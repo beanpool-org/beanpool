@@ -471,6 +471,17 @@ check "... and with that run still finishing: a wait, then cancelled, no fix sta
 decide
 check "a real red waits for its run too, then gets its fix stage" eval '[ "$CLEAN:$(fixes):$(reviews):$(reads eee1)" = 1:1:1:2 ]'
 
+scenario "37b. a second run on the head (a reopened PR, a workflow_dispatch; a re-run stays one row): the newest run is the one that counts"
+head_is aaa1; ci aaa1 failure failure success; print in_progress,failure > "$FAKE_STATE/run-aaa1"
+decide
+check "an earlier red under a run still going is a wait: no fix stage, then the review" [ "$CLEAN:$(fixes):$(reviews):$(reads aaa1)" = 1:0:1:3 ]
+: > "$LOG"; head_is bbb1; ci bbb1 failure; print failure,success > "$FAKE_STATE/run-bbb1"; print bbb2 > "$FAKE_STATE/pushes"
+decide
+check "the newest run failing is still red: its fix stage" eval '[ "$CLEAN" = 1 ] && logged "#42 is red on bbb1"'
+: > "$LOG"; head_is ccc1; ci ccc1 failure; print success,failure > "$FAKE_STATE/run-ccc1"; print ccc2 > "$FAKE_STATE/pushes"
+decide
+check "a finished run still never overrules the required check: red, its fix stage" eval '[ "$CLEAN" = 1 ] && logged "#42 is red on ccc1"'
+
 scenario "38. no run at all on a code PR → no review after the no-run limit"
 head_is aaa1; ci aaa1 none
 decide

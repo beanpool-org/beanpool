@@ -510,7 +510,9 @@ ci_head_state(){ # SHA → the required check on exactly that commit: green | re
     # has no run either. A finished run says nothing for the required check, so it never reads as green.
     # It also has `if: always()`, so a cancelled run still runs it and it FAILS: 5 of 5 cancelled runs measured on 31 Oct
     # 2026 had the run cancelled and the required check failure. Red is only a run that finished and failed.
-    out=$(gh_try gh run list -R "$LANE_GH_REPO" --commit "$1" --workflow "$LANE_CI_WORKFLOW" --json status,conclusion \
+    # The newest run only: a re-run stays one row, but a reopened PR or a workflow_dispatch adds a second run on the
+    # commit, and lane_ci_word would read an old failure over the run still going.
+    out=$(gh_try gh run list -R "$LANE_GH_REPO" --commit "$1" --workflow "$LANE_CI_WORKFLOW" --limit 1 --json status,conclusion \
           --jq 'map(if .status == "completed" then .conclusion else "pending" end) | "runs: " + join(" ")') || { print unknown; return; }
     r=$(lane_ci_word "$out")
     case "$s:$r" in

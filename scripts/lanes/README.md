@@ -96,7 +96,8 @@ gate counts it as clean.
   - The required job has `needs: shard`, so GitHub creates it only when every shard has finished. A commit with no
     required check counts as "no run" only if `ci.yml` has no run on it either.
   - It also has `if: always()`, so a cancelled run still runs it and it reports `failure`. Red therefore also needs the
-    run's own conclusion: a run that says `cancelled` is cancelled, and one still finishing is pending.
+    run's own conclusion: a run that says `cancelled` is cancelled, and one still finishing is pending. That is the
+    newest run on the commit, so an earlier failure does not count over a run that replaced it.
 - `count` returns `-1` when GitHub does not answer, after four tries through `gh_try`. Every gate refuses `-1`.
 - A killed, idle-killed, errored or downgraded stage never satisfies a review gate.
 - The idle watchdog kills a stage only when its output has not grown for 45 min **and** no worktree file has

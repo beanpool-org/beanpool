@@ -10,6 +10,7 @@
 #   $FAKE_STATE/ci-<sha>   that commit's required check, one line per read, the last one sticks: success failure cancelled pending,
 #                          none (GitHub has not created the check), or any of those +push (a push lands during that read). No file: success.
 #   $FAKE_STATE/run-<sha>  that commit's workflow run, one line per read, the last one sticks: queued in_progress success failure cancelled. No file: no run.
+#                          Several runs on the commit: comma-separated, newest first, as gh lists them up to --limit (its default is 20).
 #   $FAKE_STATE/files      the PR's changed files, one per line (no file: src/a.ts)
 # --jq filters run through real jq over GitHub's JSON shape (gh's own is gojq), so the library's filters are what gets tested.
 S=${FAKE_STATE:?}
@@ -60,12 +61,13 @@ case "$1 $2" in
   "pr merge") print -r -- "$*" >> "$S/merges";;
   "run list") if [[ "$*" == *--commit* ]]; then
                 [ "$FAKE_GH_RUNS_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
-                sha=${args[$args[(i)--commit]+1]}; r=$(pop "$S/run-$sha" '')
-                case "$r" in
-                  '')                 print -r -- '[]';;
-                  queued|in_progress) print -r -- "[{\"status\":\"$r\",\"conclusion\":\"\"}]";;
-                  *)                  print -r -- "[{\"status\":\"completed\",\"conclusion\":\"$r\"}]";;
-                esac | jq -r "$jqf"
+                sha=${args[$args[(i)--commit]+1]}; limit=${args[$args[(i)--limit]+1]:-20}; rows=(${(s:,:)$(pop "$S/run-$sha" '')})
+                for r in $rows[1,$limit]; do
+                  case "$r" in
+                    queued|in_progress) print -r -- "{\"status\":\"$r\",\"conclusion\":\"\"}";;
+                    *)                  print -r -- "{\"status\":\"completed\",\"conclusion\":\"$r\"}";;
+                  esac
+                done | jq -s . | jq -r "$jqf"
               else print -r -- "${FAKE_GH_RUN:-completed success}"; fi;;
   *) print -u2 "fake gh: unhandled: $*"; exit 1;;
 esac

@@ -26,7 +26,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Reading the repository is all this needs (the cache and the log upload use the runner's own token), so a compromised
 # action or dependency on a push to main gets no write token. Every action is pinned to a full commit SHA with its

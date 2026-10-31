@@ -366,8 +366,21 @@ describe('DecisionsAdminPanel', () => {
             ownerDecidedAt: '2026-09-20T00:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it',
         };
         vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([hidden]);
-        render(<DecisionsAdminPanel activeNode={node} />);
+        const open = render(<DecisionsAdminPanel activeNode={node} />);
         expect(await screen.findByTestId('admin-owner-decided')).toHaveTextContent('Hidden from members with the case: “Both who could vote saw it”');
+        open.unmount();
+
+        // A closed vote says so too, with the reason: a removal an owner decided does not read as the community's. One decided
+        // but not carried out (enough members voted by the close) ended as any vote does, and says nothing of the owner.
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([]);
+        vi.spyOn(nodeClient, 'fetchPastRemovalVotes').mockResolvedValue([
+            { ...hidden, id: 'dec-few-p1', status: 'executed', ownerDecisionCarriedAt: '2026-09-27T00:00:00.000Z' },
+            { ...pauseVote, id: 'dec-few-p2', status: 'unresolved', ownerDecidedAt: '2026-09-20T00:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it' },
+        ]);
+        render(<DecisionsAdminPanel activeNode={node} />);
+        const [carried, lapsed] = await screen.findAllByTestId('past-removal-row');
+        expect(within(carried).getByTestId('admin-owner-decided')).toHaveTextContent('Decided by the owner: too few members to vote. Hidden from members with the case: “Both who could vote saw it”');
+        expect(within(lapsed).queryByTestId('admin-owner-decided')).toBeNull();
     });
 
     it('a pause vote too few can vote on: the line says so, an owner decides with a reason, and the fresh proof box opens when the node asks', async () => {

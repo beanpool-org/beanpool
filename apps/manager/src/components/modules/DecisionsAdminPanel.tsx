@@ -421,6 +421,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
                             </div>
                             <h4 className="text-sm font-bold text-white m-0 break-words">{d.title}</h4>
                             {d.subjectName && <p className="text-xs text-nature-400 m-0">About: {d.subjectName}</p>}
+                            {d.ownerDecisionCarriedAt && <OwnerDecisionControl d={d} isOwner={isOwner} onDecide={openDecide} />}
                             <div className="flex flex-wrap items-center justify-end gap-2">
                                 <CaseControl d={d} onHide={openHide} />
                                 <ReplyControl d={d} onTakeDown={openTakeDown} />

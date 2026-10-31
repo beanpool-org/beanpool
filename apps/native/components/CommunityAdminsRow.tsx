@@ -1,11 +1,12 @@
 /**
- * Account Protection's third way back: "Your community's admins" (vault rethink VR3, community-held placement;
- * scratch/fable-design/DESIGN-vault-rethink-fable.md §4.3 and §4.5). Turn on, after the phone's lock; On since when;
- * Remove. Shown where the community's server says it offers it (its status answer's `offered`: its rule is "this
- * server" and anyone can't walk in), and also wherever the community already keeps this member's copy (the rule may
- * have moved since: the copy is the member's until they remove it, design §4.4). The phone asks only where its rule
- * says "this server" and it isn't the global community (utils/community-copy.ts offersCommunityCopy), or where it
- * turned it on, and goes by that rule only when the server couldn't be asked.
+ * Account Protection's third way back: "Your community's admins" (vault rethink VR3, community-held placement, and VR4,
+ * shared placement; scratch/fable-design/DESIGN-vault-rethink-fable.md §4.3 and §4.5). Turn on, after the phone's lock; On
+ * since when; Remove. Shown where the community's server says it offers it (its status answer's `offered`: its rule is
+ * "this server" and anyone can't walk in; or `sharedOffered`, its rule the key vault, in a build that has one), and also
+ * wherever the community already keeps this member's copy (the rule may have moved since: the copy is the member's until
+ * they remove it, design §4.4). The phone asks only where its rule offers one of the two and it isn't the global community
+ * (utils/community-copy.ts offersCommunityCopy), or where it turned it on, and goes by that rule only when the server
+ * couldn't be asked.
  *
  * Says who can open the copy, plainly: the community's server, so the people who run it; nobody else. Never a false
  * success: On only once the server answered that it keeps the copy and can open it. A copy it keeps but can't open

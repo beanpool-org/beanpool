@@ -42,6 +42,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { isVaultKeyHex } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import { signedDelete, signedPost } from './node-post';

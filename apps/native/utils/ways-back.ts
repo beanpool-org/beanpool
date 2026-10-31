@@ -83,7 +83,8 @@ export async function listWaysBack(identity: BeanPoolIdentity): Promise<WaysBack
         askVault(identity),
         Promise.all(places.map(async (p): Promise<CommunityPart> => {
             const status = await communityCopyStatus(identity, p.url);
-            return { ...p, status, vaultRef: labelOf(identity, status?.nodeKey) };
+            const vaultRef = labelOf(identity, status?.nodeKey);
+            return { ...p, status, ...(vaultRef ? { vaultRef } : {}) };
         })),
         pendingCommunityRemovals(identity),
     ]);
@@ -104,7 +105,7 @@ async function askVault(identity: BeanPoolIdentity): Promise<VaultPart> {
     if (!hasVault()) return { kind: 'no-vault' };
     try {
         const { copies, communityCopies } = await vaultStatus(identity);
-        return { kind: 'listed', copies, communityCopies };
+        return { kind: 'listed', copies, ...(communityCopies.length ? { communityCopies } : {}) };
     } catch (e) {
         const why = notAnswered(e);
         return { kind: 'unknown', why: why === 'refused' ? 'unreachable' : why };

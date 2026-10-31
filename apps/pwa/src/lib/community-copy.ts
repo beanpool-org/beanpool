@@ -31,7 +31,7 @@ export interface WebCommunityCopyStatus {
      * It keeps its half of a copy BeanPool's key vault keeps (vault rethink VR4): the member's phone made it, and only a phone
      * can remove it, since the web app has no key vault client (design VR6).
      */
-    shared: boolean;
+    shared?: boolean;
 }
 
 /** The server's `unopenable`, read. A reason this browser doesn't know is still "can't open", never "kept". */

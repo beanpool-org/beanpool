@@ -91,6 +91,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // utils/rekey-redeem.ts REKEY_TEXT and its refusals before anything is sent.
     'Your admin said this phone isn’t yours, so nothing changed. Ask them to try again with you there.': word('Your admin said this phone isn’t yours, so nothing changed. Ask them to try again with you there.'),
     'That code isn’t valid any more. Ask the admin for a new one.': word('That code isn’t valid any more. Ask the admin for a new one.'),
+    // A bring-back's code for an account the community has since removed (the server's refusal, design §4.4).
+    'This community no longer has your account. Use your 12 words or another way back.': word('This community no longer has your account. Use your 12 words or another way back.'),
     'That code is for another community. Check the community’s name or address and try again.': word('That code is for another community. Check the community’s name or address and try again.'),
     'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.': word('Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.'),
     'This phone’s account changed while you waited, so nothing was saved. Start again.': word('This phone’s account changed while you waited, so nothing was saved. Start again.'),

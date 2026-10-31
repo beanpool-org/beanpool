@@ -54,7 +54,7 @@ import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { cleanRekeyCode, resetRekeyWrongCodesForTests } from './engine/rekey-redeem.js';
+import { BRING_BACK_ACCOUNT_GONE, cleanRekeyCode, resetRekeyWrongCodesForTests } from './engine/rekey-redeem.js';
 import { setNodeRole } from './config/node-role.js';
 import { setPrivateKeyForTests } from './p2p.js';
 import { setRecoveryCopies, NO_COPIES_HERE } from './config/recovery-copies.js';
@@ -395,6 +395,10 @@ async function runTests() {
         adminPruneUser(kim.pubKeyHex, COMMUNITY_DECISION_ACTOR);
         const afterPrune = await bindByNumber(adminSession, kim.pubKeyHex, code3, a3.json.match);
         assert(afterPrune.status >= 400 && (await poll(p3, code3)).json.state !== 'released', `a member removed since the code is not brought back (got ${afterPrune.status})`);
+        // Design §4.4: a phone that asks on that code is told what is true, since a new code wouldn't help. Nothing is written.
+        const lateAsk = await ask(makeKeypair(), code3);
+        assert(lateAsk.status === 404 && lateAsk.json.code === 'code_not_valid' && lateAsk.json.error === BRING_BACK_ACCOUNT_GONE,
+            `a phone asking on it hears the community no longer has the account (got ${lateAsk.status} ${lateAsk.json.error})`);
         const prunedIssue = await issueBringBack(adminSession, kim.pubKeyHex);
         assert(prunedIssue.status >= 400 && prunedIssue.json.error !== undefined, 'and no new code is made for them');
         void BRING_BACK_GONE;

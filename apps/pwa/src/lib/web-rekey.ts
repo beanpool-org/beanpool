@@ -99,6 +99,8 @@ export const WEB_REKEY_TEXT = {
     gone: 'That code isn’t valid any more. Ask the admin for a new one.',
     wrongCommunity: 'That code is for another community. Open the link your admin gave you, or ask them for a new code.',
     unreachable: 'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.',
+    /** The node's refusal of a bring-back's code for an account it has since removed (design §4.4), which arrives in English. */
+    accountGone: 'This community no longer has your account. Use your 12 words or another way back.',
 } as const;
 
 /**

@@ -57,7 +57,7 @@ const Row = ({ scale }) => (
         {pins.map(([label, v]) => (
             <View key={label} style={{ alignItems: 'center' }}>
                 <View style={{ width: PIN_RENDER_W * scale, height: PIN_RENDER_H * scale }}>
-                    <View data-pin={label} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, transform: [{ scale }], transformOrigin: 'top left' }}>
+                    <View testID={'pin-' + label} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, transform: [{ scale }], transformOrigin: 'top left' }}>
                         <PinVisual emoji={v.emoji} bgColor={v.bgColor} isElder={v.isElder} glyph={v.glyph} />
                     </View>
                 </View>
@@ -119,20 +119,22 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)));
     for (const scheme of ['light', 'dark']) {
         await page.goto(`${base}/?scheme=${scheme}`);
-        await page.waitForSelector('[data-pin="Event"] svg');
+        await page.waitForSelector('[data-testid="pin-Event"] svg', { timeout: 15000 }).catch((e) => {
+            throw new Error(`${e.message}\npage errors: ${errors.join('\n') || 'none'}`);
+        });
         const found = await page.evaluate((WIDTH) => {
             const out = [];
             if (document.scrollingElement.scrollWidth > WIDTH) out.push(`the page scrolls sideways (${document.scrollingElement.scrollWidth}px)`);
-            const pins = [...document.querySelectorAll('[data-pin]')];
-            const event = pins.filter((p) => p.getAttribute('data-pin') === 'Event');
-            for (const p of event) {
+            const pins = [...document.querySelectorAll('[data-testid^="pin-"]')];
+            const name = (p) => p.getAttribute('data-testid').slice('pin-'.length);
+            for (const p of pins.filter((x) => name(x) === 'Event')) {
                 if (p.textContent.trim() !== '') out.push(`the event pin holds words or an emoji: "${p.textContent.trim()}"`);
                 if (p.querySelectorAll('svg path').length !== 1) out.push('the event pin is not the one teardrop');
             }
-            for (const p of pins.filter((x) => x.getAttribute('data-pin') !== 'Event')) {
-                if (p.textContent.trim() === '') out.push(`the ${p.getAttribute('data-pin')} pin lost its emoji`);
+            for (const p of pins.filter((x) => name(x) !== 'Event')) {
+                if (p.textContent.trim() === '') out.push(`the ${name(p)} pin lost its emoji`);
             }
-            const fills = pins.map((p) => `${p.getAttribute('data-pin')}=${p.querySelector('svg path')?.getAttribute('fill')}`);
+            const fills = pins.map((p) => `${name(p)}=${p.querySelector('svg path')?.getAttribute('fill')}`);
             return { out, fills };
         }, WIDTH);
         problems.push(...found.out.map((p) => `${scheme}: ${p}`));

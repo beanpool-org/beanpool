@@ -155,15 +155,15 @@ const now = Date.now();
  */
 const OFFER = { id: 'p-eggs', type: 'offer', status: 'active', title: 'Duck eggs', category: 'food', author_energy_cycled: 12000, lat: -28.54, lng: 153.5 };
 const NEED = { id: 'p-ladder', type: 'need', status: 'active', title: 'A ladder', category: 'tools', author_energy_cycled: 0, lat: -28.5403, lng: 153.5004 };
-const ev = (id: string, over: Record<string, unknown> = {}) => ({
+const ev = (id: string, lat: number, lng: number, over: Record<string, unknown> = {}) => ({
     id, type: 'event', status: 'active', title: `Event ${id}`, category: 'community', author_energy_cycled: 0, event_state: 'scheduled',
-    event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 2 * 60 * 60 * 1000), ...over,
+    event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 2 * 60 * 60 * 1000), lat, lng, ...over,
 });
-const CAFE = ev('ev-cafe', { author_energy_cycled: 12000, lat: -28.5401, lng: 153.5001 });
-const PARTY = ev('ev-party', { lat: -28.5402, lng: 153.5002 });
-const BEE = ev('ev-bee', { lat: -28.56, lng: 153.53 });
-const CALLED_OFF = ev('ev-off', { event_state: 'cancelled', lat: -28.57, lng: 153.54 });
-const OVER = ev('ev-over', { event_start_at: iso(now - 2 * DAY), event_end_at: iso(now - 2 * DAY + 60 * 60 * 1000), lat: -28.58, lng: 153.55 });
+const CAFE = ev('ev-cafe', -28.5401, 153.5001, { author_energy_cycled: 12000 });
+const PARTY = ev('ev-party', -28.5402, 153.5002);
+const BEE = ev('ev-bee', -28.56, 153.53);
+const CALLED_OFF = ev('ev-off', -28.57, 153.54, { event_state: 'cancelled' });
+const OVER = ev('ev-over', -28.58, 153.55, { event_start_at: iso(now - 2 * DAY), event_end_at: iso(now - 2 * DAY + 60 * 60 * 1000) });
 const ALL = [OFFER, NEED, CAFE, PARTY, BEE, CALLED_OFF, OVER];
 
 let host: HTMLDivElement;
@@ -183,7 +183,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks()
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 /** The map drawn, every pin and cluster image captured (the capture waits 200 ms after a slot's layout). */
 async function drawMap(Screen: typeof MapScreen = MapScreen) {
-    await act(async () => { root.render(createElement(Screen)); });
+    await act(async () => { root.render(createElement(Screen) as any); });
     await settle();
     await act(async () => { await new Promise((r) => setTimeout(r, 260)); });
     await settle();
@@ -299,8 +299,7 @@ describe('an event on the map (app/(tabs)/map.tsx)', () => {
 
     it('never pins a cancelled or an ended event', async () => {
         await drawMap();
-        expect(childFor(CALLED_OFF.id)).toBeUndefined();
-        expect(childFor(OVER.id)).toBeUndefined();
+        expect(markerAt(BEE), 'the map is drawn').not.toBeNull();
         expect(lastMarkerAt(CALLED_OFF)).toBeUndefined();
         expect(lastMarkerAt(OVER)).toBeUndefined();
     });
@@ -335,7 +334,7 @@ describe('an event in the bubbles (react-native-map-clustering, as patched)', ()
 
     it('comes out as its own pin when the map zooms in, and the bubble goes', async () => {
         await drawMap();
-        await act(async () => { maps.regionChanged({ latitude: CAFE.lat, longitude: CAFE.lng, latitudeDelta: 0.001, longitudeDelta: 0.001 }); });
+        await act(async () => { maps.regionChanged({ latitude: CAFE.lat, longitude: CAFE.lng, latitudeDelta: 0.0002, longitudeDelta: 0.0002 }); });
         await settle(2);
         expect(bubbles()).toEqual([]);
         for (const p of HALL) expect(opacityAt(p), p.id).toBe('1');

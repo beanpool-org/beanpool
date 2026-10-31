@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import {
-    fetchAdminDecisions, fetchNodeDecisionsOn, fetchPastRemovalVotes, haltDecision, hideDecisionCase, takeDownDecisionReply, type AdminDecisionItem,
+    fetchAdminDecisions, fetchNodeDecisionsOn, fetchPastRemovalVotes, haltDecision, hideDecisionCase, ownerDecideRemoval, takeDownDecisionReply,
+    type AdminDecisionItem,
 } from '../../lib/node-client';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
 
@@ -94,12 +96,44 @@ function ReplyControl({ d, onTakeDown }: { d: AdminDecisionItem; onTakeDown: (d:
 }
 
 /**
+ * An open pause's vote that too few members can vote on (removal by vote S6, design §5 point 3): fewer than 3 others could
+ * vote, so its quorum can't be met, and an owner may decide it. Not a vote on someone who holds a server role: no vote, and
+ * no owner's decision, removes an owner or admin.
+ */
+function ownerMayDecide(d: AdminDecisionItem): boolean {
+    return d.status === 'open' && isPauseVote(d) && d.tally?.tooFewToVote === true && !d.ownerDecidedAt && !d.params?.serverRole;
+}
+
+/** An owner's decision on a vote too few could vote on, as members read it, or the button that makes one (owners only). */
+function OwnerDecisionControl({ d, onDecide }: { d: AdminDecisionItem; onDecide: (d: AdminDecisionItem) => void }) {
+    if (d.ownerDecidedAt) {
+        return (
+            <p className="text-xs text-amber-300 m-0 break-words" data-testid="admin-owner-decided">
+                {d.ownerDecisionCarriedAt
+                    ? `Decided by the owner: too few members to vote. Members read: “${d.ownerDecidedReason}”`
+                    : `An owner decided: carried out when the vote closes, if still fewer than 3 could vote. Members read: “${d.ownerDecidedReason}”`}
+            </p>
+        );
+    }
+    if (!ownerMayDecide(d)) return null;
+    return (
+        <button
+            onClick={() => onDecide(d)}
+            className="px-3 py-2 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+        >
+            Decide as owner
+        </button>
+    );
+}
+
+/**
  * Community Decisions an admin can still act on — open votes and removals in their 7-day grace window —
  * with the admin brake: halt, with a written reason members will see. Totals only; the node never serves
  * who voted how. An emergency suspension nobody votes on (the global node) shows as a suspension with its
  * end date, and the brake as lifting it now. A vote on removing a member, open or closed, can have its case hidden as
  * one shown to be false, with a reason members read in its place (removal by vote, Amendment A point 4), and the member's
- * reply taken down when it harms someone else, the same way.
+ * reply taken down when it harms someone else, the same way. A pause's vote too few members can vote on can be decided by an
+ * owner, with the fresh proof and a reason members read (removal by vote S6).
  */
 export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPanelProps) {
     const [decisions, setDecisions] = useState<AdminDecisionItem[]>([]);
@@ -121,6 +155,12 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
     const [takeDownReason, setTakeDownReason] = useState('');
     const [takingDown, setTakingDown] = useState(false);
     const [takeDownError, setTakeDownError] = useState<string | null>(null);
+    // An owner deciding a vote too few members can vote on (removal by vote S6).
+    const [decideTarget, setDecideTarget] = useState<AdminDecisionItem | null>(null);
+    const [decideReason, setDecideReason] = useState('');
+    const [deciding, setDeciding] = useState(false);
+    const [decideError, setDecideError] = useState<string | null>(null);
+    const proof = useFreshProof();
 
     const load = async () => {
         if (!activeNode?.url) return;
@@ -207,6 +247,34 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
             setTakeDownError(err instanceof Error ? err.message : 'Failed to take down the reply');
         } finally {
             setTakingDown(false);
+        }
+    };
+
+    const decideTrimmed = decideReason.trim();
+    const decideReasonOk = decideTrimmed.length >= MIN_HALT_REASON;
+    const openDecide = (d: AdminDecisionItem) => { setDecideTarget(d); setDecideReason(''); setDecideError(null); proof.close(); };
+    const closeDecide = () => {
+        if (deciding) return;
+        setDecideTarget(null);
+        setDecideReason('');
+        setDecideError(null);
+        proof.close();
+    };
+    const confirmDecide = async (code?: string) => {
+        if (!decideTarget || !decideReasonOk) return;
+        setDeciding(true);
+        setDecideError(null);
+        try {
+            await ownerDecideRemoval(activeNode.url, decideTarget.id, decideTrimmed, nodeCredential(activeNode), tfaToken, code);
+            proof.close();
+            setDecideTarget(null);
+            setDecideReason('');
+            await load();
+        } catch (err: unknown) {
+            if (proof.checkError(err, (c) => confirmDecide(c), code)) return;
+            setDecideError(err instanceof Error ? err.message : 'Failed to decide the vote');
+        } finally {
+            setDeciding(false);
         }
     };
 
@@ -304,9 +372,15 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             <p className="text-xs text-nature-300 m-0">
                                 {d.tally.totalVoters} of {d.tally.quorumRequired} votes needed · Yes {d.tally.yesWeight} · No {d.tally.noWeight}
                             </p>
+                            {ownerMayDecide(d) && (
+                                <p className="text-xs text-amber-300 m-0" data-testid="admin-too-few-to-vote">
+                                    Fewer than 3 members could vote. If nobody else votes, an owner decides: left alone, the pause lifts when the vote closes.
+                                </p>
+                            )}
                             <div className="flex flex-wrap items-center justify-end gap-2">
                                 {hasCase(d, decisionsOn) && <CaseControl d={d} onHide={openHide} />}
                                 {hasCase(d, decisionsOn) && <ReplyControl d={d} onTakeDown={openTakeDown} />}
+                                {hasCase(d, decisionsOn) && <OwnerDecisionControl d={d} onDecide={openDecide} />}
                                 <button
                                     onClick={() => { setHaltTarget(d); setReason(''); setHaltError(null); }}
                                     className="px-3 py-2 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-xs font-bold text-bp-chip-danger-ink border border-red-800"
@@ -424,6 +498,48 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                                 className="px-3 py-2 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {takingDown ? 'Taking down…' : 'Take down reply'}
+                            </button>
+                        </div>
+                    </div>
+                </ModalBackdrop>
+            )}
+
+            {decideTarget && (
+                <ModalBackdrop onClose={closeDecide} dismissable={!deciding} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Decide as owner">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-3">
+                        <h3 className="text-base font-bold text-white m-0 break-words">Decide the vote on removing {suspendedName(decideTarget)}?</h3>
+                        <p className="text-xs text-nature-400 m-0">
+                            Fewer than 3 members could vote, so this vote can't reach its turnout. As an owner you can decide it: if still
+                            fewer than 3 could vote when it closes, {suspendedName(decideTarget)} stays paused for the 7 days of a removal's
+                            grace, then is removed. If more members can vote by then, they decide. Every member reads your reason beside the
+                            case, the member is told and can reply, and the owners are told. Any admin can still halt the removal in its grace.
+                        </p>
+                        <label className="block text-xs font-bold text-nature-300" htmlFor="owner-decision-reason">
+                            Reason (members will see this)
+                        </label>
+                        <textarea
+                            id="owner-decision-reason"
+                            value={decideReason}
+                            onChange={(e) => setDecideReason(e.target.value)}
+                            rows={3}
+                            className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2"
+                            placeholder="Why you decide this removal"
+                        />
+                        <p className={`text-[11px] m-0 ${decideReasonOk ? 'text-nature-500' : 'text-amber-400'}`}>
+                            {decideReasonOk ? `${decideTrimmed.length} characters` : `At least ${MIN_HALT_REASON} characters (${decideTrimmed.length} so far)`}
+                        </p>
+                        <FreshProofBox proof={proof} testId="owner-decision-proof" />
+                        {decideError && <div className="p-2 rounded-lg bg-red-950/60 border border-red-800 text-xs text-red-300">{decideError}</div>}
+                        <div className="flex justify-end gap-2 pt-1">
+                            <button onClick={closeDecide} disabled={deciding} className="px-3 py-2 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => confirmDecide()}
+                                disabled={!decideReasonOk || deciding}
+                                className="px-3 py-2 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {deciding ? 'Deciding…' : 'Decide: remove if still too few'}
                             </button>
                         </div>
                     </div>

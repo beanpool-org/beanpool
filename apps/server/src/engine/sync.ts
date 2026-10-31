@@ -7,7 +7,7 @@ import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainSer
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
-import { bodyOfSignedText, bytesOfSignedText, copiedPostTags, replaceLoneSurrogates, storedPostTags } from '@beanpool/core';
+import { bodyOfSignedText, bytesOfSignedText, copiedFreeTags, copiedPostTags, replaceLoneSurrogates, storedFreeTags, storedPostTags } from '@beanpool/core';
 import { getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
@@ -1209,6 +1209,15 @@ function postTags(rp: any): [string] {
     return [storedPostTags(copiedPostTags(rp.tags))];
 }
 
+/**
+ * free_tags: the tags its author typed (DESIGN-tags-free-entry-fable.md §2, slice F1), plain assignment, so tags taken off
+ * on the main server are off here too, held to the rule (@beanpool/core copiedFreeTags). A payload from a main server
+ * older than them says nothing, and it held none.
+ */
+function postFreeTags(rp: any): [string] {
+    return [storedFreeTags(copiedFreeTags(rp.freeTags))];
+}
+
 // members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
 // so a member who clears their area on the main server has none here either.
 
@@ -1983,8 +1992,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags, free_tags)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2030,6 +2039,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postFeatured(rp),
                         ...postCreatedVia(rp),
                         ...postTags(rp),
+                        ...postFreeTags(rp),
                     );
                     newPosts++;
                 } else {
@@ -2089,6 +2099,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         featured_at = ?,
                         created_via = COALESCE(?, created_via),
                         tags = ?,
+                        free_tags = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2127,6 +2138,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postFeatured(rp),
                         ...postCreatedVia(rp),
                         ...postTags(rp),
+                        ...postFreeTags(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

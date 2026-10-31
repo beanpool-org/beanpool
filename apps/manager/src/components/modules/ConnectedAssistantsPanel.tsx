@@ -22,9 +22,10 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  * command line with it at the moment of copying; the line on screen shows a placeholder.
  *
  * An owner's assistant posts Offers, Needs and events for them only if "May post for me" was ticked when it was connected
- * (here on the token form, or on the consent page; default off), and each row says whether it was. "Assistant posts a
- * day" is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed by an owner with a
- * fresh proof each time (FreshProofBox: a code, or the phone's Manage).
+ * (here on the token form, or on the consent page; default off), and each row says whether it was. The "Owner and admin
+ * limit" (first "Assistant posts a day"; Marty, 31 Oct: owners' and admins' own content limits in the apps too, server
+ * engine/owner-admin-limit.ts) is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed
+ * by an owner with a fresh proof each time (FreshProofBox: a code, or the phone's Manage).
  */
 
 interface AgentGrantRow {
@@ -66,7 +67,7 @@ interface GrantsAnswer {
     defaultDays: number;
     maxDays: number;
     perMember: number;
-    /** The owners' "Assistant posts a day" and its range (a server older than it sends none). */
+    /** The owners' "Owner and admin limit" and its range (a server older than it sends none). */
     postsPerDay?: number;
     postsPerDayMin?: number;
     postsPerDayMax?: number;
@@ -126,7 +127,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     const [shownCanPost, setShownCanPost] = useState(false);
     const [perDayDraft, setPerDayDraft] = useState('');
     const [perDayMessage, setPerDayMessage] = useState('');
-    // Changing "Assistant posts a day" asks an owner's fresh proof each time (server agent/grants-route.ts).
+    // Changing the "Owner and admin limit" asks an owner's fresh proof each time (server agent/grants-route.ts).
     const proof = useFreshProof();
     // Connecting one ticked "May post for me" asks the same fresh proof (server agent/grants-route.ts); its own box, by the form.
     const makeProof = useFreshProof();
@@ -523,17 +524,20 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                         )}
                     </div>
 
-                    {/* The owners' "Assistant posts a day" (a server older than it sends none). */}
+                    {/* The owners' "Owner and admin limit", first "Assistant posts a day" (a server older than it sends none). */}
                     {typeof data.postsPerDay === 'number' && (
                         <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-posts-per-day">
                             <p className="text-xs text-white m-0 break-words">
-                                Assistant posts a day: {data.postsPerDay.toLocaleString('en')}. Each owner&rsquo;s assistant ticked &ldquo;May post for
-                                me&rdquo; may make this many posts in a day (UTC). They don&rsquo;t use up the member&rsquo;s own 100 posts a day from
-                                the app, but their photos count in the member&rsquo;s own photos for the day. Changing it asks for a fresh proof.
+                                Owner and admin limit &mdash; posts and other content a day: {data.postsPerDay.toLocaleString('en')}. Each owner and
+                                admin may put up this many posts, and start this many groups and enterprises, in any 24 hours, and have this many
+                                upcoming events, open polls and running enterprises at once. Members keep their own limits (100 posts a day, 5
+                                upcoming events, 1 open poll). Each owner&rsquo;s assistant ticked &ldquo;May post for me&rdquo; may make this many
+                                posts in a day (UTC) too, counted apart from the owner&rsquo;s own; its photos count in the owner&rsquo;s own photos
+                                for the day. Changing it asks for a fresh proof.
                             </p>
                             {isOwner ? (
                                 <div className="flex flex-col sm:flex-row gap-2 min-w-0">
-                                    <label htmlFor="agent-posts-per-day" className="sr-only">Assistant posts a day</label>
+                                    <label htmlFor="agent-posts-per-day" className="sr-only">Owner and admin limit &mdash; posts and other content a day</label>
                                     <input
                                         id="agent-posts-per-day"
                                         type="number"

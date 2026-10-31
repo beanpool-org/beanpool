@@ -10,6 +10,8 @@ const node: NodeProfile = { id: 'local-node', name: 'Mullumbimby Node', url: 'ht
 const NEW_TOKEN = 'bp_0123456789ab_' + 'c'.repeat(64);
 const OWNER_KEY = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' } as const;
 const ADMIN_KEY = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' } as const;
+/** The owners' setting, first "Assistant posts a day": owners' and admins' own content limits too (Marty, 31 Oct). */
+const LIMIT = 'Owner and admin limit — posts and other content a day';
 
 const grant = (over: Record<string, unknown> = {}) => ({
     id: '0123456789ab', name: 'Claude on my laptop', member: 'Olive', mine: true, role: 'owner', via: 'token',
@@ -162,46 +164,46 @@ describe('ConnectedAssistantsPanel', () => {
         expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Seeder', days: 30, canPost: true });
         await waitFor(() => expect(screen.getAllByTestId('agent-grant-posts').map((p) => p.textContent)).toEqual(
             ['Reads only: not ticked to post', 'May post for me · 0 posts today']));
-        expect(screen.getByTestId('agent-posts-per-day')).toHaveTextContent('Assistant posts a day: 100.');
-        fireEvent.change(screen.getByLabelText('Assistant posts a day'), { target: { value: '1001' } });
+        expect(screen.getByTestId('agent-posts-per-day')).toHaveTextContent(`${LIMIT}: 100.`);
+        fireEvent.change(screen.getByLabelText(LIMIT), { target: { value: '1001' } });
         fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
         expect(await screen.findByText('A whole number from 1 to 1,000.')).toBeInTheDocument();
         expect(calls.some((c) => c.url.endsWith('/agent/posts-per-day'))).toBe(false);
-        fireEvent.change(screen.getByLabelText('Assistant posts a day'), { target: { value: '1000' } });
+        fireEvent.change(screen.getByLabelText(LIMIT), { target: { value: '1000' } });
         fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(calls.find((c) => c.url.endsWith('/agent/posts-per-day'))?.body).toEqual({ perDay: 1000 }));
-        expect(await screen.findByText('Assistant posts a day: 1,000. Each owner’s assistant ticked “May post for me” may make this many posts in a day (UTC). They don’t use up the member’s own 100 posts a day from the app, but their photos count in the member’s own photos for the day. Changing it asks for a fresh proof.')).toBeInTheDocument();
+        expect(await screen.findByText(`${LIMIT}: 1,000. Each owner and admin may put up this many posts, and start this many groups and enterprises, in any 24 hours, and have this many upcoming events, open polls and running enterprises at once. Members keep their own limits (100 posts a day, 5 upcoming events, 1 open poll). Each owner’s assistant ticked “May post for me” may make this many posts in a day (UTC) too, counted apart from the owner’s own; its photos count in the owner’s own photos for the day. Changing it asks for a fresh proof.`)).toBeInTheDocument();
     });
 
-    it('"Assistant posts a day" asks a fresh proof: a computer\'s key session is sent to the phone, and nothing changes', async () => {
+    it('the "Owner and admin limit" asks a fresh proof: a computer\'s key session is sent to the phone, and nothing changes', async () => {
         const calls = fakeNode({ grants: [], perDayProof: 'phone' });
         render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
-        fireEvent.change(await screen.findByLabelText('Assistant posts a day'), { target: { value: '1000' } });
+        fireEvent.change(await screen.findByLabelText(LIMIT), { target: { value: '1000' } });
         fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
         expect(await screen.findByTestId('agent-posts-per-day-proof-phone')).toHaveTextContent('Do this from your phone: open BeanPool, press Manage, then make this change there.');
         expect(calls.filter((c) => c.url.endsWith('/agent/posts-per-day')).map((c) => c.body)).toEqual([{ perDay: 1000 }]);
-        expect(screen.getByTestId('agent-posts-per-day')).toHaveTextContent('Assistant posts a day: 100.');
+        expect(screen.getByTestId('agent-posts-per-day')).toHaveTextContent(`${LIMIT}: 100.`);
         expect(screen.queryByText(/^Saved:/)).toBeNull();
     });
 
-    it('"Assistant posts a day" with the password asks a current code, and sends it with the change', async () => {
+    it('the "Owner and admin limit" with the password asks a current code, and sends it with the change', async () => {
         const calls = fakeNode({ grants: [], perDayProof: 'code' });
         render(<ConnectedAssistantsPanel activeNode={node} />);
-        fireEvent.change(await screen.findByLabelText('Assistant posts a day'), { target: { value: '500' } });
+        fireEvent.change(await screen.findByLabelText(LIMIT), { target: { value: '500' } });
         fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
         fireEvent.change(await screen.findByTestId('agent-posts-per-day-proof-input'), { target: { value: '123456' } });
         fireEvent.click(screen.getByTestId('agent-posts-per-day-proof-confirm'));
         expect(await screen.findByText('Saved: 500 a day, from the next post.')).toBeInTheDocument();
         expect(calls.filter((c) => c.url.endsWith('/agent/posts-per-day')).map((c) => c.body)).toEqual([{ perDay: 500 }, { perDay: 500, code: '123456' }]);
         expect(screen.queryByTestId('agent-posts-per-day-proof-code')).toBeNull();
-        expect(await screen.findByTestId('agent-posts-per-day')).toHaveTextContent('Assistant posts a day: 500.');
+        expect(await screen.findByTestId('agent-posts-per-day')).toHaveTextContent(`${LIMIT}: 500.`);
     });
 
-    it('an admin sees the posts a day but cannot change it', async () => {
+    it('an admin sees the owner and admin limit but cannot change it', async () => {
         fakeNode({ grants: [], role: 'admin', canConnect: false, seesAll: false });
         render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
         expect(await screen.findByTestId('agent-posts-per-day')).toHaveTextContent('Only an owner changes this.');
-        expect(screen.queryByLabelText('Assistant posts a day')).toBeNull();
+        expect(screen.queryByLabelText(LIMIT)).toBeNull();
     });
 
     it('the password session is told to connect with a key; the node\'s refusal is shown in its words', async () => {

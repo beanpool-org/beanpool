@@ -22,8 +22,10 @@
  *      saying today's count; out of range, or from an admin, refused; each change alerts the owners (sec.agent) and is shown
  *      on the list and in connection_info, with the owner's photo room left in words.
  *   2d. Seeding (the director, 30 Oct): set to 1,000, 1,000 real posts as the owner are taken, past the member's own 100, and
- *      the owner's own posts from the app keep all of their 100 (the 101st refused as before); the 1,001st refused, still
- *      after a restart empties the count in memory; the owner's photo budget refusal says the room left.
+ *      the owner's own posts from the app are counted apart: since 31 Oct (Marty: owners' and admins' own limits are the same
+ *      setting, engine/owner-admin-limit.ts) they too are held to it, so with the setting at 101 and the assistant's 500
+ *      made, all 101 of the owner's own are taken and the 102nd is refused naming the owners' 101; the 1,001st refused,
+ *      still after a restart empties the count in memory; the owner's photo budget refusal says the room left.
  *   use_my_area (in 1): with no area set, refused naming the fields; with one, stored at it rounded, on a node that syncs
  *      by area and one that doesn't, and in the nearby read of a member with an area about 4 km away.
  *   3. An admin's assistant has none of the tools (and is refused if it calls one); its maker no longer an owner or admin → 401;
@@ -60,7 +62,7 @@ import { configuredImageStoreKind, getImageStore, readObject, resetImageStoreFor
 import { S3ImageStore } from './storage/s3-image-store.js';
 import { startFakeS3 } from './fake-s3-test-harness.js';
 import { imageSize } from './storage/image-metadata.js';
-import { admitAgentCreate, agentCreatesToday, AGENT_POSTS_PER_DAY_DEFAULT, forgetAgentGrant } from './agent/limits.js';
+import { admitAgentCreate, agentCreatesToday, AGENT_POSTS_PER_DAY_DEFAULT, forgetAgentGrant, setAgentPostsPerDay } from './agent/limits.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { OWNER_POST_TOOLS, enterpriseRef } from './agent/owner-posts.js';
 import type { AgentGrant } from './agent/tools.js';
@@ -544,7 +546,7 @@ async function main(): Promise<void> {
         const after1000 = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Seeding day' } });
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
         assert(set1000.status === 200 && set1000.body?.postsPerDay === 1000 && !after1000.isError && structured(after1000)?.postsPerDay === 1000 && structured(after1000)?.postsToday === 101
-            && told.some(d => /changed how many posts each owner's AI assistant may make a day, from 100 to 1,000/.test(d)),
+            && told.some(d => /changed the owner and admin limit, how many posts and other things each owner and admin, and each owner's AI assistant, may make a day, from 100 to 1,000/.test(d)),
             `an owner sets 1,000: the 101st is taken at once, and the owners are told (${set1000.status}; ${errorText(after1000) || structured(after1000)?.postsToday}; ${told.join(' | ')})`);
         while (agentCreatesToday(capId) < 1000) admitAgentCreate(capId);
         const thousandFirst = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Past a thousand' } });
@@ -592,20 +594,24 @@ async function main(): Promise<void> {
         };
         const madeBy = (g: AgentGrant) => (db.prepare('SELECT COUNT(*) AS c FROM posts WHERE created_via = ?').get(`assistant:${g.id}`) as any).c;
         await seed(1, 500);
-        // The owner's own posts from the app, as POST /api/marketplace/posts makes them (its limit: assertMayPostToday): with the
-        // assistant's 500 made, all 100 are still theirs, and the 101st is refused as before.
+        // The owner's own posts from the app, as POST /api/marketplace/posts makes them (its limit: assertMayPostToday). An
+        // owner's own limit is the owners' setting too since 31 Oct (engine/owner-admin-limit.ts), on its own count: set to
+        // 101 here, below the assistant's 500 made, all 101 are still the owner's (one past a member's 100), and the 102nd is
+        // refused naming the owners' number. Were the assistant's 500 counted, the first would be.
+        setAgentPostsPerDay(101);
         const ownPost = (i: number) => createPost('offer', 'food', `Own jar ${i}`, 'From the app.', 1, 'fixed', owner.pub, -28.55, 153.5, [tiny], false, undefined, false,
             { beforeWrite: () => assertMayPostToday(owner.pub) });
         let ownMade = 0, ownRefusal = '';
-        for (let i = 1; i <= 101; i++) {
+        for (let i = 1; i <= 102; i++) {
             try { if (ownPost(i)) ownMade++; } catch (err) { ownRefusal = (err as Error).message; break; }
         }
+        setAgentPostsPerDay(1000);
         assert(set1000Again.status === 200 && seedT.status === 201 && seedRefused.length === 0 && madeBy(seedGrant) === 500
-            && ownMade === 100 && /^You can put up 100 new posts in any 24 hours/.test(ownRefusal),
-            `with the assistant's 500 made, the owner's own app posts are untouched: 100 taken, the 101st refused as before (${seedRefused.slice(0, 2).join(' | ')}; ${ownMade}; ${ownRefusal})`);
+            && ownMade === 101 && /^This community's owners allow 101 new posts in any 24 hours for owners and admins \("Owner and admin limit" in Settings\)\. You can post again in about/.test(ownRefusal),
+            `with the assistant's 500 made, the owner's own app posts are counted apart, held to the owners' setting: 101 taken, the 102nd refused naming it (${seedRefused.slice(0, 2).join(' | ')}; ${ownMade}; ${ownRefusal})`);
         await seed(501, 1000);
         assert(seedRefused.length === 0 && madeBy(seedGrant) === 1000 && agentCreatesToday(seedGrant.id) === 1000,
-            `set to 1,000, the assistant's posts 101 to 1,000 as the owner are all taken, the owner's own 100 used up too (${madeBy(seedGrant)} made; ${seedRefused.slice(0, 2).join(' | ')})`);
+            `set to 1,000, the assistant's posts 101 to 1,000 as the owner are all taken, the owner's own 101 made too (${madeBy(seedGrant)} made; ${seedRefused.slice(0, 2).join(' | ')})`);
         const thousandAndOne = await createOffer.run(seedGrant, seedArgs(1001), 'b0b0b0b0');
         // A restart empties the count kept in memory; the rows still hold the day.
         forgetAgentGrant(seedGrant.id);

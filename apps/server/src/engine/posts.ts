@@ -24,6 +24,7 @@ import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
+import { ownerAdminLimit } from './owner-admin-limit.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
 import {
@@ -748,12 +749,20 @@ export function createPost(
     const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey);
 
     db.transaction(() => {
+        // An owner or admin acting (a keeper for an enterprise, by their own role) is held to the owners' "Owner and admin
+        // limit" in place of a member's 1 active poll and 5 upcoming events (engine/owner-admin-limit.ts), read now.
+        const ownersLimit = type === 'poll' || type === 'event' ? ownerAdminLimit(options?.createdBy ?? authorPublicKey) : null;
         if (type === 'poll') {
             const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
-            if (authorOpen && authorOpen.c >= 1) {
+            if (ownersLimit !== null) {
+                if (authorOpen && authorOpen.c >= ownersLimit) {
+                    throw new Error(tr('Rate limit: this community\'s owners allow {n} active polls at a time for owners and admins ("Owner and admin limit" in Settings)', { n: ownersLimit }));
+                }
+            } else if (authorOpen && authorOpen.c >= 1) {
                 throw new Error(word('Rate limit: You can only have 1 active poll at a time'));
             }
 
+            // Every author's, owners' and admins' too: unchanged.
             const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
             if (nodeOpen && nodeOpen.c >= 5) {
                 throw new Error(word('Rate limit: Node limit of 5 active polls reached'));
@@ -764,13 +773,18 @@ export function createPost(
             // Upcoming cap (§2.2). Three separate pools: a group's events count against the group, and
             // everything else against the author — a member, or the enterprise a keeper posts for.
             // "Upcoming" is active and not yet ended; an ended event stays active until the 30-day scrub
-            // and must not hold a slot for that month.
+            // and must not hold a slot for that month. The pool is the same for an owner or admin acting;
+            // only its number is the owners' (ownersLimit).
             const upcoming = audienceScope === 'group'
                 ? db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
                               AND audience_scope = 'group' AND target_group_id = ?`).get(createdAt, options!.targetGroupId) as any
                 : db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
                               AND author_pubkey = ? AND (audience_scope IS NULL OR audience_scope != 'group')`).get(createdAt, authorPublicKey) as any;
-            if (upcoming && upcoming.c >= EVENT_UPCOMING_CAP) {
+            if (ownersLimit !== null) {
+                if (upcoming && upcoming.c >= ownersLimit) {
+                    throw new Error(tr('Limit reached: this community\'s owners allow {n} upcoming events at a time for owners and admins ("Owner and admin limit" in Settings)', { n: ownersLimit }));
+                }
+            } else if (upcoming && upcoming.c >= EVENT_UPCOMING_CAP) {
                 throw new Error(tr('Limit reached: {n} upcoming events at a time', { n: EVENT_UPCOMING_CAP }));
             }
         }

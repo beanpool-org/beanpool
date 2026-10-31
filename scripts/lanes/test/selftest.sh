@@ -612,6 +612,9 @@ print -l '#!/bin/zsh' "source ${(qq)LIB}" 'CLEAN=0 PR=42' "$done_line" > "$T/run
 # As a real lane ends after a hold: ci_hold's line and the run script's last line land in the same second.
 print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "⚠ PR #44 LEFT FOR THE DIRECTOR, no deciding pass: the run on aaa1 was cancelled"' 'CLEAN=0 PR=44' "$done_line" > "$T/run-selftestleft.sh"
 print -l '#!/bin/zsh' "source ${(qq)LIB}" 'CLEAN=0 PR=' "$done_line" > "$T/run-selftestnopr.sh"
+# A run script's own last line may leave a field out; a field that is not there must not read as the line's timestamp.
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "LANE $LANE_NAME DONE (clean=1 merged=0) — HELD for the director"' > "$T/run-selftestnofield.sh"
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "LANE $LANE_NAME REVIEW DONE — HELD for the director"' > "$T/run-selftestbare.sh"
 print -l '#!/bin/zsh' 'sleep 600' > "$T/run-selftestother.sh"
 watch_now(){ # OUT — starts a watcher; WOKE=1 if it exits within 5 s. One still asleep is stopped, or it would take the next lane's event.
   LANE_WATCH_SECS=1 zsh "${HERE:h}/watch.sh" > "$1" 2>&1 &
@@ -632,9 +635,15 @@ watch_now "$T/w-left2.out"; woke_left2=$WOKE
 zsh "${HERE:h}/start.sh" "$T/run-selftestnopr.sh" > /dev/null 2>&1 &
 sleep 2
 watch_now "$T/w-nopr.out"; woke_nopr=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestnofield.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-nofield.out"; woke_nofield=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestbare.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-bare.out"; woke_bare=$WOKE
 { zsh "${HERE:h}/stop.sh" selftestother; } >> "$LOG" 2>&1
 wait 2>/dev/null
-for o in done done2 left left2 nopr; do print -r -- "--- w-$o.out"; cat "$T/w-$o.out"; done >> "$LOG"
+for o in done done2 left left2 nopr nofield bare; do print -r -- "--- w-$o.out"; cat "$T/w-$o.out"; done >> "$LOG"
 show
 check "woke while the other lane still ran"      [ "$woke_done" = 1 ]
 check "printed the lane, clean and the PR"       grep -qF "LANE DONE on lane selftestdone" "$T/w-done.out"
@@ -644,7 +653,9 @@ check "the hold above the last line wakes it, once" [ "$woke_left:$woke_left2" =
 check "the hold keeps its own headline"          grep -qF "NOT REVIEWED on lane selftestleft" "$T/w-left.out"
 check "... and the same wake says the lane finished" grep -qE "selftestleft at [0-9:]+ — clean=0, PR #44, held for the director" "$T/w-left.out"
 check "a lane that ended with no PR wakes it too, and says so" eval '[ "$woke_nopr" = 1 ] && grep -qE "selftestnopr at [0-9:]+ — clean=0, no PR, held for the director" "$T/w-nopr.out"'
-check "watch.sh printed no shell errors"         eval '! grep -qE "bad option|bad pattern|command not found|parse error|read-only" "$T"/w-*.out'
+check "a last line with no pr= says no PR, not its timestamp" eval '[ "$woke_nofield" = 1 ] && grep -qE "selftestnofield at [0-9:]+ — clean=1, no PR, held for the director" "$T/w-nofield.out"'
+check "a last line with neither field says so, and any DONE line wakes it" eval '[ "$woke_bare" = 1 ] && grep -qE "selftestbare at [0-9:]+ — clean=\?, no PR, held for the director" "$T/w-bare.out"'
+check "watch.sh printed no shell errors"        eval '! grep -qE "bad option|bad pattern|command not found|parse error|read-only" "$T"/w-*.out'
 
 scenario "47. the AGY rules in the repo carry the pre-flight and the heavy-test wait, and send no stage to the full suite"
 ab=$(lane_brief agy "Build the thing on feat/z.")

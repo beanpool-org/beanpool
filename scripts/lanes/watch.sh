@@ -42,7 +42,10 @@ while :; do
       fi
       if [ -n "$fin" ] && once "$lane $fin"; then
         woke=1
-        c=${${fin#*clean=}%%[ )]*}; p=${${fin#* pr=}%%[ )]*}
+        # A # that matches nothing leaves the whole line, and its first word is the timestamp: look before cutting.
+        c=?; p=
+        [[ "$fin" == *"clean="* ]] && c=${${fin#*clean=}%%[ )]*}
+        [[ "$fin" == *" pr="* ]] && p=${${fin#* pr=}%%[ )]*}
         print "LANE DONE on lane $lane at $(date +%H:%M) — clean=$c, ${${p:+PR #$p}:-no PR}, held for the director"
       fi
       if [ "$woke" = 1 ]; then tail -4 "$f"; exit 0; fi

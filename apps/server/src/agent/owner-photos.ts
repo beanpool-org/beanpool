@@ -15,7 +15,16 @@
  *   most 24 hours: an id is the grant's that uploaded it and no other's, it is used once, and it and its file are gone
  *   when a post is made with it, when its 24 hours are up (each upload and each use sweeps, and an hourly timer), or when
  *   the grant is revoked (every revoke path calls dropUploadedPhotosOf). Nothing lists the uploads or reads one back.
- * - One budget for both: AGENT_PHOTOS_PER_DAY (200) a grant a UTC day (limits.ts), each fetch or upload tried counted.
+ * - A photo link (the director, 31 Oct, for seeding: an assistant such as Claude Code runs commands but never sees its own
+ *   bearer, so it can't use POST /mcp/photos, and a photo in the call is 49,000 to 192,000 characters): `photo_upload_link`
+ *   (owner-posts.ts) makes an address on this server, /mcp/photos/u/<token>, that takes images the same way with no header, for
+ *   one hour. It is a secret in a URL, so it is made narrow. The token is 32 random bytes and only its SHA-256 is kept, in
+ *   memory only (as an OAuth access token is, oauth.ts: a restart costs the assistant one more call); the address takes
+ *   uploads and nothing else (photo-upload-route.ts); a grant holds at most PHOTO_LINKS_PER_GRANT, a new one replacing its oldest;
+ *   and it dies at its expiry, with its grant (dropUploadedPhotosOf), and when the owners' switch goes off (dropEveryPhotoLink:
+ *   turning the switch on again brings none back). It is read again at every upload (grantMayStillPost). No line ever writes
+ *   its token: sanitize-message.ts takes it out of every log line.
+ * - One budget for all three: agentPhotosPerDay() a grant a UTC day (limits.ts), each fetch or upload tried counted.
  * - Refused in words, never the server's own error: "not an image", "too big", "a private address", "timed out". No answer
  *   carries an address the server resolved, a path or file name on this server, or another grant's anything.
  */
@@ -27,7 +36,8 @@ import {
     SsrfSecurityError, type HostResolver, type SsrfSafeFetchOptions, type SsrfSafeResponse,
 } from '../engine/pulse-resolver.js';
 import { logger } from '../logger.js';
-import { admitAgentPhoto, agentPhotosToday, AGENT_PHOTOS_PER_DAY } from './limits.js';
+import { admitAgentPhoto, agentPhotosPerDay, agentPhotosToday } from './limits.js';
+import type { AgentGrant } from './tools.js';
 
 /** The most a fetched or uploaded photo may be, before it is made 800 px. */
 export const PHOTO_SOURCE_MAX_BYTES = 5 * 1024 * 1024;
@@ -40,14 +50,28 @@ export const PHOTO_SOURCE_TYPES = ['image/jpeg', 'image/webp', 'image/png'] as c
 export const PHOTO_UPLOAD_KEEP_MS = 24 * 60 * 60 * 1000;
 /** Where an upload goes, beside /mcp (agent/photo-upload-route.ts); an assistant joins it to the address in its welcome. */
 export const PHOTO_UPLOAD_PATH = '/mcp/photos';
+/** A photo link's address is this, a slash and its token. */
+export const PHOTO_LINK_PATH = `${PHOTO_UPLOAD_PATH}/u`;
+/** A photo link's address as every log line and record writes it: never its token. */
+export const PHOTO_LINK_LOG_PATH = `${PHOTO_LINK_PATH}/…`;
+/** How long a photo link takes uploads. */
+export const PHOTO_LINK_KEEP_MS = 60 * 60 * 1000;
+/** The links a grant holds at once: one more replaces its oldest. */
+export const PHOTO_LINKS_PER_GRANT = 3;
+const PHOTO_LINK_TOKEN_BYTES = 32;
 
 const MB = 1024 * 1024;
 const MAX_WORDS = `${PHOTO_SOURCE_MAX_BYTES / MB} MB`;
 
-/** The two ways besides base64, in words, for connection_info and the welcome. */
+/** How to send one image to a photo link: the words connection_info, the tool and the manual all give. */
+export const PHOTO_LINK_CURL = "curl --data-binary @photo.jpg -H 'Content-Type: image/jpeg' <url>";
+
+/** The ways besides base64, in words, for connection_info and the welcome. */
 export const PHOTO_WAYS = `photo_urls: public addresses of images this server fetches itself (a JPEG, WebP or PNG, at most ${MAX_WORDS}); or `
     + `photo_ids: POST one image as the whole body to ${PHOTO_UPLOAD_PATH} on this server, with its Content-Type and the same Authorization `
-    + `header, and give the photoId it answers, once, within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours`;
+    + `header, and give the photoId it answers, once, within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours; or, for an assistant that runs commands `
+    + `but can't send that header, photo_upload_link: it gives a url good for ${PHOTO_LINK_KEEP_MS / 3_600_000} hour and many photos, `
+    + `then \`${PHOTO_LINK_CURL}\` for each image answers a photoId, and create_* takes those as photo_ids`;
 
 type Fetcher = (url: string, options: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>;
 let fetcher: Fetcher = ssrfSafeFetch;
@@ -147,7 +171,7 @@ function refused(grantId: string, host: string, kind: string, error: string): Fe
 
 /** Said when the grant's photos for the day are used up. */
 export function photoDayFull(grantId: string): string {
-    return `This assistant has had ${agentPhotosToday(grantId).toLocaleString('en')} photos fetched or uploaded today, and ${AGENT_PHOTOS_PER_DAY} a day `
+    return `This assistant has had ${agentPhotosToday(grantId).toLocaleString('en')} photos fetched or uploaded today, and ${agentPhotosPerDay().toLocaleString('en')} a day `
         + 'is the most: try again tomorrow (UTC).';
 }
 
@@ -266,17 +290,72 @@ export function sweepUploadedPhotos(now = Date.now()): number {
     return removed;
 }
 
-/** A revoked grant's uploads, used or not, go with it (agent/grants-route.ts, agent/oauth-route.ts, routes/automation-tokens.ts). */
+/** A revoked grant's uploads, used or not, and its photo links go with it (agent/grants-route.ts, agent/oauth-route.ts, routes/automation-tokens.ts). */
 export function dropUploadedPhotosOf(grantId: string): void {
     const folder = grantFolder(grantId);
     if (folder) fs.rmSync(folder, { recursive: true, force: true });
     for (const k of held) if (k.startsWith(`${grantId}/`)) held.delete(k);
+    for (const [hash, link] of photoLinks) if (link.grant.id === grantId) photoLinks.delete(hash);
 }
 
 /** How many photos a grant has waiting (for the suites, and nothing that answers an assistant). */
 export function uploadedPhotosWaiting(grantId: string): number {
     const folder = grantFolder(grantId);
     try { return folder ? fs.readdirSync(folder).length : 0; } catch { return 0; }
+}
+
+// ── Photo links ─────────────────────────────────────────────────────────────────────────────
+
+/** A link's grant as it was made, the grant's limits and rights read again at every upload (grantMayStillPost), and its end. */
+export interface PhotoLink { grant: AgentGrant; expiresAt: number }
+
+/** The live links, by the SHA-256 of the token: the token itself is in the answer that made it and nowhere here. Oldest first. */
+const photoLinks = new Map<string, PhotoLink>();
+
+const tokenHash = (token: string): string => crypto.createHash('sha256').update(token).digest('hex');
+
+/**
+ * A new link for this grant, which replaces the grant's oldest if it already holds PHOTO_LINKS_PER_GRANT. It ends in an hour, or
+ * when the grant's own days are up, if that is sooner. The token is answered here once and kept nowhere.
+ */
+export function issuePhotoLink(grant: AgentGrant, now = Date.now()): { token: string; expiresAt: string } {
+    for (const [hash, link] of photoLinks) if (now >= link.expiresAt) photoLinks.delete(hash);
+    const mine = [...photoLinks].filter(([, link]) => link.grant.id === grant.id);
+    for (const [hash] of mine.slice(0, Math.max(0, mine.length - PHOTO_LINKS_PER_GRANT + 1))) photoLinks.delete(hash);
+    const token = crypto.randomBytes(PHOTO_LINK_TOKEN_BYTES).toString('base64url');
+    const expiresAt = Math.min(now + PHOTO_LINK_KEEP_MS, grant.expiresAt ?? Infinity);
+    photoLinks.set(tokenHash(token), { grant, expiresAt });
+    return { token, expiresAt: new Date(expiresAt).toISOString() };
+}
+
+/** The link this token opens, or null: one that never was, one replaced or dropped and one past its hour are all the same. */
+export function photoLinkOf(token: string, now = Date.now()): PhotoLink | null {
+    const hash = tokenHash(token);
+    const link = photoLinks.get(hash);
+    if (!link) return null;
+    if (now < link.expiresAt) return link;
+    photoLinks.delete(hash);
+    return null;
+}
+
+/** A link whose grant may no longer post is dead for good: a later tick or role does not bring it back. */
+export function dropPhotoLink(token: string): void {
+    photoLinks.delete(tokenHash(token));
+}
+
+/** The owners' switch went off: every link dies, and turning it on again brings none back (agent/mcp-route.ts). */
+export function dropEveryPhotoLink(): void {
+    photoLinks.clear();
+}
+
+/** How many links a grant holds (for the suites, and nothing that answers an assistant). */
+export function photoLinksHeld(grantId: string): number {
+    return [...photoLinks.values()].filter((link) => link.grant.id === grantId).length;
+}
+
+/** For the suites: what is kept for each live link, to show it is the hash. */
+export function photoLinkHashesForTests(): string[] {
+    return [...photoLinks.keys()];
 }
 
 const SWEEP_EVERY_MS = 60 * 60 * 1000;

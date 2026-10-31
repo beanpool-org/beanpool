@@ -1,8 +1,8 @@
 /**
  * Limits per agent grant, kept by the server (admin MCP design §2): 60 calls a minute and 2,000 a day, answered 429 in
  * words past either; lists of at most 50 rows; at most 2 backups a day; at most the owners' "Assistant posts a day" made
- * by an owner's assistant (agent/owner-posts.ts), and 200 photos fetched or uploaded for it (agent/owner-photos.ts). Counted in memory by grant id: a restart starts the counts again, which
- * an assistant cannot cause.
+ * by an owner's assistant (agent/owner-posts.ts), and four times that many photos fetched or uploaded for it (agent/owner-photos.ts).
+ * Counted in memory by grant id: a restart starts the counts again, which an assistant cannot cause.
  */
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 
@@ -23,11 +23,12 @@ export const AGENT_EDITS_PER_DAY = 200;
 /** remove_all_i_made, once a UTC day per grant (design §2.8); the owner's own "Remove its posts" in Settings is not held to it. */
 export const AGENT_REMOVE_ALLS_PER_DAY = 1;
 /**
- * Photos one owner's assistant may have this server fetch (photo_urls) or take as an upload (POST /mcp/photos) in a UTC day,
- * the two together (design §2.8: 200 photo fetches; slice S4, agent/owner-photos.ts). Each one tried counts, whether or not
- * it gave a photo: the work was done.
+ * Photos one owner's assistant may have this server fetch (photo_urls) or take as an upload (POST /mcp/photos, or a photo link)
+ * in a UTC day, the three together: this many for each post the owners' daily setting allows (the director, 31 Oct, for seeding:
+ * 100 → 400, 1,000 → 4,000), read through agentPhotosPerDay(). Each one tried counts, whether or not it gave a photo: the work
+ * was done (slice S4, agent/owner-photos.ts).
  */
-export const AGENT_PHOTOS_PER_DAY = 200;
+export const AGENT_PHOTOS_PER_POST = 4;
 
 /** Whether a value is a day's number the owners may set: a whole number from 1 to 1,000. */
 export function isAgentPostsPerDay(v: unknown): v is number {
@@ -43,6 +44,11 @@ export function agentPostsPerDay(): number {
 export function setAgentPostsPerDay(n: number): void {
     if (!isAgentPostsPerDay(n)) throw new Error(`Assistant posts a day is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX}`);
     updateLocalConfig({ agentPostsPerDay: n });
+}
+
+/** The photos one owner's assistant may have today, the owners' setting read now, so a change takes effect at once. */
+export function agentPhotosPerDay(): number {
+    return AGENT_PHOTOS_PER_POST * agentPostsPerDay();
 }
 
 const MINUTE_MS = 60_000;
@@ -118,6 +124,16 @@ export function admitAgentCall(grantId: string, now = Date.now()): Admission {
     return { ok: true };
 }
 
+/**
+ * An upload admitted as a photo (admitAgentPhoto) gives back its place in the day's calls: it stays one of the minute's 60, but
+ * its day is the photos' own, which at the owners' 1,000 is 4,000 and the 2,000 calls would end at half of. An upload refused
+ * before that keeps its place, so refusals are held to the 2,000 as every other call is. The node's day total keeps it.
+ */
+export function returnAgentDayCall(grantId: string, now = Date.now()): void {
+    const c = countsOf(grantId, now);
+    if (c.dayCalls > 0) c.dayCalls--;
+}
+
 export function agentCallsToday(grantId: string, now = Date.now()): number {
     return countsOf(grantId, now).dayCalls;
 }
@@ -191,7 +207,7 @@ export function agentPhotosToday(grantId: string, now = Date.now()): number {
 /** Whether this grant may have one more photo fetched or uploaded today; counts it when it may. */
 export function admitAgentPhoto(grantId: string, now = Date.now()): boolean {
     const c = countsOf(grantId, now);
-    if (c.dayPhotos >= AGENT_PHOTOS_PER_DAY) return false;
+    if (c.dayPhotos >= agentPhotosPerDay()) return false;
     c.dayPhotos++;
     return true;
 }

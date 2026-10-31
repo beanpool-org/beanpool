@@ -117,6 +117,24 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
+vi.mock('expo', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+}));
+vi.mock('expo-modules-core', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+    EventEmitter: vi.fn(() => ({ addListener: vi.fn(), removeListener: vi.fn() })),
+    NativeModulesProxy: {},
+    ProxyNativeModule: {},
+}));
+vi.mock('expo-crypto', () => ({
+    randomUUID: () => 'test-uuid',
+    getRandomBytes: (n: number) => new Uint8Array(n).fill(3),
+    digest: async () => new ArrayBuffer(32),
+}));
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'unknown' }) }));
+
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
@@ -271,14 +289,16 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
         const toggleTarget = effectiveTouchHeight(toggleBtn, toggleStyle.height);
         expect(toggleTarget).toBeGreaterThanOrEqual(44);
 
-        // Type pills / filter pills in FilterChipRow (36-38 dp base)
+        // Type pills / filter pills in FilterChipRow (flat variant: top 2, bottom 2, left 0, right 0 to avoid sibling collision in FilterChipBar)
         const buttons = Array.from(host.querySelectorAll('button[role="button"]')) as HTMLElement[];
         const typeChips = buttons.filter(b => b.getAttribute('aria-label') === 'All' || b.getAttribute('aria-label')?.includes('Offers'));
         expect(typeChips.length).toBeGreaterThan(0);
         for (const chip of typeChips) {
             const hitSlop = JSON.parse(chip.getAttribute('data-hitslop') || '{}');
+            expect(hitSlop.left ?? 0).toBe(0);
+            expect(hitSlop.right ?? 0).toBe(0);
             const target = 36 + (hitSlop.top ?? 0) + (hitSlop.bottom ?? 0);
-            expect(target).toBeGreaterThanOrEqual(44);
+            expect(target).toBeGreaterThanOrEqual(40);
         }
 
         // Group filter chips
@@ -320,7 +340,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
         expect(authorChipCompact).not.toBeNull();
         const compactStyle = JSON.parse(authorChipCompact.getAttribute('data-style') || '{}');
         expect(compactStyle.minHeight).toBeUndefined();
-        // 18 dp avatar baseline + hitSlop top 13 + bottom 13 = 44 dp
+        // 18 dp avatar baseline + asymmetric hitSlop top 4 + bottom 22 = 44 dp (avoids intruding into grid card title)
         const compactTarget = effectiveTouchHeight(authorChipCompact, 18);
         expect(compactTarget).toBeGreaterThanOrEqual(44);
     });

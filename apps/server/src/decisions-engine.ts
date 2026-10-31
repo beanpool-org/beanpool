@@ -347,7 +347,7 @@ function rowToDecision(r: any): Decision {
  * member. `name` is null when it can't be known (an account gone from this community).
  */
 export interface RemovalProposer {
-    kind: 'admin' | 'password' | 'member';
+    kind: 'admin' | 'owner' | 'password' | 'member';
     name: string | null;
 }
 
@@ -417,6 +417,7 @@ function removalProposer(decision: Decision): RemovalProposer | null {
         const by = decision.params?.pausedBy;
         if (by === 'owner:password') return { kind: 'password', name: null };
         const recorded = typeof decision.params?.pausedByName === 'string' && decision.params.pausedByName ? decision.params.pausedByName : null;
+        if (decision.params?.secondPause) return { kind: 'owner', name: recorded ?? callsignOf(by) };
         return { kind: 'admin', name: recorded ?? callsignOf(by) };
     }
     if (decision.authorPubkey === SYSTEM_AUTHOR) return null;
@@ -2312,10 +2313,16 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
         };
         title = tr('Remove {name}?', { name: memberName });
         description = serverRole
-            ? tr("An admin paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
-                { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason })
-            : tr('An admin paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
-                { name: memberName, date: opensAt.slice(0, 10), reason });
+            ? (secondPause
+                ? tr("An owner paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
+                    { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason })
+                : tr("An admin paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
+                    { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason }))
+            : (secondPause
+                ? tr('An owner paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
+                    { name: memberName, date: opensAt.slice(0, 10), reason })
+                : tr('An admin paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
+                    { name: memberName, date: opensAt.slice(0, 10), reason }));
         if (secondPause) description = `${secondPauseSentence(secondPause)} ${description}`;
     } else {
         effect = 'keep_suspension';
@@ -2828,7 +2835,7 @@ export function pauseChainRefusal(
     if (coolDown) return { status: 403, error: coolDown, code: REMOVAL_COOL_DOWN_CODE };
     const name = callsignOf(subjectPubkey) || subjectPubkey.slice(0, 8);
     if (thirdPauseRefused(subjectPubkey, now)) {
-        return { status: 403, code: THIRD_PAUSE_CODE, error: tr('The community has decided on {name} twice in 90 days. Ask them to propose a Decision.', { name }) };
+        return { status: 403, code: THIRD_PAUSE_CODE, error: tr('{name} has been paused twice in 90 days already. A third time needs the community: propose a Decision.', { name }) };
     }
     const window = repauseWindow(subjectPubkey, now);
     if (window) {

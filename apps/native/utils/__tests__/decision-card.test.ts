@@ -80,6 +80,14 @@ describe('Decision card wording (native)', () => {
         expect(pauseVoteHeadline(params, 'abc', { kind: 'admin', name: null })).toBe('An admin paused Dave on 22 Oct 2026.');
         expect(pauseVoteHeadline(params, 'abc')).toBe('An admin paused Dave on 22 Oct 2026.');
 
+        // Removal by vote S4 / Marty 31 Oct: an owner's second pause says "an owner", never "an admin".
+        const secondParams = { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, secondPause: { after: 'no' } };
+        expect(pauseVoteHeadline(secondParams, 'abc', { kind: 'owner', name: 'Otto' })).toBe('Otto, an owner, paused Dave on 22 Oct 2026.');
+        expect(pauseVoteHeadline({ memberName: 'Dave', secondPause: { after: 'no' } }, 'abc', { kind: 'owner', name: 'Otto' })).toBe('Otto, an owner, paused Dave.');
+        expect(pauseVoteHeadline(secondParams, 'abc', { kind: 'admin', name: 'Otto' })).toBe('Otto, an owner, paused Dave on 22 Oct 2026.');
+        expect(pauseVoteHeadline(secondParams, 'abc')).toBe('An owner paused Dave on 22 Oct 2026.');
+        expect(pauseVoteHeadline({ memberName: 'Dave', secondPause: { after: 'no' } }, 'abc')).toBe('An owner paused Dave.');
+
         expect(proposedByLine({ effect: 'remove_member', proposer: { kind: 'member', name: 'Tia' } })).toBe('Proposed by Tia.');
         expect(proposedByLine({ effect: 'remove_member', proposer: { kind: 'member', name: null } })).toBe('Proposed by a member who has since left.');
         expect(proposedByLine({ effect: 'remove_member', proposer: { kind: 'admin', name: 'Ada' } })).toBeNull();

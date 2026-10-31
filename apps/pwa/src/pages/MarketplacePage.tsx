@@ -324,6 +324,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // The tags the form opened with, moved on by a reload's: what the save compares with, as on the phone (app/post/[id].tsx).
     const editTagsFrom = useRef<string[]>([]);
     const [searchResults, setSearchResults] = useState<MarketplacePost[] | null>(null);
+    // The words that answer was for: under new words it stands only as rows the words match, until their read lands.
+    const [searchResultsWords, setSearchResultsWords] = useState('');
     const searchTimerRef = useRef<any>(null);
     // Asks the node again for the search on screen: each read of the list does, so what it brought in reaches the search.
     const searchAgainRef = useRef<(() => void) | null>(null);
@@ -614,7 +616,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     limit: 50,
                     ...page,
                 }));
-                if (active) setSearchResults(replayLiveChanges(liveMark, results, fits));
+                if (active) {
+                    setSearchResults(replayLiveChanges(liveMark, results, fits));
+                    setSearchResultsWords(q);
+                }
             } catch {
                 if (active) setSearchResults(null);
             } finally {
@@ -1277,7 +1282,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (p.type === 'poll' && typeFilter !== 'poll') return false;
                 // The node's answer stands for the words, unless a tag filter is on: it asks for the words OR the tags, so there
                 // the words still narrow the tag's listings.
-                if (searchResults !== null && !selectedTag) return true;
+                if (searchResults !== null && !selectedTag && searchResultsWords === searchQuery.trim()) return true;
                 return matchesExpandedSearch(searchQuery, p.title, p.description, p.tags);
             });
         }

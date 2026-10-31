@@ -189,6 +189,18 @@ describe('a search stays true as the list moves', () => {
         expect(cards()).toEqual(['Lemon curd']);
     });
 
+    it('new words never show the old words\' rows while their own read is out', async () => {
+        node.answer = () => [jam];
+        await openMarket();
+        await search('lemon');
+        expect(cards()).toEqual(['Lemon jam']);
+
+        // The next read stays out: the box says apple, and nothing the node said about lemon stands for it.
+        vi.mocked(api.getMarketplacePosts).mockImplementation(() => new Promise(() => {}) as any);
+        await search('apple');
+        expect(cards()).toEqual([]);
+    });
+
     it('a read of the list reads the search again: an edit the member made shows without new words', async () => {
         node.answer = () => [jam];
         await openMarket();

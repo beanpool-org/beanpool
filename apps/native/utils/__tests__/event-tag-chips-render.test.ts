@@ -13,6 +13,7 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const push = vi.hoisted(() => vi.fn());
+const dismissTo = vi.hoisted(() => vi.fn());
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, accessibilityLabel, accessibilityRole, disabled, testID } = props;
@@ -34,7 +35,7 @@ vi.mock('react-native', () => {
     };
 });
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
-vi.mock('expo-router', () => ({ router: { canGoBack: () => false, back: vi.fn(), replace: vi.fn(), push } }));
+vi.mock('expo-router', () => ({ router: { canGoBack: () => false, back: vi.fn(), replace: vi.fn(), push, dismissTo } }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const m: any = await import('../../constants/colors');
@@ -66,7 +67,8 @@ describe('an event\'s tags on the phone', () => {
         expect(chips.map((c) => c.textContent)).toEqual(['Lemon']);
         expect(chips[0].getAttribute('aria-label')).toBe('Filter marketplace by tag Lemon');
         await act(async () => { chips[0].click(); });
-        expect(push).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { tag: 'food.fruit.lemon' } });
+        expect(dismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { tag: 'food.fruit.lemon' } });
+        expect(push).not.toHaveBeenCalled();
     });
 
     it('no tags, or only ones it can\'t label: no row', async () => {

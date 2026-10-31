@@ -23,7 +23,8 @@ export function PostTagChips({ tags, inset = 0 }: { tags: unknown; inset?: numbe
                 <Pressable
                     key={id}
                     style={[styles.chip, { backgroundColor: colors.surface.app, borderColor: colors.border.default }]}
-                    onPress={() => router.push({ pathname: '/(tabs)/market', params: { tag: id } })}
+                    // dismissTo, never push: this row sits in a modal over the tabs, and a push puts a second, inescapable tab navigator on top.
+                    onPress={() => router.dismissTo({ pathname: '/(tabs)/market', params: { tag: id } })}
                     accessibilityRole="button"
                     accessibilityLabel={t('Filter marketplace by tag {tag}', { tag: label })}
                 >

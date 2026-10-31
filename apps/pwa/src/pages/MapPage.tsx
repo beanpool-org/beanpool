@@ -524,6 +524,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setNewPostTitle(openDraft.title);
         setNewPostDescription(openDraft.description);
         setNewPostCategory(openDraft.category ?? 'general');
+        setNewPostTags([]);
         setNewPostCredits(openDraft.credits === null ? '' : String(openDraft.credits));
         setNewPostPriceType(openDraft.priceType ?? 'fixed');
         setNewPostRepeatable(openDraft.repeatable);
@@ -1772,6 +1773,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setNewPostTitle(copy.title);
             setNewPostDescription(moved ? withMovedFromLine(seriesMovedFromLine(source.eventRepeat), copy.description) : copy.description);
             setNewPostPhotos([]);
+            setEventTags([]);
             setEventStart('');
             setEventEnd('');
             // A copy is a one-off until its host says otherwise.

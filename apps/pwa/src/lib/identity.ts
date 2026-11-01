@@ -396,6 +396,8 @@ export interface PendingJoin {
      * sign-in. Only what the screens say about it depends on this.
      */
     door?: 'words' | 'sign-in';
+    /** This page left for the person check (web-join.ts) and hasn't heard back: a page that opens without its answer says so. */
+    checkHop?: boolean;
 }
 
 /** A join with this pending key has gone to the node, and the node has not said it did not land. */
@@ -509,6 +511,8 @@ export const DEFINITE_JOIN_REFUSALS = {
     work_expired: 400,
     work_spent: 400,
     sign_in_required: 403,
+    // The person check, asked before the work is checked and before anything is written.
+    check_required: 429,
 } as const;
 export type DefiniteJoinRefusalCode = keyof typeof DEFINITE_JOIN_REFUSALS;
 

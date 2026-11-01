@@ -42,6 +42,7 @@ import { parseToolTarget, type OpenTool } from './tools/route';
 import type { ComposerDraft } from './tools/builder';
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
+import { onConversationRead } from './lib/conversation-read';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
@@ -803,11 +804,43 @@ export function App() {
             return pollUnread();
         });
 
+        // After a conversation's unread lines are marked read on the server:
+        // App's count refreshes immediately. Must read after the mark has landed (the event only fires
+        // once the mark has landed), bypasses the 2s cooldown, and if a poll is currently in-flight,
+        // awaits it and runs a fresh poll so the count does not stay stale.
+        let refreshQueued = false;
+        const refreshAfterRead = async (): Promise<void> => {
+            if (cancelled) return;
+            if (pollPromise) {
+                if (refreshQueued) return;
+                refreshQueued = true;
+                try {
+                    await pollPromise;
+                } catch {
+                    /* in-flight poll failure is handled by pollUnread */
+                }
+                refreshQueued = false;
+                if (cancelled) return;
+                return refreshAfterRead();
+            }
+            try {
+                await pollUnread();
+            } catch {
+                /* network failure: next scheduled poll will retry */
+            }
+        };
+
+        const unsubRead = onConversationRead(() => {
+            if (cancelled) return;
+            void refreshAfterRead();
+        });
+
         return () => {
             cancelled = true;
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
+            unsubRead();
         };
     }, [identity]);
 
@@ -1175,6 +1208,7 @@ export function App() {
                                     openSearch={openMarketSearch}
                                     onSearchOpened={clearMarketSearch}
                                     onSaveSearch={(settings) => { setSaveSearchToHome(settings); setActiveTab('home'); }}
+                                    onComposer={openComposerFromTool}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}
@@ -1188,7 +1222,15 @@ export function App() {
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                 />
                             )}
-                            {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'messages' && (
+                                <MessagesPage
+                                    identity={identity}
+                                    openConversationId={openConversationId}
+                                    onConversationOpened={() => setOpenConversationId(null)}
+                                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                />
+                            )}
                             {activeTab === 'people' && (
                                 <PeoplePage
                                     identity={identity}

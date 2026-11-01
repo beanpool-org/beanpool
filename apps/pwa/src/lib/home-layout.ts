@@ -43,7 +43,7 @@ const FIXED: ReadonlySet<string> = new Set([FIXED_FIRST, FIXED_LAST]);
  */
 export const HOME_DRAWN: ReadonlySet<string> = new Set([
     'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'search', 'decide', 'groups',
-    'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
+    'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
     ...drawnToolCardTypes(),
 ]);
 
@@ -476,7 +476,7 @@ export function pickerGroups(
             state: full && state === 'add' ? 'full' : state,
             count: entry.multiple && n > 0 ? t('{n} of {max} on Home', { n: Math.min(n, max), max }) : null,
             status: status[entry.id] ?? null,
-            hasSettings: !!entry.readSettings,
+            hasSettings: !!entry.readSettings && entry.id !== 'tools',
         });
     }
     return { groups: groups.filter(g => g.rows.length > 0), full };

@@ -16,6 +16,7 @@ import { OPEN_HELP_EVENT, closeTour, helpContext, moveTour, startTour, useTour }
 import { useGuide } from '../../utils/use-guide';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getGlobalUnreadCount, syncMessages, getMarketplaceTransactions } from '../../utils/db';
+import { CONVERSATION_READ_LOCALLY_EVENT } from '../../utils/app-events';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../ThemeContext';
 import { useNodeStatus } from '../NodeStatusContext';
@@ -306,10 +307,16 @@ export default function TabLayout() {
             readForDoorbell();
         });
 
+        const readLocallySub = DeviceEventEmitter.addListener(CONVERSATION_READ_LOCALLY_EVENT, (payload?: { myPubkey?: string }) => {
+            if (!payload?.myPubkey || payload.myPubkey !== identity.publicKey) return;
+            void checkUnread(false);
+        });
+
         return () => {
             stopPolling();
             appStateSub.remove();
             wsSub.remove();
+            readLocallySub.remove();
             if (heldDoorbell) clearTimeout(heldDoorbell);
         };
     }, [identity]);

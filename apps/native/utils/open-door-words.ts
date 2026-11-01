@@ -41,6 +41,11 @@ const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
     'This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.': word('This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.'),
     'This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.': word('This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.'),
     "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
+    // global-join.ts DOOR_MESSAGES and door-work.ts DOOR_WORK_MESSAGES: the person check on a busy day.
+    'Lots of people are joining right now, so a 12-words account starts with a quick check. Sign in to join now, or try again later.': word('Lots of people are joining right now, so a 12-words account starts with a quick check. Sign in to join now, or try again later.'),
+    "That check didn't pass. Try again, or sign in to join now.": word("That check didn't pass. Try again, or sign in to join now."),
+    "The quick check didn't work on this phone. Try again, or sign in to join now.": word("The quick check didn't work on this phone. Try again, or sign in to join now."),
+    'Lots of people are joining right now, so this way starts with a quick check from Cloudflare. Or sign in to join now.': word('Lots of people are joining right now, so this way starts with a quick check from Cloudflare. Or sign in to join now.'),
     // door-key.ts commitDoorKey and keepJoinedIdentity: since S2 a phone with no account joins at another community's door
     // too (utils/open-door-key.ts), and a key the phone stored meanwhile is never written over.
     'This phone holds a different BeanPool account, so the join was not sent.': word('This phone holds a different BeanPool account, so the join was not sent.'),

@@ -53,6 +53,11 @@ export interface DoorNumbers {
     signInDiscount: number;
     /** The lowest level of a 12-words join from a network a newcomer was removed from in the last 7 days. */
     removedNetworkLevel: number;
+    /**
+     * The level from which a 12-words join needs a person check, where this node has the keys (services/door-check.ts).
+     * Never under 1: at ordinary times nobody sees it. Above DOOR_WORK_MAX_LEVEL it is off.
+     */
+    checkFromLevel: number;
     /** The ceilings per address, by door: past one, 429 `network_busy`. */
     wordsPerHour: number;
     wordsPerDay: number;
@@ -66,6 +71,13 @@ const GLOBAL_NUMBERS: DoorNumbers = {
     signInWorkFrom: 30,
     signInDiscount: 2,
     removedNetworkLevel: 4,
+    // Level 2, not 1. Level 1 is 10 to 29 joins an hour from one network: a meetup or a class, which is how BeanPool
+    // spreads, on the old phones least likely to pass a check, and a hop for each of them. What level 1 would add against
+    // a script is small: one address could not pass 9 joins an hour instead of 29, but the day's line (300 new members,
+    // level 3) stops 29 an hour after ten hours, so about 216 accounts a day against 300; a script that changes address
+    // for each account meets that same line either way. Level 2 is "a hall joining at once": 30 from one network, 2,000
+    // on the node in ten minutes, a busy day, or a network a newcomer was just removed from.
+    checkFromLevel: 2,
     wordsPerHour: 500,
     wordsPerDay: 2_000,
     signInPerHour: 1_000,

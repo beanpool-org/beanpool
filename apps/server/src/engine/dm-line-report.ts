@@ -8,8 +8,8 @@
 // What a report stands on:
 // - A signature that verifies needs no row. The sealed line is kept as handed over, with the report, so a sender who edits
 //   or deletes the line, or cancels the request, takes back nothing once it is reported, nor from a copy the reporter still
-//   holds. An app holding only the tombstone has nothing to hand over: Report on a request then blocks with no report.
-//   S2.5's lines, which no node keeps, report the same way.
+//   holds. An app holding only the tombstone has nothing to hand over: Report on a request then blocks, and reports the
+//   person (POST /api/reports) with no line. S2.5's lines, which no node keeps, report the same way.
 // - With none, the line must be the node's own encrypted row, and the node's copy is what is kept: a reporter's bytes that
 //   nobody signed are never filed as the line. The node's copy with a signature that fails reads as such.
 //

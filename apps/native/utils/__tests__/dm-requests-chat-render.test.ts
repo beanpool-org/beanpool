@@ -152,10 +152,10 @@ vi.mock('../node-post', () => ({
     signedGet: () => new Promise(() => {}), signedPost: () => new Promise(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
-const blocks = vi.hoisted(() => ({ made: [] as string[] }));
+const blocks = vi.hoisted(() => ({ made: [] as string[], reports: [] as unknown[][] }));
 vi.mock('../blocklist', () => ({
     isUserBlocked: async () => false, getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
-    blockUser: async (key: string) => { blocks.made.push(key); return true; },
+    blockUser: async (key: string, ...report: unknown[]) => { blocks.made.push(key); blocks.reports.push(report); return true; },
 }));
 // Which screen /chat/:id draws is utils/chat-route's call (tested there); here the test names it.
 const route = vi.hoisted(() => ({ now: { view: 'dm', screenId: 'dm1' } as { view: string; screenId: string } }));
@@ -202,6 +202,7 @@ beforeEach(() => {
     net.calls.length = 0;
     alerts.said.length = 0;
     blocks.made.length = 0;
+    blocks.reports.length = 0;
     composer.type = null;
     composer.send = null;
     events.on = {};
@@ -331,7 +332,7 @@ describe('a request waiting for this member, on the phone', () => {
     });
 
     // The deciding review of #2705: with the tombstone left out, a bar that needs a line would be dead for good.
-    it('a request whose line its sender deleted: the bar\'s Report blocks them, files no report, and says so', async () => {
+    it('a request whose line its sender deleted: the bar\'s Report blocks them, reports the person in this account\'s name, and says so', async () => {
         standIn({
             getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
             getMessages: [{ id: 'r1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'removed', text: 'This message was deleted', metadata: { removed: true }, rawTimestamp: '2026-10-27T00:00:00.000Z', timestamp: '10:00' }],
@@ -344,7 +345,8 @@ describe('a request waiting for this member, on the phone', () => {
         await tap('Submit report');
         expect(callsOf('reportDmLine')).toBe(0);
         expect(blocks.made).toEqual(['kofi-key']);
-        expect(alerts.said).toContain('That message was deleted, so no report went. They are blocked.');
+        expect(blocks.reports).toEqual([[ME.publicKey, 'Spam or scam']]);
+        expect(alerts.said).toContain('That message was deleted, so your report of them goes without its words. They are blocked.');
     });
 
     // The deciding review of #2705: a lapsed request's line stays in the chat, and the opener's next line is a new request.
@@ -363,13 +365,15 @@ describe('a request waiting for this member, on the phone', () => {
             await reportWith([lapsed, { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'hello Ana', rawTimestamp: iso(now - 60_000), timestamp: '' }]);
             expect(callsOf('reportDmLine')).toBe(1);
             expect(blocks.made).toEqual(['kofi-key']);
+            expect(blocks.reports).toEqual([[]]); // the line's report went: the block adds no second one
         });
 
-        it('with that line deleted, never the lapsed one: it blocks, files no report, and says so, as the web does', async () => {
+        it('with that line deleted, never the lapsed one: it blocks, reports the person, and says so, as the web does', async () => {
             await reportWith([lapsed, { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'removed', text: 'This message was deleted', metadata: { removed: true }, rawTimestamp: iso(now - 60_000), timestamp: '' }]);
             expect(callsOf('reportDmLine')).toBe(0);
             expect(blocks.made).toEqual(['kofi-key']);
-            expect(alerts.said).toContain('That message was deleted, so no report went. They are blocked.');
+            expect(blocks.reports).toEqual([[ME.publicKey, 'Spam or scam']]);
+            expect(alerts.said).toContain('That message was deleted, so your report of them goes without its words. They are blocked.');
         });
     });
 

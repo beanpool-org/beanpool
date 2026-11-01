@@ -362,7 +362,7 @@ describe('MessageRequestsPane on phone', () => {
     const DELETED = { id: 'line-1', senderId: 'bob-pubkey', type: 'removed', text: 'This message was deleted', metadata: { removed: true } };
     const opacityOf = (el: Element) => Object.assign({}, ...[JSON.parse(el.getAttribute('data-style') || '{}')].flat(Infinity).filter(Boolean)).opacity;
 
-    it('a request whose line its sender deleted: Report blocks them, files no report, says so, and the card drops', async () => {
+    it('a request whose line its sender deleted: Report blocks them, reports the person in this account\'s name, says so, and the card drops', async () => {
         dbMocks.getMessages.mockResolvedValueOnce([DELETED]);
         const onChanged = vi.fn();
         renderCard({ onChanged });
@@ -371,8 +371,8 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
         expect(dbMocks.reportDmLine).not.toHaveBeenCalled();
-        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
-        expect(alerts.said[0].title).toBe('That message was deleted, so no report went. They are blocked.');
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
+        expect(alerts.said[0].title).toBe('That message was deleted, so your report of them goes without its words. They are blocked.');
         alerts.said[0].buttons?.[0].onPress();
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     });
@@ -390,14 +390,14 @@ describe('MessageRequestsPane on phone', () => {
         expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-req-1', 'line-1', 'Buy my crypto', 'Harassment');
     });
 
-    it('a report the node refuses still blocks, and says the report did not go', async () => {
+    it('a report the node refuses still blocks, reports the person instead, and says the message did not go', async () => {
         dbMocks.reportDmLine.mockRejectedValueOnce(refusal('That message is not there.', { status: 404, code: 'not_found', nodeAnswered: true }));
         const onChanged = vi.fn();
         await reportFrom(onChanged);
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
-        expect(alerts.said[0].title).toBe('Your community did not take the report. They are blocked.');
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
+        expect(alerts.said[0].title).toBe('Your community did not take that message, so your report of them goes without its words. They are blocked.');
         alerts.said[0].buttons?.[0].onPress();
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     });
@@ -477,7 +477,7 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(screen.getByTestId('request-report'));
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
     });
 
     it('a sender already on the list: reported, and the card drops', async () => {

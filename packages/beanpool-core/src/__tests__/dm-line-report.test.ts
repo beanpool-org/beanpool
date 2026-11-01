@@ -174,6 +174,13 @@ describe('Report on a request, when no report went', () => {
         const words = (['over_limit', 'refused', 'no_line'] as const).map(requestReportNotSentWords);
         expect(new Set(words).size).toBe(3);
         for (const w of words) expect(w).toMatch(/They are blocked\.$/);
-        expect(requestReportNotSentWords('no_line')).toBe('That message was deleted, so no report went. They are blocked.');
+    });
+
+    // The deciding review of #2705: with no line left, or one the node refuses, the block reports the person. Over the hourly
+    // limit nothing goes, and only that sentence may say so.
+    it('says a report of the person goes when one does, and that none did only over the limit', () => {
+        expect(requestReportNotSentWords('no_line')).toBe('That message was deleted, so your report of them goes without its words. They are blocked.');
+        expect(requestReportNotSentWords('refused')).toBe('Your community did not take that message, so your report of them goes without its words. They are blocked.');
+        expect(requestReportNotSentWords('over_limit')).toBe('You have sent a lot of reports recently, so this one did not go. They are blocked.');
     });
 });

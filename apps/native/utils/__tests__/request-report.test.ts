@@ -65,39 +65,52 @@ describe('reportRequestAndBlock', () => {
     });
     const refusal = (status: number) => Object.assign(new Error('refused'), { status });
 
-    it('reports the line, then blocks', async () => {
-        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment')).resolves.toBe('reported');
+    it('reports the line, then blocks with no second report', async () => {
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).resolves.toBe('reported');
         expect(reportDmLine).toHaveBeenCalledWith('c1', 'l1', 'Buy my crypto', 'Harassment');
         expect(blockUser).toHaveBeenCalledWith('bo');
     });
 
-    it('with no line left, blocks with no report', async () => {
-        await expect(reportRequestAndBlock('c1', null, 'bo', 'Harassment')).resolves.toBe('no_line');
+    // The deciding review of #2705: a sender who deletes their line must not take the moderators out of it. On main, Block on
+    // this card always filed a report of the person, and with no reporter blockUser files none.
+    it('with no line left, the block reports the person, in this account\'s name and with the member\'s reason', async () => {
+        await expect(reportRequestAndBlock('c1', null, 'bo', 'Harassment', ME)).resolves.toBe('no_line');
         expect(reportDmLine).not.toHaveBeenCalled();
-        expect(blockUser).toHaveBeenCalledWith('bo');
+        expect(blockUser).toHaveBeenCalledWith('bo', ME, 'Harassment');
     });
 
-    it('a refusal by the node never costs the block: what this phone still holds may be a line the node has no more', async () => {
-        for (const [status, outcome] of [[404, 'refused'], [400, 'refused'], [429, 'over_limit']] as const) {
+    it('Child safety and the member\'s own words go with that report as they were chosen, so the urgent alert still fires', async () => {
+        await reportRequestAndBlock('c1', null, 'bo', 'Child safety: they asked my age', ME);
+        expect(blockUser).toHaveBeenCalledWith('bo', ME, 'Child safety: they asked my age');
+    });
+
+    it('a refusal by the node never costs the block, and the block reports the person: what this phone holds may be a line the node has no more', async () => {
+        for (const status of [404, 400, 403]) {
             vi.mocked(blockUser).mockClear();
             vi.mocked(reportDmLine).mockRejectedValueOnce(refusal(status));
-            await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment')).resolves.toBe(outcome);
-            expect(blockUser).toHaveBeenCalledWith('bo');
+            await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).resolves.toBe('refused');
+            expect(blockUser).toHaveBeenCalledWith('bo', ME, 'Harassment');
         }
+    });
+
+    it('over the hourly limit it blocks and reports nobody: a report of the person would meet the same limit', async () => {
+        vi.mocked(reportDmLine).mockRejectedValueOnce(refusal(429));
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).resolves.toBe('over_limit');
+        expect(blockUser).toHaveBeenCalledWith('bo');
     });
 
     it('no answer from the node blocks nobody: the sheet stays for a second try', async () => {
         vi.mocked(reportDmLine).mockRejectedValueOnce(new Error('Network request failed'));
-        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment')).rejects.toThrow('Network request failed');
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).rejects.toThrow('Network request failed');
         expect(blockUser).not.toHaveBeenCalled();
     });
 
     it('a block that did not happen says "Reported" only when the report went', async () => {
         vi.mocked(blockUser).mockResolvedValue(false);
-        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment')).rejects.toBeInstanceOf(ReportedNotBlockedError);
-        await expect(reportRequestAndBlock('c1', null, 'bo', 'Harassment')).rejects.not.toBeInstanceOf(ReportedNotBlockedError);
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).rejects.toBeInstanceOf(ReportedNotBlockedError);
+        await expect(reportRequestAndBlock('c1', null, 'bo', 'Harassment', ME)).rejects.not.toBeInstanceOf(ReportedNotBlockedError);
         vi.mocked(reportDmLine).mockRejectedValueOnce(refusal(429));
-        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment')).rejects.not.toBeInstanceOf(ReportedNotBlockedError);
+        await expect(reportRequestAndBlock('c1', LINE, 'bo', 'Harassment', ME)).rejects.not.toBeInstanceOf(ReportedNotBlockedError);
     });
 });
 

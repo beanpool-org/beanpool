@@ -131,9 +131,11 @@ export function decisionFailureWords(e: unknown): string {
 }
 
 /**
- * What became of Report on a request: `reported`, or why no report went. Every one of them blocks the sender: Report always
- * does (`over_limit`, the moderators' hourly limit; `refused`, the node turned the report down; `no_line`, nothing is left to
- * hand over, because its sender deleted the line).
+ * What became of Report on a request: `reported`, or why the message's own report didn't go. Every one of them blocks the
+ * sender: Report always does. `refused` (the node turned the message's report down) and `no_line` (nothing is left to hand
+ * over, because its sender deleted the line) report the person instead, with the member's reason, as a block from a request
+ * always did: Child safety still alerts, and a report that can't be sent yet is queued. `over_limit` (the moderators' hourly
+ * limit) reports nobody.
  */
 export type RequestReportOutcome = 'reported' | 'over_limit' | 'refused' | 'no_line';
 
@@ -147,11 +149,11 @@ export function requestReportRefused(e: unknown): 'over_limit' | 'refused' | nul
     return typeof status === 'number' && status >= 400 && status < 500 ? 'refused' : null;
 }
 
-/** What Report on a request says when no report went, in place of "Reported". The block went through. */
+/** What Report on a request says when the message's report didn't go, in place of "Reported". The block went through. */
 export function requestReportNotSentWords(outcome: Exclude<RequestReportOutcome, 'reported'>): string {
     if (outcome === 'over_limit') return t('You have sent a lot of reports recently, so this one did not go. They are blocked.');
-    if (outcome === 'no_line') return t('That message was deleted, so no report went. They are blocked.');
-    return t('Your community did not take the report. They are blocked.');
+    if (outcome === 'no_line') return t('That message was deleted, so your report of them goes without its words. They are blocked.');
+    return t('Your community did not take that message, so your report of them goes without its words. They are blocked.');
 }
 
 /** The node's refusal of the opener's second line, or reaction, while their request waits (403 `dm_request_pending`). */

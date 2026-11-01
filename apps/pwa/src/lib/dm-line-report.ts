@@ -3,11 +3,14 @@
  * line as this browser holds it, its sender's signature, and what it reads as here. No key goes, and nothing else of the
  * chat. Report on a message request (Damo via Marty, 1 Nov 2026) does that and blocks its sender. The report goes first; a
  * block that doesn't go through says so and a second try blocks them (the node answers the report's repeat as the one on
- * file). The block files no report of its own.
+ * file).
  *
  * Report on a request always blocks. A line its sender deleted leaves a tombstone and the request waiting: nothing is left to
- * hand over, so it blocks with no report, and says so. A report the node refuses blocks too, the hourly limit (429) above all:
- * someone flooded with requests is who reaches it. Only no answer from the node at all stops it, and that is tried again.
+ * hand over (`no_line`). A line the node refuses blocks too (`refused`). In both the block carries a report of the person,
+ * with the member's reason, so a sender can't take the moderators out of it by deleting their line: Child safety still alerts,
+ * and a report that can't be sent yet is queued (blocklist.ts). Over the hourly limit (429, `over_limit`) it blocks with no
+ * report: someone flooded with requests is who reaches it. A report that went needs no second one. Only no answer from the
+ * node at all stops it, and that is tried again.
  */
 import { dmLineDisclosureFor, t } from '@beanpool/core';
 import { getConversationMessages, reportDmLineApi, type ApiMessage, type Conversation } from './api';
@@ -42,8 +45,11 @@ export async function reportRequestAndBlock(conv: Conversation & { request: NonN
         }
     }
     try {
-        await blockUser(conv.request.from);
-    } catch {
+        await (outcome === 'no_line' || outcome === 'refused' ? blockUser(conv.request.from, me.publicKey, reason) : blockUser(conv.request.from));
+    } catch (e) {
+        // The node's own refusal, the limit of 500 blocks above all, which trying again won't change: its sentence, as Block
+        // shows it (a BlocklistError carries the status). No answer from the node is what a second try is for.
+        if (requestReportRefused(e)) throw e;
         throw new Error(outcome === 'reported' ? t('Reported, but not blocked. Please try again.') : t('That did not go through. Please try again.'));
     }
     return outcome;

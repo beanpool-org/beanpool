@@ -83,7 +83,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
     // Report: the line's report and a block of its sender (utils/request-report.ts). The sheet stays under the dialog until OK.
     const submitReport = async (reason: string) => {
         try {
-            const outcome = await reportRequestAndBlock(entry.id, preview.line ?? null, peer, reason);
+            const outcome = await reportRequestAndBlock(entry.id, preview.line ?? null, peer, reason, myPubkey);
             const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
             Alert.alert(
                 notSent ?? t('Reported'),

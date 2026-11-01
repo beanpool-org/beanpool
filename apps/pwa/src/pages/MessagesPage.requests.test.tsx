@@ -371,14 +371,14 @@ describe('a request card', () => {
         return card;
     }
 
-    it('a request whose line its sender deleted: Report blocks them, files no report, says so, and the request goes', async () => {
+    it('a request whose line its sender deleted: Report blocks them, reports the person in this account\'s name, says so, and the request goes', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [tombstone(line(bo, 'Hello'))]);
         vi.mocked(blockUser).mockImplementationOnce(async () => { node.list = annListWith([]); return undefined as never; });
         render(<MessagesPage identity={idOf(ann)} />);
         const card = await submitReport();
-        expect(await within(card).findByText('That message was deleted, so no report went. They are blocked.')).toBeInTheDocument();
-        expect(blockUser).toHaveBeenCalledWith(bo.publicKey);
+        expect(await within(card).findByText('That message was deleted, so your report of them goes without its words. They are blocked.')).toBeInTheDocument();
+        expect(blockUser).toHaveBeenCalledWith(bo.publicKey, ann.publicKey, expect.stringContaining('Spam or scam'));
         expect(reportDmLineApi).not.toHaveBeenCalled();
         fireEvent.click(within(card).getByRole('button', { name: 'Cancel' }));
         expect(await screen.findByText("No requests. A first message from someone you haven't added or talked to arrives here.")).toBeInTheDocument();
@@ -394,14 +394,44 @@ describe('a request card', () => {
         expect(vi.mocked(reportDmLineApi).mock.calls[0][0]).toBe(older.id);
     });
 
-    it('a report the node refuses still blocks, and says the report did not go', async () => {
+    it('a report the node refuses still blocks, reports the person instead, and says the message did not go', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
         vi.mocked(reportDmLineApi).mockRejectedValueOnce(Object.assign(new Error('A report of a direct message names it'), { status: 404, code: 'not_found' }));
         render(<MessagesPage identity={idOf(ann)} />);
         const card = await submitReport();
-        await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
-        expect(await within(card).findByText('Your community did not take the report. They are blocked.')).toBeInTheDocument();
+        await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey, ann.publicKey, expect.stringContaining('Spam or scam')));
+        expect(await within(card).findByText('Your community did not take that message, so your report of them goes without its words. They are blocked.')).toBeInTheDocument();
+    });
+
+    // The deciding review of #2705: past the limit of 500 blocks the node answers 409 and blockUser throws its sentence. "Please
+    // try again" would be said for good, for every try ends the same way.
+    it('a block the node refuses shows the node\'s own sentence, whichever way the report went', async () => {
+        const full = 'You can block up to 500 people. Unblock someone to block another.';
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [signed(line(bo, 'Hello'))]);
+        vi.mocked(blockUser).mockRejectedValueOnce(Object.assign(new Error(full), { status: 409, code: 'block_limit' }));
+        render(<MessagesPage identity={idOf(ann)} />);
+        expect(await within(await submitReport()).findByText(full)).toBeInTheDocument();
+        expect(screen.queryByText('Reported, but not blocked. Please try again.')).toBeNull();
+    });
+
+    it('with no line left too: the node\'s own sentence, never "try again"', async () => {
+        const full = 'You can block up to 500 people. Unblock someone to block another.';
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [tombstone(line(bo, 'Hello'))]);
+        vi.mocked(blockUser).mockRejectedValueOnce(Object.assign(new Error(full), { status: 409, code: 'block_limit' }));
+        render(<MessagesPage identity={idOf(ann)} />);
+        expect(await within(await submitReport()).findByText(full)).toBeInTheDocument();
+        expect(screen.queryByText('That did not go through. Please try again.')).toBeNull();
+    });
+
+    it('a block with no answer from the node keeps today\'s sentences, a 5xx included', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [tombstone(line(bo, 'Hello'))]);
+        vi.mocked(blockUser).mockRejectedValueOnce(Object.assign(new Error('Bad gateway'), { status: 502 }));
+        render(<MessagesPage identity={idOf(ann)} />);
+        expect(await within(await submitReport()).findByText('That did not go through. Please try again.')).toBeInTheDocument();
     });
 
     it('a block that does not go through says the report went and the block did not', async () => {

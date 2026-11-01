@@ -1138,7 +1138,7 @@ function ChatScreen({ id }: { id: string }) {
         const { item, blocks } = reportingLine;
         try {
             let outcome: RequestReportOutcome = 'reported';
-            if (blocks) outcome = await reportRequestAndBlock(String(id), item, blocks, reason);
+            if (blocks) outcome = await reportRequestAndBlock(String(id), item, blocks, reason, identity?.publicKey ?? '');
             else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason);
             hapticSuccess();
             const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);

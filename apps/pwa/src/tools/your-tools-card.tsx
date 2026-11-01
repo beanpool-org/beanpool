@@ -146,7 +146,7 @@ export function YourToolsCard({
                 </div>
             )}
             {notOnCard.length > 0 && (
-                <div data-testid="home-tools-add-row" className="pt-2 border-t border-border-subtle">
+                <div data-testid="home-tools-add-row" className="pt-2 border-t border-border-secondary">
                     <div className="flex items-center justify-between mb-1.5">
                         <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">
                             {t('Add a tool')}
@@ -162,7 +162,7 @@ export function YourToolsCard({
                                     data-testid={`home-tools-add-${tool.id}`}
                                     onClick={() => onChangeTools([...tools, tool.id])}
                                     aria-label={t('Add {tool} to Your tools', { tool: name })}
-                                    className="min-h-[44px] px-3 py-1.5 flex items-center gap-2 rounded-xl border border-border-primary hover:border-border-hover bg-bg-card hover:bg-bg-hover text-sm font-semibold text-text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-w-0"
+                                    className="min-h-[44px] px-3 py-1.5 flex items-center gap-2 rounded-xl border border-border-primary bg-bg-card hover:bg-bg-hover text-sm font-semibold text-text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-w-0"
                                 >
                                     <span aria-hidden="true" className="text-lg shrink-0">{tool.icon}</span>
                                     <span className="min-w-0 break-words">{name}</span>

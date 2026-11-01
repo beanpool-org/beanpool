@@ -3672,5 +3672,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "ভোট দিতে পারেন এমন সদস্য খুব কম থাকায় একজন মালিক সিদ্ধান্ত নিয়েছিলেন, কিন্তু এখন যথেষ্ট সদস্য ভোট দিতে পারেন, তাই এই ভোটই সিদ্ধান্ত নেবে। কারণ: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "ভোট দিতে পারেন এমন সদস্য খুব কম থাকায় একজন মালিক সিদ্ধান্ত নিয়েছিলেন, কিন্তু এখন যথেষ্ট সদস্য ভোট দিতে পারেন, তাই এই ভোটই সিদ্ধান্ত নেবে।",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "ভোট দিতে পারেন এমন সদস্য খুব কম, তাই আরও সদস্য ভোট না দিলে, এই ভোট বন্ধ হলে {name} ফিরে আসবেন।",
-  "Not executed: a reinstatement vote cancelled it": "কার্যকর হয়নি: পুনর্বহালের একটি ভোট এটি বাতিল করেছে"
+  "Not executed: a reinstatement vote cancelled it": "কার্যকর হয়নি: পুনর্বহালের একটি ভোট এটি বাতিল করেছে",
+  "Not sure what to charge? View the Community Pricing Guide": "কী মূল্য চাইবেন নিশ্চিত নন? কমিউনিটি প্রাইসিং গাইড দেখুন"
 }

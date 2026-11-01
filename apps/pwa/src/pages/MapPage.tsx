@@ -61,6 +61,7 @@ import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
@@ -244,6 +245,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [targetGroupId, setTargetGroupId] = useState<string>('');
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
+    const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll' | 'event'>('need');
     // Events (docs/events-on-the-map.md §3). Start and end hold <input type="datetime-local"> values.
     const [eventStart, setEventStart] = useState('');
@@ -1056,6 +1058,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             pinDropMarkerRef.current = null;
         }
         setShowNewPost(false);
+        setShowPricingGuide(false);
     }
 
     /**
@@ -1188,6 +1191,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 pinDropMarkerRef.current = null;
             }
             setShowNewPost(false);
+            setShowPricingGuide(false);
             tellAdjusted(res?.eventTimeAdjusted, res?.post);
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', res?.post?.id);
@@ -1248,6 +1252,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 setAudienceScope('public');
                 setTargetGroupId('');
                 setShowNewPost(false);
+                setShowPricingGuide(false);
                 refreshPosts();
                 if (onNavigate) onNavigate('marketplace');
             } catch (e: any) {
@@ -1339,6 +1344,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 pinDropMarkerRef.current = null;
             }
             setShowNewPost(false);
+            setShowPricingGuide(false);
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
@@ -2341,6 +2347,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventEdit ? t('Edit Event') : eventIsCopy ? t('Copy Event') : t('New Post')}</span>
                     <button onClick={() => {
                         setShowNewPost(false);
+                        setShowPricingGuide(false);
                         setPostApproximate(false);
                         setAudienceScope('public');
                         setTargetGroupId('');
@@ -3032,6 +3039,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                     onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                             </div>
                         )}
+                        {!priceMarked && (
+                            <button
+                                type="button"
+                                onClick={() => setShowPricingGuide(true)}
+                                className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer mb-2"
+                            >
+                                <span className="text-base flex-shrink-0" aria-hidden="true">❓</span>
+                                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex-1 leading-snug">
+                                    {t('Not sure what to charge? View the Community Pricing Guide')}
+                                </span>
+                            </button>
+                        )}
                         {!priceMarked && <p 
                             onClick={() => setShowCommonsInfo(true)}
                             className="text-[13.5px] text-nature-700 dark:text-nature-300 mt-1 mb-3 font-semibold cursor-pointer hover:text-nature-900 dark:hover:text-white transition-colors"
@@ -3228,6 +3247,20 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         <CommonsInfoModal 
             isOpen={showCommonsInfo} 
             onClose={() => setShowCommonsInfo(false)} 
+        />
+        <PricingGuideModal
+            isOpen={showPricingGuide && showNewPost}
+            onClose={() => setShowPricingGuide(false)}
+            reporterPubkey={identity?.publicKey}
+            onSelectOfferItem={(_item, effectivePrice) => {
+                setNewPostCredits(String(effectivePrice));
+                setValidationErrors(prev => {
+                    const n = new Set(prev);
+                    n.delete('credits');
+                    return n;
+                });
+                setShowPricingGuide(false);
+            }}
         />
         {lightboxState?.isOpen && (
             <ImageLightbox

@@ -25,6 +25,7 @@ import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { verifiedFormerKeysReader } from './key-succession.js';
 import { GROUP_LINE_REPORT_NOT_FOUND, GROUP_LINE_REPORT_OWN, GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
+import { requestReceived } from './request-limits.js';
 
 export const DM_LINE_REPORT_FORM = 'A report of a direct message names it, gives a reason and hands over the line: { messageId, reason, disclosure }.';
 
@@ -106,15 +107,18 @@ export function checkDmLineReport(reporter: string, body: { messageId?: unknown;
     };
 }
 
-/** File a checked report: one row naming the line, its author and what was handed over. Null for a key that is no member's. */
+/**
+ * File a checked report: one row naming the line, its author and what was handed over, and the request it reports, if its
+ * reporter received one from them (engine/request-limits.ts). Null for a key that is no member's.
+ */
 export function submitDmLineReport(reporter: string, checked: CheckedDmLineReport): GroupLineReport | null {
     if (!isNodeMember(db, reporter)) return null;
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     const reason = checked.reason.slice(0, 500);
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, checked.authorPubkey, checked.messageId,
-        JSON.stringify({ kind: DM_LINE_DISCLOSURE_KIND, ...checked.disclosure }), reason, createdAt);
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at, request_conversation_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, checked.authorPubkey, checked.messageId,
+        JSON.stringify({ kind: DM_LINE_DISCLOSURE_KIND, ...checked.disclosure }), reason, createdAt, requestReceived(reporter, checked.authorPubkey, true));
     return { id, reporterPubkey: reporter, targetPubkey: checked.authorPubkey, targetMessageId: checked.messageId, reason, createdAt, status: 'pending' };
 }
 

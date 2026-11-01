@@ -111,6 +111,8 @@ export interface SyncAbuseReport {
     /** A report of one group chat message: its id, and the key its reporter handed over, JSON { epoch, mk } (S6). */
     targetMessageId?: string | null;
     disclosure?: string | null;
+    /** The message request its reporter received from the person it is about (the server's engine/request-limits.ts). */
+    requestConversationId?: string | null;
 }
 
 export interface SyncCreatorChannel {
@@ -1231,6 +1233,7 @@ function abuseReportOfRow(row: any): SyncAbuseReport {
         updatedAt: row.updated_at || row.created_at,
         targetMessageId: row.target_message_id ?? null,
         disclosure: row.disclosure ?? null,
+        requestConversationId: row.request_conversation_id ?? null,
     };
 }
 

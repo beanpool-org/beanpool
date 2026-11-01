@@ -2533,8 +2533,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     // changeGroupLineReportReason) moves updated_at, and a copy that took only the status kept the old reason,
                     // so a server that took over neither marked it nor listed it first (the review of #2470).
                     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at,
-                                    target_message_id, disclosure)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    target_message_id, disclosure, request_conversation_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     reason = excluded.reason,
                                     status = excluded.status,
@@ -2551,7 +2551,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ar.status || 'pending',
                         ar.updatedAt || ar.createdAt,
                         ar.targetMessageId || null,
-                        ar.disclosure || null
+                        ar.disclosure || null,
+                        ar.requestConversationId || null
                     );
                 }
             }

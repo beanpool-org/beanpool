@@ -123,6 +123,7 @@ import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-
 import { nodeRoleOf } from './node-roles.js';
 import { hasBlocked } from './member-blocks.js';
 import { withheldConversationOwnedBy } from './withheld-lines.js';
+import { DM_REQUESTS_LIMITED_CODE, requestLimitWords } from './request-limits.js';
 
 // The words layer in English: a node never writes in the device language (core words.test N11). A refusal a member reads
 // is marked with word() instead, and member-words.ts translates it on the way out; one with a {name} in it is written here in
@@ -482,7 +483,7 @@ export type LineThroughRequest =
     | { kind: 'direct' }
     /** `ignored`: one the person ignored, which the line leaves ignored: its push is done and dropped, and only its author hears it. */
     | { kind: 'request'; to: string; ignored?: boolean }
-    | { kind: 'refused'; message: string };
+    | { kind: 'refused'; message: string; code?: string };
 const DIRECT: LineThroughRequest = { kind: 'direct' };
 
 /**
@@ -579,12 +580,17 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     const made = hidden || hasBlocked(row.to_pubkey, author)
         ? 'UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?'
         : "UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL, reached_out_at = NULL, reach_out_withdrawn_at = NULL WHERE conversation_id = ?";
-    if (over(row, now)) {
+    const lapsed = over(row, now);
+    if (!lapsed && openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
+    // From here it is a line that makes a request: not while reports hold them from making any (engine/request-limits.ts).
+    // One whose acceptance they read as not made goes to someone who accepted it, so it is no new request.
+    const limited = hidden ? null : limitedRefusal(author, now);
+    if (limited) return limited;
+    if (lapsed) {
         assertPlainTablesWritable();
         db.prepare(made).run(iso(now), row.conversation_id);
         return requestLine;
     }
-    if (openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
     // One the person ignored whose line its opener withdrew since (Cancel request, decideRequest), with nothing of theirs
     // kept during a block either, stays ignored for the rest of its 30 days: the line moves only the request's time, as one
     // kept during a block does, so the opener's answers stay a waiting request's, and its push is done and dropped, as any
@@ -603,6 +609,20 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     return requestLine;
 }
 
+/** The refusal of a new request while reports hold `sender` from making any, or null. */
+function limitedRefusal(sender: string, now: number): LineThroughRequest | null {
+    const message = requestLimitWords(sender, now);
+    return message ? { kind: 'refused', message, code: DM_REQUESTS_LIMITED_CODE } : null;
+}
+
+/**
+ * The refusal of a new conversation that would be a request while reports hold `from` from making any, or null
+ * (engine/messaging.ts createConversation, before anything is written, and whether or not `to` blocks them).
+ */
+export function newRequestRefusal(from: string, to: string, now: number = Date.now()): string | null {
+    return requestsOn() && requestNeeded(from, to) ? requestLimitWords(from, now) : null;
+}
+
 /**
  * A line in a request of their own that the person a withdrawn request was for made while its opener blocks them
  * (reachedOutRow), answered as a line in the row turned round is (lineThroughRequest, the opener's): the first, or the first
@@ -614,6 +634,8 @@ function lineOfReachOut(row: RequestRow, author: string, now: number): LineThrou
     const mine = reachedOutRow(row, author)!;
     if (over(mine, now)) assertPlainTablesWritable();
     else if (openerLinesSince(mine) > 0) return { kind: 'refused', message: waitingFor(row.from_pubkey, 'write') };
+    const limited = limitedRefusal(author, now);
+    if (limited) return limited;
     if (!standbyWritesNothing()) {
         db.prepare('UPDATE dm_requests SET reached_out_at = ?, reach_out_withdrawn_at = NULL WHERE conversation_id = ?').run(iso(now), row.conversation_id);
     }
@@ -726,19 +748,22 @@ const OPENER_WROTE = `EXISTS (SELECT 1 FROM messages mm WHERE mm.conversation_id
 /**
  * The requests waiting for `viewer`, newest first: in a real conversation they are in, made in the last 30 days, with the
  * opener's line in it, from a member still here (not removed, not deleted) whom the viewer hasn't blocked. A blocked
- * member's request never lists.
+ * member's request never lists. Nor does the request of someone a moderator paused or muted, until that is lifted, nor one
+ * reports cleared (engine/request-limits.ts): made up to a limit no moderator undid, which stays cleared once it ends.
  */
 function waitingRows(viewer: string, now: number, onlyId?: string): RequestRow[] {
     return db.prepare(`
         SELECT r.* FROM dm_requests r
-          JOIN members m ON m.public_key = r.from_pubkey AND m.status != 'pruned' AND m.deleted_by_owner_at IS NULL
+          JOIN members m ON m.public_key = r.from_pubkey AND m.status NOT IN ('pruned', 'disabled') AND m.deleted_by_owner_at IS NULL
+                        AND (m.moderation_muted_until IS NULL OR m.moderation_muted_until <= @now)
          WHERE r.to_pubkey = @viewer AND r.state = 'pending' AND r.requested_at > @since
            AND (@only IS NULL OR r.conversation_id = @only)
            AND r.conversation_id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = @viewer)
            AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = @viewer AND b.blocked_pubkey = r.from_pubkey)
+           AND NOT EXISTS (SELECT 1 FROM request_limits l WHERE l.sender_pubkey = r.from_pubkey AND l.lifted_at IS NULL AND l.made_at >= r.requested_at)
            AND ${OPENER_WROTE}
          ORDER BY r.requested_at DESC, r.conversation_id
-    `).all({ viewer, since: iso(now - REQUEST_MS), only: onlyId ?? null }) as RequestRow[];
+    `).all({ viewer, now: iso(now), since: iso(now - REQUEST_MS), only: onlyId ?? null }) as RequestRow[];
 }
 
 /** A list entry or a conversation, with the fields this reads and changes. */

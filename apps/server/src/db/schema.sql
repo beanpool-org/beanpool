@@ -674,7 +674,10 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     -- A report of one message of a locked group chat (engine/group-chat-report.ts): the message, and the key its reporter
     -- handed over for it, JSON { epoch, mk } (core groupMessageKey), which opens that one message and nothing else.
     target_message_id TEXT,
-    disclosure TEXT
+    disclosure TEXT,
+    -- The message request its reporter received from the person it is about, read when it was filed: set, the report counts
+    -- towards clearing that person's requests (engine/request-limits.ts). Null for every other report.
+    request_conversation_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 -- A member's ratings: every trust floor averages them (engine trust.ts, on each spend check and listing row), and so do
@@ -686,6 +689,8 @@ CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(sta
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_post ON abuse_reports(target_post_id) WHERE target_post_id IS NOT NULL;
 -- One reporter's reports: auto-hide reads how many of theirs a moderator kept lately, and the hourly report limit.
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_reporter ON abuse_reports(reporter_pubkey, status);
+-- The reports that count towards clearing one sender's message requests: read on each of them (engine/request-limits.ts).
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_request ON abuse_reports(target_pubkey, created_at) WHERE request_conversation_id IS NOT NULL;
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (
@@ -2989,6 +2994,24 @@ CREATE TABLE IF NOT EXISTS dm_requests (
 -- The requests waiting for a member (their list, Ignore all, the folded push), and a member's own (a removal, a re-key).
 CREATE INDEX IF NOT EXISTS idx_dm_requests_to ON dm_requests(to_pubkey, state);
 CREATE INDEX IF NOT EXISTS idx_dm_requests_from ON dm_requests(from_pubkey);
+
+-- 30a. Limits on sending message requests (engine/request-limits.ts): enough reports from the people a sender's requests
+-- reached clear those requests and stop new ones until `until`. One row per limit, so a repeat lasts longer; the row stays
+-- after it ends, as the requests it cleared stay cleared. Not a pause: no member status changes. A plain table (copied verbatim).
+CREATE TABLE IF NOT EXISTS request_limits (
+    id            TEXT PRIMARY KEY,
+    sender_pubkey TEXT NOT NULL,
+    -- When it was made: the sender's requests made up to then are cleared, unless a moderator undoes it.
+    made_at       TEXT NOT NULL,
+    until         TEXT NOT NULL,
+    -- Which way the reports reached it: 'words_newcomer', 'same_wording' or 'many_reports'.
+    how           TEXT NOT NULL CHECK (how IN ('words_newcomer', 'same_wording', 'many_reports')),
+    -- When a moderator undid it, or null. A limit that ran out by itself keeps null.
+    lifted_at     TEXT,
+    -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
+    updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_request_limits_sender ON request_limits(sender_pubkey, until);
 
 -- 31. Peek tickets (front doors S6, scratch/fable-design/DESIGN-entry-points-fable.md §2.5 C, §3.4; engine/peek-tickets.ts):
 -- a member shared ONE post outside the community, and whoever holds the link reads that post under the visitors' rules

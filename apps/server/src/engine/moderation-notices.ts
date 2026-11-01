@@ -197,6 +197,8 @@ export const POST_HIDDEN_TITLE = '🛡️ Your post is hidden for review';
 export const POST_BACK_TITLE = '🛡️ Your post is back';
 export const MUTED_TITLE = '🛡️ Posting paused';
 export const UNMUTED_TITLE = '🛡️ You can post again';
+export const REQUESTS_CLEARED_TITLE = '🛡️ Your message requests were cleared';
+export const REQUESTS_BACK_TITLE = '🛡️ You can send message requests again';
 
 /** Hidden pending review, not removed: the author can still see it, and nobody else can until a moderator looks. */
 export function postHiddenBody(title: string | null | undefined): string {
@@ -212,6 +214,18 @@ export function postBackBody(title: string | null | undefined): string {
 /** The mute, in the words both its notice and every refusal it causes use. */
 export function mutedBody(): string {
     return "Three of your posts were removed by the community's moderators in the last 30 days, so you can't post or send messages here until a moderator lifts this. You can still read, edit your profile and leave.";
+}
+
+/**
+ * Reports cleared a sender's message requests (engine/request-limits.ts), in the words their notice and every refusal it
+ * causes use. Never who reported them.
+ */
+export function requestsClearedBody(until: string): string {
+    return `People you wrote to reported your message requests, so they were cleared and you can't send new ones until ${until.slice(0, 10)}. You can still answer people who wrote to you, and post.`;
+}
+
+export function requestsBackBody(): string {
+    return 'A moderator looked at the reports, so your message requests are back and you can send new ones.';
 }
 
 export function unmutedBody(): string {
@@ -264,6 +278,14 @@ export function notifyPostsBack(cb: ModerationNoticeCallbacks, authorPubkey: str
 
 export function notifyMuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {
     tell(cb, [memberPubkey], MUTED_TITLE, mutedBody(), { kind: 'moderation_muted' });
+}
+
+export function notifyRequestsCleared(cb: ModerationNoticeCallbacks, memberPubkey: string, until: string): void {
+    tell(cb, [memberPubkey], REQUESTS_CLEARED_TITLE, requestsClearedBody(until), { kind: 'requests_cleared', until });
+}
+
+export function notifyRequestsBack(cb: ModerationNoticeCallbacks, memberPubkey: string): void {
+    tell(cb, [memberPubkey], REQUESTS_BACK_TITLE, requestsBackBody(), { kind: 'requests_back' });
 }
 
 export function notifyUnmuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {

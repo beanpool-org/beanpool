@@ -125,6 +125,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('dm_requests', 'from_pubkey');
     move('dm_requests', 'to_pubkey');
     move('dm_requests', 'accepted_by');
+    // A limit on sending them follows the person (engine/request-limits.ts).
+    move('request_limits', 'sender_pubkey');
 
     // (j) friends & ratings
     move('friends', 'owner_pubkey');

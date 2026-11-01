@@ -82,6 +82,9 @@ export interface LocalConfig {
     // answersAboutAnotherName).
     // Superseded by turnedAwayNames (config/turned-away-names.ts reads it into the list, and clears it at the next write).
     endedAddressRequest?: { name: string; at: number } | null;
+    // A new name claimed beside an address that keeps working: its host, until the members are told it is live
+    // (services/address-notice.ts).
+    addressNoticeDue?: string | null;
     // The latest names this server turned away (config/turned-away-names.ts): never stored from a registrar answer while
     // nothing is stored here.
     turnedAwayNames?: { name: string; at: number; why: 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'late-claim' | 'taken-offline' | 'unanswered' }[] | null;

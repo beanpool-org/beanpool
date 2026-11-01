@@ -152,15 +152,15 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
         }
     }
 
-    // The small copy for the lists (`size=thumb`, storage/photo-thumbnails.ts): asked only here, after every gate above,
-    // so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
+    // The small copy for the lists (`size=thumb2` or legacy `size=thumb`, storage/photo-thumbnails.ts): asked only here,
+    // after every gate above, so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
     // row, one it can't read) is answered with the photo itself, as is one whose small copy the store can't give now:
     // the photo's own path below says what a missing or unreachable photo means. That photo is cached for 5 minutes, not
     // the year below: a copy the store can't give now (a bucket hiccup) would otherwise leave the 800 px bytes under the
     // list's URL, on the phone and for a public listing in a shared cache, until the photo changed (review opus-1742 #5).
     let served: Awaited<ReturnType<typeof openPhotoOf>> = null;
     let thumbNotServed = false;
-    if (ctx.query.size === 'thumb') {
+    if (ctx.query.size === 'thumb' || ctx.query.size === 'thumb2') {
         try {
             served = await openThumbnailOf(getImageStore(), photo.photo_data ? null : photo.storage_key);
         } catch (e) {

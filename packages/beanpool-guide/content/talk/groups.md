@@ -22,6 +22,10 @@ Tap **Talk**, then **Groups**. Every group you are in is listed there, newest me
 
 On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterprises and projects you keep first (with a **Manage** button to run them), then the groups you are in, opening the same chats.
 
+## Place circles
+
+On the global community, the app makes one kind of group by itself: a **place circle**, for people waiting near the same place who said they would help start a community. Only its members can see it, and its name, purpose and who can join stay as they are. See "Finding a community".
+
 ## Starting a group
 
 - On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.

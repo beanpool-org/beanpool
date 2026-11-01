@@ -7,7 +7,6 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MarketplaceCard } from './MarketplaceCard';
 import { VisitorCard, VisitorPostDetail, visitorCardName } from './VisitorListing';
-import type { MarketplacePost } from '../lib/marketplace';
 
 const LINE = "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.";
 const copy = {
@@ -15,8 +14,8 @@ const copy = {
     createdAt: '2026-11-01T00:00:00.000Z', photos: [],
     shownCopy: true, shownPrice: '20 fixed',
     shownFrom: { host: 'mullum.example.org', postId: 'h1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' },
-} as unknown as MarketplacePost;
-const plain = { ...copy, authorPublicKey: 'abc', authorCallsign: 'Robin', shownCopy: undefined, shownFrom: undefined, shownPrice: undefined, credits: 5 } as unknown as MarketplacePost;
+} as any;
+const plain = { ...copy, authorPublicKey: 'abc', authorCallsign: 'Robin', shownCopy: undefined, shownFrom: undefined, shownPrice: undefined, credits: 5 };
 
 afterEach(cleanup);
 
@@ -51,7 +50,7 @@ describe('a copy of a listing on the web', () => {
     });
 
     it('with no row of the directory: no name, no door', () => {
-        const bare = { ...copy, shownFrom: undefined } as unknown as MarketplacePost;
+        const bare = { ...copy, shownFrom: undefined };
         render(<VisitorPostDetail post={bare} beans={false} distanceKm={null} onJoin={() => undefined} />);
         expect(screen.getByTestId('event-copy-door').textContent).toContain("20 Beans in another community · You can't buy or take this here.");
         expect(screen.queryByTestId('event-copy-ask')).toBeNull();

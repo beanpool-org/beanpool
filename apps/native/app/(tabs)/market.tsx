@@ -18,7 +18,7 @@ import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsSheet';
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
-import { ListingCopyLine } from '../../components/ListingCopy';
+import { ListingCopyLine } from '../../components/ListingCopyLine';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { ActivityWaterfall } from '../../components/ActivityWaterfall';

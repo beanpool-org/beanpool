@@ -60,7 +60,8 @@ vi.mock('../../components/ReportReasonBox', () => ({ ReportReasonBox: () => null
 vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: calls.stop, stopLaterLine: () => 'It comes down later' }));
 
 import { EventCopyDoor } from '../../components/EventCopyDoor';
-import { ListingCopyDetail, ListingCopyLine } from '../../components/ListingCopy';
+import { ListingCopyDetail } from '../../components/ListingCopy';
+import { ListingCopyLine } from '../../components/ListingCopyLine';
 import { ShowOnGlobalHostRow, ShowOnGlobalTick, listingForCopy, showListingOnGlobalHint, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
 

@@ -908,7 +908,7 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
             ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
             ...(p.eventStartLocal && p.eventTz ? { startLocal: bounded(p.eventStartLocal, ID_CHARS)!, tz: bounded(p.eventTz, ID_CHARS)! } : {}),
             ...(p.eventOnline ? { online: true as const } : {}),
-            ...(({ shownPrice: _none, ...copy }) => copy)(copyFieldsOf(p)),
+            ...copyFieldsOf(p),
             ...(p.eventRepeat ? { repeat: publicRepeatPattern(p.eventRepeat), ...(p.eventRepeatUntil ? { repeatUntil: p.eventRepeatUntil } : {}) } : {}),
         }));
     return items.length ? { items, radiusKm: near ? EVENTS_RADIUS_KM : null } : undefined;

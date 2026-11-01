@@ -1,14 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLanguage } from '../words.js';
 import { beansPriceWords, copyCardLine, copyPriceLine, copyPriceOf, copyPriceText, eventCopyColumn, eventCopyOf, type EventCopy, type ShownFromLine } from '../event-copy.js';
 
+const es = JSON.parse(readFileSync(fileURLToPath(new URL('../../words/es.json', import.meta.url)), 'utf8'));
 const from: ShownFromLine = { host: 'mullum.example.org', postId: 'p', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' };
 
 afterEach(() => setLanguage('en'));
 
 describe('a copy of an Offer or a Need, in words (slice G1′)', () => {
     it('reads in another language through the words layer, the community\'s name as the row has it', () => {
-        setLanguage('es');
+        setLanguage('es', [es]);
         const line = copyPriceLine({ from, price: { beans: 20, per: 'fixed' } });
         expect(line).toContain('Mullumbimby');
         expect(line).toContain('No puedes comprar ni tomar esto hasta que Mullumbimby te dé la bienvenida.');

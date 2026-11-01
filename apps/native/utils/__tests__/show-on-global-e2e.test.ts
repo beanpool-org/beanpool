@@ -1173,7 +1173,7 @@ describe('an Offer or a Need shown on the global community (the phone against tw
     it('a Need, and a lendable Offer as an Offer: the price and its unit, and nothing of the loan', async () => {
         const me = await memberOfBoth('Noor Lends');
         const loan = await listingAtHome(me, 'Post-hole digger', { credits: 3, priceType: 'daily', lendable: true, lendMaxDays: 7, lendTerms: 'Ring 0400 000 000', replacementValue: '50 dollars' });
-        expect(loan.lendable).toBe(true);
+        expect((loan as { lendable?: boolean }).lendable).toBe(true);
         expect(await showOnGlobal(loan, local.url, me, deps())).toBe('shown');
         const copy = await copyRow(await copyIdOf(loan.id, me));
         expect(copy).toMatchObject({ shown_price: '3 daily', credits: 0, lend_terms: null, replacement_value: null });
@@ -1188,10 +1188,10 @@ describe('an Offer or a Need shown on the global community (the phone against tw
         const home = await listingAtHome(me, 'Rye loaves', { credits: 20, freeTags: ['wombat'] });
         await showOnGlobal(home, local.url, me, deps());
         const id = await copyIdOf(home.id, me);
-        await editAtHome(me, home.id, { title: 'Rye loaves, fresh', credits: 25, priceType: 'hourly', lat: -28.91234, lng: 153.11111, freeTags: [] });
+        await editAtHome(me, home.id, { title: 'Rye loaves, fresh', category: 'tools', credits: 25, priceType: 'hourly', lat: -28.91234, lng: 153.11111, freeTags: [] });
         await tendCopies(me, deps());
         const row = await copyRow(id);
-        expect(row).toMatchObject({ title: 'Rye loaves, fresh', shown_price: '25 hourly', credits: 0, lat: -28.9, lng: 153.1 });
+        expect(row).toMatchObject({ title: 'Rye loaves, fresh', category: 'tools', shown_price: '25 hourly', credits: 0, lat: -28.9, lng: 153.1 });
         expect(row.free_tags ?? '').not.toContain('wombat');
         await tendCopies(me, deps());
         expect((await copyRow(id)).updated_at).toBe(row.updated_at);

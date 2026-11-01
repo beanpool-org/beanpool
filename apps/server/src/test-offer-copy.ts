@@ -286,8 +286,12 @@ async function main() {
     assert(asApprove.status >= 400, `Beans off: no request can be approved (${asApprove.status})`);
     const rate = await call('POST', '/api/ratings', sam, { raterPubkey: sam.pubKeyHex, targetPubkey: robin.pubKeyHex, stars: 5, comment: 'Lovely', transactionId: copyId });
     assert(rate.status >= 400, `no review: a rating needs a finished deal, and a copy's id is none (${rate.status})`);
+    // An older app's Message button on a copy: it knows only the neutral key, and no route takes a post in place of a person.
+    const talk = await call('POST', '/api/messages/conversation', sam, { type: 'dm', participants: ['hidden', sam.pubKeyHex], createdBy: sam.pubKeyHex, postId: copyId });
+    assert(talk.status === 400 && !talk.text.includes(robin.pubKeyHex), `no message door: the neutral author is nobody to write to (${talk.status} ${talk.text.slice(0, 90)})`);
+    assert((db.prepare("SELECT COUNT(*) AS c FROM conversation_participants WHERE public_key = 'hidden'").get() as { c: number }).c === 0, 'and no conversation was made for it');
     const transfer = await call('POST', '/api/ledger/transfer', sam, { from: sam.pubKeyHex, to: robin.pubKeyHex, amount: 20, memo: copyId });
-    assert(transfer.status === 403 && transfer.body?.code === 'profile_no_beans' || transfer.status === 403, `no send: Beans are off (${transfer.status} ${transfer.text.slice(0, 100)})`);
+    assert(transfer.status === 403, `no send: Beans are off (${transfer.status} ${transfer.text.slice(0, 100)})`);
     assert(deals() === before.deals && balance() === before.balance, `no deal row, and no Bean moved (${before.deals} → ${deals()})`);
 
     // ── 5. An edit ──
@@ -304,8 +308,10 @@ async function main() {
         && after?.lend_terms === null && after?.shop_id === null && after?.audience_scope === 'public', 'nothing of a deal comes in by an edit');
     const badEdit = await call('POST', '/api/marketplace/posts/update', robin, { id: copyId, authorPublicKey: robin.pubKeyHex, shownPrice: 'Ring me' });
     assert(badEdit.status === 400 && stored(copyId)?.shown_price === '25 hourly', `free text is no price, on an edit too (${badEdit.status})`);
-    const plainEdit = await call('POST', '/api/marketplace/posts/update', robin, { id: plain.body?.post?.id, authorPublicKey: robin.pubKeyHex, shownPrice: PRICE });
-    assert(plainEdit.status === 200 && stored(plain.body?.post?.id)?.shown_price === null, 'an edit puts no price on a post that is no copy');
+    for (const asked of [PRICE, '20 fixed']) {
+        const plainEdit = await call('POST', '/api/marketplace/posts/update', robin, { id: plain.body?.post?.id, authorPublicKey: robin.pubKeyHex, shownPrice: asked });
+        assert(plainEdit.status === 200 && stored(plain.body?.post?.id)?.shown_price === null, `an edit puts no price on a post that is no copy (${JSON.stringify(asked)}: ${plainEdit.status})`);
+    }
     await call('POST', '/api/marketplace/posts/update', robin, { id: copyId, authorPublicKey: robin.pubKeyHex, shownPrice: PRICE });
 
     // ── 6. No read goes by who wrote it ──

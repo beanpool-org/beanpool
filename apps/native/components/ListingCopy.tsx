@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { copyCardLine, copyPriceLine, eventCopyOf, listingFreeTags, t, type EventCopy } from '@beanpool/core';
+import { copyCardLine, copyPriceLine, eventCopyOf, listingFreeTags, t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { deletePost, reportAbuse } from '../utils/db';
@@ -19,12 +19,6 @@ import { EventCopyDoor } from './EventCopyDoor';
 import { PhotoCarousel } from './PhotoCarousel';
 import { PostTagChips } from './PostTagChips';
 import { ReportReasonBox } from './ReportReasonBox';
-
-/** A copy's line on a card, where its author's name would be. */
-export function ListingCopyLine({ copy }: { copy: EventCopy }) {
-    const styles = useStyles(makeStyles);
-    return <Text style={styles.cardLine} numberOfLines={4} testID="listing-copy-line">{copyPriceLine(copy)}</Text>;
-}
 
 function photosOfRow(raw: unknown): string[] {
     if (Array.isArray(raw)) return raw;
@@ -110,7 +104,6 @@ const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     title: { fontSize: 22, fontWeight: '800', color: colors.text.heading, marginTop: 4 },
     from: { fontSize: 14, fontWeight: '700', color: colors.text.body, marginTop: 6, lineHeight: 20 },
     body: { fontSize: 15, color: colors.text.body, lineHeight: 22, marginVertical: 12 },
-    cardLine: { fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginTop: 4, lineHeight: 16 },
     quiet: { minHeight: 44, justifyContent: 'center' },
     link: { fontSize: 14, fontWeight: '700', color: colors.text.link },
     report: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg },

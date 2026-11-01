@@ -178,6 +178,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // reconcile writes somebody else in for good, and the hand-over has been reversed by nobody's decision.
     move('groups', 'lead_pubkey');
     move('groups', 'created_by');
+    move('groups', 'circle_starter');
     move('group_members', 'member_pubkey');
     move('group_members', 'invited_by');
     // A group chat's wraps for the old key stay (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct):

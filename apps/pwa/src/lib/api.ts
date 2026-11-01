@@ -3,6 +3,7 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
+import type { CircleCard, CircleDemand } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
@@ -1035,6 +1036,8 @@ export interface Conversation {
      */
     avatarUrl?: string | null;
     category?: string | null;
+    /** A group chat's kind when it has one: a place circle's name is shown in the reader's language (core's groupNameShown). */
+    groupKind?: string | null;
     peerLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
     /** The member's mute on this chat (set on the phone), null when not muted. */
@@ -1577,6 +1580,10 @@ export interface Group {
     id: string;
     name: string;
     slug: string;
+    /** 'circle' on a place circle (@beanpool/core place-circle.ts): its name and purpose are shown in the member's language. */
+    kind?: 'circle';
+    /** A place circle's own rows, for someone in it. */
+    circle?: CircleCard;
     description?: string;
     avatarUrl?: string | null;
     category: GroupCategory;
@@ -1622,6 +1629,8 @@ export async function getGroups(filter?: { category?: string; q?: string; member
 }
 
 export interface YourChat {
+    /** 'circle' on a place circle: its name is shown in the member's language. */
+    groupKind?: string;
     kind: 'group' | 'enterprise' | 'event';
     badge: string | null;
     lifecycle?: 'ongoing' | 'bounded';
@@ -2054,8 +2063,18 @@ export async function getRatingsGiven(publicKey: string): Promise<{ ratings: Rat
  * the node's own rule), its longitude wrapped first: Home's point can be a Distance centre past the date line, which the
  * node refuses (listings-near.ts wrapLng). The phone's is utils/community-directory.ts watchPlace.
  */
-export async function watchPlace(lat: number, lng: number): Promise<{ success: boolean }> {
-    return request('POST', '/api/global/watches', roundPointToArea(lat, wrapLng(lng)));
+export async function watchPlace(lat: number, lng: number, opts: { wouldHelp?: boolean } = {}): Promise<{ success: boolean }> {
+    return request('POST', '/api/global/watches', { ...roundPointToArea(lat, wrapLng(lng)), ...opts });
+}
+
+/** "I'm starting one here", on or off, by someone in the place circle: the answer is the card as it now stands. */
+export async function setCircleStarting(id: string, starting: boolean): Promise<CircleCard> {
+    return (await request<{ circle: CircleCard }>('POST', `/api/global/circles/${encodeURIComponent(id)}/starting`, { starting })).circle;
+}
+
+/** The Find card's read, for the empty Market: the waiting count and the member's own circle, from their own area. */
+export async function getFindCard(): Promise<{ demand?: CircleDemand | null; circle?: (CircleCard & { id: string }) | null }> {
+    return request('GET', '/api/global/home');
 }
 
 // ===================== REPORTS =====================

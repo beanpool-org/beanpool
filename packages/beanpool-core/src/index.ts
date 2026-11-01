@@ -40,6 +40,7 @@ export * from './member-area-words.js';
 export * from './community-card.js';
 export * from './peek-ticket.js';
 export * from './find-community.js';
+export * from './place-circle.js';
 export * from './address-lookup.js';
 export * from './feedback.js';
 export * from './member-guide.js';

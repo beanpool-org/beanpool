@@ -76,7 +76,7 @@ import {
 import { chatAuthorWords, chatLineWords } from '../utils/chat-line-words';
 import { signedRequestWords } from './signed-request-lines';
 import { NotDeliveredMark } from './chat/NotDeliveredMark';
-import { t, tn } from '@beanpool/core';
+import { groupNameShown, t, tn } from '@beanpool/core';
 import { normaliseTappedUrl } from '../utils/chat-links';
 import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
@@ -343,7 +343,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
 
     // A project's chat says "project" and 🎯 (§3.1): "Your groups" carries the kind, as it carries the mute.
     const lifecycle = kind === 'enterprise' ? chatLifecycleFromRows(yourGroupsStore.getState().items, id) : undefined;
-    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || ownerKindName(kind, lifecycle);
+    // A place circle's stored name is English: `group` knows its kind, and the header reads in the member's language.
+    const name = groupNameShown({ name: view?.group?.name || group?.name || view?.conversation?.name || initialName || ownerKindName(kind, lifecycle), kind: group?.kind });
     const category = view?.group?.category || group?.category || null;
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;

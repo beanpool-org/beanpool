@@ -8635,6 +8635,10 @@ export interface GroupItem {
     id: string;
     name: string;
     slug: string;
+    /** 'circle' on a place circle (@beanpool/core place-circle.ts): its name and purpose are shown in the member's language. */
+    kind?: 'circle';
+    /** A place circle's own rows, for someone in it. */
+    circle?: import('@beanpool/core').CircleCard;
     description: string | null;
     avatarUrl: string | null;
     category: GroupCategory;

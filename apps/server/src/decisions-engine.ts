@@ -46,7 +46,7 @@ import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import type { Member } from '@beanpool/engine';
-import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, GROUP_KIND_CIRCLE, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR, noteKeeperLeftProject } from './db/db.js';
 import { ledger } from './engine/ledger.js';
@@ -4080,6 +4080,8 @@ function createGroupDecision(opts: CreateScopedDecisionOptions, push: ScopedVote
             break;
         }
         case 'set_join_policy': {
+            // A circle's door is the node's rule, not its members': a vote can't open what its convenor can't (engine/place-circles.ts rule 3).
+            if ((db.prepare('SELECT kind FROM groups WHERE id = ?').get(groupId) as { kind: string | null } | undefined)?.kind === GROUP_KIND_CIRCLE) throw new Error(engine.CIRCLE_WORDS_FIXED);
             const policy = opts.params?.policy;
             if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) throw new Error(word('Choose open, ask to join, or invite only.'));
             const now = (db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string }).join_policy;

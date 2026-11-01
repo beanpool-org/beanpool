@@ -677,7 +677,10 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     disclosure TEXT,
     -- The message request its reporter received from the person it is about, read when it was filed: set, the report counts
     -- towards clearing that person's requests (engine/request-limits.ts). Null for every other report.
-    request_conversation_id TEXT
+    request_conversation_id TEXT,
+    -- A SHA-256 of the wording its reporter handed over, folded, on such a report of a line long enough to compare (null
+    -- otherwise): what "the same wording" is compared on, so counting never opens a disclosure again.
+    request_wording TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 -- A member's ratings: every trust floor averages them (engine trust.ts, on each spend check and listing row), and so do

@@ -1457,6 +1457,7 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN disclosure TEXT`).run(); } catch { }
     // The message request a report's reporter received (engine/request-limits.ts). Before schema.sql, which indexes it.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN request_conversation_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN request_wording TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
     // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.

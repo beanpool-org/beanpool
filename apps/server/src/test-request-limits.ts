@@ -27,18 +27,20 @@ process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, createPost as rawCreatePost, exportSyncState } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, exportSyncState } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
 import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { consumeHandshakeToken, mintHandshakeToken } from './admin-key-auth.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, signDmLine } from '@beanpool/core';
 import { REQUEST_LIMIT, requestLimitOf, requestReportsReach, wordingOf } from './engine/request-limits.js';
 import { independentCircles } from './engine/auto-moderation.js';
+import { standbyRefuses } from './routes/standby-ledger-gate.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -171,6 +173,13 @@ async function main(): Promise<void> {
         assert(!told.some(n => [a, b, c].some(r => n.body.includes(r.name))), 'never who reported them');
     }
 
+    {
+        // No 7-day or standing rule on reporters (Marty, 1 Nov): three who joined today, on probation, with no posts.
+        const sam = member('Sam');
+        await reportedBy(sam, [1, 2, 3].map(() => member('New', { daysAgo: 0, settled: false })));
+        assert(limited(sam), 'reporters who joined today count: no 7-day or standing rule here');
+    }
+
     console.log('\n── 2. two different recipients, the same wording ──');
     {
         const sam = member('Sam');
@@ -184,6 +193,8 @@ async function main(): Promise<void> {
         const sam = member('Sam');
         const short = 'Hi, is this still available?';
         assert(wordingOf(short) === null, `a short line has no wording to compare (${short.length} characters)`);
+        assert(!db.prepare('SELECT 1 FROM abuse_reports WHERE request_wording = ?').get(LONG) && !!db.prepare('SELECT 1 FROM abuse_reports WHERE request_wording = ?').get(wordingOf(LONG)),
+            'what is compared is a hash on the report, never the words again');
         assert(wordingOf('x'.repeat(REQUEST_LIMIT.sameWordingMinChars - 1) + '!!!!!') === null && wordingOf('x'.repeat(REQUEST_LIMIT.sameWordingMinChars)) !== null,
             'and padding with punctuation doesn\'t lengthen one: 40 letters or digits');
         const [a, b] = [member('A'), member('B')];
@@ -334,6 +345,14 @@ async function main(): Promise<void> {
         assert(/moderator looked at the reports/.test(told.body), `they are told (${told.body})`);
         assert((await call('POST', null, `/api/local/admin/members/${sam.pk}/request-limit/undo`, {}, admin)).status === 409, 'undoing what no limit holds answers 409');
         assert((await call('POST', null, `/api/local/admin/members/${'0'.repeat(64)}/request-limit/undo`, {}, admin)).status === 404, 'and someone who isn\'t here 404');
+        const mo = member('Mo');
+        db.prepare(`INSERT INTO request_limits (id, sender_pubkey, made_at, until, how) VALUES (?, ?, ?, ?, 'many_reports')`).run(crypto.randomUUID(), mo.pk, ago(DAY), ago(-6 * DAY));
+        grantNodeRole(mo.pk, 'moderator', owner.pk);
+        const session = consumeHandshakeToken(mintHandshakeToken(mo.pk, 'moderator').handshakeToken).sessionId!;
+        const own = await call('POST', null, `/api/local/admin/members/${mo.pk}/request-limit/undo`, {}, { 'X-Admin-Session': session });
+        assert(own.status === 403 && limited(mo), `a moderator can't undo their own (${show(own)})`);
+        const others = await call('GET', null, '/api/local/admin/members/request-limits', undefined, { 'X-Admin-Session': session });
+        assert(others.status === 200 && (others.body?.limits ?? []).some((l: any) => l.publicKey === mo.pk), 'and a moderator\'s session reaches the list');
     }
     {
         const sam = member('Sam');
@@ -393,6 +412,14 @@ async function main(): Promise<void> {
         const person = await call('POST', c, '/api/reports', { reporterPubkey: c.pk, targetPubkey: sam.pk, reason: 'Spam' });
         assert(person.status === 200 && limited(sam), `a recipient's report of the person, the line deleted, counts (${show(person)})`);
     }
+    {
+        const sam = member('Sam');
+        const [a, b, c] = [member('A'), member('B'), member('C')];
+        await reportedBy(sam, [a, b]);
+        const taken = await request(sam, c, 'A request its sender cancels once it has been read');
+        assert((await call('POST', sam, '/api/messages/request', { conversationId: taken.conversationId, decision: 'cancel' })).status === 200, 'a sender cancels their request');
+        assert((await report(c, taken)).status === 200 && limited(sam), 'a report of the line it held still counts: cancelling takes nothing back');
+    }
 
     console.log('\n── 10. the switch ──');
     {
@@ -411,8 +438,10 @@ async function main(): Promise<void> {
         const state: any = await exportSyncState(p2p.peerId.toString());
         const limit = (state.plainTables?.request_limits ?? [])[0];
         assert(!!limit?.sender_pubkey && !!limit?.how, `the limit travels (${Object.keys(limit ?? {}).join(' ')})`);
-        const marked = (state.abuseReports ?? []).find((r: any) => r.requestConversationId);
-        assert(!!marked, 'and so does a report\'s mark');
+        const marked = (state.abuseReports ?? []).find((r: any) => r.requestConversationId && r.requestWording);
+        assert(!!marked, 'and so does a report\'s mark, with its wording\'s hash');
+        assert(standbyRefuses(`/api/local/admin/members/${owner.pk}/request-limit/undo`, 'POST') && !standbyRefuses('/api/local/admin/members/request-limits', 'GET'),
+            'a standby refuses the undo, as it writes no plain table, and still answers the list');
     }
 
     console.log(`\n${passed}/${run} passed`);

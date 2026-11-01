@@ -16,8 +16,8 @@
  * written to first, which is what those rules stand in for on a post, where anyone can report anything.
  *
  * One person's accounts count once: reporters are grouped by auto-moderation.ts's independent circles (`independentCircles`).
- * Reports count from the end of the sender's last limit, or 30 days back if that is sooner: a report a moderator dismissed
- * doesn't count, and one handled does. A reporter who is no longer active doesn't.
+ * Reports count from the end of the sender's last limit, and for 30 days at most. A report a moderator dismissed doesn't count,
+ * and one handled does. A reporter who is no longer active doesn't.
  *
  * ## The three ways
  *
@@ -31,7 +31,8 @@
  * wrote that person a line, not what it says. Wording is letters, marks and digits only, folded (NFKC, lower case), so spacing,
  * punctuation and emoji don't make two lines different. `sameWordingMinChars` is 40 of those, about 8 words: two people can
  * innocently get "Hi, is this still available?" (25) from a friendly sender, which is no sign of a bot; 40 is past any
- * greeting, and shorter lines still count towards the 3.
+ * greeting, and shorter lines still count towards the 3. Its SHA-256 goes on the report when it is filed (`request_wording`),
+ * so weighing a report reads small rows: a disclosure holds up to 104 KB, and each report weighs them all again.
  *
  * ## The limit
  *
@@ -52,7 +53,7 @@
 import crypto from 'node:crypto';
 import { db, deletePlainRows } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { standbyWritesNothing } from '../config/node-role.js';
+import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { independentCircles } from './auto-moderation.js';
 import { isWordsNewcomer } from './probation.js';
 import { notifyRequestsBack, notifyRequestsCleared, requestsClearedBody, type ModerationNoticeCallbacks } from './moderation-notices.js';
@@ -123,45 +124,34 @@ export function requestReceived(reporter: string, sender: string, lineProved: bo
     return row?.conversation_id ?? null;
 }
 
-/** A line's wording, folded (the file header), or null for one too short to compare. */
+/** What a line's wording is compared by: a hash of it, folded (the file header), or null for a line too short to compare. */
 export function wordingOf(words: string): string | null {
     const folded = words.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, '');
-    return [...folded].length >= REQUEST_LIMIT.sameWordingMinChars ? folded : null;
+    return [...folded].length >= REQUEST_LIMIT.sameWordingMinChars ? crypto.createHash('sha256').update(folded).digest('hex') : null;
 }
 
-/** When reports begin to count: the end of the sender's last limit, or `windowDays` back if that is sooner. */
+/** When reports begin to count: the end of the sender's last limit, and `windowDays` back at the most. */
 function countingFrom(sender: string, now: number): string {
     const last = (db.prepare('SELECT MAX(COALESCE(lifted_at, until)) AS ended FROM request_limits WHERE sender_pubkey = ?').get(sender) as { ended: string | null }).ended;
     const window = iso(now - REQUEST_LIMIT.windowDays * DAY_MS);
     return last && last > window ? last : window;
 }
 
-/** The words a report handed over, if it handed over a line. */
-function wordsHandedOver(disclosure: string | null): string {
-    try {
-        const words = disclosure ? JSON.parse(disclosure)?.words : null;
-        return typeof words === 'string' ? words : '';
-    } catch {
-        return '';
-    }
-}
-
 /** Which way, if any, the reports counting now reach a limit (the file header's three ways). */
 export function requestReportsReach(sender: string, now: number = Date.now()): RequestLimitHow | null {
     const reports = db.prepare(`
-        SELECT ar.reporter_pubkey AS reporter, ar.disclosure FROM abuse_reports ar
+        SELECT ar.reporter_pubkey AS reporter, ar.request_wording AS wording FROM abuse_reports ar
           JOIN members m ON m.public_key = ar.reporter_pubkey AND m.status = 'active'
          WHERE ar.target_pubkey = ? AND ar.request_conversation_id IS NOT NULL AND ar.created_at > ?
            AND ar.reporter_pubkey != ar.target_pubkey AND (ar.status IS NULL OR ar.status != 'reviewed')
-    `).all(sender, countingFrom(sender, now)) as { reporter: string; disclosure: string | null }[];
+    `).all(sender, countingFrom(sender, now)) as { reporter: string; wording: string | null }[];
     if (reports.length === 0) return null;
     const circles = independentCircles([...new Set(reports.map(r => r.reporter))]);
     if (isWordsNewcomer(sender, now) && circles.length >= REQUEST_LIMIT.wordsNewcomerCircles) return 'words_newcomer';
     const circleOf = new Map(circles.flatMap((circle, i) => circle.map(reporter => [reporter, i] as const)));
     const byWording = new Map<string, Set<number>>();
     for (const r of reports) {
-        const wording = wordingOf(wordsHandedOver(r.disclosure));
-        if (wording) byWording.set(wording, (byWording.get(wording) ?? new Set()).add(circleOf.get(r.reporter)!));
+        if (r.wording) byWording.set(r.wording, (byWording.get(r.wording) ?? new Set()).add(circleOf.get(r.reporter)!));
     }
     if ([...byWording.values()].some(reached => reached.size >= REQUEST_LIMIT.sameWordingCircles)) return 'same_wording';
     return circles.length >= REQUEST_LIMIT.anyWordingCircles ? 'many_reports' : null;
@@ -193,6 +183,7 @@ export function evaluateRequestReports(cb: ModerationNoticeCallbacks, sender: st
 export function liftRequestLimit(cb: ModerationNoticeCallbacks, sender: string, now: number = Date.now()): boolean {
     const limit = requestLimitOf(sender, now);
     if (!limit) return false;
+    assertPlainTablesWritable();
     db.prepare('UPDATE request_limits SET lifted_at = ? WHERE id = ?').run(iso(now), limit.id);
     notifyRequestsBack(cb, sender);
     return true;

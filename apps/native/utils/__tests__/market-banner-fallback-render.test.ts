@@ -232,7 +232,7 @@ describe("the Market's cards: a banner that will not load gives way to the tile"
 
         // A listing's own photo that will not load is healed by its own URL, and stays a picture, as before.
         const jam = pictureOf(cardOf('Plum jam jars'));
-        expect(jam?.getAttribute('data-src')).toBe(`${JAM_PHOTO}&size=thumb`);
+        expect(jam?.getAttribute('data-src')).toBe(`${JAM_PHOTO}&size=thumb2`);
         await failToLoad(jam);
         expect(healed.calls).toEqual([['p-jam', JAM_PHOTO]]);
         expect(pictureOf(cardOf('Plum jam jars'))).not.toBeNull();

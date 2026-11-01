@@ -295,12 +295,12 @@ async function main(): Promise<void> {
         await section('1', async () => {
             reg.status = live('bname');
             // Holding no name and asked for none, N has nothing to ask the registrar when Settings opens (#2143 item 1): the
-            // name is the owner's claim in Settings, as a first claim is.
+            // name is the owner's claim in Settings, with the fresh proof, as N already publishes b2.test (rename S1).
             const callsBefore = reg.calls.length;
             const bare = await statusOpen();
             assert(bare.status === 200 && bare.body?.status === 'none' && reg.calls.length === callsBefore,
                 `with no name, Settings' status asks the registrar nothing (${show(bare)}; ${reg.calls.slice(callsBefore).join(', ') || 'no calls'})`);
-            const claimed = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'bname', mode: 'tunnel' });
+            const claimed = await call(nBase, 'POST', '/api/local/admin/public-address/claim', await N.send('owner-phone-session'), { name: 'bname', mode: 'tunnel' });
             assert(claimed.status === 200, `the owner claims bname in Settings (${show(claimed)})`);
             const opened = await statusOpen();
             assert(opened.status === 200 && opened.body?.status === 'live' && opened.body?.hostname === 'bname.beanpool.org', `Settings shows bname live (${show(opened)})`);

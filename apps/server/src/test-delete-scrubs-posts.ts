@@ -144,7 +144,7 @@ async function child(): Promise<void> {
                 row: db.prepare('SELECT * FROM posts WHERE id = ?').get(id) as Record<string, any> | undefined,
                 photos: (db.prepare('SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?').get(id) as { n: number }).n,
                 objects: store.list(`posts/${id}/`).length,
-                photoObjects: store.list(`posts/${id}/`).filter((k) => !/-t\.[a-z]+$/.test(k)).length,
+                photoObjects: store.list(`posts/${id}/`).filter((k) => !/-(?:s|t)\.[a-z]+$/.test(k)).length,
                 photoTombstones: (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'post_photos' AND row_key LIKE ?`).get(`${id}|%`) as { n: number }).n,
                 rsvps: (db.prepare('SELECT COUNT(*) AS n FROM event_rsvps WHERE post_id = ?').get(id) as { n: number }).n,
                 rsvpTombstones: (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'event_rsvps' AND row_key LIKE ?`).get(`${id}|%`) as { n: number }).n,

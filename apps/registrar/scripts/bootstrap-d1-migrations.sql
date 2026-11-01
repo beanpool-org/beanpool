@@ -109,4 +109,9 @@ SELECT '0013_notices.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('notices', 'notice_recipients', 'reply_tokens'))
        OR (type = 'index' AND name IN ('idx_notice_recipients_key', 'idx_reply_tokens_recipient', 'idx_reply_tokens_expires'))) = 6;
 
+-- 0014: its one policy row.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0014_reserve_byron.sql'
+WHERE (SELECT COUNT(*) FROM name_policy WHERE pattern = 'byron') = 1;
+
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

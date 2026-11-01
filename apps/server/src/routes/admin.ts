@@ -31,11 +31,12 @@ import {
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
-    restoreHiddenPost, liftModerationMute, pushServiceRefusals,
+    restoreHiddenPost, liftModerationMute, liftRequestsLimit, pushServiceRefusals,
     hideBurst, undoBurst,
     removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
+import { listRequestLimits } from '../engine/request-limits.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
 import { logAlertsLook, logBalanceLook, logDisputesLook, type TradeLookAction } from '../engine/community-health.js';
 import {
@@ -1656,6 +1657,39 @@ router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
         return;
     }
     logger.info('ADMIN', `Lifted the mute on ${pubkey.substring(0, 12)} by ${actor ? actor.substring(0, 12) : 'owner:password'} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true };
+});
+
+/** Who can't send message requests for now, because reports cleared theirs (engine/request-limits.ts), for the moderators. */
+router.get('/api/local/admin/members/request-limits', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, limits: listRequestLimits() };
+});
+
+/**
+ * Undo a limit on sending message requests: the requests come back, and they may send new ones. Owners, admins and
+ * moderators, as lifting a mute. A moderator can't undo their own, or one on an enterprise they keep.
+ */
+router.post('/api/local/admin/members/:pubkey/request-limit/undo', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    const pubkey = ctx.params.pubkey;
+    if (isModeratorsOwn(ctx, pubkey)) {
+        ctx.status = 403;
+        ctx.body = { success: false, error: 'A moderator cannot undo a limit on themselves, or on an enterprise they keep. Ask another moderator, an admin or an owner.' };
+        return;
+    }
+    if (!getMember(pubkey)) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'Member not found' };
+        return;
+    }
+    if (!liftRequestsLimit(pubkey)) {
+        ctx.status = 409;
+        ctx.body = { success: false, error: 'No limit holds on this member' };
+        return;
+    }
+    logger.info('ADMIN', `Undid the limit on message requests of ${pubkey.substring(0, 12)} by ${actor ? actor.substring(0, 12) : 'owner:password'} (${(ctx.state as any)?.adminRole})`);
     ctx.body = { success: true };
 });
 

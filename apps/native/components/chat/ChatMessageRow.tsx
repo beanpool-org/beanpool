@@ -35,7 +35,8 @@ interface Props {
     /** Report this message (a locked group chat's line): only where actions.report offers it. */
     onReport?: () => void;
     onPickEmoji: (emoji: string) => void;
-    onPressUrl: (url: string) => void;
+    /** Left out in a chat that is still a message request: its links don't open (ChatBubble). */
+    onPressUrl?: (url: string) => void;
     authorLabel?: string | null;
     quote?: ChatQuote | null;
     attachment?: React.ReactNode;

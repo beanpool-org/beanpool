@@ -38,7 +38,8 @@ interface Props {
     authorLabel?: string | null;
     quote?: ChatQuote | null;
     onPress?: (event: any) => void;
-    onPressUrl: (url: string) => void;
+    /** Left out, a link reads as its words and nothing opens: a chat that is still a message request (R1). */
+    onPressUrl?: (url: string) => void;
     /** A DM photo, drawn above the words. */
     attachment?: React.ReactNode;
     /** Trailing the time, inline: ticks, a clock, or "! not delivered". */
@@ -49,8 +50,8 @@ interface Props {
     editing?: boolean;
 }
 
-function renderTextWithLinks(text: string, linkStyle: any, onPressUrl: (url: string) => void) {
-    if (!text) return text;
+function renderTextWithLinks(text: string, linkStyle: any, onPressUrl?: (url: string) => void) {
+    if (!text || !onPressUrl) return text;
     return splitTextWithLinks(text).map((run, i) =>
         run.isUrl
             ? <Text key={i} style={linkStyle} onPress={() => onPressUrl(run.text)}>{run.text}</Text>

@@ -67,6 +67,8 @@ A photo stays sealed. No other message in the chat comes with a report, and nobo
 
 Report on a message request does the same, and blocks the sender for the member who reported them. If the sender deleted the message before the member tapped Report, or your server refused the message's report, you get a report of the person instead: the member's reason, and no message. **Child safety** still alerts you. If the member is over the hourly limit for reports, the sender is blocked and no report reaches you.
 
+Enough of these reports clear a sender's requests with no moderator needed, where **Reported posts hidden automatically** is on. The sender's waiting requests leave every list, and they can't send new ones for 7 days, then 14, 28 and 56 on a repeat, and at most 90. It takes two people reporting the same words, on a line of 40 or more letters or digits, or three people reporting anything, or one person when the sender is a 12-words newcomer on probation. Only someone a request reached counts, and one person's accounts count once. Words are compared only as reporters handed them over: your server can't read a sealed line. It is not a pause: the sender can still answer people who wrote to them, and post, and they are told in words. **Message requests cleared by reports**, at the top of Reports, names them, and **Undo** brings their requests back and lets them send new ones. Their reports stay in your queue. A pause or a mute clears a member's waiting requests too, until you lift it.
+
 ## A message from a group's chat
 
 A group's chat is end-to-end encrypted: your server stores it but cannot read it, and neither can you. So a member who reports a message there sends that one message's own key with the report. Your server keeps the key with the report and opens nothing when the report comes in; a standby copies both. When a report is shown in **Reports** or **Triage & Moderation**, Settings asks the server to open that one message with that key, and shows:
@@ -102,7 +104,7 @@ A report on a line in a circle's chat reaches you like a report on any group's c
 On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **How this community works** (under Safety):
 
 - **Limits on new accounts (probation)**: New accounts have small daily posting and messaging limits during their first days, protecting the community from rapid spam.
-- **Reported posts hidden automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Off by default on local communities (where reports wait for a moderator to review).
+- **Reported posts hidden automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Reports clear a sender's message requests by the same switch. Off by default on local communities (where reports wait for a moderator to review).
 - **Repeat offenders muted automatically (auto-mute)**: A member whose posts moderators have removed 3 times in 30 days is automatically muted from posting and messaging until a moderator lifts it.
 
 ### How posts are hidden by reports

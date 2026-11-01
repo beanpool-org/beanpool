@@ -1395,7 +1395,7 @@ function ChatScreen({ id }: { id: string }) {
                     setReportingLine({ item, blocks: null });
                 }}
                 onPickEmoji={handleEmojiSelect}
-                onPressUrl={openUrl}
+                onPressUrl={requestMode === 'none' ? openUrl : undefined}
                 editing={editingMessage?.id === item.id}
                 quote={quote}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (

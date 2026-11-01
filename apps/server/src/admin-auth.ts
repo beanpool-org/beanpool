@@ -558,6 +558,9 @@ export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: str
     { method: 'POST', path: '/api/local/admin/posts/:id/restore' },
     { method: 'GET', path: '/api/local/admin/members/muted' },
     { method: 'POST', path: '/api/local/admin/members/:pubkey/unmute' },
+    // Reports clearing a sender's message requests (engine/request-limits.ts): who is limited, and the undo.
+    { method: 'GET', path: '/api/local/admin/members/request-limits' },
+    { method: 'POST', path: '/api/local/admin/members/:pubkey/request-limit/undo' },
     // Clean-up by burst (engine/burst-cleanup.ts, S9): the digest, one account's burst, hiding its posts and the undo.
     // Removing its accounts is not here: that stays with owners and admins.
     { method: 'GET', path: '/api/local/admin/bursts' },

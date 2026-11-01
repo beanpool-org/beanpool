@@ -8,6 +8,8 @@ import { setKeySessionCsrfToken, setTfaSessionToken } from '../../lib/node-clien
 // The AI assistants' suggestions card lists from the node on mount (its own tests: AgentSuggestionsPanel.test.tsx); these
 // tests count the moderation calls alone.
 vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
+// So does the card of who reports stopped from sending message requests (its own tests: RequestLimitsCard.test.tsx).
+vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => <div data-testid="request-limits-card" /> }));
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
@@ -430,6 +432,12 @@ describe('PeopleSafetySection Component', () => {
 
         expect(screen.getByText('Handmade Wooden Chair')).toBeInTheDocument();
         expect(screen.getByText('@carpenter_alice')).toBeInTheDocument();
+    });
+
+    it('owners and admins see who reports stopped from sending message requests, under Reports', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
+        renderModeration([]);
+        expect(await screen.findByTestId('request-limits-card')).toBeInTheDocument();
     });
 
     it('sub-tab count badge counts OPEN reports only and falls as handled', async () => {

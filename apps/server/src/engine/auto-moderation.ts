@@ -230,6 +230,37 @@ export interface HideTally {
     circlesNeeded: number;
 }
 
+/**
+ * Reporters grouped into independent circles (the file header): one per connected group, sharing a door label or an invite
+ * tree, transitively. One person's accounts are one circle. Message requests count by this too (engine/request-limits.ts).
+ */
+export function independentCircles(reporters: string[]): string[][] {
+    const parent = new Map<string, string>();
+    const find = (k: string): string => {
+        let x = k;
+        while (parent.get(x) !== x) x = parent.get(x)!;
+        parent.set(k, x);
+        return x;
+    };
+    const link = (a: string, b: string) => {
+        for (const k of [a, b]) if (!parent.has(k)) parent.set(k, k);
+        const ra = find(a), rb = find(b);
+        if (ra !== rb) parent.set(rb, ra);
+    };
+    const tops = new Map<string, string>();
+    for (const r of reporters) {
+        link(`r:${r}`, `i:${inviteTreeTop(r, tops)}`);
+        const cohort = joinCohortOf(r);
+        if (cohort) link(`r:${r}`, `c:${cohort}`);
+    }
+    const byRoot = new Map<string, string[]>();
+    for (const r of reporters) {
+        const root = find(`r:${r}`);
+        byRoot.set(root, [...(byRoot.get(root) ?? []), r]);
+    }
+    return [...byRoot.values()];
+}
+
 /** Who counts towards hiding this post, and in how many independent circles (the file header has the rule). */
 export function hideTally(postId: string, now: number = Date.now()): HideTally {
     const post = postRow(postId);
@@ -266,31 +297,7 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
         if (probationState(r.reporter, now).onProbation) continue;
         counting.push(r.reporter);
     }
-    // One circle per connected group: reporters sharing a door label or an invite tree, transitively.
-    const parent = new Map<string, string>();
-    const find = (k: string): string => {
-        let x = k;
-        while (parent.get(x) !== x) x = parent.get(x)!;
-        parent.set(k, x);
-        return x;
-    };
-    const link = (a: string, b: string) => {
-        for (const k of [a, b]) if (!parent.has(k)) parent.set(k, k);
-        const ra = find(a), rb = find(b);
-        if (ra !== rb) parent.set(rb, ra);
-    };
-    const tops = new Map<string, string>();
-    for (const r of counting) {
-        link(`r:${r}`, `i:${inviteTreeTop(r, tops)}`);
-        const cohort = joinCohortOf(r);
-        if (cohort) link(`r:${r}`, `c:${cohort}`);
-    }
-    const byRoot = new Map<string, string[]>();
-    for (const r of counting) {
-        const root = find(`r:${r}`);
-        byRoot.set(root, [...(byRoot.get(root) ?? []), r]);
-    }
-    return { authorStanding, needed, circles: [...byRoot.values()], circlesNeeded };
+    return { authorStanding, needed, circles: independentCircles(counting), circlesNeeded };
 }
 
 /** Hidden or visible again: every copy anyone holds has to change, and the feed's post_created lines follow it. */

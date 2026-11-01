@@ -333,8 +333,18 @@ export function registerFederationHandler(node: Libp2p): void {
                         // sender's home node so it is never confused with a local member.
                         registerVisitor(senderPublicKey, senderCallsign, peerHome);
                         
-                        const conversation = createConversation('dm', [senderPublicKey, recipientPublicKey], senderPublicKey);
-                        if (conversation) {
+                        // A limit on new requests refuses here (engine/request-limits.ts): answered, as the line's own refusals are below.
+                        let conversation: ReturnType<typeof createConversation> = null;
+                        let refused: string | null = null;
+                        try {
+                            conversation = createConversation('dm', [senderPublicKey, recipientPublicKey], senderPublicKey);
+                        } catch (e: any) {
+                            if (!(e instanceof MessagingError) && !(e instanceof WriterLimitError)) throw e;
+                            refused = e.message;
+                        }
+                        if (refused) {
+                            response = { error: refused };
+                        } else if (conversation) {
                             // A DM is stored encrypted or not at all (engine/messaging.ts): a peer relaying a readable
                             // line is answered with the refusal, not left to time out.
                             let message: ReturnType<typeof sendMessage> = null;

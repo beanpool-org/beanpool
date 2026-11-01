@@ -13,6 +13,8 @@ import type { NodeProfile } from '../../lib/profiles';
 vi.mock('./PostModerationPanel', () => ({ PostModerationPanel: () => null }));
 // The AI assistants' suggestions card lists from the node on mount (its own tests cover it); stubbed so only the prune's calls count.
 vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
+// So does the card of who reports stopped from sending message requests (its own tests: RequestLimitsCard.test.tsx).
+vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => null }));
 
 const mockProfile: NodeProfile = {
     id: 'test-node',

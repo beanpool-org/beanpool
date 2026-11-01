@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { t } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
-import { checkPageMayLoad, doorCheckUrl, readCheckMessage, type AskDoorCheck, type DoorCheck, type DoorCheckResult } from '../utils/door-check';
+import { CHECK_PAGE_ORIGINS, checkPageMayLoad, doorCheckUrl, readCheckMessage, type AskDoorCheck, type DoorCheck, type DoorCheckResult } from '../utils/door-check';
 
 /** How long the page has to bring up its widget before the check counts as not loading. */
 export const CHECK_LOAD_WAIT_MS = 30_000;
@@ -43,7 +43,8 @@ export function DoorCheckSheet({ check, publicKey, dark, colors, onDone }: {
     const close = () => onDone({ kind: 'closed' });
     return (
         <Modal visible animationType="slide" onRequestClose={close}>
-            <SafeAreaView style={[styles.sheet, { backgroundColor: colors.surface.page }]} edges={['top', 'bottom', 'left', 'right']}>
+            {/* surface.app, as every full-screen sheet: surface.page is see-through under the pattern background. */}
+            <SafeAreaView style={[styles.sheet, { backgroundColor: colors.surface.app }]} edges={['top', 'bottom', 'left', 'right']}>
                 <View style={[styles.header, { borderBottomColor: colors.border.default }]}>
                     <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">{t('A quick check')}</Text>
                     <Pressable style={styles.close} onPress={close} accessibilityRole="button" accessibilityLabel={t('Close')}>
@@ -55,8 +56,8 @@ export function DoorCheckSheet({ check, publicKey, dark, colors, onDone }: {
                 </Text>
                 <WebView
                     source={{ uri }}
-                    style={[styles.page, { backgroundColor: colors.surface.page }]}
-                    originWhitelist={['https://*']}
+                    style={[styles.page, { backgroundColor: colors.surface.app }]}
+                    originWhitelist={CHECK_PAGE_ORIGINS}
                     javaScriptEnabled
                     domStorageEnabled
                     thirdPartyCookiesEnabled

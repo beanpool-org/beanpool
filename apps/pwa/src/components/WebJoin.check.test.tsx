@@ -29,9 +29,10 @@ const solver: DoorWorkSolver = (challenge) => ({ done: Promise.resolve(solveDoor
 
 /**
  * The node, busy: work only with a good token (or a pass from one), and a join only with work. `joinAsks`: it got busy
- * after the work was handed out, so the work route hands it out and the join asks for the check.
+ * after the work was handed out, so the work route hands it out and the join asks for the check. `asksAgain`: it couldn't
+ * judge the token (Cloudflare lost the call, or is limiting this node), so it asks for the check again.
  */
-function busyNode(o: { goodToken?: string; joinAsks?: boolean } = {}) {
+function busyNode(o: { goodToken?: string; joinAsks?: boolean; asksAgain?: boolean } = {}) {
     const works: any[] = [];
     const joins: any[] = [];
     let passed = false;
@@ -43,6 +44,7 @@ function busyNode(o: { goodToken?: string; joinAsks?: boolean } = {}) {
             works.push(body);
             if (body.door === 'sign-in') return json(200, { work: null, turnstile: null });
             if (body.turnstile) {
+                if (o.asksAgain) return json(429, CHECK_REQUIRED);
                 if (body.turnstile !== o.goodToken) return json(403, { error: "That check didn't pass. Try again, or sign in to join now.", code: 'check_failed' });
                 passed = true;
             }
@@ -181,6 +183,17 @@ describe('the join', () => {
         renderJoin({ authReturn: readAuthReturn('/app/auth/check', '#token=0.tok') });
         expect((await screen.findByTestId('join-notice')).textContent).toMatch(/didn't pass\. Try again, or sign in/);
         await screen.findByTestId('join-provider-google');
+    });
+
+    it('the node asks again straight after a token: said at the two ways in, with no second hop, so it can\'t go round', async () => {
+        await pendingHere();
+        const node = busyNode({ asksAgain: true });
+        const { navigate } = renderJoin({ authReturn: readAuthReturn('/app/auth/check', '#token=0.tok') });
+        expect((await screen.findByTestId('join-notice')).textContent).toMatch(/didn't work in this browser\. Try again, or sign in/);
+        await screen.findByTestId('join-provider-google');
+        expect(navigate).not.toHaveBeenCalled();
+        expect(node.works.filter((w) => w.turnstile)).toEqual([{ door: 'words', turnstile: '0.tok' }]);
+        expect(node.joins).toHaveLength(0);
     });
 
     it('back with no pass: said in words, with the sign-ins beside it, and nothing sent', async () => {

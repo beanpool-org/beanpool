@@ -31,8 +31,9 @@
  * refused: no token is a refusal, and a junk token is answered "invalid", which is an answer, so Cloudflare is up and the
  * join is refused. A client's token whose call gets no answer proves nothing either: it only asks for the probe sooner,
  * at most every PROBE_FORCED_EVERY_MS and one at a time, and the probe decides. So a client can choose when the question
- * is asked, never its answer. What it would take to open the door is breaking this server's own path to Cloudflare, and
- * then the door still asks for the work, and the ceilings hold.
+ * is asked, never its answer. Nor can a flood of tokens: every one is a call to Cloudflare, so one that limits this server
+ * (429) is Cloudflare answering, and the requirement stays. What it would take to open the door is breaking this server's
+ * own path to Cloudflare, and then the door still asks for the work, and the ceilings hold.
  *
  * A wrong secret reads as the same outage, on purpose, and says so in the log: every token would fail, which would turn
  * every real person away from the words door on a busy day. No client can cause it.
@@ -56,6 +57,8 @@ export const PASS_LIFE_MS = DOOR_WORK_TTL_MS;
 export const PROBE_STANDS_MS = 60_000;
 /** The least time between probes, however many clients' tokens went unanswered. */
 export const PROBE_FORCED_EVERY_MS = 10_000;
+/** Not one of Cloudflare's codes: what `siteverify` says for its 429. */
+const TOO_MANY_CALLS = 'beanpool-too-many-calls';
 /** The probe's token: not a token, and fixed, so that no client's input is ever part of the outage's evidence. */
 const PROBE_TOKEN = 'beanpool-door-check-probe';
 /** At most this many kept: past it the oldest go, which costs a member one more check and no more. */
@@ -117,12 +120,16 @@ interface SiteverifyAnswer {
     'error-codes'?: unknown;
 }
 
-/** The answer, or null for none: unreachable, too slow, or not its JSON. Never throws. */
+/** The answer, or null for none: unreachable, too slow, or not its JSON. A 429 is an answer, whatever its body. Never throws. */
 async function siteverify(secret: string, token: string, idempotencyKey?: string): Promise<SiteverifyAnswer | null> {
     const form = new URLSearchParams({ secret, response: token });
     if (idempotencyKey) form.set('idempotency_key', idempotencyKey);
     try {
         const res = await fetch(SITEVERIFY_URL, { method: 'POST', body: form, signal: AbortSignal.timeout(SITEVERIFY_TIMEOUT_MS), redirect: 'error' });
+        if (res.status === 429) {
+            warnOnce('⚠️  Cloudflare is limiting this server\'s calls, so some of the door\'s person checks can\'t be judged. The check stays on, and those members are pointed to the sign-in.');
+            return { 'error-codes': [TOO_MANY_CALLS] };
+        }
         const body = await res.json() as SiteverifyAnswer | null;
         return body && typeof body === 'object' ? body : null;
     } catch {
@@ -134,7 +141,7 @@ const hasCode = (a: SiteverifyAnswer, ...codes: string[]): boolean =>
     Array.isArray(a['error-codes']) && a['error-codes'].some((c) => codes.includes(c as string));
 
 /** Cloudflare's own trouble, or this server's secret: nothing to do with the token that was asked about. */
-const notAboutTheToken = (a: SiteverifyAnswer): boolean => hasCode(a, 'internal-error', 'missing-input-secret', 'invalid-input-secret');
+const notAboutTheToken = (a: SiteverifyAnswer): boolean => hasCode(a, 'internal-error', 'missing-input-secret', 'invalid-input-secret', TOO_MANY_CALLS);
 
 // ── Whether Cloudflare can be asked ───────────────────────────────────────────────────────────
 
@@ -145,7 +152,8 @@ async function probe(secret: string): Promise<boolean> {
     // Twice, so one lost packet or one stalled moment on this server doesn't open the door.
     for (let attempt = 0; attempt < 2; attempt++) {
         const answer = await siteverify(secret, PROBE_TOKEN);
-        if (answer && !notAboutTheToken(answer)) return true;
+        // A limit is an answer: it says nothing of the token, and it says Cloudflare is up.
+        if (answer && (hasCode(answer, TOO_MANY_CALLS) || !notAboutTheToken(answer))) return true;
         if (answer && hasCode(answer, 'missing-input-secret', 'invalid-input-secret')) {
             warnOnce('⚠️  Cloudflare refused TURNSTILE_SECRET_KEY, so the door\'s person check can\'t run. Check the key in .env.');
         }

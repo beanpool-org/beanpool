@@ -131,7 +131,8 @@ describe('the check page', () => {
         const headers = fs.readFileSync(path.join(DIR, '_headers'), 'utf-8');
         expect(headers).toMatch(/script-src 'self' https:\/\/challenges\.cloudflare\.com;/);
         expect(headers).toMatch(/frame-ancestors 'none'/);
-        expect(headers).toMatch(/Referrer-Policy: no-referrer/);
+        // The origin and nothing more: the page's own host, which Cloudflare already knows, and never a path or a fragment.
+        expect(headers).toMatch(/Referrer-Policy: strict-origin$/m);
         expect(vi.isMockFunction(fs.readFileSync)).toBe(false);
     });
 });

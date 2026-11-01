@@ -47,7 +47,8 @@ const PAGE = 'https://check.beanpool.org/';
 const CHECK = { siteKey: '0x4AAA', page: PAGE };
 const KEY = 'ab'.repeat(32);
 const colorsFor = (dark: boolean) => ({
-    surface: { page: dark ? '#000001' : '#fffffe' },
+    // The pattern background is on by default, and then the page's own colour is see-through (ThemeContext).
+    surface: { page: 'transparent', app: dark ? '#000001' : '#fffffe' },
     border: { default: '#888888' },
     text: { heading: dark ? '#eeeeee' : '#111111', secondary: '#555555' },
 }) as any;
@@ -81,6 +82,9 @@ describe('the check\'s sheet', () => {
         expect(web.props.onShouldStartLoadWithRequest({ url: 'https://challenges.cloudflare.com/x', isTopFrame: false })).toBe(true);
         expect(web.props.source.html).toBeUndefined();
         expect(box.querySelector('[data-bg="#000001"]')).not.toBeNull();
+        expect(box.querySelector('[data-bg="transparent"]')).toBeNull();
+        expect(JSON.stringify(web.props.style)).not.toContain('transparent');
+        expect(web.props.originWhitelist).toContain('about:srcdoc');
     });
 
     it('says what it is, and has a way out that the hardware Back also takes', () => {

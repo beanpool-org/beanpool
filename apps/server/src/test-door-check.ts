@@ -16,7 +16,7 @@
  *      work; when Cloudflare answers again the requirement is back within the probe's time
  *   9. nobody can force that: junk, an over-long token and no token at all are refused while Cloudflare answers, and a
  *      client's token that gets no answer changes nothing while the server's own probe is answered; probes are not one
- *      per request
+ *      per request; and Cloudflare limiting this server's calls, the one thing a flood of tokens could cause, is no outage
  *  10. the owners' setting: the shape reads it where the door is open, and only there (test-community-shape-write sets it)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-door-check.ts
@@ -57,7 +57,7 @@ const SECRET = 'test-secret-not-a-real-one';
 const PAGE = 'https://check.example.org/';
 
 interface Issued { hostname?: string; action?: string; cdata: string; made?: number }
-type Mode = 'ok' | 'down' | 'http500' | 'internal' | 'bad_secret';
+type Mode = 'ok' | 'down' | 'http500' | 'internal' | 'bad_secret' | 'limited';
 const cf = {
     mode: 'ok' as Mode,
     /** Fail only calls for a client's token: Cloudflare is up and this one call was lost. */
@@ -78,6 +78,7 @@ globalThis.fetch = (async (input: any, init?: any) => {
     const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
     if (cf.mode === 'down' || (cf.loseClientTokens && !isProbe)) throw new TypeError('fetch failed');
     if (cf.mode === 'http500') return new Response('<html>bad gateway</html>', { status: 502 });
+    if (cf.mode === 'limited') return new Response('<html>too many requests</html>', { status: 429 });
     if (cf.mode === 'internal') return reply(200, { success: false, 'error-codes': ['internal-error'] });
     if (cf.mode === 'bad_secret' || form.get('secret') !== SECRET) return reply(200, { success: false, 'error-codes': ['invalid-input-secret'] });
     const issued = cf.issued.get(token);
@@ -338,6 +339,18 @@ async function main(): Promise<void> {
     assert(await verifyDoorCheck(notBurnt, mal.pk) === 'unknown', 'a token that got no answer was not judged');
     cf.loseClientTokens = false;
     assert(await verifyDoorCheck(notBurnt, mal.pk) === 'passed', 'so it is not spent: the same token works when sent again');
+    // Every junk token is one call to Cloudflare, so a flood of them is the one thing a client could send to make it stop
+    // answering this server. A limit is Cloudflare answering: no outage, and the check stays on.
+    fresh(); cf.mode = 'limited';
+    const flood = newId(); const floodIp = anotherIp();
+    const metTheLimit = tokenFor(flood.pk);
+    const limited = await askWork(flood, floodIp, metTheLimit);
+    assert(limited.status === 429 && limited.body?.code === 'check_required' && !limited.body?.work, `Cloudflare limiting this server is no outage: a token it wouldn't judge is refused (${show(limited)})`);
+    const limitedBare = await askWork(newId(), anotherIp());
+    assert(limitedBare.status === 429 && limitedBare.body?.code === 'check_required' && !limitedBare.body?.work, `and no token is still refused (${show(limitedBare)})`);
+    assert(await siteverifyUp(false, Date.now() + PROBE_STANDS_MS + 5_000) === true, 'the server\'s own probe reads a limit as Cloudflare answering');
+    cf.mode = 'ok';
+    assert(await verifyDoorCheck(metTheLimit, flood.pk) === 'passed', 'a token that met the limit was not judged, so it counts when sent again');
 
     // ── 10. the owners' setting ──────────────────────────────────────────────────────────────────
     console.log('\n── 10. the owners\' setting ──');

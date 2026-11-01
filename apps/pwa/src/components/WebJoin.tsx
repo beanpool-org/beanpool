@@ -960,7 +960,12 @@ export function WebJoin({
             // Stopped waiting: the member chose another way, and nothing goes until they choose again.
             if (!mounted.current || !got) return;
             if (!got.ok) {
-                if (got.state.status === 'check') return await leaveForCheck(p, got.state.check);
+                if (got.state.status === 'check') {
+                    // Asked again straight after a token: the node couldn't judge it. Said, not hopped, so this can't go
+                    // round in a circle with the member never told. Join is still there for another go.
+                    if (sentToken) return toProviders(p, { tone: 'error', text: () => t(JOIN_WORDS.checkDidNotPass) });
+                    return await leaveForCheck(p, got.state.check);
+                }
                 // The node didn't take the check's token: said at the top, because the door's next ask will say something else.
                 if (sentToken && got.state.status === 'failed') return toProviders(p, { tone: 'error', text: got.state.message });
                 // Busy or failed: said under the 12-words button (WordsWorkLine), beside the sign-ins. Shut here: the

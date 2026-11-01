@@ -34,6 +34,13 @@ function originOf(url: string): string | null {
     return m ? m[1].toLowerCase() : null;
 }
 
+/**
+ * The embedded browser's `originWhitelist`. Cloudflare's widget makes about:srcdoc frames (its mobile guide lists them),
+ * and react-native-webview tests this list before `checkPageMayLoad`, on iOS for every frame: a frame that fails it is
+ * cancelled, so the widget never comes. The library adds about:blank by itself.
+ */
+export const CHECK_PAGE_ORIGINS = ['https://*', 'about:srcdoc'];
+
 /** The embedded browser stays on the check's page: the widget's frames may load, and nothing else takes the top frame. */
 export function checkPageMayLoad(url: string, topFrame: boolean | undefined, page: string): boolean {
     return topFrame === false || (originOf(url) !== null && originOf(url) === originOf(page));

@@ -19,7 +19,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn(() => new Uint8Array(32)),
 vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(), deleteItemAsync: vi.fn() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
 
-const { checkPageMayLoad, doorCheckUrl, readCheckMessage, readDoorCheck } = await import('../door-check');
+const { CHECK_PAGE_ORIGINS, checkPageMayLoad, doorCheckUrl, readCheckMessage, readDoorCheck } = await import('../door-check');
 const { busyLevelSentence, DOOR_WORK_MESSAGES, passDoorCheck, startDoorWork, workPastCheck } = await import('../door-work');
 const { DOOR_MESSAGES, nextStepFor, readDoorAnswer, readWordsDoorAnswer } = await import('../global-join');
 
@@ -80,6 +80,16 @@ describe('the page', () => {
         expect(checkPageMayLoad('https://www.cloudflare.com/privacy', true, PAGE)).toBe(false);
         expect(checkPageMayLoad('https://check.beanpool.org.evil.example/', undefined, PAGE)).toBe(false);
         expect(checkPageMayLoad('intent://x', undefined, PAGE)).toBe(false);
+    });
+
+    it('lets the widget\'s own frames in: what Cloudflare\'s mobile guide lists, and nothing but https and those', () => {
+        // react-native-webview's rule (src/WebViewShared.tsx): it adds about:blank itself and tests each url's origin before
+        // onShouldStartLoadWithRequest is ever asked. On iOS it does that for every frame, and a url that fails is cancelled.
+        const origin = (url: string) => /^[A-Za-z][A-Za-z0-9+\-.]+:(\/\/)?[^/]*/.exec(url)?.[0] ?? '';
+        const rules = ['about:blank', ...CHECK_PAGE_ORIGINS].map((o) => new RegExp(`^${o.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}`));
+        const passes = (url: string) => rules.some((r) => r.test(origin(url)));
+        for (const url of [PAGE, 'https://challenges.cloudflare.com/cdn-cgi/x', 'about:blank', 'about:srcdoc']) expect(passes(url), url).toBe(true);
+        for (const url of ['http://check.beanpool.org/', 'intent://x', 'file:///etc/hosts']) expect(passes(url), url).toBe(false);
     });
 
     it('hears only the check\'s page', () => {

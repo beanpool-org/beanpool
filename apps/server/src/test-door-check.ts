@@ -42,7 +42,7 @@ import { _clearSpentDoorWorkForTests } from './services/door-work.js';
 import {
     PROBE_FORCED_EVERY_MS, PROBE_STANDS_MS, SITEVERIFY_URL, TOKEN_LIFE_MS, _resetDoorCheckForTests, doorCheckPassed, forgetDoorCheckPass, siteverifyUp, verifyDoorCheck,
 } from './services/door-check.js';
-import { loopWatch, solveOffLoop } from './door-work-test-solver.js';
+import { solveOffLoop } from './door-work-test-solver.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -139,8 +139,11 @@ function setKeys(on: boolean): void {
         delete process.env.TURNSTILE_SITE_KEY; delete process.env.TURNSTILE_SECRET_KEY; delete process.env.TURNSTILE_PAGE_URL;
     }
 }
-/** The door at level 2 from the first join on any network, or as it ships. */
-const setBusy = (on: boolean) => setRow('doorNumbers.networkSteps', on ? '1,2,100,200' : null);
+/** The door at level 2 from the first join on any network (one step each for the network and the node), or as it ships. */
+function setBusy(on: boolean): void {
+    setRow('doorNumbers.networkSteps', on ? '1,100,200,300' : null);
+    setRow('doorNumbers.nodeSteps', on ? '1,2000,5000' : null);
+}
 function fresh(): void {
     _resetDoorCheckForTests();
     _clearSpentDoorWorkForTests();
@@ -160,7 +163,6 @@ async function main(): Promise<void> {
     initStateEngine();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
-    loopWatch();
 
     console.log('── 0. the numbers ──');
     assert(DOOR_NUMBERS.global.checkFromLevel === 2, 'the check starts at level 2');
@@ -293,7 +295,7 @@ async function main(): Promise<void> {
     }
     console.warn = realWarn;
     fresh(); cf.mode = 'down';
-    const noWork = await join(newId(), 'No Work', {}, anotherIp());
+    const noWork = await join(newId(), 'No Work', undefined, anotherIp());
     assert(noWork.status === 400 && noWork.body?.code === 'work_required', `the outage drops the check and never the work (${show(noWork)})`);
     fresh(); cf.mode = 'down';
     const t0 = Date.now();

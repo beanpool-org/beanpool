@@ -722,7 +722,7 @@ export function wordsWorkRefusal(answer: DoorAnswer): { kind: 'busy' | 'closed' 
     if (answer.status === 403 && answer.body.code === 'sign_in_required') return { kind: 'closed', message: said ?? SIGN_IN_REQUIRED };
     if (answer.status === 403 && answer.body.code === 'private_preview') return { kind: 'closed', message: said ?? PRIVATE_PREVIEW_MESSAGE };
     if (answer.status === 429) {
-        const sentence = answer.body.code === 'network_busy' && said ? said : TOO_MANY;
+        const sentence = (answer.body.code === 'network_busy' || answer.body.code === 'check_required') && said ? said : TOO_MANY;
         return { kind: 'busy', message: withRetryAfter(sentence, answer.retryAfterSeconds) };
     }
     if (answer.status === 404) return { kind: 'closed', message: DOOR_CLOSED };

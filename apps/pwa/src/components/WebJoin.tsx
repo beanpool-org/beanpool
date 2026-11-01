@@ -945,6 +945,7 @@ export function WebJoin({
                 k = new WordsWork(p.identity, { solver: solverRef.current, onChange: (s) => { if (mounted.current) setWork(s); } });
                 keeper.current = k;
             }
+            const sentToken = !!checkToken.current;
             if (checkToken.current) k.passCheck(checkToken.current);
             checkToken.current = null;
             // Ready by now at ordinary levels; otherwise the joining screen waits for it, saying so, with the way back to
@@ -959,6 +960,8 @@ export function WebJoin({
             if (!mounted.current || !got) return;
             if (!got.ok) {
                 if (got.state.status === 'check') return await leaveForCheck(p, got.state.check);
+                // The node didn't take the check's token: said at the top, because the door's next ask will say something else.
+                if (sentToken && got.state.status === 'failed') return toProviders(p, { tone: 'error', text: got.state.message });
                 // Busy or failed: said under the 12-words button (WordsWorkLine), beside the sign-ins. Shut here: the
                 // 12-words choice goes, so it is said at the top.
                 if (got.state.status !== 'closed') return toProviders(p, null);

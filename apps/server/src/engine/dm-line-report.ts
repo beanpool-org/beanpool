@@ -7,7 +7,9 @@
 //
 // What a report stands on:
 // - A signature that verifies needs no row. The sealed line is kept as handed over, with the report, so a sender who edits
-//   or deletes the line, or cancels the request, takes back nothing. S2.5's lines, which no node keeps, report the same way.
+//   or deletes the line, or cancels the request, takes back nothing once it is reported, nor from a copy the reporter still
+//   holds. An app holding only the tombstone has nothing to hand over: Report on a request then blocks with no report.
+//   S2.5's lines, which no node keeps, report the same way.
 // - With none, the line must be the node's own encrypted row, and the node's copy is what is kept: a reporter's bytes that
 //   nobody signed are never filed as the line. The node's copy with a signature that fails reads as such.
 //
@@ -184,5 +186,5 @@ export function metadataAfterDmEdit(stored: string | null, sent: unknown): strin
     const lineSig = dmLineSigOf((sent as Record<string, unknown> | null | undefined)?.[DM_LINE_SIG_KEY]);
     if (lineSig) meta[DM_LINE_SIG_KEY] = lineSig;
     else delete meta[DM_LINE_SIG_KEY];
-    return Object.keys(meta).length > 0 ? JSON.stringify(meta) : stored;
+    return Object.keys(meta).length > 0 ? JSON.stringify(meta) : null;
 }

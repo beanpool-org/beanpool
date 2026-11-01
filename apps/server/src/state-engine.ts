@@ -1118,7 +1118,6 @@ function armMainServerTimers(): void {
         // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
         try { rollDueSeries(broadcast); } catch (e) { console.warn('[Events] Series roll failed:', e); }
         try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
-        // A message request push folded in the last hour goes as one, naming nobody, once the hour is over (engine/dm-requests.ts).
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }

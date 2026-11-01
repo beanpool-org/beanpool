@@ -16,6 +16,8 @@
  *      says so and the card stays (PR #2540 review 4399651364)
  *   9. MessageRequestsPane: the closed-photo line has a gap under it when a caption follows, read at render, not frozen in
  *      the sheet while the preview loads (PR #2540 review 4399651606)
+ *  10. MessageRequestsPane: Report always blocks: a line its sender deleted, or a refusal by the node, costs the report and
+ *      never the block; Report is dim whenever it is off (the deciding review of #2705)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -295,7 +297,7 @@ describe('MessageRequestsPane on phone', () => {
     // Review 4399651364: blockUser answers false rather than throwing (no account on the phone, the list not written, the
     // sender already on it), and a card that ignores the answer shows a block that didn't happen as one that did.
     const reportFrom = async (onChanged: () => void) => {
-        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', text: 'Buy my crypto', metadata: {} }]);
+        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', metadata: {} }]);
         renderCard({ onChanged });
         await screen.findByText('Buy my crypto');
         fireEvent.click(screen.getByTestId('request-report'));
@@ -352,6 +354,99 @@ describe('MessageRequestsPane on phone', () => {
         expect(blockMocks.isUserBlocked).toHaveBeenCalledWith('bob-pubkey');
         expect(alerts.said[0].title).toBe('Reported, but not blocked. Please try again.');
         expect(onChanged).not.toHaveBeenCalled();
+    });
+
+    // The deciding review of #2705: a delete leaves the request waiting and the newest row a tombstone. Handed over, the node
+    // answers 400 disclosure_form, which threw before the block; on main, Block worked here.
+    const DELETED = { id: 'line-1', senderId: 'bob-pubkey', type: 'removed', text: 'This message was deleted', metadata: { removed: true } };
+    const opacityOf = (el: Element) => Object.assign({}, ...[JSON.parse(el.getAttribute('data-style') || '{}')].flat(Infinity).filter(Boolean)).opacity;
+
+    it('a request whose line its sender deleted: Report blocks them, files no report, says so, and the card drops', async () => {
+        dbMocks.getMessages.mockResolvedValueOnce([DELETED]);
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+        await screen.findByText('This message was deleted');
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).not.toHaveBeenCalled();
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('That message was deleted, so no report went. They are blocked.');
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
+
+    it('hands over the request\'s line, not the newest row: a failed line of mine after it is not theirs to report', async () => {
+        dbMocks.getMessages.mockResolvedValueOnce([
+            { id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', rawTimestamp: '2026-10-27T00:00:00Z', metadata: {} },
+            { id: 'mine', senderId: 'me-pubkey', text: 'No thanks', rawTimestamp: '2026-10-27T00:01:00Z', sendState: 'failed', metadata: {} },
+        ]);
+        renderCard();
+        await screen.findByText('No thanks');
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-req-1', 'line-1', 'Buy my crypto', 'Harassment');
+    });
+
+    it('a report the node refuses still blocks, and says the report did not go', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(refusal('That message is not there.', { status: 404, code: 'not_found', nodeAnswered: true }));
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('Your community did not take the report. They are blocked.');
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
+
+    it('over the limit with a block that did not happen: never says it was reported', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(Object.assign(new Error('Too many'), { status: 429 }));
+        blockMocks.blockUser.mockResolvedValueOnce(false);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(false);
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(alerts.said[0].title).toBe('That did not go through. Please try again.');
+        expect(onChanged).not.toHaveBeenCalled();
+    });
+
+    it('Report is dim and off while the preview loads, and live once it has', async () => {
+        let finish: (lines: any[]) => void = () => {};
+        dbMocks.getMessages.mockReturnValueOnce(new Promise((r) => { finish = r; }));
+        renderCard();
+        const report = screen.getByTestId('request-report');
+        expect(opacityOf(report)).toBe(0.7);
+        fireEvent.click(report);
+        expect(screen.queryByTestId('report-sheet-submit')).toBeNull();
+        finish([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', metadata: {} }]);
+        await screen.findByText('Buy my crypto');
+        expect(opacityOf(screen.getByTestId('request-report'))).toBeUndefined();
+    });
+
+    it('no line here and no word from the node: Report stays dim and off, for it can\'t yet tell deleted from not here yet', async () => {
+        dbMocks.syncSingleConversation.mockResolvedValueOnce(false);
+        dbMocks.getMessages.mockResolvedValueOnce([]);
+        renderCard();
+        await screen.findByText('Open the chat to read it.');
+        const report = screen.getByTestId('request-report');
+        expect(opacityOf(report)).toBe(0.7);
+        fireEvent.click(report);
+        expect(screen.queryByTestId('report-sheet-submit')).toBeNull();
+    });
+
+    it('no line here and the node has answered: Report is live, and blocks', async () => {
+        dbMocks.syncSingleConversation.mockResolvedValueOnce(true);
+        dbMocks.getMessages.mockResolvedValueOnce([]);
+        renderCard();
+        await screen.findByText('Open the chat to read it.');
+        expect(opacityOf(screen.getByTestId('request-report'))).toBeUndefined();
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
     });
 
     it('a sender already on the list: reported, and the card drops', async () => {

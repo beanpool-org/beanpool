@@ -15,7 +15,7 @@ import {
     deleteMessageApi, removeGroupChatMessage, muteChatApi, type YourChatMute,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry, type DmRequestEntry,
 } from '../lib/api';
-import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
+import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
@@ -1128,9 +1128,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 title={t('Report this message')}
                 note={t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")}
                 onSubmitReason={async (reason) => {
-                    const reported = await reportRequestAndBlock(reportingRequest, identity, reason);
+                    const outcome = await reportRequestAndBlock(reportingRequest, identity, reason);
                     requestReported.current = true;
-                    if (!reported) throw new Error(t("You have sent a lot of reports recently, so this one did not go. They are blocked."));
+                    if (outcome !== 'reported') throw new Error(requestReportNotSentWords(outcome));
                 }}
             />
         );

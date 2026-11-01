@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, Animated } from 'react-native';
-import { t, tn } from '@beanpool/core';
+import { requestReportNotSentWords, t, tn } from '@beanpool/core';
 import { decideMessageRequest, ignoreAllMessageRequests, getMessages, syncSingleConversation } from '../utils/db';
-import { reportRequestAndBlock, ReportedNotBlockedError } from '../utils/request-report';
+import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn } from '../utils/request-report';
 import { reportedAlertBody } from '../utils/reportReasons';
 import { chatActionErrorMessage, requestDecisionFailureWords, requestIsGone } from '../utils/chat-actions';
 import { ReportMessageSheet } from './ReportMessageSheet';
@@ -25,7 +25,8 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
     const { theme, colors } = useTheme();
     const peer = entry.participants?.find((p: string) => p !== myPubkey) || entry.request?.from || '';
     const name = entry.peerCallsign || entry.name || peer.slice(0, 8);
-    const [preview, setPreview] = useState<{ text?: string; photo?: boolean; loading: boolean; line?: any }>({ loading: true });
+    // `line` is the one Report hands over (null: none left), `canReport` that this phone can tell.
+    const [preview, setPreview] = useState<{ text?: string; photo?: boolean; loading: boolean; line?: any; canReport?: boolean }>({ loading: true });
     const [busy, setBusy] = useState(false);
     const [reporting, setReporting] = useState(false);
 
@@ -35,15 +36,19 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
             try {
                 // The node's word first, then the copy here: a line its opener withdrew (Cancel request) never shows from
                 // this phone's copy, and their new one does (PR #2540 review 4393642158). With no answer, the copy here.
-                await syncSingleConversation(entry.id).catch(() => false);
+                const answered = await syncSingleConversation(entry.id).catch(() => false);
                 const msgs = await getMessages(entry.id, { limit: 20 });
                 if (!alive) return;
                 const last = msgs[msgs.length - 1];
+                // The newest row may be no line of theirs (a tombstone, a failed line of mine). With none here, only the
+                // node's word says none is left: this phone may just not have it yet, and Report would say it was deleted.
+                const line = requestLineIn(msgs, myPubkey);
+                const canReport = !!line || answered !== false;
                 if (last) {
                     const hasPhoto = last.type === 'image' || !!last.metadata?.attachment;
-                    setPreview({ text: last.text, photo: hasPhoto, loading: false, line: last });
+                    setPreview({ text: last.text, photo: hasPhoto, loading: false, line, canReport });
                 } else {
-                    setPreview({ loading: false });
+                    setPreview({ loading: false, canReport });
                 }
             } catch {
                 if (alive) setPreview({ loading: false });
@@ -51,7 +56,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         };
         loadPreview();
         return () => { alive = false; };
-    }, [entry.id]);
+    }, [entry.id, myPubkey]);
 
     const handleDecide = async (decision: 'accept' | 'ignore') => {
         if (busy) return;
@@ -75,11 +80,11 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
     // Report: the line's report and a block of its sender (utils/request-report.ts). The sheet stays under the dialog until OK.
     const submitReport = async (reason: string) => {
         try {
-            if (!preview.line) throw new Error('No line');
-            const reported = await reportRequestAndBlock(entry.id, preview.line, peer, reason);
+            const outcome = await reportRequestAndBlock(entry.id, preview.line ?? null, peer, reason);
+            const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
             Alert.alert(
-                reported ? t('Reported') : t('You have sent a lot of reports recently, so this one did not go. They are blocked.'),
-                reported ? reportedAlertBody(undefined, reason) : undefined,
+                notSent ?? t('Reported'),
+                notSent ? undefined : reportedAlertBody(undefined, reason),
                 [{ text: t('OK'), onPress: () => { setReporting(false); onChanged(); } }],
             );
         } catch (e: any) {
@@ -284,8 +289,8 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                     accessibilityRole="button"
                     accessibilityLabel={t('Report', undefined, 'button: report a message request')}
                     testID="request-report"
-                    style={[styles.reportBtn, busy && { opacity: 0.7 }]}
-                    disabled={busy || preview.loading || !preview.line}
+                    style={[styles.reportBtn, (busy || !preview.canReport) && { opacity: 0.7 }]}
+                    disabled={busy || !preview.canReport}
                     onPress={() => setReporting(true)}
                 >
                     <Text style={styles.reportBtnText}>{t('Report', undefined, 'button: report a message request')}</Text>

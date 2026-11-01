@@ -23,7 +23,7 @@ Only an owner can change these settings. Admins can view every setting and its r
 
 ## Talking
 
-- **First message from someone new**: When on, a message from someone new waits under Requests until accepted. When off, messages arrive straight away.
+- **First message from someone new**: When on, a message from someone new waits under Message requests until accepted. When off, messages arrive straight away.
 
 ## Deciding together
 

@@ -15,9 +15,12 @@
  *   4. one report per reporter per line; a repeat that changes the reason to Child safety changes the one on file
  *   5. the sender can't take it back: reported, then deleted; deleted, then reported from the copy the reporter holds; a
  *      request cancelled. An unsigned line that is gone has nothing to stand on
- *   6. an edit: a new signature replaces the old, an edit from an older app drops it, and a report of the old copy still verifies
+ *   6. an edit: a new signature replaces the old, an edit from an older app drops it, a reply's or not, and a report of the old
+ *      copy still verifies
  *   7. the form: the disclosure's shape, its words' limit
  *   8. a standby copy carries the row exactly, and a server that took over verifies it the same
+ *   9. a request whose line its sender deleted: it still waits, the node takes no report of the tombstone an app is left with,
+ *      and the block Report sends in its place clears the request
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-dm-line-report node scripts/run-server-suites.mjs
  */
@@ -34,7 +37,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
-import { ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -275,6 +278,16 @@ async function main(): Promise<void> {
     const unsignedEdit = await report(ann, oldEdit);
     v = await viewOf(unsignedEdit.body?.report?.id);
     assert(v.body?.message?.signature === 'unsigned', `so it reports as unsigned, not as a failed signature (${v.body?.message?.signature})`);
+    // The signature is all this one's metadata holds, so nothing else keeps the row's metadata in being (the deciding review of #2705).
+    const plain = sealed(bo, ann, conv, 'not a reply');
+    await send(bo, plain);
+    const plainEdit = sealed(bo, ann, conv, 'edited by an older app, and not a reply', { id: plain.id, signed: false });
+    const pe = await call('POST', bo, '/api/messages/edit', { messageId: plain.id, ciphertext: plainEdit.ciphertext, nonce: plainEdit.nonce });
+    const plainRow = db.prepare('SELECT metadata FROM messages WHERE id = ?').get(plain.id) as { metadata: string | null };
+    assert(pe.status === 200 && plainRow.metadata === null, `an edit from an older app of a line that is not a reply leaves no signature either (${plainRow.metadata})`);
+    const plainReport = await report(ann, plainEdit);
+    v = await viewOf(plainReport.body?.report?.id);
+    assert(v.body?.message?.signature === 'unsigned', `and it too reports as unsigned, not as a failed signature (${show(v)})`);
 
     console.log('── 7. the form ──');
     const allForm = allReports();
@@ -309,6 +322,30 @@ async function main(): Promise<void> {
     admin = ownerTokenHeaders('admin');
     v = await viewOf(repId);
     assert(v.body?.message?.signature === 'verified', `and on a server that took over its signature verifies the same (${v.body?.message?.signature})`);
+
+    console.log('── 9. a request whose line its sender deleted ──');
+    const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { dmRequests: true } }, ownerSessionHeaders(owner.pk));
+    assert(on.status === 200, `an owner turns requests on (${show(on)})`);
+    const dee = member('Dee');
+    const deeConv = await open(dee, ann);
+    const deeLine = sealed(dee, ann, deeConv, 'a nasty request');
+    await send(dee, deeLine);
+    const waiting = async (): Promise<number | undefined> => (await call('GET', ann, `/api/messages/conversations/${ann.pk}`)).body?.requests?.count;
+    const before = await waiting();
+    await call('POST', dee, '/api/messages/delete', { messageId: deeLine.id });
+    const afterDelete = await waiting();
+    assert(before === 1 && afterDelete === 1, `a delete leaves the request waiting (${before}, then ${afterDelete})`);
+    const heldNow = (await call('GET', ann, `/api/messages/${deeConv}?limit=20`)).body?.messages?.find((m: any) => m.id === deeLine.id);
+    assert(heldNow?.type === 'removed', `and all an app reads now is a tombstone (${heldNow?.type})`);
+    const ofTombstone = await call('POST', ann, '/api/messages/report', {
+        messageId: heldNow.id, reason: 'Harassment',
+        disclosure: dmLineDisclosureFor({ ciphertext: heldNow.ciphertext, nonce: heldNow.nonce, conversationId: deeConv, metadata: heldNow.metadata }, ''),
+    });
+    assert(ofTombstone.status === 400 && ofTombstone.body?.code === 'disclosure_form' && reportRows(ann.pk, deeLine.id) === 0,
+        `the node takes no report of it, so the apps never hand it over (${show(ofTombstone)})`);
+    const blocked = await call('POST', ann, '/api/blocks', { targetPubkey: dee.pk });
+    const afterBlock = await waiting();
+    assert(blocked.status === 200 && afterBlock === 0, `the block Report sends in its place clears the request (${afterDelete} to ${afterBlock})`);
 
     console.log(`\n${passed}/${run} passed`);
     try { await p2p.stop(); } catch { /* stopping only */ }

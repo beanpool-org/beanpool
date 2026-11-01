@@ -12,7 +12,7 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse, how-your-com
 - **A Pulse post:** tap the flag on it.
 - **A project or an enterprise:** open it and tap **Report Project** or **Report Enterprise** at the bottom.
 - **A message in a chat:** in a group's chat or a chat with one person, on the phone, tap the message, then the flag (**Report message**). In the web app, tap **Report** under it. You can report anybody's message but your own.
-- **A message request:** tap **Report** on the request. This also blocks the person who sent it.
+- **A message request:** tap **Report** on the request. This also blocks the person who sent it. If they have deleted the message, nothing is left to report, but they are still blocked.
 
 Then:
 

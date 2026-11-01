@@ -360,6 +360,50 @@ describe('a request card', () => {
         expect(await within(card).findByText('You have sent a lot of reports recently, so this one did not go. They are blocked.')).toBeInTheDocument();
     });
 
+    // The deciding review of #2705: a delete leaves the request waiting and a tombstone in the thread. Handed over, the node
+    // answers 400 disclosure_form, which threw before the block; on main, Block worked here.
+    const tombstone = (l: ApiMessage): ApiMessage => ({ ...l, type: 'removed', nonce: 'plaintext-v1', ciphertext: btoa('This message was deleted'), metadata: JSON.stringify({ removed: true }) }) as ApiMessage;
+    async function submitReport(): Promise<HTMLElement> {
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
+        const card = await screen.findByRole('dialog');
+        fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        return card;
+    }
+
+    it('a request whose line its sender deleted: Report blocks them, files no report, says so, and the request goes', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [tombstone(line(bo, 'Hello'))]);
+        vi.mocked(blockUser).mockImplementationOnce(async () => { node.list = annListWith([]); return undefined as never; });
+        render(<MessagesPage identity={idOf(ann)} />);
+        const card = await submitReport();
+        expect(await within(card).findByText('That message was deleted, so no report went. They are blocked.')).toBeInTheDocument();
+        expect(blockUser).toHaveBeenCalledWith(bo.publicKey);
+        expect(reportDmLineApi).not.toHaveBeenCalled();
+        fireEvent.click(within(card).getByRole('button', { name: 'Cancel' }));
+        expect(await screen.findByText("No requests. A first message from someone you haven't added or talked to arrives here.")).toBeInTheDocument();
+    });
+
+    it('with an older line of theirs still there, that is the one it reports', async () => {
+        const older = signed(line(bo, 'Hello', LINE_AT));
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [older, tombstone(line(bo, 'Gone', new Date(Date.parse(LINE_AT) + 1000).toISOString()))]);
+        render(<MessagesPage identity={idOf(ann)} />);
+        await submitReport();
+        await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
+        expect(vi.mocked(reportDmLineApi).mock.calls[0][0]).toBe(older.id);
+    });
+
+    it('a report the node refuses still blocks, and says the report did not go', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        vi.mocked(reportDmLineApi).mockRejectedValueOnce(Object.assign(new Error('A report of a direct message names it'), { status: 404, code: 'not_found' }));
+        render(<MessagesPage identity={idOf(ann)} />);
+        const card = await submitReport();
+        await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
+        expect(await within(card).findByText('Your community did not take the report. They are blocked.')).toBeInTheDocument();
+    });
+
     it('a block that does not go through says the report went and the block did not', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);

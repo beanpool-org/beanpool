@@ -45,7 +45,7 @@ export function ReportedDirectMessage({ nodeUrl, reportId, adminPassword, tfaTok
 
     return (
         <div className="space-y-2" data-testid="reported-direct-message">
-            <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-nature-400 m-0">
                 {`Direct message${author ? ` · from ${author}` : ''}`}
             </p>
             {error ? (
@@ -89,7 +89,7 @@ export function ReportedDirectMessage({ nodeUrl, reportId, adminPassword, tfaTok
                     {lineNow && <p className="text-xs text-nature-400 m-0">{lineNow}</p>}
                 </div>
             )}
-            <p className="text-xs text-nature-500 m-0">
+            <p className="text-xs text-nature-400 m-0">
                 Only this one message was shared with the report. Nothing else in the chat can be read here.
             </p>
         </div>

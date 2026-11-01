@@ -65,7 +65,7 @@ A direct message is end-to-end encrypted, and it has no key of its own to hand o
 
 A photo stays sealed. No other message in the chat comes with a report, and nobody in the chat is told who reported it. Settings has no button to take a direct message down: its sender can delete it, and the owners and admins can suspend its sender.
 
-Report on a message request does the same, and blocks the sender for the member who reported them.
+Report on a message request does the same, and blocks the sender for the member who reported them. If the sender deleted the message before the member tapped Report, nothing is left to hand over: the sender is blocked and no report reaches you.
 
 ## A message from a group's chat
 

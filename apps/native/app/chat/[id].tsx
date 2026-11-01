@@ -3,7 +3,7 @@ import { askPhotoSource } from '../../utils/post-photo';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine } from '@beanpool/core';
+import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, type RequestReportOutcome } from '@beanpool/core';
 import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -149,7 +149,8 @@ function ChatScreen({ id }: { id: string }) {
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
     const [peerName, setPeerName] = useState(() => t('Loading...'));
     const [peerPubkey, setPeerPubkey] = useState<string | null>(null);
-    const [reportingLine, setReportingLine] = useState<{ item: any; blocks: boolean } | null>(null);
+    // `blocks`: Report on a request, and the sender it blocks. `item` is then the request's line, or null with none left.
+    const [reportingLine, setReportingLine] = useState<{ item: any; blocks: string | null } | null>(null);
     const [isPeerBlocked, setIsPeerBlocked] = useState(false);
     const [peerAvatar, setPeerAvatar] = useState<string | null>(null);
     // True when this thread is a 2-party DM (the only threads we E2E-encrypt).
@@ -747,6 +748,8 @@ function ChatScreen({ id }: { id: string }) {
     // A request holds every send until it is decided, or the node has answered; the opener's, once their line is in, until
     // the other accepts. Not an edit of that line, which the node and the web allow (PR #2540 review 4394827275).
     const requestLine = requestMode === 'to-me' ? requestLineIn(messages, identity?.publicKey) : null;
+    // With no line here, only the node's word says none is left: this phone may just not have it yet.
+    const canReportRequest = !!requestLine || nodeAnswered;
     const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);
     // Asked before the composer empties the box, so a refused send keeps what was typed.
     const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && !requestHoldsSends;
@@ -1134,11 +1137,12 @@ function ChatScreen({ id }: { id: string }) {
         if (!reportingLine) return;
         const { item, blocks } = reportingLine;
         try {
-            let reported = true;
-            if (blocks) reported = await reportRequestAndBlock(String(id), item, item.senderId, reason);
+            let outcome: RequestReportOutcome = 'reported';
+            if (blocks) outcome = await reportRequestAndBlock(String(id), item, blocks, reason);
             else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason);
             hapticSuccess();
-            Alert.alert(reported ? t('Reported') : t('You have sent a lot of reports recently, so this one did not go. They are blocked.'), reported ? reportedAlertBody(undefined, reason) : undefined, [{ text: t('OK'), onPress: () => {
+            const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
+            Alert.alert(notSent ?? t('Reported'), notSent ? undefined : reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => {
                 setReportingLine(null);
                 if (blocks) router.navigate('/(tabs)/chats');
             } }]);
@@ -1388,7 +1392,7 @@ function ChatScreen({ id }: { id: string }) {
                 onRemove={() => { /* a DM has no convenor: nobody removes anybody else's message here */ }}
                 onReport={() => {
                     setActiveMessageActionsId(null);
-                    setReportingLine({ item, blocks: false });
+                    setReportingLine({ item, blocks: null });
                 }}
                 onPickEmoji={handleEmojiSelect}
                 onPressUrl={openUrl}
@@ -1754,9 +1758,9 @@ function ChatScreen({ id }: { id: string }) {
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Report', undefined, 'button: report a message request')}
                                 testID="request-report"
-                                style={[styles.toMeIgnoreBtn, (decidingRequest || !requestLine) && { opacity: 0.7 }]}
-                                disabled={decidingRequest || !requestLine}
-                                onPress={() => { if (requestLine) setReportingLine({ item: requestLine, blocks: true }); }}
+                                style={[styles.toMeIgnoreBtn, (decidingRequest || !canReportRequest) && { opacity: 0.7 }]}
+                                disabled={decidingRequest || !canReportRequest}
+                                onPress={() => setReportingLine({ item: requestLine, blocks: heldRequest.from })}
                             >
                                 <Text style={[styles.toMeIgnoreBtnText, { color: colors.feedback.danger.fg }]}>{t('Report', undefined, 'button: report a message request')}</Text>
                             </Pressable>
@@ -1843,7 +1847,7 @@ function ChatScreen({ id }: { id: string }) {
             <ReportMessageSheet
                 isOpen={!!reportingLine}
                 photo={false}
-                blocks={reportingLine?.blocks}
+                blocks={!!reportingLine?.blocks}
                 onSubmit={submitLineReport}
                 onClose={() => setReportingLine(null)}
             />

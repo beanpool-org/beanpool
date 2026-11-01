@@ -118,6 +118,30 @@ export function decisionFailureWords(e: unknown): string {
     return t('Connect to your community to accept or decline.');
 }
 
+/**
+ * What became of Report on a request: `reported`, or why no report went. Every one of them blocks the sender: Report always
+ * does (`over_limit`, the moderators' hourly limit; `refused`, the node turned the report down; `no_line`, nothing is left to
+ * hand over, because its sender deleted the line).
+ */
+export type RequestReportOutcome = 'reported' | 'over_limit' | 'refused' | 'no_line';
+
+/**
+ * A report's failure, as Report on a request reads it: the node's refusal, which never costs a member their block, or null
+ * for no answer from it (offline, a 5xx), which throws as ever: the card stays and a second try sends the report.
+ */
+export function requestReportRefused(e: unknown): 'over_limit' | 'refused' | null {
+    const status = (e as { status?: unknown } | null | undefined)?.status;
+    if (status === 429) return 'over_limit';
+    return typeof status === 'number' && status >= 400 && status < 500 ? 'refused' : null;
+}
+
+/** What Report on a request says when no report went, in place of "Reported". The block went through. */
+export function requestReportNotSentWords(outcome: Exclude<RequestReportOutcome, 'reported'>): string {
+    if (outcome === 'over_limit') return t('You have sent a lot of reports recently, so this one did not go. They are blocked.');
+    if (outcome === 'no_line') return t('That message was deleted, so no report went. They are blocked.');
+    return t('Your community did not take the report. They are blocked.');
+}
+
 /** The node's refusal of the opener's second line, or reaction, while their request waits (403 `dm_request_pending`). */
 export function requestPendingRefusal(e: unknown): string | null {
     const err = e as { code?: unknown; message?: unknown } | null | undefined;

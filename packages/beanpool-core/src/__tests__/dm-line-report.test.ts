@@ -11,6 +11,7 @@ import {
     DM_LINE_SIG_TAG, DM_REPORT_WORDS_MAX, dmLineDisclosureFor, dmLineDisclosureOf, dmLineSigDigest, dmLineSigInMetadata, dmLineSigVerifies,
     dmLineSignedBy, signDmLine, type DmLineSigBinding,
 } from '../dm-line-report.js';
+import { requestReportNotSentWords, requestReportRefused } from '../dm-requests.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
 
 const seed = (name: string) => sha256(utf8ToBytes(`beanpool dm-line vector: ${name}`));
@@ -120,5 +121,22 @@ describe('what a reporter hands over', () => {
             { ...good, words: 1 }, { ...good, words: 'z'.repeat(DM_REPORT_WORDS_MAX + 1) }, { ...good, lineSig: 'x' }]) {
             expect(dmLineDisclosureOf(bad)).toBeNull();
         }
+    });
+});
+
+describe('Report on a request, when no report went', () => {
+    it('reads a refusal by the node as one the block goes on from, and no answer as one to try again', () => {
+        expect(requestReportRefused({ status: 429 })).toBe('over_limit');
+        for (const status of [400, 401, 403, 404]) expect(requestReportRefused({ status })).toBe('refused');
+        for (const e of [new Error('Network request failed'), { status: 500 }, { status: 502 }, { status: 0 }, { status: '404' }, null, undefined]) {
+            expect(requestReportRefused(e)).toBeNull();
+        }
+    });
+
+    it('says why in a sentence of its own for each, and that they are blocked', () => {
+        const words = (['over_limit', 'refused', 'no_line'] as const).map(requestReportNotSentWords);
+        expect(new Set(words).size).toBe(3);
+        for (const w of words) expect(w).toMatch(/They are blocked\.$/);
+        expect(requestReportNotSentWords('no_line')).toBe('That message was deleted, so no report went. They are blocked.');
     });
 });

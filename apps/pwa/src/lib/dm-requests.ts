@@ -13,6 +13,7 @@ import {
     t,
     type RequestMode,
     type DmRequestCore,
+    type RequestReportOutcome,
     REQUEST_CARDS_SHOWN,
     IGNORE_ALL_FROM,
     requestModeOf,
@@ -21,10 +22,13 @@ import {
     requestAfterRead,
     decisionFailureWords,
     requestPendingRefusal,
+    requestReportRefused,
+    requestReportNotSentWords,
 } from '@beanpool/core';
 export {
     type RequestMode,
     type DmRequestCore,
+    type RequestReportOutcome,
     REQUEST_CARDS_SHOWN,
     IGNORE_ALL_FROM,
     requestModeOf,
@@ -33,6 +37,8 @@ export {
     requestAfterRead,
     decisionFailureWords,
     requestPendingRefusal,
+    requestReportRefused,
+    requestReportNotSentWords,
 };
 import type { ApiMessage, Conversation, DmRequest } from './api';
 import { checkDmThread, dmLineShownText, dmThreadInShownOrder } from './e2e-crypto';

@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard } from '@beanpool/core';
-import { readCommunityCard, t } from '@beanpool/core';
+import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -1148,8 +1148,14 @@ export async function editMessageApi(
     authorPubkey: string,
     ciphertext: string,
     nonce: string,
+    lineSig?: DmLineSig,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce, ...(lineSig ? { metadata: { lineSig } } : {}) });
+}
+
+/** Report one line of a direct message with what this reporter hands over for it (core dm-line-report.ts). */
+export async function reportDmLineApi(messageId: string, reason: string, disclosure: DmLineDisclosure): Promise<{ success: boolean; duplicate?: boolean }> {
+    return request('POST', '/api/messages/report', { messageId, reason, disclosure });
 }
 
 export async function toggleMessageReactionApi(

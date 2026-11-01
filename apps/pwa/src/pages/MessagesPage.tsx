@@ -24,7 +24,7 @@ import {
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
-import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
+import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -47,6 +47,7 @@ import { imageFromTransfer, dragCarriesFile, chatImageRefusal, NODE_READABLE_NO_
 import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
+import { reportDmLine, reportRequestAndBlock } from '../lib/dm-line-report';
 import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
 import { ChatDealStrip } from '../components/ChatDealStrip';
 import { ChatMenuModal } from '../components/ChatMenuModal';
@@ -342,6 +343,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [reportTarget, setReportTarget] = useState<{ pubkey: string; name: string } | null>(null);
     // One line of a locked group chat being reported with its key (group chat photos S6): its report card is open while set.
     const [reportingLine, setReportingLine] = useState<ApiMessage | null>(null);
+    // The request whose Report is open: the report card reports its line and blocks its sender (lib/dm-line-report.ts).
+    const [reportingRequest, setReportingRequest] = useState<(Conversation & { request: NonNullable<Conversation['request']> }) | null>(null);
+    const requestReported = useRef(false);
     const [chatMute, setChatMute] = useState<YourChatMute | null>(null);
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
     const [muteDialogOpen, setMuteDialogOpen] = useState(false);
@@ -1104,11 +1108,39 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
+    /** Report on a request, from its card or its chat: back to the requests once it is done, whichever it was from. */
+    function requestReportCard() {
+        if (!reportingRequest) return null;
+        return (
+            <ReportModal
+                isOpen
+                onClose={() => {
+                    setReportingRequest(null);
+                    if (!requestReported.current) return;
+                    requestReported.current = false;
+                    setActiveConv(null);
+                    setActiveTab('requests');
+                    void loadConversations();
+                }}
+                reporterPubkey={identity.publicKey}
+                targetPubkey={reportingRequest.request.from}
+                targetName=""
+                title={t('Report this message')}
+                note={t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")}
+                onSubmitReason={async (reason) => {
+                    const reported = await reportRequestAndBlock(reportingRequest, identity, reason);
+                    requestReported.current = true;
+                    if (!reported) throw new Error(t("You have sent a lot of reports recently, so this one did not go. They are blocked."));
+                }}
+            />
+        );
+    }
+
     /**
      * A line as it goes to the node: readable in a group chat, locked in a DM. A DM that can't be locked gets one more
      * try with the node's copy of the conversation, then throws DmNotLockedError — never a readable fallback.
      */
-    async function payloadFor(text: string, conv: Conversation, line: DmLineSeal): Promise<{ ciphertext: string; nonce: string }> {
+    async function payloadFor(text: string, conv: Conversation, line: DmLineSeal): Promise<LockedLine> {
         try {
             return payloadForChat(text, conv, identity, line);
         } catch (e) {
@@ -1266,7 +1298,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const line: DmLineSeal = wasEditing
                 ? { messageId: wasEditing.id, after: lineViews?.get(wasEditing.id)?.after ?? null, replyToId: dmReplyToOf(wasEditing.metadata) ?? null }
                 : { messageId: newDmMessageId(), after: dmAfterReference(shownMessages), replyToId: replyToMessage?.id ?? null };
-            const { ciphertext, nonce } = await payloadFor(draft.trim(), activeConv, line);
+            const { ciphertext, nonce, lineSig } = await payloadFor(draft.trim(), activeConv, line);
 
             if (wasEditing) {
                 const prevMessages = messages;
@@ -1279,7 +1311,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 } : m));
 
                 try {
-                    await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
+                    await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce, lineSig);
                     setEditingMessage(null);
                     setDraft('');
                     setChatRefusal(null);
@@ -1289,10 +1321,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     throw err;
                 }
             } else {
-                let metadata: string | undefined = undefined;
-                if (replyToMessage) {
-                    metadata = JSON.stringify({ replyToId: replyToMessage.id });
-                }
+                const metadata = lineMetadata(replyToMessage?.id, lineSig);
                 // 1. Store locally (Server will handle Libp2p federation relay automatically)
                 await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
                 ownLineTaken(activeConv.id);
@@ -1337,10 +1366,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const replyToId = replyToMessage?.id ?? null;   // sealed into both parts, as the metadata below names it
             const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment', replyToId });       // big blob -> lazy attachment
             const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: dmAfterReference(shownMessages), replyToId });   // caption (often empty) -> message body
-            let metadata: string | undefined = undefined;
-            if (replyToMessage) {
-                metadata = JSON.stringify({ replyToId: replyToMessage.id });
-            }
+            const metadata = lineMetadata(replyToMessage?.id, encCap.lineSig);
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
             ownLineTaken(activeConv.id);
@@ -2650,8 +2676,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         >
                                             {t('React')}
                                         </button>
-                                        {/* Someone else's line of a locked group chat, opened here: reported with its own key (S6). */}
-                                        {groupLine && groupLocked && !groupLine.mine && !groupLine.unattributed && !!openGroup?.thread?.views.get(msg.id)?.signer && (
+                                        {/* Someone else's line of a locked group chat, opened here: reported with its own key (S6);
+                                            or of a direct message: reported as sealed, with its sender's signature (R0). */}
+                                        {(groupLine
+                                            ? groupLocked && !groupLine.mine && !groupLine.unattributed && !!openGroup?.thread?.views.get(msg.id)?.signer
+                                            : activeConv?.type === 'dm' && msg.authorPubkey !== identity.publicKey && isEncryptedNonce(msg.nonce) && lineViews?.get(msg.id)?.text != null) && (
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); setReportingLine(msg); }}
@@ -3019,7 +3048,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </div>
                 ) : requestMode === 'to-me' ? (
                     // Request mode (design §4.5): the lines read above, and in place of the composer the card's three
-                    // buttons. Report is in the header. Nothing is written until the node takes the decision.
+                    // buttons. Nothing is written until the node takes the decision.
                     <div data-testid="request-mode" style={{
                         padding: '0.75rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
                     }}>
@@ -3027,20 +3056,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             {t('{name} wants to message you', { name: getConversationTitle(activeConv) })}
                         </p>
                         <p style={{ margin: '0.25rem 0 0.6rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            {t('Accept to reply. If you ignore it, they are not told.')}
+                            {t('Accept to reply. If you decline, they are not told.')}
                         </p>
                         <RequestActions
                             conversationId={activeConv.id}
-                            peerPubkey={peerPubkey}
-                            peerName={getConversationTitle(activeConv)}
-                            identity={identity}
                             onAccepted={(request) => {
                                 const id = activeConv.id;
                                 setActiveConv(prev => (prev && prev.id === id ? { ...prev, request } : prev));
                                 void loadConversations();
                             }}
                             onIgnored={() => { setActiveConv(null); setActiveTab('requests'); void loadConversations(); }}
-                            onBlocked={() => { setActiveConv(null); setActiveTab('requests'); void loadConversations(); }}
+                            onReport={() => setReportingRequest({ ...activeConv, request: activeConv.request! })}
                         />
                     </div>
                 ) : requestMode === 'mine-waiting' && !editingMessage ? (
@@ -3052,7 +3078,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem',
                     }}>
                         <span style={{ flex: '1 1 14rem' }}>
-                            {t('Sent as a request. {name} will see it under Requests. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
+                            {t('Sent as a request. {name} will see it under Message requests. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
                         </span>
                         <button
                             type="button"
@@ -3189,6 +3215,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         targetName={reportTarget.name}
                     />
                 )}
+                {requestReportCard()}
+                {reportingLine && !openGroup && activeConv && (
+                    // The report card's reasons and words, sending this one line: as sealed, signed, and as it reads here.
+                    <ReportModal
+                        isOpen
+                        onClose={() => setReportingLine(null)}
+                        reporterPubkey={identity.publicKey}
+                        targetPubkey={reportingLine.authorPubkey}
+                        targetName=""
+                        title={t('Report this message')}
+                        note={t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
+                        onSubmitReason={(reason) => reportDmLine(activeConv.id, reportingLine, lineViews?.get(reportingLine.id)?.text ?? '', reason)}
+                    />
+                )}
                 {reportingLine && openGroup && (
                     // The DM report card's reasons and words, sending this one line with its key (lib/group-chat-lines.ts).
                     <ReportModal
@@ -3275,10 +3315,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         { id: 'direct', label: t('Direct'), count: 0 },
         { id: 'groups', label: t('Groups'), count: groupsUnread },
     ];
-    // Requests (lib/dm-requests.ts): only where the community has them on and one is waiting, or while it is open (so it
-    // doesn't vanish under the member as they decide the last). Its count is its own, never in the unread ones.
+    // Requests (lib/dm-requests.ts): one plain row at the top of Chat, where the community has them on and one is waiting. No
+    // count and no badge until one is accepted (Marty, 1 Nov 2026): every kind of outside request waits behind it.
     const requestCount = requests?.count ?? 0;
-    if (requests && (requestCount > 0 || activeTab === 'requests')) filterChips.push({ id: 'requests', label: t('Requests'), count: requestCount });
     const showingRequests = activeTab === 'requests' && !!requests;
     // When a person joined, on a request card, where this page holds their card.
     const joinedWordsOf = (pubkey: string): string | null => {
@@ -3316,17 +3355,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             <div className="scrollbar-none" data-testid="conversation-filter-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-primary)', paddingBottom: '1rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 {filterChips.map(chip => {
                     const active = activeTab === chip.id;
-                    const isRequests = chip.id === 'requests';
                     return (
                         <button
                             key={chip.id}
                             onClick={() => setActiveTab(chip.id)}
                             aria-pressed={active}
-                            aria-label={chip.count > 0
-                                ? (isRequests
-                                    ? tn(chip.count, 'Requests, {n} person wants to message you', 'Requests, {n} people want to message you')
-                                    : t('{label}, {count} unread', { label: chip.label, count: chip.count }))
-                                : undefined}
+                            aria-label={chip.count > 0 ? t('{label}, {count} unread', { label: chip.label, count: chip.count }) : undefined}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', background: active ? 'var(--text-primary)' : 'var(--bg-hover)', color: active ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                         >
                             {chip.label}
@@ -3335,8 +3369,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     aria-hidden="true"
                                     data-testid={`conversation-filter-count-${chip.id}`}
                                     style={{
-                                        // Requests' count is not unread lines: the sage accent, not the unread red.
-                                        background: isRequests ? 'var(--bp-accent-fill)' : 'var(--danger)', color: isRequests ? 'var(--bp-accent-on)' : 'var(--on-danger)', fontSize: '0.7rem', fontWeight: 800,
+                                        background: 'var(--danger)', color: 'var(--on-danger)', fontSize: '0.7rem', fontWeight: 800,
                                         minWidth: '18px', height: '18px', borderRadius: '9px', display: 'inline-flex', alignItems: 'center',
                                         justifyContent: 'center', padding: '0 5px', lineHeight: 1,
                                     }}
@@ -3346,6 +3379,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     );
                 })}
             </div>
+
+            {requests && requestCount > 0 && !showingRequests && (
+                <button type="button" data-testid="message-requests-row" onClick={() => setActiveTab('requests')} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '48px', padding: '0.5rem 1rem',
+                    marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '12px',
+                    color: 'var(--text-primary)', font: 'inherit', fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+                }}>
+                    {t('Message requests')}<span aria-hidden="true">›</span>
+                </button>
+            )}
 
             {chatRefusalNotice && <div style={{ marginBottom: '1rem' }}>{chatRefusalNotice}</div>}
 
@@ -3389,7 +3432,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         void loadConversations();
                     }}
                     onChanged={() => { void loadConversations(); }}
-                    onReport={(pubkey, name) => setReportTarget({ pubkey, name })}
+                    onReport={(entry) => setReportingRequest(entry)}
+                    onBack={() => setActiveTab('all')}
                 />
             ) : activeTab === 'groups' && !hasGroups ? (
                 // On a card as the list is, so the words never sit on the page's doodles.
@@ -3576,6 +3620,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             )}
 
             {/* A request card's 🚩 Report (the chat has its own, in its header). */}
+            {requestReportCard()}
             {reportTarget && (
                 <ReportModal
                     isOpen={!!reportTarget}

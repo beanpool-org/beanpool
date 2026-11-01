@@ -399,7 +399,7 @@ describe('a decision on a message request, then the chat, on the phone (review 4
         const accepted: string[] = [];
         await draw(createElement(MessageRequestsPane, {
             entries: requests!.conversations, count: requests!.count, identity: { publicKey: bo.publicKey },
-            onOpen: () => {}, onAccepted: (entry: any) => accepted.push(entry.id), onChanged: () => {},
+            onOpen: () => {}, onBack: () => {}, onAccepted: (entry: any) => accepted.push(entry.id), onChanged: () => {},
         }));
         // The card's preview read the node's page, and wrote the request waiting into the phone's row.
         expect(host.textContent).toContain('first words from Rhea');

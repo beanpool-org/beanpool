@@ -10,10 +10,10 @@
 import { describe, it, expect } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { ed25519Signer, toEd25519Pkcs8 } from '@beanpool/core';
+import { dmLineSigVerifies, ed25519Signer, toEd25519Pkcs8 } from '@beanpool/core';
 import { openDmLine, isEncryptedNonce, newDmMessageId } from './e2e-crypto';
 import {
-    DmNotLockedError, dmKeyContext, dmNotLockedLine, isDmNotLocked, isNodeReadableChat, lockForDm, payloadForChat,
+    DmNotLockedError, dmKeyContext, dmNotLockedLine, isDmNotLocked, isNodeReadableChat, lineMetadata, lockForDm, payloadForChat,
 } from './dm-lock';
 
 function person() {
@@ -49,6 +49,35 @@ describe('a line in a DM', () => {
         const line = aLine();
         const sent = payloadForChat('is the ladder free?', { ...dm, id: 'conv-listing', postId: 'post-1' } as any, myBrowserKey, line);
         expect(peerReads(sent, line, 'conv-listing')).toBe('is the ladder free?');
+    });
+});
+
+// R0 (core dm-line-report.ts): the signature a line leaves the browser with is the one the node checks when it is reported.
+describe('a line\'s signature', () => {
+    const binding = (messageId: string) => ({ conversationId: dm.id, senderPubHex: me.publicKey, recipientPubHex: peer.publicKey, messageId });
+
+    it('its words go signed by their sender, to the other person, from the browser\'s key and a phone\'s seed alike', () => {
+        for (const key of [myBrowserKey, { publicKey: me.publicKey, privateKey: bytesToHex(me.seed) }]) {
+            const line = aLine();
+            const sent = lockForDm('hello', dm, key, line);
+            expect(dmLineSigVerifies(sent, sent.lineSig!, binding(line.messageId))).toBe(true);
+            expect(dmLineSigVerifies(sent, sent.lineSig!, { ...binding(line.messageId), recipientPubHex: me.publicKey })).toBe(false);
+        }
+    });
+
+    it('a photo goes unsigned: its caption stands for the line', () => {
+        expect(lockForDm('data:image/jpeg;base64,AA', dm, myBrowserKey, { ...aLine(), part: 'attachment' }).lineSig).toBeUndefined();
+    });
+
+    it('a chat the node reads has none', () => {
+        expect(payloadForChat('hello', { id: 'g', type: 'group_thread', participants: [] } as any, myBrowserKey, aLine()).lineSig).toBeUndefined();
+    });
+
+    it('it goes in the line\'s metadata beside the message it answers, and a line with neither has none', () => {
+        const lineSig = { sig: 'c2ln', at: 'now' };
+        expect(JSON.parse(lineMetadata('reply-1', lineSig)!)).toEqual({ replyToId: 'reply-1', lineSig });
+        expect(JSON.parse(lineMetadata(null, lineSig)!)).toEqual({ lineSig });
+        expect(lineMetadata(null, undefined)).toBeUndefined();
     });
 });
 

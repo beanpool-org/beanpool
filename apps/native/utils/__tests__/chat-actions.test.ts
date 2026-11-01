@@ -231,9 +231,18 @@ describe('Report message (group chat photos S6)', () => {
         expect(canReportMessage(msg({ senderId: THEM }), locked({ myPubkey: null }))).toBe(false);
     });
 
-    it('is never offered outside a locked group chat: an unlocked one, an event chat, an enterprise thread, a DM', () => {
+    it('is offered on someone else\'s line in a DM that reports lines (R0), never on one\'s own, a tombstone or a line shown as nobody\'s', () => {
+        const dm = viewer({ kind: 'dm', reportsLines: true });
+        expect(canReportMessage(msg({ senderId: THEM }), dm)).toBe(true);
+        expect(canReportMessage(msg({ senderId: ME }), dm)).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM, unattributed: true }), dm)).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM, type: 'removed' }), dm)).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM }), viewer({ kind: 'dm' }))).toBe(false);
+    });
+
+    it('is never offered outside a locked group chat or a DM: an unlocked one, an event chat, an enterprise thread', () => {
         expect(canReportMessage(msg({ senderId: THEM }), viewer({ kind: 'group' }))).toBe(false);
-        for (const kind of ['event', 'enterprise', 'dm'] as const) expect(canReportMessage(msg({ senderId: THEM }), viewer({ kind, reportsLines: true }))).toBe(false);
+        for (const kind of ['event', 'enterprise'] as const) expect(canReportMessage(msg({ senderId: THEM }), viewer({ kind, reportsLines: true }))).toBe(false);
         expect('report' in messageActions(msg({ senderId: THEM }), viewer({ kind: 'group' }))).toBe(false);
     });
 });

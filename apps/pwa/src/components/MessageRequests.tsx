@@ -1,6 +1,6 @@
 /**
  * Message requests on the web (DESIGN-message-a-friend-fable.md §4.5, slice S3): the Requests list under Messages' Requests
- * pill, each request's card, and the Accept / Ignore / Block bar the card and the chat's request mode share. The node
+ * row, each request's card, and the Accept / Decline / Report bar the card and the chat's request mode share. The node
  * decides (PR #2392 routes/messaging.ts); this only asks it, and says in words what it answered, or that it couldn't be
  * reached: nothing is shown as done that the node didn't take.
  *
@@ -10,7 +10,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from 'react';
 import { t, tn } from '@beanpool/core';
 import { decideMessageRequest, getConversationMessages, ignoreAllMessageRequests, type DmRequest, type DmRequestEntry } from '../lib/api';
-import { blockUser } from '../lib/blocklist';
 import { decisionFailureWords, requestPreviewLines, REQUEST_CARDS_SHOWN, IGNORE_ALL_FROM, type RequestPreviewLine } from '../lib/dm-requests';
 import type { BeanPoolIdentity } from '../lib/identity';
 
@@ -20,32 +19,24 @@ const button: CSSProperties = {
 };
 const acceptButton: CSSProperties = { ...button, border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', flex: '1 1 100%' };
 const ignoreButton: CSSProperties = { ...button, border: '1px solid var(--border-primary)', background: 'var(--bg-hover)', color: 'var(--text-primary)' };
-const blockButton: CSSProperties = {
-    ...button, border: '1px solid var(--bp-chip-danger-ink)', background: 'var(--bp-chip-danger-tint)', color: 'var(--bp-chip-danger-ink)',
-};
 const reportButton: CSSProperties = {
-    ...button, flex: '0 0 auto', fontWeight: 600, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-secondary)',
+    ...button, border: '1px solid var(--bp-chip-danger-ink)', background: 'var(--bp-chip-danger-tint)', color: 'var(--bp-chip-danger-ink)',
 };
 
 interface ActionsProps {
     conversationId: string;
-    peerPubkey: string;
-    peerName: string;
-    identity: BeanPoolIdentity;
     /** Accepted: the request as the node now reads it. */
     onAccepted: (request: DmRequest) => void;
     onIgnored: () => void;
-    onBlocked: () => void;
-    /** The 🚩 Report button, where it is shown (the card; the chat has it in its header). */
-    onReport?: () => void;
+    /** Report: the page opens the report card, which reports the line and blocks its sender (lib/dm-line-report.ts). */
+    onReport: () => void;
 }
 
 /**
- * Accept, Ignore and Block for one request (and Report, on the card). Each asks the node and waits: a decision it didn't
- * take leaves the buttons as they were, with its words, or the offline sentence. Block is today's block (lib/blocklist:
- * the community's list, and a report); its own words when it fails.
+ * Accept, Decline and Report for one request. Accept and Decline ask the node and wait: a decision it didn't take leaves
+ * the buttons as they were, with its words, or the offline sentence. Decline is the node's `ignore`: its sender isn't told.
  */
-export function RequestActions({ conversationId, peerPubkey, peerName, identity, onAccepted, onIgnored, onBlocked, onReport }: ActionsProps) {
+export function RequestActions({ conversationId, onAccepted, onIgnored, onReport }: ActionsProps) {
     const [busy, setBusy] = useState(false);
     const [failure, setFailure] = useState<string | null>(null);
     const alive = useRef(true);
@@ -70,23 +61,6 @@ export function RequestActions({ conversationId, peerPubkey, peerName, identity,
         }
     }
 
-    async function block() {
-        if (busy) return;
-        if (!window.confirm(t('Block {name}?\n\nThis will hide their messages and posts, and notify moderation.', { name: peerName }))) return;
-        setBusy(true);
-        setFailure(null);
-        try {
-            await blockUser(peerPubkey, identity.publicKey, 'Blocked from a message request');
-            if (!alive.current) return;
-            setBusy(false);
-            onBlocked();
-        } catch (e) {
-            if (!alive.current) return;
-            setBusy(false);
-            setFailure((e as Error | null)?.message || t('That did not go through. Please try again.'));
-        }
-    }
-
     return (
         <div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -94,16 +68,11 @@ export function RequestActions({ conversationId, peerPubkey, peerName, identity,
                     {t('Accept', undefined, 'button: accept a message request')}
                 </button>
                 <button type="button" style={ignoreButton} disabled={busy} onClick={() => decide('ignore')}>
-                    {t('Ignore', undefined, 'button: ignore a message request')}
+                    {t('Decline', undefined, 'button: decline a message request')}
                 </button>
-                <button type="button" style={blockButton} disabled={busy} onClick={block}>
-                    {t('Block', undefined, 'button: block a member')}
+                <button type="button" style={reportButton} disabled={busy} onClick={onReport}>
+                    {t('Report', undefined, 'button: report a message request')}
                 </button>
-                {onReport && (
-                    <button type="button" style={reportButton} onClick={onReport} aria-label={t('Report {name}', { name: peerName })}>
-                        <span aria-hidden="true">🚩 </span>{t('Report', undefined, 'button: report a member')}
-                    </button>
-                )}
             </div>
             {failure && (
                 <p role="alert" style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', wordBreak: 'break-word' }}>{failure}</p>
@@ -200,12 +169,8 @@ function RequestCard({ entry, identity, preview, avatar, joinedWords, onOpen, on
             </button>
             <RequestActions
                 conversationId={entry.id}
-                peerPubkey={peer}
-                peerName={name}
-                identity={identity}
                 onAccepted={onAccepted}
                 onIgnored={onGone}
-                onBlocked={onGone}
                 onReport={onReport}
             />
         </li>
@@ -241,17 +206,19 @@ interface ListProps {
     onOpen: (entry: DmRequestEntry) => void;
     onOpenProfile?: (pubkey: string) => void;
     onAccepted: (entry: DmRequestEntry, request: DmRequest) => void;
-    /** Something changed the requests (an ignore, a block, Ignore all): read the list again. */
+    /** Something changed the requests (a decline, a report, Decline all): read the list again. */
     onChanged: () => void;
-    onReport: (pubkey: string, name: string) => void;
+    onReport: (entry: DmRequestEntry) => void;
+    /** Back to the chats: the row at the top of Chat opened this. */
+    onBack: () => void;
 }
 
 /**
  * The Requests list: how many people want to message you, a card for each (newest first, 50 shown), "and {n} more", and
- * Ignore all when more than five wait. Each card's lines are read once per request (by its id and time) while the page is
+ * Decline all when more than five wait. Each card's lines are read once per request (by its id and time) while the page is
  * open, three at a time.
  */
-export function MessageRequestsList({ entries, count, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport }: ListProps) {
+export function MessageRequestsList({ entries, count, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport, onBack }: ListProps) {
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
     const { previews, setPreviews, asked } = store;
     const keyOf = (e: DmRequestEntry) => `${e.id}@${e.request.at}`;
@@ -286,7 +253,7 @@ export function MessageRequestsList({ entries, count, identity, store, avatar, j
 
     async function ignoreAll() {
         if (ignoringAll) return;
-        if (!window.confirm(tn(count, "Ignore {n} request? They won't be told.", "Ignore all {n} requests? They won't be told."))) return;
+        if (!window.confirm(tn(count, "Decline {n} request? They won't be told.", "Decline all {n} requests? They won't be told."))) return;
         setIgnoringAll(true);
         setAllFailure(null);
         try {
@@ -301,7 +268,13 @@ export function MessageRequestsList({ entries, count, identity, store, avatar, j
 
     const more = count - shown.length;
     return (
-        <section data-testid="message-requests" aria-label={t('Requests')}>
+        <section data-testid="message-requests" aria-label={t('Message requests')}>
+            <button type="button" data-testid="message-requests-back" onClick={onBack} style={{
+                display: 'block', minHeight: '44px', padding: 0, marginBottom: '0.25rem', background: 'none', border: 'none',
+                color: 'var(--text-primary)', font: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer',
+            }}>
+                <span aria-hidden="true">‹ </span>{t('Back to chats')}
+            </button>
             {count === 0 ? (
                 <p style={{
                     textAlign: 'center', padding: '2rem 1.25rem', margin: 0, background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
@@ -329,7 +302,7 @@ export function MessageRequestsList({ entries, count, identity, store, avatar, j
                                     onOpenProfile={onOpenProfile ? () => onOpenProfile(peer) : undefined}
                                     onAccepted={(request) => onAccepted(e, request)}
                                     onGone={onChanged}
-                                    onReport={() => onReport(peer, e.peerCallsign || peer.slice(0, 8))}
+                                    onReport={() => onReport(e)}
                                 />
                             );
                         })}
@@ -340,7 +313,7 @@ export function MessageRequestsList({ entries, count, identity, store, avatar, j
                     {count >= IGNORE_ALL_FROM && (
                         <div style={{ marginTop: '0.5rem' }}>
                             <button type="button" onClick={ignoreAll} disabled={ignoringAll} style={{ ...ignoreButton, width: '100%' }}>
-                                {t('Ignore all')}
+                                {t('Decline all')}
                             </button>
                             {allFailure && (
                                 <p role="alert" style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{allFailure}</p>

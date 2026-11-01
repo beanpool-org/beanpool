@@ -38,6 +38,9 @@ import {
 } from '../engine/withheld-lines.js';
 import { withRequestFor, sortRequestsOut, decideRequest, ignoreAllRequests, RequestDecisionError } from '../engine/dm-requests.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
+import { checkDmLineReport, submitDmLineReport } from '../engine/dm-line-report.js';
+import { GroupLineReportError } from '../engine/group-chat-report.js';
+import { fileMessageReport } from './message-report.js';
 import { word } from '@beanpool/core';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -349,6 +352,32 @@ router.post('/api/messages/edit', async (ctx) => {
         // Thread and removed messages are refused outright (403) so the client can say why.
         respondToMessagingError(ctx, e, 'edit the message');
     }
+});
+
+/**
+ * Report one line of a direct message (engine/dm-line-report.ts): { messageId, reason, disclosure }, what the reporter's app
+ * hands over for it. The reporter is the signer, never the body, and a member here, as for /api/reports. Any line that isn't
+ * theirs to report answers as an id nobody has. The node opens nothing: it holds no key for the line. One report per
+ * reporter per line (routes/message-report.ts).
+ */
+router.post('/api/messages/report', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    if (!membersOnlyHere(ctx)) return;
+    let checked;
+    try {
+        checked = checkDmLineReport(actor, (ctx as any).requestBody || {});
+    } catch (e) {
+        if (!(e instanceof GroupLineReportError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+        return;
+    }
+    fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => submitDmLineReport(actor, checked));
 });
 
 /**

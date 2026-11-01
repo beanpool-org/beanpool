@@ -33,9 +33,10 @@
  * exactly one of them, and the node can't turn one into the other. Nothing on the wire says which, so nothing the node
  * controls decides it.
  *
- * Not covered, by design: the two people share one secret, so either of them could seal a line naming the other as
- * sender (only a signature per line would prove authorship between the two; the node alone can do none of this). The
- * node can still withhold or delay a line, put an edit's earlier words back (an edit keeps its line's id, and both
+ * Not covered by the seal, by design: the two people share one secret, so either of them could seal a line naming the other
+ * as sender. A signature per line proves authorship between the two, and the apps send one beside the line for a report to
+ * stand on (dm-line-report.ts), which no app checks when it opens a line yet (S2.3's format 4). The node alone can do none of
+ * this. The node can still withhold or delay a line, put an edit's earlier words back (an edit keeps its line's id, and both
  * versions are the sender's own), and show an old format-2 line (marked as such).
  */
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';

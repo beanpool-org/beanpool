@@ -313,6 +313,18 @@ describe('a request waiting for this member, on the phone', () => {
         expect(callsOf('toggleMessageReactionApi')).toBe(1);
     });
 
+    it('Accept, Decline, Report in place of the box, and a line has no Report of its own: the one on the bar blocks', async () => {
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+            getMessages: [{ id: 'r1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'Buy my crypto', rawTimestamp: '2026-10-27T00:00:00.000Z', timestamp: '10:00' }],
+            syncSingleConversation: true,
+        });
+        await open();
+        for (const name of ['Accept', 'Decline', 'Report']) expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent === name)).toBe(true);
+        await tapLine('Buy my crypto');
+        expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent?.includes('Report message'))).toBe(false);
+    });
+
     describe('Accept or Ignore refused (review 4395541944)', () => {
         const refusal = (message: string, extra: Record<string, unknown>) => Object.assign(new Error(message), extra);
         const GONE = () => refusal('There is no message request for you in this chat.', { status: 404, code: 'request_not_found', nodeAnswered: true });
@@ -339,7 +351,7 @@ describe('a request waiting for this member, on the phone', () => {
         it('a request its opener cancelled: Ignore goes back to Talk too, and says nothing', async () => {
             const navigate = vi.spyOn(router, 'navigate');
             await kofiAsks(() => Promise.reject(GONE()));
-            await tap('Ignore');
+            await tap('Decline');
             expect(navigate).toHaveBeenCalledWith('/(tabs)/chats');
             expect(alerts.said).toEqual([]);
             navigate.mockRestore();
@@ -360,8 +372,8 @@ describe('a request waiting for this member, on the phone', () => {
             await kofiAsks(() => Promise.reject(answer));
             await tap('Accept');
             answer = new Error('Network request failed');
-            await tap('Ignore');
-            expect(alerts.said).toEqual(['Connect to your community to accept or ignore.', 'Connect to your community to accept or ignore.']);
+            await tap('Decline');
+            expect(alerts.said).toEqual(['Connect to your community to accept or decline.', 'Connect to your community to accept or decline.']);
         });
     });
 

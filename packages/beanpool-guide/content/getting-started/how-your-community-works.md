@@ -30,7 +30,7 @@ In communities where Beans and member confirmation are active, **confirmed membe
 
 ## Messages
 
-**Messages** controls what happens when someone who hasn't talked with you or added you writes to you for the first time. When message requests are on, their first message waits under requests until you accept it. When message requests are off, all direct messages arrive in your chat list straight away.
+**Messages** controls what happens when someone who hasn't talked with you or added you writes to you for the first time. When message requests are on, their first message waits under **Message requests** until you accept it, with no notification. When message requests are off, all direct messages arrive in your chat list straight away.
 
 ## Decisions
 

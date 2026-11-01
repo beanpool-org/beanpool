@@ -1364,6 +1364,42 @@ describe('a copy global\'s reports hold: a rest at home waits, so nothing comes 
         expect(await liveCopies(me)).toEqual([]);
     }, START_MS);
 
+    it('a rest whose remove went unanswered asks again: a hold since then keeps the copy', async () => {
+        const me = await memberOfBoth('Holly Retry');
+        const home = await listingAtHome(me, 'Damsons');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        const noPosts: CopyDeps = { ...deps(), post: (async (url: string, ...rest: any[]) => {
+            if (String(url).startsWith(global_.url)) throw new Error('timed out');
+            return (signedPost as any)(url, ...rest);
+        }) as any };
+        await tendCopies(me, noPosts);
+        expect((await pairOf(home.id, me.publicKey))?.leaving).toBe(true);
+
+        await holdByReports(id);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(1);
+        expect((await copyRow(id)).status).toBe('active');
+    }, START_MS);
+
+    it('a moderator\'s takedown of a held copy doesn\'t keep the rest waiting', async () => {
+        const me = await memberOfBoth('Holly Taken');
+        const home = await listingAtHome(me, 'Mulberries');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await holdByReports(id);
+        await globalSql("UPDATE posts SET status = 'cancelled' WHERE id = ?", [id]);
+        const [, off] = homeRests[0];
+        await off(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
     it('a moderator\'s restore while the listing is off the board: the rest goes ahead and the copy comes back', async () => {
         const me = await memberOfBoth('Holly Restored');
         const home = await listingAtHome(me, 'Pears');

@@ -36,6 +36,7 @@ export function ListingCopyDetail({ post }: { post: any }) {
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
     const [reporting, setReporting] = useState(false);
+    const [stopping, setStopping] = useState(false);
     const copy = eventCopyOf(post)!;
     const own = !!identity && post.author_pubkey === identity.publicKey;
     const photos = photosOfRow(post.photos);
@@ -53,17 +54,20 @@ export function ListingCopyDetail({ post }: { post: any }) {
         }
     };
     const takeDown = async () => {
+        if (stopping) return;
+        setStopping(true);
         try {
             await deletePost(post.id);
             goBack();
         } catch (e: any) {
+            setStopping(false);
             Alert.alert(t('Error'), e?.message ? String(e.message) : t('Could not reach the node.'));
         }
     };
 
     return (
         <View style={[styles.screen, { paddingTop: insets.top }]} testID="listing-copy">
-            <Pressable onPress={goBack} style={styles.back} accessibilityRole="button">
+            <Pressable onPress={goBack} style={styles.back} accessibilityRole="button" accessibilityLabel={t('Back')}>
                 <Text style={styles.backText}>{t('← Back')}</Text>
             </Pressable>
             {/* The report box's words and Send are the last things here, and under edge-to-edge the window doesn't resize for the
@@ -80,7 +84,7 @@ export function ListingCopyDetail({ post }: { post: any }) {
                     ? (
                         <View testID="listing-copy-own">
                             <Text style={styles.body}>{t('This is your copy. Change it in your own community and it follows.')}</Text>
-                            <Pressable onPress={takeDown} style={styles.quiet} accessibilityRole="button" testID="listing-copy-remove">
+                            <Pressable onPress={takeDown} disabled={stopping} style={styles.quiet} accessibilityRole="button" accessibilityState={{ disabled: stopping, busy: stopping }} testID="listing-copy-remove">
                                 <Text style={styles.link}>{t('Stop showing')}</Text>
                             </Pressable>
                         </View>
@@ -88,7 +92,7 @@ export function ListingCopyDetail({ post }: { post: any }) {
                     : <EventCopyDoor copy={copy} line={copyPriceLine(copy)} />}
                 {!own && !!identity && (
                     <>
-                        <Pressable onPress={() => setReporting((r) => !r)} style={styles.quiet} accessibilityRole="button" accessibilityState={{ expanded: reporting }} testID="listing-copy-report">
+                        <Pressable onPress={() => setReporting((r) => !r)} style={styles.quiet} accessibilityRole="button" accessibilityLabel={t('Report Post')} accessibilityState={{ expanded: reporting }} testID="listing-copy-report">
                             <Text style={styles.report}>{t('🚩 Report Post')}</Text>
                         </Pressable>
                         {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}

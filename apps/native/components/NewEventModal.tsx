@@ -34,9 +34,7 @@ import * as Crypto from 'expo-crypto';
 import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { ShowOnGlobalTick, showOnGlobalLabel } from './ShowOnGlobalRow';
-import { copyResultLine, showOnGlobal } from '../utils/show-on-global';
-import { anchorUrl } from '../utils/node-post';
+import { ShowOnGlobalTick, showEventOnGlobal } from './ShowOnGlobalRow';
 import { createPost, fetchEventZone, fetchEventZones, fetchGroups, getBalance, getTreasuries, isRouteMissing, updateEvent } from '../utils/db';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { askForPostPhoto } from '../utils/post-photo';
@@ -571,12 +569,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             });
             const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, tz);
             const done = t('Your event is in the Market feed.');
-            // The member's own copy, sent from here: it holds up nothing, and what it owes them comes as its own line.
-            if (alsoOnGlobal && answer?.post) {
-                void anchorUrl().then((here) => (here ? showOnGlobal(answer.post, here, identity) : null))
-                    .then((result) => { const line = result && copyResultLine(result); if (line) Alert.alert(showOnGlobalLabel(), line); })
-                    .catch(() => {});
-            }
+            if (alsoOnGlobal && answer?.post) void showEventOnGlobal(answer.post, identity).catch(() => {});
             setAlsoOnGlobal(false);
             reset();
             Alert.alert(t('Event created'), [done, ...dst].join('\n\n'));
@@ -968,7 +961,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             </View>
                         )}
 
-                        <ShowOnGlobalTick enabled={!editOf && !online && !effectiveAudience && host.key === 'me'} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} />
+                        <ShowOnGlobalTick enabled={!editOf && !online && !effectiveAudience && host.key === 'me' && nodeProfile?.profile === 'local'} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} />
 
                         {editOf ? (
                             <View style={styles.field}>

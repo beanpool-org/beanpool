@@ -18,7 +18,6 @@
  * Phone only, for now (slice G3 is the web's tick). Sign Out wipes the pairs (utils/identity.ts wipeIdentityScopedStorage).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
 import { audienceOf, roundToArea, t } from '@beanpool/core';
 import { SHOWN_ON_GLOBAL_STORE_KEY } from './storage-keys';
 import { GLOBAL_NODE_URL } from './global-node-url';
@@ -90,9 +89,9 @@ export interface CopyDeps {
 
 const liveDeps: CopyDeps = {
     global: GLOBAL_NODE_URL,
-    get: signedGet,
-    post: signedPost,
-    del: signedDelete,
+    get: (...args) => signedGet(...args),
+    post: (...args) => signedPost(...args),
+    del: (...args) => signedDelete(...args),
     fetchPhoto: async (url) => (await import('./post-photo')).fetchedPostPhoto(url),
     hostOf: audienceOf,
 };
@@ -240,8 +239,9 @@ async function repeatDates(pair: CopyPair, home: HomeEvent, identity: BeanPoolId
  * {@link tendCopies} sends it. `homeUrl` is the community the event is on.
  */
 export async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: BeanPoolIdentity, deps: CopyDeps = liveDeps): Promise<CopyResult> {
+    const { randomUUID } = await import('expo-crypto');
     const pair: CopyPair = (await pairOf(home.id, identity.publicKey))
-        ?? { publicKey: identity.publicKey, home: plainOriginOf(homeUrl) ?? homeUrl, homeId: home.id, copyId: Crypto.randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
+        ?? { publicKey: identity.publicKey, home: plainOriginOf(homeUrl) ?? homeUrl, homeId: home.id, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
     await savePair(pair);
     return sendCopy(pair, home, identity, deps);
 }

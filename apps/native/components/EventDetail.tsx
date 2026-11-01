@@ -48,6 +48,8 @@ interface EventDetailProps {
     post: any;
     /** The node says `openMembership` (anyone can join in a minute): the spot is the host's to give (ROUGH_PLACE_LINE). */
     openMembership?: boolean;
+    /** A local community, whose host may show the event on the global community (components/ShowOnGlobalRow.tsx). */
+    onLocalCommunity?: boolean;
 }
 
 function countsOf(p: any): RsvpCounts {
@@ -58,7 +60,7 @@ function countsOf(p: any): RsvpCounts {
     };
 }
 
-export function EventDetail({ post, openMembership = false }: EventDetailProps) {
+export function EventDetail({ post, openMembership = false, onLocalCommunity = false }: EventDetailProps) {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
@@ -415,7 +417,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                     </Text>
                 )}
                 {isHost && !!view && (
-                    <ShowOnGlobalHostRow event={view} enabled={!copy && !closed && !online && !isGroupOnly && view.authorPublicKey === identity?.publicKey} />
+                    <ShowOnGlobalHostRow event={view} enabled={onLocalCommunity && !copy && !closed && !online && !isGroupOnly && view.authorPublicKey === identity?.publicKey} />
                 )}
 
                 {isHost && (

@@ -5,8 +5,8 @@
  *
  *   1. the write: the copy keeps its community's host for a shown row; a place name, a note and an exact pin sent anyway
  *      are not stored; the point is the rounded home point
- *   2. the reads, a visitor's and a member's: no key, name, face, exact place, typed place or note, on every read shape;
- *      the from-line and the door are the row's words, never what the phone said; only its author reads an author
+ *   2. the reads, a visitor's and a member's: no key, name, face, exact place, typed place or note, on every read shape and
+ *      on the socket; the from-line and the door are the row's words, never what the phone said; only its author reads an author
  *   3. the unlisted host: dropped at write, the answer says so by what it lacks, and the copy is still a copy
  *   4. the row that goes: the line and the door go with it at the next read, and no ETag confirms the old body
  *   5. no RSVP: 409 with the door's words; no chat is made or opened; the activity feed names nobody; a member's own list
@@ -25,6 +25,7 @@ delete process.env.ENFORCE_WS_AUTH;
 process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
+import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 
@@ -130,6 +131,21 @@ async function main() {
     const stored = (id: string) => db.prepare('SELECT lat, lng, event_place_name, event_private_note, shown_from_host, shown_from_post_id, author_pubkey, updated_at FROM posts WHERE id = ?').get(id) as any;
     const byId = async (id: string, who: Id | null) => (await call('GET', `/api/marketplace/posts?id=${id}`, who)).body?.[0];
 
+    // A member near the copy, on the socket a new listing goes out on, and one on the socket of its author.
+    const { setMemberArea } = await import('./engine/member-area.js');
+    setMemberArea(sam.pubKeyHex, ROUNDED);
+    const socketOf = (id: Id): Promise<{ ws: WebSocket; raw: string[] }> => new Promise((resolve, reject) => {
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
+        const ws = new WebSocket(`wss://localhost:${port}/ws?pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`, { rejectUnauthorized: false });
+        const raw: string[] = [];
+        ws.on('message', (d) => raw.push(d.toString()));
+        ws.on('open', () => resolve({ ws, raw }));
+        ws.on('error', reject);
+    });
+    const samSocket = await socketOf(sam);
+
     // ── 1. The write ──
     console.log('── 1. The write ──');
     const made = await postCopy(robin, 'Mullum street party');
@@ -164,6 +180,12 @@ async function main() {
         leaks(JSON.stringify(near.body), `${who}, by distance`);
         assert(Array.isArray(near.body) && near.body.some((p: any) => p.id === copyId), `${who} finds it from a point`);
     }
+    await new Promise((r) => setTimeout(r, 200));
+    const onSocket = samSocket.raw.join('\n');
+    assert(onSocket.includes(copyId), `a member near it hears that it changed (${samSocket.raw.length} frames)`);
+    leaks(onSocket, 'a member, the socket');
+    assert(!onSocket.includes('Mull'.concat('um street party')), 'the socket carries the id, and no copy of the listing');
+    samSocket.ws.close();
     const own = await byId(copyId, robin);
     assert(own?.authorPublicKey === robin.pubKeyHex && own?.shownCopy === true && own?.shownFrom?.name === 'Mullumbimby Commons', 'its author reads it as theirs, to tend it');
     const home = await call('GET', `/api/global/home?lat=${ROUNDED.lat}&lng=${ROUNDED.lng}`, sam);

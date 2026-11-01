@@ -900,7 +900,7 @@ export default function PostDetailModal() {
 
     // Events have their own screen: no price, no escrow, RSVP instead of accept (docs/events-on-the-map.md §3).
     if (post.type === 'event') {
-        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} />;
+        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} />;
     }
 
     const isOperatorOfAuthor = !!(post.author_pubkey && operatedTreasuries.includes(post.author_pubkey));

@@ -45,11 +45,21 @@ Once an hour the main server looks for Offers and Needs that nothing has changed
 - Its words stay in the database; the apps no longer show the listing.
 - Left alone: a listing with a deal asked for or under way on it, one a report waits on or hidden for the moderators (so a moderator sees it as it was; put back up, it has another 90 days), one a keeper's wage claim waits on (an enterprise asked to pay for the job and can't yet; the claim is paid when it can), and copies of another community's listings.
 
+A member's copy of an event from their own community (see "A member's copy of an event", below) goes the same way, so a copy no phone looks after any more comes off by itself.
+
 At most 200 listings go in one run; the rest go in the next hour's runs. Each listing goes in its own transaction, so a run stopped halfway leaves every listing either whole or archived.
 
 A deleted photo's row goes at once, so no one can open it again. The file goes with the image clean-up that runs every day, which the archive brings forward to about a minute later. It takes 2,000 files a pass on a disk and 500 on a bucket (IMAGE_STORE=s3), a minute apart, until none are left.
 
 A standby archives nothing of its own: it copies the result from the main server, photo deletions included.
+
+## A member's copy of an event
+
+A member of a local community can tick **Also show this on the global community** on an event at a place. Their phone posts a copy here, by their own key, as their own post: probation, the day's limits, reports, auto-hide and the archive count it as any post. Your server calls no community for it, and their community's server is never told.
+
+A copy shows nobody: no name, no key and nothing to message, to members as to visitors. Only moderators, from a report, see who posted it. It has the times, the words, the photos and a point rounded to about 10 km; no place name and no note are kept, whatever a phone sends. It takes no RSVP and has no chat.
+
+**from** a community's name and **Ask to join** beside a copy are drawn at each read from the directory this server mirrors. If the community is not shown in the directory at that moment, the line and the door are not drawn, and the copy stays as it is. If it was not shown when the copy was posted, its address is not kept at all. Until communities sign for their members, the line means a member said so and the directory has a community at that address: it says where it is from, and vouches for nothing.
 
 ## Changing the switch
 

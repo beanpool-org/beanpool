@@ -1054,6 +1054,9 @@ function RootLayoutNav() {
     );
 }
 
+/** The member's copies on the global community come into step, at most hourly (utils/show-on-global.ts). Loaded when used. */
+const tendGlobalCopies = () => loadIdentity().then(async (me) => (await import('../utils/show-on-global')).tendCopiesSoon(me)).catch(() => {});
+
 export default function RootLayout() {
     const appState = useRef(AppState.currentState);
 
@@ -1126,6 +1129,7 @@ export default function RootLayout() {
                 presentLeaveStatements();
                 retryPushRegistrations();
                 void syncBlocks();
+                void tendGlobalCopies();
             }
         }, 300000);
 
@@ -1137,7 +1141,7 @@ export default function RootLayout() {
                 void syncBlocks();
                 presentLeaveStatements();
                 retryPushRegistrations();
-                void loadIdentity().then(async (me) => (await import('../utils/show-on-global')).tendCopiesSoon(me)).catch(() => {});
+                void tendGlobalCopies();
                 // Clear app icon badge when user opens the app (only in custom client / standalone builds)
                 if (Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) {
                     try {

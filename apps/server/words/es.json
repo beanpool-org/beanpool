@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": null,
+    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door)",
     "reviewed": false,
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
@@ -12,5 +12,7 @@
   "Only the person who sent a message request can cancel it.": "Solo la persona que envió una solicitud de mensaje puede cancelarla.",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envía conversationId, el chat, y decision, 'accept', 'ignore' o 'cancel'.",
   "This community has a new address": "Esta comunidad tiene una nueva dirección",
-  "This community is also at {address}. The old address keeps working.": "Esta comunidad también está en {address}. La dirección anterior sigue funcionando."
+  "This community is also at {address}. The old address keeps working.": "Esta comunidad también está en {address}. La dirección anterior sigue funcionando.",
+  "To go, ask to join {community}": "Para ir, pide unirte a {community}",
+  "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir."
 }

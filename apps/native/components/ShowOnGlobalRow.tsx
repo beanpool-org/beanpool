@@ -1,47 +1,87 @@
 /**
  * "Also show this on the global community" on an in-person event (DESIGN-list-on-global-fable.md §2, slice G2′): off by
- * default, and never a join by itself. The composer's tick, and the same row on the host's page, where it says the event
- * is shown and offers to stop. A phone that isn't a member of the global community is offered the door instead. The
- * global community itself shows none of this. The words are utils/show-on-global.ts's rule: what goes, and what stays.
+ * default, and never a join by itself. The composer's tick, and the same offer on the host's page, which says when the event
+ * is shown and offers to stop. The global community itself shows none of this.
+ *
+ * Nothing is asked of the global community until the member taps: a composer that opens tells it nothing. The row is
+ * drawn from what the phone kept of its last answer, and the tap asks if that isn't "member". Told this key is a stranger
+ * there, it offers the door: on the host's page as a link, and in the composer as words, since the form is a modal over
+ * the app and leaving it would lose the event.
+ *
+ * The event screens open for everyone and this is for the few: what it runs on is loaded at the tap, or when the row shows.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
 import { t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
-import { useGlobalEntry } from '../utils/use-global-entry';
-import { useNodeProfile } from '../utils/use-node-profile';
-import { copyResultLine, pairOf, showOnGlobal, stopShowing, type HomeEvent } from '../utils/show-on-global';
-import { anchorUrl } from '../utils/node-post';
+import type { BeanPoolIdentity } from '../utils/identity';
+import type { GlobalStanding } from '../utils/global-entry';
+import type { HomeEvent } from '../utils/show-on-global';
 
 export const showOnGlobalLabel = () => t('Also show this on the global community');
 export const showOnGlobalHint = () => t("Anyone there can see it, with its times, its rough area and this community's name. Not your name, the place or your note. To go, they ask to join.");
+const joinFirstWords = () => t('Join the global community to show this there');
 
-/** Whether the phone can offer it: `tick` for a member of the global community, `join` for the door, else nothing. */
-export function useShowOnGlobalOffer(enabled: boolean): 'tick' | 'join' | null {
-    const elsewhere = useNodeProfile()?.profile === 'local';
-    const entry = useGlobalEntry(enabled && elsewhere);
-    return !enabled || !elsewhere ? null : entry === 'member' ? 'tick' : entry === 'join' ? 'join' : null;
+/** The member's own copy, sent from here: it holds up nothing, and what it owes them comes as its own line. */
+export async function showEventOnGlobal(event: HomeEvent, identity: BeanPoolIdentity): Promise<void> {
+    const { copyResultLine, showOnGlobal } = await import('../utils/show-on-global');
+    const here = await (await import('../utils/node-post')).anchorUrl();
+    const line = here ? copyResultLine(await showOnGlobal(event, here, identity)) : null;
+    if (line) Alert.alert(showOnGlobalLabel(), line);
 }
 
-function JoinRow() {
-    const styles = useStyles(makeStyles);
-    return (
-        <Pressable onPress={() => router.push('/join-global')} style={styles.row} accessibilityRole="button" testID="show-on-global-join">
-            <Text style={styles.link}>{t('Join the global community to show this there')}</Text>
-        </Pressable>
-    );
+/**
+ * What the row offers, from the phone's own memory. `enabled`: an event at a place, the member's own and for the whole
+ * community, on a local community; the screen that draws the row holds the node's profile, and the global community draws none.
+ */
+function useOffer(enabled: boolean): { offer: 'tick' | 'join' | null; ask: () => Promise<GlobalStanding> } {
+    const { identity } = useIdentity();
+    const [kept, setKept] = useState<GlobalStanding>('unknown');
+    const publicKey = identity?.publicKey;
+    useEffect(() => {
+        let gone = false;
+        if (enabled && publicKey) {
+            void import('../utils/global-entry').then((g) => g.readGlobalStanding(publicKey)).then((s) => { if (!gone) setKept(s); });
+        }
+        return () => { gone = true; };
+    }, [enabled, publicKey]);
+    const ask = async (): Promise<GlobalStanding> => {
+        if (!identity?.privateKey) return 'unknown';
+        const { askGlobalStanding, readGlobalStanding } = await import('../utils/global-entry');
+        const now = await readGlobalStanding(identity.publicKey);
+        const standing = now === 'member' ? now : (await askGlobalStanding({ publicKey: identity.publicKey, privateKey: identity.privateKey })).standing;
+        setKept(standing);
+        return standing;
+    };
+    return { offer: !enabled || !identity ? null : kept === 'stranger' ? 'join' : 'tick', ask };
 }
+
+const unreachable = () => Alert.alert(showOnGlobalLabel(), t("The global community can't be reached right now."));
 
 /** The composer's tick. Off until the member ticks it. */
 export function ShowOnGlobalTick({ enabled, checked, onChange }: { enabled: boolean; checked: boolean; onChange: (next: boolean) => void }) {
     const styles = useStyles(makeStyles);
-    const offer = useShowOnGlobalOffer(enabled);
-    if (offer === 'join') return <JoinRow />;
+    const { offer, ask } = useOffer(enabled);
+    if (offer === 'join') {
+        return (
+            <View style={styles.row} testID="show-on-global-join">
+                <View style={styles.col}>
+                    <Text style={styles.title}>{joinFirstWords()}</Text>
+                    <Text style={styles.hint}>{t("You can show it from the event's page once you have.")}</Text>
+                </View>
+            </View>
+        );
+    }
     if (offer !== 'tick') return null;
+    const tap = async () => {
+        if (checked) return onChange(false);
+        const standing = await ask();
+        if (standing === 'member') onChange(true);
+        else if (standing === 'unknown') unreachable();
+    };
     return (
-        <Pressable onPress={() => onChange(!checked)} style={styles.row} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={showOnGlobalLabel()} testID="show-on-global-tick">
+        <Pressable onPress={tap} style={styles.row} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={showOnGlobalLabel()} testID="show-on-global-tick">
             <Text style={styles.box}>{checked ? '☑' : '☐'}</Text>
             <View style={styles.col}>
                 <Text style={styles.title}>{showOnGlobalLabel()}</Text>
@@ -55,26 +95,31 @@ export function ShowOnGlobalTick({ enabled, checked, onChange }: { enabled: bool
 export function ShowOnGlobalHostRow({ event, enabled }: { event: HomeEvent; enabled: boolean }) {
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
-    const offer = useShowOnGlobalOffer(enabled);
+    const { offer, ask } = useOffer(enabled);
     const [shown, setShown] = useState(false);
     const [busy, setBusy] = useState(false);
     const read = useCallback(() => {
-        if (identity) void pairOf(event.id, identity.publicKey).then((p) => setShown(!!p));
-    }, [event.id, identity]);
-    useFocusEffect(read);
-    if (!enabled || !identity) return null;
-    if (!shown && offer === 'join') return <JoinRow />;
-    if (!shown && offer !== 'tick') return null;
+        if (enabled && identity) void import('../utils/show-on-global').then((c) => c.pairOf(event.id, identity.publicKey)).then((p) => setShown(!!p));
+    }, [enabled, event.id, identity]);
+    useEffect(read, [read]);
+    if (!enabled || !identity || (!shown && !offer)) return null;
+    if (!shown && offer === 'join') {
+        return (
+            <Pressable onPress={() => void import('expo-router').then(({ router }) => router.push('/join-global'))} style={styles.row} accessibilityRole="button" testID="show-on-global-join">
+                <Text style={styles.link}>{joinFirstWords()}</Text>
+            </Pressable>
+        );
+    }
+    const show = async () => {
+        const standing = await ask();
+        if (standing === 'unknown') return unreachable();
+        if (standing === 'member') await showEventOnGlobal(event, identity);
+    };
     const act = async () => {
         setBusy(true);
         try {
-            if (shown) {
-                await stopShowing(event.id, identity);
-            } else {
-                const here = await anchorUrl();
-                const line = here ? copyResultLine(await showOnGlobal(event, here, identity)) : null;
-                if (line) Alert.alert(showOnGlobalLabel(), line);
-            }
+            if (shown) await (await import('../utils/show-on-global')).stopShowing(event.id, identity);
+            else await show();
         } finally {
             read();
             setBusy(false);

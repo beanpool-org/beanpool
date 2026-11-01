@@ -520,10 +520,29 @@ export function NodeIdentityPanel({
             )}
 
             <form onSubmit={handleSave} className="space-y-6">
+                {/* Community Name */}
+                <div>
+                    <label htmlFor="community-name" className="block text-xs font-bold text-nature-300 mb-1">
+                        {t('Community Name')}
+                    </label>
+                    <input
+                        id="community-name"
+                        type="text"
+                        maxLength={60}
+                        value={communityName}
+                        onChange={(e) => setCommunityName(e.target.value)}
+                        placeholder="e.g. Mullumbimby Community Exchange"
+                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                    />
+                    <p className="text-xs text-nature-400 mt-1 m-0">
+                        {t('This is the name members see.')}
+                    </p>
+                </div>
+
                 {/* Callsign */}
                 <div>
                     <label htmlFor="cfg-callsign" className="block text-xs font-bold text-nature-300 mb-1">
-                        Callsign (Short Name)
+                        {t('Callsign (Short Name)')}
                     </label>
                     <input
                         id="cfg-callsign"
@@ -531,9 +550,12 @@ export function NodeIdentityPanel({
                         maxLength={20}
                         value={callsign}
                         onChange={(e) => setCallsign(e.target.value)}
-                        placeholder="e.g. Mullumbimby BeanPool"
+                        placeholder="e.g. mullum"
                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-terra-500"
                     />
+                    <p className="text-xs text-nature-400 mt-1 m-0">
+                        {t('Only used where no Community Name is set.')}
+                    </p>
                 </div>
 
                 {/* Operating Region Search & Leaflet Map */}
@@ -796,28 +818,13 @@ export function NodeIdentityPanel({
                     <div>
                         <h4 className="text-sm font-bold text-white m-0">Community Contacts</h4>
                         <p className="text-xs text-nature-400 mt-0.5 m-0">
-                            The name is public. The email and phone stay private unless you turn each on under How this community works; then anyone can read it.
+                            {t('The email and phone stay private unless you turn each on under How this community works; then anyone can read it.')}
                         </p>
                         {contacts === 'failed' && (
                             <p id="contacts-not-loaded" role="status" className="text-[11px] text-amber-300 mt-1 m-0 leading-normal">
                                 Couldn&apos;t load the contact email and phone from the node, so Save leaves them as they are. Reload to change them.
                             </p>
                         )}
-                    </div>
-
-                    <div>
-                        <label htmlFor="community-name" className="block text-xs font-bold text-nature-300 mb-1">
-                            Community Name
-                        </label>
-                        <input
-                            id="community-name"
-                            type="text"
-                            maxLength={60}
-                            value={communityName}
-                            onChange={(e) => setCommunityName(e.target.value)}
-                            placeholder="e.g. Mullumbimby Community Exchange"
-                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                        />
                     </div>
 
                     <div>

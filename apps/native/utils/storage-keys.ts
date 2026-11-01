@@ -33,6 +33,12 @@ export const KNOCK_ROLE_STORE_KEY = 'beanpool_knock_role_checked';
  */
 export const BRING_LISTINGS_STORE_KEY = 'beanpool_bring_listings';
 
+/**
+ * This phone's copies of its member's events on the global community, each with the event it shows
+ * (utils/show-on-global.ts). Sign Out wipes them (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const SHOWN_ON_GLOBAL_STORE_KEY = 'beanpool_shown_on_global';
+
 /** A town typed in "Find your community" (utils/typed-place.ts): where the member lives, roughly. Sign Out wipes it. */
 export const TYPED_PLACE_STORE_KEY = 'beanpool_find_typed_place';
 

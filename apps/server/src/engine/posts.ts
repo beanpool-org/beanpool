@@ -26,6 +26,7 @@ import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type Photo
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertFreeTags, assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
 import { ownerAdminLimit } from './owner-admin-limit.js';
+import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
 import {
@@ -534,6 +535,8 @@ export function createPost(
         freeTags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
+        /** A member's copy of an event from their own community (engine/event-copy.ts copyOfRequest): no chat, no activity line. */
+        shownCopy?: CopyColumns | null;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
          * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
@@ -810,8 +813,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -832,7 +835,9 @@ export function createPost(
             lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value, shopId,
             typeof options?.createdVia === 'string' && options.createdVia ? options.createdVia.slice(0, 80) : null,
             storedPostTags(tags),
-            storedFreeTags(freeTags)
+            storedFreeTags(freeTags),
+            options?.shownCopy?.host ?? null,
+            options?.shownCopy?.postId ?? null,
         );
 
         if (photoColumns.length > 0) {
@@ -843,7 +848,7 @@ export function createPost(
             photoColumns.forEach((c, idx) => insertPhoto.run(finalId, c.photo_data, idx, c.storage_key, c.sha256, c.bytes, c.mime));
         }
 
-        if (type === 'event') {
+        if (type === 'event' && !options?.shownCopy) {
             // Every event carries a chat, created with the post and keyed by the post id (§2.1). The first
             // participant is the acting member — the keeper or convenor for an enterprise or group event.
             ensureEventThread(finalId);
@@ -867,7 +872,8 @@ export function createPost(
 
     // Activity feed isolation (docs/the-commons.md §9, Item 10)
     // Only public posts are recorded to the public activity feed
-    if (audienceScope === 'public') {
+    // Nor a member's copy: the feed names who posted, and a copy names nobody (engine/event-copy.ts).
+    if (audienceScope === 'public' && !options?.shownCopy) {
         try {
             recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
         } catch (e) {
@@ -1641,7 +1647,7 @@ export function rsvpEvent(
     }
     rollIfDue(broadcast, postId);
 
-    const row = db.prepare("SELECT id, type, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in FROM posts WHERE id = ?").get(postId) as any;
+    const row = db.prepare("SELECT id, type, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at, event_host_lets_in, shown_from_host FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
     // would hand back the whole event. Nor is a group's event for anyone outside the group (engine/post-sight.ts), before
     // its cancellation or its end can say it exists.
@@ -1649,6 +1655,8 @@ export function rsvpEvent(
         || postOutOfSight(row, memberPublicKey)) {
         throw new Error(word('Event not found'));
     }
+    // A member's copy takes no RSVP, in any state: going is at home, and the answer is the door (engine/event-copy.ts).
+    if (row.shown_from_host != null) throw copyRsvpRefusal(row.shown_from_host);
     // "Not going" takes a member's own name off the host's list whatever the event's state: a cancelled event keeps its
     // guest list until the scrub, 30 days after the date it was cancelled from, which can be a year away (the photos/events
     // audit check, 2026-10-17). Only Going or Interested needs an open event.
@@ -2451,7 +2459,7 @@ export function archiveStaleListings(broadcast: BroadcastFn, push?: PushFn, nowM
     const due = db.prepare(`
         SELECT p.id, p.type, p.title, p.author_pubkey, p.target_group_id, p.audience_scope, p.target_pubkey, p.assigned_to, p.status
           FROM posts p
-         WHERE p.type IN ('offer', 'need')
+         WHERE (p.type IN ('offer', 'need') OR p.shown_from_host IS NOT NULL)
            AND p.origin_node IS NULL
            AND p.hidden_by_reports_at IS NULL
            AND COALESCE(p.updated_at, p.created_at) < ?

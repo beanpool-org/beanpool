@@ -28,6 +28,7 @@ import {
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
     knockStillAnswerable,
+    copyFromLine, eventCopyOf, type ShownFromLine,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -134,6 +135,8 @@ export interface HomeEventItem {
     startLocal?: string | null; tz?: string | null; online?: boolean | null;
     /** A repeating event's pattern and last date (DESIGN-event-times §8), for the ↻ caption; absent on a one-off. */
     repeat?: RepeatPattern | null; repeatUntil?: string | null;
+    /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from stands for its place. */
+    shownCopy?: boolean | null; shownFrom?: ShownFromLine | null;
 }
 export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt?: string | null }
 
@@ -1232,7 +1235,8 @@ export function eventDay(iso: string): string {
  * ("Sat 17 Oct, 20:50 Lagos time"); an online event reads in the phone's own time and says Online (§4).
  */
 export function eventLine(e: HomeEventItem): string {
-    const place = e.online ? t('Online') : e.place;
+    const copy = eventCopyOf(e);
+    const place = e.online ? t('Online') : copy ? (copy.from ? copyFromLine(copy.from) : null) : e.place;
     // A repeating event's rule rides after its next date: "Fri 16 Oct · ↻ Every Friday · Working bee, The hall".
     const repeats = repeatCaption(e.repeat ?? null, e.repeatUntil ?? null);
     return `${eventHomeWhen(e)}${repeats ? ` · ↻ ${repeats}` : ''} · ${e.title}${place ? `, ${place}` : ''}`;

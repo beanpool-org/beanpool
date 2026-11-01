@@ -155,3 +155,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-12 - Replace catch err any in OffboardMemberWizard
 **Learning:** `OffboardMemberWizard.tsx` used `catch (err: any)` in async preview loading and offboard execution handlers, weakening error handling type safety.
 **Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.
+
+## 2026-12-13 - Strictly type fetchNodeLogs return value with LogEntry
+**Learning:** `fetchNodeLogs` in `lib/node-client.ts` returned `Promise<any[]>`, weakening type safety across manager API callers like `App.tsx` and appliance sections.
+**Action:** Export `LogEntry` interface in `node-client.ts` and type `fetchNodeLogs` as returning `Promise<LogEntry[]>`.

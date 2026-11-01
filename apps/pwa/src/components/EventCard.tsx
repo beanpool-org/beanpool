@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { t, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
+import { copyCardLine, copyFromLine, eventCopyOf, t, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
@@ -27,6 +27,7 @@ import {
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
+import { EventCopyDoor } from './EventCopyDoor';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
 import { Sentence } from './Sentence';
@@ -286,6 +287,7 @@ interface EventCardProps {
 export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, visitor = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
+    const copy = eventCopyOf(p);
     // An online event has no place and no distance: "Online" stands where they go (DESIGN-event-times §4).
     const place = p.eventOnline
         ? t('Online')
@@ -317,7 +319,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 </span>
             )}
             {/* The counts wrap rather than cut: "interested" is the longest word on the card in most languages. */}
-            {countsLine(p) && (
+            {!copy && countsLine(p) && (
                 <span className="block w-full break-words text-sm font-semibold text-nature-600 dark:text-nature-300">
                     <span aria-hidden="true">👥 </span>{countsLine(p)}
                 </span>
@@ -353,7 +355,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 )}
                 {asRow ? <span className="min-w-0 flex-1 flex flex-col gap-1">{lines}</span> : lines}
             </button>
-            {!visitor && <RsvpButtons rsvp={rsvp} />}
+            {copy?.from && <p data-testid="event-copy-line" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyCardLine(copy.from)}</p>}
+            {!visitor && !copy && <RsvpButtons rsvp={rsvp} />}
             {rsvp.error && (
                 <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
             )}
@@ -398,6 +401,9 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const isHost = isEventHostView(p);
     const open = isEventOpen(p);
     const editBlocked = eventEditBlockedReason(p);
+    // A member's copy, on the global community (@beanpool/core eventCopyOf): no author, no Going, no chat. The door instead.
+    const copy = eventCopyOf(p);
+    const isOwnCopy = !!copy && !!identity && p.authorPublicKey === identity.publicKey;
     const going = (p.eventRsvps ?? []).filter(r => r.status === 'going');
     const interested = (p.eventRsvps ?? []).filter(r => r.status === 'interested');
     const hostName = p.authorCallsign || p.authorPublicKey.slice(0, 8);
@@ -509,7 +515,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             </button>
                         )}
                         {/* Where anyone can join, the spot is the host's to give (DESIGN-global-member-privacy-fable.md §4). */}
-                        {placeShownRoughly(p, identity?.publicKey, openMembership) && (
+                        {!copy && placeShownRoughly(p, identity?.publicKey, openMembership) && (
                             <p data-testid="rough-place-line" className="m-0 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
                                 {t(PLACE_WORDS.roughPlace, { name: hostName })}
                             </p>
@@ -522,7 +528,8 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 )}
                 {onOpenTag && <PostTagChips tags={p.tags} freeTags={p.freeTags} onPick={onOpenTag} onPickFree={onOpenFreeTag} />}
 
-                <p className="m-0 text-sm text-nature-600 dark:text-nature-400 min-w-0">
+                {copy?.from && <p data-testid="event-copy-from" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyFromLine(copy.from)}</p>}
+                {!copy && <p className="m-0 text-sm text-nature-600 dark:text-nature-400 min-w-0">
                     {/* One sentence with the host's name (a button) and the group's in it: the order is the language's. */}
                     <Sentence
                         text={p.audienceScope === 'group' && p.targetGroupName ? t('Hosted by {host} · for {group} only') : t('Hosted by {host}')}
@@ -539,25 +546,25 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                             group: p.targetGroupName ?? '',
                         }}
                     />
-                </p>
+                </p>}
 
-                {countsLine(p) && (
+                {!copy && countsLine(p) && (
                     <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">
                         <span aria-hidden="true">👥 </span>{countsLine(p)}
                     </p>
                 )}
-                <RsvpButtons rsvp={rsvp} />
+                {copy ? open && !isOwnCopy && <EventCopyDoor copy={copy} /> : <RsvpButtons rsvp={rsvp} />}
                 {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
 
                 {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}
                 <EventShareAndCalendar post={p} />
                 {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
-                {!isHost && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
+                {!isHost && !copy && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
 
                 {letInLine && open && (
                     <p data-testid="event-let-in-line" className="m-0 text-sm text-nature-800 dark:text-nature-200 break-words">{letInLine}</p>
                 )}
-                {onOpenChat && letInState === 'waiting' && (
+                {onOpenChat && !copy && letInState === 'waiting' && (
                     <button
                         type="button"
                         disabled
@@ -567,7 +574,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         💬 {eventChatWaitingText()}
                     </button>
                 )}
-                {onOpenChat && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting')) && (
+                {onOpenChat && !copy && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting')) && (
                     <button
                         type="button"
                         data-testid="event-open-chat"
@@ -583,7 +590,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         <p className="m-0 mb-1 text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-300">{t('Note for people who are going')}</p>
                         <p dir="auto" className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">{p.eventPrivateNote}</p>
                     </div>
-                ) : !isHost && open && !letInLine ? (
+                ) : !isHost && !copy && open && !letInLine ? (
                     <p className="m-0 text-xs text-nature-500 dark:text-nature-400">
                         {t('If the host left a note (a gate code, parking, what to bring), it shows here once you tap Going.')}
                     </p>

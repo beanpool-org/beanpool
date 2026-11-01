@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 
-export interface LogEntry {
-    timestamp?: string | number | Date;
-    level?: string;
-    message?: string;
-    [key: string]: unknown;
-}
+import type { LogEntry } from '../../lib/node-client';
+export type { LogEntry };
 
 interface LogsModuleProps {
     logs: LogEntry[];

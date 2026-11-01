@@ -20,6 +20,7 @@ import { upgradeLegacyShapeAtBoot } from './config/community-shape-upgrade.js';
 import { placeAs, placeShownTo } from './config/community-place.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
+import { readOfCopy, type CopyColumns } from './engine/event-copy.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
@@ -1679,8 +1680,9 @@ export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boole
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
-    // catch-up sync gets what it may see: the moderators the post, everyone else a removal.
-    if ((event?.type === 'new_post' || event?.type === 'post_updated') && event.post?.hiddenByReportsAt) {
+    // catch-up sync gets what it may see: the moderators the post, everyone else a removal. A member's copy the same way:
+    // it names its author to its author alone (engine/event-copy.ts).
+    if ((event?.type === 'new_post' || event?.type === 'post_updated') && (event.post?.hiddenByReportsAt || event.post?.shownFromHost !== undefined)) {
         const author = event.post.authorPublicKey;
         const toAuthor = typeof author === 'string' && (!recipients || recipients.includes(author)) ? deliverBroadcast(event, [author]) : 0;
         return toAuthor + deliverBroadcast({ type: 'post_updated', id: event.post.id }, recipients);
@@ -1777,7 +1779,9 @@ function keepersOf(treasuries: string[]): Set<string> {
  * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
  * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
  * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
- * author's); a party is, blocked or not, as their set keeps the listings they are tied to. The author's blockers are
+ * author's); a party is, blocked or not, as their set keeps the listings they are tied to. A member's copy goes to all
+ * near it, whoever they blocked: their set holds it (engine/event-copy.ts), and a doorbell that missed the author's
+ * blockers would say whose it is. The author's blockers are
  * kept from one event to the next until any write to member_blocks (blockersOfKept), so a block or an unblock holds from
  * the next one (#1812), and an author blocked by thousands costs a lookup, not a read (#1831). Every other socket gets nothing, not
  * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
@@ -1799,8 +1803,8 @@ interface ListingReach {
 function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
-    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in FROM posts WHERE id = ?').get(id) as
-        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null } | undefined;
+    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in, shown_from_host FROM posts WHERE id = ?').get(id) as
+        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null; shown_from_host: string | null } | undefined;
     if (!row) return null;
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
@@ -1809,7 +1813,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
-    const blockers = placed ? blockersOfKept(row.author_pubkey) : null;
+    const blockers = placed && row.shown_from_host == null ? blockersOfKept(row.author_pubkey) : null;
     // Where anyone can join in a minute, each member's set measures another's listing from its neighbourhood
     // (engine getNearbySet, exactPlacesFor), so its copy reaches them as their set holds it: from the neighbourhood, or
     // from the place for those who have it exactly (exactPlaceReaders). Measured from the place for everyone, which
@@ -1819,7 +1823,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
-        if (!placed || blockers!.has(pubkey)) return false;
+        if (!placed || blockers?.has(pubkey)) return false;
         const area = memberAreaFor(pubkey);
         const at = nb && !exactReaders!.has(pubkey) ? nb : { lat: row.lat!, lng: row.lng! };
         return !!area && engine.haversineKm(area.lat, area.lng, at.lat, at.lng) <= radiusKm;
@@ -5694,6 +5698,7 @@ export function createPost(
         freeTags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
+        shownCopy?: CopyColumns | null;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
         /** `assistant:<grant id>` for an owner's AI assistant (engine/posts.ts, posts.created_via). */
@@ -5726,7 +5731,7 @@ export function createPost(
 }
 
 export function getPosts(filter?: PostFilter): MarketplacePost[] {
-    return getPostsEngine(db, filter);
+    return getPostsEngine(db, filter).map(p => readOfCopy(p, filter?.viewerPubkey));
 }
 
 /**
@@ -5742,7 +5747,7 @@ export function offListingPhotoShownTo(viewer: string | undefined): engine.OffLi
 
 /** One page of the listings in heal order, for a phone whose photo URLs changed shape (engine getPostsForPhotoHeal). */
 export function getPostsForPhotoHeal(filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
-    return getPostsForPhotoHealEngine(db, filter, heal);
+    return getPostsForPhotoHealEngine(db, filter, heal).map(p => readOfCopy(p, filter.viewerPubkey));
 }
 
 export function removePost(id: string, authorPublicKey: string): boolean {

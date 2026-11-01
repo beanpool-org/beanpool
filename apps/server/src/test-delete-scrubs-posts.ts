@@ -10,12 +10,14 @@
  *  1. The main server M. Rhea has: a listing up, with two photos and a pin, that Cy reports and the pricing guide takes
  *     its picture from; a listing Bo bought (a done deal); a listing she took down herself; a listing whose deal an admin
  *     ruled on; an event with a photo, a pin, a place name and a note for the people going, Bo going; a poll Bo voted in;
- *     a lendable Offer with a photo, a pin, terms and a replacement value in her words.
+ *     a lendable Offer with a photo, a pin, terms and a replacement value in her words; a copy of an event from another
+ *     community (engine/event-copy.ts), naming that community and the event's id there.
  *     Every one names words found nowhere else. Before she deletes, each route shows them (so the checks below can fail).
  *  2. The standby S copies M: it holds the words and the photos too.
  *  3. Rhea deletes her account (POST /api/member/purge). On M: every post of hers but the poll, whatever its status, keeps
  *     its row and id and loses its title, description, photos (rows, objects, a tombstone per slot) and place, and the
- *     lendable Offer its terms, replacement value and longest loan; the event's
+ *     lendable Offer its terms, replacement value and longest loan, and the copy the community and the event's id, staying
+ *     a copy that names nobody; the event's
  *     chat takes the neutral name, and Bo, going, still reads it until the 30-day scrub; the poll is closed and keeps its
  *     question and votes; the deals and ledger rows still name the posts. Search finds none of her words, the index is sound (the cancel and
  *     the wipe write each post twice in one millisecond: #878) and holds none of her words in its bytes. No route, read by
@@ -51,13 +53,16 @@ const WORDS = {
     ruledTitle: 'Wexmoorian jam', ruledText: 'Oxbalm plums, six jars',
     eventTitle: 'Oskaloo picnic', eventText: 'Fennimore lawn games', eventPlace: 'Glimmerhook Hall', eventNote: 'Doorcode Xanthrip',
     lentTitle: 'Drumbellow ladder', lentText: 'Sprocklin rungs, folds flat', lentTerms: 'Collect from Vardengrove Lane, ring 0400 111 222', lentValue: '$120 Ombrequill',
+    copyTitle: 'Nimblethorpe parade', copyText: 'Quillonbury bunting',
 };
+/** Where her copy of an event says it came from. Neither may be read after she deletes her account. */
+const COPY_FROM = { host: 'mullum.example.org', postId: '5b0d5a3e-5d6c-4f0a-9a57-111111111111' };
 /** The pins, each to four places (a listing's pin, about 11 metres): a JSON body carries them as written. */
 const PINS = { up: [-28.6432, 153.6198], sold: [-28.6543, 153.6287], down: [-28.6654, 153.6376], ruled: [-28.6765, 153.6465], event: [-28.6876, 153.6554], lent: [-28.6987, 153.6643] };
 /** The poll's question stays after she deletes: a closed poll is the community's record. */
 const POLL_QUESTION = 'Quibblefen question: which day suits the market?';
 const CALLSIGN = 'Rheanwyn';
-const TITLE_WORDS = ['Quorvex', 'Brindlewick', 'Zelkovan', 'Marmalith', 'Tavirush', 'Pellucine', 'Wexmoorian', 'Oxbalm', 'Oskaloo', 'Fennimore', 'Glimmerhook', 'Xanthrip', 'Drumbellow', 'Sprocklin', 'Vardengrove', 'Ombrequill'];
+const TITLE_WORDS = ['Quorvex', 'Brindlewick', 'Zelkovan', 'Marmalith', 'Tavirush', 'Pellucine', 'Wexmoorian', 'Oxbalm', 'Oskaloo', 'Fennimore', 'Glimmerhook', 'Xanthrip', 'Drumbellow', 'Sprocklin', 'Vardengrove', 'Ombrequill', 'Nimblethorpe', 'Quillonbury'];
 const DELETED_POST_TITLE = 'Deleted post';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -113,6 +118,21 @@ async function child(): Promise<void> {
         'guest-view': async () => {
             const { setSwitchOverride } = await import('./config/node-profile.js');
             setSwitchOverride('guestListingsOnly', true);
+            return true;
+        },
+        /**
+         * A copy needs a node that keeps the directory, and a shown row for the community it names. The switch goes off again
+         * once the copy is made, as this suite is a local community's: the row stays, for the reads to draw the from-line.
+         */
+        directory: async (a: { on: boolean; host?: string }) => {
+            const { setSwitchOverride } = await import('./config/node-profile.js');
+            const { writeDirectoryRows, normaliseRegistryRow } = await import('./engine/directory-cache.js');
+            setSwitchOverride('directoryMirror', a.on);
+            if (a.host) {
+                const url = `https://${a.host}`;
+                const now = new Date().toISOString();
+                writeDirectoryRows([normaliseRegistryRow({ node_id: url, shown_name: 'Mullumbimby Commons', node_url: url, last_seen_at: now, accepting_knocks: true })!], now);
+            }
             return true;
         },
         /** The rows a standby must hold as this server does: the posts, their photos, the replies, the chats. */
@@ -277,7 +297,7 @@ const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.
 function leaks(text: string, ids: string[]): string[] {
     const found: string[] = [];
     const lower = text.toLowerCase();
-    for (const w of TITLE_WORDS) if (lower.includes(w.toLowerCase())) found.push(w);
+    for (const w of [...TITLE_WORDS, COPY_FROM.host, COPY_FROM.postId]) if (lower.includes(w.toLowerCase())) found.push(w);
     for (const id of ids) if (text.includes(`/api/marketplace/posts/${id}/photos/`)) found.push(`photo of ${id.slice(0, 8)}`);
     for (const [name, [lat, lng]] of Object.entries(PINS)) if (text.includes(String(lat)) || text.includes(String(lng))) found.push(`pin ${name}`);
     return found;
@@ -349,13 +369,29 @@ async function main(): Promise<void> {
             lat: PINS.lent[0], lng: PINS.lent[1], photos: [TINY_PNG],
             lendable: true, lendMaxDays: 7, lendTerms: WORDS.lentTerms, replacementValue: WORDS.lentValue,
         })).post;
+        await main.send('directory', { on: true, host: COPY_FROM.host });
+        const copy = built('Rhea shows an event from another community', await S_(rhea, '/api/marketplace/posts', {
+            type: 'event', title: WORDS.copyTitle, description: WORDS.copyText, authorPublicKey: rhea.pk,
+            lat: -28.7, lng: 153.7, eventStartAt: startAt, photos: [TINY_PNG], shownFrom: COPY_FROM,
+        })).post;
+        await main.send('directory', { on: false });
+        require_(copy.shownCopy === true, 'M: it is a copy');
         built('Cy reports the listing that is up', await S_(cy, '/api/reports', { reporterPubkey: cy.pk, targetPubkey: rhea.pk, targetPostId: up.id, reason: 'Testing the report view' }));
         built('the admin adds a pricing guide item', await A('/api/pricing-guide/admin/item', { category: 'food', emoji: '🏮', name: 'Lantern', priceBeans: 3 }));
         built('the pricing guide runs', await A('/api/pricing-guide/admin/aggregate'));
-        const wiped = [up.id, sold.id, down.id, ruled.id, event.id, lent.id];
+        const wiped = [up.id, sold.id, down.id, ruled.id, event.id, lent.id, copy.id];
         const guide0 = await api(m, 'GET', '/api/pricing-guide', { as: cy });
         require_(guide0.text.includes(`/api/marketplace/posts/${up.id}/photos/0`), 'M: the pricing guide takes its picture from Rhea\'s listing');
         await main.send('guest-view');
+        /** Her copy in a sync read: with no signature, what anyone can ask for, or signed by `as`, a member. */
+        const copyRead = async (base: string, as?: Id) => {
+            const read = await api(base, 'GET', '/api/marketplace/posts?sync=true&types=event&limit=200', as ? { as } : {});
+            const posts: any[] = Array.isArray(read.body) ? read.body : (read.body?.posts ?? []);
+            return posts.find((p) => p.id === copy.id);
+        };
+        const copyBefore = await copyRead(m);
+        require_(copyBefore?.shownFrom?.host === COPY_FROM.host && copyBefore?.shownFrom?.postId === COPY_FROM.postId && copyBefore?.authorPublicKey === 'hidden',
+            `M: before she deletes, an unsigned sync read gives the copy's community and the event's id, and no author (${JSON.stringify(copyBefore?.shownFrom)}; ${copyBefore?.authorPublicKey})`);
 
         /** Every route that can show a post, read as Bo, Cy, a guest and the admin, and the replication export. */
         const sweep = async (base: string, adminPw: Record<string, string>): Promise<{ route: string; status: number; leaked: string[] }[]> => {
@@ -387,7 +423,9 @@ async function main(): Promise<void> {
             const out = [];
             for (const [route, p] of reads) {
                 const a = await p;
-                out.push({ route, status: a.status, leaked: leaks(a.text, wiped) });
+                // The directory is a public list that a standby copies whole, and names the community by right. Her post must not.
+                const text = typeof a.body === 'object' && a.body?.directoryCache ? JSON.stringify({ ...a.body, directoryCache: undefined }) : a.text;
+                out.push({ route, status: a.status, leaked: leaks(text, wiped) });
             }
             return out;
         };
@@ -446,7 +484,7 @@ async function main(): Promise<void> {
             'none has a pin, a place name or a note for the people going');
         assert(rowsOf(m3).every((p: any) => p.photos === 0 && p.objects === 0),
             `none has a photo, in the database or the image store, nor a photo's small copy (${JSON.stringify(rowsOf(m3).map((p: any) => [p.photos, p.objects]))})`);
-        assert(rowsOf(m3).map((p: any) => p.photoTombstones).join() === '2,1,1,1,1,1',
+        assert(rowsOf(m3).map((p: any) => p.photoTombstones).join() === '2,1,1,1,1,1,1',
             `a tombstone for each photo slot, so a standby deletes them too (${rowsOf(m3).map((p: any) => p.photoTombstones).join()})`);
         const statuses = rowsOf(m3).map((p: any) => p.row.status);
         assert(statuses[0] === 'cancelled' && statuses[2] === 'cancelled' && statuses[4] === 'cancelled' && statuses[5] === 'cancelled'
@@ -455,6 +493,19 @@ async function main(): Promise<void> {
         const lentRow = m3[5].row;
         assert(lentRow.lend_terms === null && lentRow.replacement_value === null && lentRow.lend_max_days === null,
             `the lendable Offer keeps none of its terms, its replacement value or its longest loan (${JSON.stringify([lentRow.lend_terms, lentRow.replacement_value, lentRow.lend_max_days])})`);
+        const copyRow = m3[wiped.indexOf(copy.id)].row;
+        assert(copyRow.shown_from_host === '' && copyRow.shown_from_post_id === null,
+            `the copy keeps no community and no event id, and '' keeps it a copy (${JSON.stringify([copyRow.shown_from_host, copyRow.shown_from_post_id])})`);
+        const copyAfter = await copyRead(m);
+        assert(!!copyAfter && copyAfter.shownCopy === true && copyAfter.shownFrom === undefined
+            && !JSON.stringify(copyAfter).includes(COPY_FROM.host) && !JSON.stringify(copyAfter).includes(COPY_FROM.postId),
+            `an unsigned sync read gives no host and no event id for it (${JSON.stringify(copyAfter?.shownFrom)})`);
+        assert(copyAfter?.authorPublicKey === 'hidden' && copyAfter?.authorCallsign === '' && !JSON.stringify(copyAfter).includes(rhea.pk),
+            `and still no author (${JSON.stringify([copyAfter?.authorPublicKey, copyAfter?.authorCallsign])})`);
+        // A guest's read is masked whatever the row holds. A member's is where a host of NULL would show: the row is then an ordinary post, which names its author.
+        const copyForBo = await copyRead(m, bo);
+        assert(copyForBo?.authorPublicKey === 'hidden' && copyForBo?.authorCallsign === '' && !JSON.stringify(copyForBo).includes(rhea.pk),
+            `nor to a member, whose read is the one a host of NULL would name her in (${JSON.stringify([copyForBo?.authorPublicKey, copyForBo?.authorCallsign])})`);
         assert(m3[4].rsvps === 1 && m3[4].rsvpTombstones === 0 && m3[4].chat === DELETED_POST_TITLE,
             `the event: Bo's reply stays until the 30-day scrub, and its chat is called "${DELETED_POST_TITLE}" (${m3[4].rsvps}; ${m3[4].rsvpTombstones}; ${m3[4].chat})`);
         const chat = await api(m, 'GET', `/api/marketplace/posts/${event.id}/chat`, { as: bo });

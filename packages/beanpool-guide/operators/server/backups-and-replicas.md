@@ -24,7 +24,7 @@ The simplest complete backup: stop the server, copy the whole data folder somewh
 
 ### Members' copies in your backups
 
-The members' sign-in copies your server keeps are rows in state.db, locked with recovery-seal.key: the copies kept under **This server** (Where members' copies go, in Members and invites), any from before the key vault, and the copy a web-app member's join made. Every backup and every standby's copy holds them, and a member who removes theirs later removes it from the server, not from a backup already made. Copies at BeanPool's key vault are not on your server and in none of your backups.
+The members' sign-in copies your server keeps are rows in state.db, locked with recovery-seal.key: the copies kept under **This server** (Where members' copies go, in Members and invites), any from before the key vault, and the copy a web-app member's join made. So are the copies and halves your community keeps for **Bring back**. Every backup and every standby's copy holds them, and a member who removes theirs later removes it from the server, not from a backup already made. Copies at BeanPool's key vault are not on your server and in none of your backups.
 
 When a copy brings a member's account back, the server keeps a record of it: which kind of copy, when, and whose account, so a member can see an attempt happened. It keeps the locked copy it handed over for **30 days**, then empties it; the record stays. A backup made before then still holds that copy.
 

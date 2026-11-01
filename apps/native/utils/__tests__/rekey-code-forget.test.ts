@@ -56,6 +56,7 @@ vi.mock('react-native-keyboard-controller', async () => {
 });
 vi.mock('expo-router', () => ({ router: { back: () => {}, replace: () => {} }, useLocalSearchParams: () => fake.params }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
+vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 vi.mock('expo-camera', () => ({ CameraView: () => null, useCameraPermissions: () => [{ granted: true }, async () => ({ granted: true })] }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { setItem: async () => {}, getItem: async () => null } }));
 vi.mock('../../app/ThemeContext', () => {

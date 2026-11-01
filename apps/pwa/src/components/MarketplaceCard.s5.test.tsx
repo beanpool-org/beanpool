@@ -118,4 +118,28 @@ describe('MarketplaceCard S5 design requirements', () => {
         const thumbContainer = container.querySelector('.w-20.h-20');
         expect(thumbContainer).not.toBeNull();
     });
+
+    it('grid card picture wrapper has 4:3 aspect ratio (aspect-[4/3]) and crop anchored to top third (market-card-43)', () => {
+        const { container } = render(<MarketplaceCard post={basePost} viewMode="grid" />);
+        const mediaBox = container.querySelector('.aspect-\\[4\\/3\\]');
+        expect(mediaBox).toBeInTheDocument();
+        expect(container.querySelector('.aspect-square')).toBeNull();
+
+        const img = container.querySelector('img[src*="/api/marketplace/posts"]');
+        expect(img).toHaveStyle({ objectPosition: '50% 33%' });
+    });
+
+    it('grid card moves RECURRING under the picture so overlays fit (market-card-43)', () => {
+        const post = {
+            ...basePost,
+            status: 'active' as const,
+            repeatable: true,
+        };
+        const { container } = render(<MarketplaceCard post={post} viewMode="grid" />);
+        const recurringPill = screen.getByText('↻ RECURRING');
+        expect(recurringPill).toBeInTheDocument();
+
+        const badgeRow = container.querySelector('[data-testid="grid-badge-row"]');
+        expect(badgeRow?.textContent).not.toContain('RECURRING');
+    });
 });

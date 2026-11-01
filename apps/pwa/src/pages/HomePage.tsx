@@ -41,6 +41,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
+import { onConversationRead } from '../lib/conversation-read';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { PlaceCircleCard } from '../components/PlaceCircleCard';
 import { AskedCommunity } from '../components/AskedCommunity';
@@ -1548,6 +1549,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         // The member put a notice away (the alert, or Home's own Mark as read): the card goes now, not at the next poll.
         const onSeen = () => { void fetchHomeRef.current('doorbell'); };
         window.addEventListener(NOTICES_SEEN_EVENT, onSeen);
+        const onRead = () => { void fetchHomeRef.current('doorbell'); };
+        const unsubRead = onConversationRead(onRead);
         const onVisibility = () => {
             if (document.hidden) return;
             if (stale || Date.now() - lastStart.current > HOME_RETURN_STALE_MS) {
@@ -1564,6 +1567,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             offLive();
             offNotice();
             window.removeEventListener(NOTICES_SEEN_EVENT, onSeen);
+            unsubRead();
             document.removeEventListener('visibilitychange', onVisibility);
             clearInterval(poll);
         };

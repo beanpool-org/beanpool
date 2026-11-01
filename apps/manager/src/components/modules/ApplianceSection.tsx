@@ -178,7 +178,7 @@ export function ApplianceSection({
     const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
     const [checkingUpdate, setCheckingUpdate] = useState(false);
     const [checkedVersion, setCheckedVersion] = useState<string | null>(null);
-    const nodeVersion = diag?.version || checkedVersion;
+    const nodeVersion = checkedVersion || diag?.version;
 
     // Disk Health & Clean Storage state
     const [diskHealth, setDiskHealth] = useState<DiskHealth | null>(diag?.diskHealth || null);
@@ -314,6 +314,9 @@ export function ApplianceSection({
         setScheduleKnown(false);
         setScheduleConfig(null);
         setScheduleReadFailed(false);
+        setCheckedVersion(null);
+        setUpdateInfo(null);
+        setUpdateAvailable(false);
         loadSnapshots();
         loadScheduleConfig();
         load2faStatus();

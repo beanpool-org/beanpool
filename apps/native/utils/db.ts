@@ -29,7 +29,7 @@ import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
 import { clearPendingProfileChange, nameRefusedForGood, pendingNameRefused, pendingProfileChange } from './pending-profile-sync';
-import { emitAppEvent } from './app-events';
+import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
@@ -1561,6 +1561,7 @@ export async function markConversationReadLocally(conversationId: string, myPubk
         'UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ?',
         [now, conversationId, myPubkey]
     );
+    emitAppEvent(CONVERSATION_READ_LOCALLY_EVENT, { conversationId, myPubkey });
 }
 
 export async function markConversationRead(conversationId: string, myPubkey: string) {

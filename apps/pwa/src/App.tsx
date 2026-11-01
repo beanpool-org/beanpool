@@ -13,7 +13,7 @@ import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, request, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
+import { getMyUnread, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, request, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
 import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
@@ -727,14 +727,16 @@ export function App() {
                     // from here, one unrelated endpoint erroring starved the whole marketplace view.
                     // The member's own deals only where deals are not in preview (lib/features readsOwn): on the
                     // global node Your deals is Example Valley's, and null here leaves the counts as they are.
-                    const [convResult, txResult] = await Promise.allSettled([
-                        getConversations(identity.publicKey),
+                    // The badge asks for its number and no more: the counts route, never the whole list. `requests` stays
+                    // out of it: a message request makes no badge until it is accepted.
+                    const [unreadResult, txResult] = await Promise.allSettled([
+                        getMyUnread(),
                         readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : null)),
                     ]);
                     if (cancelled) return;
 
-                    if (convResult.status === 'fulfilled') {
-                        setTotalUnread(convResult.value.totalUnread || 0);
+                    if (unreadResult.status === 'fulfilled') {
+                        setTotalUnread(unreadResult.value.unread || 0);
                     }
 
                     if (txResult.status === 'fulfilled' && txResult.value) {
@@ -748,8 +750,8 @@ export function App() {
                     // must reject so the coordinator does not advance the delta cursor past data
                     // that never arrived. One of the two failing is tolerated on purpose — that
                     // is why they are settled independently rather than chained.
-                    if (convResult.status === 'rejected' && txResult.status === 'rejected') {
-                        throw convResult.reason;
+                    if (unreadResult.status === 'rejected' && txResult.status === 'rejected') {
+                        throw unreadResult.reason;
                     }
                     lastPollTime = Date.now();
                 } finally {
@@ -810,6 +812,11 @@ export function App() {
             unsubscribe();
         };
     }, [identity]);
+
+    // The browser tab shows the Chat badge's number, so a tab in the background still says a message is waiting.
+    useEffect(() => {
+        document.title = totalUnread > 0 ? `(${totalUnread > 99 ? '99+' : totalUnread}) BeanPool` : 'BeanPool';
+    }, [totalUnread]);
 
     // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
     // The tabs' names are the phone's tab words (word(…, 'tab')), so one translation serves both; "Chat" is the web's own.

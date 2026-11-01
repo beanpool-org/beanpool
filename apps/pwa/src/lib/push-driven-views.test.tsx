@@ -39,7 +39,7 @@ vi.mock('./api', async (importOriginal) => {
         getMarketplacePosts: vi.fn(async () => []),
         getNodeInfo: vi.fn(async () => ({ peerNodes: [] })),
         getRemotePosts: vi.fn(async () => []),
-        getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
+        getMyUnread: vi.fn(async () => ({ unread: 0, requests: 0, asOf: '2026-11-01T00:00:00.000Z' })),
         getMyMarketplaceTransactions: vi.fn(async () => []),
         getCommissionCapacity: vi.fn(async () => ({ links: [] })),
         getNodeConfig: vi.fn(async () => ({ enablePeerConnectors: false })),
@@ -608,13 +608,13 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
     describe('App unread polling & push updates', () => {
         it('refreshes unread and deals on new_message broadcast', async () => {
             const ws = await setupWsConnection();
-            const convSpy = vi.spyOn(api, 'getConversations');
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
 
             await act(async () => {
                 render(<App />);
                 await vi.advanceTimersByTimeAsync(100);
             });
-            const initialCalls = convSpy.mock.calls.length;
+            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(2500);
@@ -627,35 +627,35 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 await vi.advanceTimersByTimeAsync(500);
             });
 
-            expect(convSpy.mock.calls.length).toBeGreaterThan(initialCalls);
+            expect(unreadSpy.mock.calls.length).toBeGreaterThan(initialCalls);
         });
 
         it('the backstop still fires when no broadcast arrives (300s)', async () => {
             await setupWsConnection();
-            const convSpy = vi.spyOn(api, 'getConversations');
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
 
             await act(async () => {
                 render(<App />);
                 await vi.advanceTimersByTimeAsync(50);
             });
-            const initialCalls = convSpy.mock.calls.length;
+            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(370_000);
             });
 
-            expect(convSpy.mock.calls.length).toBeGreaterThan(initialCalls);
+            expect(unreadSpy.mock.calls.length).toBeGreaterThan(initialCalls);
         });
 
         it('becoming visible refreshes exactly once', async () => {
             const ws = await setupWsConnection();
-            const convSpy = vi.spyOn(api, 'getConversations');
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
 
             await act(async () => {
                 render(<App />);
                 await vi.advanceTimersByTimeAsync(50);
             });
-            const initialCalls = convSpy.mock.calls.length;
+            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 Object.defineProperty(document, 'hidden', { value: true, configurable: true });
@@ -670,7 +670,7 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 await vi.advanceTimersByTimeAsync(300);
             });
 
-            expect(convSpy.mock.calls.length).toBe(initialCalls + 1);
+            expect(unreadSpy.mock.calls.length).toBe(initialCalls + 1);
         });
     });
 

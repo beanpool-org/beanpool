@@ -785,6 +785,15 @@ export function sortRequestsOut<T extends Listed>(viewer: string, convs: T[], no
 }
 
 /**
+ * How many requests wait for `viewer`: {@link sortRequestsOut}'s `count`, asked of the only conversations that can be among
+ * them, so a count (GET /api/me/unread) never builds their whole list and has no rule of its own. None where requests are off.
+ */
+export function countRequestsWaitingFor(viewer: string, now: number = Date.now()): number {
+    if (!requestsOn()) return 0;
+    return sortRequestsOut(viewer, waitingRows(viewer, now).map(r => ({ id: r.conversation_id, type: 'dm' })), now).count;
+}
+
+/**
  * One conversation as `viewer` reads it (the open's answer, GET /api/messages/:id): with its `request` (null for an ordinary
  * direct one), and the other's read marker left out while it isn't accepted. Unchanged where requests are off, or for
  * anything but a direct conversation.

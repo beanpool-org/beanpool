@@ -5,7 +5,7 @@
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
-import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard } from '@beanpool/core';
+import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
 import { readCommunityCard, t } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
@@ -1159,6 +1159,11 @@ export async function toggleMessageReactionApi(
 
 export async function getConversations(publicKey: string): Promise<ConversationsAnswer> {
     return request('GET', `/api/messages/conversations/${encodeURIComponent(publicKey)}`);
+}
+
+/** What waits for the signer in this community, in counts alone (GET /api/me/unread): the Chat badge's number, never the list. */
+export async function getMyUnread(): Promise<UnreadAnswer> {
+    return request('GET', '/api/me/unread');
 }
 
 /**

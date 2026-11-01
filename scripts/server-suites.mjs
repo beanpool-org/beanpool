@@ -403,6 +403,7 @@ export const SUITES = [
     'test-push-leave-statement',
     'test-push-access-token',
     'test-push-notices',
+    'test-unread-count',
     'test-push-tokens-at-rest',
     'test-push-repeat-folds',
     'test-settings',
@@ -684,6 +685,11 @@ export const VARIANTS = [
     // Messaging IDOR (A2-2/A2-3/A2-15) with read auth opted out: another member, a key that is no member and an unsigned
     // caller still cannot read a member's conversations (#2119). The plain run covers read auth ON.
     { name: 'test-messaging-idor', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+
+    // A member's unread counts go to them alone with read auth opted out too, where the route's own checks are all there
+    // is; and on a local node, where requests are off, `requests` is 0.
+    { name: 'test-unread-count', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    { name: 'test-unread-count', tag: 'local', label: 'local profile, requests off', env: { UNREAD_LOCAL_NODE: '1' } },
 
     // Member-read IDOR (A2-16 family): one member cannot read another member's invites or notification preferences.
     // The plain run makes both 403 assertions; this covers the operator opt-out, where the invites one still holds, the

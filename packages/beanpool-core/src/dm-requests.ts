@@ -5,6 +5,18 @@
  */
 import { t } from './words.js';
 
+/**
+ * What waits for a member in one community, in counts alone (GET /api/me/unread): both apps read it, and it names nobody
+ * and no chat. `unread` is the lines in the chats their list shows, so the number can always be opened and cleared.
+ * `requests` is the message requests waiting for them: never in `unread`, and no badge or alert is made of it
+ * (Marty, 1 Nov 2026: nothing until accepted). `asOf` is when the node counted (ISO 8601).
+ */
+export interface UnreadAnswer {
+    unread: number;
+    requests: number;
+    asOf: string;
+}
+
 /** The chat's request mode, for the reader. */
 export type RequestMode =
     /** An ordinary chat: requests off, none on this chat, or accepted. */

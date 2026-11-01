@@ -29,6 +29,8 @@ export interface JoinDeps {
     addSavedNode(url: string, alias?: string, currencyType?: 'text' | 'image', currencyValue?: string): Promise<void>;
     clearGuestNode(url: string): Promise<void>;
     requestSync(): Promise<unknown>;
+    /** Register this phone's push token where it is missing: the community joined, now it is on the phone's list. */
+    registerPush?(): Promise<unknown>;
     /** Optional in a test's deps; the app's always has it. */
     noteBringOffer?(o: { publicKey: string; from: string | null; to: string; name: string; alreadyMember: boolean }): Promise<boolean>;
 }
@@ -46,6 +48,7 @@ async function defaultDeps(): Promise<JoinDeps> {
         addSavedNode: nodes.addSavedNode,
         clearGuestNode: nodes.clearGuestNode,
         requestSync: sync.requestSync,
+        registerPush: async () => (await import('../services/push-notifications')).retryPushRegistrations(),
         noteBringOffer: bring.noteBringOffer,
     };
 }
@@ -116,6 +119,8 @@ export async function joinAnotherCommunity(
     } catch {
         // The phone is on the community either way; the saved list catches up from the header's picker.
     }
+    // Its DMs reach this phone from now on, wherever the phone is set next (utils/push-registrations.ts).
+    deps.registerPush?.().catch(() => {});
     await deps.noteBringOffer?.({ publicKey: opts.identity.publicKey, from: opts.returnUrl, to: targetUrl, name, alreadyMember }).catch(() => {});
     return { url: targetUrl, name, alreadyMember };
 }

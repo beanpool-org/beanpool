@@ -530,6 +530,8 @@ function RootLayoutNav() {
                                             // marketplace asks for a photo in a fresh community, as it should.
                                             pushProfileToServer().catch(() => {});
                                             requestSync().catch(console.error);
+                                            // Its DMs reach this phone from now on (utils/push-registrations.ts).
+                                            void retryPushRegistrations();
                                             // Refresh membership for the new node before routing, so a stale
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
                                             await recheck();
@@ -584,14 +586,17 @@ function RootLayoutNav() {
                                                     style: 'destructive',
                                                     onPress: async () => {
                                                         try {
-                                                            await clearDB();
-                                                            // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
-                                                            await forgetSyncCursors();
-                                                            await AsyncStorage.removeItem('beanpool_anchor_url');
-                                                            // No community on the phone: the update screen's block comes down.
-                                                            communitySwitched();
-                                                            const { removeSavedNode } = await import('../utils/nodes');
-                                                            await removeSavedNode(targetOrigin);
+                                                            const { forgetCommunityPush } = await import('../utils/account-leaves-phone');
+                                                            await forgetCommunityPush(identity, targetOrigin, async () => {
+                                                                await clearDB();
+                                                                // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                                                                await forgetSyncCursors();
+                                                                await AsyncStorage.removeItem('beanpool_anchor_url');
+                                                                // No community on the phone: the update screen's block comes down.
+                                                                communitySwitched();
+                                                                const { removeSavedNode } = await import('../utils/nodes');
+                                                                await removeSavedNode(targetOrigin);
+                                                            });
                                                             router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
                                                         } catch (err: any) {
                                                             Alert.alert(t('Wipe Failed'), err.message);
@@ -1109,9 +1114,9 @@ export default function RootLayout() {
         // build sends the blocks the phone held before it. Now, on each return, and with the 5-minute sync below; nothing is
         // sent when nothing changed.
         void syncBlocks();
-        // A push registration that didn't land (no connection, no answer, an error) is tried again on each return and
-        // with the 5-minute sync, until it does (utils/push-registrations.ts `retryDueRegistrations`). At start, the
-        // account's own registration goes anyway (RootLayoutNav).
+        // A push registration that didn't land (no connection, no answer, an error), and any community on the phone that
+        // was never asked, is tried on each return and with the 5-minute sync, until it lands (utils/push-registrations.ts
+        // `registerWhereMissing`). At start, the account's own registrations go anyway (RootLayoutNav).
 
         // Set up foreground polling fallback every 5 minutes (safety net)
         const intervalId = setInterval(() => {

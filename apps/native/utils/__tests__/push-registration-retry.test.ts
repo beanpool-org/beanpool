@@ -54,16 +54,18 @@ vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() })
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signOutOfThisPhone } from '../account-leaves-phone';
 import { discardUnjoinedIdentity, draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
-import { addSavedNode, markGuestNode, removeSavedNode } from '../nodes';
+import { addSavedNode, clearGuestNode, markGuestNode, removeSavedNode } from '../nodes';
 import { pendingLeaveStatements, presentLeaveStatements, type LeaveStatement } from '../push-leave';
 import {
-    leaveState, registerAccountForPush, registerPushTokenWithCommunity, retryDueRegistrations, RETRY_FIRST_WAIT_MS, RETRY_LONGEST_WAIT_MS,
-    TOKEN_TIMEOUT_MS,
+    leaveState, registerAccountForPush, registerPushTokenWithCommunity, registerWhereMissing, retryDueRegistrations,
+    RETRY_FIRST_WAIT_MS, RETRY_LONGEST_WAIT_MS, TOKEN_TIMEOUT_MS,
 } from '../push-registrations';
+import { markAlertsOff } from '../push-alerts-off';
 import { saveRestoredAccount } from '../restore-account';
 import { Communities, PHONE_TOKEN } from './fake-communities';
 import {
     PUSH_LEAVE_STATEMENTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, PUSH_TOKEN_STORE_KEY,
+    SAVED_NODES_STORE_KEY,
 } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
@@ -136,8 +138,9 @@ const recorded = () => (JSON.parse(mem.async.get(PUSH_REGISTERED_AT_STORE_KEY) ?
 const registrations = (from = 0) => nodes.sent.slice(from).filter((s) => s.method === 'POST' && s.path === '/api/push-tokens');
 const stored = () => JSON.parse(mem.async.get(PUSH_LEAVE_STATEMENTS_STORE_KEY) ?? '[]') as LeaveStatement[];
 
-/** Kim signs in on the phone while it is set to `community`: her key is written, and the app registers her. */
+/** Kim, a member of `community`, signs in on the phone while it is set there: her key is written, and the app registers her. */
 async function kimSignsIn(community = MULLUM): Promise<void> {
+    nodes.join(kim.publicKey, community);
     await importIdentity(kim);
     mem.async.set(ANCHOR, community);
     await registerAccountForPush(kim.publicKey, phoneToken, 'android');
@@ -573,6 +576,7 @@ describe('#1258\'s rules hold for a retry', () => {
 
         // Ben's 12 words replace her account on this phone, set to Byron; still no connection, and his registration fails.
         offline();
+        nodes.join(ben.publicKey, BYRON);
         await saveRestoredAccount({ identity: ben, replacesAnother: true }, BYRON);
         expect((await loadIdentity())?.publicKey).toBe(ben.publicKey);
         expect(due()).toEqual([]);
@@ -701,5 +705,196 @@ describe('a token fetch that never settles', () => {
         await comeBack();
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
         expect(mem.async.has(PUSH_REGISTRATIONS_DUE_STORE_KEY)).toBe(false);
+    });
+});
+
+describe('the token goes to every community the phone keeps, each on its own (design R1)', () => {
+    const CASTLEMAINE = 'https://castlemaine.beanpool.org';
+    const at = (community: string) => registrations().filter((s) => s.community === community).length;
+
+    /** Kim's phone: set to Mullum, Byron and Castlemaine saved. */
+    async function kimKeepsThree(): Promise<void> {
+        await addSavedNode(MULLUM);
+        await addSavedNode(BYRON);
+        await addSavedNode(CASTLEMAINE);
+        nodes.join(kim.publicKey, BYRON, CASTLEMAINE);
+    }
+
+    it('each gets its own request signed for its own host, its own stamp and its own record entry', async () => {
+        await kimKeepsThree();
+        await kimSignsIn();
+        for (const community of [MULLUM, BYRON, CASTLEMAINE]) expect(nodes.has(community, kim.publicKey)).toBe(true);
+        expect(registrations()).toHaveLength(3);
+        expect(new Set(registrations().map((s) => s.body.registeredAt)).size).toBe(3);
+        expect(recorded()).toEqual([BYRON, CASTLEMAINE, MULLUM].sort());
+        expect(due()).toEqual([]);
+    });
+
+    it('one that refuses and one that drops the connection hold up no other: each stays due on its own, with its own wait', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        await kimKeepsThree();
+        nodes.answer = (s) => (s.method !== 'POST' ? 'up' : s.community === BYRON ? 500 : s.community === CASTLEMAINE ? 'down' : 'up');
+        await kimSignsIn();
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+        expect(due().map((d) => [d.community, d.refusals]).sort()).toEqual([[BYRON, 1], [CASTLEMAINE, 0]]);
+        // All three are on the record: a node may hold what it never answered for.
+        expect(recorded()).toEqual([BYRON, CASTLEMAINE, MULLUM].sort());
+
+        online();
+        vi.setSystemTime(Date.now() + RETRY_FIRST_WAIT_MS + 1);
+        await comeBack();
+        expect(nodes.has(BYRON, kim.publicKey) && nodes.has(CASTLEMAINE, kim.publicKey)).toBe(true);
+        expect(due()).toEqual([]);
+    });
+
+    it('one that never answers holds up no other either, and is due once its timeout is up', async () => {
+        await kimKeepsThree();
+        nodes.answer = (s) => (s.method === 'POST' && s.community === BYRON ? 'silent' : 'up');
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const signing = kimSignsIn();
+        await vi.waitFor(() => expect(nodes.has(MULLUM, kim.publicKey) && nodes.has(CASTLEMAINE, kim.publicKey)).toBe(true));
+        expect(due()).toEqual([]);
+        await vi.advanceTimersByTimeAsync(12_000);
+        await signing;
+        expect(due()).toMatchObject([{ community: BYRON, refusals: 1 }]);
+    });
+
+    it('a start while one is left alone doesn\'t knock on its door again, but always asks the community the phone is set to', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        await kimKeepsThree();
+        nodes.answer = (s) => (s.method === 'POST' && (s.community === MULLUM || s.community === BYRON) ? 500 : 'up');
+        await kimSignsIn();
+        expect([at(MULLUM), at(BYRON)]).toEqual([1, 1]);
+        await registerAccountForPush(kim.publicKey, phoneToken, 'android');
+        await registerAccountForPush(kim.publicKey, phoneToken, 'android');
+        expect(at(BYRON)).toBe(1);
+        expect(at(MULLUM)).toBe(3);
+        vi.setSystemTime(Date.now() + 2 * RETRY_LONGEST_WAIT_MS);
+        await registerAccountForPush(kim.publicKey, phoneToken, 'android');
+        expect(at(BYRON)).toBe(2);
+    });
+
+    it('no token to be had yet: each stays due, and each lands at the next return', async () => {
+        await kimKeepsThree();
+        offline();
+        await kimSignsIn();
+        expect(due().map((d) => d.community).sort()).toEqual([BYRON, CASTLEMAINE, MULLUM].sort());
+        online();
+        await comeBack();
+        for (const community of [MULLUM, BYRON, CASTLEMAINE]) expect(nodes.has(community, kim.publicKey)).toBe(true);
+        expect(due()).toEqual([]);
+    });
+
+    it('no token where push can\'t work (Expo Go, permission off): nothing goes out, and nothing is on the record', async () => {
+        await kimKeepsThree();
+        await importIdentity(kim);
+        mem.async.set(ANCHOR, MULLUM);
+        await registerAccountForPush(kim.publicKey, async () => null, 'android');
+        await registerWhereMissing(async () => null, 'android');
+        expect(nodes.sent).toEqual([]);
+        expect(recorded()).toEqual([]);
+    });
+
+    it('a community the phone only looks at as a guest gets nothing while the phone is set elsewhere, and everything once she joins', async () => {
+        await kimKeepsThree();
+        await markGuestNode(BYRON);
+        await kimSignsIn();
+        expect(at(BYRON)).toBe(0);
+        expect(recorded()).toEqual([CASTLEMAINE, MULLUM].sort());
+        await registerWhereMissing(phoneToken, 'android');
+        expect(at(BYRON)).toBe(0);
+
+        // She joins Byron (nodes.ts clearGuestNode, at every join): the next chance registers her there.
+        await clearGuestNode(BYRON);
+        await registerWhereMissing(phoneToken, 'android');
+        expect(nodes.has(BYRON, kim.publicKey)).toBe(true);
+    });
+
+    it('the community the phone is set to counts as a guest\'s at a cold start, as ever (a knock\'s answer reaches the phone so), but a return sends it nothing', async () => {
+        await markGuestNode(BYRON);
+        await importIdentity(kim);
+        mem.async.set(ANCHOR, BYRON);
+        await registerWhereMissing(phoneToken, 'android');
+        expect(at(BYRON)).toBe(0);
+        await registerAccountForPush(kim.publicKey, phoneToken, 'android');
+        expect(at(BYRON)).toBe(1);
+    });
+
+    it('a saved address that isn\'t plain is never sent the token (node-url.ts: on iOS it reaches another host than it names)', async () => {
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM }, { url: 'https://evil.example\\@mullum.beanpool.org' }]));
+        await kimSignsIn();
+        expect(new Set(nodes.sent.map((s) => s.community))).toEqual(new Set([MULLUM]));
+        // Nor does it go on the record, where a Sign Out would be asked to reach it.
+        expect(recorded()).toEqual([MULLUM]);
+    });
+
+    it('a saved list that can\'t be read is none, and the community the phone is set to still gets it', async () => {
+        mem.async.set(SAVED_NODES_STORE_KEY, 'not a list');
+        await kimSignsIn();
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+    });
+
+    it('a community that came onto the phone by any door is registered at the next chance, and those already on the record are not asked again', async () => {
+        await addSavedNode(MULLUM);
+        await kimSignsIn();
+        expect(at(MULLUM)).toBe(1);
+        await addSavedNode(BYRON);
+        nodes.join(kim.publicKey, BYRON);
+        await registerWhereMissing(phoneToken, 'android');
+        await registerWhereMissing(phoneToken, 'android');
+        expect(at(BYRON)).toBe(1);
+        expect(at(MULLUM)).toBe(1);
+    });
+
+    it('a missing community isn\'t lost to a retry already under way', async () => {
+        await addSavedNode(MULLUM);
+        offline();
+        await kimSignsIn();
+        online();
+        await addSavedNode(BYRON);
+        nodes.join(kim.publicKey, BYRON);
+        let release: ((token: string) => void) | null = null;
+        const running = retryDueRegistrations(() => new Promise<string>((resolve) => { release = resolve; }), 'android');
+        await vi.waitFor(() => expect(release).not.toBeNull());
+        const missing = registerWhereMissing(phoneToken, 'android');
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        release!(PHONE_TOKEN);
+        await running;
+        await missing;
+        expect(nodes.has(MULLUM, kim.publicKey) && nodes.has(BYRON, kim.publicKey)).toBe(true);
+    });
+
+    it('what is due only is what a switch retries: a phone set to an address it has never registered with sends it nothing yet', async () => {
+        await addSavedNode(MULLUM);
+        await kimSignsIn();
+        mem.async.set(ANCHOR, BYRON);
+        await comeBack();
+        expect(at(BYRON)).toBe(0);
+    });
+
+    it('alerts turned off hold whoever asks: a start, a return, a language pick, a retry, and the community the phone is set to', async () => {
+        await kimKeepsThree();
+        await markAlertsOff(BYRON);
+        await markAlertsOff(MULLUM);
+        await kimSignsIn();
+        await registerWhereMissing(phoneToken, 'android');
+        expect(await registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android', 1000, AsyncStorage, BYRON)).toBe(false);
+        expect(await registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).toBe(false);
+        expect([at(MULLUM), at(BYRON), at(CASTLEMAINE)]).toEqual([0, 0, 1]);
+        expect(recorded()).toEqual([CASTLEMAINE]);
+    });
+
+    it('what was due at a community is dropped once its alerts go off, and it is not contacted again', async () => {
+        await kimKeepsThree();
+        nodes.answer = (s) => (s.community === BYRON ? 'down' : 'up');
+        await kimSignsIn();
+        expect(due()).toMatchObject([{ community: BYRON }]);
+        await markAlertsOff(BYRON);
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.now() + 2 * RETRY_LONGEST_WAIT_MS);
+        const before = at(BYRON);
+        await comeBack();
+        expect(at(BYRON)).toBe(before);
+        expect(due()).toEqual([]);
     });
 });

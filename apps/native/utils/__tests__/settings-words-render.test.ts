@@ -291,6 +291,7 @@ import { consentHeading, saveKnownConsent } from '../known-consent';
 import { OWNER_WORDS_COPY } from '../owner-words';
 import { holdEndsText } from '../vault';
 import { copiesRuleNow } from '../copies-rule';
+import { PUSH_REGISTERED_AT_STORE_KEY } from '../storage-keys';
 import SettingsScreen from '../../app/(tabs)/settings';
 
 const NODE = 'https://mullum.example';
@@ -838,6 +839,82 @@ describe('Settings follows a language picked on it', () => {
         expect(languageRow()?.textContent).not.toBe(before);
         expect(languageRow()?.textContent).toContain('Français');
         expect(host.textContent).toContain('Grows beans by the river');
+    });
+});
+
+describe('Saved communities: Forget goes by the community, not by how its address is spelled (#2701)', () => {
+    const CASTLE = 'https://castle.example';
+    const savedUrls = () => (JSON.parse(store.map.get('beanpool_saved_nodes') ?? '[]') as Array<{ url: string }>).map((n) => n.url);
+    const forgetButtons = () => Array.from(host.querySelectorAll('[data-hint="Removes this community and deletes its local data from this device"]'));
+    /** Saved communities open, and Forget tapped on the first row that has one: the row spelled as the phone is set draws none. */
+    async function forgetFirstRow(): Promise<void> {
+        await renderIn('en');
+        await click(row('Saved communities', 'en'), 'Saved communities');
+        await settle();
+        await click(forgetButtons()[0], 'Forget');
+    }
+
+    it('a second spelling of the community in use is the community in use: the phone says so, moves on, and no row of it stays', async () => {
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: `${NODE}/` }, { url: CASTLE }]));
+        await forgetFirstRow();
+        expect(alerts.said).toContain('Forget Active Node');
+        expect(alerts.said).not.toContain('Forget Community?');
+
+        const forgetAndSwitch = alerts.buttons.find((b) => b.text === 'Forget & Switch');
+        await act(async () => { await forgetAndSwitch?.onPress?.(); });
+        await settle();
+        expect(store.map.get('beanpool_anchor_url')).toBe(CASTLE);
+        expect(savedUrls()).toEqual([CASTLE]);
+    });
+
+    it('with nothing else saved, a second spelling is the only community: it can\'t be forgotten, and its copy stays', async () => {
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: `${NODE}/` }]));
+        await forgetFirstRow();
+        expect(alerts.said).toContain('Action Denied');
+        expect(alerts.said).not.toContain('Forget Community?');
+    });
+
+    describe.each([
+        ['a capital letter', 'https://Mullum.example'],
+        ['a default port', `${NODE}:443`],
+    ])('a second spelling with %s', (_how, spelled) => {
+        it('is the community in use: the phone says so, moves on, and no row of it stays', async () => {
+            store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: spelled }, { url: CASTLE }]));
+            await forgetFirstRow();
+            expect(alerts.said).toContain('Forget Active Node');
+            expect(alerts.said).not.toContain('Forget Community?');
+
+            const forgetAndSwitch = alerts.buttons.find((b) => b.text === 'Forget & Switch');
+            await act(async () => { await forgetAndSwitch?.onPress?.(); });
+            await settle();
+            expect(store.map.get('beanpool_anchor_url')).toBe(CASTLE);
+            expect(savedUrls()).toEqual([CASTLE]);
+        });
+
+        it('is let go under the spelling the phone registered with, the one it is set to: the row\'s own is on no record', async () => {
+            store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: spelled }, { url: CASTLE }]));
+            store.map.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([NODE]));
+            await forgetFirstRow();
+
+            const forgetAndSwitch = alerts.buttons.find((b) => b.text === 'Forget & Switch');
+            await act(async () => { await forgetAndSwitch?.onPress?.(); });
+            await settle();
+            expect(JSON.parse(store.map.get(PUSH_REGISTERED_AT_STORE_KEY) ?? '[]')).toEqual([]);
+        });
+
+        it('with nothing else saved, is the only community: it can\'t be forgotten', async () => {
+            store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: spelled }]));
+            await forgetFirstRow();
+            expect(alerts.said).toContain('Action Denied');
+            expect(alerts.said).not.toContain('Forget Community?');
+        });
+    });
+
+    it('another community is forgotten as ever', async () => {
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: CASTLE }]));
+        await forgetFirstRow();
+        expect(alerts.said).toContain('Forget Community?');
+        expect(alerts.said).not.toContain('Forget Active Node');
     });
 });
 

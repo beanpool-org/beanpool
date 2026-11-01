@@ -23,7 +23,7 @@ vi.mock('@react-native-async-storage/async-storage', () => {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { pushCommunityTag } from '@beanpool/core';
 import { addSavedNode, removeSavedNode } from '../nodes';
-import { pinPushKey, readPushPins } from '../push-pins';
+import { pinPushKey, readPushPins, sameCommunity } from '../push-pins';
 import { PUSH_PINS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
@@ -47,6 +47,37 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+});
+
+describe('two addresses are one community however each is spelled', () => {
+    it('a trailing slash is the same community, another host is not, and no address is nobody\'s', () => {
+        const mullum = 'https://mullum.beanpool.org';
+        expect(sameCommunity(mullum, mullum)).toBe(true);
+        expect(sameCommunity(`${mullum}/`, mullum)).toBe(true);
+        expect(sameCommunity(mullum, `${mullum}//`)).toBe(true);
+        expect(sameCommunity(mullum, 'https://byron.beanpool.org')).toBe(false);
+        expect(sameCommunity(null, null)).toBe(false);
+        expect(sameCommunity('Detecting...', 'Detecting...')).toBe(false);
+        expect(sameCommunity(mullum, null)).toBe(false);
+    });
+
+    it('capitals and a default port are the same community too; another scheme or port is not (deciding review 4434633343)', () => {
+        const mullum = 'https://mullum.beanpool.org';
+        expect(sameCommunity('https://Mullum.beanpool.org', mullum)).toBe(true);
+        expect(sameCommunity(mullum, 'HTTPS://MULLUM.BEANPOOL.ORG/')).toBe(true);
+        expect(sameCommunity(`${mullum}:443`, mullum)).toBe(true);
+        expect(sameCommunity('http://mullum.lan:80', 'http://mullum.lan')).toBe(true);
+        expect(sameCommunity(`${mullum}:8443`, mullum)).toBe(false);
+        expect(sameCommunity('http://mullum.beanpool.org', mullum)).toBe(false);
+        expect(sameCommunity('https://mullum.beanpool.org.evil.example', mullum)).toBe(false);
+    });
+
+    it('an address that isn\'t plain is compared as written, never by a host it might reach', () => {
+        const odd = 'https://mullum.beanpool.org\\@evil.test';
+        expect(sameCommunity(odd, `${odd}/`)).toBe(true);
+        expect(sameCommunity(odd, 'https://mullum.beanpool.org')).toBe(false);
+        expect(sameCommunity(odd, 'https://evil.test')).toBe(false);
+    });
 });
 
 describe('pins are kept apart from the saved list', () => {

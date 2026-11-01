@@ -218,6 +218,14 @@ export const PUSH_REGISTRATIONS_DUE_STORE_KEY = 'beanpool_push_registrations_due
 export const PUSH_ALERTS_OFF_STORE_KEY = 'beanpool_push_alerts_off';
 
 /**
+ * The communities on the push record told to let the token go that heard nothing: the DELETE failed and no statement was
+ * written down (utils/push-registrations.ts `leavesOwed`). Each return tries again (utils/account-leaves-phone.ts
+ * `retryLeavesOwed`). Apart from the record because the record can't say so: it also holds a moved community's old
+ * address, which must hear no DELETE. Sign Out wipes it with the account (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const PUSH_LEAVES_OWED_STORE_KEY = 'beanpool_push_leaves_owed';
+
+/**
  * This phone's last push stamp (utils/push-registrations.ts `nextPushStamp`): each registration and each leave statement
  * takes a later one, whatever the clock does. Phone-wide, not the account's: Sign Out keeps it, so a statement the old
  * account made can never outrank the registration of an account that signs in after it. Kept under this name twice, in

@@ -23,7 +23,7 @@ vi.mock('@react-native-async-storage/async-storage', () => {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { pushCommunityTag } from '@beanpool/core';
 import { addSavedNode, removeSavedNode } from '../nodes';
-import { pinPushKey, readPushPins } from '../push-pins';
+import { pinPushKey, readPushPins, sameCommunity } from '../push-pins';
 import { PUSH_PINS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
@@ -47,6 +47,19 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+});
+
+describe('two addresses are one community however each is spelled', () => {
+    it('a trailing slash is the same community, another host is not, and no address is nobody\'s', () => {
+        const mullum = 'https://mullum.beanpool.org';
+        expect(sameCommunity(mullum, mullum)).toBe(true);
+        expect(sameCommunity(`${mullum}/`, mullum)).toBe(true);
+        expect(sameCommunity(mullum, `${mullum}//`)).toBe(true);
+        expect(sameCommunity(mullum, 'https://byron.beanpool.org')).toBe(false);
+        expect(sameCommunity(null, null)).toBe(false);
+        expect(sameCommunity('Detecting...', 'Detecting...')).toBe(false);
+        expect(sameCommunity(mullum, null)).toBe(false);
+    });
 });
 
 describe('pins are kept apart from the saved list', () => {

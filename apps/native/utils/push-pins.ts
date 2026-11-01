@@ -43,6 +43,12 @@ export function communityAddress(raw: unknown): string | null {
     return raw.trim().replace(/\/+$/, '');
 }
 
+/** Whether two addresses are one community, however each is spelled ({@link communityAddress}). Not when either is no address. */
+export function sameCommunity(a: unknown, b: unknown): boolean {
+    const address = communityAddress(a);
+    return address !== null && address === communityAddress(b);
+}
+
 /** The `pushKey` a registration answer carries: a raw Ed25519 public key in lower-case hex, or null for anything else. */
 export function pushKeyOf(answer: unknown): string | null {
     const key = answer && typeof answer === 'object' ? (answer as { pushKey?: unknown }).pushKey : undefined;

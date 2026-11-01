@@ -6,8 +6,9 @@
  * signed request with its own record entry, its own retries and its own pin, unless the member turned alerts from that
  * community off (account-leaves-phone.ts `turnAlertsOffAt`), and never one it only looks at as a guest while it is set
  * elsewhere. A DM at a community the phone wasn't set to used to reach nobody
- * (scratch/fable-design/DESIGN-cross-community-chat-fable.md §1.2, R1). Each community goes on the record before the
- * request goes out, so a node that took the token but whose answer never arrived is on it too. As the account leaves the
+ * (scratch/fable-design/DESIGN-cross-community-chat-fable.md §1.2, R1). Being kept is not belonging, and no mark says
+ * which it is, so the first token at a community asks it first ({@link belongsThere}). Each community goes on the
+ * record before the request goes out, so a node that took the token but whose answer never arrived is on it too. As the account leaves the
  * phone, only the communities on the record are asked to drop the token (account-leaves-phone.ts): one this phone never
  * sent it to is never sent it (#1184 review 4110460184). The record goes with the account (identity.ts
  * `wipeIdentityScopedStorage`).
@@ -30,9 +31,9 @@
  * signed in on a poor connection got no alerts, recovery alerts included, until then (#1258 confirmation 5859456754).
  * A community that answered with an error or not at all is left alone for a while, longer after each such answer in a
  * row, and one whose request failed with no answer at all for a minute: every try sends it the token and the phone's
- * address, so none is tried at every return. A retry is a registration like any other
- * ({@link registerPushTokenWithCommunity}), and only where the phone still keeps the community: what is due for a key
- * goes as that key starts leaving the phone, and what is due at a community goes once the phone forgets it (Forget
+ * address, so none is tried at every return, and one that says the account isn't a member waits the same way. A retry
+ * is a registration like any other ({@link registerPushTokenWithCommunity}), and only where the phone still keeps the
+ * community: what is due for a key goes as that key starts leaving the phone, and what is due at a community goes once the phone forgets it (Forget
  * Community, Wipe Connection).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,12 +41,13 @@ import * as SecureStore from 'expo-secure-store';
 import { onAccountOnPhone } from './account-on-phone';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity, KEY_ITEM_OPTIONS, type BeanPoolIdentity } from './identity';
+import { fetchMembership } from './membership-probe';
 import { isPlainNodeAddress } from './node-url';
 import { communitiesWithAlertsOff, readAlertsOff } from './push-alerts-off';
 import { communityAddress, pinPushKey, pushKeyOf } from './push-pins';
 import { languageForNode } from './language-choice';
 import {
-    PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
+    PUSH_LEAVES_OWED_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
 } from './storage-keys';
 
 export { communityAddress };
@@ -149,6 +151,51 @@ export async function dropFromRecord(communities: readonly string[], storage: Pi
         });
     } catch (e) {
         console.warn('[Push] Could not take the community left off the record', e);
+    }
+}
+
+/**
+ * The communities on the record that heard nothing when the member let them go: the DELETE failed and no statement was
+ * written down (account-leaves-phone.ts `unregisterPushTokenAt`), so nothing but the phone trying again will reach them
+ * (account-leaves-phone.ts `retryLeavesOwed`). The record can't say which they are: a community that moved stays on it at
+ * its old address, which must never hear a DELETE, since it may be the same node (address-follow.ts). After any change
+ * under way. Reads only; never throws.
+ */
+export async function leavesOwed(storage: Pick<Storage, 'getItem'> = AsyncStorage): Promise<string[]> {
+    try {
+        await recordWrites;
+        return parseRecord(await storage.getItem(PUSH_LEAVES_OWED_STORE_KEY));
+    } catch {
+        return [];
+    }
+}
+
+function changeOwed(change: (owed: string[]) => string[], storage: Pick<Storage, 'getItem' | 'setItem'>): Promise<void> {
+    return changeRecord(async () => {
+        const owed = parseRecord(await storage.getItem(PUSH_LEAVES_OWED_STORE_KEY));
+        const after = change(owed);
+        if (after.length !== owed.length) await storage.setItem(PUSH_LEAVES_OWED_STORE_KEY, JSON.stringify(after));
+    });
+}
+
+/**
+ * `community` goes on {@link leavesOwed}. A list that can't be written is logged: the record still has it, and a later
+ * Sign Out asks it. Never throws.
+ */
+export async function oweLeave(community: string, storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage): Promise<void> {
+    try {
+        await changeOwed((owed) => (owed.includes(community) ? owed : [...owed, community]), storage);
+    } catch (e) {
+        console.warn(`[Push] Could not write down that ${community} is still owed a leave`, e);
+    }
+}
+
+/** `community` comes off {@link leavesOwed}: it has heard, or is wanted again. Never throws; one left on is only asked again. */
+export async function leaveNoLongerOwed(community: string, storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage): Promise<void> {
+    try {
+        await changeOwed((owed) => owed.filter((c) => c !== community), storage);
+    } catch (e) {
+        console.warn(`[Push] Could not cross ${community} off the leaves still owed`, e);
     }
 }
 
@@ -351,6 +398,7 @@ function isDue(d: DueRegistration, now: number): boolean {
  * `key`'s registration at `community` did not land: it stays due. When it is tried again depends on how it `failed`:
  * - 'refused': the community answered, but not with the route's own confirmation, or never answered within the
  *   timeout. It is left alone a while, longer after each refusal in a row.
+ *   A community that says the account isn't one of its members counts as a refusal ({@link belongsThere}).
  * - 'unanswered': the request failed with no answer: no connection, or a node that drops it, a lapsed certificate, a
  *   name that no longer resolves; the phone can't tell these apart. It is left alone the first wait, and never longer
  *   for it: a member back online lands within a minute, and a node that drops each request can't have the phone call
@@ -466,9 +514,9 @@ function isStopped(key: string, community: string): boolean {
 /**
  * The account on the phone registers it for its alerts (services/push-notifications.ts: its key written to the phone,
  * each time the app starts, a language picked). The phone's push token from `phoneToken`, then
- * {@link registerPushTokenWithCommunity} with each community it should go to ({@link communitiesForAlerts}), all
- * together: one that refuses or never answers holds up no other, and stays due alone. One still left alone after a
- * failed try is left alone now too (every try sends it the token and the phone's address), unless it is the one the
+ * {@link registerPushTokenWithCommunity} with each community it should go to ({@link communitiesForAlerts}) that
+ * {@link belongsThere} lets through, all together: one that refuses or never answers holds up no other, and stays due
+ * alone. One still left alone after a failed try is left alone now too (every try sends it the token and the phone's address), unless it is the one the
  * phone is set to, which is asked each time, as ever. When the token can't be had yet (`phoneToken` throws: no
  * connection, most often), each registration stays due all the same and is tried at the next chance
  * ({@link retryDueRegistrations}). Nothing once `publicKey` is no longer the account on the phone, or where push can't
@@ -511,6 +559,7 @@ export async function registerAccountForPush(
     }
     await Promise.all(communities.map(async (community) => {
         try {
+            if (!await belongsThere(account, community, REGISTER_TIMEOUT_MS, storage)) return;
             if (await registerPushTokenWithCommunity(account, token, platform, REGISTER_TIMEOUT_MS, storage, community)) {
                 console.log(`[Push] Token registered with ${community}`);
             }
@@ -519,6 +568,40 @@ export async function registerAccountForPush(
         }
     }));
     return token;
+}
+
+/**
+ * Whether this phone's token may go to `community`, one {@link communitiesForAlerts} named: it is the one the phone is set
+ * to, it is on the record and holds the token already, or it says `account` is one of its members. Being kept says nothing:
+ * a restored list, a look before a restore, a failed invite and Add & Connect with no answer each leave a community the
+ * member never joined on the list with no guest mark, and every community the token goes to keeps it and can put a line
+ * on the lock screen. So it is asked first, by the signed probe the BeanPool sheet sends every row, which carries no token
+ * (membership-probe.ts). No answer is no: the community stays due, like a registration that failed the same way, and is
+ * asked at the next chance after its wait. What was true when it was named is looked at again once the answer is in,
+ * which can take `timeoutMs`: a community let go meanwhile gets nothing. Never for a key that is leaving or a community
+ * being stopped, whom a registration wouldn't reach either. Never throws.
+ */
+async function belongsThere(account: RegisteringAccount, community: string, timeoutMs: number, storage: Storage): Promise<boolean> {
+    const key = account.publicKey.toLowerCase();
+    if (isLeaving(key) || isStopped(key, community)) return false;
+    if (community === communityAddress(await storage.getItem(ANCHOR_STORE_KEY))) return true;
+    if ((await pushRegisteredCommunities(storage)).includes(community)) return true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let answered = false;
+    let isMember = false;
+    try {
+        const res = await fetchMembership(community, account, controller.signal);
+        answered = true;
+        const answer: { isMember?: unknown } | undefined = await res.json().catch(() => undefined);
+        isMember = res.ok && answer?.isMember === true;
+    } catch (e) {
+        console.warn(`[Push] ${community} did not say whether this account belongs there; asked again later:`, e instanceof Error ? e.message : e);
+    } finally {
+        clearTimeout(timer);
+    }
+    if (!isMember) await stillDue(key, community, answered || controller.signal.aborted ? 'refused' : 'unanswered', storage);
+    return isMember && (await communitiesForAlerts(storage)).includes(community);
 }
 
 /** {@link communitiesForAlerts}, without those still waiting out a failed try, but for the one the phone is set to. */
@@ -554,14 +637,15 @@ async function communitiesKept(storage: Pick<Storage, 'getItem'>): Promise<strin
 }
 
 /**
- * Where this phone's push token should be for the account on it: the communities it keeps ({@link communitiesKept}, the
+ * Where this phone's push token may go for the account on it: the communities it keeps ({@link communitiesKept}, the
  * one it is set to first), each once, less the ones the member turned alerts off for. A saved community is left out when
  * its address isn't plain (node-url.ts: on iOS it reaches another host than it names) and when the phone only looks at it
  * as a guest (nodes.ts `markGuestNode`): a look is not belonging, and every community the token goes to keeps it.
  * Joining clears that mark. The community the phone is set to counts even as a guest, as it always has: a knock's answer
- * reaches the phone that way. Throws when the phone's storage can't be read.
+ * reaches the phone that way. {@link belongsThere} has the last word before a first token. Throws when the phone's
+ * storage can't be read.
  */
-async function communitiesForAlerts(storage: Pick<Storage, 'getItem'>): Promise<string[]> {
+export async function communitiesForAlerts(storage: Pick<Storage, 'getItem'>): Promise<string[]> {
     const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
     const off = await readAlertsOff(storage);
     const guests = await guestMarks(storage);
@@ -592,9 +676,10 @@ let retrying: Promise<void> | null = null;
  * for another key. Only where the token should still go ({@link communitiesForAlerts}): what is due at a community the
  * phone has forgotten, or turned alerts off for, is dropped, and it is never contacted again (#1267 review 4117004415).
  * The token (`phoneToken`) is asked
- * for only when one is due; when it can't be had within {@link TOKEN_TIMEOUT_MS}, all stay due. One run at a time: a
- * call while one runs waits for it, and a run ends within the token's deadline and the registrations' timeout. Never
- * throws.
+ * for only when one is due; when it can't be had within {@link TOKEN_TIMEOUT_MS}, all stay due. Whichever door put a
+ * community on the list, {@link belongsThere} lets it through first. One run at a time: a call while one runs waits for
+ * it, and a run ends within the token's deadline and twice the registrations' timeout (the question, then the
+ * registration). Never throws.
  */
 export function retryDueRegistrations(
     phoneToken: () => Promise<string | null>,
@@ -635,6 +720,7 @@ export function retryDueRegistrations(
             const kept = await communitiesForAlerts(storage);
             await Promise.all(due.filter((d) => kept.includes(d.community)).map(async (d) => {
                 try {
+                    if (!await belongsThere(account, d.community, timeoutMs, storage)) return;
                     if (await registerPushTokenWithCommunity(account, token, platform, timeoutMs, storage, d.community)) {
                         console.log(`[Push] Token registered with ${d.community} at last`);
                     }
@@ -657,7 +743,9 @@ export function retryDueRegistrations(
  * no moment of its own told it. Each goes on the due list, with no wait, then {@link retryDueRegistrations} runs: as the
  * app comes back, with the 5-minute sync, after a join and after a restore. Never a community marked as a guest's, even
  * the one the phone is set to: only a cold start asks that one, as ever, so coming back to the app sends no token to a
- * community a member is only looking at. Never throws.
+ * community a member is only looking at. The run itself asks each first token's community ({@link belongsThere}), and a
+ * wait left by that question ends once the phone is set to the community, which needs no asking: a join lands at once.
+ * First, each community still owed a leave is tried again ({@link leavesOwed}). Never throws.
  */
 export async function registerWhereMissing(
     phoneToken: () => Promise<string | null>,
@@ -669,14 +757,22 @@ export async function registerWhereMissing(
     try {
         const account = await onPhone();
         if (account?.publicKey && leaveState(account.publicKey) === 'none') {
+            if ((await leavesOwed(storage)).length > 0) {
+                // Loaded only then: account-leaves-phone.ts imports this module.
+                const { retryLeavesOwed } = await import('./account-leaves-phone');
+                await retryLeavesOwed(account);
+            }
             const key = account.publicKey.toLowerCase();
             const asked = await pushRegisteredCommunities(storage);
             const guests = await guestMarks(storage);
             const missing = (await communitiesForAlerts(storage)).filter((c) => !asked.includes(c) && !guests.includes(c));
+            const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
             await changeDue(storage, (due) => {
                 if (leaving.has(key)) return due;
                 const fresh = missing.filter((c) => !due.some((d) => d.publicKey === key && d.community === c));
-                return [...due, ...fresh.map((community) => ({ publicKey: key, community, refusals: 0, retryAt: 0 }))];
+                // Never on the record, so nothing has gone there: its wait was the question's.
+                const here = (d: DueRegistration) => d.publicKey === key && d.community === anchor && missing.includes(d.community);
+                return [...due.map((d) => (here(d) ? { ...d, refusals: 0, retryAt: 0 } : d)), ...fresh.map((community) => ({ publicKey: key, community, refusals: 0, retryAt: 0 }))];
             });
         }
     } catch (e) {

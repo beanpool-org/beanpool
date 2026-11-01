@@ -102,6 +102,7 @@ afterEach(() => {
 
 /** Kim on the phone, with its token registered at Mullum and at Byron (the app opened while set to each), Bellingen never. */
 async function kimRegisteredAtMullumAndByron(): Promise<number[]> {
+    nodes.join(kim.publicKey, MULLUM, BYRON);
     await importIdentity(kim);
     mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
     for (const community of [MULLUM, BYRON]) {
@@ -769,6 +770,128 @@ describe('one community goes and the key stays (Forget Community; design R2)', (
         const noSignature = { publicKey: kim.publicKey, privateKey: '' };
         expect(await unregisterPushTokenAt(noSignature, BYRON)).toBe(false);
         expect(recorded()).toEqual([BYRON, MULLUM].sort());
+    });
+
+    describe('a statement that can\'t be written down, and a DELETE that fails: nothing went (#2701, deciding review 4434518886)', () => {
+        const setItem = vi.mocked(AsyncStorage.setItem);
+        const write = async (key: string, value: string) => { mem.async.set(key, value); };
+        const statementsCantBeWritten = () => setItem.mockImplementation(async (key: string, value: string) => {
+            if (key === PUSH_LEAVE_STATEMENTS_STORE_KEY) throw new Error('storage full');
+            return write(key, value);
+        });
+        const byronDown = () => { nodes.answer = (s) => (s.community === BYRON ? 'down' : 'up'); };
+        afterEach(() => { setItem.mockImplementation(write); });
+
+        /** Kim forgets Byron with Byron down and her statement unwritten. */
+        async function forgottenAndUntold(): Promise<void> {
+            await kimAtBoth();
+            statementsCantBeWritten();
+            byronDown();
+            await forget(BYRON);
+            expect(stored()).toEqual([]);
+        }
+
+        it('the community stays on the record, and a later return tells it, with the writes still failing', async () => {
+            await forgottenAndUntold();
+            expect(recorded()).toEqual([BYRON, MULLUM].sort());
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(true);
+
+            nodes.answer = () => 'up';
+            await presentLeaveStatements();
+            await registerWhereMissing(phoneToken, 'android');
+
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+            expect(recorded()).toEqual([MULLUM]);
+            // Told: the next return asks it nothing.
+            const from = nodes.sent.length;
+            await registerWhereMissing(phoneToken, 'android');
+            expect(deletes(from)).toEqual([]);
+        });
+
+        it('still down at the return, once the phone can write: the statement goes down, and lands when the community is back', async () => {
+            await forgottenAndUntold();
+            setItem.mockImplementation(write);
+            await registerWhereMissing(phoneToken, 'android');
+            expect(stored()).toMatchObject([{ community: BYRON, keyStays: true }]);
+            expect(recorded()).toEqual([MULLUM]);
+
+            nodes.answer = () => 'up';
+            await presentLeaveStatements();
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+            expect(stored()).toEqual([]);
+        });
+
+        it('still nothing goes at a return: it stays on the record, and the next one tries again', async () => {
+            await forgottenAndUntold();
+            await registerWhereMissing(phoneToken, 'android');
+            expect(recorded()).toEqual([BYRON, MULLUM].sort());
+            nodes.answer = () => 'up';
+            await registerWhereMissing(phoneToken, 'android');
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+        });
+
+        it('an app restart loses nothing: the next return still tells it', async () => {
+            await forgottenAndUntold();
+            nodes.answer = () => 'up';
+            vi.resetModules();
+            const restarted = await import('../push-registrations');
+            await restarted.registerWhereMissing(phoneToken, 'android');
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+            expect(recorded()).toEqual([MULLUM]);
+        });
+
+        it('rejoining first: the community is wanted again, so it hears no goodbye, and her row stays', async () => {
+            await forgottenAndUntold();
+            saved(MULLUM, BYRON);
+            nodes.answer = () => 'up';
+            const from = nodes.sent.length;
+            await registerWhereMissing(phoneToken, 'android');
+            await registerWhereMissing(phoneToken, 'android');
+            expect(deletes(from)).toEqual([]);
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(true);
+            expect(recorded()).toEqual([BYRON, MULLUM].sort());
+        });
+
+        it('a later Sign Out asks it, as ever', async () => {
+            await forgottenAndUntold();
+            setItem.mockImplementation(write);
+            nodes.answer = () => 'up';
+            await signOutOfThisPhone(kim);
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+        });
+
+        it('alerts turned off the same way: the community is told at a later return, and stays off', async () => {
+            await kimAtBoth();
+            statementsCantBeWritten();
+            byronDown();
+            await turnAlertsOffAt(kim, BYRON);
+            expect(recorded()).toEqual([BYRON, MULLUM].sort());
+
+            nodes.answer = () => 'up';
+            await registerWhereMissing(phoneToken, 'android');
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+            expect(recorded()).toEqual([MULLUM]);
+            expect(await communitiesWithAlertsOff()).toEqual([BYRON]);
+        });
+
+        it('a statement the community took by DELETE needs no writing down', async () => {
+            await kimAtBoth();
+            statementsCantBeWritten();
+            await forget(BYRON);
+            expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+            expect(recorded()).toEqual([MULLUM]);
+        });
+    });
+
+    it('a community that moved stays on the record at its old address, and a return sends that address nothing: it may be the same node, and a DELETE would take the row the new address needs', async () => {
+        await kimAtBoth();
+        // utils/address-follow.ts `acceptAddressFollow`: the row moves, and no DELETE goes.
+        saved(MULLUM, BELLINGEN);
+        nodes.join(kim.publicKey, BELLINGEN);
+        const from = nodes.sent.length;
+        await registerWhereMissing(phoneToken, 'android');
+        expect(deletes(from)).toEqual([]);
+        expect(nodes.has(BYRON, kim.publicKey)).toBe(true);
     });
 });
 

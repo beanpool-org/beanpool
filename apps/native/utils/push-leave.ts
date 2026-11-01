@@ -162,8 +162,9 @@ async function keyOnPhone(): Promise<string | null> {
  * write them down before anything is sent. A newer statement replaces an older one for the same key, token and
  * community (it removes all the older one did). Returns them: the caller sends the leave now, and confirms each one that
  * lands ({@link confirmLeave}). A community whose address can't be signed for gets none, and is logged. Never throws:
- * statements that can't be written down are still returned, for the leave sent now. `keyStays`: only these communities
- * go, and the key stays on the phone (see the header).
+ * statements that can't be written down are still returned, for the leave sent now, and only that: a caller counting on
+ * one to go later asks {@link leaveWrittenDown}. `keyStays`: only these communities go, and the key stays on the phone
+ * (see the header).
  */
 export async function recordLeave(
     account: LeavingAccount, token: string, communities: readonly string[], storage: Storage = AsyncStorage, keyStays = false,
@@ -189,6 +190,11 @@ export async function recordLeave(
         console.warn('[Push] Could not write the leave statements down; the leave is still sent now', e);
     }
     return statements;
+}
+
+/** Whether `statement` is written down, so it will be presented until its community confirms. Reads only; never throws. */
+export async function leaveWrittenDown(statement: LeaveStatement, storage: Storage = AsyncStorage): Promise<boolean> {
+    return (await pendingLeaveStatements(storage)).some((p) => sameStatement(p, statement));
 }
 
 /** The leave `statement` stands for was confirmed by its community (or refused there for good): it goes. Never throws. */

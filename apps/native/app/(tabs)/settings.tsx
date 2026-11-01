@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
 import { updateCallsign, hasMnemonic } from '../../utils/identity';
 import { forgetCommunityPush, namesCopiesBeforeSignOut, signOutOfThisPhone } from '../../utils/account-leaves-phone';
+import { sameCommunity } from '../../utils/push-pins';
 import { NAMES_COPY, namesSignOutWords } from '../../utils/names-list';
 import {
     DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteAccountHere, finishLastDelete, planDelete,
@@ -1426,8 +1427,10 @@ export default function SettingsScreen() {
     }
 
     async function handleForgetNode(targetUrl: string) {
-        if (targetUrl === anchorUrl) {
-            const remainingNodes = savedNodes.filter(n => n.url !== targetUrl);
+        if (sameCommunity(targetUrl, anchorUrl)) {
+            const remainingNodes = savedNodes.filter(n => !sameCommunity(n.url, targetUrl));
+            // Every spelling of it: a second row of the one community (a trailing slash) would keep it on the phone.
+            const everySpelling = [...new Set([targetUrl, anchorUrl, ...savedNodes.map(n => n.url).filter(url => sameCommunity(url, targetUrl))])];
             if (remainingNodes.length === 0) {
                 Alert.alert(t("Action Denied"), t("You cannot forget your only saved node. If you want to leave BeanPool completely, please use 'Delete Account' to destroy your identity."));
                 return;
@@ -1442,7 +1445,7 @@ export default function SettingsScreen() {
                         text: t("Forget & Switch"),
                         style: "destructive",
                         onPress: () => forgetCommunityPush(identity, targetUrl, async () => {
-                            await removeSavedNode(targetUrl);
+                            for (const url of everySpelling) await removeSavedNode(url);
                             setSavedNodes(remainingNodes);
                             try {
                                 const filename = getDatabaseFilenameForNode(targetUrl);
@@ -1459,7 +1462,7 @@ export default function SettingsScreen() {
                             await handleSwitchNode(remainingNodes[0].url);
                             // Any read of the list before the phone moved put the community in use back on it
                             // (nodes.ts getSavedNodes), and a community on the list gets the push token.
-                            await removeSavedNode(targetUrl);
+                            for (const url of everySpelling) await removeSavedNode(url);
                         })
                     }
                 ]

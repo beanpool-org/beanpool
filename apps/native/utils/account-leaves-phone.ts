@@ -42,11 +42,11 @@ import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
 import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfirmed, type NamesPinStore } from './names-list';
-import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
+import { confirmLeave, leaveStatementsSettled, leaveWrittenDown, recordLeave } from './push-leave';
 import { markAlertsOff, markAlertsOn } from './push-alerts-off';
 import {
-    communityAddress, dropFromRecord, forgetPushRegistrations, pushRegisteredCommunities, resumeRegisteringAt, stopRegistering,
-    stopRegisteringAt,
+    communitiesForAlerts, communityAddress, dropFromRecord, forgetPushRegistrations, leaveNoLongerOwed, leavesOwed, oweLeave,
+    pushRegisteredCommunities, resumeRegisteringAt, stopRegistering, stopRegisteringAt,
 } from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 import { withdrawVaultPushToken } from './vault';
@@ -205,8 +205,9 @@ export async function stopPushAlertsAt(
  * there from now until {@link resumeRegisteringAt}, and one on its way is waited for; a statement that survives the key
  * being on the phone is written down (push-leave.ts, `keyStays`); the signed DELETE goes with its stamp, and the statement
  * is crossed off if the community took it, or else presented until it does. The community then comes off the record: the
- * statement speaks for it, and a later Sign Out need not ask again. It stays on the record only when neither the DELETE
- * nor a statement went, so a later Sign Out asks it. The phone's token stays: every other community still holds it.
+ * statement speaks for it, and a later Sign Out need not ask again. It stays on the record only when nothing will speak
+ * for it, the DELETE having failed with no statement written down: each later return tries again
+ * ({@link retryLeavesOwed}), and a later Sign Out asks it. The phone's token stays: every other community still holds it.
  * Nothing is sent to a community that isn't on the record: the DELETE carries the token, and a community this phone never
  * sent it to is never sent it (#1184 review 4110460184; one only looked at as a guest, say). Nor when the phone never got
  * a token. True once the community is dealt with. Never throws; the DELETE gives up at `timeoutMs`, and one registration
@@ -225,6 +226,7 @@ export async function unregisterPushTokenAt(
         token = await SecureStore.getItemAsync(PUSH_TOKEN_STORE_KEY);
     } catch (e) {
         console.warn(`[Push] Could not read this phone's push token to unregister it at ${base}`, e);
+        await oweLeave(base);
         return false;
     }
     if (!token) {
@@ -235,9 +237,37 @@ export async function unregisterPushTokenAt(
     const body = JSON.stringify({ publicKey: account.publicKey, token, ...(statement ? { leftAt: statement.leftAt } : {}) });
     const took = await unregisterAt(base, body, account, timeoutMs);
     if (took && statement) await confirmLeave(statement);
-    if (!took && !statement) return false;
+    if (!took && !(statement && await leaveWrittenDown(statement))) {
+        await oweLeave(base);
+        return false;
+    }
     await dropFromRecord([base]);
     return true;
+}
+
+/**
+ * The app comes back (push-registrations.ts `registerWhereMissing`): each community {@link unregisterPushTokenAt} could
+ * not reach is tried again with `account`, the one on the phone, unless it is wanted again by now (the member rejoined it,
+ * or turned its alerts back on). That one owes nothing, and stays on the record, where its registration still is.
+ * Never throws.
+ */
+export async function retryLeavesOwed(account: LeavingAccount): Promise<void> {
+    try {
+        const wanted = await communitiesForAlerts(AsyncStorage);
+        await Promise.all((await leavesOwed()).map(async (base) => {
+            if (wanted.includes(base)) {
+                await leaveNoLongerOwed(base);
+                return;
+            }
+            try {
+                if (await unregisterPushTokenAt(account, base)) await leaveNoLongerOwed(base);
+            } finally {
+                resumeRegisteringAt(account.publicKey, base);
+            }
+        }));
+    } catch (e) {
+        console.warn('[Push] Could not try the communities still owed a leave again', e);
+    }
 }
 
 /**

@@ -715,6 +715,7 @@ describe('the token goes to every community the phone keeps, each on its own (de
         await addSavedNode(MULLUM);
         await addSavedNode(BYRON);
         await addSavedNode(CASTLEMAINE);
+        nodes.join(kim.publicKey, BYRON, CASTLEMAINE);
     }
 
     it('each gets its own request signed for its own host, its own stamp and its own record entry', async () => {
@@ -730,7 +731,7 @@ describe('the token goes to every community the phone keeps, each on its own (de
     it('one that refuses and one that drops the connection hold up no other: each stays due on its own, with its own wait', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         await kimKeepsThree();
-        nodes.answer = (s) => (s.community === BYRON ? 500 : s.community === CASTLEMAINE ? 'down' : 'up');
+        nodes.answer = (s) => (s.method !== 'POST' ? 'up' : s.community === BYRON ? 500 : s.community === CASTLEMAINE ? 'down' : 'up');
         await kimSignsIn();
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
         expect(due().map((d) => [d.community, d.refusals]).sort()).toEqual([[BYRON, 1], [CASTLEMAINE, 0]]);
@@ -746,7 +747,7 @@ describe('the token goes to every community the phone keeps, each on its own (de
 
     it('one that never answers holds up no other either, and is due once its timeout is up', async () => {
         await kimKeepsThree();
-        nodes.answer = (s) => (s.community === BYRON ? 'silent' : 'up');
+        nodes.answer = (s) => (s.method === 'POST' && s.community === BYRON ? 'silent' : 'up');
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         const signing = kimSignsIn();
         await vi.waitFor(() => expect(nodes.has(MULLUM, kim.publicKey) && nodes.has(CASTLEMAINE, kim.publicKey)).toBe(true));
@@ -759,7 +760,7 @@ describe('the token goes to every community the phone keeps, each on its own (de
     it('a start while one is left alone doesn\'t knock on its door again, but always asks the community the phone is set to', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         await kimKeepsThree();
-        nodes.answer = (s) => (s.community === MULLUM || s.community === BYRON ? 500 : 'up');
+        nodes.answer = (s) => (s.method === 'POST' && (s.community === MULLUM || s.community === BYRON) ? 500 : 'up');
         await kimSignsIn();
         expect([at(MULLUM), at(BYRON)]).toEqual([1, 1]);
         await registerAccountForPush(kim.publicKey, phoneToken, 'android');
@@ -836,6 +837,7 @@ describe('the token goes to every community the phone keeps, each on its own (de
         await kimSignsIn();
         expect(at(MULLUM)).toBe(1);
         await addSavedNode(BYRON);
+        nodes.join(kim.publicKey, BYRON);
         await registerWhereMissing(phoneToken, 'android');
         await registerWhereMissing(phoneToken, 'android');
         expect(at(BYRON)).toBe(1);
@@ -848,6 +850,7 @@ describe('the token goes to every community the phone keeps, each on its own (de
         await kimSignsIn();
         online();
         await addSavedNode(BYRON);
+        nodes.join(kim.publicKey, BYRON);
         let release: ((token: string) => void) | null = null;
         const running = retryDueRegistrations(() => new Promise<string>((resolve) => { release = resolve; }), 'android');
         await vi.waitFor(() => expect(release).not.toBeNull());

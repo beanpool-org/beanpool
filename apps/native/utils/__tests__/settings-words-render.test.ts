@@ -841,6 +841,46 @@ describe('Settings follows a language picked on it', () => {
     });
 });
 
+describe('Saved communities: Forget goes by the community, not by how its address is spelled (#2701)', () => {
+    const CASTLE = 'https://castle.example';
+    const savedUrls = () => (JSON.parse(store.map.get('beanpool_saved_nodes') ?? '[]') as Array<{ url: string }>).map((n) => n.url);
+    const forgetButtons = () => Array.from(host.querySelectorAll('[data-hint="Removes this community and deletes its local data from this device"]'));
+    /** Saved communities open, and Forget tapped on the first row that has one: the row spelled as the phone is set draws none. */
+    async function forgetFirstRow(): Promise<void> {
+        await renderIn('en');
+        await click(row('Saved communities', 'en'), 'Saved communities');
+        await settle();
+        await click(forgetButtons()[0], 'Forget');
+    }
+
+    it('a second spelling of the community in use is the community in use: the phone says so, moves on, and no row of it stays', async () => {
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: `${NODE}/` }, { url: CASTLE }]));
+        await forgetFirstRow();
+        expect(alerts.said).toContain('Forget Active Node');
+        expect(alerts.said).not.toContain('Forget Community?');
+
+        const forgetAndSwitch = alerts.buttons.find((b) => b.text === 'Forget & Switch');
+        await act(async () => { await forgetAndSwitch?.onPress?.(); });
+        await settle();
+        expect(store.map.get('beanpool_anchor_url')).toBe(CASTLE);
+        expect(savedUrls()).toEqual([CASTLE]);
+    });
+
+    it('with nothing else saved, a second spelling is the only community: it can\'t be forgotten, and its copy stays', async () => {
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: `${NODE}/` }]));
+        await forgetFirstRow();
+        expect(alerts.said).toContain('Action Denied');
+        expect(alerts.said).not.toContain('Forget Community?');
+    });
+
+    it('another community is forgotten as ever', async () => {
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: CASTLE }]));
+        await forgetFirstRow();
+        expect(alerts.said).toContain('Forget Community?');
+        expect(alerts.said).not.toContain('Forget Active Node');
+    });
+});
+
 describe('Saved communities: the global community, guest view first (Marty, 21 Oct 2026)', () => {
     it('on another community: Look around opens the global community as a guest, never the door (fails on origin/main: the door)', async () => {
         await renderIn('en');

@@ -362,7 +362,6 @@ export function App() {
     const myTransactionsRef = useRef<MarketplaceTransaction[]>([]);
     useLayoutEffect(() => { myTransactionsRef.current = myTransactions; }, [myTransactions]);
     useEffect(() => registerLivePostTie(openDealTie(() => myTransactionsRef.current)), []);
-    const refreshAfterReadRef = useRef<() => Promise<void>>(() => Promise.resolve());
     const [marketClickCount, setMarketClickCount] = useState(0);
     // null until the node has answered the membership check. The Market, Commons and Map pages wait for it
     // before asking for the viewer's balance, so a guest never sends that request; everything else reads
@@ -824,9 +823,12 @@ export function App() {
                 if (cancelled) return;
                 return refreshAfterRead();
             }
-            return pollUnread();
+            try {
+                await pollUnread();
+            } catch {
+                /* network failure: next scheduled poll will retry */
+            }
         };
-        refreshAfterReadRef.current = refreshAfterRead;
 
         const unsubRead = onConversationRead(() => {
             if (cancelled) return;
@@ -835,7 +837,6 @@ export function App() {
 
         return () => {
             cancelled = true;
-            refreshAfterReadRef.current = () => Promise.resolve();
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
@@ -1227,7 +1228,6 @@ export function App() {
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
-                                    onConversationRead={() => { void refreshAfterReadRef.current(); }}
                                 />
                             )}
                             {activeTab === 'people' && (

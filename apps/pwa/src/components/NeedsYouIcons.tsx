@@ -295,7 +295,7 @@ export function NeedsYouIcons({
 
         const unsubRead = onConversationRead(() => {
             forgetHomeForHeader();
-            void refresh();
+            poke();
         });
 
         return () => {

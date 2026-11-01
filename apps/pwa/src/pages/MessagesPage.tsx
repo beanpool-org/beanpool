@@ -130,8 +130,6 @@ interface Props {
     onNavigate?: (tab: string, contextId?: string, txId?: string) => void;
     /** A person's profile: a request's sender, from their card or the chat's header in request mode. */
     onOpenProfile?: (pubkey: string) => void;
-    /** Called when an open conversation's unread lines have been marked read on the server. */
-    onConversationRead?: (conversationId: string) => void;
 }
 
 // ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
@@ -258,7 +256,7 @@ function ChatPhotoShown({ uri, failed, onOpen }: { uri: string | null; failed: b
     );
 }
 
-export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile, onConversationRead }: Props) {
+export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
     // null where the community has requests off (its list has no `requests`).
@@ -319,7 +317,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             await markConversationReadApi(identity.publicKey, convId);
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
             setActiveConv(prev => (prev && prev.id === convId ? { ...prev, unreadCount: 0 } : prev));
-            onConversationRead?.(convId);
             notifyConversationRead(convId);
         } catch {
             // offline: the next poll tries again

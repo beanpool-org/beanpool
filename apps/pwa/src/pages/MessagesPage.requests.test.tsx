@@ -248,6 +248,20 @@ describe('a request card', () => {
         expect(within(list).getByText('1 person wants to message you')).toBeInTheDocument();
     });
 
+    // R1 (Marty, 1 Nov 2026): a request's link is words, on the card and in the chat it opens.
+    it('a link in a request is only words: no link on the card or in the chat', async () => {
+        const words = 'Free money at https://spam.example/win';
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, words)]);
+        const { container } = render(<MessagesPage identity={idOf(ann)} />);
+        const card = within(await openRequests()).getByTestId('request-card');
+        expect(await within(card).findByText(words)).toBeInTheDocument();
+        expect(container.querySelector('a[href*="spam.example"]')).toBeNull();
+        fireEvent.click(within(card).getByTestId('request-card-open'));
+        expect(await screen.findByTestId('request-mode')).toBeInTheDocument();
+        expect(container.querySelector('a[href*="spam.example"]')).toBeNull();
+    });
+
     it('says when the sender has added you', async () => {
         node.list = annListWith([requestEntry(bo, CONV, { addedYou: true })]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);

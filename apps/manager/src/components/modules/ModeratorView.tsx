@@ -4,6 +4,7 @@ import { PhoneReturnLink } from '../layout/ReturnLinks';
 import type { BackLink } from '../../lib/came-from';
 import { MODERATOR_MANUAL_PAGES } from '../../lib/manual';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
+import { RequestLimitsCard } from './RequestLimitsCard';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
 import { ReportedDirectMessage } from './ReportedDirectMessage';
 import {
@@ -132,6 +133,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                     A message from a locked group chat shows here only when its reporter shared its key, and only that one message.
                 </p>
 
+                <RequestLimitsCard nodeUrl={nodeUrl} />
                 <BurstDigestCard nodeUrl={nodeUrl} onOpen={setBurstAnchor} reloadKey={burstReload} onAvailability={setBurstsHere} />
                 {burstAnchor && (
                     <BurstPanel

@@ -10,6 +10,7 @@ import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
+import { RequestLimitsCard } from './RequestLimitsCard';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -383,6 +384,9 @@ export function PeopleSafetySection({
 
             {subTab === 'moderation' && (
                 <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Message requests cleared by reports" resetKey={activeNode.id}>
+                        <RequestLimitsCard nodeUrl={activeNode.url} adminPassword={nodeCredential(activeNode)} tfaToken={getTfaSessionToken(activeNode.id)} />
+                    </SectionErrorBoundary>
                     {hasDoorMembers && (
                         <SectionErrorBoundary sectionName="Accounts that joined together" resetKey={activeNode.id}>
                             <BurstDigestCard

@@ -77,6 +77,9 @@ export interface CreateGroupParams {
     category?: GroupCategory;
     joinPolicy?: JoinPolicy;
     createdBy: string;
+    /** A place circle (apps/server engine/place-circles.ts). No route passes these: only the node's own run makes one. */
+    kind?: 'circle';
+    placeCell?: string;
 }
 
 export interface UpdateGroupParams {
@@ -222,8 +225,8 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
 
     db.transaction(() => {
         db.prepare(`
-            INSERT INTO groups (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO groups (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at, kind, place_cell)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             id,
             trimmedName,
@@ -236,7 +239,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
             params.createdBy,
             joinPolicy,
             now,
-            now
+            now,
+            params.kind ?? null,
+            params.placeCell ?? null
         );
 
         // Creator is the initial convenor with active status
@@ -362,7 +367,7 @@ function clearInlineGroupPicture(db: Db, groupId: string): boolean {
 }
 
 /** The group row's columns a group read is made from, never the picture (not in the row) nor any column it doesn't use. */
-const GROUP_COLUMNS = 'g.id, g.name, g.slug, g.description, g.avatar_ref, g.category, g.created_by, g.join_policy, g.created_at, g.updated_at';
+const GROUP_COLUMNS = 'g.id, g.name, g.slug, g.description, g.avatar_ref, g.category, g.created_by, g.join_policy, g.kind, g.created_at, g.updated_at';
 /**
  * The same for a list, with no more of a description than its preview needs (#1493): SQLite's substr counts characters
  * (code points), and LIST_PREVIEW_CHARS + 1 of them always hold the preview (previewText counts UTF-16 units, never fewer)
@@ -424,6 +429,7 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
         category: row.category as GroupCategory,
         createdBy: row.created_by,
         joinPolicy: row.join_policy as JoinPolicy,
+        kind: row.kind ?? undefined,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         memberCount: row.member_count ?? 0,
@@ -518,6 +524,7 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
         category: row.category as GroupCategory,
         createdBy: row.created_by,
         joinPolicy: row.join_policy as JoinPolicy,
+        kind: row.kind ?? undefined,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         memberCount: row.member_count ?? 0,
@@ -853,6 +860,30 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
     return getGroupMember(db, groupId, memberPubkey)!;
 }
 
+/**
+ * Seats someone in a place circle (apps/server engine/place-circles.ts): the node's own act, on their "I'd help start one
+ * here", so it takes no join policy. A visitor's row, a pruned account, a suspended one and someone a convenor removed
+ * are refused, as they are at every other door.
+ */
+export function addCircleMember(db: Db, groupId: string, memberPubkey: string): GroupMember {
+    const group = db.prepare("SELECT kind FROM groups WHERE id = ?").get(groupId) as { kind: string | null } | undefined;
+    if (group?.kind !== 'circle') throw new Error(word('Group not found'));
+    const member = db.prepare("SELECT public_key, status, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!member || member.is_visitor || member.status === 'pruned') throw new Error(word('Member not found or pruned'));
+    if (isSuspendedAccount(db, memberPubkey)) throw new Error(unauthorized(GROUP_JOIN_PAUSED));
+    const existing = db.prepare("SELECT status FROM group_members WHERE group_id = ? AND member_pubkey = ?").get(groupId, memberPubkey) as { status: string } | undefined;
+    if (existing?.status === 'active') return getGroupMember(db, groupId, memberPubkey)!;
+    if (existing?.status === 'removed') throw new Error(word('A convenor removed you from this group. Only a convenor can add you back.'));
+    const now = membershipWriteAt(db, groupId, memberPubkey);
+    db.prepare(`
+        INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at, role_since)
+        VALUES (?, ?, 'member', 'active', ?, ?, ?)
+        ON CONFLICT (group_id, member_pubkey) DO UPDATE SET status = 'active', role = 'member', joined_at = excluded.joined_at,
+            updated_at = excluded.updated_at, role_since = excluded.role_since
+    `).run(groupId, memberPubkey, now, now, now);
+    return getGroupMember(db, groupId, memberPubkey)!;
+}
+
 // ===================== CONVENOR MODERATION =====================
 
 export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
@@ -987,11 +1018,26 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
     return res.changes > 0;
 }
 
+/** A place circle's purpose is what the people in it opted into: a convenor can't turn it into another group. */
+export const CIRCLE_WORDS_FIXED = word("A circle's name, purpose and door stay as they are.");
+
+function assertCircleStaysACircle(db: Db, groupId: string, updates: UpdateGroupParams): void {
+    const row = db.prepare('SELECT kind, name, description, category, join_policy FROM groups WHERE id = ?').get(groupId) as
+        { kind: string | null; name: string; description: string | null; category: string; join_policy: string } | undefined;
+    if (row?.kind !== 'circle') return;
+    const changes = (updates.name !== undefined && String(updates.name).trim() !== row.name)
+        || (updates.description !== undefined && String(updates.description).trim() !== (row.description ?? ''))
+        || (updates.category !== undefined && updates.category !== row.category)
+        || (updates.joinPolicy !== undefined && updates.joinPolicy !== row.join_policy);
+    if (changes) throw new Error(CIRCLE_WORDS_FIXED);
+}
+
 export function updateGroupPolicy(db: Db, groupId: string, convenorPubkey: string, joinPolicy: JoinPolicy): Group {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error(unauthorized(word('Only a group convenor can change the group join policy')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
+    assertCircleStaysACircle(db, groupId, { joinPolicy });
     if (!isJoinPolicy(joinPolicy)) {
         throw new Error(`Invalid join policy: ${joinPolicy}`);
     }
@@ -1009,6 +1055,7 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
         throw new Error(unauthorized(word('Only a group convenor can update group details')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
+    assertCircleStaysACircle(db, groupId, updates);
 
     const sets: string[] = [];
     const params: any[] = [];

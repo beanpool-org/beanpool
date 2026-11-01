@@ -1227,6 +1227,7 @@ export function App() {
                             isOpen
                             onClose={() => setOpenGroup(null)}
                             myPubkey={identity?.publicKey}
+                            identity={identity}
                         />
                     )}
                     {openGroupVotes && (

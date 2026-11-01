@@ -130,10 +130,12 @@ describe('a card at 320dp × 1.3', () => {
         const tell = 'Tell me when one starts here';
         expect(textWidth(tell, num(s.buttonText.fontSize)) + pad).toBeGreaterThan(CARD_INNER);
         expect(longestWord(tell, num(s.buttonText.fontSize)) + pad).toBeLessThanOrEqual(CARD_INNER);
+        // "I'd help start one here" (the place circle) wraps the same way, each word whole.
+        expect(longestWord("I'd help start one here", num(s.buttonText.fontSize)) + pad).toBeLessThanOrEqual(CARD_INNER);
         expect(read('components/home/HomeParts.tsx')).toMatch(/<Text style=\{\[s\.buttonText, primary && s\.buttonTextPrimary\]\}>\{text\}<\/Text>/);
         const body = read('components/home/FindCommunityBody.tsx');
         expect(body).toMatch(/<FabAware id="find:actions" style=\{s\.buttonRow\}>/);
-        expect(body.match(/<HomeButton /g)).toHaveLength(3);
+        expect(body.match(/<HomeButton /g)).toHaveLength(5);
         // No touchable of its own below Home's floor: every action is a HomeButton (48dp).
         expect(body).not.toMatch(/<Pressable|minHeight: 44/);
     });

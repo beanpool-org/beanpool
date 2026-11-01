@@ -44,7 +44,7 @@ RELEASE_COOLOFF_S = "2592000"   # 30 days: an owner-released name is held this l
 WATCH_TARGETS = '''[
   {"name": "global", "url": "https://global.beanpool.org"},
   {"name": "vault", "url": "https://vault.beanpool.org", "kind": "vault"},
-  {"name": "mullum", "url": "https://mullum.beanpool.org"},
+  {"name": "mullum", "url": "https://byron.beanpool.org"},
   {"name": "castlemaine", "url": "https://castlemaine.beanpool.org"},
   {"name": "test", "url": "https://test.beanpool.org"}
 ]'''

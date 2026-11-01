@@ -56,6 +56,7 @@ import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
+import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
@@ -246,7 +247,7 @@ import {
     previewAdmitsInvite,
 } from './engine/invites.js';
 import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
-import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
+import { avatarUrlOf, GROUP_KIND_CIRCLE, PLACE_CIRCLE_WORDS, word, wordsFor } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -328,6 +329,7 @@ import {
     type SyncPollVote,
     type SyncPayload,
     createGroup as createGroupEngine,
+    addCircleMember as addCircleMemberEngine,
     getGroup as getGroupEngine,
     listGroups as listGroupsEngine,
     getGroupMembers as getGroupMembersEngine,
@@ -10748,6 +10750,41 @@ export function createGroup(params: CreateGroupParams): Group {
     return res;
 }
 
+/** A place circle, made by the node for `createdBy` and the people near them (engine/place-circles.ts). */
+export function createPlaceCircle(createdBy: string, placeCell: string): string {
+    return createGroup({
+        name: PLACE_CIRCLE_WORDS.name, description: PLACE_CIRCLE_WORDS.purpose, category: 'working_group',
+        // Hidden from everyone outside it, so an outsider's read of it is the 404 of no group at all (the engine's header).
+        joinPolicy: 'invite_only', createdBy, kind: GROUP_KIND_CIRCLE, placeCell,
+    }).id;
+}
+
+/**
+ * Seats someone in a place circle on their own "I'd help start one here". As an old app's join does: no epoch, so the
+ * chat's current key (if it has one yet) goes stale and the next writer's app rotates it to everyone seated.
+ */
+export function addPlaceCircleMember(groupId: string, pubkey: string): void {
+    const wasActive = isGroupMemberEngine(db, groupId, pubkey);
+    const res = withMembershipEpoch(groupId, pubkey, undefined, () => addCircleMemberEngine(db, groupId, pubkey),
+        { allowed: ['join', 'invite'], subject: pubkey });
+    afterGroupMembershipChange(groupId, pubkey, wasActive);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_member_updated', groupId, member: res }, getGroupActiveMemberRecipients(groupId, [pubkey]));
+    const group = getGroupEngine(db, groupId, pubkey);
+    if (group) broadcast({ type: 'group_created', group: groupAsListed(group) }, [pubkey]);
+}
+
+/** Whether a place circle may hold this key: a member here, and not suspended (a group's chat would reach them). */
+export function maySitInPlaceCircle(pubkey: string): boolean {
+    return isNodeMember(pubkey) && !engine.isSuspendedAccount(db, pubkey);
+}
+
+/** A retired circle's 30 days are up: it closes as a group closed by a vote does, its row and its lines kept. */
+export function closePlaceCircle(groupId: string): void {
+    const cancelledPosts = db.transaction(() => closeGroupByVote(groupId, CIRCLE_CLOSED_BY))();
+    afterGroupVote(groupId, { kind: 'closed', text: PLACE_CIRCLE_CLOSED, cancelledPosts });
+}
+
 export function getGroup(idOrSlug: string, viewerPubkey?: string): Group | null {
     return getGroupEngine(db, idOrSlug, viewerPubkey);
 }
@@ -10856,7 +10893,14 @@ export function groupClosedAtMany(groupIds: string[]): Map<string, string> {
 }
 
 function assertGroupNotClosed(groupId: string): void {
-    if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
+    if (groupClosedAt(groupId)) throw new Error(groupClosedBy(groupId) === CIRCLE_CLOSED_BY ? PLACE_CIRCLE_CLOSED : GROUP_CLOSED);
+}
+
+/** Why a place circle that finished takes nobody new and no new line: no vote closed it. */
+export const PLACE_CIRCLE_CLOSED = word('This circle has finished. It takes nobody new and no new messages.');
+
+function groupClosedBy(groupId: string): string | null {
+    return (db.prepare('SELECT decision_id FROM group_closures WHERE group_id = ?').get(groupId) as { decision_id: string } | undefined)?.decision_id ?? null;
 }
 
 /**
@@ -10903,6 +10947,7 @@ export function removeGroupMemberByVote(groupId: string, subject: string): void 
         .run(now, now, groupId, subject);
     reconcileGroupLeadEngine(db, groupId);
     if (groupKeyRoster(groupId).join(',') !== before) markGroupEpochStale(groupId);
+    afterLeavingCircle(groupId, subject);
 }
 
 export function setGroupJoinPolicyByVote(groupId: string, policy: JoinPolicy): void {
@@ -10920,6 +10965,7 @@ export function closeGroupByVote(groupId: string, decisionId: string): ReturnTyp
         .run(groupId, decisionId, now, now, now);
     const cancelled = cancelClosedGroupPosts(groupId);
     db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
+    afterClosingCircle(groupId);
     return cancelled;
 }
 
@@ -11024,6 +11070,7 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
     const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey),
         { allowed: ['remove'], subject: targetPubkey });
     if (res) {
+        afterLeavingCircle(groupId, targetPubkey);
         // Leaving drops their vote on the group's open votes; a removal by a convenor keeps it (§2.6).
         if (actorPubkey === targetPubkey) dropFromOpenGroupRolls(groupId, targetPubkey);
         try {

@@ -79,6 +79,8 @@ export interface Group {
     category: GroupCategory;
     createdBy: string;
     joinPolicy: JoinPolicy;
+    /** 'circle' on a group the node made for people waiting near one place (place-circle.ts); absent on every other. */
+    kind?: 'circle';
     createdAt: string;
     updatedAt?: string;
     memberCount?: number;

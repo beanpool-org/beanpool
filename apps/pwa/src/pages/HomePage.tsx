@@ -42,6 +42,7 @@ import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKno
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
+import { PlaceCircleCard } from '../components/PlaceCircleCard';
 import { AskedCommunity } from '../components/AskedCommunity';
 import { AskToJoin } from '../components/AskToJoin';
 import {
@@ -50,6 +51,7 @@ import {
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
     starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
+    type HomeFind,
 } from '../lib/home-cards';
 import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
@@ -93,7 +95,7 @@ import { ToolHomeCard } from '../tools/home-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
 import {
-    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
+    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_CIRCLE_WORDS, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
 } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
@@ -1011,6 +1013,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // (the screen the 🏘️ sheet opens), or be told.
     const [startOpen, setStartOpen] = useState(false);
     const [watched, setWatched] = useState(false);
+    const [helped, setHelped] = useState(false);
+    /** "I'm starting one here" answers with the card: it stands until Home is next read. */
+    const [circleNow, setCircleNow] = useState<HomeFind['circle']>(null);
     const [phoneAppDismissed, setPhoneAppDismissed] = useState(() => publicKey ? isUsePhoneAppDismissed(publicKey) : false);
     useEffect(() => {
         if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
@@ -1109,6 +1114,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const hasOpenKnock = knocksRef.current.some(k => !k.cancelledAt && knockStillAnswerable(k, at));
         return askPinned(ans, at, { hasOpenKnock });
     }, []);
+
+    // A read says what the circle is now: a card kept from a tap would hide a community that has since retired it. A read
+    // sends nothing to that community, whatever the member wished: only Ask to join on the card does (Marty, 1 Nov).
+    const ownCircle = (answer?.cards?.find as HomeFind | undefined)?.circle ?? null;
+    useEffect(() => setCircleNow(null), [ownCircle]);
 
     const currentPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
         const hasOpenKnock = (knocksRef.current ?? knocks).some(k => !k.cancelledAt && knockStillAnswerable(k, at));
@@ -1834,6 +1844,23 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         );
     }
 
+    /** "I'd help start one here" (the place circle): a watch at the point Home was read from, with the one flag. */
+    async function wouldHelp() {
+        setWatchNote(null);
+        if (!publicKey) { setWatchNote(t(WATCH_WORDS.joinFirst)); return; }
+        const p = pointRef.current;
+        if (!p) { setWatchNote(t(WATCH_WORDS.needsPlace)); setTownOpen(true); return; }
+        try {
+            await watchPlace(p.lat, p.lng, { wouldHelp: true });
+            setWatched(true);
+            setHelped(true);
+            setWatchNote(t(PLACE_CIRCLE_WORDS.helpDone));
+        } catch (e: any) {
+            if (e?.code === PLACE_WATCH_LIMIT_CODE && typeof e.limit === 'number') setWatchNote(placeWatchLimitLine(e.limit));
+            else setWatchNote(e?.message || t("That didn't go through. Try again."));
+        }
+    }
+
     /** "Tell me when one starts here": a member's, at the point Home was read from; a visitor is told to join first. */
     async function tellMe() {
         setWatchNote(null);
@@ -2064,6 +2091,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const f = c.find!;
                 const more = findListed(f);
                 const nearby = nearbyLine(f);
+                const circle = circleNow?.id === f.circle?.id ? circleNow ?? f.circle : f.circle;
+                const helping = helped || !!f.watches?.some(w => w.wouldHelp);
+                const demandLine = findOffersStart(f) && !circle ? circleDemandLine(f.demand) : null;
                 return (
                     <HomeCard key={id} {...common}>
                         {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />}
@@ -2137,6 +2167,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                             {answersLine}
                                         </p>
                                     )}
+                                    {pending && !cancelled && !circle && circleWaitingLine(f.demand) && (
+                                        <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-near-${k.url}`}>
+                                            {circleWaitingLine(f.demand)}
+                                        </p>
+                                    )}
+                                    {pending && !cancelled && !circle && !helping && circleWaitingLine(f.demand) && (
+                                        <div className="mt-2">
+                                            <button type="button" onClick={() => void wouldHelp()} data-testid={`home-waiting-help-${k.url}`} className={FIND_ACTION}>
+                                                {t(PLACE_CIRCLE_WORDS.help)}
+                                            </button>
+                                        </div>
+                                    )}
                                     {closed && !cancelled && (
                                         <div className="mt-2">
                                             <button
@@ -2184,10 +2226,21 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                         {t('Tell me when one starts here')}
                                     </button>
                                 )}
-                                {watchNote && <p role="status" data-testid="home-find-watch-note" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
+                                {!circle && !helping && (
+                                    <button type="button" onClick={() => void wouldHelp()} data-testid="home-find-help" className={FIND_ACTION}>
+                                        {t(PLACE_CIRCLE_WORDS.help)}
+                                    </button>
+                                )}
                             </div>
                         )}
+                        {/* Outside findOffersStart: a waiting card's own "I'd help" answers here too, and with a request out that
+                            block is not drawn. Always in the page, so a screen reader hears the line when it is put in. */}
+                        <div role="status">
+                            {watchNote && <p data-testid="home-find-watch-note" className="m-0 mt-1 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
+                        </div>
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
+                        {demandLine && <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-demand">{demandLine}</p>}
+                        {circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} onAsked={handleAsked} onStart={() => setStartOpen(true)} onChange={card => setCircleNow({ ...card, id: circle.id })} />}
                         {townName && !townOpen && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3" data-testid="home-town-picked">
                                 <span className="min-w-0 break-words text-sm font-semibold text-text-primary">{t('Near {town}', { town: townName })}</span>
@@ -2605,7 +2658,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
                 )}
                 {visitor?.joinCard}
-                {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
+                {startOpen && <StartCommunityScreen demandLine={circleDemandLine((answer?.cards?.find as HomeFind | undefined)?.demand)} onClose={() => setStartOpen(false)} />}
                 {saveNote && (
                     <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
                         <span className="min-w-0 flex-1 break-words">{saveNote}</span>

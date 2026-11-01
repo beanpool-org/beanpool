@@ -34,6 +34,9 @@
  *     names run side by side, each on its own token and metrics port; one crashes, rotates, is refused, paused or released
  *     alone; Take offline of the new name leaves the old one up; a start asks /status?name= again; a name the community
  *     never went by gets no child; the bound holds; and a server with one name does and asks nothing new.
+ * 34. A Release lands while /status is held: the late `live` answer starts no child and leaves the record `released`.
+ * 35. Both tunnels refused, the old name first: the stored name's check takes the way, and the old name's heal goes out on
+ *     the next check, not a debounce later.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-tunnel-connector.ts
  */
@@ -54,6 +57,7 @@ import {
 import { reconcile, checkAddressRequest, tick } from './services/public-address-agent.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { noteTurnedAway } from './config/turned-away-names.js';
+import { registrarNames } from './engine/registrar-names.js';
 import { writeAddressRequestFile } from './address-request.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { useFakeCloudflared, type FakeTunnel } from './tunnel-test-fake.js';
@@ -1437,6 +1441,68 @@ async function main(): Promise<void> {
             await post('/api/local/admin/public-address/offline');
             assert(await until(() => fakes().length === 0) && getTunnelStatus().state === 'off', `Take offline stops it (${getTunnelStatus().state})`);
             reg.status = () => ({ status: 'none' });
+        });
+
+        await section('34. a Release lands while /status is held: the late live answer starts nothing and writes nothing', async () => {
+            const host = 'late-old.beanpool.org';
+            const { oldT, newT, oldPid, newPid } = await twoNames('late-old', 'late-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            const row = () => registrarNames().find((e) => e.address === host);
+            const startsOf = () => fake.runs().filter((r) => r.env.TUNNEL_TOKEN === oldT).length;
+            let answer: (a: unknown) => void = () => {};
+            const held = new Promise((r) => { answer = r; });
+            reg.status = (n) => (n === 'late-old' ? held : live(n!, newT));
+            const a0 = asked('late-old');
+            const ticking = agentTick();
+            assert(await until(() => asked('late-old') === a0 + 1), `the tick waits on /status?name=late-old (${asked('late-old') - a0})`);
+            assert(await letGo('late-old'), 'Release lets it go meanwhile');
+            assert(!alive(oldPid) && row()?.status === 'released', `its child stopped, and the record says released (${row()?.status})`);
+            const n0 = startsOf();
+            answer(live('late-old', oldT));
+            await ticking;
+            await sleep(200);
+            assert(!tunnelConnectorForTests().tunnels.some((t) => t.host === host) && !fakeOn(oldT) && startsOf() === n0,
+                `the late answer starts no child (${startsOf() - n0}, ${onTokens().join(', ')}; a name let go was still "other" before)`);
+            assert(row()?.status === 'released', `and the record stays released (${row()?.status})`);
+            assert(fakeOn(newT)?.pid === newPid && pa()?.name === 'late-new', 'the stored name never noticed');
+            await clearNames();
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('35. both tunnels refused, the old name first: the old name is healed on the next check, not a debounce later', async () => {
+            const { oldT, newT } = await twoNames('both-old', 'both-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            // A debounce far past this section: only a retry of the skipped heal can send one in time.
+            setTunnelConnectorForTests({ healDebounceMs: 300_000 });
+            fake.readyFor(oldT, 503);
+            fake.readyFor(newT, 503);
+            let answerOld: (a: unknown) => void = () => {}, answerNew: (a: unknown) => void = () => {};
+            const heldOld = new Promise((r) => { answerOld = r; });
+            const heldNew = new Promise((r) => { answerNew = r; });
+            reg.status = (n) => (n === 'both-old' ? heldOld : heldNew);
+            const T_HEALED = 'eyJ.both-old-healed';
+            reg.heal = (b) => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: T_HEALED, changed: ['tunnel', 'dns'] });
+            const a0 = asked('both-old'), b0 = asked('both-new'), c0 = claims().length, h0 = heals().length;
+            const refuse = (token: string) => setInterval(() => fake.sayTo(token, UNAUTHORIZED), 60);
+            const spamOld = refuse(oldT);
+            assert(await until(() => asked('both-old') === a0 + 1, 6_000), `the old name's check goes first (${asked('both-old') - a0})`);
+            const spamNew = refuse(newT);
+            assert(await until(() => asked('both-new') === b0 + 1, 6_000), `then the stored name's, which takes the way (${asked('both-new') - b0})`);
+            // The old name's answer calls for a heal while the stored name's check holds the way: none can go out now.
+            answerOld(live('both-old', oldT));
+            await sleep(300);
+            assert(heals().length === h0, `no heal goes out meanwhile (${heals().length - h0})`);
+            reg.status = (n) => live(n!, n === 'both-old' ? oldT : newT);
+            answerNew(live('both-new', newT));
+            assert(await until(() => claims().length === c0 + 1, 6_000), `the stored name is made again (${claims().length - c0})`);
+            assert(await until(() => heals().length === h0 + 1, 6_000), `and the old name is healed on the next check (${heals().length - h0}; before, its debounce was spent on the skipped heal)`);
+            assert(heals().at(-1)?.body?.name === 'both-old' && claims().slice(c0).every((c) => c.body?.name === 'both-new'), `by a heal of that name, never a claim (${JSON.stringify(heals().at(-1)?.body)})`);
+            assert(await runningAll(T_HEALED, newT), `its fresh token runs (${onTokens().join(', ')})`);
+            clearInterval(spamOld);
+            clearInterval(spamNew);
+            setTunnelConnectorForTests({ healDebounceMs: 2_000 });
+            await clearNames('both-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

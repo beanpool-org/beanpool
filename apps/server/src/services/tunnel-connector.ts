@@ -890,8 +890,13 @@ async function moveOriginToLoopback(): Promise<void> {
 
 const labelOf = (host: string): string => host.slice(0, -(REGISTRAR_ZONE.length + 1));
 
-/** Is `host` still a name this community moved off? A claim or a release may have changed that while the registrar was asked. */
-const stillOther = (host: string): boolean => registrarNames().some((e) => e.address === host && e.role === 'former');
+/**
+ * Is `host` still a name this community moved off and holds? A claim, a Release or Take offline may have changed that while
+ * the registrar was asked. The test otherHosts goes by: a Release leaves the row former, its status `released`, and no
+ * `releasedByUsAt`.
+ */
+const stillOther = (host: string): boolean =>
+    registrarNames().some((e) => e.address === host && e.role === 'former' && !e.lost && !e.releasedByUsAt && e.status !== 'released');
 
 const tokenIn = (answer: any): string | null =>
     (typeof answer?.tunnelToken === 'string' && answer.tunnelToken.trim() ? answer.tunnelToken.trim() : null);
@@ -899,16 +904,17 @@ const tokenIn = (answer: any): string | null =>
 /**
  * A heal of `host`, one of the other names: never a claim, which could take back a release. The registrar routes it again
  * only once this server proves its key. Its answer is written on the name, and a new token run by the sync that follows.
+ * False when none was sent, because another registrar job holds the way: the caller's next check is what tries again.
  */
-async function healOtherName(host: string): Promise<void> {
-    if (registrarBusy) return;
+async function healOtherName(host: string): Promise<boolean> {
+    if (registrarBusy) return false;
     registrarBusy = true;
     try {
         say('info', `${host}: asking the address service to bring it back, which proves this server's key`);
         const res = await healAddress(labelOf(host), LOOPBACK_ORIGIN);
         const { changed: _changed, attest: _attest, ...healed } = res ?? {};
         const answer = await withLiveToken(healed, labelOf(host));
-        if (!stillOther(host) || typeof answer?.status !== 'string') return;
+        if (!stillOther(host) || typeof answer?.status !== 'string') return true;
         recordRegistrarAnswer({ ...answer, name: labelOf(host), hostname: host }, 'status');
         const token = tokenIn(answer);
         if (token) otherTokens.set(host, token);
@@ -917,6 +923,7 @@ async function healOtherName(host: string): Promise<void> {
     } finally {
         registrarBusy = false;
     }
+    return true;
 }
 
 /**
@@ -929,35 +936,40 @@ async function healOtherName(host: string): Promise<void> {
  *    registrar that does not read `name`, or a key that holds this one no more), or `pending` (the registrar re-making it).
  *    What runs keeps running. A refused tunnel is stopped: nothing can bring it back until the registrar speaks of the
  *    name, and the next tick asks.
- * Throws when nothing answered.
+ * False when the answer called for a heal that was not sent (healOtherName). Throws when nothing answered.
  */
-async function askAbout(host: string, refused = false): Promise<void> {
+async function askAbout(host: string, refused = false): Promise<boolean> {
     const st = await addressStatus(labelOf(host));
-    if (!stillOther(host)) return;
+    if (!stillOther(host)) return true;
     if (registrarHostOf(st) !== host || typeof st?.status !== 'string' || st.status === 'pending') {
-        if (!refused) return;
+        if (!refused) return true;
         say('warn', `${host}: Cloudflare refuses its tunnel, and the address service says nothing of it: stopping that tunnel`);
         otherTokens.delete(host);
         const t = tunnels.get(host);
         if (t) t.lastToken = null;
-        return;
+        return true;
     }
     if (st.status === 'live') {
         recordRegistrarAnswer(st, 'status');
         const token = tokenIn(st);
         const same = !token || token === (otherTokens.get(host) ?? tunnels.get(host)?.lastToken);
         if (token) otherTokens.set(host, token);
-        if (refused && same) await healOtherName(host);
-        return;
+        return refused && same ? healOtherName(host) : true;
     }
-    if (healable(st, { name: labelOf(host) })) { await healOtherName(host); return; }
+    if (healable(st, { name: labelOf(host) })) return healOtherName(host);
     recordRegistrarAnswer(st, 'status');
+    return true;
 }
 
-/** Cloudflare has refused this name's tunnel past the threshold: what the registrar says of it decides. */
+/**
+ * Cloudflare has refused this name's tunnel past the threshold: what the registrar says of it decides. Stamped before the
+ * ask, so no second check starts during it. The ask holds no registrar flag (healOtherName takes it), so another job can
+ * take the way meanwhile and the heal is not sent: then the stamp goes, and the next poll tries again, not 30 min later. The
+ * agent's tick is no help here: it never heals a live name on an unchanged token.
+ */
 async function healDeadOtherName(t: Tunnel): Promise<void> {
     t.lastHealAt = Date.now();
-    try { await askAbout(t.host, true); }
+    try { if (!await askAbout(t.host, true)) t.lastHealAt = 0; }
     catch (e: any) { say('warn', `${t.host}: could not ask the address service about the refused tunnel: ${e?.message || e}`); }
     await syncTunnel();
 }

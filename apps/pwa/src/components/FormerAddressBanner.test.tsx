@@ -231,6 +231,20 @@ describe('FormerAddressBanner', () => {
         expect(container.innerHTML).toBe('');
     });
 
+    it('not shown while guest status is unknown (isGuest is null)', async () => {
+        openedAt('mullum.beanpool.org');
+        const { container } = await renderBanner(renamedFleet(), false, /* isGuest */ null);
+        expect(container.innerHTML).toBe('');
+    });
+
+    it('not shown when isGuest is omitted (visitor view defaults to null)', async () => {
+        openedAt('mullum.beanpool.org');
+        render(<FormerAddressBanner />);
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await new Promise((r) => setTimeout(r, 0));
+        expect(screen.queryByTestId('main-address-banner')).toBeNull();
+    });
+
     it('dismissal holds, and a later move shows again', async () => {
         openedAt('mullum.beanpool.org');
         const { unmount } = await renderBanner(renamedFleet());

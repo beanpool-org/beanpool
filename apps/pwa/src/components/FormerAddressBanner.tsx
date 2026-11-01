@@ -32,7 +32,7 @@ import {
     type MainAddressNotice,
 } from '../lib/former-address';
 
-export function FormerAddressBanner({ signedIn = false, isGuest = false }: { signedIn?: boolean; isGuest?: boolean | null }) {
+export function FormerAddressBanner({ signedIn = false, isGuest = null }: { signedIn?: boolean; isGuest?: boolean | null }) {
     const [formerNotice, setFormerNotice] = useState<FormerAddressNotice | null>(null);
     const [mainNotice, setMainNotice] = useState<MainAddressNotice | null>(null);
     const [dismissed, setDismissed] = useState(false);
@@ -95,7 +95,7 @@ export function FormerAddressBanner({ signedIn = false, isGuest = false }: { sig
         );
     }
 
-    if (mainNotice && !isGuest && !dismissed) {
+    if (mainNotice && isGuest === false && !dismissed) {
         const handleDismiss = () => {
             dismissMainAddress(mainNotice.primaryAddress);
             setDismissed(true);

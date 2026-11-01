@@ -655,13 +655,14 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 render(<App />);
                 await vi.advanceTimersByTimeAsync(50);
             });
-            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 Object.defineProperty(document, 'hidden', { value: true, configurable: true });
                 document.dispatchEvent(new Event('visibilitychange'));
                 await vi.advanceTimersByTimeAsync(5000);
             });
+            // After the hide: leaving reads the count once, by itself.
+            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 Object.defineProperty(document, 'hidden', { value: false, configurable: true });

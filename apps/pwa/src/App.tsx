@@ -769,14 +769,14 @@ export function App() {
         // to catch up later and the last line of a burst would never reach the number. Not held in `pollPromise`: a member's
         // return must still read the deals, and from then on that read owns the number, so this one's answer is dropped.
         // Throws as pollUnread does, so the coordinator does not advance the delta cursor past a read that failed.
-        const readCountHidden = async () => {
+        const readCountHidden = async (stampFloor = true) => {
             const floor = lastPollTime + POLL_FLOOR_MS - Date.now();
             if (floor > 0) await new Promise((resolve) => setTimeout(resolve, floor));
             if (cancelled || !document.hidden) return;
             const { unread } = await getMyUnread(identity.publicKey);
             if (cancelled || !document.hidden) return;
             setTotalUnread(unread || 0);
-            lastPollTime = Date.now();
+            if (stampFloor) lastPollTime = Date.now();
         };
 
         const startPolling = () => {
@@ -798,6 +798,8 @@ export function App() {
         const handleVisibilityChange = () => {
             if (document.hidden) {
                 stopPolling();
+                // What the tab leaves with is what it keeps until the next doorbell, so it leaves with the right number.
+                readCountHidden(false).catch(() => {});
             } else {
                 startPolling();
             }

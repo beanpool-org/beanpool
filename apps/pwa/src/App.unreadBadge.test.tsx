@@ -140,6 +140,27 @@ describe('the Chat badge and the tab read the counts route', () => {
         expect(row.textContent).not.toMatch(/\d/);
     });
 
+    it('a tab that goes hidden reads the count on the way out: a chat read clears the title, a line waiting shows it', async () => {
+        vi.mocked(getMyUnread).mockResolvedValue({ unread: 1, requests: 0, asOf });
+        render(<App />);
+        await chatRow();
+        await waitFor(() => expect(document.title).toBe('(1) BeanPool'));
+
+        vi.mocked(getMyUnread).mockResolvedValue({ unread: 0, requests: 0, asOf });
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        await waitFor(() => expect(document.title).toBe('BeanPool'), { timeout: 3000 });
+
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+        document.dispatchEvent(new Event('visibilitychange'));
+        await waitFor(() => expect(getMyUnread).toHaveBeenCalled());
+        vi.mocked(getMyUnread).mockResolvedValue({ unread: 2, requests: 0, asOf });
+        await new Promise((r) => setTimeout(r, 2100));
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        await waitFor(() => expect(document.title).toBe('(2) BeanPool'), { timeout: 3000 });
+    });
+
     it('a refused read keeps the number it had, and the deals are still read', async () => {
         vi.mocked(getMyUnread).mockResolvedValue({ unread: 5, requests: 0, asOf });
         render(<App />);

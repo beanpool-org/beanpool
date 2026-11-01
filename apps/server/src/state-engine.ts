@@ -20,6 +20,7 @@ import { upgradeLegacyShapeAtBoot } from './config/community-shape-upgrade.js';
 import { placeAs, placeShownTo } from './config/community-place.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
+import { readOfCopy, type CopyColumns } from './engine/event-copy.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
@@ -1678,8 +1679,9 @@ export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boole
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
-    // catch-up sync gets what it may see: the moderators the post, everyone else a removal.
-    if ((event?.type === 'new_post' || event?.type === 'post_updated') && event.post?.hiddenByReportsAt) {
+    // catch-up sync gets what it may see: the moderators the post, everyone else a removal. A member's copy the same way:
+    // it names its author to its author alone (engine/event-copy.ts).
+    if ((event?.type === 'new_post' || event?.type === 'post_updated') && (event.post?.hiddenByReportsAt || event.post?.shownFromHost !== undefined)) {
         const author = event.post.authorPublicKey;
         const toAuthor = typeof author === 'string' && (!recipients || recipients.includes(author)) ? deliverBroadcast(event, [author]) : 0;
         return toAuthor + deliverBroadcast({ type: 'post_updated', id: event.post.id }, recipients);
@@ -5693,6 +5695,7 @@ export function createPost(
         freeTags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
+        shownCopy?: CopyColumns | null;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
         /** `assistant:<grant id>` for an owner's AI assistant (engine/posts.ts, posts.created_via). */
@@ -5725,7 +5728,7 @@ export function createPost(
 }
 
 export function getPosts(filter?: PostFilter): MarketplacePost[] {
-    return getPostsEngine(db, filter);
+    return getPostsEngine(db, filter).map(p => readOfCopy(p, filter?.viewerPubkey));
 }
 
 /**
@@ -5741,7 +5744,7 @@ export function offListingPhotoShownTo(viewer: string | undefined): engine.OffLi
 
 /** One page of the listings in heal order, for a phone whose photo URLs changed shape (engine getPostsForPhotoHeal). */
 export function getPostsForPhotoHeal(filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
-    return getPostsForPhotoHealEngine(db, filter, heal);
+    return getPostsForPhotoHealEngine(db, filter, heal).map(p => readOfCopy(p, filter.viewerPubkey));
 }
 
 export function removePost(id: string, authorPublicKey: string): boolean {

@@ -139,6 +139,17 @@ export interface MarketplacePost {
     lng?: number;
     photos?: string[];
     originNode?: string;
+    /**
+     * A member's copy of an event from their own community (DESIGN-list-on-global-fable.md §3; apps/server
+     * engine/event-copy.ts). The stored columns, read by that file and on the standby copy's payload; no read of a post
+     * by a member or a visitor sends either: `shownCopy` and `shownFrom` take their place.
+     */
+    shownFromHost?: string;
+    shownFromPostId?: string;
+    /** This post is such a copy: it shows no author and takes no RSVP. */
+    shownCopy?: boolean;
+    /** Where it is from, drawn from the directory row global holds for it at each read, never from the phone's words. */
+    shownFrom?: ShownFrom;
     /** #143 step 4: how far this listing travels. Absent on a row written before the column existed → 'local'. */
     reach?: PostReach;
     /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
@@ -262,6 +273,16 @@ export interface MarketplacePost {
      * (apps/native services/pillar-sync.ts parseIfChanged) applies it. No app stores or reads it.
      */
     resentAt?: string;
+}
+
+/** A copy's from-line and its door: every word of it from the community's own row of the directory. */
+export interface ShownFrom {
+    host: string;
+    postId: string | null;
+    name: string;
+    url: string;
+    /** `ask`: the community takes requests to join. `invite`: new members come by invite. */
+    door: 'ask' | 'invite';
 }
 
 export interface PostFilter {
@@ -801,6 +822,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         lng: row.lng,
         photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at, row.audience_scope)),
         originNode: row.origin_node,
+        ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}) } : {}),
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
         // what an absent value means — on a database upgraded before the column existed, it means "stays
         // home", and that is the answer the poster is entitled to.
@@ -1963,7 +1985,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     }
     if (filter?.category && filter.category !== 'all') { where += " AND p.category = ?"; params.push(filter.category); }
     if (filter?.status) { where += " AND p.status = ?"; params.push(filter.status); }
-    if (filter?.authorPubkey) { where += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
+    if (filter?.authorPubkey) {
+        where += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey);
+        // A member's copy shows no author, so one member's listings are the last place it is named as theirs, but for themselves.
+        if (filter.viewerPubkey !== filter.authorPubkey) where += ' AND p.shown_from_host IS NULL';
+    }
     // #108: beans-only browse. COALESCE so rows predating the column are treated as beans-only
     // rather than vanishing from the filtered view.
     if (filter?.beansOnly) { where += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
@@ -2432,6 +2458,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
+    // A copy says it is one, and where from when the directory says so. The stored host is never a reader's.
+    shownCopy: 'keep', shownFrom: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop',
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',

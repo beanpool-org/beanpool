@@ -1697,6 +1697,9 @@ export function initSchema() {
     // The tags its author typed (schema.sql; DESIGN-tags-free-entry-fable.md §2). '' on every existing row, so no boot pass
     // and no row rewritten. An older image booted on this file names its columns in every INSERT, and the default applies.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN free_tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
+    // A member's copy of an event from their own community (schema.sql; engine/event-copy.ts). NULL on every existing row.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_host TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_post_id TEXT`).run(); } catch { }
     // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.

@@ -634,6 +634,25 @@ export function listedCommunityAt(host: string): { key: string; name: string | n
     return byHost.map.get(host) ?? null;
 }
 
+/** How long after its last push a row is shown (supabase directory_listed: front doors S13), should the mirror have stopped. */
+const SHOWN_FOR_MS = 7 * DAY_MS;
+
+/**
+ * The community at `host` (audienceOf's form) if a stranger is shown it now: listed, named, with an address, pushed within
+ * 7 days. Else null. What a copy's from-line and door are drawn from (engine/event-copy.ts), and nothing the phone said.
+ */
+export function shownCommunityAt(host: string, now: number = Date.now()): DirectoryRow | null {
+    const found = listed().find(({ row }) => row.url !== null && audienceOf(row.url) === host)?.row;
+    if (!found?.name || !found.url || !found.registryUpdatedAt) return null;
+    return now - Date.parse(found.registryUpdatedAt) <= SHOWN_FOR_MS ? found : null;
+}
+
+/** Changes when the rows do: a copy's from-line is drawn from them, so a read's ETag holds this too. */
+export function directoryStamp(): string {
+    const rows = listed();
+    return `${rows.length}:${(db.prepare('SELECT MAX(updated_at) AS at FROM directory_cache WHERE listed = 1').get() as { at: string | null }).at ?? ''}`;
+}
+
 /** A listed community with a place, and when this node first saw it. */
 export interface FirstSighting { key: string; lat: number; lng: number; radiusKm: number | null; firstSeenAt: string }
 

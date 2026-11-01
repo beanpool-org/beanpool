@@ -75,7 +75,7 @@ import { getAddedYou } from '../engine/friends-added-you.js';
 import { isPoint, nearestPeople, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
-import { ratingsForReader } from '@beanpool/engine';
+import { HIDDEN_AUTHOR, ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
@@ -2198,6 +2198,14 @@ router.get('/api/ratings/:publicKey', async (ctx) => {
 
 // ===================== ABUSE REPORTS =====================
 
+// A report of a member's copy reaches the moderators with its author (the server reads them from the post); its reporter,
+// who reads no author on the copy (engine/event-copy.ts), is not told one here.
+function reportAsReporterSees<T extends { targetPubkey?: string }>(report: T, postId: unknown): T {
+    if (typeof postId !== 'string' || !postId) return report;
+    const row = db.prepare('SELECT shown_from_host FROM posts WHERE id = ?').get(postId) as { shown_from_host: string | null } | undefined;
+    return row?.shown_from_host != null ? { ...report, targetPubkey: HIDDEN_AUTHOR } : report;
+}
+
 router.post('/api/reports', async (ctx) => {
     const { reporterPubkey, reason, targetPostId, targetPulseItemId } = (ctx as any).requestBody || {};
     let { targetPubkey } = (ctx as any).requestBody || {};
@@ -2281,11 +2289,11 @@ router.post('/api/reports', async (ctx) => {
             const changed = updatePendingReportReason(pending.id, reason);
             if (changed) {
                 noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
-                ctx.body = { success: true, report: changed, duplicate: true };
+                ctx.body = { success: true, report: reportAsReporterSees(changed, targetPostId), duplicate: true };
                 return;
             }
         }
-        ctx.body = { success: true, report: pending, duplicate: true };
+        ctx.body = { success: true, report: reportAsReporterSees(pending, targetPostId), duplicate: true };
         return;
     }
     if (isReportRateLimited(activeReporter)) {
@@ -2302,7 +2310,7 @@ router.post('/api/reports', async (ctx) => {
     // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
     // never holds the reporter's answer.
     noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
-    ctx.body = { success: true, report };
+    ctx.body = { success: true, report: reportAsReporterSees(report, targetPostId) };
 });
 
 // ======================== FRIENDS ========================

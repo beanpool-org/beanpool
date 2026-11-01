@@ -20,6 +20,7 @@
 
 import { createPost } from '../state-engine.js';
 import type { EventTimeOut } from '../engine/posts.js';
+import type { CopyColumns } from '../engine/event-copy.js';
 
 /**
  * @param body      the parsed request body
@@ -29,8 +30,9 @@ import type { EventTimeOut } from '../engine/posts.js';
  * @param beforeWrite the route's own limit on new posts (W-main), which the engine runs once every refusal has passed
  * @param out       where the engine leaves `eventTimeAdjusted` when a clock the host set was adjusted (eventTimeAnswer)
  * @param createdVia what made it when the host's own app did not (`assistant:<grant id>`, agent/owner-posts.ts)
+ * @param shownCopy this event is a member's copy from their own community (engine/event-copy.ts)
  */
-export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void, out?: EventTimeOut, createdVia?: string) {
+export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void, out?: EventTimeOut, createdVia?: string, shownCopy?: CopyColumns | null) {
     const b = body || {};
     return createPost(
         'event', 'community', b.title, b.description || '',
@@ -66,6 +68,7 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             beforeWrite,
             out,
             createdVia,
+            shownCopy,
         }
     );
 }

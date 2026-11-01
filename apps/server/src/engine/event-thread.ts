@@ -128,8 +128,9 @@ function seriesContinues(row: EventRow): boolean {
 
 /** The event row behind a chat, or a refusal. The chat id IS the post id (§2.1). */
 export function loadEventForThread(postId: string): EventRow {
-    const row = db.prepare(`SELECT ${EVENT_COLUMNS} FROM posts WHERE id = ?`).get(postId) as any;
-    if (!row || row.type !== 'event') throw new Error(EVENT_NOT_FOUND);
+    const row = db.prepare(`SELECT ${EVENT_COLUMNS}, shown_from_host FROM posts WHERE id = ?`).get(postId) as any;
+    // A member's copy has no chat, for anyone (engine/event-copy.ts): it is at home.
+    if (!row || row.type !== 'event' || row.shown_from_host != null) throw new Error(EVENT_NOT_FOUND);
     return row as EventRow;
 }
 

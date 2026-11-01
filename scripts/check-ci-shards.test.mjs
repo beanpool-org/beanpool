@@ -403,7 +403,7 @@ test('each edit the check exists to catch fails it', () => {
     assert.match(shardProblems(twice, TEST_ALL).join('\n'), /lint is in 2 shards/);
     // A split check also named whole in another shard.
     assert.match(shardProblems(CI.replace('name: checks, checks: "build ', 'name: checks, checks: "build test '), TEST_ALL).join('\n'), /test is in 6 shards .*it would run twice/);
-    assert.match(shardProblems(CI.replace('name: checks, checks: "build ', 'name: checks, checks: "build server_suites '), TEST_ALL).join('\n'), /server_suites is in 7 shards/);
+    assert.match(shardProblems(CI.replace('name: checks, checks: "build ', 'name: checks, checks: "build server_suites '), TEST_ALL).join('\n'), /server_suites is in 8 shards/);
     // A new check in test-all.sh that no shard names.
     assert.match(shardProblems(CI, `${TEST_ALL}\nrun_check "brand_new" true\n`).join('\n'), /brand_new is in no shard/);
     // ... and one with a digit in its name (a [a-z_]+ pattern would never see it, so no shard would be asked for it).

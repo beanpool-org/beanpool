@@ -426,7 +426,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                 {/* Foot of photo: status chip on left, price pill bottom-trailing on right */}
                 <div data-testid="grid-badge-row" className="absolute left-2 right-2 bottom-2 flex flex-wrap items-end justify-between gap-1 pointer-events-none">
-                    {/* Status chip: at most ONE by precedence PENDING > YOU > RECURRING */}
+                    {/* Status chip: at most ONE by precedence PENDING > YOU */}
                     {statusChip ? (
                         <div className={`font-bold rounded-lg shadow-sm text-[0.6rem] px-2 py-1 pointer-events-auto ${statusChip.className}`}>
                             {statusChip.text}

@@ -75,10 +75,14 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(marketSrc).not.toMatch(/gridImageWrapper:\s*\{[^}]*aspectRatio:\s*1[, \t\r\n\}]/);
     });
 
-    it('MarketCardPicture anchors crop towards the top third ({ top: "33%", left: "50%" }) (market-card-43)', () => {
+    it('only the grid card anchors its crop towards the top third; the 32 and 80 dp thumbnails stay centred, as on the web (market-card-43)', () => {
         const picSrc = source('components/MarketCardPicture.tsx');
         expect(picSrc).toMatch(/contentPosition=\{\s*contentPosition\s*\}/);
-        expect(picSrc).toMatch(/contentPosition\s*=\s*\{\s*top:\s*['"]33%['"],\s*left:\s*['"]50%['"]\s*\}/);
+        expect(picSrc).toMatch(/MARKET_GRID_CROP[^=]*=\s*\{\s*top:\s*['"]33%['"],\s*left:\s*['"]50%['"]\s*\}/);
+        expect(picSrc).not.toMatch(/contentPosition\s*=\s*\{\s*top/);
+        const crops = marketSrc.match(/contentPosition=\{MARKET_GRID_CROP\}/g) ?? [];
+        expect(crops.length).toBe(1);
+        expect(marketSrc).toMatch(/size="grid"\s+contentPosition=\{MARKET_GRID_CROP\}/);
     });
 
     it('grid card moves RECURRING under the picture into gridTextContent (market-card-43)', () => {

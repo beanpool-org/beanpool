@@ -5,6 +5,9 @@ import { listPhotoUrl } from '@beanpool/core';
 import { CategoryTile, type CategoryTileKind, type CategoryTileSize } from './CategoryTile';
 import { refreshListingAfterPhotoError } from '../utils/photo-refresh';
 
+/** Grid cards only: the 32 and 80 dp thumbnails stay centred, as they are on the web. */
+export const MARKET_GRID_CROP: ImageContentPosition = { top: '33%', left: '50%' };
+
 /**
  * A Market card's picture (Pictures S6, DESIGN-pictures-fable §3.1), as utils/market-card-picture.ts chose it: `picture`
  * the listing's own first photo (`cover`) or else its enterprise's shop banner, and the CategoryTile when it has neither.
@@ -13,12 +16,12 @@ import { refreshListingAfterPhotoError } from '../utils/photo-refresh';
  * or a URL from before the enterprise changed it. The URL that failed is kept, not a flag, so a new banner the next sync
  * brings is tried.
  *
- * In 4:3 frame, upright photos anchor towards the top third ({ top: '33%', left: '50%' }) so heads/jar tops stay in (market-card-43).
+ * The grid's 4:3 frame passes MARKET_GRID_CROP, so upright photos anchor towards the top third so heads/jar tops stay in (market-card-43).
  *
  * `imageStyle` sizes the photo; the tile is drawn with `tileStyle`, inside a box of `tileBox` where the card sizes it
  * from outside.
  */
-export function MarketCardPicture({ postId, cover, picture, category, kind, size, accessibilityLabel, imageStyle, tileStyle, tileBox, contentPosition = { top: '33%', left: '50%' } }: {
+export function MarketCardPicture({ postId, cover, picture, category, kind, size, accessibilityLabel, imageStyle, tileStyle, tileBox, contentPosition }: {
     postId: string;
     cover: string | null;
     picture: string | null;

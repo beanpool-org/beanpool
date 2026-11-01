@@ -28,7 +28,7 @@ import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
-import { MarketCardPicture } from '../../components/MarketCardPicture';
+import { MARKET_GRID_CROP, MarketCardPicture } from '../../components/MarketCardPicture';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -1645,6 +1645,7 @@ export default function MarketScreen() {
                             category={item.category}
                             kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
                             size="grid"
+                            contentPosition={MARKET_GRID_CROP}
                             accessibilityLabel={item.title}
                             imageStyle={styles.gridImage}
                         />

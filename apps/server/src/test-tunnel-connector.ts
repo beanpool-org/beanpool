@@ -1191,7 +1191,8 @@ async function main(): Promise<void> {
             // Each child's health is read at its own port.
             fake.readyFor(oldT, 200, 3);
             fake.readyFor(newT, 503);
-            assert(await until(() => getTunnelStatus().others?.[0]?.connections === 3), `the old name is connected (${JSON.stringify(getTunnelStatus().others)})`);
+            // Each child's reading lands on its own poll, so the old name's can arrive first: wait for both, or this reads the new one's last.
+            assert(await until(() => getTunnelStatus().others?.[0]?.connections === 3 && getTunnelStatus().state === 'starting'), `the old name is connected (${JSON.stringify(getTunnelStatus().others)})`);
             assert(getTunnelStatus().state === 'starting' && getTunnelStatus().others?.[0]?.host === 'two-old.beanpool.org' && getTunnelStatus().others?.[0]?.connections === 3,
                 `Settings reads the stored name's state, and the other's beside it (${JSON.stringify(getTunnelStatus())})`);
             fake.readyFor(newT, 200);

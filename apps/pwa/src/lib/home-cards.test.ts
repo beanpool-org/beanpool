@@ -10,6 +10,7 @@ import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, usePhoneAppCardDue, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
+    homeEventWhere,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
 
@@ -439,6 +440,21 @@ describe('enterprise latest line: positive incoming ("from"), negative outgoing 
     it('commons: positive is "from Commons", negative is "to Commons"', () => {
         expect(enterpriseLatestLine({ kind: 'commons', amount: 10, who: null, at: '' })).toBe('Latest: +10 Beans from Commons');
         expect(enterpriseLatestLine({ kind: 'commons', amount: -10, who: null, at: '' })).toBe('Latest: −10 Beans to Commons');
+    });
+});
+
+describe('where an event on Home is', () => {
+    const item = { place: null, online: false };
+    const from = { host: 'mullum.example.org', postId: 'p', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' as const };
+    it('its place; a visitor is told joining shows it', () => {
+        expect(homeEventWhere({ ...item, place: 'The hall' }, false)).toBe('The hall');
+        expect(homeEventWhere(item, true)).toBe('Place shown after you join');
+        expect(homeEventWhere(item, false)).toBeNull();
+        expect(homeEventWhere({ ...item, online: true }, true)).toBe('Online');
+    });
+    it('a member\'s copy says where it is from: joining the global community would show no place', () => {
+        expect(homeEventWhere({ ...item, shownCopy: true, shownFrom: from }, true)).toBe('from Mullumbimby');
+        expect(homeEventWhere({ ...item, shownCopy: true }, true)).toBeNull();
     });
 });
 

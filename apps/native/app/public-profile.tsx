@@ -1029,6 +1029,7 @@ export default function PublicProfileScreen() {
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Message', undefined, 'button: write to')}
+                                accessibilityState={{ disabled: isMessaging, busy: isMessaging }}
                                 disabled={isMessaging}
                                 style={styles.messageBtn}
                                 onPress={() => handleOpenDm()}

@@ -33,7 +33,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags } from '@beanpool/core';
+import { eventCopyColumn, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -431,7 +431,8 @@ async function _doInitDB() {
             carried_avatar TEXT,
             carried_banner TEXT,
             tags TEXT NOT NULL DEFAULT '',
-            free_tags TEXT NOT NULL DEFAULT ''
+            free_tags TEXT NOT NULL DEFAULT '',
+            shown_from TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -745,6 +746,8 @@ ${TOOL_DOCS_TABLE}
         // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
         // polls; NULL where it says nothing). The split by answer travels inside poll_options.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
+        // A member's copy of an event on the global community: its from-line as the node last said (@beanpool/core eventCopyOf).
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN shown_from TEXT;`); } catch (e) {}
         // #2631/#2637 tag library: posts.tags space-separated tag ids (DESIGN-owner-seeding-tags-fable.md §4.5). F2: posts.free_tags,
         // the member's own tags, the node's JSON list as it stores it (DESIGN-tags-free-entry-fable.md §2). Either one missing, the
         // copy holds none of them for listings that have not changed since, so the whole copy is read again.
@@ -2305,7 +2308,7 @@ export async function createPost(post: any) {
          ...eventCacheColumns(post)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
-    return { eventTimeAdjusted: answer?.eventTimeAdjusted ?? null };
+    return { eventTimeAdjusted: answer?.eventTimeAdjusted ?? null, post: answer?.post ?? null };
 }
 
 export async function votePoll(postId: string, optionId: string) {
@@ -2595,6 +2598,7 @@ export async function setEventDateCancelled(postId: string, date: string, cancel
     }
     const out = await res.json();
     if (out?.post) await persistEventView(out.post, identity.publicKey).catch(() => {});
+    if (out?.post) repeatOnGlobalCopy((copy) => copy.repeatOnCopy(out.post, identity));
     return out;
 }
 
@@ -2634,8 +2638,14 @@ export async function updateEvent(postId: string, patch: EventEditPatch, out?: {
             console.warn('[SQLite] Failed to cache the edited event:', dbErr);
         }
         await persistEventView(post, identity.publicKey);
+        repeatOnGlobalCopy((copy) => copy.repeatOnCopy(post, identity));
     }
     return post;
+}
+
+/** The member's copy on the global community follows, if there is one. Loaded when used; a miss is caught up later. */
+function repeatOnGlobalCopy(run: (copy: typeof import('./show-on-global')) => Promise<unknown>): void {
+    import('./show-on-global').then(run).catch(() => {});
 }
 
 export async function closePoll(postId: string) {
@@ -3694,6 +3704,8 @@ export async function deletePost(id: string) {
         throw new Error(`Offline or anchor node unreachable: ${e.message}`);
     }
 
+    repeatOnGlobalCopy((copy) => copy.stopShowing(id, identity));
+
     // 2. Erase from local SQLite Cache
     const database = await getDb();
     await database.runAsync('DELETE FROM posts WHERE id = ?', [id]);
@@ -3778,7 +3790,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, shown_from, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3821,6 +3833,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             syncedTagsColumn(p),
             syncedFreeTagsColumn(p),
             ...eventCacheColumns(p),
+            eventCopyColumn(p),
             // A copy without the name (an older node) keeps the one the row has.
             syncedAuthorCallsign(p),
             p.id ?? null,

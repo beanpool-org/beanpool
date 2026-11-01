@@ -11,7 +11,7 @@ import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
-    listingFreeTags, postTagsOf, storedFreeTags,
+    listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -931,12 +931,14 @@ export function eventPinCard(post: any): EventPinCard {
     // A repeating event's ↻ caption follows the time (DESIGN-event-times §8): last, so a line that runs out of room at 320 dp
     // and 1.3× text cuts the caption, never the time.
     const repeats = eventRepeatCaption(post);
+    // A member's copy takes no RSVP: map.tsx draws this line as it comes, so it says where it is from, or nothing.
+    const copy = eventCopyOf(post);
     return {
         when: `${formatEventWhenFor(post)}${zone ? ` · ${zone}` : ''}${repeats ? ` · ↻ ${repeats}` : ''}`,
         badge: eventBadge(post),
         title: post?.title || t('Event'),
         place: place || null,
-        going: tn(going, '{n} going', '{n} going'),
+        going: copy ? (copy.from ? copyFromLine(copy.from) : '') : tn(going, '{n} going', '{n} going'),
     };
 }
 

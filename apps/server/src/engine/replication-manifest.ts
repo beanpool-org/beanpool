@@ -217,11 +217,14 @@ export const TABLES: Record<string, TableEntry> = {
     // postFreeTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags free_tags'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags free_tags shown_from_host shown_from_post_id'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
         },
+        // On a copy of an event alone: every other post's move is stamped, and a delta carries it.
+        movedByRekey: Object.fromEntries(['author_pubkey', 'accepted_by', 'created_by', 'target_pubkey', 'assigned_to'].map((c) =>
+            [c, 'a copy of an event keeps its stamp through the move, or a read would tie it to its author\'s listings (engine/key-move.ts)'])),
     },
     // A photo taken off a listing travels as a `post_photos` tombstone (engine/posts.ts updatePost), judged against the
     // main server's stamp.

@@ -13,7 +13,7 @@
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getVersion } from './version.js';
+import { getVersion, shownVersion } from './version.js';
 
 let run = 0;
 let passed = 0;
@@ -52,6 +52,9 @@ async function main() {
     }).trim();
 
     assert(envOutput === '9.9.9-test', `3. APP_VERSION environment variable takes precedence ("${envOutput}")`);
+
+    assert(shownVersion('0.0.0') === null, '4. A version nothing could resolve is shown as none, never as a number');
+    assert(shownVersion('1.2.32') === '1.2.32', '4. A real version is shown as it is');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

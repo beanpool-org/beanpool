@@ -6,7 +6,7 @@ describe('HomeScreen Component', () => {
     const defaultProps = {
         communityName: 'Mullumbimby Commons',
         publicDomain: 'mullum.local',
-        version: '1.4.2',
+        version: '1.2.28',
         diag: null,
         nodeData: null,
         onNavigate: vi.fn(),
@@ -357,6 +357,23 @@ describe('HomeScreen Component', () => {
                 const { unmount } = render(<HomeScreen {...defaultProps} shape={shape} />);
                 expect(screen.queryByTestId('home-community-shape-card')).toBeNull();
                 expect(screen.getByText('Action Required')).toBeInTheDocument();
+                unmount();
+            }
+        });
+    });
+
+    describe('Node version display', () => {
+        it('renders the real version when provided, and never a hard-coded literal', () => {
+            render(<HomeScreen {...defaultProps} version="1.2.28" />);
+            expect(screen.getByText('v1.2.28')).toBeInTheDocument();
+            expect(screen.queryByText(/1\.4\.2/)).not.toBeInTheDocument();
+        });
+
+        it('shows nothing rather than a number when version is omitted or empty', () => {
+            for (const v of [undefined, null, ''] as (string | undefined | null)[]) {
+                const { unmount } = render(<HomeScreen {...defaultProps} version={v} />);
+                expect(screen.queryByText(/v\d+\.\d+\.\d+/)).not.toBeInTheDocument();
+                expect(screen.queryByText(/1\.4\.2/)).not.toBeInTheDocument();
                 unmount();
             }
         });

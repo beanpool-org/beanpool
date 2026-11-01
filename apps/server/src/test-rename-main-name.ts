@@ -23,7 +23,8 @@
  *  6. The public-address agent's own claim copies and tells as Settings' does.
  *  7. A name on this server's tunnel has no route until that tunnel connects, whatever the registrar says: nobody is told
  *     before it does, on any of the ways a notice goes out, and a tunnel that cannot start tells nobody and loses nothing
- *     (the fake cloudflared, /ready as each case needs).
+ *     (the fake cloudflared, /ready as each case needs). The agent's claim over a live tunnel name never says the old
+ *     address keeps working: it goes dark, as it does for Settings' claim.
  *
  * Run: SERVER_SUITES_ONLY=test-rename-main-name TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -106,7 +107,9 @@ async function main(): Promise<void> {
     const held = new Map<string, any>();
     const gated = new Set<string>();
     let claimsAsked = 0;
-    const liveAnswer = (name: string, mode = 'tunnel') => ({ status: 'live', name, hostname: `${name}.beanpool.org`, mode });
+    /** Set: what /status answers whatever it is asked, as a registrar older than the one that reads `name` (the key's first name). */
+    let statusAnswer: any = null;
+    const liveAnswer =(name: string, mode = 'tunnel') => ({ status: 'live', name, hostname: `${name}.beanpool.org`, mode });
     const approve = (name: string) => held.set(name, liveAnswer(name, held.get(name)?.mode));
     const registrar = http.createServer((req, res) => {
         let raw = '';
@@ -126,7 +129,7 @@ async function main(): Promise<void> {
             }
             if (url.pathname === '/api/registrar/status') {
                 const name = url.searchParams.get('name') ?? '';
-                return res.end(JSON.stringify(held.get(name) ?? { status: 'none' }));
+                return res.end(JSON.stringify(statusAnswer ?? held.get(name) ?? { status: 'none' }));
             }
             if (url.pathname === '/api/registrar/holder') {
                 const row = held.get(body.name);
@@ -235,6 +238,7 @@ async function main(): Promise<void> {
         updateLocalConfig({ turnedAwayNames: [], addressNoticeDue: null } as any);
         held.clear();
         gated.clear();
+        statusAnswer = null;
         for (const n of s.names ?? []) held.set(n, liveAnswer(n));
         forgetOwnAddresses();
         notes.length = 0;
@@ -593,6 +597,27 @@ async function main(): Promise<void> {
         fake.ready(200);
         await syncTunnel();
         assert(await until(() => notices().length > n0) && notices()[n0].body === SOFT_BODY, `fixed, it connects and the notice goes out (${show(notices().slice(n0))})`);
+    }
+    {
+        // The agent claims over a live tunnel name: an older registrar answers about the key's first name, gone, so the
+        // record still says the stored name is live and main; and the env names another. One connector here, so it goes dark.
+        const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
+        await tunnelScene({ config: { publicAddress: oldvale } });
+        fake.ready(200);
+        await syncTunnel();
+        assert(await until(() => getTunnelStatus().state === 'connected'), `the old name's tunnel is connected (${getTunnelStatus().state})`);
+        statusAnswer = { status: 'released', name: 'firstname' };
+        held.set('byron', withToken('byron'));
+        const n0 = notices().length;
+        process.env.PUBLIC_ADDRESS_NAME = 'byron';
+        await reconcile();
+        delete process.env.PUBLIC_ADDRESS_NAME;
+        assert(stored().publicAddress?.name === 'byron' && ownerConfirmedAddresses().includes('oldvale.beanpool.org') && tunnelConnectorForTests().runningToken === 'T-byron',
+            `the agent's claim keeps the old name and moves the one connector onto the new one (${stored().publicAddress?.name}, ${show(stored().ownerAddresses)}, ${tunnelConnectorForTests().runningToken})`);
+        assert(await until(() => getTunnelStatus().state === 'connected'), `and it connects (${getTunnelStatus().state})`);
+        await polls();
+        assert(!notices().slice(n0).some((n) => n.body === SOFT_BODY) && due() === null,
+            `the old tunnel went dark, so nobody is told it keeps working, and nothing stays due (${show(notices().slice(n0))}, ${due()})`);
     }
     await resetTunnelConnectorForTests();
 

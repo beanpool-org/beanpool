@@ -29,7 +29,7 @@ import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, a
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration, adminBroadcastAnnouncement, isOwnPublicAddress } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarHostOf, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
 import { dropAddressRequest, nameAskedFor, replacesLiveOwnAddress, storeOwnAddress } from '../services/public-address-agent.js';
-import { claimReplacesAddress, forgetAddressNotice } from '../services/address-notice.js';
+import { claimReplacesAddress, claimTakesTunnelDark, forgetAddressNotice } from '../services/address-notice.js';
 import { isPublicIpv4Host, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
 import { dropReleasedAddress, primaryAddress, publishedAddresses, publishedBesides } from '../engine/own-addresses.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
@@ -391,8 +391,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
             // Before the stored address changes: where the community lives until now stays one of its addresses. A live
             // tunnel name goes dark, as this server runs one connector until slice S2, so it gets its own words below.
-            const tunnelGoesDark = movesOffLive && live.mode !== 'direct';
-            const replaced = claimReplacesAddress(claimed, tunnelGoesDark);
+            const tunnelGoesDark = claimTakesTunnelDark(claimed);
+            const replaced = claimReplacesAddress(claimed);
             // Recorded before the stored address changes: a name held until now is kept, as former.
             recordRegistrarAnswer({ name, hostname: result.hostname, status: result.status, reason: result.reason }, 'claim');
             updateNodeConfig({ publicAddress: {

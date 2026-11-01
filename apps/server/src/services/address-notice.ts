@@ -20,8 +20,9 @@
 
 import { word, wordsFor } from '@beanpool/core';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
-import { adminBroadcastAnnouncement } from '../state-engine.js';
+import { adminBroadcastAnnouncement, getNodeConfig } from '../state-engine.js';
 import { keepReplacedAddress, primaryAddress } from '../engine/own-addresses.js';
+import { registrarHostOf } from '../engine/registrar-names.js';
 
 // The words layer in English (a node never writes in the device language: core words.test N11).
 const { t: tr } = wordsFor('en');
@@ -36,13 +37,24 @@ function setDue(host: string | null): void {
 }
 
 /**
- * A claim of `claimed` answered, before it is recorded and stored: keeps the address it replaces, and leaves the members'
- * notice due unless `oldGoesDark`. Returns the address replaced, or null when the claim replaces none. Replacing none ends a
- * notice left due by an earlier claim: its name is not on its way any more.
+ * Whether a claim of `claimed`, once stored, takes this server's live tunnel name dark: it runs one connector, so another
+ * name stored stops that name's tunnel, until slice S2. A direct name's record stays at the address service. Asked before
+ * the stored address changes.
  */
-export function claimReplacesAddress(claimed: string, oldGoesDark = false): string | null {
+export function claimTakesTunnelDark(claimed: string): boolean {
+    const pa = (getNodeConfig() as any).publicAddress;
+    return !!pa?.name && pa.status === 'live' && pa.mode !== 'direct' && registrarHostOf(pa) !== claimed;
+}
+
+/**
+ * A claim of `claimed` answered, by Settings or the public-address agent, before it is recorded and stored: keeps the
+ * address it replaces, and leaves the members' notice due unless that address goes dark. Returns the address replaced, or
+ * null when the claim replaces none. Replacing none ends a notice left due by an earlier claim: its name is not on its way
+ * any more.
+ */
+export function claimReplacesAddress(claimed: string): string | null {
     const replaced = keepReplacedAddress(claimed);
-    setDue(replaced && !oldGoesDark ? claimed : null);
+    setDue(replaced && !claimTakesTunnelDark(claimed) ? claimed : null);
     return replaced;
 }
 

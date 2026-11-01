@@ -162,7 +162,7 @@ export function EditHomeSheet({
                     canRemove={!!menuFor && canRemoveCard(menuFor.type, pinned)}
                     canUp={menuAt > 0}
                     canDown={menuAt >= 0 && menuAt < listed.length - 1}
-                    onSettings={menuFor && homeCardType(menuFor.type)?.readSettings ? () => onSettings(menuFor) : undefined}
+                    onSettings={menuFor && homeCardType(menuFor.type)?.readSettings && menuFor.type !== 'tools' ? () => onSettings(menuFor) : undefined}
                     onRemove={() => { if (menuFor) onRemove(menuFor); }}
                     onUp={() => { if (menuFor) move(menuFor, 'up'); }}
                     onDown={() => { if (menuFor) move(menuFor, 'down'); }}

@@ -1087,7 +1087,14 @@ export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfa
     return normalizeNodeData(json);
 }
 
-export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {
+export interface LogEntry {
+    timestamp?: string | number | Date;
+    level?: string;
+    message?: string;
+    [key: string]: unknown;
+}
+
+export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<LogEntry[]> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/logs');
     const res = await fetch(endpoint, {
         method: 'POST',

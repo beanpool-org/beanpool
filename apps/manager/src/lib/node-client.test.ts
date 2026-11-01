@@ -25,6 +25,7 @@ import {
     fetchTreasuryKeepers,
     assignTreasuryKeeper,
     revokeTreasuryKeeper,
+    fetchNodeLogs,
     fetchNodeRoles,
     grantNodeRoleApi,
     revokeNodeRoleApi,
@@ -1211,6 +1212,24 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             json: async () => ({ keepers: ['keeper-1'] }),
         });
         await revokeTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+    });
+
+    it('fetchNodeLogs retrieves typed log entries and forwards admin headers', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                logs: [
+                    { timestamp: '2026-10-31T12:00:00Z', level: 'info', message: 'Node online' },
+                    { timestamp: '2026-10-31T12:01:00Z', level: 'error', message: 'Failed to sync' },
+                ],
+            }),
+        });
+        const logs = await fetchNodeLogs('https://node.example.com', 'adminpass', 'tfa123');
+        expect(logs).toHaveLength(2);
+        expect(logs[0].message).toBe('Node online');
+        expect(logs[1].level).toBe('error');
         expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
     });

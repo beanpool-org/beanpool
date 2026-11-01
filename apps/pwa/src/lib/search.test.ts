@@ -38,6 +38,13 @@ describe('matchesExpandedSearch', () => {
     });
 });
 
+describe('a listing found by a tag its author typed (DESIGN-tags-free-entry-fable.md §4)', () => {
+    it('its words find it, though the title and description do not hold them', () => {
+        expect(matchesExpandedSearch('hand', 'Old laptop', 'Works well', undefined, ['2nd hand'])).toBe(true);
+        expect(matchesExpandedSearch('hand', 'Old laptop', 'Works well')).toBe(false);
+    });
+});
+
 describe('marketSearchToSave: Save this search to Home on the web (Marty, 7 Oct)', () => {
     it('takes the words, Offers or Needs from the tab, the category and the distance filter', () => {
         expect(marketSearchToSave({ type: 'offer', category: 'food', radiusKm: 5 }, 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5, tags: ['food.eggs'] });

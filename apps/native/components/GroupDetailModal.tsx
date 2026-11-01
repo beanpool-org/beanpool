@@ -25,7 +25,9 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
-import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, inCapitalsOf, t, word, bundledGroupEmblem, type GroupPerson, type WordKey } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, groupClosedShown, groupDescriptionShown, groupNameShown, inCapitalsOf, t, word, bundledGroupEmblem, type GroupPerson, type WordKey } from '@beanpool/core';
+import { useIdentity } from '../app/IdentityContext';
+import { PlaceCircleCard } from './PlaceCircleCard';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPickerSheet } from './AvatarPickerSheet';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
@@ -82,6 +84,7 @@ export function GroupDetailModal({
     keyChanged,
 }: GroupDetailModalProps) {
     const { colors } = useTheme();
+    const { identity } = useIdentity();
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [members, setMembers] = useState<GroupMemberItem[]>([]);
@@ -700,7 +703,7 @@ export function GroupDetailModal({
                                 updatedAt={groupData.updatedAt}
                                 size={36}
                             />
-                            <Text style={styles.title} numberOfLines={1}>{groupData.name}</Text>
+                            <Text style={styles.title} numberOfLines={1}>{groupNameShown(groupData)}</Text>
                         </View>
                         <Pressable
                             style={styles.closeBtn}
@@ -724,7 +727,7 @@ export function GroupDetailModal({
                                 <Text style={[styles.pillText, { flexShrink: 1 }]}>{policyWords(groupData.joinPolicy)}</Text>
                             </View>
                             {closed && (
-                                <View style={styles.pill} accessibilityLabel={t("Closed by its members' vote")}>
+                                <View style={styles.pill} accessibilityLabel={groupClosedShown(groupData, t("Closed by its members' vote"))}>
                                     <MaterialCommunityIcons name="lock-outline" size={14} color={colors.text.secondary} />
                                     <Text style={styles.pillText}>{t('Closed', undefined, 'a group')}</Text>
                                 </View>
@@ -776,14 +779,18 @@ export function GroupDetailModal({
                         </View>
 
                         {/* What its members wrote: shown as written. */}
-                        {groupData.description ? (
-                            <Text style={styles.description}>{groupData.description}</Text>
+                        {!!groupData.circle && (
+                            <PlaceCircleCard id={groupData.id} circle={groupData.circle} identity={identity} colors={colors} closed={closed} onLeave={onClose}
+                                onChange={circle => setGroupData(g => (g ? { ...g, circle } : g))} />
+                        )}
+                        {groupDescriptionShown(groupData) ? (
+                            <Text style={styles.description}>{groupDescriptionShown(groupData)}</Text>
                         ) : null}
 
                         {closed && (
                             <View style={styles.infoNotice}>
                                 <MaterialCommunityIcons name="lock-outline" size={16} color={colors.text.secondary} />
-                                <Text style={styles.infoNoticeText}>{t(LINES.closed)}</Text>
+                                <Text style={styles.infoNoticeText} testID="group-closed-note">{groupClosedShown(groupData, t(LINES.closed))}</Text>
                             </View>
                         )}
 

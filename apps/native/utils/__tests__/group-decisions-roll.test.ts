@@ -61,6 +61,8 @@ vi.mock('../haptics', () => ({ hapticTick: vi.fn(), hapticSuccess: vi.fn() }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 // The quiet-lead panel is its own component with its own reads: here only whether the sheet draws it.
 vi.mock('../../components/GroupSuccessionPanel', () => ({ GroupSuccessionPanel: () => createElement('div', { 'data-testid': 'succession' }) }));
+vi.mock('../../components/PlaceCircleCard', () => ({ PlaceCircleCard: () => null }));
+vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null }) }));
 const node = vi.hoisted(() => ({ decisions: null as ScopedDecisionList | null, group: null as unknown, members: [] as unknown[] }));
 vi.mock('../db', () => ({
     getGroupDecisions: vi.fn(async () => node.decisions),

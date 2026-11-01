@@ -9,6 +9,7 @@ else document.documentElement.classList.remove('dark', 'dark-theme');
 
 function TagPickerHarness() {
     const [tags, setTags] = useState<string[]>(['food.fruit.lemon', 'garden.produce']);
+    const [freeTags, setFreeTags] = useState<string[]>(['2nd hand']);
     const view = q.get('view') || 'row';
     const [submits, setSubmits] = useState(0);
     const [pageEscapes, setPageEscapes] = useState(0);
@@ -24,7 +25,7 @@ function TagPickerHarness() {
             <div data-testid="panel" className="fixed bottom-2 left-3 right-3 z-[1000] max-h-[60vh] overflow-y-auto backdrop-blur-xl bg-white/80 dark:bg-nature-900/80 rounded-2xl p-4">
                 <form onSubmit={(e) => { e.preventDefault(); setSubmits((n) => n + 1); }}>
                     <input aria-label="Title" defaultValue="Meyer Lemons" className="w-full mb-2 border" />
-                    <TagPicker value={tags} onChange={setTags} category="food" title="Meyer Lemons" />
+                    <TagPicker value={tags} onChange={setTags} freeTags={freeTags} onFreeTagsChange={setFreeTags} category="food" title="Meyer Lemons" />
                     <button type="submit">Publish</button>
                 </form>
                 <output data-testid="counts">{`${submits} ${pageEscapes}`}</output>

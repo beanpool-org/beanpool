@@ -122,6 +122,7 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
         postType: 'offer',
         postCategory: 'tools',
         postTags: [],
+        postFreeTags: [],
         postTitle: 'Lawnmower for loan',
         postDescription: 'Available all weekend, sharp blade.',
         postCredits: '5',
@@ -143,6 +144,7 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
         postType: 'need',
         postCategory: 'gardening',
         postTags: [],
+        postFreeTags: [],
         postTitle: 'Seeking wheelbarrow',
         postDescription: 'For mulch this Saturday',
         postCredits: '',
@@ -179,7 +181,7 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
         const stored = JSON.stringify(toolDraft);
         expect(decideDraftOpen(JSON.parse(stored), ANCHOR, toolDraft.savedAt + 2_000)).toBe('open-tool');
         expect(restoredByMap(stored)).toEqual({
-            PostType: 'offer', PostCategory: 'tools', PostTags: [], PostTitle: 'Lawnmower for loan', PostDescription: 'Available all weekend, sharp blade.',
+            PostType: 'offer', PostCategory: 'tools', PostTags: [], PostFreeTags: [], PostTitle: 'Lawnmower for loan', PostDescription: 'Available all weekend, sharp blade.',
             PostCredits: '5', PostPriceType: 'daily', PostRepeatable: false, PostCashAlsoNeeded: false, PostPhotos: ['data:image/jpeg;base64,abc'],
             PostLat: null, PostLng: null, PostReach: 'local', PostReachPeers: [],
         });

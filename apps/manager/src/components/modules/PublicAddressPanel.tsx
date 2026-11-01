@@ -169,7 +169,7 @@ interface ExtraName { name: string; hostname?: string; releasable?: boolean; fro
 
 export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind: 'password' } }: PublicAddressPanelProps) {
     const isOwnerViewer = viewer.kind === 'password' || viewer.role === 'owner';
-    // Take offline, Release and Claim over a live name ask an owner's fresh proof each time (server requireFreshProof).
+    // Take offline, Release and a claim while the node publishes an address ask an owner's fresh proof each time (server requireFreshProof).
     const proof = useFreshProof();
     const [statusData, setStatusData] = useState<PublicAddressStatus | null>(null);
     const [loading, setLoading] = useState(true);

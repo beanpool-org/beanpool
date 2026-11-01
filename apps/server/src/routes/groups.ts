@@ -41,6 +41,7 @@ import {
     isReportRateLimited,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import { circleCardFor } from '../engine/place-circles.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
 import {
     GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
@@ -270,7 +271,9 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         // Closed by its members' vote: the group stays to read, as "Your groups" shows it (closedAt, readOnly).
         const closedAt = groupClosedAt(group.id);
         ctx.status = 200;
-        ctx.body = { ...group, closedAt, readOnly: !!closedAt };
+        // A place circle's own rows, for someone in it (engine/place-circles.ts); null for anyone else and any other group.
+        const circle = group.kind ? circleCardFor(group.id, viewerPubkey) : null;
+        ctx.body = { ...group, closedAt, readOnly: !!closedAt, ...(circle ? { circle } : {}) };
     });
 
     // 3. Create a group

@@ -20,6 +20,7 @@ import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressFollowCard } from '../../components/AddressFollowCard';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
+import { BringListingsSheet } from '../../components/BringListingsSheet';
 import { NotificationPermissionCard } from '../../components/NotificationPermissionCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
@@ -1293,6 +1294,8 @@ export default function HomeScreen() {
                     visible={shapeSheetOpen}
                     onClose={() => setShapeSheetOpen(false)}
                 />
+                {/* A member's first local community: bring their global listings (utils/bring-listings.ts). */}
+                {!lookingAround && <BringListingsSheet />}
                 {manage.dialog}
             </View>
         </FabBandContext.Provider>

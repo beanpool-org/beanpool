@@ -329,6 +329,29 @@ describe('its tags on the edit form', () => {
         expect(sent()).not.toHaveProperty('tags');
     });
 
+    it('the tags its author typed: an edit that left them alone sends none, even when they land after the form opened', async () => {
+        let free_tags = '';
+        await open([ENT], () => ({ free_tags }));
+        await click(button('✏️ Edit Post'), 'Edit Post');
+        expect(chip('#2nd hand')).toBeNull();
+        free_tags = '["2nd hand"]';
+        await reload();
+        expect(chip('#2nd hand')).toBeTruthy();
+        await type('Title', 'Dozen free-range eggs');
+        await click(button('💾 Save'), 'Save');
+        expect(net.calls).toContain('db.updatePost');
+        expect(sent()).not.toHaveProperty('freeTags');
+    });
+
+    it('one taken off goes as the rest, the last as the empty list that clears them', async () => {
+        await open([ENT], () => ({ free_tags: '["2nd hand","used"]' }));
+        await click(button('✏️ Edit Post'), 'Edit Post');
+        await click(chip('#used'), 'Remove #used');
+        await click(chip('#2nd hand'), 'Remove #2nd hand');
+        await click(button('💾 Save'), 'Save');
+        expect(sent().freeTags).toEqual([]);
+    });
+
     it('one taken off before such a reload stays off, and the save names the rest', async () => {
         let tags = LEMON;
         await open([ENT], () => ({ tags }));

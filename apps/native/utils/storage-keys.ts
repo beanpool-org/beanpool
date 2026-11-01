@@ -27,6 +27,12 @@ export const ADMIN_KNOCKS_COUNT_STORE_KEY = 'beanpool_admin_knocks_last_count';
  */
 export const KNOCK_ROLE_STORE_KEY = 'beanpool_knock_role_checked';
 
+/**
+ * The offer to bring a member's listings to the community they joined, or that their key has had its one
+ * (utils/bring-listings.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const BRING_LISTINGS_STORE_KEY = 'beanpool_bring_listings';
+
 /** A town typed in "Find your community" (utils/typed-place.ts): where the member lives, roughly. Sign Out wipes it. */
 export const TYPED_PLACE_STORE_KEY = 'beanpool_find_typed_place';
 

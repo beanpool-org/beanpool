@@ -12,8 +12,8 @@
  * - **The from-line and the door are drawn at each read** from the row of the directory, and never from anything the
  *   phone said. So a row that is gone takes its line with it, whatever the copy holds.
  * - **No read goes by who wrote it.** A reader's block list, the author's holiday, a paused account and a new name or face
- *   move their listings and leave a copy where it is, in every list, count and tag (@beanpool/engine posts.ts IS_COPY_SQL):
- *   a copy that came and went with its author's row would say whose it is.
+ *   move their listings and leave a copy where it is, in every list, count and tag (@beanpool/engine posts.ts IS_COPY_SQL)
+ *   and on the socket (state-engine.ts listingReach): a copy that came and went with its author's row would say whose it is.
  * - **Going is at home.** An RSVP is answered 409 with the door's words (rsvpEvent), and no chat is made or opened
  *   (createPost, event-thread.ts loadEventForThread).
  * - **It carries the times and the rounded pin only**: no place name, no note, no link, whatever a request sends

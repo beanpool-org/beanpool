@@ -1779,7 +1779,9 @@ function keepersOf(treasuries: string[]): Set<string> {
  * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
  * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
  * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
- * author's); a party is, blocked or not, as their set keeps the listings they are tied to. The author's blockers are
+ * author's); a party is, blocked or not, as their set keeps the listings they are tied to. A member's copy goes to all
+ * near it, whoever they blocked: their set holds it (engine/event-copy.ts), and a doorbell that missed the author's
+ * blockers would say whose it is. The author's blockers are
  * kept from one event to the next until any write to member_blocks (blockersOfKept), so a block or an unblock holds from
  * the next one (#1812), and an author blocked by thousands costs a lookup, not a read (#1831). Every other socket gets nothing, not
  * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
@@ -1801,8 +1803,8 @@ interface ListingReach {
 function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
-    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in FROM posts WHERE id = ?').get(id) as
-        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null } | undefined;
+    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in, shown_from_host FROM posts WHERE id = ?').get(id) as
+        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null; shown_from_host: string | null } | undefined;
     if (!row) return null;
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
@@ -1811,7 +1813,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
-    const blockers = placed ? blockersOfKept(row.author_pubkey) : null;
+    const blockers = placed && row.shown_from_host == null ? blockersOfKept(row.author_pubkey) : null;
     // Where anyone can join in a minute, each member's set measures another's listing from its neighbourhood
     // (engine getNearbySet, exactPlacesFor), so its copy reaches them as their set holds it: from the neighbourhood, or
     // from the place for those who have it exactly (exactPlaceReaders). Measured from the place for everyone, which
@@ -1821,7 +1823,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
-        if (!placed || blockers!.has(pubkey)) return false;
+        if (!placed || blockers?.has(pubkey)) return false;
         const area = memberAreaFor(pubkey);
         const at = nb && !exactReaders!.has(pubkey) ? nb : { lat: row.lat!, lng: row.lng! };
         return !!area && engine.haversineKm(area.lat, area.lng, at.lat, at.lng) <= radiusKm;

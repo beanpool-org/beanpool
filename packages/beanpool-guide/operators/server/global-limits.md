@@ -59,7 +59,7 @@ A member of a local community can tick **Also show this on the global community*
 
 A copy shows nobody: no name, no key and nothing to message, to members as to visitors. Only moderators, from a report, see who posted it. It has the times, the words, the photos and a point rounded to about 10 km; no place name and no note are kept, whatever a phone sends. It takes no RSVP and has no chat.
 
-Nothing about a member's account moves a copy, because a copy that came and went with an account would say whose it is. A block, a holiday and a new name leave it as it is. So does a pause: a paused member's other listings leave the Market, and their copy stays up until a report or a moderator takes it down, or its date passes.
+Nothing about a member's account here moves a copy, because a copy that came and went with an account would say whose it is. A block, a holiday and a new name leave it as it is, on every read and on the socket. A holiday at the member's home community is theirs to act on: their phone takes the copy down and puts it back. A pause here leaves it too: a paused member's other listings leave the Market, and their copy stays up until a report or a moderator takes it down, or its date passes.
 
 **from** a community's name and **Ask to join** beside a copy are drawn at each read from the directory this server mirrors. If the community is not shown in the directory at that moment, the line and the door are not drawn, and the copy stays as it is. If it was not shown when the copy was posted, its address is not kept at all. Until communities sign for their members, the line means a member said so and the directory has a community at that address: it says where it is from, and vouches for nothing.
 

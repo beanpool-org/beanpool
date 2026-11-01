@@ -16,7 +16,8 @@
  *   8. probation and retention count the copy
  *   9. a local community ignores the field
  *  10. no read goes by who wrote it: a reader's block, the author's holiday or pause and a new name move their listings,
- *      each proved by a control, and leave a copy reading as it did, in every list, delta, count and tag
+ *      each proved by a control, and leave a copy reading as it did, in every list, delta, count and tag; a block leaves the
+ *      frames a real socket hears of a copy as they were, made, edited, rolled on and taken down
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-event-copy)
  */
@@ -390,6 +391,54 @@ async function main() {
     await blockList('/api/blocks/remove', writer.pubKeyHex);
     await blockList('/api/blocks/remove', robin.pubKeyHex);
     assert((await sample(watcher)).search[plainA] === unblocked.search[plainA], 'control: unblocked, their ordinary listing is back');
+
+    // The socket, with the same control. A member near a listing hears its events unless they blocked its author (state-engine.ts
+    // listingReach): three spare accounts blocking halves of 8 suspects named a copy's author from one edit, in the review of #2711.
+    // Each way a copy rings goes through that rule: made, edited, rolled on by the minute tick, and taken down.
+    const { rollDueSeries } = await import('./engine/event-series-roll.js');
+    const listener = await socketOf(watcher);
+    const retitle = (who: Id, id: string, title: string) => call('POST', '/api/marketplace/posts/update', who, { id, authorPublicKey: who.pubKeyHex, title });
+    const WEEKLY = {
+        eventStartAt: undefined, eventEndAt: undefined, eventStartLocal: '2027-10-01T20:50', eventEndLocal: '2027-10-01T22:50',
+        eventTz: 'Australia/Sydney', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' },
+    };
+    let round = 0;
+    /** One copy and one ordinary event of the writer's, through all four: what the socket heard of each. */
+    const ring = async () => {
+        round++;
+        const from = listener.raw.length;
+        const [copy, plain] = [crypto.randomUUID(), crypto.randomUUID()];
+        const made = [await postCopy(writer, `Bell ${round}`, { ...WEEKLY, id: copy }), await postCopy(writer, `Bell ${round}`, { ...WEEKLY, id: plain, shownFrom: undefined })];
+        assert(made.every(m => m.status === 200) && stored(copy)?.shown_from_host === HOST && stored(plain)?.shown_from_host === null, `round ${round}: a repeating copy and an ordinary one (${made.map(m => m.status)})`);
+        await retitle(writer, copy, `Bell ${round}, moved`);
+        await retitle(writer, plain, `Bell ${round}, moved`);
+        const dueAt = (db.prepare('SELECT event_end_at FROM posts WHERE id = ?').get(copy) as { event_end_at: string }).event_end_at;
+        assert(rollDueSeries(se.broadcast, Date.parse(dueAt) + 1000) >= 2, `round ${round}: the minute tick rolled both on`);
+        await call('POST', '/api/marketplace/posts/remove', writer, { id: copy, authorPublicKey: writer.pubKeyHex });
+        await call('POST', '/api/marketplace/posts/remove', writer, { id: plain, authorPublicKey: writer.pubKeyHex });
+        // A socket's frames keep their order, so a frame from an author this reader never blocks says the ones before it have landed.
+        await retitle(loner, copyB, `Lantern walk by the sea, round ${round}`);
+        for (let i = 0; i < 500 && !listener.raw.slice(from).some(f => f.includes(copyB)); i++) await tick();
+        const frames = listener.raw.slice(from);
+        const about = (id: string) => frames.filter(f => f.includes(id));
+        return { copy: about(copy).map(f => f.replaceAll(copy, 'ID')).join(' '), plain: about(plain).map(f => JSON.parse(f).type).join(' ') };
+    };
+    const openFrames = await ring();
+    const asId = (type: string) => JSON.stringify({ type, id: 'ID' });
+    assert(openFrames.copy === [asId('post_updated'), asId('post_updated'), asId('post_updated')].join(' ').concat(' ', JSON.stringify({ type: 'post_removed', id: 'ID', audienceScope: 'public' })),
+        `no block: all four ring for a copy, each with its id and nothing else (${openFrames.copy})`);
+    assert(openFrames.plain === 'new_post post_updated post_updated post_removed', `no block, control: and for an ordinary event (${openFrames.plain})`);
+    await blockList('/api/blocks', robin.pubKeyHex);
+    const otherBlocked = await ring();
+    assert(otherBlocked.copy === openFrames.copy && otherBlocked.plain === openFrames.plain, `a block on another key: both as they were (${otherBlocked.plain})`);
+    await blockList('/api/blocks', writer.pubKeyHex);
+    const authorBlocked = await ring();
+    assert(authorBlocked.plain === '', `a block on the author, control: nothing more of their ordinary event (${authorBlocked.plain})`);
+    assert(authorBlocked.copy === openFrames.copy, `a block on the author: the frames of their copy are unchanged (${authorBlocked.copy})`);
+    await blockList('/api/blocks/remove', writer.pubKeyHex);
+    await blockList('/api/blocks/remove', robin.pubKeyHex);
+    assert((await ring()).plain === openFrames.plain, 'control: unblocked, the ordinary event rings again');
+    listener.ws.close();
 
     // The board's rule, which an author's row sets: their listings go and come back with it, at one moment, for everyone.
     const standings: Array<[string, () => void, () => void]> = [

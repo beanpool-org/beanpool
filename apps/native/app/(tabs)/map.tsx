@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, useReducer } from 'react';
-import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, Pressable, Image as RNImage, Linking, DeviceEventEmitter, Animated, PixelRatio } from 'react-native';
+import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, Pressable, Image as RNImage, Linking, DeviceEventEmitter, Animated, PixelRatio, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
@@ -27,6 +27,11 @@ import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans } from '../../utils/market-global';
+import { MapStackList } from '../../components/MapStackList';
+import { planBubbleTap, stackPosts } from '../../utils/map-stack';
+
+// The window as the clustering library read it: once, when the app loaded (its helpers.js). A bubble's zoom is worked out in its units.
+const CLUSTER_WINDOW = Dimensions.get('window');
 
 const CATEGORIES = POST_CATEGORIES;
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
@@ -313,6 +318,11 @@ export default function MapScreen() {
 
     // Map UI State
     const [selectedPostPreview, setSelectedPostPreview] = useState<any>(null);
+    // The bubble a tap opened as a list (MapStackList): its pins' ids, read against what the map shows on every draw.
+    const [stackIds, setStackIds] = useState<string[] | null>(null);
+    const clusterIndex = useRef<any>(null);
+    // A row opened a post: coming back keeps the list open and the map where it was (the focus effect re-centres otherwise).
+    const keepMapOnReturn = useRef(false);
     const [markersReady, setMarkersReady] = useState(false);
     const [clustersReady, setClustersReady] = useState(false);
 
@@ -365,13 +375,19 @@ export default function MapScreen() {
     };
     // The filter bar hides behind a pin preview; the panel does not come back with it.
     useEffect(() => {
-        if (selectedPostPreview) closeCategoryPanel();
+        if (selectedPostPreview) { closeCategoryPanel(); setStackIds(null); }
     }, [selectedPostPreview]);
     // Leaving the tab closes it too, so coming back to the Map shows the map, not the panel.
-    useFocusEffect(useCallback(() => () => dispatchCategoryPanel({ kind: 'dismiss' }), []));
+    useFocusEffect(useCallback(() => () => {
+        dispatchCategoryPanel({ kind: 'dismiss' });
+        if (!keepMapOnReturn.current) setStackIds(null);
+    }, []));
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
     const mapFilterState = { type: mapTypeFilter, category: mapCategoryFilter, eventWindow };
     const secondRow = mapSecondRow(mapTypeFilter);
+    const visiblePins = [...visibleMarketPins(posts, mapFilterState), ...visibleEventPins(posts, mapFilterState)];
+    const stack = stackIds ? stackPosts(stackIds, visiblePins) : [];
+    const stackOpen = stack.length > 0;
     /**
      * The zoom pill sits at bottom 120, which on a 320dp phone at 1.3x text runs up under the two filter
      * rows. Measure the screen, the rows and the pill, and drop the pill just far enough to clear them —
@@ -411,7 +427,8 @@ export default function MapScreen() {
     useFocusEffect(
         React.useCallback(() => { 
             loadPosts();
-            fetchNodeLocation();
+            if (keepMapOnReturn.current) keepMapOnReturn.current = false;
+            else fetchNodeLocation();
         }, [])
     );
 
@@ -475,6 +492,17 @@ export default function MapScreen() {
         } catch (err) { console.log("Failed to fetch current location", err); }
     };
 
+    /** A bubble's tap: the zoom stops at a cap, and a bubble the cap could not part opens as a list (utils/map-stack.ts). */
+    const onClusterPress = (cluster: any, leaves: any[]) => {
+        closeCategoryPanel();
+        setSelectedPostPreview(null);
+        const splitsAt = clusterIndex.current?.getClusterExpansionZoom(cluster.id) ?? Infinity;
+        const points = leaves.map(({ geometry }) => ({ latitude: geometry.coordinates[1], longitude: geometry.coordinates[0] }));
+        const plan = planBubbleTap(splitsAt, points, currentRegion, CLUSTER_WINDOW);
+        if (plan.kind === 'zoom') mapRef.current?.animateToRegion(plan.region, 350);
+        else setStackIds(leaves.map((leaf) => leaf.properties.post.id));
+    };
+
     const renderCluster = (cluster: any) => {
         return <ClusterMarker key={`cluster-${cluster.id}-${clustersReady}`} cluster={cluster} clustersReady={clustersReady} />;
     };
@@ -516,12 +544,16 @@ export default function MapScreen() {
                     }}
                     onPress={() => {
                         if (selectedPostPreview) setSelectedPostPreview(null);
+                        setStackIds(null);
                         // A tap on the map closes the category panel without changing the filter.
                         closeCategoryPanel();
                     }}
                     initialRegion={currentRegion}
                     renderCluster={renderCluster}
-                    spiralEnabled={true}
+                    superClusterRef={clusterIndex}
+                    preserveClusterPressBehavior
+                    onClusterPress={onClusterPress}
+                    spiralEnabled={false}
                     animationEnabled={false}
                     radius={15}
                 >
@@ -531,7 +563,7 @@ export default function MapScreen() {
                         filtered by the date chips; `eventInWindow` applies the slice-1 feed rule first, so an
                         event that has ended or been cancelled never pins — the sync pull is a replica of the
                         list, not the list, and carries both. */}
-                    {[...visibleMarketPins(posts, mapFilterState), ...visibleEventPins(posts, mapFilterState)].map(post => {
+                    {visiblePins.map(post => {
                         const catObj = CATEGORIES_BY_ID.get(post.category) || { id: normalizeCategory(post.category), emoji: categoryEmoji(post.category), label: categoryLabel(post.category) };
                         const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
                         const isSelected = selectedPostPreview?.id === post.id;
@@ -570,7 +602,7 @@ export default function MapScreen() {
 
             {/* Floating Filter Bar — the type pills, and under them one contextual row that stays in
                 the same place: category chips for All / Offers / Needs, date chips for Events. */}
-            {!selectedPostPreview && (
+            {!selectedPostPreview && !stackOpen && (
                 <View
                     style={styles.filterBarWrapper}
                     pointerEvents="box-none"
@@ -634,7 +666,7 @@ export default function MapScreen() {
             )}
 
             {/* Map Action FABs - Left Pill */}
-            {!selectedPostPreview && !categoryPanel.open && (
+            {!selectedPostPreview && !stackOpen && !categoryPanel.open && (
                 <View style={[styles.fabPill, { bottom: fabPillBottom, left: 16 }]} pointerEvents="box-none" onLayout={e => setFabPillH(e.nativeEvent.layout.height)}>
                     <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Toggle dark mode')} style={styles.pillBtn} onPress={() => setIsDarkMap(!isDarkMap)}>
                         <Text style={styles.pillBtnEmoji}>{isDarkMap ? '☀️' : '🌙'}</Text>
@@ -757,8 +789,17 @@ export default function MapScreen() {
             )}
 
 
+            {stackOpen && (
+                <MapStackList
+                    key={stackIds?.join()}
+                    posts={stack}
+                    onOpen={(id) => { keepMapOnReturn.current = true; router.push(`/post/${id}`); }}
+                    onClose={() => setStackIds(null)}
+                />
+            )}
+
             {/* FAB — New Post Button */}
-            {!selectedPostPreview && (
+            {!selectedPostPreview && !stackOpen && (
                 <SafeAreaView style={StyleSheet.absoluteFill} pointerEvents="box-none">
                     <TouchableOpacity
                         accessibilityRole="button"

@@ -15,7 +15,7 @@ not repeat them; the code comments name the incident behind each rule.
 | `lib.sh` | The library. Source it from a run script. Stages for both backends, watchdog, gates, land, deploy, process-tree and worktree helpers. |
 | `decide.sh` | Deciding reviews: they wait for GitHub on the PR's head, then run one at a time behind a machine-wide lock, probing the model first. `lib.sh` sources it. |
 | `start.sh` | Runs `run-<lane>.sh` in the foreground under `caffeinate -i`, logging to `scratch/lanes/log-<lane>.txt`. |
-| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, left a PR unreviewed because GitHub was not green, or when all lanes have stopped. |
+| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, left a PR unreviewed because GitHub was not green, or finished (its run script's last line, `LANE <name> DONE (clean=… pr=…) — HELD for the director`), or when all lanes have stopped. |
 | `stop.sh` | Stops lanes now, killing each lane's whole process tree. |
 | `stop-at-boundary.sh` | Lets each lane finish its current stage, then stops it as a FIX, SYNC or deciding stage starts. |
 | `sweep-orphans.sh` | Lists (or `--kill`s) test runners reparented to launchd that are more than an hour old. |
@@ -36,9 +36,9 @@ sit beside them. Worktrees go in `.claude/worktrees/lane-<lane>`, which is also 
 source "$(git -C "${0:A:h}" rev-parse --show-toplevel)/scripts/lanes/lib.sh"
 LANE_BUILD_BACKEND=claude            # high-risk build: headless Opus 5. Omit for AGY Flash.
 log "lane S7 — keeper succession"
-item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 2 early passes → GitHub green → deciding pass
+item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 1 early pass → GitHub green → deciding pass
 [ "$CLEAN" = 1 ] && land "$PR"          # CI green, then HELD unless LANE_MERGE=1
-log "LANE S7 DONE (clean=$CLEAN merged=$MERGED)"
+log "LANE S7 DONE (clean=$CLEAN pr=$PR) — HELD for the director"   # watch.sh wakes on this line
 ```
 
 The director launches both of these with the Bash tool's `run_in_background: true`, in the foreground form shown:
@@ -56,6 +56,10 @@ The building blocks are `stage NAME TIMEOUT BRIEF [ROLE]`, `cont`, `item`, `revi
 `decide_pass PR BRANCH`, `ci_gate PR BRANCH`, `sync_main`, `land PR [hold]`, `merge_if_clean`,
 `deploy_main NODE SYMBOL [LABEL]`, `count`, `prnum`, `pr_head`, `ci_head_state SHA` and `gh_try`. The comment above each
 function describes its contract.
+
+A fix round pushes once. The FIX, FIX-CI and CONTINUE briefs and both rule files tell a stage to commit locally and push when
+the round's findings are done and its local checks pass, because each push cancels and restarts GitHub's run. A long first
+build may still push early so work is not lost, and a run about to end must push what it has.
 
 ## Backends and models
 
@@ -84,6 +88,11 @@ gate counts it as clean.
 
 ## Gates
 
+- Early passes depend on who built the lane. **AGY-built:** two passes, with a `FIX-*` stage after each one that comments.
+  **Claude-built:** one pass, no `FIX-*` stage and no second pass. Its comments go to the deciding pass, whose brief tells it
+  to weigh each one. A real one it posts as a new inline comment, so the count sees it. A false one it lists in its summary
+  and does not reply to, because a reply is an inline comment too. Either way, early comments are counted before the
+  deciding pass starts, so only what that pass adds can read as a defect.
 - A deciding pass waits for the required check on the PR's exact head, outside the deciding slot; every path to one goes
   through `decide_review`, so `land()`'s post-sync pass and a run script's own confirmation pass wait too. Early passes
   do not wait.

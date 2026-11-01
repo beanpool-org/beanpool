@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Fake agy for selftest.sh — never talks to a model. FAKE_AGY_MODE picks the behaviour; every call is appended to
-# $FAKE_STATE/agy.calls.
+# $FAKE_STATE/agy.calls. FAKE_EARLY_POSTS=N: a review pass adds N to $FAKE_STATE/comments, the PR's inline comment count.
 S=${FAKE_STATE:?}
 prompt= model= timeout= fmt=text
 while (( $# )); do
@@ -27,7 +27,10 @@ print -r -- "{\"event\":\"init\",\"init\":{\"model\":\"$model\",\"cwd\":\"$PWD\"
 ok='{"event":"result","result":{"status":"SUCCESS","response":"Done and pushed. Notes: the handler now maps HTTP 429 and rate limit exceeded responses to a retry."}}'
 banner='{"event":"step_update","step_update":{"state":"ACTIVE","text_delta":"root agent idle; waiting for 1 background task(s) (bounded by --print-timeout)"}}'
 case "${FAKE_AGY_MODE:-success}" in
-  success) sleep 1; print -r -- "$ok";;
+  success)
+    [[ "$prompt" == /pr-codereview-comprehensive* ]] && [ -n "$FAKE_EARLY_POSTS" ] \
+      && print $(( $(cat "$S/comments" 2>/dev/null || print 0) + FAKE_EARLY_POSTS )) > "$S/comments"
+    sleep 1; print -r -- "$ok";;
   idlehang)
     print -r -- "$banner"
     sleep 600 &

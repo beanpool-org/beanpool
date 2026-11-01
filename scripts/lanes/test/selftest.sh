@@ -48,7 +48,7 @@ scenario(){ # TITLE — resets the fakes' state; the scenario's lane log goes to
   print; print -r -- "━━ $1"
   rm -rf "$FAKE_STATE"; mkdir -p "$FAKE_STATE"
   LOG=$T/scenario-$((++SCEN)).log; : > "$LOG"
-  unset FAKE_AGY_MODE FAKE_AGY_PROBE_FAILS FAKE_CLAUDE_MODE FAKE_CLAUDE_PROBE_FAILS FAKE_GH_DOWN FAKE_GH_COMMENTS_DOWN FAKE_GH_RUNS_DOWN FAKE_GH_PR FAKE_REVIEW_POSTS FAKE_SSH_REVISION FAKE_SSH_SYMBOL
+  unset FAKE_AGY_MODE FAKE_AGY_PROBE_FAILS FAKE_CLAUDE_MODE FAKE_CLAUDE_PROBE_FAILS FAKE_GH_DOWN FAKE_GH_COMMENTS_DOWN FAKE_GH_RUNS_DOWN FAKE_GH_PR FAKE_REVIEW_POSTS FAKE_EARLY_POSTS FAKE_SSH_REVISION FAKE_SSH_SYMBOL
   unset LANE_DECIDE_FALLBACK_MODEL LANE_DECIDE_MODEL
   LANE_BUILD_BACKEND=agy; LANE_REVIEW_BACKEND=agy; LANE_DECIDE_BACKEND=claude
   LANE_GREEN_TRIES=6; LANE_GREEN_NONE_TRIES=3
@@ -605,6 +605,136 @@ show
 check "woke on the held PR"                      logged "NOT REVIEWED on lane selftestgate"
 check "a long wait for GitHub is not reported as a quota stall" eval '! grep -q "STUCK ON QUOTA" "$T/watch3.out" && grep -q "ALL LANES STOPPED" "$T/watch3.out"'
 wait 2>/dev/null
+
+scenario "46. watch.sh wakes on a lane's last line while another lane keeps running, once; a hold just above that line keeps its own headline"
+done_line='log "LANE $LANE_NAME DONE (clean=$CLEAN pr=$PR) — HELD for the director"'
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'CLEAN=0 PR=42' "$done_line" > "$T/run-selftestdone.sh"
+# As a real lane ends after a hold: ci_hold's line and the run script's last line land in the same second.
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "⚠ PR #44 LEFT FOR THE DIRECTOR, no deciding pass: the run on aaa1 was cancelled"' 'CLEAN=0 PR=44' "$done_line" > "$T/run-selftestleft.sh"
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'CLEAN=0 PR=' "$done_line" > "$T/run-selftestnopr.sh"
+# A run script's own last line may leave a field out; a field that is not there must not read as the line's timestamp.
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "LANE $LANE_NAME DONE (clean=1 merged=0) — HELD for the director"' > "$T/run-selftestnofield.sh"
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "LANE $LANE_NAME REVIEW DONE — HELD for the director"' > "$T/run-selftestbare.sh"
+print -l '#!/bin/zsh' 'sleep 600' > "$T/run-selftestother.sh"
+watch_now(){ # OUT — starts a watcher; WOKE=1 if it exits within 5 s. One still asleep is stopped, or it would take the next lane's event.
+  LANE_WATCH_SECS=1 zsh "${HERE:h}/watch.sh" > "$1" 2>&1 &
+  local w=$! i
+  WOKE=1
+  for i in {1..5}; do kill -0 $w 2>/dev/null || return 0; sleep 1; done
+  WOKE=0; kill $w 2>/dev/null; wait $w 2>/dev/null; }
+zsh "${HERE:h}/start.sh" "$T/run-selftestother.sh" > /dev/null 2>&1 &
+sleep 1
+zsh "${HERE:h}/start.sh" "$T/run-selftestdone.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-done.out"; woke_done=$WOKE
+watch_now "$T/w-done2.out"; woke_done2=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestleft.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-left.out"; woke_left=$WOKE
+watch_now "$T/w-left2.out"; woke_left2=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestnopr.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-nopr.out"; woke_nopr=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestnofield.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-nofield.out"; woke_nofield=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestbare.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-bare.out"; woke_bare=$WOKE
+{ zsh "${HERE:h}/stop.sh" selftestother; } >> "$LOG" 2>&1
+wait 2>/dev/null
+for o in done done2 left left2 nopr nofield bare; do print -r -- "--- w-$o.out"; cat "$T/w-$o.out"; done >> "$LOG"
+show
+check "woke while the other lane still ran"      [ "$woke_done" = 1 ]
+check "printed the lane, clean and the PR"       grep -qF "LANE DONE on lane selftestdone" "$T/w-done.out"
+check "... clean=0 and PR #42"                   grep -qE "selftestdone at [0-9:]+ — clean=0, PR #42, held for the director" "$T/w-done.out"
+check "a restarted watcher stays asleep: once stops the repeat" [ "$woke_done2" = 0 ]
+check "the hold above the last line wakes it, once" [ "$woke_left:$woke_left2" = 1:0 ]
+check "the hold keeps its own headline"          grep -qF "NOT REVIEWED on lane selftestleft" "$T/w-left.out"
+check "... and the same wake says the lane finished" grep -qE "selftestleft at [0-9:]+ — clean=0, PR #44, held for the director" "$T/w-left.out"
+check "a lane that ended with no PR wakes it too, and says so" eval '[ "$woke_nopr" = 1 ] && grep -qE "selftestnopr at [0-9:]+ — clean=0, no PR, held for the director" "$T/w-nopr.out"'
+check "a last line with no pr= says no PR, not its timestamp" eval '[ "$woke_nofield" = 1 ] && grep -qE "selftestnofield at [0-9:]+ — clean=1, no PR, held for the director" "$T/w-nofield.out"'
+check "a last line with neither field says so, and any DONE line wakes it" eval '[ "$woke_bare" = 1 ] && grep -qE "selftestbare at [0-9:]+ — clean=\?, no PR, held for the director" "$T/w-bare.out"'
+check "watch.sh printed no shell errors"        eval '! grep -qE "bad option|bad pattern|command not found|parse error|read-only" "$T"/w-*.out'
+
+scenario "47. the AGY rules in the repo carry the pre-flight and the heavy-test wait, and send no stage to the full suite"
+ab=$(lane_brief agy "Build the thing on feat/z.")
+ab_has(){ print -r -- "$ab" | grep -qF -- "$1"; }
+check "AGY brief carries PRE-FLIGHT"             ab_has "PRE-FLIGHT (Marty, 1 Nov)"
+check "AGY brief carries the heavy-test wait"    ab_has 'while [ -d /Users/marty/.cache/heavy-test.lock ]; do sleep 30; done'
+check "no stage is told to run the full suite"   eval '! ab_has "test-all.sh LAST" && ab_has "Do NOT run scripts/test-all.sh"'
+
+# Below, an agy run is an early pass or a FIX stage on an AGY-built lane, and a claude run the deciding pass or a FIX stage on a Claude-built one.
+scenario "48. a Claude-built lane: one early pass, no FIX stage, no second pass; its comments are not defects, and the deciding pass weighs them"
+LANE_BUILD_BACKEND=claude LANE_WT=$T/repo/.claude/worktrees/lane-opus; mkdir -p "$LANE_WT"
+FAKE_GH_PR=42 FAKE_EARLY_POSTS=3; print 5 > "$FAKE_STATE/comments"
+{ review feat/x; } >> "$LOG" 2>&1
+show
+check "CLEAN=1: three early comments and none from the deciding pass" [ "$CLEAN" = 1 ]
+check "one early pass, one deciding pass, no other stage" [ "$(fixes):$(reviews)" = 1:1 ]
+check "the early comments were counted"          logged "review feat/x pass 1: comments 5 → 8"
+check "no FIX stage, no second pass"             eval 'not_logged "FIX-feat/x" && not_logged "CCR-feat/x-2"'
+check "the log says who weighs them"             logged "3 early comment(s) left for the deciding pass to weigh"
+check "the gate's count starts after the early comments" logged "#42 comments before the deciding pass: 8"
+check "the brief tells it to weigh them, and from when" eval 'brief_has claude.prompt-1 "WEIGH each one" && grep -qE "created after [0-9]{4}-[0-9]{2}-[0-9]{2}T" "$FAKE_STATE/claude.prompt-1"'
+check "... a real one is posted as a new comment, whatever the brief below says about repeating" eval 'brief_has claude.prompt-1 "post it as your own new inline comment" && brief_has claude.prompt-1 "overrides any line below"'
+check "... a false one gets no reply, which would read as a defect" brief_has claude.prompt-1 "not even a reply"
+check "... the summary says which are real"      brief_has claude.prompt-1 "as REAL or NOT REAL"
+check "... and a -fix lane's pass still checks the verdict before it was acted on" brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
+check "the lane's own deciding brief still follows" brief_has claude.prompt-1 "DECIDING pass — the code merges"
+: > "$LOG"; rm -f "$FAKE_STATE/claude.calls" "$FAKE_STATE/claude.runs" "$FAKE_STATE/agy.calls" "$FAKE_STATE/agy.runs"
+FAKE_EARLY_POSTS=; print 5 > "$FAKE_STATE/comments"
+{ review feat/x; } >> "$LOG" 2>&1
+check "an early pass with no comments goes straight on too" eval '[ "$CLEAN:$(fixes):$(reviews)" = 1:1:1 ] && not_logged "left for the deciding pass"'
+check "... and its brief asks for no verdict on comments that do not exist" eval '! brief_has claude.prompt-1 "WEIGH" && ! brief_has claude.prompt-1 "as REAL or NOT REAL"'
+check "... it still checks the earlier findings"  brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
+
+scenario "49. a Claude-built lane: an early comment the deciding pass finds real counts, because it posts it again"
+LANE_BUILD_BACKEND=claude LANE_WT=$T/repo/.claude/worktrees/lane-opus
+FAKE_GH_PR=42 FAKE_EARLY_POSTS=3 FAKE_REVIEW_POSTS=1; print 5 > "$FAKE_STATE/comments"
+{ review feat/x; } >> "$LOG" 2>&1
+show
+check "CLEAN=0"                                  [ "$CLEAN" = 0 ]
+check "said why"                                 logged "deciding pass found new defects"
+
+scenario "50. an AGY-built lane keeps both early passes and both FIX stages, and its deciding pass checks the fixes"
+FAKE_GH_PR=42 FAKE_EARLY_POSTS=2; print 5 > "$FAKE_STATE/comments"
+{ review feat/x; } >> "$LOG" 2>&1
+show
+check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
+check "two passes and two FIX stages on agy, then one deciding pass" [ "$(fixes):$(reviews)" = 4:1 ]
+check "in order"                                 eval '(( $(line_of "CCR-feat/x-1 started") < $(line_of "FIX-feat/x-1 started") && $(line_of "FIX-feat/x-1 started") < $(line_of "CCR-feat/x-2 started") && $(line_of "CCR-feat/x-2 started") < $(line_of "FIX-feat/x-2 started") && $(line_of "FIX-feat/x-2 started") < $(line_of "CCR-feat/x-3 started") ))'
+check "the deciding brief checks the fixes"      brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
+check "... and has nothing to weigh"             eval '! brief_has claude.prompt-1 "WEIGH"'
+: > "$LOG"; rm -f "$FAKE_STATE/claude.calls" "$FAKE_STATE/claude.runs" "$FAKE_STATE/agy.calls" "$FAKE_STATE/agy.runs"
+FAKE_EARLY_POSTS=; print 5 > "$FAKE_STATE/comments"
+{ review feat/x; } >> "$LOG" 2>&1
+check "a first pass with no comments still ends the early passes" eval '[ "$CLEAN:$(fixes):$(reviews)" = 1:1:1 ] && not_logged "CCR-feat/x-2"'
+
+scenario "51. a fix round pushes once: the FIX, FIX-CI and CONTINUE briefs and both rule files say so, with the two exceptions"
+one_push="push once, when this round's findings are done and the local checks pass"
+says_once(){ grep -qF -- "$one_push" "$1" && ! grep -qE "[Cc]ommit and push per|push per fix" "$1"; }
+FAKE_GH_PR=42 FAKE_EARLY_POSTS=2; print 5 > "$FAKE_STATE/comments"
+{ review feat/x; } >> "$LOG" 2>&1
+check "the FIX brief"                            says_once "$FAKE_STATE/agy.prompt-2"
+FAKE_EARLY_POSTS=; rm -f "$FAKE_STATE/agy.calls" "$FAKE_STATE/agy.runs"
+head_is aaa1; ci aaa1 failure; print aaa2 > "$FAKE_STATE/pushes"
+{ decide_review 42 feat/x 3 1; } >> "$LOG" 2>&1
+check "the FIX-CI brief"                         says_once "$FAKE_STATE/agy.prompt-1"
+check "... and it still says what the review waits for" brief_has agy.prompt-1 "the review runs once that push is green"
+( stage(){ print -r -- "$3" > "$FAKE_STATE/brief-$1"; STAGE_OK=1; STAGE_IDLEKILL=0; return 0; }
+  review(){ :; }
+  item NOPR feat/nopr "$T/briefs/nopr.md" "$T/briefs/nopr.md" ) >> "$LOG" 2>&1
+check "the CONTINUE brief"                       says_once "$FAKE_STATE/brief-NOPR-CONTINUE"
+check "the second brief's CONTINUE"              says_once "$FAKE_STATE/brief-NOPR-b"
+check "a long first build may push early"        brief_has brief-NOPR-CONTINUE "first build may still push early"
+check "a run about to end pushes what it has"    brief_has brief-NOPR-CONTINUE "a run about to end must push what it has"
+for r in "$LANE_AGY_RULES" "$LANE_CLAUDE_RULES"; do
+  check "${r:t} sets the rule and its reason"    eval 'grep -qF "ONE PUSH PER FIX ROUND" "$r" && grep -qF "each push cancels and restarts" "$r"'
+  check "${r:t} gives both exceptions"           eval 'grep -qF "first build may still push early" "$r" && grep -qF "a run about to end must push what it has" "$r"'
+  check "${r:t} no longer says push every step without saying when" eval '! grep -qE "^- Push to origin after EVERY|\\. Push after each logical step\\.$" "$r"'
+done
+show
 
 print
 print "selftest: $PASS passed, $FAILS failed"

@@ -3543,5 +3543,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "Một chủ sở hữu đã quyết định khi quá ít thành viên có thể bỏ phiếu, nhưng giờ đã đủ người có thể bỏ phiếu, nên cuộc bỏ phiếu này sẽ quyết định. Lý do: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "Một chủ sở hữu đã quyết định khi quá ít thành viên có thể bỏ phiếu, nhưng giờ đã đủ người có thể bỏ phiếu, nên cuộc bỏ phiếu này sẽ quyết định.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "Quá ít thành viên có thể bỏ phiếu, nên nếu không có thêm người bỏ phiếu, {name} sẽ trở lại khi cuộc bỏ phiếu này kết thúc.",
-  "Not executed: a reinstatement vote cancelled it": "Không thực thi: một cuộc bỏ phiếu phục hồi đã hủy việc này"
+  "Not executed: a reinstatement vote cancelled it": "Không thực thi: một cuộc bỏ phiếu phục hồi đã hủy việc này",
+  "Not sure what to charge? View the Community Pricing Guide": "Chưa chắc về giá? Xem Hướng dẫn định giá cộng đồng"
 }

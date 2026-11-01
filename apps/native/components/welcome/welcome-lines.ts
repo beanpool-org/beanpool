@@ -53,6 +53,11 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "That sign-in did not say who you are, so it can't be used. Try again.": word("That sign-in did not say who you are, so it can't be used. Try again."),
     'This phone holds a different BeanPool account, so the join was not sent.': word('This phone holds a different BeanPool account, so the join was not sent.'),
     'This phone holds a different BeanPool account, so the join was not saved here.': word('This phone holds a different BeanPool account, so the join was not saved here.'),
+    // utils/global-join.ts DOOR_MESSAGES and utils/door-work.ts DOOR_WORK_MESSAGES: the person check on a busy day.
+    'Lots of people are joining right now, so a 12-words account starts with a quick check. Sign in to join now, or try again later.': word('Lots of people are joining right now, so a 12-words account starts with a quick check. Sign in to join now, or try again later.'),
+    "That check didn't pass. Try again, or sign in to join now.": word("That check didn't pass. Try again, or sign in to join now."),
+    "The quick check didn't work on this phone. Try again, or sign in to join now.": word("The quick check didn't work on this phone. Try again, or sign in to join now."),
+    'Lots of people are joining right now, so this way starts with a quick check from Cloudflare. Or sign in to join now.': word('Lots of people are joining right now, so this way starts with a quick check from Cloudflare. Or sign in to join now.'),
     // utils/door-work.ts DOOR_WORK_MESSAGES.solverUnavailable.
     "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
     // utils/db.ts redeemInvite: the invite join's redeem with no answer in time (REDEEM_NO_ANSWER), a node that is down (a

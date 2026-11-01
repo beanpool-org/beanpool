@@ -455,7 +455,7 @@ async function main(): Promise<void> {
     }
     const sample = readShape();
     const placesExist = Object.entries(SHAPE_SWITCH_PLACES).filter(([sw, place]) =>
-        !(place === 'kindOnly' ? (shape.KIND_ONLY_SWITCHES as readonly string[]).includes(sw) : place === 'dmRequests' || place === 'wordsDoor' || place in sample.settings));
+        !(place === 'kindOnly' ? (shape.KIND_ONLY_SWITCHES as readonly string[]).includes(sw) : place === 'dmRequests' || place === 'wordsDoor' || place === 'doorCheck' || place in sample.settings));
     assert(placesExist.length === 0, `every place named is a setting the shape has (wrong: ${placesExist.map(([s, p]) => `${s}→${p}`).join(', ') || 'none'})`);
     const withoutStandby = SHAPE_LOCK_CODES.filter((c) => c !== 'standby');
     const unseen = withoutStandby.filter((c) => !locksSeen.has(c));

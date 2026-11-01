@@ -3543,5 +3543,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "投票できる会員が少なすぎた時にオーナーが決定しましたが、今は十分な会員が投票できるため、この投票で決まります。理由：{reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "投票できる会員が少なすぎた時にオーナーが決定しましたが、今は十分な会員が投票できるため、この投票で決まります。",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "投票できる会員が少なすぎるため、これ以上投票がなければ、この投票の終了時に{name}さんは復帰します。",
-  "Not executed: a reinstatement vote cancelled it": "未実行：復帰の投票により取り消されました"
+  "Not executed: a reinstatement vote cancelled it": "未実行：復帰の投票により取り消されました",
+  "Not sure what to charge? View the Community Pricing Guide": "価格の目安がわかりませんか？コミュニティ価格ガイドを見る"
 }

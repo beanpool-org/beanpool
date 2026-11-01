@@ -19,6 +19,8 @@ A community that lets anyone join sent you its link? On the phone app, the link 
 
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
+On a busy day, joining the global community with 12 secret words can start with a quick check from Cloudflare, on a page of its own, to keep automated sign-ups out. Cloudflare sees the browser that takes the check. If the check doesn't work for you, or you'd rather not take it, sign in instead: a sign-in never needs it.
+
 ## Joining with an invite
 
 An invite is a link, a QR code or a code. A code looks like **INV-** followed by letters, or a long code that starts with **BP-**.

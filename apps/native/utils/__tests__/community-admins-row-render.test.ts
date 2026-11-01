@@ -84,6 +84,8 @@ const fx = vi.hoisted(() => ({
     vault: false,
     side: null as string | null | (() => Promise<string | null>),
     sharedFails: null as string | null,
+    /** What a shared copy's Remove throws. */
+    sharedRemoveFails: null as string | null,
     turnedOnShared: [] as string[],
     removedShared: [] as string[],
 }));
@@ -105,7 +107,10 @@ vi.mock('../community-recovery', async (importOriginal) => ({
         fx.turnedOnShared.push(url);
         return { since: new Date().toISOString() };
     },
-    removeSharedCopy: async (url: string) => { fx.removedShared.push(url); },
+    removeSharedCopy: async (url: string) => {
+        if (fx.sharedRemoveFails) throw new Error(fx.sharedRemoveFails);
+        fx.removedShared.push(url);
+    },
 }));
 vi.mock('../copies-rule', () => ({ copiesRuleForScreen: async (url: string | null) => (url ? fx.rules[url] ?? null : null) }));
 vi.mock('../identity', () => ({ getMnemonic: async () => null }));
@@ -147,6 +152,7 @@ beforeEach(() => {
     fx.vault = false;
     fx.side = null;
     fx.sharedFails = null;
+    fx.sharedRemoveFails = null;
     fx.turnedOnShared.length = 0;
     fx.removedShared.length = 0;
     alertsPress.remove = false;
@@ -480,6 +486,32 @@ describe('the shared placement: half at the key vault, half at the community (va
             await click('community-admins-remove');
             expect(fx.removedShared).toEqual([MULLUM]);
             expect(byTestId('community-admins-on')).toBeNull();
+        });
+
+        it('a Remove that stopped, and the phone moves to another community while the vault is asked again: its answer about the community left is not laid over this one', async () => {
+            fx.rules[BELL] = 'vault';
+            fx.answers[MULLUM] = SHARED;
+            // Bellingen keeps its own pair, and gives no answer to the read after, which is all that would put a wrong side right.
+            let bellAsked = 0;
+            fx.answers[BELL] = () => (++bellAsked === 1 ? SHARED : null);
+            fx.side = 'matches';
+            alertsPress.remove = true;
+            await mount();
+            let vaultAnswers: (side: string) => void = () => {};
+            let sideAsked = 0;
+            fx.side = () => (++sideAsked === 1 ? new Promise((resolve) => { vaultAnswers = resolve; }) : Promise.resolve('matches'));
+            fx.sharedRemoveFails = 'It stopped here.';
+            await click('community-admins-remove');
+
+            fx.anchor = BELL;
+            await act(async () => { communitySwitched(); });
+            await settle();
+            expect(byTestId('community-admins-on'), "Bellingen's own On").toBeTruthy();
+
+            await act(async () => { vaultAnswers('none'); });
+            await settle();
+            expect(byTestId('community-admins-on'), "Mullumbimby's half is not Bellingen's").toBeTruthy();
+            expect(byTestId('community-admins-unfinished')).toBeNull();
         });
     });
 });

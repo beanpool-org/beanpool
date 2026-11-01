@@ -26,7 +26,8 @@
  * in a build that has one, the same row makes a copy the vault and the community keep half each, and says so: it takes
  * both, and it takes a day. On only when both keep the very same copy; begun on one side only, it says "Not finished: tap
  * to try again". A vault that can't be asked just now never turns an On off, and a slow one holds nothing up: what the
- * community said is shown while the vault is asked.
+ * community said is shown while the vault is asked. Its own signed delete is another matter: a Remove that stopped after it
+ * is never On again, even if neither can be asked (`remove`).
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -40,7 +41,7 @@ import { authenticateUser } from '../utils/LocalAuth';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { copiesRuleForScreen } from '../utils/copies-rule';
 import { hasVault } from '../utils/vault-config';
-import { removeSharedCopy, sharedCopySide, sharedCopyState, turnOnSharedCopy, type SharedCopySide } from '../utils/community-recovery';
+import { COMMUNITY_RECOVERY_TEXT, removeSharedCopy, sharedCopySide, sharedCopyState, turnOnSharedCopy, type SharedCopySide } from '../utils/community-recovery';
 import { onCommunitySwitched } from '../utils/community-switch';
 import {
     COMMUNITY_COPY_TEXT, communityCopyStatus, offersCommunityCopy, removeCommunityCopy, turnOnCommunityCopy, type CommunityCopyStatus,
@@ -254,7 +255,16 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
                         setStatus(null);
                         setSide(null);
                     } catch (e) {
-                        setError(keyLineWords(e instanceof Error ? e.message : String(e)));
+                        const said = e instanceof Error ? e.message : String(e);
+                        setError(keyLineWords(said));
+                        // The vault goes first, so its half may be gone, and with no answer the read below keeps what the community last
+                        // said: the vault is asked against that, so a half with no pair never stays On. If the vault has already said it
+                        // deleted, not being able to ask again doesn't undo that. Dropped if the phone has moved to another community.
+                        if (vaultKey && status) {
+                            const asked = readFor.current;
+                            const nowSide = await sharedCopySide(identity, status);
+                            if (asked === readFor.current) setSide(nowSide === 'unknown' && said === COMMUNITY_RECOVERY_TEXT.offHalfway ? 'none' : nowSide);
+                        }
                     } finally {
                         await read();
                         setBusy(false);

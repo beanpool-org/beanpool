@@ -647,6 +647,44 @@ describe('what each confirm offers, and what a result says (English)', () => {
         });
     });
 
+    describe("a shared copy's Remove that the vault stops is said as the vault's, not the community's (#2683 deciding pass, app/ways-back.tsx:186)", () => {
+        const PAIR = () => halfAtMullum({ adminsCopy: { since: SINCE, placement: 'shared', copy: 'digest' } });
+        const BLAMED = "Not removed: Mullumbimby couldn't do it just now. Try again later.";
+        const removePair = async (why: string, lang: 'en' | 'xx' = 'en') => {
+            fx.ways = PAIR();
+            fx.writtenDown = true;
+            fx.adminsRemoval = { removed: false, why };
+            await mount(lang);
+            await click(all('button').find(b => b.textContent === (lang === 'xx' ? pseudoLocalise('Remove') : 'Remove')), 'the Remove');
+            await press(lang === 'xx' ? pseudoLocalise('Remove') : 'Remove');
+        };
+
+        for (const [what, why, line] of [
+            ['paused', 'paused', "Not removed: BeanPool's key vault is paused for a little while. Try again later."],
+            ["an answer that didn't check out", 'unverified', "Not removed: BeanPool's key vault sent an answer that didn't check out. Check that your phone's date and time are right, then try again."],
+            ['refused', 'refused', "Not removed: BeanPool's key vault couldn't do it just now. Try again later."],
+            ['no answer', 'vault-unreachable', "Not removed: BeanPool's key vault didn't answer. Check your connection and try again."],
+        ] as const) {
+            it(`the vault gave ${what}: the result names the vault, which was asked, and not the community, which wasn't`, async () => {
+                await removePair(why);
+                expect(host!.textContent).toContain(line);
+                expect(host!.textContent).not.toContain(BLAMED);
+            });
+
+            it(`the vault gave ${what}, in the pseudo-locale: through t()`, async () => {
+                await removePair(why, 'xx');
+                wholly(`a vault that gave ${what}`);
+                expect(host!.textContent).toContain(pseudoLocalise(line));
+            });
+        }
+
+        it('the vault deleted its half and the community couldn\'t: that one is the community\'s, by name (the control)', async () => {
+            await removePair('unreachable');
+            expect(host!.textContent).toContain(BLAMED);
+            expect(host!.textContent).not.toContain("BeanPool's key vault didn't answer");
+        });
+    });
+
     it("the copy Mullumbimby keeps for its admins (VR3): its row with since when, its own confirm, and only what Mullumbimby answered", async () => {
         await mount('en');
         // Drawn under Mullumbimby, first (the whole copy, as design §5.1 lists it), before the next community (the host stubs carry no testID).

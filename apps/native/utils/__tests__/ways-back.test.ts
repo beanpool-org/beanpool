@@ -399,6 +399,47 @@ describe("the vault's half when its community can't be heard, on the real listin
         expect(vaultDeletes(net)).toEqual([]);
     });
 
+    describe('a shared copy\'s Remove says which keeper stopped it (#2683 deciding pass, app/ways-back.tsx:186)', () => {
+        const toMullum = (net: Net) => deletesAt(net, MULLUM).filter((s) => s.path === '/api/recovery/community-copy');
+        const stops: [string, (v: FakeVault) => void, string][] = [
+            ['is paused', (v) => { v.locked = true; }, 'paused'],
+            ["answers in a way the phone can't check", (v) => { v.answers = 'forged'; }, 'unverified'],
+            ['refuses', (v) => { v.handle = () => ({ status: 429, body: { error: 'Too many tries.', code: 'rate_limited' } }); }, 'refused'],
+            ["doesn't answer", (v) => { v.unreachable = true; }, 'vault-unreachable'],
+        ];
+        for (const [what, breakIt, why] of stops) {
+            it(`a vault that ${what}: the removal is the vault's to explain, and the community was never asked`, async () => {
+                const net = network();
+                await sharedAtMullum(net);
+                const ways = await listWaysBack(kim);
+                breakIt(net.vault);
+                expect(await removeAdminsCopyFrom(kim, ways.communities[0], { vaultToo: true })).toEqual({ removed: false, why });
+                expect(toMullum(net)).toEqual([]);
+                expect(net.communities[MULLUM].admins, 'its half is still there').toEqual({ since: SINCE, placement: 'shared', copy: DIGEST });
+            });
+        }
+
+        it("the vault deletes and the community can't: `unreachable`, the community's (the control)", async () => {
+            const net = network();
+            await sharedAtMullum(net);
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].adminsDelete = 'refused';
+            expect(await removeAdminsCopyFrom(kim, ways.communities[0], { vaultToo: true })).toEqual({ removed: false, why: 'unreachable' });
+            expect(vaultDeletes(net)).toHaveLength(1);
+            expect(toMullum(net)).toHaveLength(1);
+        });
+
+        it('a whole copy never asks the vault, whatever the vault is doing (the control)', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].admins = { since: SINCE };
+            const ways = await listWaysBack(kim);
+            net.vault.locked = true;
+            expect(await removeAdminsCopyFrom(kim, ways.communities[0])).toEqual({ removed: true });
+            expect(vaultDeletes(net)).toEqual([]);
+        });
+    });
+
     it('a half whose community left this phone, with every community heard: stray, and removable, as Ways back promises', async () => {
         const net = network();
         const ref = await sharedAtMullum(net);

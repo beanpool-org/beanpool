@@ -36,7 +36,7 @@ import {
     VAULT_COMMUNITY_PROVIDER, type SealedShare,
 } from '@beanpool/core';
 import { hexToBytes } from '../crypto';
-import { communityCopyStatus, offersCommunityCopy } from '../community-copy';
+import { COMMUNITY_COPY_TEXT, communityCopyStatus, offersCommunityCopy } from '../community-copy';
 import {
     advanceCommunityRestore, clearPendingCommunityRestore, COMMUNITY_RECOVERY_TEXT, loadPendingCommunityRestore, removeSharedCopy, sharedCopySide, sharedCopyState,
     takeSharedRelease, turnOnSharedCopy, type PendingCommunityRestore,
@@ -58,6 +58,8 @@ let sent: SentRequest[];
 const mullum = {
     half: null as { half: string; copy: string; since: string } | null,
     refuses: false, down: false,
+    /** What its delete answers in place of deleting. */
+    deleteAnswer: null as (() => Response) | null,
     status() {
         return {
             kept: !!this.half, since: this.half?.since ?? null, unopenable: null, offered: false, sharedOffered: true, nodeKey: NODE_KEY,
@@ -75,6 +77,7 @@ beforeEach(async () => {
     mullum.half = null;
     mullum.refuses = false;
     mullum.down = false;
+    mullum.deleteAnswer = null;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         const u = new URL(url);
@@ -98,6 +101,7 @@ beforeEach(async () => {
                 return json(200, { kept: true, since: mullum.half.since });
             }
             if (req.path === '/api/recovery/community-copy' && req.method === 'DELETE') {
+                if (mullum.deleteAnswer) return mullum.deleteAnswer();
                 mullum.half = null;
                 return json(200, { removed: 1, kept: false });
             }
@@ -233,6 +237,50 @@ describe('removing it', () => {
         expect(sharedCopyState(await statusNow(), await sharedCopySide(kim, await statusNow()))).toBe('unfinished');
         await removeSharedCopy(MULLUM, kim, NODE_KEY);
         expect(mullum.half).toBeNull();
+    });
+
+    describe("stopped past the vault's delete (#2683 deciding pass, community-recovery.ts:168)", () => {
+        const STANDBY = 'This server is a standby copy of the community, not its main server.';
+        const STOPS: [string, () => void][] = [
+            ["can't be reached", () => { mullum.down = true; }],
+            ['refuses in its own words', () => { mullum.deleteAnswer = () => new Response(JSON.stringify({ error: STANDBY, code: 'standby' }), { status: 409 }); }],
+            ['fails with no words of its own', () => { mullum.deleteAnswer = () => new Response('', { status: 502 }); }],
+            ["answers with a proxy's page", () => { mullum.deleteAnswer = () => new Response('<html>Welcome to the cafe wifi</html>', { status: 200 }); }],
+            ['says it still keeps it', () => { mullum.deleteAnswer = () => new Response(JSON.stringify({ kept: true }), { status: 200 }); }],
+        ];
+        for (const [what, stop] of STOPS) {
+            it(`a community that ${what}: the sentence of its own, never "nothing changed", and asked against the last status the vault keeps none, so it is "Not finished"`, async () => {
+                await turnOnSharedCopy(MULLUM, kim, NODE_KEY);
+                const last = await statusNow();
+                stop();
+                await expect(removeSharedCopy(MULLUM, kim, NODE_KEY)).rejects.toThrow(new Error(COMMUNITY_RECOVERY_TEXT.offHalfway));
+                expect(COMMUNITY_RECOVERY_TEXT.offHalfway).not.toContain('nothing changed');
+                expect(vault.copiesOf(kim.publicKey), "the vault's half has gone").toEqual([]);
+                expect(mullum.half, "the community's hasn't").not.toBeNull();
+                const side = await sharedCopySide(kim, last);
+                expect(side).toBe('none');
+                expect(sharedCopyState(last, side)).toBe('unfinished');
+            });
+        }
+
+        it('the same on a second try: the vault has nothing left to delete, and it still keeps no half', async () => {
+            await turnOnSharedCopy(MULLUM, kim, NODE_KEY);
+            mullum.down = true;
+            await expect(removeSharedCopy(MULLUM, kim, NODE_KEY)).rejects.toThrow(new Error(COMMUNITY_RECOVERY_TEXT.offHalfway));
+            await expect(removeSharedCopy(MULLUM, kim, NODE_KEY)).rejects.toThrow(new Error(COMMUNITY_RECOVERY_TEXT.offHalfway));
+        });
+
+        it("with no node key the vault is never asked: it keeps its half, nothing changed is true, and a refusal stays the community's own (the control)", async () => {
+            await turnOnSharedCopy(MULLUM, kim, NODE_KEY);
+            mullum.down = true;
+            await expect(removeSharedCopy(MULLUM, kim, null)).rejects.toThrow(new Error(COMMUNITY_COPY_TEXT.unreachable));
+            mullum.down = false;
+            mullum.deleteAnswer = () => new Response(JSON.stringify({ error: STANDBY, code: 'standby' }), { status: 409 });
+            await expect(removeSharedCopy(MULLUM, kim, null)).rejects.toThrow(new Error(STANDBY));
+            mullum.deleteAnswer = () => new Response('<html>Welcome to the cafe wifi</html>', { status: 200 });
+            await expect(removeSharedCopy(MULLUM, kim, null)).rejects.toThrow(new Error(COMMUNITY_COPY_TEXT.unreachable));
+            expect(vault.copiesOf(kim.publicKey)).toHaveLength(1);
+        });
     });
 });
 

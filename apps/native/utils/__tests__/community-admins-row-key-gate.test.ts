@@ -5,7 +5,8 @@
  * in it is the key reaching the community's server. community-admins-row-render.test.ts holds the row's states; this one
  * holds the promise: while the status is unknown, or its read failed, no such request is ever made. And Remove, on the same
  * terms (#2683 deciding pass, CommunityAdminsRow.tsx:247): the real removeSharedCopy, so what is asked of whom is what a
- * member's tap really does. Nothing is contacted.
+ * member's tap really does, and what the row says when it stops halfway (#2683 deciding pass, community-recovery.ts:168).
+ * Nothing is contacted.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -81,7 +82,9 @@ vi.mock('../vault', async (importOriginal) => {
         ...real,
         disconnectCommunityCopy: async (identity: Parameters<typeof real.disconnectCommunityCopy>[0], ref: string) => {
             if (!net.vault) return real.disconnectCommunityCopy(identity, ref);
+            if (net.vaultFails) throw net.vaultFails;
             net.removals.push(`vault ${ref}`);
+            net.side = net.sideOnceDeleted;
             return 1;
         },
     };
@@ -98,6 +101,12 @@ const net = vi.hoisted(() => ({
     status: (() => { throw new Error('unset'); }) as () => Promise<Response>,
     /** How the vault's side of a shared copy stands. */
     side: 'none' as string,
+    /** How it stands when it is asked after deleting its half. */
+    sideOnceDeleted: 'none',
+    /** What the vault's delete throws instead of deleting. */
+    vaultFails: null as Error | null,
+    /** What the community's delete does instead of deleting. */
+    deleteFails: null as (() => Promise<Response>) | null,
     /** What Remove asked the member. */
     asked: [] as string[],
     /** What Remove deleted, in order: the vault's half, by its label, and the community's copy. */
@@ -106,6 +115,7 @@ const net = vi.hoisted(() => ({
 vi.mock('../node-post', () => ({
     anchorUrl: async () => 'https://mullum.beanpool.org',
     signedDelete: async () => {
+        if (net.deleteFails) return net.deleteFails();
         net.removals.push('community');
         return new Response(JSON.stringify({ removed: true, kept: false }), { status: 200 });
     },
@@ -118,6 +128,7 @@ vi.mock('../node-post', () => ({
 
 import { CommunityAdminsRow } from '../../components/CommunityAdminsRow';
 import { communityRefFor } from '../community-recovery';
+import { VaultError } from '../vault';
 
 const ok = (body: unknown) => async () => new Response(JSON.stringify(body), { status: 200 });
 const OFFERED = { kept: false, since: null, offered: true, sharedOffered: false, nodeKey: 'ab'.repeat(32) };
@@ -140,6 +151,9 @@ beforeEach(() => {
     net.sent.length = 0;
     net.sharedTurnOns = 0;
     net.side = 'none';
+    net.sideOnceDeleted = 'none';
+    net.vaultFails = null;
+    net.deleteFails = null;
     net.asked.length = 0;
     net.removals.length = 0;
     // Everything goes through the faked request above: anything that reached for the network itself would fail here.
@@ -286,5 +300,123 @@ describe('Remove on a shared copy, on the real removeSharedCopy (#2683 deciding 
         await remove();
         expect(net.removals).toEqual([`vault ${communityRefFor(me.identity, NODE_KEY)}`, 'community']);
         expect(net.asked).toEqual(["mullum.beanpool.org's server and BeanPool's key vault delete their halves of your copy. Your admins can no longer bring you back; your 12 words still work."]);
+    });
+
+    describe('a Remove that stops halfway (#2683 deciding pass, community-recovery.ts:168)', () => {
+        const HALFWAY = "BeanPool's key vault no longer keeps its half, so your admins can't bring you back now. Your community hasn't confirmed it deleted its half: tap Remove to try again.";
+        const NOTHING_CHANGED = 'Couldn’t reach your community, so nothing changed. Try again in a moment.';
+        const offline = async () => { throw new Error('offline'); };
+        /** The three ways the community's side of it can stop, past the vault's delete. */
+        const STOPS: [string, () => Promise<Response>][] = [
+            ["the community can't be reached", offline],
+            ['the community refuses in its own words', async () => new Response(JSON.stringify({ error: 'This server is a standby copy of the community, not its main server.', code: 'standby' }), { status: 409 })],
+            ['a proxy answers with its own page', async () => new Response('<html>Welcome to the cafe wifi</html>', { status: 200 })],
+        ];
+        const on = () => host!.querySelector('[data-testid="community-admins-on"]');
+        const notFinished = () => host!.querySelector('[data-testid="community-admins-unfinished"]');
+        const removeButton = () => host!.querySelector('[data-testid="community-admins-remove"]');
+        const pair = async () => {
+            keeps(HALF_HERE);
+            net.side = 'matches';
+            await mount();
+            expect(on(), 'On, before it').toBeTruthy();
+        };
+        const vaultGone = () => [`vault ${communityRefFor(me.identity, NODE_KEY)}`];
+
+        for (const [how, stops] of STOPS) {
+            it(`${how}, and it gives no answer to the read after: On goes, "Not finished" shows, and it never says nothing changed`, async () => {
+                await pair();
+                net.deleteFails = stops;
+                net.status = offline;
+                await remove();
+                expect(net.removals, "the vault's half went, and the community's didn't").toEqual(vaultGone());
+                expect(on()).toBeNull();
+                expect(notFinished()).toBeTruthy();
+                expect(host!.textContent).toContain(HALFWAY);
+                expect(host!.textContent).not.toContain('nothing changed');
+                expect(removeButton(), 'Remove is still there, to finish it').toBeTruthy();
+            });
+
+            it(`${how}, and it answers the read after: "Not finished", and it never says nothing changed`, async () => {
+                await pair();
+                net.deleteFails = stops;
+                await remove();
+                expect(net.removals).toEqual(vaultGone());
+                expect(on()).toBeNull();
+                expect(notFinished()).toBeTruthy();
+                expect(host!.textContent).toContain(HALFWAY);
+                expect(host!.textContent).not.toContain('nothing changed');
+                expect(removeButton()).toBeTruthy();
+            });
+        }
+
+        it("the phone lost its signal after the vault's answer, so neither can be asked again: the vault's signed delete still stands, and On goes", async () => {
+            await pair();
+            net.sideOnceDeleted = 'unknown';
+            net.deleteFails = offline;
+            net.status = offline;
+            await remove();
+            expect(on()).toBeNull();
+            expect(notFinished()).toBeTruthy();
+            expect(host!.textContent).toContain(HALFWAY);
+        });
+
+        it('the vault deleted and its answer was lost: asked again it keeps none, so On goes, though it said nothing at the time', async () => {
+            await pair();
+            net.vaultFails = new VaultError('unreachable', "BeanPool's key vault didn't answer.");
+            net.side = 'none';
+            net.status = offline;
+            await remove();
+            expect(net.removals, 'the community is never asked past a vault that gave no answer').toEqual([]);
+            expect(on()).toBeNull();
+            expect(notFinished()).toBeTruthy();
+        });
+
+        it('a paused vault deleted nothing: On stays, and the row says nothing was removed (the control)', async () => {
+            await pair();
+            net.vaultFails = new VaultError('locked', 'paused', 'locked');
+            net.status = offline;
+            await remove();
+            expect(net.removals).toEqual([]);
+            expect(on()).toBeTruthy();
+            expect(notFinished()).toBeNull();
+            expect(host!.textContent).toContain('so nothing was removed');
+            expect(host!.textContent).not.toContain(HALFWAY);
+        });
+
+        it("a vault that can't be asked at all never turns an On off (the control)", async () => {
+            await pair();
+            net.vaultFails = new VaultError('unreachable', "BeanPool's key vault didn't answer.");
+            net.side = 'unknown';
+            net.status = offline;
+            await remove();
+            expect(on()).toBeTruthy();
+            expect(notFinished()).toBeNull();
+        });
+
+        it('in a build with no vault nothing was asked of it: nothing changed is still true, and On stays (the control)', async () => {
+            net.vault = false;
+            store.set('beanpool_community_copy_on_https://mullum.beanpool.org', '1');
+            keeps(HALF_HERE);
+            await mount();
+            net.deleteFails = offline;
+            net.status = offline;
+            await remove();
+            expect(net.removals).toEqual([]);
+            expect(on()).toBeTruthy();
+            expect(host!.textContent).toContain(NOTHING_CHANGED);
+        });
+
+        it('a server still starting says no node key, so the vault is never asked: nothing changed is still true (the control)', async () => {
+            keeps({ ...HALF_HERE, nodeKey: null });
+            net.side = 'matches';
+            await mount();
+            net.deleteFails = offline;
+            net.status = offline;
+            await remove();
+            expect(net.removals).toEqual([]);
+            expect(host!.textContent).toContain(NOTHING_CHANGED);
+            expect(host!.textContent).not.toContain(HALFWAY);
+        });
     });
 });

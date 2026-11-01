@@ -46,8 +46,11 @@ export type CopyAt =
     /** A community copy at the vault no community saved on this phone can be keeping the rest of: it goes alone, by its label. */
     | { at: 'vault-half'; ref: string };
 
-/** What a removal did. `remembered`: a community's delete that didn't land, kept and tried again. */
-export type Removal = { removed: true } | { removed: false; why: NotAnswered | 'refused' | 'remembered' };
+/**
+ * What a removal did. `remembered`: a community's delete that didn't land, kept and tried again. `vault-unreachable`: a shared
+ * copy's Remove stopped at the vault, asked first, for want of an answer (`unreachable` there is the community's).
+ */
+export type Removal = { removed: true } | { removed: false; why: NotAnswered | 'refused' | 'remembered' | 'vault-unreachable' };
 
 /** Two addresses of one community, as the phone saves them (case and a trailing slash aside). */
 export function sameCommunity(a: string, b: string): boolean {

@@ -139,12 +139,13 @@ export async function removeCommunityCopyFrom(
  * Remove the copy a community keeps for its admins to bring the member back from (vault rethink VR3): removed on the
  * community's own answer; otherwise not removed, and not remembered (vault-move.ts `removeAdminsCopy`). A shared copy
  * (VR4) goes from the vault first (`vaultToo`), on its signed answer: half a pair left there is what can be tried again.
+ * Stopped there, the community was never asked, and the reason given is the vault's: `unreachable` alone is the community's.
  * A whole copy never asks the vault, which has nothing of it and may be paused.
  */
 export async function removeAdminsCopyFrom(identity: BeanPoolIdentity, community: CommunityPart, opts: { vaultToo?: boolean } = {}): Promise<Removal> {
     if (opts.vaultToo && community.vaultRef) {
         const atVault = await removeVaultHalf(identity, community.vaultRef);
-        if (!atVault.removed) return atVault;
+        if (!atVault.removed) return atVault.why === 'unreachable' ? { removed: false, why: 'vault-unreachable' } : atVault;
     }
     return (await removeAdminsCopy(identity, community.url)) ? { removed: true } : { removed: false, why: 'unreachable' };
 }

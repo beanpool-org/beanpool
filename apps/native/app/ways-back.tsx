@@ -58,11 +58,15 @@ function communityResult(name: string, removal: Removal): string {
         : t("Not removed yet: {community} didn't answer. The app tries again each time it opens.", { community: name });
 }
 
-/** What removing a community's copy for its admins says (VR3): gone on its own answer, or not, to try again. */
+/**
+ * What removing a community's copy for its admins says (VR3): gone on its own answer, or not, to try again. Any reason but
+ * `unreachable` is the vault's, which a shared copy's Remove (VR4) asks first: the community was never asked, and isn't blamed.
+ */
 function adminsResult(name: string, removal: Removal): string {
-    return removal.removed
-        ? t('Removed from {community}.', { community: name })
-        : t("Not removed: {community} couldn't do it just now. Try again later.", { community: name });
+    if (removal.removed) return t('Removed from {community}.', { community: name });
+    return removal.why === 'unreachable'
+        ? t("Not removed: {community} couldn't do it just now. Try again later.", { community: name })
+        : vaultNotRemoved(removal.why);
 }
 
 /** Remove everything's result, keeper by keeper: only what each one's own answer says. */

@@ -43,6 +43,7 @@ import {
     formatTimeLeft, scanProblemMessage as signinScanProblem, type PairingLookup,
 } from '../settings-signin';
 import { REKEY_TEXT } from '../rekey-redeem';
+import { COMMUNITY_RECOVERY_TEXT } from '../community-recovery';
 import { claimOutcomeMessage, type ClaimOutcome } from '../node-claim';
 import { NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE, stillKeptLine, type KeptCommunity } from '../delete-here';
 import { NAMES_COPY, UNREACHABLE, firstSentence } from '../names-list';
@@ -106,6 +107,7 @@ const WHOLE: string[] = [
     'Could not reach the node.', 'The node refused the sign-in.',
     SIGNIN_QUESTION, SIGNIN_WARNING, AGENT_QUESTION, AGENT_WARNING, DIGITS_PRIVATE,
     ...Object.values(REKEY_TEXT),
+    ...Object.values(COMMUNITY_RECOVERY_TEXT),
     'That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.',
     'That isn’t a community address the app can use.',
     'That is not a community address the app can use.', 'Could not reach the server.', "That address doesn't answer like a BeanPool server.",

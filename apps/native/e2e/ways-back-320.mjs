@@ -122,6 +122,7 @@ const STUBS = {
 };
 // The shared placement's side of the row (VR4): how the vault's half stands (the page's query), and nothing sealed or sent.
 STUBS['community-recovery'] = `
+    export const COMMUNITY_RECOVERY_TEXT = {};
     export const sharedCopySide = async () => globalThis.__side ?? null;
     export const sharedCopyState = (status, side) => {
         if (!status) return null;

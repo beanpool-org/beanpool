@@ -75,6 +75,8 @@ export const COMMUNITY_RECOVERY_TEXT = {
     pausedOn: "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.",
     /** The same at Remove. */
     pausedOff: "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.",
+    /** A Remove that stopped halfway: the vault keeps no half now, and the community hasn't said the same of its own. */
+    offHalfway: "BeanPool's key vault no longer keeps its half, so your admins can't bring you back now. Your community hasn't confirmed it deleted its half: tap Remove to try again.",
 } as const;
 
 /** How often the phone asks the vault while it waits: a day's hold, so once a minute is plenty, and costs a signed call. */
@@ -156,20 +158,23 @@ export async function turnOnSharedCopy(url: string, identity: BeanPoolIdentity, 
 
 /**
  * Turn it off: the vault deletes its copy and its half, then the community its half. Resolves only on both answers; throws
- * with a sentence otherwise, and what is left is "Not finished" on the row, with Remove still there. `nodeKey` null: the
- * community didn't say it, or this build has no vault to ask, so only its half can be asked for.
+ * with a sentence otherwise, and what is left is "Not finished" on the row, with Remove still there. Once the vault has
+ * answered, that sentence is {@link COMMUNITY_RECOVERY_TEXT}.offHalfway, however the community's side stopped: "nothing
+ * changed" would be false, and a community's own refusal doesn't say the half at the vault has gone. `nodeKey` null: the
+ * community didn't say it, or this build has no vault to ask, so only its half can be asked for, and the vault keeps its own.
  */
 export async function removeSharedCopy(url: string, identity: BeanPoolIdentity, nodeKey: string | null): Promise<void> {
     if (nodeKey) await disconnectCommunityCopy(identity, communityRefFor(identity, nodeKey)).catch((e) => { throw inThisFlow(e, COMMUNITY_RECOVERY_TEXT.pausedOff); });
+    const stopped = (refusal?: unknown) => new Error(nodeKey ? COMMUNITY_RECOVERY_TEXT.offHalfway : typeof refusal === 'string' ? refusal : COMMUNITY_COPY_TEXT.unreachable);
     let res: Response;
     try {
         res = await signedDelete(url, '/api/recovery/community-copy', identity);
     } catch {
-        throw new Error(COMMUNITY_COPY_TEXT.unreachable);
+        throw stopped();
     }
     const body = await res.json().catch(() => ({} as Record<string, unknown>));
-    if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : COMMUNITY_COPY_TEXT.unreachable);
-    if (body.kept !== false) throw new Error(COMMUNITY_COPY_TEXT.unreachable);
+    if (!res.ok) throw stopped(body.error);
+    if (body.kept !== false) throw stopped();
 }
 
 // ── Getting back in ────────────────────────────────────────────────────────────────────────────────────────────────

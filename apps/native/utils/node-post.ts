@@ -75,14 +75,14 @@ export async function signedGet(
  * for a request that carries none.
  */
 export async function signedDelete(
-    url: string, path: string, identity: BeanPoolIdentity,
+    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal,
 ): Promise<Response> {
     const target = `${url.replace(/\/+$/, '')}${path}`;
     const headers = await buildSignedHeaders(
         'DELETE', target, '', identity.privateKey, identity.publicKey,
     );
     return fetch(target, {
-        method: 'DELETE', headers,
+        method: 'DELETE', headers, ...(signal ? { signal } : {}),
     });
 }
 

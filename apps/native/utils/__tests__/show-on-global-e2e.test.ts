@@ -7,8 +7,9 @@
  *   as home holds it. Global's from-line is the directory's; an unlisted host is dropped and the member told. An edit, a
  *   time change, a cancelled date and a cancel repeat. Global down, it all waits, and a phone back comes into step, a cancel
  *   included. A lost answer posts nothing twice. A refusal forgets a copy only once it has gone from global, and a series
- *   between dates isn't over. A holiday at home takes the copy down and its end brings it back. A global that predates copies
- *   keeps nothing with the member's name on.
+ *   between dates isn't over. A holiday at home takes the copy down and its end brings it back. A Stop showing that lands during
+ *   a tend stands, and a request that never answers ends in time for the next tend to run. A global that predates copies keeps
+ *   nothing with the member's name on.
  *
  *   The home harness's request log holds nothing but the phone: no call to global, and home is asked nothing it isn't always
  *   asked. The community's own fetch refuses every host but this machine. The phone's fetch is held to these two addresses.
@@ -56,7 +57,7 @@ import { repeatPatternFor, roundToArea } from '@beanpool/core';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
 import { fetchedPostPhoto } from '../post-photo';
-import { COPY_KEEP_ALIVE_MS, copyFields, copyResultLine, homeHostOf, pairOf, repeatOnCopy, showOnGlobal, stopLaterLine, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
+import { COPY_KEEP_ALIVE_MS, COPY_TIMEOUT_MS, copyFields, copyResultLine, homeHostOf, pairOf, repeatOnCopy, showOnGlobal, stopLaterLine, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
 const START_MS = 120_000;
@@ -239,6 +240,12 @@ const copyCount = async (me: BeanPoolIdentity) => (await global_.control<Array<{
 const muteOnGlobal = (me: BeanPoolIdentity, muted: boolean) => global_.control('sql', {
     sql: 'UPDATE members SET moderation_muted_until = ? WHERE public_key = ?', params: [muted ? new Date(Date.now() + 3_600_000).toISOString() : null, me.publicKey],
 });
+
+/** Fails rather than hangs: the tend queue is the module's, so one stuck tend would hang every test after it. */
+const within = <T,>(waiting: Promise<T>, ms = 20_000) => Promise.race([
+    waiting,
+    new Promise<never>((_, reject) => { setTimeout(() => reject(new Error(`still waiting after ${ms} ms`)), ms); }),
+]);
 
 describe('an in-person event shown on the global community (the phone against two real nodes)', () => {
     it('the tick: a copy by the same key, the point rounded, no place and no note; home hears nothing of it and calls nobody', async () => {
@@ -552,6 +559,286 @@ describe('an in-person event shown on the global community (the phone against tw
             await tendCopies(me, deps());
             expect(phoneToLocal.slice(from).filter((r) => r.includes('/api/members/preferences'))).toHaveLength(1);
         }, START_MS);
+
+        /** One step of a tend held open until the test lets it go, as a slow line holds it. */
+        function held() {
+            let reached!: () => void;
+            let release!: () => void;
+            const at = new Promise<void>((resolve) => { reached = resolve; });
+            const until = new Promise<void>((resolve) => { release = resolve; });
+            return { at, release, hold: () => { reached(); return until; } };
+        }
+        type Held = ReturnType<typeof held>;
+        const homeHeld = (gate: Held, part: string): CopyDeps => ({ ...deps(), get: async (url, path, identity, signal) => {
+            if (url === local.url && path.includes(part)) await gate.hold();
+            return signedGet(url, path, identity, signal);
+        } });
+        /** A write to global held on its way there, or held after it has landed with its answer on the way back. */
+        const globalHeld = (gate: Held, part: RegExp, when: 'going' | 'landed'): CopyDeps => ({ ...deps(), post: async (url, path, body, identity, signal) => {
+            if (!part.test(path)) return signedPost(url, path, body, identity, signal);
+            if (when === 'going') await gate.hold();
+            const res = await signedPost(url, path, body, identity, signal);
+            if (when === 'landed') await gate.hold();
+            return res;
+        } });
+        const weekly = async (me: BeanPoolIdentity, title: string) => {
+            const first = new Date(inHours(14 * 24));
+            const end = new Date(first.getTime() + 2 * 3_600_000);
+            const clock = (d: Date) => d.toISOString().slice(0, 16);
+            const home = await eventAtHome(me, title, {
+                eventStartAt: first.toISOString(), eventEndAt: end.toISOString(), eventStartLocal: clock(first), eventEndLocal: clock(end), eventTz: 'UTC',
+                eventRepeat: repeatPatternFor('weekly', clock(first).slice(0, 10)),
+            });
+            await showOnGlobal(home, local.url, me, deps());
+            return { home, date: new Date(first.getTime() + 7 * 86_400_000).toISOString().slice(0, 10) };
+        };
+
+        describe('a Stop showing that lands during a tend stands: the pair stays gone, and nothing comes back when the holiday ends', () => {
+            const staysStopped = async (me: BeanPoolIdentity, homeId: string, tend: Promise<void>, gate: Held, others: string[] = []) => {
+                await within(gate.at);
+                expect(await stopShowing(homeId, me, deps())).toBe(true);
+                gate.release();
+                await within(tend);
+                expect(await pairOf(homeId, me.publicKey)).toBeNull();
+                await holiday(me, false);
+                await within(tendCopies(me, deps()));
+                expect((await liveCopies(me)).map((c) => c.title)).toEqual(others);
+            };
+
+            it('on the next event, while the tend is reading the first from home', async () => {
+                const me = await memberOfBoth('Mid Uma');
+                const kept = await eventAtHome(me, 'Still shown');
+                const stopped = await eventAtHome(me, 'Stopped mid-tend');
+                for (const event of [kept, stopped]) await showOnGlobal(event, local.url, me, deps());
+                await holiday(me, true);
+                const gate = held();
+                await staysStopped(me, stopped.id, tendCopies(me, homeHeld(gate, kept.id)), gate, ['Still shown']);
+            }, START_MS);
+
+            it.each([['its own read from home', 'id'], ['the read of the holiday', 'preferences']] as const)('on the event itself, during %s', async (_step, part) => {
+                const me = await memberOfBoth(`Mid Vee ${part}`);
+                const home = await eventAtHome(me, 'Stopped during a read');
+                await showOnGlobal(home, local.url, me, deps());
+                await holiday(me, true);
+                const gate = held();
+                await staysStopped(me, home.id, tendCopies(me, homeHeld(gate, part === 'id' ? home.id : '/api/members/preferences')), gate);
+            }, START_MS);
+
+            it('on the next event, both waiting for global to hear, while the first is being retried', async () => {
+                const me = await memberOfBoth('Mid Tess');
+                const first = await eventAtHome(me, 'Retried first');
+                const stopped = await eventAtHome(me, 'Stopped while waiting');
+                for (const event of [first, stopped]) await showOnGlobal(event, local.url, me, deps());
+                await holiday(me, true);
+                globalDown = true;
+                await tendCopies(me, deps());
+                globalDown = false;
+                const gate = held();
+                await staysStopped(me, stopped.id, tendCopies(me, globalHeld(gate, /\/remove$/, 'going')), gate, ['Retried first']);
+            }, START_MS);
+
+            it('with the rest\'s own remove on its way to global', async () => {
+                const me = await memberOfBoth('Mid Wren');
+                const home = await eventAtHome(me, 'Stopped mid-remove');
+                await showOnGlobal(home, local.url, me, deps());
+                await holiday(me, true);
+                const gate = held();
+                await staysStopped(me, home.id, tendCopies(me, globalHeld(gate, /\/remove$/, 'going')), gate);
+            }, START_MS);
+
+            const rested = async (me: BeanPoolIdentity, title: string) => {
+                const home = await eventAtHome(me, title);
+                await showOnGlobal(home, local.url, me, deps());
+                await holiday(me, true);
+                await tendCopies(me, deps());
+                await holiday(me, false);
+                return home;
+            };
+
+            it('at the holiday\'s end, while the tend is reading from home: no new copy goes up', async () => {
+                const me = await memberOfBoth('Mid Xan');
+                const home = await rested(me, 'Stopped at the end');
+                const gate = held();
+                await staysStopped(me, home.id, tendCopies(me, homeHeld(gate, home.id)), gate);
+            }, START_MS);
+
+            it.each(['going', 'landed'] as const)('at the holiday\'s end, with the new copy %s: it comes down', async (when) => {
+                const me = await memberOfBoth(`Mid Yara ${when}`);
+                const home = await rested(me, 'Stopped on its way back');
+                const gate = held();
+                await staysStopped(me, home.id, tendCopies(me, globalHeld(gate, /\/api\/marketplace\/posts$/, when)), gate);
+            }, START_MS);
+
+            it('with an edit\'s answer on its way back: the pair doesn\'t return', async () => {
+                const me = await memberOfBoth('Mid Zed');
+                const home = await eventAtHome(me, 'Edited, then stopped');
+                await showOnGlobal(home, local.url, me, deps());
+                const id = await copyIdOf(home.id, me);
+                await editAtHome(me, home.id, { title: 'Edited again' });
+                const gate = held();
+                const tend = tendCopies(me, globalHeld(gate, /\/update$/, 'landed'));
+                await staysStopped(me, home.id, tend, gate);
+                expect((await copyRow(id)).status).toBe('cancelled');
+            }, START_MS);
+
+            it('with a cancelled date\'s answer on its way back: the pair doesn\'t return', async () => {
+                const me = await memberOfBoth('Mid Abe');
+                const { home, date } = await weekly(me, 'Dated, then stopped');
+                expect((await signedPost(local.url, `/api/events/${home.id}/skip`, { date }, me)).ok).toBe(true);
+                const gate = held();
+                await staysStopped(me, home.id, tendCopies(me, globalHeld(gate, /\/skip$/, 'landed')), gate);
+            }, START_MS);
+        });
+
+        describe('a request that never answers ends in time: the tends after it still run', () => {
+            /** The request timer the code under test has running, fired by hand: a minute going by on a dead line. */
+            function requestClock() {
+                const running = new Map<unknown, () => void>();
+                const [realSet, realClear] = [globalThis.setTimeout, globalThis.clearTimeout];
+                const set = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+                    const handle = realSet(fn, ms);
+                    if (ms === COPY_TIMEOUT_MS) running.set(handle, fn);
+                    return handle;
+                }) as unknown as typeof setTimeout);
+                const clear = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(((handle: any) => {
+                    running.delete(handle);
+                    realClear(handle);
+                }) as typeof clearTimeout);
+                return { fire: () => { for (const fn of running.values()) fn(); }, restore: () => { set.mockRestore(); clear.mockRestore(); } };
+            }
+            /** A line that has gone quiet. It ends for the signal it was given, or when the test is over, so a failure can't hang the rest. */
+            function deadLine({ deaf = false } = {}) {
+                const over = new AbortController();
+                const signals: Array<AbortSignal | undefined> = [];
+                let heard!: () => void;
+                const reached = new Promise<void>((resolve) => { heard = resolve; });
+                const stall = (signal?: AbortSignal) => {
+                    signals.push(signal);
+                    heard();
+                    return new Promise<never>((_, reject) => {
+                        const dies = () => reject(new TypeError('Network request failed'));
+                        if (!deaf) signal?.addEventListener('abort', dies);
+                        over.signal.addEventListener('abort', dies);
+                    });
+                };
+                return { reached, signals, stall, end: () => over.abort() };
+            }
+            type Dead = ReturnType<typeof deadLine>;
+            /** The headers came, and the body never does. */
+            const noBody = (line: Dead, signal?: AbortSignal) => ({ ok: true, status: 200, json: () => line.stall(signal) }) as unknown as Response;
+
+            async function stalledThenTended(me: BeanPoolIdentity, line: Dead, stuck: CopyDeps): Promise<void> {
+                const clock = requestClock();
+                try {
+                    const tend = tendCopies(me, stuck);
+                    await within(line.reached);
+                    clock.fire();
+                    await within(tend);
+                } finally {
+                    clock.restore();
+                    line.end();
+                }
+                expect(line.signals).toHaveLength(1);
+                expect(line.signals[0]?.aborted).toBe(true);
+            }
+
+            it('a cancelled date: the holiday switch\'s tend still runs, and the copy comes down', async () => {
+                const me = await memberOfBoth('Dead Ann');
+                const { home, date } = await weekly(me, 'Skip on a dead line');
+                expect((await signedPost(local.url, `/api/events/${home.id}/skip`, { date }, me)).ok).toBe(true);
+                const line = deadLine();
+                await stalledThenTended(me, line, { ...deps(), post: (url, path, body, identity, signal) => (path.endsWith('/skip') ? line.stall(signal) : signedPost(url, path, body, identity, signal)) });
+                await holiday(me, true);
+                await within(tendCopies(me, deps()));
+                expect(await liveCopies(me)).toEqual([]);
+            }, START_MS);
+
+            it('a step that doesn\'t hear the signal is given up on all the same', async () => {
+                const me = await memberOfBoth('Dead Gus');
+                const { home, date } = await weekly(me, 'Skip that hears nothing');
+                expect((await signedPost(local.url, `/api/events/${home.id}/skip`, { date }, me)).ok).toBe(true);
+                const line = deadLine({ deaf: true });
+                await stalledThenTended(me, line, { ...deps(), post: (url, path, body, identity, signal) => (path.endsWith('/skip') ? line.stall(signal) : signedPost(url, path, body, identity, signal)) });
+                await within(tendCopies(me, deps()));
+            }, START_MS);
+
+            it('a date brought back: the same, and the delete gives up on its signal', async () => {
+                const me = await memberOfBoth('Dead Bo');
+                const { home, date } = await weekly(me, 'Unskip on a dead line');
+                const path = `/api/events/${home.id}/skip`;
+                expect((await signedPost(local.url, path, { date }, me)).ok).toBe(true);
+                await tendCopies(me, deps());
+                expect((await pairOf(home.id, me.publicKey))?.skips).toEqual([date]);
+                expect((await signedDelete(local.url, `${path}?date=${date}`, me)).ok).toBe(true);
+                const line = deadLine();
+                await stalledThenTended(me, line, { ...deps(), del: (_url, _path, _identity, signal) => line.stall(signal) });
+                await holiday(me, true);
+                await within(tendCopies(me, deps()));
+                expect(await liveCopies(me)).toEqual([]);
+
+                const gaveUp = new AbortController();
+                gaveUp.abort();
+                await expect(signedDelete(global_.url, `/api/events/${randomUUID()}/skip?date=${date}`, me, gaveUp.signal)).rejects.toThrow();
+            }, START_MS);
+
+            it.each([
+                ['the home read', (id: string) => id],
+                ['the read of the holiday', () => '/api/members/preferences'],
+            ])('the body of %s never comes: the next tend still asks', async (name, part) => {
+                const me = await memberOfBoth(`Dead Cy ${name}`);
+                const home = await eventAtHome(me, 'A quiet body');
+                await showOnGlobal(home, local.url, me, deps());
+                const line = deadLine();
+                await stalledThenTended(me, line, {
+                    ...deps(),
+                    get: async (url, path, identity, signal) => (path.includes(part(home.id)) ? noBody(line, signal) : signedGet(url, path, identity, signal)),
+                });
+                const next: CopyDeps = { ...deps(), get: vi.fn(signedGet) };
+                await within(tendCopies(me, next));
+                expect(next.get).toHaveBeenCalled();
+            }, START_MS);
+
+            it('the body of an edit\'s answer never comes: the next tend sends it', async () => {
+                const me = await memberOfBoth('Dead Di');
+                const home = await eventAtHome(me, 'A quiet edit');
+                await showOnGlobal(home, local.url, me, deps());
+                await editAtHome(me, home.id, { title: 'A quiet edit, moved' });
+                const line = deadLine();
+                await stalledThenTended(me, line, { ...deps(), post: async (url, path, body, identity, signal) => (path.endsWith('/update') ? noBody(line, signal) : signedPost(url, path, body, identity, signal)) });
+                await within(tendCopies(me, deps()));
+                expect((await liveCopies(me)).map((c) => c.title)).toEqual(['A quiet edit, moved']);
+            }, START_MS);
+
+            it('the body of a remove\'s answer never comes: the rest is tried again', async () => {
+                const me = await memberOfBoth('Dead Eve');
+                const home = await eventAtHome(me, 'A quiet remove');
+                await showOnGlobal(home, local.url, me, deps());
+                await holiday(me, true);
+                const line = deadLine();
+                await stalledThenTended(me, line, { ...deps(), post: async (url, path, body, identity, signal) => (path.endsWith('/remove') ? noBody(line, signal) : signedPost(url, path, body, identity, signal)) });
+                await within(tendCopies(me, deps()));
+                expect(await liveCopies(me)).toEqual([]);
+                expect((await pairOf(home.id, me.publicKey))?.resting).toBe(true);
+            }, START_MS);
+
+            it.each(['the read a waiting copy starts with', 'a new copy\'s answer'])('the body of %s never comes: the next tend sends it', async (step) => {
+                const me = await memberOfBoth(`Dead Flo ${step.length}`);
+                const home = await eventAtHome(me, 'A quiet first send');
+                globalDown = true;
+                await showOnGlobal(home, local.url, me, deps());
+                globalDown = false;
+                const copyId = await copyIdOf(home.id, me);
+                const line = deadLine();
+                await stalledThenTended(me, line, {
+                    ...deps(),
+                    ...(step.startsWith('the read')
+                        ? { get: async (url, path, identity, signal) => (url === global_.url && path.includes(copyId) ? noBody(line, signal) : signedGet(url, path, identity, signal)) }
+                        : { post: async (url, path, body, identity, signal) => (/\/api\/marketplace\/posts$/.test(path) ? noBody(line, signal) : signedPost(url, path, body, identity, signal)) }),
+                } as CopyDeps);
+                await within(tendCopies(me, deps()));
+                expect((await liveCopies(me)).map((c) => c.title)).toEqual(['A quiet first send']);
+            }, START_MS);
+        });
     });
 
     it('what the tick is not for never goes, whoever asks: a group\'s event, an enterprise\'s, an online one', async () => {

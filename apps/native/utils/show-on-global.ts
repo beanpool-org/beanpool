@@ -14,6 +14,8 @@
  *   member's to take down from My posts on global.
  * - **A holiday at home.** The member's listings leave their community's board, and the copy leaves global with them. The
  *   pair stays, and when the holiday ends the copy goes back up as a new one ({@link CopyPair.resting}).
+ * - **A Stop showing stands.** A tap can land between any two steps of a tend, so each step goes by the pair as it is stored
+ *   now: a pair that has gone stays gone, and a send that lands after it comes down ({@link recordSend}).
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
  *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
  *   pair goes only once global says the copy isn't up ({@link forgetIfGone}): it is the phone's only way to that copy.
@@ -34,7 +36,8 @@ import type { FetchedPhoto } from './post-photo';
 
 const POSTS_PATH = '/api/marketplace/posts';
 const PREFERENCES_PATH = '/api/members/preferences';
-const TIMEOUT_MS = 60_000;
+/** How long one request gets, its answer's body included. React Native's fetch never gives up by itself. */
+export const COPY_TIMEOUT_MS = 60_000;
 /** A copy unchanged this long is sent again, so global's retention (90 days without a change) only takes an untended one. */
 export const COPY_KEEP_ALIVE_MS = 30 * 24 * 60 * 60 * 1000;
 /** {@link tendCopiesSoon}: at most this often. */
@@ -93,7 +96,7 @@ export interface CopyDeps {
     global: string;
     get(url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal): Promise<Response>;
     post(url: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal): Promise<Response>;
-    del(url: string, path: string, identity: BeanPoolIdentity): Promise<Response>;
+    del(url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal): Promise<Response>;
     fetchPhoto(url: string): Promise<FetchedPhoto>;
     /** The host global looks the community up by. */
     hostOf(home: string): string | null | Promise<string | null>;
@@ -128,6 +131,11 @@ async function readPairs(): Promise<CopyPair[]> {
 }
 
 const writePairs = (pairs: CopyPair[]) => AsyncStorage.setItem(SHOWN_ON_GLOBAL_STORE_KEY, JSON.stringify(pairs));
+
+/** The pair as it is stored now: a tap may have changed it, or taken it away, since it was read. */
+async function storedPair(copyId: string): Promise<CopyPair | undefined> {
+    return (await readPairs()).find((p) => p.copyId === copyId);
+}
 
 async function savePair(pair: CopyPair): Promise<void> {
     await writePairs([...(await readPairs()).filter((p) => p.copyId !== pair.copyId), pair]);
@@ -169,11 +177,21 @@ export function copyFields(home: HomeEvent, publicKey: string): Record<string, u
 
 const firstPhoto = (home: HomeEvent) => home.photos?.[0] ?? '';
 
+/**
+ * Runs a request and the reading of its answer, and gives up at {@link COPY_TIMEOUT_MS} whatever it is waiting on. Each tend
+ * waits for the one before ({@link tendCopies}), so everything a tend waits on the network for goes through here.
+ */
 async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const noAnswer = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error('No answer in time'));
+        }, COPY_TIMEOUT_MS);
+    });
     try {
-        return await run(controller.signal);
+        return await Promise.race([run(controller.signal), noAnswer]);
     } finally {
         clearTimeout(timer);
     }
@@ -187,14 +205,20 @@ async function answerOf(res: Response): Promise<{ done: any } | 'later' | { refu
     return typeof answer?.error === 'string' && answer.error ? { refused: answer.error } : 'later';
 }
 
+/** What a node answers a read with, body and all. Null where it refused the read or answered with something else. */
+function readJson(url: string, path: string, identity: BeanPoolIdentity, deps: CopyDeps): Promise<unknown> {
+    return withTimeout(async (signal) => {
+        const res = await deps.get(url, path, identity, signal);
+        return res.ok ? res.json().catch(() => null) : null;
+    });
+}
+
 /**
  * Is the copy up on global? `later` when global didn't say. A copy taken down there still reads by id for its host, as
  * cancelled, for 30 days: that one isn't up, and an edit can't bring it back.
  */
 async function copyIsThere(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean | 'later'> {
-    const res = await withTimeout((signal) => deps.get(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, signal));
-    if (!res.ok) return 'later';
-    const rows: unknown = await res.json().catch(() => null);
+    const rows = await readJson(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, deps);
     return Array.isArray(rows) ? rows.some((row) => row?.status !== 'cancelled') : 'later';
 }
 
@@ -209,6 +233,16 @@ async function forgetIfGone(pair: CopyPair, identity: BeanPoolIdentity, deps: Co
     return there;
 }
 
+/**
+ * A send landed, and the pair takes it in. If a Stop showing came while it was on its way the pair has gone and stays gone,
+ * and what just landed comes down. One already on its way out is left to go.
+ */
+async function recordSend(sent: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<void> {
+    const stored = await storedPair(sent.copyId);
+    if (!stored) await takeDown(sent, identity, deps);
+    else if (!stored.leaving) await savePair(sent);
+}
+
 async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIdentity, deps: CopyDeps): Promise<CopyResult> {
     const { photos, later } = await photosOf({ photos: (home.photos ?? []).slice(0, BRING_MOST_PHOTOS) }, pair.home, deps);
     if (photos.length === 0 && later) return 'later';
@@ -216,7 +250,7 @@ async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
         id: pair.copyId, ...copyFields(home, identity.publicKey), photos,
         shownFrom: { host: await deps.hostOf(pair.home), postId: pair.homeId },
     };
-    const answer = await answerOf(await withTimeout((signal) => deps.post(deps.global, POSTS_PATH, body, identity, signal)));
+    const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, POSTS_PATH, body, identity, signal)));
     if (answer === 'later') return 'later';
     if ('refused' in answer) {
         // Up all the same: this was a second send of the id (an edit made during the upload), and the first one landed.
@@ -229,7 +263,7 @@ async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
         await dropPair(pair);
         return { refused: t("The global community can't show this yet.") };
     }
-    await savePair({ ...pair, sent: JSON.stringify(copyFields(home, identity.publicKey)), sentAt: Date.now(), photo: firstPhoto(home) });
+    await recordSend({ ...pair, sent: JSON.stringify(copyFields(home, identity.publicKey)), sentAt: Date.now(), photo: firstPhoto(home) }, identity, deps);
     return answer.done.post?.shownFrom ? 'shown' : 'shown-no-name';
 }
 
@@ -241,13 +275,13 @@ async function updateCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
     // sent as taken off, or it stays public here while `sent` says the copy is in step.
     const taken = { tags: fields.tags ?? [], freeTags: fields.freeTags ?? [], ...(!fields.eventRepeat ? { eventRepeat: null } : fields.eventRepeatUntil ? {} : { eventRepeatUntil: null }) };
     const body = { id: pair.copyId, ...edit, ...taken, ...(fetched?.photos.length ? { photos: fetched.photos } : {}) };
-    const answer = await answerOf(await withTimeout((signal) => deps.post(deps.global, `${POSTS_PATH}/update`, body, identity, signal)));
+    const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, `${POSTS_PATH}/update`, body, identity, signal)));
     if (answer === 'later') return 'later';
     if ('refused' in answer) {
         await forgetIfGone(pair, identity, deps);
         return answer;
     }
-    await savePair({ ...pair, sent: JSON.stringify(fields), sentAt: Date.now(), photo: fetched?.photos.length ? firstPhoto(home) : pair.photo });
+    await recordSend({ ...pair, sent: JSON.stringify(fields), sentAt: Date.now(), photo: fetched?.photos.length ? firstPhoto(home) : pair.photo }, identity, deps);
     return 'shown';
 }
 
@@ -268,12 +302,13 @@ async function repeatDates(pair: CopyPair, home: HomeEvent, identity: BeanPoolId
     const path = `/api/events/${encodeURIComponent(pair.copyId)}/skip`;
     const done = [...pair.skips];
     for (const date of want.filter((d) => !pair.skips.includes(d))) {
-        if ((await deps.post(deps.global, path, { date }, identity)).ok) done.push(date);
+        if (await withTimeout(async (signal) => (await deps.post(deps.global, path, { date }, identity, signal)).ok)) done.push(date);
     }
     for (const date of pair.skips.filter((d) => !want.includes(d))) {
-        if ((await deps.del(deps.global, `${path}?date=${encodeURIComponent(date)}`, identity)).ok) done.splice(done.indexOf(date), 1);
+        if (await withTimeout(async (signal) => (await deps.del(deps.global, `${path}?date=${encodeURIComponent(date)}`, identity, signal)).ok)) done.splice(done.indexOf(date), 1);
     }
-    if (done.join() !== pair.skips.join()) await savePair({ ...((await readPairs()).find((p) => p.copyId === pair.copyId) ?? pair), skips: done });
+    const stored = await storedPair(pair.copyId);
+    if (stored && done.join() !== pair.skips.join()) await savePair({ ...stored, skips: done });
 }
 
 /**
@@ -311,8 +346,8 @@ export async function repeatOnCopy(home: HomeEvent, identity: BeanPoolIdentity, 
 /** Asks global to take the copy down, the pair marked first. False when global didn't answer, and it stays marked. */
 async function askDown(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
     await savePair({ ...pair, leaving: true });
-    const answer = await withTimeout((signal) => deps.post(deps.global, `${POSTS_PATH}/remove`, { id: pair.copyId, authorPublicKey: identity.publicKey }, identity, signal))
-        .then(answerOf).catch(() => 'later' as const);
+    const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, `${POSTS_PATH}/remove`, { id: pair.copyId, authorPublicKey: identity.publicKey }, identity, signal)))
+        .catch(() => 'later' as const);
     return answer !== 'later';
 }
 
@@ -324,12 +359,17 @@ async function takeDown(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDe
     return true;
 }
 
-/** A holiday at home: the copy comes down and the pair waits with a new id for the holiday to end. */
+/**
+ * A holiday at home: the copy comes down and the pair waits with a new id for the holiday to end. A Stop showing while global
+ * was being asked has the last word: {@link takeDown} saves `resting: false` before it asks, and drops the pair after.
+ */
 async function restCopy(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<void> {
     if (!(await askDown({ ...pair, resting: true }, identity, deps))) return;
     const { randomUUID } = await import('expo-crypto');
     const waiting: CopyPair = { ...pair, leaving: false, resting: true, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
-    await writePairs([...(await readPairs()).filter((p) => p.copyId !== pair.copyId), waiting]);
+    const pairs = await readPairs();
+    if (!pairs.find((p) => p.copyId === pair.copyId)?.resting) return;
+    await writePairs([...pairs.filter((p) => p.copyId !== pair.copyId), waiting]);
 }
 
 /** Stop showing, and a cancel at home: the copy goes. False when global didn't answer, and it is tried again. */
@@ -343,17 +383,13 @@ export const stopLaterLine = () => t('It will come down from the global communit
 
 /** The event from its community, null where it is gone, `later` where the community didn't say. */
 async function readHome(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<HomeEvent | null | 'later'> {
-    const res = await withTimeout((signal) => deps.get(pair.home, `${POSTS_PATH}?id=${encodeURIComponent(pair.homeId)}`, identity, signal));
-    if (!res.ok) return 'later';
-    const rows: unknown = await res.json().catch(() => null);
+    const rows = await readJson(pair.home, `${POSTS_PATH}?id=${encodeURIComponent(pair.homeId)}`, identity, deps);
     return Array.isArray(rows) ? (rows[0] as HomeEvent | undefined) ?? null : 'later';
 }
 
 /** Is the member on holiday at their community? `later` where it didn't say: a pair changes on its word alone. */
 async function onHoliday(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean | 'later'> {
-    const res = await withTimeout((signal) => deps.get(pair.home, `${PREFERENCES_PATH}?publicKey=${encodeURIComponent(identity.publicKey)}`, identity, signal));
-    if (!res.ok) return 'later';
-    const prefs: any = await res.json().catch(() => null);
+    const prefs: any = await readJson(pair.home, `${PREFERENCES_PATH}?publicKey=${encodeURIComponent(identity.publicKey)}`, identity, deps);
     return prefs && typeof prefs === 'object' ? prefs.holiday_mode === 'true' : 'later';
 }
 
@@ -388,8 +424,10 @@ let lastTend: Promise<unknown> = Promise.resolve();
 
 async function tendPairs(identity: BeanPoolIdentity, deps: CopyDeps, now: number): Promise<void> {
     const holidays = new Map<string, Promise<boolean | 'later'>>();
-    for (const pair of (await readPairs()).filter((p) => p.publicKey === identity.publicKey)) {
+    for (const { copyId } of (await readPairs()).filter((p) => p.publicKey === identity.publicKey)) {
         try {
+            const pair = await storedPair(copyId);
+            if (!pair) continue;
             if (pair.leaving) {
                 await (pair.resting ? restCopy : takeDown)(pair, identity, deps);
                 continue;
@@ -407,14 +445,17 @@ async function tendPairs(identity: BeanPoolIdentity, deps: CopyDeps, now: number
             if (!holidays.has(pair.home)) holidays.set(pair.home, onHoliday(pair, identity, deps));
             const away = await holidays.get(pair.home);
             if (away === 'later') continue;
+            // Home may have taken a minute to say: only what is still stored, and not on its way out, goes on from here.
+            const still = await storedPair(copyId);
+            if (!still || still.leaving) continue;
             if (away) {
-                if (!pair.resting) await restCopy(pair, identity, deps);
+                if (!still.resting) await restCopy(still, identity, deps);
                 continue;
             }
-            if (pair.sent !== JSON.stringify(copyFields(home, identity.publicKey)) || firstPhoto(home) !== pair.photo || now - pair.sentAt >= COPY_KEEP_ALIVE_MS) {
-                await sendCopy({ ...pair, resting: false }, home, identity, deps);
+            if (still.sent !== JSON.stringify(copyFields(home, identity.publicKey)) || firstPhoto(home) !== still.photo || now - still.sentAt >= COPY_KEEP_ALIVE_MS) {
+                await sendCopy({ ...still, resting: false }, home, identity, deps);
             }
-            const current = (await readPairs()).find((p) => p.copyId === pair.copyId);
+            const current = await storedPair(copyId);
             if (current?.sent) await repeatDates(current, home, identity, deps);
         } catch { /* the next time round */ }
     }

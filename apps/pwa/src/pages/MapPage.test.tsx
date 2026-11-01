@@ -676,8 +676,11 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             vi.mocked(loadEnabledPeers).mockReturnValue(new Set(['https://peer.example']));
             let answer: (info: unknown) => void = () => {};
             vi.spyOn(api, 'getNodeInfo').mockReturnValue(new Promise((resolve) => { answer = resolve; }) as any);
+            mockCreatedMarkers.length = 0;
             await act(async () => { render(<MapPage identity={mockIdentity} onNavigate={onNavigate as any} />); });
             await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-enterprise-pin'))).toBe(true));
+            expect(eventPins()).toEqual([]);
+            await act(async () => {});
             await act(async () => { answer({ peerNodes: [] }); });
             await waitFor(() => expect(listOpen()).toBeTruthy());
             expect(rowTitles(listOpen()!)).toEqual(['Repair café', 'A dozen eggs']);

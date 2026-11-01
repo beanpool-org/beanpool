@@ -433,11 +433,12 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('gives a tile with a photo and one without the same square media (aspect-square), and no VIEW button (Pictures S5)', async () => {
+    it('gives a tile with a photo and one without the same 4:3 landscape media (aspect-[4/3]), and no VIEW button (Pictures S5, market-card-43)', async () => {
         await openGrid();
         for (const title of ['Bicycle Repair', 'Chainsaw']) {
             const media = tileOf(title).querySelector('div.relative.w-full') as HTMLElement;
-            expect(media.className).toContain('aspect-square');
+            expect(media.className).toContain('aspect-[4/3]');
+            expect(media.className).not.toContain('aspect-square');
             expect(tileOf(title).textContent).not.toContain('VIEW');
         }
     });

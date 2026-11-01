@@ -104,9 +104,9 @@ function PhoneStandin({ viewMode }: { viewMode: 'grid' | 'list' | 'compact' }) {
                 <div className="grid grid-cols-2 gap-2">
                     {items.map(({ post, media }) => (
                         <div key={post.id} className="bg-white dark:bg-neutral-800 rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-700 flex flex-col shadow-sm">
-                            <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 dark:bg-neutral-900">
+                            <div className="relative w-full aspect-[4/3] overflow-hidden bg-neutral-100 dark:bg-neutral-900">
                                 {media ? (
-                                    <img src={media} alt={post.title} className="w-full h-full object-cover" />
+                                    <img src={media} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} />
                                 ) : (
                                     <CategoryTile category={post.category} kind="listing" size="grid" />
                                 )}

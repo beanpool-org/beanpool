@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
+import { Image, type ImageContentPosition } from 'expo-image';
 import { listPhotoUrl } from '@beanpool/core';
 import { CategoryTile, type CategoryTileKind, type CategoryTileSize } from './CategoryTile';
 import { refreshListingAfterPhotoError } from '../utils/photo-refresh';
@@ -13,10 +13,12 @@ import { refreshListingAfterPhotoError } from '../utils/photo-refresh';
  * or a URL from before the enterprise changed it. The URL that failed is kept, not a flag, so a new banner the next sync
  * brings is tried.
  *
+ * In 4:3 frame, upright photos anchor towards the top third ({ top: '33%', left: '50%' }) so heads/jar tops stay in (market-card-43).
+ *
  * `imageStyle` sizes the photo; the tile is drawn with `tileStyle`, inside a box of `tileBox` where the card sizes it
  * from outside.
  */
-export function MarketCardPicture({ postId, cover, picture, category, kind, size, accessibilityLabel, imageStyle, tileStyle, tileBox }: {
+export function MarketCardPicture({ postId, cover, picture, category, kind, size, accessibilityLabel, imageStyle, tileStyle, tileBox, contentPosition = { top: '33%', left: '50%' } }: {
     postId: string;
     cover: string | null;
     picture: string | null;
@@ -27,6 +29,7 @@ export function MarketCardPicture({ postId, cover, picture, category, kind, size
     imageStyle: StyleProp<ImageStyle>;
     tileStyle?: StyleProp<ViewStyle>;
     tileBox?: StyleProp<ViewStyle>;
+    contentPosition?: ImageContentPosition;
 }) {
     const [failed, setFailed] = useState<string | null>(null);
     if (picture && picture !== failed) {
@@ -36,6 +39,7 @@ export function MarketCardPicture({ postId, cover, picture, category, kind, size
                 style={imageStyle}
                 accessibilityLabel={accessibilityLabel}
                 contentFit="cover"
+                contentPosition={contentPosition}
                 cachePolicy="memory-disk"
                 transition={150}
                 onError={() => (cover ? refreshListingAfterPhotoError(postId, cover) : setFailed(picture))}

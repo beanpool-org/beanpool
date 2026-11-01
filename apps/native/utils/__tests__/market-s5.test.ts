@@ -69,4 +69,23 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
     it('market-see-elsewhere button has at least 48 dp minHeight for accessibility', () => {
         expect(marketSrc).toMatch(/<Pressable[^<]{0,400}?minHeight:\s*48[^<]{0,400}?testID="market-see-elsewhere"/);
     });
+
+    it('grid card picture wrapper has 4:3 aspect ratio (aspectRatio: 4 / 3), not square (market-card-43)', () => {
+        expect(marketSrc).toMatch(/gridImageWrapper:\s*\{[^}]*aspectRatio:\s*4\s*\/\s*3[^}]*\}/);
+        expect(marketSrc).not.toMatch(/gridImageWrapper:\s*\{[^}]*aspectRatio:\s*1[, \t\r\n\}]/);
+    });
+
+    it('MarketCardPicture anchors crop towards the top third ({ top: "33%", left: "50%" }) (market-card-43)', () => {
+        const picSrc = source('components/MarketCardPicture.tsx');
+        expect(picSrc).toMatch(/contentPosition=\{\s*contentPosition\s*\}/);
+        expect(picSrc).toMatch(/contentPosition\s*=\s*\{\s*top:\s*['"]33%['"],\s*left:\s*['"]50%['"]\s*\}/);
+    });
+
+    it('grid card moves RECURRING under the picture into gridTextContent (market-card-43)', () => {
+        const gridBadgeRowBlock = marketSrc.split('testID="grid-badge-row"')[1]?.split('</View>')[0] || '';
+        expect(gridBadgeRowBlock).not.toContain('RECURRING');
+
+        const gridTextBlock = marketSrc.split('styles.gridTextContent')[1]?.split('</Pressable>')[0] || '';
+        expect(gridTextBlock).toContain('RECURRING');
+    });
 });

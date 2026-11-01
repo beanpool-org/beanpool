@@ -324,6 +324,30 @@ async function main() {
     // A copy shows no author, so a read that changed with its author's row would say whose it is. Each rule is tested on an
     // author who has a copy and an ordinary listing: the listing is the control, proving the rule ran, and the copy of an
     // author it wasn't aimed at is the other, so "reads the same" can't pass on two reads that both lost it.
+    console.log('\n── 9b. A copy hidden by reports names nobody ──');
+    {
+        const author = member('HiddenCopyAuthor');
+        const reader = member('SyncReader');
+        const hideNow = (id: string) => db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+        const when = { eventStartAt: inHours(30), eventEndAt: inHours(32) };
+        const copy: string = (await postCopy(author, 'Hidden copy of a market', when)).body?.post?.id;
+        const plain: string = (await postCopy(author, 'Hidden ordinary market', { ...when, shownFrom: undefined })).body?.post?.id;
+        hideNow(copy); hideNow(plain);
+        const cursor = new Date(Date.now() - 86_400_000).toISOString();
+        for (const [name, path] of [
+            ['a sync', '/api/marketplace/posts?sync=true&types=event&limit=200'],
+            ['a delta', `/api/marketplace/posts?sync=true&types=event&limit=200&updatedAfter=${encodeURIComponent(cursor)}`],
+        ] as const) {
+            const body = (await call('GET', path, reader)).body;
+            const list: any[] = Array.isArray(body) ? body : body?.posts ?? [];
+            const seenCopy = list.find((p) => p.id === copy);
+            const seenPlain = list.find((p) => p.id === plain);
+            assert(seenCopy?.authorPublicKey === 'hidden' && seenCopy?.authorCallsign === '', `${name}: a hidden copy names nobody (got ${JSON.stringify([seenCopy?.authorPublicKey, seenCopy?.authorCallsign])})`);
+            assert(!JSON.stringify(list).includes(author.pubKeyHex) || seenPlain?.authorPublicKey === author.pubKeyHex, `${name}: the author's key is only on their own ordinary event`);
+            assert(seenPlain?.authorPublicKey === author.pubKeyHex, `${name}: the control, a hidden ordinary event, keeps its author (got ${JSON.stringify(seenPlain?.authorPublicKey)})`);
+        }
+    }
+
     console.log('\n── 10. No read goes by who wrote it ──');
     const tick = () => new Promise((r) => setTimeout(r, 5));
     const rows = (body: any): any[] => Array.isArray(body) ? body : body?.posts ?? [];

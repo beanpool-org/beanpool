@@ -915,8 +915,9 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
         description: '',
         credits: 0,
         priceType: post.priceType,
-        authorPublicKey: post.authorPublicKey,
-        authorCallsign: post.authorCallsign,
+        // A copy names nobody, hidden or not: this shape has no shownFromHost, so readOfCopy can't mask it afterwards.
+        authorPublicKey: post.shownFromHost === undefined ? post.authorPublicKey : HIDDEN_AUTHOR,
+        authorCallsign: post.shownFromHost === undefined ? post.authorCallsign : '',
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
         active: false,

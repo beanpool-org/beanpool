@@ -232,9 +232,9 @@ html, body, #root {
 
    "Plain background" in Settings adds .plain-background to <html>.
 
-   .page-wallpaper is for the welcome page, the one screen that scrolls the document. #root is one viewport tall, so
-   its wallpaper stopped there (Marty, 2 Nov: "the background doodle stops halfway down the page"). This layer grows
-   with the page, from the same corner as #root, so nothing jogs. */
+   .page-wallpaper wraps the welcome page, the one screen that scrolls the document, with the banner above it. #root is
+   one viewport tall, so its wallpaper stopped there (Marty, 2 Nov: "the background doodle stops halfway down the page").
+   This layer grows with the page, from the same corner as #root, so the doodles don't double up. */
 
 /* Both wallpapered selectors paint from here, ABOVE the @supports blocks below, and neither
    may restate background-image later in the file. The override and this rule have equal

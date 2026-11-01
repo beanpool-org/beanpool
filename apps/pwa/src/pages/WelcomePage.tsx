@@ -1449,7 +1449,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     return (
         // 2rem around the page and inside the card, 1rem each below 360 px: at 320 px with 130 % text the two 2rem paddings
         // left the steps about 150 px for their words (rehearsal 14 Oct, B3 and S10).
-        <div data-testid="welcome-page" className="page-surface page-wallpaper min-h-screen text-nature-950 dark:text-oat-50 p-8 max-[359px]:px-4" style={{
+        <div data-testid="welcome-page" className="page-surface min-h-screen text-nature-950 dark:text-oat-50 p-8 max-[359px]:px-4" style={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -3049,8 +3049,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     <Sentence
                         text={t('By continuing, you agree to our {terms} and {privacy}.')}
                         parts={{
-                            terms: <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>{t('Terms of Service')}</a>,
-                            privacy: <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>{t('Privacy Policy')}</a>,
+                            terms: <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--link)', textDecoration: 'underline' }}>{t('Terms of Service')}</a>,
+                            privacy: <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--link)', textDecoration: 'underline' }}>{t('Privacy Policy')}</a>,
                         }}
                     />
                 </p>

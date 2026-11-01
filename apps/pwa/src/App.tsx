@@ -925,10 +925,10 @@ export function App() {
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
-            <>
+            <div className="page-wallpaper" data-testid="welcome-wallpaper">
                 <FormerAddressBanner />
                 <WelcomePage onComplete={signedInHere} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
-            </>
+            </div>
         );
     }
 

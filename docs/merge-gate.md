@@ -4,7 +4,7 @@ GitHub's merge queue is the only gate to `main` (Marty, 1 Nov 2026: "drop the Ma
 
 | Piece | Where |
 |---|---|
-| The check | `.github/workflows/ci.yml`: on `pull_request` and `merge_group`, 14 shards and the aggregate job |
+| The check | `.github/workflows/ci.yml`: on `pull_request` and `merge_group`, 18 shards and the aggregate job |
 | The ruleset | `.github/rulesets/protect-main.json` |
 | The way in | `scripts/merge-queue/board.sh` |
 | The way back after a flake | `scripts/merge-queue/requeue.sh` |
@@ -24,11 +24,11 @@ GitHub's merge queue is the only gate to `main` (Marty, 1 Nov 2026: "drop the Ma
 | `merge_method` | `SQUASH` | As every merge here. |
 | `check_response_timeout_minutes` | 120 | A slow run (55 min) behind a job queue. A timeout is a red, never a pass. |
 
-**Why 6 fits in 60 jobs.** Measured on six runs on 1 Nov: a run is 15 jobs and 121-138 job-minutes over 16-29 minutes of wall clock, so it holds 5-8 slots on average, not 15. Six runs hold about 40 of the 60, on top of the 14 that PR runs held on average that day (9.3 runs an hour), so a full queue on a busy day uses most of what there is. `web-pages` alone sets the wall clock (16-29 min; the next is 15). Six starting at the same moment, as after a red, want 84 slots for the first ten minutes, and some shards wait for a slot.
+**Why 6 fits in 60 jobs.** Measured on one run on 1 Nov, 41283016351, with no queue beside it: 19 jobs, 130 job-minutes over 12.1 minutes of wall clock, so about 11 slots on average, slowest `settings-phone-1` at 11.9 minutes. Six runs would want about 64 slots at that rate, so shards wait for a slot, but six builds need about 13 minutes of all 60 slots (780 job-minutes), which is still quicker than the single-file wait. Take these numbers from a few runs on main before changing `max_entries_to_build`.
 
 **Sharing a group buys nothing.** Under `ALLGREEN` each PR's own commit must pass, so every PR still costs a build. Under `HEADGREEN` only the last commit must pass, so a PR that failed can land on a later PR's green, which is a pass nobody decided. So the throughput comes from building more at once.
 
-**What a red costs.** The PR is taken out. Every PR behind it, up to 5, is rebuilt without it: each loses at most one run, about 23 minutes, and none is taken out. Their old runs carry on to the end, because `ci.yml`'s token is read-only and cannot cancel them: up to 5 × 130 job-minutes, and for those minutes job slots are short. If reds turn out to be common, lower `max_entries_to_build`: one number, and the trade is plain.
+**What a red costs.** The PR is taken out. Every PR behind it, up to 5, is rebuilt without it: each loses at most one run, about 12 minutes, and none is taken out. Their old runs carry on to the end, because `ci.yml`'s token is read-only and cannot cancel them: up to 5 × 130 job-minutes, and for those minutes job slots are short. If reds turn out to be common, lower `max_entries_to_build`: one number, and the trade is plain.
 
 ## Putting it on (the director, after this merges)
 

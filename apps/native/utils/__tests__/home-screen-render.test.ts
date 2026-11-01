@@ -2928,7 +2928,7 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         expect(document.querySelector('[data-testid="home-search-words"]')?.textContent).toContain('duck eggs');
         const save = node.requests.slice(before).find(r => r.method === 'POST')!;
         expect(sentList(save)).toEqual([
-            { id: 'events', type: 'events' }, { id: 'search-k2x7', type: 'search', settings: { q: 'duck eggs', kind: 'any' } }, { id: 'market', type: 'market' },
+            { id: 'events', type: 'events' }, { id: 'search-k2x7', type: 'search', settings: { q: 'duck eggs', kind: 'any', tags: ['animals.poultry.ducks', 'food.eggs'] } }, { id: 'market', type: 'market' },
         ]);
         expect(boundSignatureValid(save, who.identity.publicKey)).toBe(true);
     });

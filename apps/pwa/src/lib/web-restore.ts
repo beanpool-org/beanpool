@@ -49,6 +49,7 @@ import {
     openListedFragment,
     openSeedFromSso,
     toEd25519Pkcs8,
+    type CopyCommunity,
     type ListedFragment,
     type SealedShare,
 } from '@beanpool/core';
@@ -196,8 +197,11 @@ export async function fetchSignInCopy(eph: EphemeralKey, collectionId: string): 
 // ===================== OPENING IT, AND THE ONE CHECK THAT DECIDES =====================
 
 export type OpenedAccount =
-    /** The account the lookup named: its key, and its 12 words when they came back and make it. */
-    | { kind: 'ok'; identity: BeanPoolIdentity }
+    /**
+     * The account the lookup named: its key, and its 12 words when they came back and make it. `communities`: the
+     * member's list, when the copy carried one (vault rethink VR5, core copy-communities.ts), else empty.
+     */
+    | { kind: 'ok'; identity: BeanPoolIdentity; communities: CopyCommunity[] }
     /** It opened to another key than the one the lookup named. Nothing of it is returned. */
     | { kind: 'wrong_account' }
     /** The old two-part kind of copy, which the web does not open. */
@@ -219,10 +223,13 @@ export async function openRestoredAccount(
     if (!isSingleBlobSso(copy.kdfParams)) return { kind: 'old_format' };
     let seed: Uint8Array;
     let words: string[] | null;
+    let communities: CopyCommunity[];
     try {
         const opened = await openSeedFromSso(copy, provider, sub);
         seed = opened.seed;
         words = opened.words;
+        // The list never fails a restore: one that didn't open is no list (core says 'unreadable').
+        communities = opened.communities ?? [];
     } catch (e) {
         console.warn(`[WebRestore] ${provider}: the sign-in copy did not open: ${(e as Error)?.message || e}`);
         return { kind: 'unreadable' };
@@ -246,7 +253,7 @@ export async function openRestoredAccount(
             if (fromWords?.publicKey === publicKey) identity.mnemonic = words;
             else console.warn(`[WebRestore] ${provider}: the copy's 12 words do not make its key here; restoring the key alone`);
         }
-        return { kind: 'ok', identity };
+        return { kind: 'ok', identity, communities };
     } finally {
         seed.fill(0);
     }

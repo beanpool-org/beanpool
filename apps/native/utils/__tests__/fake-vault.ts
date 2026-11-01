@@ -23,6 +23,7 @@ import {
     checkDoorWorkChallenge,
     checkDoorWorkSolution,
     checkVaultTicket,
+    checkVaultVoucher,
     isVaultChallenge,
     makeDoorWorkChallenge,
     newVaultChallenge,
@@ -34,6 +35,7 @@ import {
     vaultB64,
     vaultCopyDigest,
     vaultTicketNonce,
+    VAULT_COMMUNITY_PROVIDER,
     type SealedShare,
     type VaultAnswerKind,
     type VaultTicketPurpose,
@@ -102,6 +104,8 @@ interface Copy {
     lastReleasedAt: number | null;
     /** The day (UTC) the copy was deposited: the row's `updated_day`, said as `since` (vault rethink VR1). */
     day: string;
+    /** A community copy (vault rethink VR4): the vault's half, the member's label, and the node key its index is made from. */
+    community?: { nodeKey: string; half: string; ref: string };
 }
 
 /** Today, as the vault writes a day. */
@@ -186,6 +190,59 @@ export class FakeVault {
         return signVaultTicket(newVaultTicket(key, purpose, now), TICKET_SEED);
     }
 
+    /** The vault's check of a ticket with no sign-in behind it: a community copy's. */
+    private ticketOnly(body: any, signer: string, purpose: VaultTicketPurpose): { n: string } | Reply {
+        const check = checkVaultTicket(body.ticket, { ticketKeys: [TICKET_KEY], now: Date.now(), key: signer, purpose });
+        if (!check.ok) return reply(401, { error: 'That ticket is not this vault\'s.', code: `ticket_${check.reason}` });
+        if (this.spent.has(check.ticket.n)) return reply(401, { error: 'That ticket was already used.', code: 'ticket_used' });
+        return { n: check.ticket.n };
+    }
+
+    /** A community copy's deposit, as apps/vault's: no sign-in, one per member per community. */
+    private depositCommunity(b: any, signer: string): Reply {
+        const t = this.ticketOnly(b, signer, 'deposit');
+        if ('status' in t) return t;
+        this.spent.add(t.n);
+        let contents;
+        try {
+            contents = openVaultDepositBox(b.box, DEPOSIT_SECRET, signer, VAULT_COMMUNITY_PROVIDER);
+        } catch {
+            return reply(400, { error: 'The copy did not open as a deposit for this account.', code: 'bad_box' });
+        }
+        const community = contents.community!;
+        if (this.keepsDeposits) {
+            this.copies.set(`${VAULT_COMMUNITY_PROVIDER}:${community.nodeKey}:${signer}`, {
+                provider: VAULT_COMMUNITY_PROVIDER, sub: `${community.nodeKey}:${signer}`, pubkey: signer, clientCopy: contents.clientCopy,
+                pushTokens: contents.pushToken ? [contents.pushToken] : [], lastReleasedAt: null, day: today(), community,
+            });
+        }
+        return {
+            ...reply(200, { ok: true, provider: VAULT_COMMUNITY_PROVIDER, replaced: false }),
+            says: { kind: 'receipt', fields: { provider: VAULT_COMMUNITY_PROVIDER, copy: vaultCopyDigest(contents.clientCopy), signIn: vaultTicketNonce(b.ticket), replaced: false } },
+        };
+    }
+
+    /** A community copy's restore, as apps/vault's: one voucher is one hold, whatever became of it. */
+    private restoreCommunity(b: any, signer: string): Reply {
+        const t = this.ticketOnly(b, signer, 'restore');
+        if ('status' in t) return t;
+        const check = checkVaultVoucher(b.voucher, { now: Date.now(), key: signer });
+        if (!check.ok) return reply(401, { error: 'That voucher does not check out.', code: `voucher_${check.reason}` });
+        this.spent.add(t.n);
+        const id = `${VAULT_COMMUNITY_PROVIDER}:${check.voucher.community}:${check.voucher.member}`;
+        const copy = this.copies.get(id);
+        if (!copy || vaultCopyDigest(copy.clientCopy) !== check.voucher.copy) return reply(404, { error: 'No copy this community can bring back.', code: 'no_copy' });
+        const sent = this.holds.get(check.holdId);
+        if (sent) return sent.cancelled ? reply(200, { status: 'stopped' }) : reply(200, { status: 'held', holdId: sent.holdId, until: sent.releaseAt });
+        const now = Date.now();
+        const hold: Hold = {
+            holdId: check.holdId, copy: id, requester: signer, provider: VAULT_COMMUNITY_PROVIDER, openedAt: now,
+            releaseAt: now + HOLD_MS, cancelled: false, released: false,
+        };
+        this.holds.set(hold.holdId, hold);
+        return reply(200, { status: 'held', holdId: hold.holdId, until: hold.releaseAt });
+    }
+
     /** The vault's own check of a sign-in: its ticket, for this signer and purpose, unspent, with its hash in the token. */
     private signIn(body: any, signer: string, purpose: VaultTicketPurpose): { sub: string; provider: string } | Reply {
         const check = checkVaultTicket(body.ticket, { ticketKeys: [TICKET_KEY], now: Date.now(), key: signer, purpose });
@@ -239,6 +296,7 @@ export class FakeVault {
                 return reply(200, { ticket: this.ticketFor(signer, b.purpose), expiresAt: Date.now() + 600_000 });
             }
             case '/v1/copies': {
+                if (b.provider === VAULT_COMMUNITY_PROVIDER) return this.depositCommunity(b, signer);
                 const s = this.signIn(b, signer, 'deposit');
                 if ('status' in s) return s;
                 let contents;
@@ -272,12 +330,16 @@ export class FakeVault {
                 const days = (c: Copy) => (this.statusDays === 'since' ? { updatedDay: c.day, since: c.day }
                     : this.statusDays === 'updatedDay' ? { updatedDay: c.day } : {});
                 return reply(200, {
-                    copies: mine.map(c => ({ provider: c.provider, lastReleasedAt: c.lastReleasedAt, ...days(c) })),
+                    copies: mine.map(c => ({
+                        provider: c.provider, lastReleasedAt: c.lastReleasedAt, ...days(c),
+                        ...(c.community ? { community: c.community.ref, copy: vaultCopyDigest(c.clientCopy) } : {}),
+                    })),
                     holds,
                 });
             }
             case '/v1/copies/delete': {
-                const doomed = this.copiesOf(signer).filter(c => b.all === true || c.provider === b.provider);
+                const doomed = this.copiesOf(signer).filter(c => b.all === true
+                    || (b.provider === VAULT_COMMUNITY_PROVIDER ? c.community?.ref === b.community : c.provider === b.provider));
                 for (const c of doomed) this.copies.delete(`${c.provider}:${c.sub}`);
                 return reply(200, { deleted: doomed.length });
             }
@@ -296,6 +358,7 @@ export class FakeVault {
                 return reply(200, { updated });
             }
             case '/v1/restore': {
+                if (b.provider === VAULT_COMMUNITY_PROVIDER) return this.restoreCommunity(b, signer);
                 const s = this.signIn(b, signer, 'restore');
                 if ('status' in s) return s;
                 const id = `${s.provider}:${s.sub}`;
@@ -323,7 +386,9 @@ export class FakeVault {
                 hold.released = true;
                 copy.lastReleasedAt = Date.now();
                 const pubkey = this.releaseNamesOtherKey ? OTHER_KEY : copy.pubkey;
-                const release = sealVaultRelease({ provider: copy.provider, pubkey, clientCopy: copy.clientCopy }, signer);
+                const release = sealVaultRelease({
+                    provider: copy.provider, pubkey, clientCopy: copy.clientCopy, ...(copy.community ? { half: copy.community.half } : {}),
+                }, signer);
                 return { ...reply(200, { status: 'released', release }), says: { kind: 'release', fields: { provider: copy.provider, pubkey, box: release } } };
             }
             case '/v1/holds/cancel':

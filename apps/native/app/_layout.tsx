@@ -54,6 +54,7 @@ import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
+import { loadPendingCommunityRestore } from '../utils/community-recovery';
 import { retryCommunityRemovals } from '../utils/vault-move';
 import { attestOwnRekeys, declineRekey, operatorContact, rekeyToAsk } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
@@ -497,11 +498,13 @@ function RootLayoutNav() {
                                             const redeemRes: any = await redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity);
 
                                             // Fetch and save new node details
+                                            let joinedName = targetOrigin;
                                             try {
                                                 const healthRes = await fetch(`${targetOrigin}/api/community/health`, { method: 'GET' });
                                                 if (healthRes.ok) {
                                                     const healthData = await healthRes.json();
                                                     const remoteName = healthData.nodeName || healthData.name || targetOrigin;
+                                                    joinedName = remoteName;
                                                     const cType = healthData.currency?.type || 'image';
                                                     const cVal = healthData.currency?.value || 'bean';
                                                     const { addSavedNode } = await import('../utils/nodes');
@@ -510,6 +513,11 @@ function RootLayoutNav() {
                                             } catch (e) {
                                                 console.warn('Failed to fetch node details for saving in deep link', e);
                                             }
+
+                                            // A first local join by a tapped link: their listings can follow, as after any join (utils/bring-listings.ts).
+                                            await import('../utils/bring-listings')
+                                                .then((bring) => bring.noteBringOffer({ publicKey: identity.publicKey, from: current, to: targetOrigin, name: joinedName, alreadyMember: !!redeemRes?.alreadyMember }))
+                                                .catch(() => {});
 
                                             if (redeemRes?.alreadyMember) {
                                                 Alert.alert(t("You're already in! 🫘"), t('Switched active node to {address}. You are already a registered member!', { address: targetOrigin }));
@@ -522,6 +530,8 @@ function RootLayoutNav() {
                                             // marketplace asks for a photo in a fresh community, as it should.
                                             pushProfileToServer().catch(() => {});
                                             requestSync().catch(console.error);
+                                            // Its DMs reach this phone from now on (utils/push-registrations.ts).
+                                            void retryPushRegistrations();
                                             // Refresh membership for the new node before routing, so a stale
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
                                             await recheck();
@@ -576,14 +586,17 @@ function RootLayoutNav() {
                                                     style: 'destructive',
                                                     onPress: async () => {
                                                         try {
-                                                            await clearDB();
-                                                            // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
-                                                            await forgetSyncCursors();
-                                                            await AsyncStorage.removeItem('beanpool_anchor_url');
-                                                            // No community on the phone: the update screen's block comes down.
-                                                            communitySwitched();
-                                                            const { removeSavedNode } = await import('../utils/nodes');
-                                                            await removeSavedNode(targetOrigin);
+                                                            const { forgetCommunityPush } = await import('../utils/account-leaves-phone');
+                                                            await forgetCommunityPush(identity, targetOrigin, async () => {
+                                                                await clearDB();
+                                                                // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                                                                await forgetSyncCursors();
+                                                                await AsyncStorage.removeItem('beanpool_anchor_url');
+                                                                // No community on the phone: the update screen's block comes down.
+                                                                communitySwitched();
+                                                                const { removeSavedNode } = await import('../utils/nodes');
+                                                                await removeSavedNode(targetOrigin);
+                                                            });
                                                             router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
                                                         } catch (err: any) {
                                                             Alert.alert(t('Wipe Failed'), err.message);
@@ -877,6 +890,12 @@ function RootLayoutNav() {
         if (!identity?.publicKey) return;
         let current = true;
         const waits = new Set<() => void>();
+        // A bring-back this phone is waiting on at the key vault, for another account than the one it holds: it has no
+        // welcome screen to come back through, and the wait outlives the code (utils/community-recovery.ts).
+        // Once the app itself shows, as the alert below: never under App Lock's screen, or before the navigator is there.
+        loadPendingCommunityRestore().then((waiting) => {
+            if (current && waiting) waits.add(whenAppShows(() => { if (current) router.push('/rekey-code'); }));
+        }).catch(() => {});
         const look = () => {
             vaultHoldsAtOpen(identity).then((holds) => {
                 if (!current || holds.length === 0) return;
@@ -889,7 +908,9 @@ function RootLayoutNav() {
                     // one was cut mid-word (measured on the emulator). The body says what happened.
                     Alert.alert(
                         t('Is this you?'),
-                        t('Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, you can let it through now. If not, stop it.'),
+                        holds.some(h => h.provider === 'community')
+                            ? t("Someone is getting your account back on another device, with help from a community's admins. If it was you, you can let it through now. If not, stop it.")
+                            : t('Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, you can let it through now. If not, stop it.'),
                         [
                             { text: t('Not now'), style: 'cancel' },
                             { text: t('Review'), onPress: () => router.push('/(tabs)/settings') },
@@ -1093,9 +1114,9 @@ export default function RootLayout() {
         // build sends the blocks the phone held before it. Now, on each return, and with the 5-minute sync below; nothing is
         // sent when nothing changed.
         void syncBlocks();
-        // A push registration that didn't land (no connection, no answer, an error) is tried again on each return and
-        // with the 5-minute sync, until it does (utils/push-registrations.ts `retryDueRegistrations`). At start, the
-        // account's own registration goes anyway (RootLayoutNav).
+        // A push registration that didn't land (no connection, no answer, an error), and any community on the phone that
+        // was never asked, is tried on each return and with the 5-minute sync, until it lands (utils/push-registrations.ts
+        // `registerWhereMissing`). At start, the account's own registrations go anyway (RootLayoutNav).
 
         // Set up foreground polling fallback every 5 minutes (safety net)
         const intervalId = setInterval(() => {

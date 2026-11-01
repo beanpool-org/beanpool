@@ -28,7 +28,7 @@ import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
-import { MarketCardPicture } from '../../components/MarketCardPicture';
+import { MARKET_GRID_CROP, MarketCardPicture } from '../../components/MarketCardPicture';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -43,7 +43,7 @@ import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '
 import {
     MARKET_TYPE_PILLS, marketFilterFromLink, marketSearchFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
-    marketSearchQuery, marketSearchMatches, marketSearchToSave, saveSearchParam,
+    marketSearchQuery, marketAnswerStands, marketSearchMatches, marketSearchToSave, saveSearchParam,
 } from '../../utils/market-filters';
 import { SaveSearchButton } from '../../components/SaveSearchButton';
 import { localDaysAgo } from '../../utils/feed-sections';
@@ -57,9 +57,10 @@ import { LookAroundCard } from '../../components/LookAroundCard';
 import { openLookDoor } from '../../utils/look-door';
 import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
+import { MarketCircleLine } from '../../components/MarketCircleLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listingChips, listingChipWords, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, type WordKey } from '@beanpool/core';
+import { listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, type WordKey } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
@@ -198,7 +199,8 @@ export default function MarketScreen() {
         iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
         dealsIconBtn: {
             // Capped, so Your deals in a longer language never squeezes the search field to nothing: its words shrink instead.
-            paddingHorizontal: 14, height: 38, borderRadius: 19, maxWidth: 120,
+            // Uses minHeight + paddingVertical so it grows at 1.3 font scale without clipping the label (~49 dp), while keeping 38 dp at 1.0.
+            paddingHorizontal: 14, minHeight: 38, paddingVertical: 4, borderRadius: 19, maxWidth: 120,
             backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
             borderWidth: 1,
             borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber300,
@@ -293,7 +295,7 @@ export default function MarketScreen() {
         },
         gridRow: { gap: 16 },
         gridCard: { flex: 1, marginBottom: 16 },
-        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 1 },
+        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 4 / 3 },
         gridImage: { width: '100%', height: '100%' },
         gridFallback: { backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
         gridFallbackEmoji: { fontSize: 32, opacity: 0.3 },
@@ -586,6 +588,9 @@ export default function MarketScreen() {
         }).catch(() => {});
     }, []);
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedTag, setSelectedTag] = useState<string | null>(null);
+    // A `#tag` tapped: the Market with exactly that typed tag (DESIGN-tags-free-entry-fable.md §4). One filter by tag at a time.
+    const [selectedFree, setSelectedFree] = useState<string | null>(null);
     const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
     const [posts, setPosts] = useState<any[]>([]);
     // First-run loading: until posts load or a pillar sync completes THIS session, show a
@@ -616,6 +621,8 @@ export default function MarketScreen() {
         return () => { live = false; ended.remove(); };
     }, [identity?.publicKey]));
     const [searchResults, setSearchResults] = useState<any[] | null>(null);
+    // The words that answer was for (marketAnswerStands): null when a tag filter was on, as it asks for the words OR the tag.
+    const [searchResultsWords, setSearchResultsWords] = useState<string | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     /**
@@ -718,7 +725,23 @@ export default function MarketScreen() {
         }, [filter, groupFilter, identity?.publicKey, userGroupsKey, escrowMode])
     );
 
-    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string, new?: string }>();
+    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string, new?: string, tag?: string, free?: string }>();
+
+    // A tag chip tapped on a post detail page opens the Market filtered by that tag (§4.4)
+    useEffect(() => {
+        if (params.tag) {
+            setSelectedTag(params.tag);
+            setSelectedFree(null);
+            router.setParams({ tag: '' });
+        }
+    }, [params.tag]);
+    useEffect(() => {
+        if (params.free) {
+            setSelectedFree(params.free);
+            setSelectedTag(null);
+            router.setParams({ free: '' });
+        }
+    }, [params.free]);
 
     // The Start something sheet opens the Market on its Poll or Event form (DESIGN-commons-ux §3.2).
     useEffect(() => {
@@ -869,10 +892,11 @@ export default function MarketScreen() {
 
     // Debounced FTS5 server search
     useEffect(() => {
+        let active = true;
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         
         const q = searchQuery.trim();
-        if (!q) {
+        if (!q && !selectedTag && !selectedFree) {
             setSearchResults(null);
             setIsSearching(false);
             return;
@@ -883,34 +907,51 @@ export default function MarketScreen() {
             try {
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (!anchorUrl) {
-                    setSearchResults(null);
-                    setIsSearching(false);
+                    if (active) {
+                        setSearchResults(null);
+                        setIsSearching(false);
+                    }
                     return;
                 }
                 // Events are opt-in on the list route; All and Events ask for them. The category only while its chip is on screen.
                 const { type, cat } = marketServerFilter(filter, categoryFilter);
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
-                const expandedQ = marketSearchQuery(q);
-                
+                const expandedQ = q ? marketSearchQuery(q) : '';
+                const qParam = expandedQ ? `q=${encodeURIComponent(expandedQ)}` : '';
+
+                // Resolve typed words through label index and send q AND tags (§4.7)
+                const resolvedTags = q ? searchTagsFor(q) : [];
+                const searchTagIds = [...new Set([...(selectedTag ? [selectedTag] : []), ...resolvedTags])].slice(0, 20);
+                const tagsParam = searchTagIds.length > 0 ? `${qParam ? '&' : ''}tags=${encodeURIComponent(searchTagIds.join(','))}` : '';
+                const freeParam = selectedFree ? `${qParam || tagsParam ? '&' : ''}free=${encodeURIComponent(selectedFree)}` : '';
+                const queryPrefix = (qParam || tagsParam || freeParam) ? `?${qParam}${tagsParam}${freeParam}` : '?';
+
                 // Nearest first where the node sorts by distance and the phone already knows where it is.
                 const near = marketSearchDistanceParams(nodeProfile, myLocation);
-                const res = await fetch(`${anchorUrl}/api/marketplace/posts?q=${encodeURIComponent(expandedQ)}${type}${cat}${near}&limit=50`);
-                if (res.ok) {
-                    const data = await res.json();
-                    const parsed = normalizeServerPosts(data, anchorUrl);
-                    setSearchResults(parsed);
-                } else {
-                    setSearchResults(null); // Fall back to local filtering
+                const res = await fetch(`${anchorUrl}/api/marketplace/posts${queryPrefix}${type}${cat}${near}&limit=50`);
+                if (active) {
+                    if (res.ok) {
+                        const data = await res.json();
+                        const parsed = normalizeServerPosts(data, anchorUrl);
+                        setSearchResults(parsed);
+                        setSearchResultsWords(selectedTag || selectedFree || !expandedQ ? null : q);
+                    } else {
+                        setSearchResults(null); // Fall back to local filtering
+                    }
                 }
             } catch {
-                setSearchResults(null); // Fall back to local filtering
+                if (active) setSearchResults(null); // Fall back to local filtering
+            } finally {
+                if (active) setIsSearching(false);
             }
-            setIsSearching(false);
         }, 300);
 
-        return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
-    }, [searchQuery, filter, categoryFilter, nodeProfile, myLocation]);
+        return () => {
+            active = false;
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
+    }, [searchQuery, selectedTag, selectedFree, filter, categoryFilter, nodeProfile, myLocation]);
 
     const loadPosts = async (): Promise<boolean> => {
         const queryFilter = marketFeedQuery(filter, groupFilter, identity?.publicKey);
@@ -978,6 +1019,8 @@ export default function MarketScreen() {
     };
     const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.fill;
     const filterCtx = { blockedUsers, favCategories };
+    // No answer has no words, whatever the last one was for: a failed read leaves the phone's copy, which the words must narrow.
+    const answerStands = marketAnswerStands(searchQuery, searchResults !== null ? searchResultsWords : null);
 
     let filteredPosts = basePosts.filter(p => {
         // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
@@ -986,12 +1029,16 @@ export default function MarketScreen() {
         // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
         if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
 
-        // Synonym-aware local search: expand query using synonym map
-        // Works on ALL servers, even those without FTS5 deployed
-        if (searchQuery.trim()) {
-            const serverHasFTS = searchResults !== null && searchResults.length > 0 && 'search_keywords' in searchResults[0];
-            if (!serverHasFTS && !marketSearchMatches(p, searchQuery)) return false;
+        // The node's answer stands for its words, as on the web. Synonym-aware local search for everything else: the phone's
+        // copy, and an answer until the read for these words lands.
+        if (searchQuery.trim() && !answerStands && !marketSearchMatches(p, searchQuery)) return false;
+
+        // Tag filter (§4.4 post detail tap)
+        if (selectedTag) {
+            const pTags = postTagsOf(p.tags);
+            if (!pTags.some(t => t === selectedTag || t.startsWith(selectedTag + '.'))) return false;
         }
+        if (selectedFree && !listingFreeTags(p).includes(selectedFree)) return false;
         return true;
     });
 
@@ -1017,7 +1064,8 @@ export default function MarketScreen() {
     // newest from elsewhere come beneath, read as the search reads the node. The same filters apply to both parts.
     const fillNeeded = marketFillWanted({
         profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
-        searching: searchQuery.trim().length > 0, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
+        // A tag filter reads as words do, nearest first from anywhere, so there is no elsewhere to fill from.
+        searching: searchQuery.trim().length > 0 || !!selectedTag || !!selectedFree, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
         shownNear: filteredPosts,
     });
     const fillKey = `${filter}|${categoryFilter}`;
@@ -1052,7 +1100,7 @@ export default function MarketScreen() {
         : [];
 
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0;
+    const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0 || !!selectedTag || !!selectedFree;
 
     // A few example cards while the Market is nearly empty, where the node asks for them (utils/example-listings.ts):
     // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
@@ -1116,6 +1164,8 @@ export default function MarketScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={pendingCount > 0 ? tn(pendingCount, 'Your deals, {n} pending', 'Your deals, {n} pending') : t('Your deals')}
                     accessibilityHint={t('Opens your active and pending deals sheet')}
+                    hitSlop={{ top: 3, bottom: 3, left: 3, right: 3 }}
+                    testID="market-deals-pill"
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
                     {/* Capped (dealsIconBtn maxWidth): a longer name in another language shrinks to fit, never squeezing the search. */}
@@ -1131,6 +1181,8 @@ export default function MarketScreen() {
                     style={styles.iconBtn}
                     accessibilityRole="button"
                     accessibilityLabel={viewMode === 'list' ? t('Grid view') : (viewMode === 'grid' ? t('Compact view') : t('List view'))}
+                    hitSlop={{ top: 3, bottom: 3, left: 3, right: 3 }}
+                    testID="market-view-mode-toggle"
                 >
                     <MaterialCommunityIcons
                         name={viewMode === 'list' ? 'view-grid-outline' : (viewMode === 'grid' ? 'view-headline' : 'view-list-outline')} 
@@ -1139,6 +1191,39 @@ export default function MarketScreen() {
                     />
                 </Pressable>
             </View>
+            {(selectedTag || selectedFree) && (() => {
+                const label = selectedFree ?? tagIndex().label(selectedTag ?? '');
+                if (!label) return null;
+                return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 2 }}>
+                        <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: colors.accent.tint,
+                            borderColor: colors.accent.border,
+                            borderWidth: 1,
+                            borderRadius: 16,
+                            paddingVertical: 3,
+                            paddingLeft: 10,
+                            paddingRight: 6,
+                            minHeight: 28,
+                        }}>
+                            <Text style={{ fontSize: 13, color: colors.text.body, fontWeight: '500', marginRight: 4 }} maxFontSizeMultiplier={1.3}>
+                                #{label}
+                            </Text>
+                            <Pressable
+                                onPress={() => { setSelectedTag(null); setSelectedFree(null); }}
+                                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Clear tag filter')}
+                                style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' }}
+                            >
+                                <Text style={{ fontSize: 12, color: colors.text.body, fontWeight: '700' }}>✕</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                );
+            })()}
 
             {/* The map's filter shape (utils/market-filters.ts): the type row, and under it one row that stays in
                 the same place and changes with the type — the category chip and the feed's own filters, or the
@@ -1237,6 +1322,7 @@ export default function MarketScreen() {
                             style={[styles.chip, groupFilter === 'all' && styles.chipActive]}
                             accessibilityRole="button"
                             accessibilityState={{ selected: groupFilter === 'all' }}
+                            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                         >
                             <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextOnAccent]}>
                                 {t('👥 All Groups & Public')}
@@ -1254,6 +1340,7 @@ export default function MarketScreen() {
                                     ]}
                                     accessibilityRole="button"
                                     accessibilityState={{ selected: isSelected }}
+                                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                                 >
                                     <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
                                         👥 {g.name}
@@ -1295,9 +1382,11 @@ export default function MarketScreen() {
     });
     // "Save this search to Home" (Marty, 7 Oct): a member's search, Offers and Needs only, handed to Home, which opens the
     // saved search's own sheet with it (or says why it can't: the same search there, five there, Home full).
-    const toSave = identity && !refusal ? marketSearchToSave(filterState, searchQuery) : null;
+    const toSave = identity && !refusal ? marketSearchToSave(filterState, searchQuery.trim() ? searchQuery : selectedFree ?? '', selectedTag || undefined) : null;
     const clearAllFilters = () => {
         setSearchQuery('');
+        setSelectedTag(null);
+        setSelectedFree(null);
         setFilter('all');
         dispatchCategoryPanel({ kind: 'pick', category: 'all' });
         setEventWindow('all');
@@ -1557,6 +1646,7 @@ export default function MarketScreen() {
                             category={item.category}
                             kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
                             size="grid"
+                            contentPosition={MARKET_GRID_CROP}
                             accessibilityLabel={item.title}
                             imageStyle={styles.gridImage}
                         />
@@ -1591,13 +1681,6 @@ export default function MarketScreen() {
                                     </View>
                                 );
                             }
-                            if (item.repeatable) {
-                                return (
-                                    <View style={styles.gridBadge}>
-                                        <Text style={styles.gridPriceText}>{t('↻ RECURRING')}</Text>
-                                    </View>
-                                );
-                            }
                             return null;
                         })()}
                         {dealChip && (
@@ -1628,6 +1711,11 @@ export default function MarketScreen() {
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
                         <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />
+                        {!!item.repeatable && !isOwn && item.status !== 'pending' && (
+                            <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('↻ RECURRING')}</Text>
+                            </View>
+                        )}
                         {groupScopeBadgeText && (
                             <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                                 <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
@@ -1820,6 +1908,7 @@ export default function MarketScreen() {
                     {t('Nothing within 250 km yet.')}
                 </Text>
             )}
+            {filteredPosts.length === 0 && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
             {fillRows.length === 0 ? (
                 <ActivityIndicator size="small" color={colors.brand.primary} />
             ) : (
@@ -1943,6 +2032,7 @@ export default function MarketScreen() {
                                 <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
                                     {nodeProfile?.profile === 'global' ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                 </Text>
+                                {nodeProfile?.profile === 'global' && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
                                 {nodeProfile?.profile === 'global' && (
                                     <Pressable
                                         accessibilityRole="button"

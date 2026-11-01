@@ -100,7 +100,7 @@ export function scrubServerFaults(): Koa.Middleware {
         for (const field of ['error', 'message'] as const) {
             const text = body[field];
             if (typeof text === 'string' && looksLikeServerFault(text)) {
-                console.error(`[MemberRoute] ${ctx.method} ${ctx.path} answered a server fault, now in general words: ${sanitizeMessage(text)}`);
+                console.error(`[MemberRoute] ${ctx.method} ${sanitizeMessage(ctx.path)} answered a server fault, now in general words: ${sanitizeMessage(text)}`);
                 // A copy: the body may be an object a route shares between answers.
                 scrubbed = { ...(scrubbed ?? body), [field]: SERVER_FAULT_TEXT };
             }

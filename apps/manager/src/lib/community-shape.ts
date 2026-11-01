@@ -41,6 +41,7 @@ export interface ShapeSettings {
     join: ShapeSetting<JoinState>;
     openDoor: ShapeSetting<boolean>;
     wordsDoor?: ShapeSetting<boolean>;
+    doorCheck?: ShapeSetting<boolean>;
     knocks: ShapeSetting<boolean>;
     preview: ShapeSetting<boolean>;
     beans: ShapeSetting<boolean> & {
@@ -120,13 +121,14 @@ export const DOOR_PRESETS: ReadonlyArray<{ door: 'members' | 'admins'; name: str
 /**
  * The three choices for where members' copies go, each with the honest words under it (design DESIGN-vault-rethink-fable.md
  * §5.3, VR2). A copy is a member's key, and their 12 words, locked to a sign-in they link, so the sign-in brings the
- * account back on a new phone. Only what exists today is said: the community path (VR3, VR4) adds its own sentence.
+ * account back on a new phone. The community path (VR3, VR4) is said too, in each choice that has it: half here under the
+ * key vault, whole here under this server.
  */
 export const RECOVERY_COPIES_CHOICES: ReadonlyArray<{ rule: RecoveryCopies; name: string; words: string }> = [
     {
         rule: 'vault',
         name: "BeanPool's key vault",
-        words: "Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Nothing on your server needs the vault.",
+        words: "Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Where a member lets your admins bring them back, your server keeps half of a locked copy and the vault the other half, and neither can open it alone. Nothing on your server needs the vault.",
     },
     {
         rule: 'server',
@@ -362,6 +364,10 @@ export function getConsequenceSentence(
             return targetValue === true
                 ? t('People will be able to join with 12 secret words without a sign-in.')
                 : t('People will join with a sign-in only.');
+        case 'doorCheck':
+            return targetValue === true
+                ? t('When lots of people are joining, a 12-words join will start with a Cloudflare check, if the keys are on the server. A sign-in never needs it.')
+                : t('A 12-words join will never ask for a Cloudflare check.');
         case 'recoveryCopies':
             // Nothing moves by itself (design §5.3): each says what happens to copies already made, and the one thing this
             // server can't hold, a phone app from before the setting, which keeps sending its copies to the vault.

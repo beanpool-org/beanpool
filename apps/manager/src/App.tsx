@@ -1432,6 +1432,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 tabAlertCounts={tabAlertCounts}
                 isFleetMode={isFleetMode}
                 communityName={effectiveCommunityName}
+                version={diag?.version}
                 onLogout={handleLogout}
                 returnLinks={returnLinks}
                 mode={sidebarMode}
@@ -1444,6 +1445,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         variant="drawer"
                         profiles={profiles}
                         activeProfileId={activeProfileId}
+                        version={diag?.version}
                         onSelectNode={(id) => setActiveProfileId(id)}
                         onOpenAddModal={() => setShowAddModal(true)}
                         onEditNode={(node) => setEditingNode(node)}
@@ -1587,7 +1589,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                             activeNode={activeNode}
                                             communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
                                             publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
-                                            version="1.4.2"
+                                            version={diag?.version}
                                             diag={diag}
                                             nodeData={nodeData}
                                             nodeDataLoading={nodeDataLoading}
@@ -1708,6 +1710,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         activeNode={activeNode}
                                         nodeData={nodeData}
                                         tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                        rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                         initialSubTab={(navSubTab as any) || 'enterprises'}
                                         onSubTabChange={setNavSubTab}
                                         onRefresh={() => {

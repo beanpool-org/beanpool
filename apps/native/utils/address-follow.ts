@@ -45,6 +45,7 @@ import { communityOrigin } from './community-origin';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { isPlainNodeAddress, plainOriginOf } from './node-url';
 import { carryPendingProfileChange } from './pending-profile-sync';
+import { carryAlertsOff } from './push-alerts-off';
 import type { CopyCarry } from './community-copy-carry';
 import type { NodeProfile } from './node-profile';
 import type { SavedNode } from './nodes';
@@ -382,6 +383,9 @@ export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: 
     if (await deps.isGuestNode(anchor).catch(() => false)) await deps.markGuestNode(offer.to);
     const carried = await deps.switchTo(offer.to, offer.from);
     await carryPendingProfileChange(offer.from, offer.to);
+    // The same community: alerts turned off stay off. No DELETE at the old address, which may be this same node and would
+    // take the row the new address needs (utils/account-leaves-phone.ts `forgetCommunityPush` is for one that goes).
+    await carryAlertsOff(offer.from, offer.to);
     await deps.addSavedNode(offer.to, saved?.alias, saved?.currencyType, saved?.currencyValue).catch(() => {});
     if (saved) await deps.removeSavedNode(saved.url).catch(() => {});
     await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, undefined);

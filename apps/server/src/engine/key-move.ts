@@ -125,6 +125,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('dm_requests', 'from_pubkey');
     move('dm_requests', 'to_pubkey');
     move('dm_requests', 'accepted_by');
+    // A limit on sending them follows the person (engine/request-limits.ts).
+    move('request_limits', 'sender_pubkey');
 
     // (j) friends & ratings
     move('friends', 'owner_pubkey');
@@ -178,6 +180,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // reconcile writes somebody else in for good, and the hand-over has been reversed by nobody's decision.
     move('groups', 'lead_pubkey');
     move('groups', 'created_by');
+    move('groups', 'circle_starter');
     move('group_members', 'member_pubkey');
     move('group_members', 'invited_by');
     // A group chat's wraps for the old key stay (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct):
@@ -250,6 +253,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('decisions', 'admin_halted_by');
     move('decisions', 'case_hidden_by');
     move('decisions', 'reply_hidden_by');
+    // Left on the old key, an owner's decision on a vote too few could vote on would name no owner when the vote closes, so a
+    // phone move would undo it (decisions-engine ownerDecisionStands).
+    move('decisions', 'owner_decided_by');
     // A pause's own vote names who paused in its params, not in a column (decisions-engine pauseMember `pausedBy`), and the
     // cool-down and a report of its case read it there (removalCoolDownRefusal, removalCaseReport). Left on the old key, the
     // admin could pause the member again at once from the new one, and the member's report of the case would name nobody.

@@ -8,7 +8,7 @@
  * error about a feature they never asked for.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@beanpool/core';
 import {
     getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, setEventReminder, type MarketplacePost,
@@ -16,8 +16,8 @@ import {
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
-    formatReminderChoice, icsFileName, normaliseReminderOffsets, parseReminderOffsets, reminderOffsetLabel,
-    type ShareableEvent,
+    formatReminderChoice, googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets,
+    reminderOffsetLabel, type ShareableEvent,
 } from '../lib/event-extras';
 import { eventShareWhen } from '../lib/events';
 import { Sentence } from './Sentence';
@@ -52,11 +52,15 @@ const BUTTON =
  *
  * Share hands the text to the browser's own share sheet where there is one (a phone, mostly); where there
  * is not, it copies the link and says so, which is the same job done by the only means a desktop browser
- * has. Add to calendar builds the .ics here and downloads it: no node, no account, and the same file the
- * phone app shares.
+ * has. Add to calendar opens a choice between a calendar file (.ics) for any calendar app, and Google Calendar.
+ * The calendar file builds the .ics here and downloads it: no node, no account, and the same file the
+ * phone app shares. Google Calendar opens Google's template URL in a new tab.
  */
 export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
     const [note, setNote] = useState<string | null>(null);
+    const [calendarMenuOpen, setCalendarMenuOpen] = useState(false);
+    const calendarMenuRef = useRef<HTMLDivElement | null>(null);
+    const calendarButtonRef = useRef<HTMLButtonElement | null>(null);
     const event = shareableEvent(post);
     const link = eventLink(nodeOrigin(), post.id);
     // A shared time is read outside the app, by someone whose zone nobody knows: it names its zone.
@@ -92,7 +96,10 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
         }
     };
 
-    const addToCalendar = () => {
+    const downloadIcs = () => {
+        setCalendarMenuOpen(false);
+        calendarButtonRef.current?.focus();
+        requestAnimationFrame(() => calendarButtonRef.current?.focus());
         const blob = new Blob([buildIcs(event, link)], { type: 'text/calendar;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -105,16 +112,100 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
         say(t('Calendar file saved.'));
     };
 
+    const openGoogleCalendar = () => {
+        setCalendarMenuOpen(false);
+        calendarButtonRef.current?.focus();
+        requestAnimationFrame(() => calendarButtonRef.current?.focus());
+        window.open(googleCalendarUrl(event, link), '_blank', 'noopener,noreferrer');
+    };
+
+    useEffect(() => {
+        if (!calendarMenuOpen) return;
+        calendarMenuRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
+        const onDown = (e: MouseEvent | TouchEvent) => {
+            const target = e.target;
+            if (target instanceof Node && !calendarMenuRef.current?.contains(target) && !calendarButtonRef.current?.contains(target)) {
+                setCalendarMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('touchstart', onDown);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('touchstart', onDown);
+        };
+    }, [calendarMenuOpen]);
+
+    const onCalendarKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setCalendarMenuOpen(false);
+            requestAnimationFrame(() => calendarButtonRef.current?.focus());
+            return;
+        }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Tab') return;
+        const items = Array.from(calendarMenuRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') ?? []);
+        if (!items.length) return;
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        if (e.key === 'Tab') {
+            setCalendarMenuOpen(false);
+            return;
+        }
+        e.preventDefault();
+        const next = e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+        items[next]?.focus();
+    };
+
     return (
         <div className="flex flex-col gap-2">
             <div className="flex flex-wrap gap-2">
                 <button type="button" data-testid="event-share" onClick={share} className={`flex-1 min-w-[8rem] ${BUTTON}`}>
                     <span aria-hidden="true">🔗 </span>{t('Share')}
                 </button>
-                <button type="button" data-testid="event-add-to-calendar" onClick={addToCalendar} className={`flex-1 min-w-[8rem] ${BUTTON}`}>
-                    <span aria-hidden="true">📅 </span>{t('Add to calendar')}
-                </button>
+                <div className="flex-1 min-w-[8rem]">
+                    <button
+                        ref={calendarButtonRef}
+                        type="button"
+                        data-testid="event-add-to-calendar"
+                        onClick={() => setCalendarMenuOpen(o => !o)}
+                        aria-expanded={calendarMenuOpen}
+                        aria-haspopup="menu"
+                        className={`w-full ${BUTTON}`}
+                    >
+                        <span aria-hidden="true">📅 </span>{t('Add to calendar')}
+                    </button>
+                </div>
             </div>
+            {/* In the page's flow, not floating: the event's card is overflow-hidden and would cut a floating menu off. */}
+                {calendarMenuOpen && (
+                    <div
+                        ref={calendarMenuRef}
+                        role="menu"
+                        aria-label={t('Add to calendar')}
+                        onKeyDown={onCalendarKeyDown}
+                        className="w-full py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800"
+                    >
+                        <button
+                            type="button"
+                            role="menuitem"
+                            data-testid="event-add-calendar-file"
+                            onClick={downloadIcs}
+                            className="w-full min-h-[48px] px-3 py-2 text-left bg-transparent border-0 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800 rounded-lg flex flex-col justify-center"
+                        >
+                            <span className="text-sm font-semibold text-nature-900 dark:text-nature-100">{t('Calendar file (.ics)')}</span>
+                            <span className="text-xs text-nature-600 dark:text-nature-300">{t('For any calendar app')}</span>
+                        </button>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            data-testid="event-add-google-calendar"
+                            onClick={openGoogleCalendar}
+                            className="w-full min-h-[48px] px-3 py-2 text-left bg-transparent border-0 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800 rounded-lg flex flex-col justify-center"
+                        >
+                            <span className="text-sm font-semibold text-nature-900 dark:text-nature-100">{t('Google Calendar')}</span>
+                        </button>
+                    </div>
+                )}
             {note && <p role="status" data-testid="event-share-note" className="m-0 text-xs text-nature-600 dark:text-nature-400">{note}</p>}
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />

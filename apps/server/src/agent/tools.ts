@@ -6,11 +6,13 @@
  * Redaction is at the source: every tool builds its answer from named fields, never by passing a record through. No
  * answer carries a key, a balance of any member, a reporter, a DM, a photo, an address or URL (the node's own included:
  * links are Settings paths the assistant joins to the address in its welcome), a host, a log line, or a destination's name.
+ * The one exception is what a tool is for: photo_upload_link answers an address on this node, which the assistant sends photos to.
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *
  * Slice S1: reads, and `take_backup` for owner grants. Slice S4: `suggest_action`, which changes nothing: it files a card the
  * member approves on their phone (agent/suggestions.ts). MCP-OWNER-POSTS: an owner's grant also posts Offers, Needs, events and
- * enterprise listings for them, photos required, 50 a day (agent/owner-posts.ts).
+ * enterprise listings for them, photos required, 50 a day (agent/owner-posts.ts). Tags T4: every create and update_post takes
+ * library tags and free tags, and tags_search finds the library's (agent/owner-reads.ts).
  */
 import os from 'node:os';
 import { db } from '../db/db.js';
@@ -38,7 +40,7 @@ import { getBackupStatus } from '../services/backup-puller.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE, type Fenced } from './fence.js';
 import {
     admitAgentBackup, agentBackupsToday, agentCallsToday, agentPhotosToday, returnAgentBackup,
-    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPostsPerDay, AGENT_LIST_MAX, AGENT_PHOTOS_PER_DAY,
+    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPhotosPerDay, agentPostsPerDay, AGENT_LIST_MAX,
 } from './limits.js';
 import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-posts.js';
 import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
@@ -85,8 +87,11 @@ export interface AgentTool {
     destructive?: boolean;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
-    /** A create (agent/owner-posts.ts) answers once its photos are resized; every other tool answers at once. */
-    run: (grant: AgentGrant, args: Record<string, unknown>, boundary: string) => ToolResult | Promise<ToolResult>;
+    /**
+     * A create (agent/owner-posts.ts) answers once its photos are resized; every other tool answers at once. `nodeUrl` is the address
+     * in the welcome (agent/mcp-route.ts nodeUrlFor), for the one tool that answers an address; a Settings preview runs no such tool.
+     */
+    run: (grant: AgentGrant, args: Record<string, unknown>, boundary: string, nodeUrl?: string) => ToolResult | Promise<ToolResult>;
 }
 
 /** A tool's description, made from its row (§7: two sentences, a third where member text can appear). */
@@ -137,10 +142,12 @@ function iso(value: unknown): string | null {
     return null;
 }
 
-function targetKind(r: AbuseReport): 'post' | 'pulse_item' | 'group_message' | 'member' {
+function targetKind(r: AbuseReport): 'post' | 'pulse_item' | 'group_message' | 'direct_message' | 'member' {
     if (r.targetPulseItemId) return 'pulse_item';
     if (r.targetPostId || r.postId) return 'post';
-    // A group chat message's report (engine/group-chat-report.ts): about its author, and never its key or its words here.
+    // A chat message's report (engine/group-chat-report.ts, dm-line-report.ts): about its author, and never its key or its
+    // words here.
+    if (r.directMessage) return 'direct_message';
     if (r.targetMessageId) return 'group_message';
     return 'member';
 }
@@ -174,7 +181,7 @@ function reportView(r: AbuseReport, withText: boolean, boundary: string): Record
     view.authorCallsign = kind === 'post'
         ? fence(boundary, what("reported post author's name"), r.postAuthorCallsign)
         : kind === 'member' ? fence(boundary, what("reported member's name"), r.targetCallsign)
-            : kind === 'group_message' ? fence(boundary, what("reported message author's name"), r.targetCallsign) : null;
+            : kind === 'group_message' || kind === 'direct_message' ? fence(boundary, what("reported message author's name"), r.targetCallsign) : null;
     return view;
 }
 
@@ -533,9 +540,9 @@ export const AGENT_TOOLS: AgentTool[] = [
                 // with the owner's photo room left in words; a grant that does not post (an admin's, or one not ticked) has no count.
                 canPost: grantPosts(grant),
                 ...(grantPosts(grant) ? { posts: { today: assistantPostsToday(grant), perDay: agentPostsPerDay(), photoRoom: photoRoomWords(grant.member) } } : {}),
-                // Slice S4: the photos it has had fetched or uploaded today against the 200 (agent/owner-photos.ts), where an
-                // upload goes (a path it joins to the address in its welcome), and the two ways besides base64, in words.
-                ...(grantPosts(grant) ? { photos: { today: agentPhotosToday(grant.id), perDay: AGENT_PHOTOS_PER_DAY, uploadPath: PHOTO_UPLOAD_PATH, ways: PHOTO_WAYS } } : {}),
+                // Slice S4: the photos it has had fetched or uploaded today against the day's (limits.ts agentPhotosPerDay; agent/
+                // owner-photos.ts), where an upload goes (a path it joins to the address in its welcome), and the ways besides base64, in words.
+                ...(grantPosts(grant) ? { photos: { today: agentPhotosToday(grant.id), perDay: agentPhotosPerDay(), uploadPath: PHOTO_UPLOAD_PATH, ways: PHOTO_WAYS } } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
                 cannot: AGENT_CANNOT,
             },
@@ -617,6 +624,7 @@ AGENT_TOOLS.push({
         const kindOf = targetKind(r);
         if (kind === 'remove_reported' && kindOf === 'member') return { ok: false, error: 'That report is about a member, not a post: there is nothing to remove.' };
         if (kind === 'remove_reported' && kindOf === 'group_message') return { ok: false, error: 'That report is about a group chat message, not a post: there is nothing to remove.' };
+        if (kind === 'remove_reported' && kindOf === 'direct_message') return { ok: false, error: 'That report is about a direct message, not a post: there is nothing to remove.' };
         if (kind !== 'restore_post' && (r.status === 'reviewed' || r.status === 'actioned')) {
             return { ok: false, error: 'That report is already closed: there is nothing to suggest about it.' };
         }

@@ -24,13 +24,15 @@ import {
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
+import { RestoreMenu } from '../components/welcome/RestoreMenu';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
     keepJoinedIdentity, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
-import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
+import { DOOR_WORK_MESSAGES, passDoorCheck, workPastCheck } from '../utils/door-work';
+import { useDoorCheck } from '../components/DoorCheckSheet';
 import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } from '../components/WordsDoor';
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
 import { type LinkAnswer } from '../utils/join-link';
@@ -74,6 +76,7 @@ import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { holdEndsWords } from '../components/RecoveryAlertBanner';
 import { VAULT_WORDS } from '../utils/vault-words';
+import { loadPendingCommunityRestore } from '../utils/community-recovery';
 import { landNextOn } from '../utils/member-landing';
 import { visitGlobalAsGuest } from '../utils/global-guest-visit';
 import { LOOK_JOIN, LOOK_LANDING, lookingAroundHere } from '../utils/look-around';
@@ -95,6 +98,7 @@ import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
 import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
+import { fieldTextFor, releaseFieldHints, withCopyCommunities } from '../utils/restore-community-choices';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -323,6 +327,10 @@ export default function WelcomeScreen() {
                 setError(t(VAULT_WORDS.stopped));
             } else {
                 setSsoReleased(result.restored);
+                // The copy listed the member's communities (vault rethink VR5): the first is the one the phone was on when
+                // the sign-in was linked, so "Which community?" starts there. Global otherwise, as before.
+                const first = result.restored.communities?.[0];
+                if (first) setSsoCommunity(fieldTextFor(first.url));
                 setError(null);
             }
         } catch (e) {
@@ -371,6 +379,13 @@ export default function WelcomeScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
+    /**
+     * The sheet's copy carries the list of communities (vault rethink VR5): only from the panel's Protect with, with its
+     * tick on. The claim flow's Add a sign-in draws no tick, so it sets this off.
+     */
+    const [ssoListCommunities, setSsoListCommunities] = useState(false);
+    /** What the panel's tick shows (KeeperProtectionPanel `listShown`). */
+    const [listTickShown, setListTickShown] = useState(false);
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     /**
      * Where a copy made at Safety Backup goes: the joined community's rule (vault rethink VR2, utils/copies-rule.ts),
@@ -421,6 +436,7 @@ export default function WelcomeScreen() {
     const [globalDoorCopies, setGlobalDoorCopies] = useState<SignInCopies>(() => signInCopiesAt());
     const [doorWay, setDoorWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
+    const doorCheck = useDoorCheck(colors, dark);
     /**
      * The door was opened by the global community's link or the install referrer's `global=1` (utils/global-link.ts), not
      * by a tap here: its 12-words work, signed and sent to the global community, waits for the member's first tap at it.
@@ -997,7 +1013,9 @@ export default function WelcomeScreen() {
     // A re-key ask the app was closed in the middle of (utils/rekey-redeem.ts): back to its screen, which asks once more.
     useEffect(() => {
         let alive = true;
-        rekeySlotStore.get().then((held) => { if (alive && held) router.push('/rekey-code'); }).catch(() => {});
+        // And a shared bring-back waiting out its day at the key vault (utils/community-recovery.ts).
+        Promise.all([rekeySlotStore.get(), loadPendingCommunityRestore()])
+            .then(([held, waiting]) => { if (alive && (held || waiting)) router.push('/rekey-code'); }).catch(() => {});
         return () => { alive = false; };
     }, []);
 
@@ -1945,7 +1963,7 @@ export default function WelcomeScreen() {
             setCallsignSuggestions([]);
             setWorkWaiting(run.state().phase !== 'ready');
             // Stops waiting the moment the member leaves the step ("Choose another way", Back): PR #1452 review, finding 2.
-            const ready = await solutionUnlessLeft(run, leave.signal);
+            const ready = await workPastCheck(run, leave.signal, doorCheck.ask);
             // Left while it finished: the way out they took has already drawn its screen.
             if (leave.signal.aborted || ready.kind === 'cancelled') return;
             setWorkWaiting(false);
@@ -1957,7 +1975,7 @@ export default function WelcomeScreen() {
             joinSendingRef.current = true;
             setGlobalPhase('joining');
             const identity = await commitJoinKey(key, name);
-            const answer = await submitWordsJoin(GLOBAL_NODE_URL, identity, name, run);
+            const answer = await submitWordsJoin(GLOBAL_NODE_URL, identity, name, run, (check) => passDoorCheck(run, check, leave.signal, doorCheck.ask));
             await afterDoorAnswer(answer, key, identity, 'join', 'words');
         } catch (err) {
             setError(err instanceof StoredKeyUnreadableError
@@ -2418,10 +2436,14 @@ export default function WelcomeScreen() {
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
                             copiesAt={backupCopiesAt}
                             communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
-                            onProtectSso={Platform.OS !== 'web' ? (prov) => {
+                            onProtectSso={Platform.OS !== 'web' ? (prov, listCommunities) => {
                                 if (prov) setSsoProvider(prov);
+                                setSsoListCommunities(listCommunities);
                                 setShowSsoSheet(true);
                             } : undefined}
+                            listCommunitiesFor={pendingIdentity?.publicKey}
+                            listShown={listTickShown}
+                            onListShown={setListTickShown}
                         />
                         )}
                         {linked && (
@@ -2460,6 +2482,7 @@ export default function WelcomeScreen() {
                             askPhoneLock={!pendingWordsAreNew}
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
                             copiesAt={backupCopiesAt}
+                            listCommunities={ssoListCommunities}
                             onClose={() => setShowSsoSheet(false)}
                             onCopiesChanged={() => setBackupCopiesRead((n) => n + 1)}
                             onEnrolled={(result) => {
@@ -2601,7 +2624,12 @@ export default function WelcomeScreen() {
                         {wordsMember && Platform.OS !== 'web' && (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginTop: 8 }]}
-                                onPress={() => (joinFlow === 'claim' ? setShowSsoSheet(true) : setShowLinkSheet(true))}
+                                onPress={() => {
+                                    if (joinFlow !== 'claim') return setShowLinkSheet(true);
+                                    // No tick here, so no list of communities in this copy (vault rethink VR5).
+                                    setSsoListCommunities(false);
+                                    setShowSsoSheet(true);
+                                }}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.secondaryBtnText}>{backupCopiesAt === 'none' ? t('Add a sign-in') : t(WORDS_BACKUP_TEXT.addSignIn)}</Text>
@@ -3255,7 +3283,7 @@ export default function WelcomeScreen() {
                                         onWords={chooseWordsAtDoor}
                                         onSignIn={(provider) => { setDoorWay('sign-in'); handleGlobalSignIn(provider); }}
                                         disabled={loading}
-                                        busy={doorWork.busy}
+                                        busy={doorWork.busy ? welcomeLineWords(doorWork.busy) : null}
                                         wordsProblem={wordsState?.phase === 'failed' ? welcomeLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                         signInNote={signInNote}
                                         keepsNoCopies={globalDoorCopies === 'none'}
@@ -3395,6 +3423,7 @@ export default function WelcomeScreen() {
                         </View>
                     </ScrollView>
                 </KeyboardAvoidingView>
+                {doorCheck.sheet}
             </SafeAreaView>
         );
     }
@@ -3411,33 +3440,21 @@ export default function WelcomeScreen() {
                             {t("Your account isn't lost — bring it to this device with your social sign-in or 12 recovery words.")}
                         </Text>
 
-                        <Pressable
-                            style={styles.ssoRecoverBtn}
-                            onPress={() => {
-                                setMode('ssoRecover');
-                                setError(null);
-                            }}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Recover with Social Sign-In')}
-                        >
-                            <View style={styles.ssoRecoverRow}>
-                                <Text style={styles.ssoRecoverBtnText}>{t('🌐 Recover with Social')}</Text>
-                                <View style={styles.ssoRecoverLogos}>
+                        <RestoreMenu
+                            colors={colors}
+                            dark={dark}
+                            logos={(
+                                <>
                                     {Platform.OS === 'ios' && <AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />}
                                     <GoogleLogo size={16} />
                                     <FacebookLogo size={16} />
-                                </View>
-                            </View>
-                        </Pressable>
-
-                        <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
-                            <Text style={styles.recoverBtnText}>{t('🔑 Recover with 12 Words')}</Text>
-                        </Pressable>
-
-                        {/* Lost the phone and the words: an admin's re-key code (app/rekey-code.tsx, #1768). */}
-                        <Pressable style={styles.recoverBtn} onPress={() => { setError(null); router.push('/rekey-code'); }} accessibilityRole="button">
-                            <Text style={styles.recoverBtnText}>{t('🪪 An admin gave me a re-key code')}</Text>
-                        </Pressable>
+                                </>
+                            )}
+                            onSocial={() => { setMode('ssoRecover'); setError(null); }}
+                            onWords={() => { setMode('recover'); setError(null); }}
+                            onCommunity={() => { setError(null); router.push({ pathname: '/rekey-code', params: { bringBack: '1' } }); }}
+                            onRekey={() => { setError(null); router.push('/rekey-code'); }}
+                        />
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
                             <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
@@ -3842,18 +3859,21 @@ export default function WelcomeScreen() {
                                     <Text style={styles.subtitle}>
                                         {t('Your account is back. Which community do you want to open it in? You can add your other communities afterwards.')}
                                     </Text>
+                                    {/* With the copy's list (vault rethink VR5), the member's communities from it beside this
+                                        phone's own; a copy without one shows this phone's, as before. */}
                                     <SavedNodePicker
-                                        nodes={savedNodes}
+                                        nodes={withCopyCommunities(savedNodes, ssoReleased.communities)}
                                         onPick={(url) => { setSsoCommunity(url); setError(null); }}
                                         disabled={loading}
                                         selectedUrl={normalizeNodeUrl(ssoCommunity.trim())}
-                                        label={t('Your communities on this phone')}
+                                        label={ssoReleased.communities?.length ? t('Your communities, on this phone and in your copy') : t('Your communities on this phone')}
                                         actionLabel={t('Open in')}
                                         hint={t("Or type a community's name or address below.")}
                                     />
                                     <TextInput
                                         accessibilityLabel={t('Community name or node address')}
-                                        accessibilityHint={t("The global community is filled in. Enter your community's name, like mullum, or its full address")}
+                                        // What the field really holds: the global community, the copy's first one, or another.
+                                        accessibilityHint={releaseFieldHints(ssoCommunity, ssoReleased.communities?.[0]).a11y}
                                         style={styles.input}
                                         placeholder={t('Community name or address (e.g. mullum)')}
                                         placeholderTextColor={colors.text.muted}
@@ -3870,7 +3890,7 @@ export default function WelcomeScreen() {
                                         </Text>
                                     )}
                                     <Text style={styles.fieldHint}>
-                                        {t('The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.')}
+                                        {releaseFieldHints(ssoCommunity, ssoReleased.communities?.[0]).hint}
                                     </Text>
                                     {error && <Text style={styles.error}>{error}</Text>}
                                     <Pressable
@@ -4199,14 +4219,8 @@ const styles = StyleSheet.create({
     secondaryBtnText: { color: dark ? colors.text.secondary : palette.gray600, fontSize: 16, fontWeight: '600' },
 
     // Member sub-options
-    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : '#93C5FD', backgroundColor: dark ? colors.feedback.info.bg : '#EFF6FF', alignItems: 'center', marginBottom: 10 },
-    // The label shrinks and wraps; the logos keep their size. A label that could not shrink made the row wider than
-    // the button at 320dp or with enlarged text, and the centred row spilled past both edges.
-    ssoRecoverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
-    ssoRecoverBtnText: { color: dark ? palette.blue400 : '#1D4ED8', fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
-    ssoRecoverLogos: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
-    recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700' },
+    recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700', textAlign: 'center' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },
     socialRecoverBtnText: { color: colors.brand.primary, fontSize: 16, fontWeight: '700' },
 

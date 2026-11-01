@@ -42,7 +42,7 @@ export const START_COMMUNITY_KNOW = {
         { label: word('What it costs'), body: word('A spare computer, or a few dollars a month for a rented server. The software is free.') },
         { label: word('Who hosts it'), body: word('You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.') },
         { label: word('What you take on'), body: word('Reports from your members come to you. The data folder is yours to back up, with a recovery code. Keep two owners, and keep the server on and up to date.') },
-        { label: word('What you never see'), body: word("Your members' direct messages.") },
+        { label: word('What you never see'), body: word("Your members' direct messages, unless a member reports one.") },
     ],
     steps: word('About half an hour if you can follow a recipe: paste one block of commands, then run beanpool claim on the server and scan its code with your phone to become the owner.'),
     setupChapter: word('The setup chapter: the first start and claiming it with your phone'),

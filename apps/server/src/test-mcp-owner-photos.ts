@@ -18,7 +18,7 @@
  *      JPEG on white; a WebP stays a WebP; base64 and an address in one post, in that order; more than 4 refused; the AGENT
  *      log names the host, never the path; an event and an enterprise listing take photo_urls; update_post replaces photos
  *      from an address, and a refused one leaves them.
- *   3. The day's 200, shared: past it a create with addresses is refused before anything is fetched, and an upload 429.
+ *   3. The day's 400 (4 × the owners' 100), shared: past it a create with addresses is refused before anything is fetched, and an upload 429.
  *   4. Upload: no token, a made-up one, a reads-only grant's, an admin's → refused, nothing kept; another site's page, a GET,
  *      the switch off → refused; a wrong Content-Type, a JSON body → 415; a declared 6 MB → 413 while only 10 bytes of it
  *      were sent; 6 MB streamed with no length → 413, nothing kept; HTML as image/jpeg → 400; a good one → 201 with exactly
@@ -27,7 +27,7 @@
  *      refused; a create refused after the id was taken leaves it usable; 24 hours on, swept and refused; a PNG upload is
  *      stored as a JPEG; revoked, a grant's unused uploads and their folder are gone; bodies still arriving fill the server's
  *      places (one more → 503, uncounted), and their clients going frees them at once; so does a client gone while the JSON
- *      reader in front of every route had its body (the route meets a request already closed). connection_info says the two
+ *      reader in front of every route had its body (the route meets a request already closed). connection_info says the
  *      ways.
  *   5. Beans: create_enterprise_listing asks a price above 0 where Beans are on (0 and absent refused in words). Where they are
  *      off its schema asks none and neither 0 nor absent is refused for its price; the call is still refused, because Beans
@@ -65,7 +65,7 @@ import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import { imageSize } from './storage/image-metadata.js';
-import { admitAgentPhoto, agentCreatesToday, agentPhotosToday, AGENT_PHOTOS_PER_DAY } from './agent/limits.js';
+import { admitAgentPhoto, agentCreatesToday, agentPhotosPerDay, agentPhotosToday } from './agent/limits.js';
 import { pinnedHostResolver, type HostResolver } from './engine/pulse-resolver.js';
 import { __usePhotoFetchResolverForTests, PHOTO_UPLOAD_KEEP_MS, sweepUploadedPhotos, uploadedPhotosWaiting } from './agent/owner-photos.js';
 import { enterpriseRef } from './agent/owner-posts.js';
@@ -598,22 +598,22 @@ async function main(): Promise<void> {
         assert(midUpload === 401 && uploadedPhotosWaiting(W.id) === 0,
             `disconnected while an upload is still arriving → 401, nothing kept for it (${midUpload}, ${uploadedPhotosWaiting(W.id)} waiting)`);
 
-        // ── 3. The day's 200, shared ─────────────────────────────────────────────────────────────
-        console.log('── 3. 200 photos a day, fetched and uploaded together ──');
+        // ── 3. The day's 400, shared ─────────────────────────────────────────────────────────────
+        console.log('── 3. 400 photos a day, fetched and uploaded together ──');
         const C = await makeToken(owner, 'Olive\'s busy day');
         const c = await connect(C.token);
-        for (let i = 0; i < AGENT_PHOTOS_PER_DAY - 1; i++) admitAgentPhoto(C.id);
-        const hitsAt199 = totalHits();
+        for (let i = 0; i < agentPhotosPerDay() - 1; i++) admitAgentPhoto(C.id);
+        const hitsAt399 = totalHits();
         const twoOver = await tool(c, 'create_offer', { ...offerArgs, photo_urls: [img('/good.jpg'), img('/small.webp')] });
-        assert(twoOver.isError === true && /^This assistant has had 199 photos fetched or uploaded today, and 200 a day is the most: try again tomorrow \(UTC\)\.$/.test(errorText(twoOver))
-            && totalHits() === hitsAt199 && agentPhotosToday(C.id) === 199,
-            `199 used, a post with two addresses → refused before anything is fetched (${errorText(twoOver)})`);
-        const the200th = await tool(c, 'create_offer', { ...offerArgs, title: 'The 200th photo', photo_urls: [img('/small.webp')] });
-        const upload201 = await upload(C.token, goodJpg);
-        const fetch201 = await tool(c, 'create_offer', { ...offerArgs, photo_urls: [img('/small.webp')] });
-        assert(!the200th.isError && agentPhotosToday(C.id) === 200 && upload201.status === 429 && /200 a day is the most/.test(upload201.body?.error ?? '')
-            && fetch201.isError === true && /200 a day is the most/.test(errorText(fetch201)) && uploadedPhotosWaiting(C.id) === 0,
-            `the 200th is fetched; then an upload → 429 and an address → refused, by the same count (${upload201.status} ${upload201.body?.error?.slice(0, 50)})`);
+        assert(twoOver.isError === true && /^This assistant has had 399 photos fetched or uploaded today, and 400 a day is the most: try again tomorrow \(UTC\)\.$/.test(errorText(twoOver))
+            && totalHits() === hitsAt399 && agentPhotosToday(C.id) === 399,
+            `399 used, a post with two addresses → refused before anything is fetched (${errorText(twoOver)})`);
+        const the400th = await tool(c, 'create_offer', { ...offerArgs, title: 'The 400th photo', photo_urls: [img('/small.webp')] });
+        const upload401 = await upload(C.token, goodJpg);
+        const fetch401 = await tool(c, 'create_offer', { ...offerArgs, photo_urls: [img('/small.webp')] });
+        assert(!the400th.isError && agentPhotosToday(C.id) === 400 && upload401.status === 429 && /400 a day is the most/.test(upload401.body?.error ?? '')
+            && fetch401.isError === true && /400 a day is the most/.test(errorText(fetch401)) && uploadedPhotosWaiting(C.id) === 0,
+            `the 400th is fetched; then an upload → 429 and an address → refused, by the same count (${upload401.status} ${upload401.body?.error?.slice(0, 50)})`);
         await c.close().catch(() => {});
         assert(await revoke(C.id) === 200, 'the busy day\'s check is disconnected');
 
@@ -665,7 +665,7 @@ async function main(): Promise<void> {
         const expires = Date.parse(good.body?.expiresAt ?? '');
         assert(good.status === 201 && JSON.stringify(Object.keys(good.body ?? {}).sort()) === JSON.stringify(['expiresAt', 'photoId', 'photosPerDay', 'photosToday'])
             && /^ph_[0-9a-f]{32}$/.test(id1) && Math.abs(expires - (Date.now() + PHOTO_UPLOAD_KEEP_MS)) < 60_000
-            && good.body.photosToday === photosBefore + 1 && good.body.photosPerDay === 200,
+            && good.body.photosToday === photosBefore + 1 && good.body.photosPerDay === 400,
             `a good upload → 201 with exactly photoId, expiresAt (24 hours on), photosToday and photosPerDay (${show(good)})`);
         assert(files.length === 1 && keptFacts.format === 'jpeg' && keptFacts.width === 800 && keptFacts.height === 600 && !keptFacts.exif && !keptFacts.mark,
             `kept made what the apps send: 800 × 600, no metadata (${JSON.stringify(keptFacts)})`);
@@ -751,10 +751,10 @@ async function main(): Promise<void> {
         const info = structured(await tool(a, 'connection_info', {}));
         const readerClient = await connect(R.token);
         const readerInfo = structured(await tool(readerClient, 'connection_info', {}));
-        assert(info?.photos?.perDay === 200 && info.photos.uploadPath === '/mcp/photos' && typeof info.photos.today === 'number'
+        assert(info?.photos?.perDay === 400 && info.photos.uploadPath === '/mcp/photos' && typeof info.photos.today === 'number'
             && /photo_urls: public addresses of images this server fetches itself/.test(info.photos.ways) && /POST one image as the whole body to \/mcp\/photos/.test(info.photos.ways)
             && readerInfo && readerInfo.photos === undefined,
-            `connection_info says the photos today against 200, where an upload goes and the two ways; a reads-only grant's has none (${JSON.stringify(info?.photos)})`);
+            `connection_info says the photos today against 400, where an upload goes and the ways; a reads-only grant's has none (${JSON.stringify(info?.photos)})`);
         await readerClient.close().catch(() => {});
 
         const D = await makeToken(owner, 'Olive\'s old laptop');

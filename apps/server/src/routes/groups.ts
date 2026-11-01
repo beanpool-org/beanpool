@@ -38,9 +38,9 @@ import {
     voteGroupConvenor,
     getGroupSuccession,
     listYourChats,
-    isReportRateLimited,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import { circleCardFor } from '../engine/place-circles.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
 import {
     GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
@@ -65,9 +65,9 @@ import { formerKeysReader } from '../engine/key-succession.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 import { word } from '@beanpool/core';
 import {
-    GroupLineReportError, changeGroupLineReportReason, checkGroupLineReport, groupLineReportOnFile, submitGroupLineReport,
+    GroupLineReportError, checkGroupLineReport, submitGroupLineReport,
 } from '../engine/group-chat-report.js';
-import { noteNewReport, reportKind } from '../services/alerts.js';
+import { fileMessageReport } from './message-report.js';
 import { logger } from '../logger.js';
 
 /**
@@ -270,7 +270,9 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         // Closed by its members' vote: the group stays to read, as "Your groups" shows it (closedAt, readOnly).
         const closedAt = groupClosedAt(group.id);
         ctx.status = 200;
-        ctx.body = { ...group, closedAt, readOnly: !!closedAt };
+        // A place circle's own rows, for someone in it (engine/place-circles.ts); null for anyone else and any other group.
+        const circle = group.kind ? circleCardFor(group.id, viewerPubkey) : null;
+        ctx.body = { ...group, closedAt, readOnly: !!closedAt, ...(circle ? { circle } : {}) };
     });
 
     // 3. Create a group
@@ -738,8 +740,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     // may read now, as its words and its photo are served (groupChatRole + groupLineForReader), and any other answers as an
     // id nobody has, a group they are not in included. The node keeps the key with the report and opens nothing here: the
     // moderators' view opens that one line (routes/admin.ts, engine/group-chat-report.ts). One report per reporter per
-    // message, repeats answered as /api/reports answers them: the one on file, changed only to Child safety; and Child
-    // safety on one a moderator closed is a new report, as /api/reports files one once nothing is pending.
+    // message (routes/message-report.ts).
     router.post('/api/groups/:id/chat/report', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
@@ -752,40 +753,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: e.message, code: e.code };
             return;
         }
-        // Every alert judges the 500 characters the queue keeps, as /api/reports does.
-        const kept = checked.reason.slice(0, 500);
-        const onFile = groupLineReportOnFile(actor, checked.messageId);
-        const child = reportKind(kept) === 'child safety';
-        // Child safety on a report a moderator dismissed or handled (the deciding review of #2470): filed below as a new
-        // one, with the key sent with it, and told. The closed one is never reopened or changed: an actioned report
-        // counts towards a suspension (member-wizards.ts reportMaySuspend). Any other repeat of a closed one is the one
-        // on file still.
-        if (onFile && !(child && onFile.status !== 'pending')) {
-            if (child && reportKind(onFile.reason) !== 'child safety') {
-                const changed = changeGroupLineReportReason(onFile.id, kept);
-                if (changed) {
-                    noteNewReport(kept, actor).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
-                    ctx.body = { success: true, report: changed, duplicate: true };
-                    return;
-                }
-            }
-            ctx.body = { success: true, report: onFile, duplicate: true };
-            return;
-        }
-        if (isReportRateLimited(actor)) {
-            ctx.status = 429;
-            ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
-            return;
-        }
-        const report = submitGroupLineReport(actor, checked);
-        if (!report) {
-            ctx.status = 400;
-            ctx.body = { error: word('Failed — must be a registered member, cannot report yourself') };
-            return;
-        }
-        // The owners and admins hear of it by kind and count, never who or what, as for any report.
-        noteNewReport(kept, actor).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
-        ctx.body = { success: true, report };
+        fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => submitGroupLineReport(actor, checked));
     });
 
     router.post('/api/groups/:id/chat/remove', async (ctx) => {

@@ -805,12 +805,140 @@ describe('PublicAddressPanel Component', () => {
             expect(screen.queryByRole('button', { name: 'Release' })).not.toBeInTheDocument();
         });
 
+        describe.each(['dark', 'light'])('a live name the community moved off, in %s', (theme) => {
+            const moved = { name: 'oldvale', hostname: 'oldvale.beanpool.org', state: 'live', releasable: true, fromInstall: false };
+            beforeEach(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); });
+            afterEach(() => { document.documentElement.classList.remove('dark'); });
+
+            it('says phones still using it lose the community, and never that it is not used', async () => {
+                const calls = mockNames(() => [moved]);
+                render(<PublicAddressPanel activeNode={mockActiveNode} />);
+                const line = await screen.findByTestId('extra-name');
+                expect(line).toHaveTextContent('This community also holds oldvale.beanpool.org. It still works: phones still using this address lose the community if you release it.');
+                expect(line).not.toHaveTextContent('not used');
+                expect(line).not.toHaveTextContent('from the install');
+                fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+                const dialog = await screen.findByRole('dialog');
+                expect(dialog).toHaveTextContent('Release an address that still works');
+                expect(dialog).toHaveTextContent("Release oldvale.beanpool.org? Phones still using this address lose the community. Your community's address stays owner-pick.beanpool.org.");
+                expect(dialog).not.toHaveTextContent('does not use');
+                expect(calls.some((c) => c.url.includes('/public-address/release-name'))).toBe(false);
+                fireEvent.click(screen.getByRole('button', { name: 'Release it' }));
+                await waitFor(() => expect(calls.filter((c) => c.url.includes('/public-address/release-name')).map((c) => c.body?.name)).toEqual(['oldvale']));
+            });
+        });
+
+        it('a name that only waited, never live here, stays not used', async () => {
+            mockNames(() => [{ name: 'waited', hostname: 'waited.beanpool.org', state: 'pending', releasable: true, fromInstall: false }]);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line).toHaveTextContent('This community also holds waited.beanpool.org; it is not used. Release it?');
+            expect(line).not.toHaveTextContent('phones');
+            fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+            const dialog = await screen.findByRole('dialog');
+            expect(dialog).toHaveTextContent('Release a name this community does not use');
+            expect(dialog).not.toHaveTextContent('phones');
+        });
+
         it('an admin (refused the list) is shown nothing', async () => {
             const calls = mockNames(() => [], 403);
             render(<PublicAddressPanel activeNode={mockActiveNode} />);
             await waitFor(() => expect(calls.some((c) => c.url.includes('/public-address/extra-names'))).toBe(true));
             await screen.findByText('owner-pick.beanpool.org');
             expect(screen.queryByTestId('extra-name')).not.toBeInTheDocument();
+        });
+    });
+
+    // A name the community moved off keeps its own tunnel after Take offline, so this server stays public there.
+    describe.each(['dark', 'light'])('Take offline with an old name still answering, in %s', (theme) => {
+        const OLD = 'oldvale.beanpool.org';
+        const others = [{ host: OLD, state: 'connected', connections: 4 }];
+        const moved = { success: true, status: 'live', name: 'byron', hostname: 'byron.beanpool.org', mode: 'tunnel', tunnel: { state: 'connected', connections: 4, others } };
+        const waiting = { success: true, status: 'pending', name: 'byron', mode: 'tunnel', reason: 'awaiting-approval', tunnel: { state: 'off', connections: 0, others } };
+        const none = (over: Record<string, unknown> = {}) => ({ success: true, status: 'none', tunnel: { state: 'off', connections: 0 }, ...over });
+        const noneButOld = none({ tunnel: { state: 'off', connections: 0, others } });
+
+        beforeEach(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); });
+        afterEach(() => { document.documentElement.classList.remove('dark'); });
+
+        /** The node, before and after Take offline: `answer` is what the route says. */
+        const mockNode = (before: unknown, after: unknown, answer: unknown) => {
+            let done = false;
+            vi.spyOn(global, 'fetch').mockImplementation((url) => {
+                const u = String(url);
+                if (u.includes('/public-address/offline')) done = true;
+                const body = u.includes('/public-address/offline') ? answer
+                    : u.includes('/public-address/status') ? (done ? after : before)
+                        : { success: true, logs: [] };
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
+            });
+        };
+        const openDialog = async () => {
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            fireEvent.click(await screen.findByRole('button', { name: /Take offline/i }));
+            return screen.findByRole('dialog');
+        };
+
+        it('the dialog names what keeps answering and how to end it, and never says the node goes offline', async () => {
+            mockNode(moved, noneButOld, { success: true, status: 'none', stillAnswering: [OLD] });
+            const dialog = await openDialog();
+            expect(screen.getByRole('heading', { name: 'Take this address offline' })).toBeInTheDocument();
+            expect(dialog).toHaveTextContent(`Release public address "byron.beanpool.org"? Its tunnel and DNS record will be torn down, but the node stays on the public internet: this server still answers at ${OLD}. To end that, claim ${OLD} back, then use Take offline.`);
+            expect(dialog).not.toHaveTextContent('take the node offline');
+            expect(dialog).not.toHaveTextContent('Take Node Offline');
+        });
+
+        it('a gated name still waiting: the same words, for the name that waits', async () => {
+            mockNode(waiting, noneButOld, { success: true, status: 'none', stillAnswering: [OLD] });
+            const dialog = await openDialog();
+            expect(dialog).toHaveTextContent(`Release public address "byron"? Its tunnel and DNS record will be torn down, but the node stays on the public internet: this server still answers at ${OLD}.`);
+            expect(dialog).not.toHaveTextContent('take the node offline');
+        });
+
+        it('the toast never says the node is offline, and the panel\'s line says where it still answers', async () => {
+            mockNode(moved, noneButOld, { success: true, status: 'none', stillAnswering: [OLD] });
+            await openDialog();
+            fireEvent.click(screen.getByRole('button', { name: 'Take Offline' }));
+            const toast = await screen.findByText(`✓ Public address released. This server still answers at ${OLD}.`);
+            expect(toast.closest('[role="status"]')?.className).toMatch(/bg-amber-950/);
+            expect(screen.queryByText(/Node is offline/)).not.toBeInTheDocument();
+            const line = await screen.findByTestId('public-address-still-answers');
+            expect(line).toHaveTextContent(`This server still answers at ${OLD}. To end that, claim the old name back, then use Take offline.`);
+            expect(line.className).toMatch(/text-bp-chip-warn-ink/);
+            expect(line.className).toMatch(/break-words/);
+        });
+
+        it('two old names are both named', async () => {
+            mockNode(none({ tunnel: { state: 'off', others: [{ host: OLD }, { host: 'older.beanpool.org' }] } }), none(), {});
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByTestId('public-address-still-answers')).toHaveTextContent(`This server still answers at ${OLD}, older.beanpool.org.`);
+        });
+
+        it('beside a name the server keeps with no record of it, the line still shows', async () => {
+            mockNode(none({ kept: { hostname: 'kept.beanpool.org' }, tunnel: { state: 'off', others } }), none(), {});
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            await screen.findByTestId('public-address-kept');
+            expect(screen.getByTestId('public-address-still-answers')).toHaveTextContent(`This server still answers at ${OLD}.`);
+        });
+
+        it('only the stored name to take offline: the words are the usual ones, and it is offline', async () => {
+            const alone = { ...moved, tunnel: { state: 'connected', connections: 4 } };
+            mockNode(alone, none(), { success: true, status: 'none', stillAnswering: [] });
+            const dialog = await openDialog();
+            expect(screen.getByRole('heading', { name: 'Take Node Offline' })).toBeInTheDocument();
+            expect(dialog).toHaveTextContent('Release public address "byron.beanpool.org" and take the node offline from the public internet? The Cloudflare tunnel and DNS record will be torn down.');
+            fireEvent.click(screen.getByRole('button', { name: 'Take Offline' }));
+            const toast = await screen.findByText('✓ Public address released. Node is offline.');
+            expect(toast.closest('[role="status"]')?.className).toMatch(/bg-emerald-950/);
+            await screen.findByText(/No public address currently assigned/);
+            expect(screen.queryByTestId('public-address-still-answers')).not.toBeInTheDocument();
+        });
+
+        it('with the new name live, the old one has its own row above, not this line', async () => {
+            mockNode(moved, moved, {});
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            await screen.findByText('byron.beanpool.org');
+            expect(screen.queryByTestId('public-address-still-answers')).not.toBeInTheDocument();
         });
     });
 });

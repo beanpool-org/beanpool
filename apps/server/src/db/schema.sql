@@ -353,6 +353,12 @@ CREATE TABLE IF NOT EXISTS posts (
     -- sets them (engine/post-fields.ts). Their words are in search_keywords; the Market's tag filter is a LIKE on this
     -- column (beanpool-engine posts.ts tagCondition). '' on every row without. Added to an older database by db.ts.
     tags TEXT NOT NULL DEFAULT '',
+    -- The tags its author typed (DESIGN-tags-free-entry-fable.md §2; @beanpool/core tags/free-tags.ts): a JSON list of them
+    -- in their stored form, at most 5 in 200 characters, each held to the rule (engine/post-fields.ts), never mixed with
+    -- `tags`. Their words are in search_keywords; the Market's `free=` is a json_each on this column (beanpool-engine posts.ts
+    -- freeTagCondition). '' on every row without. No trigger, index or default here calls a connection function, so an
+    -- older image boots on this file. Added to an older database by db.ts.
+    free_tags TEXT NOT NULL DEFAULT '',
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).
@@ -379,7 +385,9 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
+-- A plain index, under the name the unique one had (db.ts makeActivePollIndexPlain): how many active polls an author may
+-- have is engine/posts.ts createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
+CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
 
 -- Event RSVPs (docs/events-on-the-map.md §2.1). "Not going" is a delete, not a third value, and travels
 -- to a replica as an `event_rsvps` tombstone. updated_at rather than created_at because an RSVP changes,
@@ -666,7 +674,13 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     -- A report of one message of a locked group chat (engine/group-chat-report.ts): the message, and the key its reporter
     -- handed over for it, JSON { epoch, mk } (core groupMessageKey), which opens that one message and nothing else.
     target_message_id TEXT,
-    disclosure TEXT
+    disclosure TEXT,
+    -- The message request its reporter received from the person it is about, read when it was filed: set, the report counts
+    -- towards clearing that person's requests (engine/request-limits.ts). Null for every other report.
+    request_conversation_id TEXT,
+    -- A SHA-256 of the wording its reporter handed over, folded, on such a report of a line long enough to compare (null
+    -- otherwise): what "the same wording" is compared on, so counting never opens a disclosure again.
+    request_wording TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 -- A member's ratings: every trust floor averages them (engine trust.ts, on each spend check and listing row), and so do
@@ -678,6 +692,8 @@ CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(sta
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_post ON abuse_reports(target_post_id) WHERE target_post_id IS NOT NULL;
 -- One reporter's reports: auto-hide reads how many of theirs a moderator kept lately, and the hourly report limit.
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_reporter ON abuse_reports(reporter_pubkey, status);
+-- The reports that count towards clearing one sender's message requests: read on each of them (engine/request-limits.ts).
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_request ON abuse_reports(target_pubkey, created_at) WHERE request_conversation_id IS NOT NULL;
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (
@@ -1122,6 +1138,8 @@ CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(upd
 -- (stamped by a set, a radius change, a notice and a re-key), with a `place_watches` tombstone keyed by `id` for each
 -- removal, so a server that takes over has every watch and each member's quiet day. Carried in file and sealed
 -- backups. Goes with the member on a prune or a self-deletion, and moves with them on a re-key.
+-- `would_help`: they also said "I'd help start one here" (the place circle, engine/place-circles.ts). The one fact a
+-- circle adds to a watch: no name, no town, no second place.
 CREATE TABLE IF NOT EXISTS place_watches (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL REFERENCES members(public_key),
@@ -1131,9 +1149,12 @@ CREATE TABLE IF NOT EXISTS place_watches (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_notified_at TEXT,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    would_help INTEGER NOT NULL DEFAULT 0 CHECK (would_help IN (0, 1)),
     UNIQUE (pubkey, lat, lng)
 );
 CREATE INDEX IF NOT EXISTS idx_place_watches_updated_at ON place_watches(updated_at);
+-- The public count near a point reads a box of cells (engine/place-circles.ts waitingNear).
+CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 
 -- 14f. "Ask to join" (G6, design §3.3, engine/knocks.ts): a stranger's request to join this community, which any
 -- member may answer with an invite.
@@ -2366,6 +2387,13 @@ CREATE TABLE IF NOT EXISTS decisions (
     reply_hidden_at      DATETIME,
     reply_hidden_by      TEXT,
     reply_hidden_reason  TEXT,
+    -- A pause's own vote too few members could vote on, which an owner decided (removal by vote S6, design §5 point 3):
+    -- when, which owner, the public reason, and when the tick carried it out as the vote closed (decisions-engine.ts
+    -- ownerDecideTooFew). NULL on every other Decision. db.ts adds them to a table from before (REMOVAL_CASE_COLUMNS).
+    owner_decided_at          DATETIME,
+    owner_decided_by          TEXT,
+    owner_decided_reason      TEXT,
+    owner_decision_carried_at DATETIME,
     CHECK ((scope_kind = 'community') = (scope_id IS NULL)),
     CHECK ((scope_kind = 'community') = (touches != 'scope'))
 );
@@ -2460,7 +2488,18 @@ CREATE TABLE IF NOT EXISTS groups (
     lead_pubkey TEXT REFERENCES members(public_key),
     join_policy TEXT NOT NULL DEFAULT 'open' CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- A place circle (engine/place-circles.ts): the node made this group for people waiting near one place. NULL on every
+    -- other group. `place_cell` is the circle's 0.1° cell, "lat,lng", which no response or push carries.
+    kind TEXT CHECK (kind IS NULL OR kind = 'circle'),
+    place_cell TEXT,
+    -- When a listed community retired the circle, and which (its key in directory_cache, so the card reads its name as
+    -- the directory has it now). The circle's chat stays CIRCLE_CHAT_KEEP_MS after, then it closes (group_closures).
+    circle_done_at TEXT,
+    circle_community_key TEXT,
+    -- Who said "I'm starting one here", and when they last did.
+    circle_starter TEXT REFERENCES members(public_key),
+    circle_starting_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_groups_updated_at ON groups(updated_at);
 CREATE INDEX IF NOT EXISTS idx_groups_slug ON groups(slug);
@@ -2958,6 +2997,24 @@ CREATE TABLE IF NOT EXISTS dm_requests (
 -- The requests waiting for a member (their list, Ignore all, the folded push), and a member's own (a removal, a re-key).
 CREATE INDEX IF NOT EXISTS idx_dm_requests_to ON dm_requests(to_pubkey, state);
 CREATE INDEX IF NOT EXISTS idx_dm_requests_from ON dm_requests(from_pubkey);
+
+-- 30a. Limits on sending message requests (engine/request-limits.ts): enough reports from the people a sender's requests
+-- reached clear those requests and stop new ones until `until`. One row per limit, so a repeat lasts longer; the row stays
+-- after it ends, as the requests it cleared stay cleared. Not a pause: no member status changes. A plain table (copied verbatim).
+CREATE TABLE IF NOT EXISTS request_limits (
+    id            TEXT PRIMARY KEY,
+    sender_pubkey TEXT NOT NULL,
+    -- When it was made: the sender's requests made up to then are cleared, unless a moderator undoes it.
+    made_at       TEXT NOT NULL,
+    until         TEXT NOT NULL,
+    -- Which way the reports reached it: 'words_newcomer', 'same_wording' or 'many_reports'.
+    how           TEXT NOT NULL CHECK (how IN ('words_newcomer', 'same_wording', 'many_reports')),
+    -- When a moderator undid it, or null. A limit that ran out by itself keeps null.
+    lifted_at     TEXT,
+    -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
+    updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_request_limits_sender ON request_limits(sender_pubkey, until);
 
 -- 31. Peek tickets (front doors S6, scratch/fable-design/DESIGN-entry-points-fable.md §2.5 C, §3.4; engine/peek-tickets.ts):
 -- a member shared ONE post outside the community, and whoever holds the link reads that post under the visitors' rules

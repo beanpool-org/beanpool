@@ -213,10 +213,11 @@ export const TABLES: Record<string, TableEntry> = {
     // import sets the tables' touch triggers aside while it writes them (engine/sync.ts IMPORT_KEEPS_STAMPS, G1, G1b).
     // `search_keywords` is the main server's too; one it holds empty (a linked community's listing cached before tags
     // slice T2, which now writes them as it caches) is filled by each server's boot backfill alike, from the same words
-    // (state-engine.ts backfillSearchKeywords). `tags` is the main server's verbatim (engine/sync.ts postTags).
+    // (state-engine.ts backfillSearchKeywords). `tags` and `free_tags` are the main server's verbatim (engine/sync.ts postTags,
+    // postFreeTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags free_tags'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -290,7 +291,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     abuse_reports: {
         kind: 'replicated-except', payload: 'abuseReports', watermark: 'updated_at',
-        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at target_message_id disclosure'),
+        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at target_message_id disclosure request_conversation_id request_wording'),
         except: {
             suspended_member: { reason: "read only by a cancel of a re-key code made before codes kept the member's earlier status (member-wizards.ts cancelRekeyCode); a server that took over reads it as not known, which keeps the member suspended, and Lift suspension lifts it" },
         },
@@ -328,7 +329,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     groups: {
         kind: 'replicated-except', payload: 'groups', watermark: 'updated_at',
-        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at'),
+        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at kind place_cell circle_done_at circle_community_key circle_starter circle_starting_at'),
         except: {
             lead_pubkey: { reason: "the import keeps the lead it has over the main server's null (COALESCE): a group whose last convenor left has no lead there and keeps the old one on the standby (not in the design; found by this net)", gap: 'G1b' },
         },
@@ -356,7 +357,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     place_watches: {
         kind: 'replicated', payload: 'placeWatches', watermark: 'updated_at',
-        columns: cols('id pubkey lat lng radius_km created_at last_notified_at updated_at'),
+        columns: cols('id pubkey lat lng radius_km created_at last_notified_at updated_at would_help'),
     },
     directory_cache: {
         kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',
@@ -399,7 +400,7 @@ export const TABLES: Record<string, TableEntry> = {
     deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
-    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason'),
+    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
     decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
@@ -520,6 +521,8 @@ export const TABLES: Record<string, TableEntry> = {
     // that takes over holds back the same lines and lists the same requests. Only a real conversation's: one kept for a
     // blocked opener alone is never in a copy (withheld_conversations), and its row starts travelling when it becomes real.
     dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by state_before reached_out_at reach_out_withdrawn_at updated_at', { rows: REAL_CONVERSATIONS }),
+    // A limit on sending message requests (engine/request-limits.ts), so a standby that takes over refuses and clears the same.
+    request_limits: plain('id sender_pubkey made_at until how lifted_at updated_at'),
 
     // ── Not copied today, and the design says they should be ──
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
@@ -678,6 +681,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     claim: { kind: 'per-server', reason: "this server's one-time claim code (its scrypt hash, id, who used it); never copied" },
     addressRequest: { kind: 'per-server', reason: "a name this server was asked to claim at install (beanpool claim); a standby never claims one; never copied" },
     endedAddressRequest: { kind: 'per-server', reason: "the last install name request this server ended, so a late registrar answer never revives it (#1579); per-server like addressRequest; never copied" },
+    addressNoticeDue: { kind: 'per-server', reason: "a new name this server claimed and must still tell its members of, once it is live (services/address-notice.ts); a standby tells nobody; never copied" },
     turnedAwayNames: { kind: 'per-server', reason: "the latest names this server turned away (ended install requests, replaced or timed-out Settings claims, names taken offline), so a late registrar answer never revives one (#1579 review); per-server like addressRequest; never copied" },
     registrarNotices: { kind: 'per-server', reason: "the notices the address service sent this server (services/registrar-notices.ts); a standby takes none and sends no seen, so its main server's never overwrite its own; each holds a live one-use reply link, so never copied, never in a backup file or the stager's copy" },
     registrarNoticeSeen: { kind: 'per-server', reason: "the highest notice id this server has had, sent back on its own /status as seen; per-server like registrarNotices; never copied" },
@@ -689,7 +693,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     aiAssistantsAllowed: { kind: 'per-server', reason: "the owner switch for this server's AI assistant endpoint (/mcp), beside its agent tokens" },
     agentOAuthGrants: { kind: 'per-server', reason: "AI assistants connected to this server through OAuth (refresh-token hashes); a standby's copy holds none" },
-    agentPostsPerDay: { kind: 'per-server', reason: "the owners' number of posts one of this server's assistants may make a day, beside its grants; never copied" },
+    agentPostsPerDay: { kind: 'per-server', reason: "the owners' \"Owner and admin limit\": posts one of this server's assistants may make a day, beside its grants, and owners' and admins' own content limits; never copied" },
     automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },

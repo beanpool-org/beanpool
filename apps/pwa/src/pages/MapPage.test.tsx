@@ -1,4 +1,4 @@
-import { render, waitFor, act, fireEvent, within, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MapPage, resetSavedMapView } from './MapPage';
@@ -1861,6 +1861,102 @@ describe('a Need where Beans are off (B4/M2)', () => {
     });
 });
 
+/**
+ * Community Pricing Guide in the new-listing form (web-pricing-in-form):
+ * Under the price row, "Not sure what to charge? View the Community Pricing Guide"
+ * opens PricingGuideModal wherever a price is shown (same rule as priceMarked: not
+ * where Beans are off). Choosing an item fills the form's price and keeps everything
+ * else the member typed (e.g. title), and the form stays open.
+ */
+describe('Community Pricing Guide in the new-listing form', () => {
+    const info = (beans: boolean) => ({
+        memberCount: 3,
+        postCount: 0,
+        transactionCount: 0,
+        commonsBalance: 0,
+        profile: beans ? 'local' : 'global',
+        features: beans ? { beans: true } : { openJoin: true, guestListingsOnly: true, beans: false, showcase: true },
+    });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getPricingGuideApi').mockResolvedValue({ items: [], config: {} } as any);
+    });
+
+    it('the line opens the guide, a choice fills the price and keeps the title', async () => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(true) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+
+        // Switch to Offer
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🟢 Offer' })); });
+
+        // Member types a title first
+        const titleInput = within(panel).getByPlaceholderText('What do you need/offer?');
+        await act(async () => {
+            fireEvent.change(titleInput, { target: { value: 'Fresh sourdough bread' } });
+        });
+        expect(titleInput).toHaveValue('Fresh sourdough bread');
+
+        // The line is present under the price row
+        const guideLine = within(panel).getByRole('button', {
+            name: /Not sure what to charge\? View the Community Pricing Guide/i,
+        });
+        expect(guideLine).toBeInTheDocument();
+
+        // Clicking the line opens the Pricing Guide modal
+        await act(async () => { fireEvent.click(guideLine); });
+
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeInTheDocument();
+        expect(within(dialog).getByText('Community Pricing Guide')).toBeInTheDocument();
+
+        // A choice from the guide: click Artisan Sourdough Loaf (8 Beans)
+        const selectBtn = within(dialog).getByRole('button', { name: /Select Artisan Sourdough Loaf for offer at 8 Beans/i });
+        await act(async () => { fireEvent.click(selectBtn); });
+
+        // Modal closed
+        expect(screen.queryByRole('dialog')).toBeNull();
+
+        // The form stays open
+        expect(panel).toBeVisible();
+
+        // Price is filled with the item's price (8)
+        const priceInput = within(panel).getByPlaceholderText('B');
+        expect(priceInput).toHaveValue('8');
+
+        // Title that member typed is kept!
+        expect(titleInput).toHaveValue('Fresh sourdough bread');
+    });
+
+    it('no line where Beans are off', async () => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(false) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+
+        // The Pricing Guide banner is NOT rendered when Beans are off
+        expect(within(panel).queryByRole('button', {
+            name: /Not sure what to charge\? View the Community Pricing Guide/i,
+        })).toBeNull();
+        expect(within(panel).queryByText(/Not sure what to charge\? View the Community Pricing Guide/i)).toBeNull();
+    });
+});
+
 /*
  * Sending a Need from the global node's real form (review #1936 N2/N3): `showcase` marks Beans, so there is no price box,
  * and a Need with no photo goes up free, even from a member an older node still calls blocked. A local community keeps
@@ -2484,6 +2580,22 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         expect(within(panel).queryByDisplayValue('/ Wk')).toBeNull();
         expect(within(panel).queryByText('✓ Location set')).toBeNull();
         expect(create).not.toHaveBeenCalled();
+    });
+
+    it('a tag picked for one post never rides into a tool\'s draft: the draft starts with none, as on the phone', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost openDraft={draft} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        fireEvent.click(within(panel).getByRole('button', { name: '+ Add tag' }));
+        fireEvent.change(await view!.findByRole('textbox', { name: 'Search tags...' }), { target: { value: 'lemon' } });
+        fireEvent.click(await view!.findByRole('button', { name: 'Lemon' }));
+        fireEvent.click(view!.getByRole('button', { name: 'Done' }));
+        expect(await within(panel).findByRole('button', { name: 'Remove Lemon' })).toBeInTheDocument();
+
+        await act(async () => { view!.rerender(<MapPage identity={mockIdentity} openNewPost openDraft={{ ...draft, title: 'Tomato seed' }} />); });
+        const next = await view!.findByTestId('map-new-post-panel');
+        expect(within(next).getByPlaceholderText('What do you need/offer?')).toHaveValue('Tomato seed');
+        expect(within(next).queryByRole('button', { name: 'Remove Lemon' })).toBeNull();
     });
 
     it("the profile check still holds: a member with no photo is asked for one, and the composer doesn't open", async () => {

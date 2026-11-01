@@ -120,6 +120,7 @@ vi.mock('../../components/NewEventModal', () => ({ NewEventModal: none }));
 vi.mock('../../components/NewPostTypeSheet', () => ({ NewPostTypeSheet: none }));
 vi.mock('../../components/OwnerWordsPrompt', () => ({ OwnerWordsPrompt: none }));
 vi.mock('../../components/ExampleListings', () => ({ ExampleListings: none }));
+vi.mock('../../components/MarketCircleLine', () => ({ MarketCircleLine: none, useFindCardRead: () => null }));
 vi.mock('../../components/NoAreaLine', () => ({ NoAreaLine: none }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: none }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
@@ -210,6 +211,112 @@ const text = () => host.textContent ?? '';
 const fill = () => host.querySelector('[data-testid="market-fill"]');
 const tick = async () => { await act(async () => { DeviceEventEmitter.emit('sync_data_updated'); }); await settle(); };
 const count = (title: string) => (text().match(new RegExp(`${title}(?!\\d)`, 'g')) ?? []).length;
+
+describe('a tag filter on a short nearby list (review of #2663)', () => {
+    const LEMON = 'food.fruit.lemon';
+    const lemon = (id: string, title: string) => listing(id, title, { tags: LEMON });
+
+    it('only listings with the tag: the tag\'s own read goes everywhere, and nothing untagged comes beneath', async () => {
+        holds([lemon('near-lemon', 'Near lemons'), listing('near-kettle', 'Near kettle')]);
+        node.rows = [...farOf(2), { ...farOf(1)[0], id: 'far-lemon', title: 'Far lemons', tags: [LEMON] }];
+        params.now = { tag: LEMON };
+        await render();
+        await act(async () => { await new Promise(r => setTimeout(r, 320)); });
+        await settle();
+        expect(node.asked.at(-1)).toContain(`tags=${encodeURIComponent(LEMON)}`);
+        expect(text()).toContain('Far lemons');
+        expect(count('Far 0')).toBe(0);
+        expect(count('Far 1')).toBe(0);
+        expect(text()).not.toContain('Near kettle');
+        expect(fill()).toBeNull();
+    });
+});
+
+// The node reads posts_fts, which folds accents and holds joined compounds and a listing's keywords, so the rows below are what
+// it finds (test-free-tags.ts, test-tags-search.ts) and what the phone's own filter, comparing letters, can't.
+describe("what the node found stays on the phone, as on the web (review of #2691, finding 1)", () => {
+    const LEMON = 'food.fruit.lemon';
+    const found = (title: string, extra: Record<string, unknown> = {}) => ({ ...farOf(1)[0], id: `found-${title}`, title, description: 'Red', ...extra });
+    const landed = async () => { await act(async () => { await new Promise(r => setTimeout(r, 320)); }); await settle(); };
+    const search = async (q: string, rows: unknown[], link: Record<string, string> = {}) => {
+        node.rows = rows;
+        params.now = { q, ...link };
+        await render();
+        await landed();
+    };
+
+    it.each([
+        ['limón', 'limon'],
+        ['wi-fi router', 'wifi'],
+        ['café', 'cafe'],
+        ['free-range', 'freerange'],
+    ])('by a typed tag: #%s, searched %s', async (tag, q) => {
+        await search(q, [found('Bike', { freeTags: [tag] })]);
+        expect(node.asked.at(-1)).toContain(`q=${q}`);
+        expect(text()).toContain('Bike');
+    });
+
+    it.each([
+        ['its title, an accent folded', 'limon', 'Limón fresco', {}],
+        ['its description, an accent folded', 'limon', 'Bike', { description: 'Un limón del árbol' }],
+        ['a library tag, by the start of its word', 'lem', 'Bike', { tags: [LEMON] }],
+        ['a library tag, by the word of the tag above it', 'food', 'Bike', { tags: [LEMON] }],
+    ])('by %s', async (_how, q, title, extra) => {
+        await search(q, [found(title, extra)]);
+        expect(text()).toContain(title);
+    });
+
+    it.each(['"', "'", '""', "' '"])('words that leave nothing to ask (%s) are no answer: the search shows nothing, never every listing', async (q) => {
+        await search(q, [found('Bike')]);
+        expect(node.asked.at(-1)).not.toContain('q=');
+        expect(text()).not.toContain('Bike');
+    });
+
+    it('with no answer the words narrow the phone\'s copy: a true non-match stays out', async () => {
+        holds([listing('near-kettle', 'Old kettle'), listing('near-jam', 'Limon jam')]);
+        node.fail = true;
+        await search('limon', []);
+        expect(text()).toContain('Limon jam');
+        expect(text()).not.toContain('Old kettle');
+    });
+
+    it('a read that fails after a good one is no answer, whatever that one was for: the true non-match stays out', async () => {
+        holds([listing('near-kettle', 'Old kettle')]);
+        await search('limon', [found('Bike', { freeTags: ['limón'] })]);
+        expect(text()).toContain('Bike');
+        node.fail = true;
+        await act(async () => { pick.select?.('offers'); });
+        await landed();
+        expect(node.asked.at(-1)).toContain('type=offer');
+        expect(text()).not.toContain('Bike');
+        expect(text()).not.toContain('Old kettle');
+    });
+
+    it('an answer for other words does not stand for these: a true non-match goes until their read lands', async () => {
+        await search('limon', [found('Bike', { freeTags: ['limón'] })]);
+        expect(text()).toContain('Bike');
+        node.hold = true;
+        node.rows = [found('Banana tree')];
+        params.now = { q: 'banana' };
+        await act(async () => { root.render(createElement(MarketScreen) as any); });
+        await landed();
+        expect(text()).not.toContain('Bike');
+        await act(async () => { for (const go of node.held.splice(0)) go(); });
+        await settle();
+        expect(text()).toContain('Banana tree');
+    });
+
+    it.each([
+        ['a library tag', { tag: LEMON }, 'tags='],
+        ['a typed tag', { free: 'vintage' }, 'free=vintage'],
+    ])('under %s the words still narrow: that read asks for the words OR the tag, as on the web', async (_how, link, asked) => {
+        const rows = [found('Lemon tree', { tags: [LEMON], freeTags: ['vintage'] }), found('Honey and lemons', { tags: [LEMON], freeTags: ['vintage'] })];
+        await search('honey', rows, link as Record<string, string>);
+        expect(node.asked.at(-1)).toContain(asked);
+        expect(text()).toContain('Honey and lemons');
+        expect(text()).not.toContain('Lemon tree');
+    });
+});
 
 describe('a short nearby list is filled with the newest from elsewhere', () => {
     it('nothing near: the newest from elsewhere fill in at once, with the short line above and no tap', async () => {

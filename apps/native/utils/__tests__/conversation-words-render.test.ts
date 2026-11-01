@@ -468,7 +468,7 @@ describe('message request on the phone (phone-web-parity)', () => {
         });
         await renderIn('en');
         expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
-        expect(host.textContent).toContain('Sent as a request. Kofi will see it under Requests. You can write more once they accept.');
+        expect(host.textContent).toContain('Sent as a request. Kofi will see it under Message requests. You can write more once they accept.');
         expect(host.querySelector('input[placeholder="Message..."]')).toBeNull();
 
         const cancelBtn = host.querySelector('[data-testid="request-cancel"]');

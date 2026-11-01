@@ -96,6 +96,7 @@ import {
 import { GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from './node-profile';
 import type { DoorWorkDoor } from '@beanpool/core';
 import type { DoorWorkOutcome, DoorWorkRun, DoorWorkSolution } from './door-work';
+import { readDoorCheck, type DoorCheck } from './door-check';
 
 export const JOIN_NONCE_PATH = '/api/join/sso-nonce';
 export const JOIN_PATH = '/api/join';
@@ -152,6 +153,8 @@ export type DoorAnswer =
     | { kind: 'work_again'; code: WorkRefusalCode; message: string }
     /** 403 `sign_in_required`: this door takes no 12-words joins (now). The sign-in door is still open. */
     | { kind: 'sign_in_required'; message: string }
+    /** 429 `check_required`: the door is busy, and a 12-words join needs the person check first (utils/door-check.ts). */
+    | { kind: 'check'; check: DoorCheck; message: string }
     /** 401: the sign-in was refused (expired, or not this request's). A new sign-in may work. */
     | { kind: 'sign_in_again'; message: string }
     /**
@@ -188,6 +191,12 @@ export const DOOR_MESSAGES = {
     /** 403 `sign_in_required`: a door that takes no 12-words joins. */
     signInRequired: 'This community needs a sign-in to join: Google, Apple or Facebook. You can sign in below.',
     signInAgain: 'Your sign-in could not be used. Please sign in again.',
+    /** 429 `check_required`, when the check can't be taken here: the sign-in door never needs one. */
+    checkNeeded: 'Lots of people are joining right now, so a 12-words account starts with a quick check. Sign in to join now, or try again later.',
+    /** 403 `check_failed`: the node didn't take the check's token. */
+    checkFailed: "That check didn't pass. Try again, or sign in to join now.",
+    /** The check wouldn't load or wouldn't pass in the embedded browser. */
+    checkWontLoad: "The quick check didn't work on this phone. Try again, or sign in to join now.",
     /** A 401 with no code on the 12-words path: the phone's clock (PR #1452 review, finding 3). */
     phoneClock: 'The global community couldn\'t accept this because your phone\'s date and time look wrong. Check them in your phone\'s settings (set them to automatic), then try again.',
     tryAgain: 'Your join could not be completed, and nothing was saved. Please try again in a minute.',
@@ -294,6 +303,7 @@ export function readDoorAnswer(status: number, body: unknown, retryAfter: number
     if (status === 409 && code === 'already_joined') return { kind: 'already_joined', message: said(body) ?? DOOR_MESSAGES.alreadyJoined };
     if (status === 403 && code === 'removed') return { kind: 'removed', message: said(body) ?? DOOR_MESSAGES.removed };
     if (status === 403 && code === 'key_invalidated') return { kind: 'key_invalidated', message: said(body) ?? DOOR_MESSAGES.keyInvalidated };
+    if (status === 403 && code === 'check_failed') return { kind: 'try_again', message: DOOR_MESSAGES.checkFailed };
     if (status === 403 && code === 'account_closed') return { kind: 'account_closed', message: DOOR_MESSAGES.accountClosed };
     if (status === 403 && code === 'sign_in_required') return { kind: 'sign_in_required', message: DOOR_MESSAGES.signInRequired };
     // A node in a private preview (server config/private-preview.ts) says why in its own words: shown as-is.
@@ -301,6 +311,10 @@ export function readDoorAnswer(status: number, body: unknown, retryAfter: number
     if (status === 403 || status === 404) return { kind: 'door_closed', message: DOOR_MESSAGES.doorClosed };
     if (status === 400 && code && WORK_REFUSAL_CODES.includes(code)) {
         return { kind: 'work_again', code: code as WorkRefusalCode, message: WORK_MESSAGES[code as WorkRefusalCode] };
+    }
+    if (status === 429 && code === 'check_required') {
+        const check = readDoorCheck(body);
+        return check ? { kind: 'check', check, message: DOOR_MESSAGES.checkNeeded } : { kind: 'try_again', message: DOOR_MESSAGES.checkNeeded };
     }
     if (status === 429) {
         return busyAnswer(body, retryAfter)
@@ -609,6 +623,7 @@ function refusedByTheNode(answer: DoorAnswer): boolean {
         case 'account_closed':
         case 'door_closed':
         case 'rate_limited':
+        case 'check':
         case 'sign_in_again':
         case 'phone_clock':
         case 'work_again':
@@ -751,7 +766,9 @@ async function workForJoin(
  * quietly). The join is counted on the phone before it goes (`joinsOut`), as the sign-in door's is, and a work refusal
  * (`work_again`) fetches a new challenge, solves it, and sends once more: the member reads it only if it happens twice.
  */
-export async function submitWordsJoin(url: string, identity: BeanPoolIdentity, callsign: string, run: DoorWorkRun): Promise<DoorAnswer> {
+export async function submitWordsJoin(
+    url: string, identity: BeanPoolIdentity, callsign: string, run: DoorWorkRun, passCheck?: (check: DoorCheck) => Promise<DoorWorkOutcome>,
+): Promise<DoorAnswer> {
     let work = await workForJoin(run, 'words', false);
     if (work.kind === 'answer') return work.answer;
     let answer = await sendWordsJoin(url, identity, callsign, work.work);
@@ -759,6 +776,12 @@ export async function submitWordsJoin(url: string, identity: BeanPoolIdentity, c
         work = await workForJoin(run, 'words', true);
         if (work.kind === 'answer') return work.answer;
         answer = await sendWordsJoin(url, identity, callsign, work.work);
+    }
+    // The door got busy after the work was handed out: the check now, at this same tap, then the join again.
+    if (answer.kind === 'check' && passCheck) {
+        const passed = await passCheck(answer.check);
+        if (passed.kind === 'refused') return passed.answer;
+        if (passed.kind === 'solved') answer = await sendWordsJoin(url, identity, callsign, passed.work);
     }
     return answer;
 }

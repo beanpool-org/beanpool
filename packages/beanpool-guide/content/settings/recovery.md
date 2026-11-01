@@ -54,6 +54,8 @@ One linked sign-in account covers all your communities: you don't link it again 
 
 If you joined the global community with 12 words, use **Add a sign-in**, near the top of **Account Protection**, instead. It is a way back too, and it also lifts the limits on a new 12-words account. See "Your 12 words".
 
+**Also keep my list of communities in the copy**, under the sign-in buttons, is ticked unless you untick it: a copy you make with **Protect with** or **Connect again** also lists your communities (their names and addresses, no more than 20), locked the same way, and a new phone restored with that sign-in offers them and keeps them.
+
 If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 
 This is not a way to log in. Your account is still your own key. The linked account only helps you get it back.
@@ -95,6 +97,8 @@ In the phone app, open **Settings**, **Account Protection**, then **Where your a
 - **Your 12 words**: whether this phone has them, and **I have them written down**, which you tick yourself. The app never checks it.
 - **BeanPool's key vault**: each sign-in account it keeps a copy for, and **Kept since**, the day that copy was made. Linking the same account again makes a new copy, with a new day. If you linked more than one account of the same sign-in (two Google accounts, say), each copy is listed under that sign-in, and its **Remove** takes them all: the key vault removes a sign-in's copies together. If the vault is paused or doesn't answer, the screen says so and lists nothing there.
 - **Your communities' servers**: each community on this phone, and the sign-in accounts its server keeps a copy for, from before the key vault, from the web app, or as a community's first owner. Where you turned on **Your community's admins**, from this phone or another, its copy is listed there too, with **Kept since** (see "Your community's admins"). A community that doesn't answer is shown as not answering, and nothing there is listed.
+- Where the key vault and your community keep half each (see "Your community's admins"), the key vault's list shows **Half a copy for** that community, and that community's server shows the other half. They are one way back, so **Remove** on either takes both. Half a copy with no other half brings nobody back, and the screen says so.
+- If a community hasn't answered, your phone can't always tell which community a half is for. The key vault's list then shows **Half a copy for a community**, with no **Remove** of its own, because it may be half of a copy that still works. Open the screen again later. **Remove everything** still takes it from the key vault.
 
 Tap **Remove** next to a copy, or **Remove everything** under them all. A copy shows as removed only once the key vault or the community says it is gone:
 
@@ -108,20 +112,29 @@ Before you remove the last copy your phone knows of, the app asks **Show my 12 w
 
 Nothing is lost by removing a copy: to have that way back again, link the sign-in account in **Account Protection** (see "Protecting your account now"). In a community that keeps no copies, the screen says so in place of **Link a sign-in**: any copy it lists was made before, there or in another community, and is yours until you remove it.
 
-In the web app, **Settings** has **Where your account can be brought back from** too. It lists whether that browser has your 12 words and the copies that community's server keeps, the copy for its admins too, each with **Remove**. The web app can't reach the key vault, so it says **Copies in BeanPool's key vault are managed in the phone app**.
+In the web app, **Settings** has **Where your account can be brought back from** too. It lists whether that browser has your 12 words and the copies that community's server keeps, the copy for its admins too, each with **Remove**. The web app can't reach the key vault, so it says **Copies in BeanPool's key vault are managed in the phone app**. For the same reason, half of a copy you made on your phone is listed there with no **Remove**.
 
 ## What the key vault keeps about you
 
 For each sign-in account you link in the phone app, BeanPool's key vault keeps:
 
-- the locked copy of your key, with your 12 words if the phone had them, which only that sign-in opens;
+- the locked copy of your key, with your 12 words if the phone had them and your list of communities if you left that ticked, which only that sign-in opens;
 - two fingerprints, one of your sign-in account and one of your key, made with a secret only the running vault holds, so it can find your copy when your sign-in or your key asks;
 - the push addresses of your phones, locked with the copy, so it can tell them when someone starts getting back into your account;
 - the day the copy was made, and when it last brought your account back.
 
-While someone is getting back in with a sign-in (see "If someone else tries"), it keeps the new phone's one-time key and the times, until 7 days after that ends. When you remove a copy, it keeps a note of the removal for 30 days, with the two fingerprints and the day, so that a restore from an older backup removes the copy again.
+For each community where it keeps half of a copy for your admins (see "Your community's admins"), it keeps:
 
-It never keeps your name, email, phone number or address, your sign-in account's id itself (only its fingerprint), which communities you are in, or a copy of what it handed back. It never writes down your IP address: to limit abuse, it counts the requests from each address in its memory, and forgets them when it restarts. The totals it signs each day count copies, restores and removals, and say nothing about anyone.
+- the locked copy of your key, with your 12 words if the phone had them, which it can't open, and one half of what opens it;
+- two fingerprints, one of that community and your key together and one of your key, made with the same secret;
+- a label only your own phones can read, so the app can tell which community a copy is for;
+- the push addresses of your phones, and the days, as above.
+
+Nothing the key vault keeps says which community that is. It is told when the copy is made, to make the first fingerprint, and doesn't keep what it was told. It is told again only if that community vouches for you when someone is getting your account back, and doesn't keep it then either. Anyone with the running vault's secret could still work the community out, by trying each community against that fingerprint.
+
+While someone is getting back in with a sign-in or with a community's word (see "If someone else tries"), it keeps the key the phone asked with and the times, until 7 days after that ends. That is a one-time key made for this, unless the phone already holds another account and came with a community's word: then it is the public half of that account's key. When you remove a copy, it keeps a note of the removal for 30 days, with the two fingerprints and the day, so that a restore from an older backup removes the copy again.
+
+It never keeps your name, email, phone number or address, your sign-in account's id itself (only its fingerprint), which communities you are in (except inside the locked copy, and the fingerprint above), or a copy of what it handed back. It never writes down your IP address: to limit abuse, it counts the requests from each address in its memory, and forgets them when it restarts. The totals it signs each day count copies, restores and removals, and say nothing about anyone.
 
 ## If you had linked GitHub
 
@@ -141,6 +154,8 @@ BeanPool can open these copies. For now one person, BeanPool's founder, looks af
 
 **Your community's server: a copy it keeps itself, or one from before the key vault.** Where your community keeps copies on its own server (see "Where your community keeps copies"), a sign-in you link there keeps its copy on that server. A copy your community kept before the key vault stays there until you move it or remove it (see "Moving a copy your community keeps"). The first owner of a community, who links a sign-in while setting it up, has that copy kept on the community's own server too, never at the key vault. The people who run that server can open it, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.
 
+**Half and half: your community's admins, in a community that uses the key vault.** Your phone locks a copy and splits what opens it in two: the key vault keeps the copy and one half, and your community's server keeps the other half (see "Your community's admins"). The key vault can't open it, and neither can your community's server: it takes both. The vault gives its half only when your community's server vouches for you, and only after a day, with your other phones told. So the people who run your community's server could ask for it as an admin does, and what stops them is that day: your phones are told, and **Stop** ends it.
+
 **The global community's server: a sign-in you joined with in a web browser.** The web app has no link to the key vault. When you join the global community in a browser with a sign-in, the global community's server keeps the copy, and **Safety Backup** and **Settings** there say so. The people who run that server, BeanPool, can open it. On any other community, the web app makes no copy, and **Settings** there says whether that community's server keeps one.
 
 If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Remove everything** in **Where your account can be brought back from** (see above), or **Disconnect** next to each sign-in account in the phone app. That deletes the key vault's copy at once, and from its backups within 30 days, or later if the vault is paused in that time. A copy on a community's server goes with **Remove** there, or **Remove it instead** (above). A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Removing a copy there does not delete the copies already in that server's backups. Each time a sign-in brings your account back from a community's server, the server keeps a record of it, and the copy it handed over for 30 days; then it deletes that copy and keeps only the record. The people who run the server can open those copies while they are kept. Your 12 words always work, with or without any copy.
@@ -152,6 +167,8 @@ If someone starts getting back into your account with your linked sign-in accoun
 - If it was you, on another phone, tap **Yes, it's me** and pass your phone's lock screen check. It goes through now, and **Settings** shows **Let through** until your other phone has your account.
 - If it wasn't, tap **Stop**. It never goes through, and whoever tried gets nothing. Then make sure that sign-in account has its own strong password.
 
+The same goes when someone is getting your account back with help from a community's admins, where the key vault keeps half: your phones are told, with **Someone is getting your account back with help from a community's admins** in place of the sign-in. **Yes, it's me** lets it through; **Stop** ends it, and it stays stopped until an admin sees you again and makes a new code. Then tell your community's owners: an admin was fooled, or someone used an admin's account.
+
 A copy your community still keeps, from before the key vault, has no day's wait. If someone uses it, **Settings** shows **Someone is recovering your account** while it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. If they get in, you get an alert that your account was just restored on another device, and they may already be in by the time you see it.
 
 ## If the phone already has an account
@@ -162,14 +179,22 @@ Make sure you have the 12 words for the account you are replacing. If this phone
 
 ## Your community's admins
 
-Where your community keeps copies itself (its owners chose **This server**), you can let its admins bring your account back, with no Google or Apple account, no paper and nothing to remember. It is not offered in the global community, where nobody meets anyone.
+Your community's admins can bring your account back, with no Google or Apple account, no paper and nothing to remember. It is not offered in the global community, where nobody meets anyone.
 
-- Turn it on in **Settings**, **Account Protection**, **Your community's admins**: tap **Turn on** and pass your phone's lock screen check. In the web app it is in **Settings**, under your ways back. The row then says **On** and since when.
-- Your app locks a copy of your key, and your 12 words when the app has them, and your community's server keeps it. The people who run that server can open it; nobody else can, not BeanPool. Nothing goes to BeanPool's key vault.
-- To get back in on a new phone, go and see an admin in person. They make a **bring-back code** (it starts BB-), and you scan or type it as a re-key code: **Already a Member? Restore Account**, then **An admin gave me a re-key code**. Your phone shows two digits; the admin types them. Your account comes back at once: **the same key**, your Beans, your name, your chats and every community you are in, with your 12 words when the copy has them. Nothing is moved, and your other phones keep working. If the new phone already has another account, the app asks **Replace this phone's account?** first.
-- When an admin makes a code for you, your phones are told ("An admin is bringing your account back on a new phone…"), and again when it goes through. If that wasn't you, tell an owner at once.
+Where your copy is kept depends on your community's choice (see "Where your community keeps copies"):
+
+- **BeanPool's key vault**, where every community starts. In the phone app, your app locks a copy of your key, and your 12 words when the app has them, and splits what opens it in two. The key vault keeps the copy and one half; your community's server keeps the other half. Neither can open it alone: it takes both, and it takes a day, so your other phones can stop it. The web app can't do this yet: in a browser the row isn't offered, and a copy you made on your phone is shown there as on, with **Manage it in the phone app**.
+- **This server.** Your app locks the copy the same way, and your community's server keeps it whole, with what opens it. The people who run that server can open it; nobody else can, not BeanPool. Nothing goes to BeanPool's key vault, and there is no day's wait.
+
+Either way:
+
+- Turn it on in **Settings**, **Account Protection**, **Your community's admins**: tap **Turn on** and pass your phone's lock screen check. In the web app it is in **Settings**, under your ways back. The row then says **On** and since when. Where the key vault keeps half, it says **On** only once your community and the key vault both have their half. If only one does, it says **Not finished: tap to try again**.
+- To get back in on a new phone, go and see an admin in person. They make a **bring-back code** (it starts BB-): tap **Already a Member? Restore Account**, then **My community can bring me back**, and scan or type it. Your phone shows two digits; the admin types them. **The same key** comes back, your Beans, your name, your chats and every community you are in, with your 12 words when the copy has them. Nothing is moved, and your other phones keep working. If the new phone already has another account, the app asks **Replace this phone's account?** first.
+- Where your community keeps the whole copy, your account comes back at once. Where the key vault keeps half, your new phone waits a day, or less if another phone of yours taps **Yes, it's me**. You can close the app while it waits. The admin's code ends after a day, but the wait goes on without it.
+- When an admin makes a code for you, your phones are told ("An admin is bringing your account back on a new phone…"), and again when it goes through. Where the key vault keeps half, it tells them, and they can stop it (see "If someone else tries"). If that wasn't you, tell an owner at once.
+- If your admins can't be reached, or your community's server is gone, the half it kept is gone with it: use your 12 words, a sign-in you linked, or the same way back in another community where you turned it on.
 - Only an owner can bring back an owner or an admin.
-- **Remove** turns it off: your community's server deletes the copy. You can also remove it in **Where your account can be brought back from**, where **Remove everything** takes it with the rest. A re-key to a new key, or deleting your account, removes it too.
+- **Remove** turns it off: your community's server deletes what it keeps, and the key vault deletes what it keeps. You can also remove it in **Where your account can be brought back from**, where **Remove everything** takes it with the rest. A re-key to a new key, or deleting your account, removes it from your community's server too. A half left at the key vault after a re-key opens nothing, since the other half is gone.
 - If your community later stops keeping copies, the row says so, and your copy there still works until you remove it.
 
 ## Lost your phone and your 12 words

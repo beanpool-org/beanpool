@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { parseReachPeers } from '@beanpool/core';
+import { freeTagsOf, parseReachPeers } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -111,6 +111,10 @@ export interface SyncAbuseReport {
     /** A report of one group chat message: its id, and the key its reporter handed over, JSON { epoch, mk } (S6). */
     targetMessageId?: string | null;
     disclosure?: string | null;
+    /** The message request its reporter received from the person it is about (the server's engine/request-limits.ts). */
+    requestConversationId?: string | null;
+    /** A SHA-256 of the wording it handed over, folded, on a line long enough to compare. */
+    requestWording?: string | null;
 }
 
 export interface SyncCreatorChannel {
@@ -331,6 +335,13 @@ export interface SyncGroup {
     joinPolicy: string;
     createdAt: string;
     updatedAt: string;
+    /** A place circle's own columns (apps/server engine/place-circles.ts). Absent from a main server older than circles. */
+    kind?: string | null;
+    placeCell?: string | null;
+    circleDoneAt?: string | null;
+    circleCommunityKey?: string | null;
+    circleStarter?: string | null;
+    circleStartingAt?: string | null;
 }
 
 /**
@@ -389,6 +400,8 @@ export interface SyncPlaceWatch {
     createdAt: string;
     lastNotifiedAt: string | null;
     updatedAt: string;
+    /** "I'd help start one here" (the place circle). Absent from a main server older than circles: not set. */
+    wouldHelp?: boolean;
 }
 
 /**
@@ -1035,6 +1048,8 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.created_via != null ? { createdVia: row.created_via } : {}),
         // Its tags, as the main server holds them (apps/server engine/sync.ts postTags): none said is none.
         ...(typeof row.tags === 'string' && row.tags ? { tags: row.tags.split(' ').filter(Boolean) } : {}),
+        // The tags its author typed, as the main server holds them (apps/server engine/sync.ts postFreeTags): none said is none.
+        ...(freeTagsOf(row.free_tags).length > 0 ? { freeTags: freeTagsOf(row.free_tags) } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,
@@ -1220,6 +1235,8 @@ function abuseReportOfRow(row: any): SyncAbuseReport {
         updatedAt: row.updated_at || row.created_at,
         targetMessageId: row.target_message_id ?? null,
         disclosure: row.disclosure ?? null,
+        requestConversationId: row.request_conversation_id ?? null,
+        requestWording: row.request_wording ?? null,
     };
 }
 
@@ -1349,6 +1366,12 @@ function groupOfRow(r: any): SyncGroup {
         joinPolicy: r.join_policy,
         createdAt: r.created_at,
         updatedAt: r.updated_at || r.created_at,
+        kind: r.kind ?? null,
+        placeCell: r.place_cell ?? null,
+        circleDoneAt: r.circle_done_at ?? null,
+        circleCommunityKey: r.circle_community_key ?? null,
+        circleStarter: r.circle_starter ?? null,
+        circleStartingAt: r.circle_starting_at ?? null,
     };
 }
 
@@ -1387,6 +1410,7 @@ function placeWatchOfRow(r: any): SyncPlaceWatch {
         createdAt: r.created_at,
         lastNotifiedAt: r.last_notified_at ?? null,
         updatedAt: r.updated_at,
+        wouldHelp: r.would_help === 1,
     };
 }
 

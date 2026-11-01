@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The once-a-day full run on main, 05:00 local time: scripts/merge-queue/tripwire.sh (docs/merge-gate.md). EXAMPLE ONLY: not
+  installed. It holds no merge. 05:00 is clear of macOS's /tmp clean-up at about 03:15-03:40, which guts a test tree mid-run.
+
+  To install:
+    cp scripts/launchd/com.marty.beanpool-test-all-tripwire.plist.example \
+       ~/Library/LaunchAgents/com.marty.beanpool-test-all-tripwire.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.marty.beanpool-test-all-tripwire.plist
+  Run it now to test:  launchctl kickstart gui/$(id -u)/com.marty.beanpool-test-all-tripwire
+  Remove:              launchctl bootout gui/$(id -u)/com.marty.beanpool-test-all-tripwire
+
+  If the Mac is asleep at 05:00, launchd runs it at the next wake.
+  Paths assume the main checkout at ~/projects/beanpool; adjust if it moves.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.marty.beanpool-test-all-tripwire</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/marty/projects/beanpool/scripts/merge-queue/tripwire.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/marty/projects/beanpool</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/marty/Library/Logs/beanpool-test-all-tripwire.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/marty/Library/Logs/beanpool-test-all-tripwire.log</string>
+</dict>
+</plist>

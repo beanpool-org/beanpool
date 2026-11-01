@@ -11,7 +11,7 @@ import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketFilterState,
-    marketSearchFromLink, marketSearchQuery, marketSearchMatches, marketSearchToSave, saveSearchParam, readSaveSearchParam,
+    marketSearchFromLink, marketSearchQuery, marketAnswerStands, marketSearchMatches, marketSearchToSave, saveSearchParam, readSaveSearchParam,
 } from '../market-filters';
 import { CATEGORY_FILTER_CHIPS, categoryPanelReducer } from '../map-filters';
 import { CATEGORY_META } from '../../constants/categories';
@@ -216,9 +216,11 @@ describe('marketSearchFromLink: a saved search\'s See more fills the Market\'s s
 describe('Save this search to Home: the Market\'s search as a saved search (Marty, 7 Oct)', () => {
     const at = (over: Partial<MarketFilterState>) => ({ ...DEFAULT_MARKET_FILTERS, ...over });
     it('takes the words, Offers or Needs from the pill, the category chip and the distance chip', () => {
-        expect(marketSearchToSave(at({ type: 'offers', category: 'food', radiusKm: 5 }), 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5 });
-        expect(marketSearchToSave(at({ type: 'needs' }), ' help moving ')).toEqual({ q: 'help moving', kind: 'need' });
-        expect(marketSearchToSave(at({ type: 'all', category: 'tools', radiusKm: 3 }), 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 5 });
+        expect(marketSearchToSave(at({ type: 'offers', category: 'food', radiusKm: 5 }), 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5, tags: ['food.eggs'] });
+        expect(marketSearchToSave(at({ type: 'needs' }), ' help moving ')).toEqual({ q: 'help moving', kind: 'need', tags: ['tech.repair.it-support', 'general.sharing.volunteer', 'transport.delivery.moving'] });
+        expect(marketSearchToSave(at({ type: 'all', category: 'tools', radiusKm: 3 }), 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 5, tags: ['tools.power.drills'] });
+        expect(marketSearchToSave(at({}), 'lemon')?.tags).toEqual(['food.fruit.lemon']);
+        expect(marketSearchToSave(at({}), 'lemon', 'food.fruit.orange')?.tags).toEqual(['food.fruit.orange', 'food.fruit.lemon']);
         expect(marketSearchToSave(at({ type: 'for-you' }), 'eggs')?.kind).toBe('any');
     });
     it('offers nothing to save without words, or under Events or Polls (a saved search is Offers and Needs)', () => {
@@ -284,5 +286,30 @@ describe('the Market\'s search in any script (review of #1716, finding 1)', () =
         expect(src).toMatch(/marketSearchQuery\(q\)/);
         expect(src).toMatch(/marketSearchMatches\(p, searchQuery\)/);
         expect(src).not.toMatch(/expandSearchTerms/);
+    });
+});
+
+describe('a listing found by a tag its author typed (DESIGN-tags-free-entry-fable.md §4)', () => {
+    it("the Market's own filter reads the words of a typed tag, in either shape a row comes in", () => {
+        const title = { title: 'Old laptop', description: 'Works well' };
+        expect(marketSearchMatches({ ...title, freeTags: ['2nd hand'] }, 'hand')).toBe(true);
+        expect(marketSearchMatches({ ...title, free_tags: '["2nd hand"]' }, 'hand')).toBe(true);
+        expect(marketSearchMatches(title, 'hand')).toBe(false);
+    });
+});
+
+// The screen itself, with the node's answer: market-fill-render.test.ts.
+describe('whether the node\'s answer stands for the search (review of #2691, finding 1)', () => {
+    it('for the words it was asked, however the box is spaced; not for others, and not with no answer', () => {
+        expect(marketAnswerStands('limon', 'limon')).toBe(true);
+        expect(marketAnswerStands('  limon ', 'limon')).toBe(true);
+        expect(marketAnswerStands('limon', 'limo')).toBe(false);
+        expect(marketAnswerStands('limon', null)).toBe(false);
+    });
+
+    it('the screen reads this, and no field the node never sends', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/market.tsx'), 'utf8');
+        expect(src).toMatch(/marketAnswerStands\(searchQuery, searchResults !== null \? searchResultsWords : null\)/);
+        expect(src).not.toMatch(/search_keywords/);
     });
 });

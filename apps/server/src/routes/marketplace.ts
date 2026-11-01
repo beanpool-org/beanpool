@@ -57,7 +57,7 @@ import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet,
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 import { setReadCaching, PHOTO_EDGE_MAX_S } from '../guest-cache.js';
-import { SEARCH_TAGS_MAX, TAG_ID_PATTERN, word } from '@beanpool/core';
+import { FREE_TAGS_MAX, SEARCH_TAGS_MAX, TAG_ID_PATTERN, freeTagRefusal, freeTagStored, word } from '@beanpool/core';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -152,15 +152,15 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
         }
     }
 
-    // The small copy for the lists (`size=thumb`, storage/photo-thumbnails.ts): asked only here, after every gate above,
-    // so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
+    // The small copy for the lists (`size=thumb2` or legacy `size=thumb`, storage/photo-thumbnails.ts): asked only here,
+    // after every gate above, so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
     // row, one it can't read) is answered with the photo itself, as is one whose small copy the store can't give now:
     // the photo's own path below says what a missing or unreachable photo means. That photo is cached for 5 minutes, not
     // the year below: a copy the store can't give now (a bucket hiccup) would otherwise leave the 800 px bytes under the
     // list's URL, on the phone and for a public listing in a shared cache, until the photo changed (review opus-1742 #5).
     let served: Awaited<ReturnType<typeof openPhotoOf>> = null;
     let thumbNotServed = false;
-    if (ctx.query.size === 'thumb') {
+    if (ctx.query.size === 'thumb' || ctx.query.size === 'thumb2') {
         try {
             served = await openThumbnailOf(getImageStore(), photo.photo_data ? null : photo.storage_key);
         } catch (e) {
@@ -343,7 +343,7 @@ function photoKeysSince(): string {
 
 /** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
  *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
-const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'tags', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo', 'lendable', 'shop'] as const;
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'tags', 'free', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo', 'lendable', 'shop'] as const;
 
 /**
  * A by-area read's query as its ETag describes it: without where the read starts, its page, the hash the phone holds, or
@@ -394,6 +394,18 @@ router.get('/api/marketplace/posts', async (ctx) => {
             return;
         }
     }
+    // `free=a,b`: listings carrying exactly one of these typed tags (DESIGN-tags-free-entry-fable.md §4, engine PostFilter.free),
+    // what tapping a `#tag` opens; with `q` or `tags`, a listing any of them finds. Each read as it is stored and held to
+    // the rule, at most FREE_TAGS_MAX: garbage is a 400, as `tags=` is.
+    let free: string[] | undefined;
+    if (typeof ctx.query.free === 'string' && ctx.query.free !== '') {
+        free = [...new Set(ctx.query.free.split(',').map(freeTagStored).filter(Boolean))];
+        if (free.length === 0 || free.length > FREE_TAGS_MAX || free.some(x => freeTagRefusal(x) !== null)) {
+            ctx.status = 400;
+            ctx.body = { error: `free is 1 to ${FREE_TAGS_MAX} tags, comma separated` };
+            return;
+        }
+    }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
     const updatedAfter = ctx.query.updatedAfter as string | undefined;
@@ -432,10 +444,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // switch off, is answered as without it, byte for byte. A whole read must page (paged=1, X-Posts-Next), as a phone
     // (S3) does: without it, it answers only the first `limit` rows, newest first, and no key to the next page, and the
     // rest of the set comes only by `ids=`. Its types are `types=` alone: a singular `type=` would keep the rows to it
-    // and not the set, which would name listings no page of the read answers. So would `tags=` (PR #2637 review).
+    // and not the set, which would name listings no page of the read answers. So would `tags=` (PR #2637 review) and `free=`.
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
-    if (nearby && (id || ids || point || author || q || ctx.query.tags !== undefined || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
+    if (nearby && (id || ids || point || author || q || ctx.query.tags !== undefined || ctx.query.free !== undefined || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
         || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined || ctx.query.lendable !== undefined
         || ctx.query.shop !== undefined)) {
         ctx.status = 400;
@@ -460,7 +472,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
     // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
     // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
-    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !tags && !category && !audienceScope && !targetGroupId && !assignedTo && !lendableOnly && !shopId) {
+    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !tags && !free && !category && !audienceScope && !targetGroupId && !assignedTo && !lendableOnly && !shopId) {
         restartPhotoHealFor(ctx.state.actor as string | undefined);
     }
 
@@ -569,7 +581,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A search leaves out the listings of the authors the reader blocked (engine getPosts), so its tag describes that list
     // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
     // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
-    const blocksPart = (q || tags) && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
+    const blocksPart = (q || tags || free) && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
     // A keeper who asks (`keeper=1`) reads one enterprise's listings as it would (engine readsAsAuthor: its paused ones too,
     // and while it is off the board), so the tag says which view this is: a member bound as a keeper, or unbound, changes
     // the answer and no listing, and the copy they held must not be confirmed with a 304. Every other read is tagged as before.
@@ -635,7 +647,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
     // no author's trust profile, photo or trade count per post.
     const listing = {
-        id, ids, type, types, excludeEvents, category, query: q, tags, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
+        id, ids, type, types, excludeEvents, category, query: q, tags, free, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
         neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined, shopId, asKeeper: asKeeper || undefined,
     };
@@ -737,7 +749,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
     const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags } =
+        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -820,6 +832,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
                 // Its tags, raw: the engine holds them to the library (engine/post-fields.ts assertPostTags). An app that
                 // sends none makes a listing as before.
                 tags,
+                // The tags its author typed, raw: the engine holds them to the rule (engine/post-fields.ts assertFreeTags).
+                freeTags,
             }
         );
         if (!post) {

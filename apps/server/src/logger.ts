@@ -104,13 +104,13 @@ export function writeLog(
  * "…and M more" line after (agent/mcp-route.ts logRefusal). Those lines are counted apart again, newest
  * AGENT_REFUSED_LOG_KEEP_ROWS: anyone can send refusals, and 5,000 tokenless requests emptied the assistant's own record
  * (review of #1855 confirmation, finding 1). So only calls let in fill AGENT_LOG_KEEP_ROWS, one line each, and it is one
- * assistant's daily allowance (agent/limits.ts AGENT_CALLS_PER_DAY): a full day of its calls fits while it is the only busy
- * one. The ring is shared by every grant, so another grant's admitted calls can flush a token's record: the newest lines
+ * assistant's daily allowance (agent/limits.ts AGENT_CALLS_PER_DAY, 2,000, and an upload's own line for each of the most photos
+ * a day, 4 × the owners' 1,000): a full day of its calls fits while it is the only busy one. The ring is shared by every grant, so another grant's admitted calls can flush a token's record: the newest lines
  * kept are the busiest assistant's, which is what an inquiry into a stolen token reads first (#1855 confirmation 2, finding 3).
  */
 export const LOG_KEEP_DAYS = 30;
 export const LOG_KEEP_ROWS = 2500;
-export const AGENT_LOG_KEEP_ROWS = 2000;
+export const AGENT_LOG_KEEP_ROWS = 6000;
 export const AGENT_REFUSED_LOG_KEEP_ROWS = 500;
 const LOG_KEEP_MS = LOG_KEEP_DAYS * 24 * 60 * 60_000;
 

@@ -34,8 +34,9 @@
  *                                                 (`publicAddress` `ip`/`own`, beanpool claim --ip/--address) stops being
  *                                                 that too.
  *
- * An address is only ever added by an owner or admin here, or by config the operator set (the registrar's name,
- * CF_RECORD_NAME, BEANPOOL_ADDRESSES). Never from a request's Host header.
+ * An address is only ever added by an owner or admin here, by an owner's claim of a new name (the address it replaces,
+ * engine/own-addresses.ts keepReplacedAddress), or by config the operator set (the registrar's name, CF_RECORD_NAME,
+ * BEANPOOL_ADDRESSES). Never from a request's Host header.
  */
 
 import Router from '@koa/router';

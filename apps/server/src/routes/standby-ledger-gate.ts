@@ -69,10 +69,13 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/groups\/[^/]+\/succession\/(propose|[^/]+\/vote)\/?$/,
     // An admin's emergency suspension and its lift (a Decision, and the role it holds aside), and a replacement phone's code.
     /^\/api\/local\/admin\/users\/[^/]+\/(suspend|status)\/?$/,
-    // A vote on removing a member: its case hidden as false, or the member's reply taken down (decisions-engine.ts). No
-    // Beans move, so not with the halt above.
-    /^\/api\/local\/admin\/decisions\/[^/]+\/(hide-case|hide-reply)\/?$/,
+    // A vote on removing a member: its case hidden as false, the member's reply taken down, or an owner deciding it when too
+    // few can vote (decisions-engine.ts). No Beans move, so not with the halt above. Refused here, before its fresh proof
+    // is asked: a code must not be spent on a server that can't write the decision.
+    /^\/api\/local\/admin\/decisions\/[^/]+\/(hide-case|hide-reply|owner-decision)\/?$/,
     /^\/api\/local\/admin\/members\/[^/]+\/rekey\/(issue-code|cancel|proposals\/[^/]+\/decline)\/?$/,
+    // A moderator's undo of a limit on sending message requests (engine/request-limits.ts).
+    /^\/api\/local\/admin\/members\/[^/]+\/request-limit\/undo\/?$/,
     // A recovery fragment released: the log of which fragments left the community.
     /^\/api\/recovery\/collect\/(hub|sso)\/?$/,
     // A link's commissioning ceiling.

@@ -105,7 +105,8 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
+import { dmLineSigInMetadata, dmLineSigVerifies } from '@beanpool/core';
+import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LINE } from '../dm-lock';
 import { dmKeyChangeCopy } from '../dm-key-change';
@@ -162,6 +163,8 @@ const node = {
     lines: [] as Line[],
     convs: [] as Conv[],
     photos: new Map<string, { data: string; nonce: string }>(),
+    /** What each report it took said (POST /api/messages/report). */
+    reports: [] as any[],
     /** The node answering every send 503 (a phone's send then stays on it as failed). */
     refuseSends: false,
     /** The lines the node serves for a conversation, in its order (default: its newest 50 by time, oldest first). */
@@ -195,7 +198,12 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
         const b = JSON.parse(init.body);
         const line = node.lines.find((l) => l.id === b.messageId)!;
         Object.assign(line, { ciphertext: b.ciphertext, nonce: b.nonce, editedAt: tick() });
+        if (b.metadata) line.metadata = JSON.stringify({ ...JSON.parse(line.metadata ?? '{}'), ...b.metadata });
         return answer(200, { success: true, message: line });
+    }
+    if (method === 'POST' && u.pathname === '/api/messages/report') {
+        node.reports.push(JSON.parse(init.body));
+        return answer(200, { success: true });
     }
     const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
     if (list) {
@@ -316,7 +324,7 @@ beforeEach(async () => {
     ana = person('Ana');
     ben = person('Ben');
     dm = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
-    Object.assign(node, { lines: [], convs: [dm], photos: new Map(), refuseSends: false, serve: null });
+    Object.assign(node, { lines: [], convs: [dm], photos: new Map(), refuseSends: false, serve: null, reports: [] });
     (globalThis as any).fetch = fetchMock;
     await getDb();
 });
@@ -340,6 +348,46 @@ describe('a line as it was sent', () => {
         ]);
         // and in the conversation list's preview
         expect((await getConversations(ana.publicKey)).find((c: any) => c.id === dm.id)?.lastMessage).toBe('No');
+    });
+});
+
+// R0 (core dm-line-report.ts): the signature a line leaves this phone with is the one the node checks when it is reported.
+describe('a line\'s signature, and its report', () => {
+    const signedBy = (l: { id: string; ciphertext: string; nonce: string; metadata?: unknown }, from: Person, to: Person) => {
+        const lineSig = dmLineSigInMetadata(l.metadata);
+        return !!lineSig && dmLineSigVerifies(l, lineSig, { conversationId: dm.id, senderPubHex: from.publicKey, recipientPubHex: to.publicKey, messageId: l.id });
+    };
+
+    it('a line leaves the phone signed by its sender, to the other person, and by nobody else', async () => {
+        const { question, answer } = await aQuestionAndAnAnswer();
+        expect(signedBy(node.lines.find((l) => l.id === question.id)!, ana, ben)).toBe(true);
+        expect(signedBy(node.lines.find((l) => l.id === answer.id)!, ben, ana)).toBe(true);
+        expect(signedBy(node.lines.find((l) => l.id === question.id)!, ben, ana)).toBe(false);
+    });
+
+    it('an edit is signed anew, and the old signature no longer stands for the line', async () => {
+        const { question } = await aQuestionAndAnAnswer();
+        const before = node.lines.find((l) => l.id === question.id)!.metadata;
+        await phoneOf(ana);
+        await editMessage(dm.id, question.id, 'Shall I cancel the whole order?');
+        const line = node.lines.find((l) => l.id === question.id)!;
+        expect(line.metadata).not.toBe(before);
+        expect(signedBy(line, ana, ben)).toBe(true);
+    });
+
+    it('a report hands over the sealed line as this phone holds it, its signature and the words it reads, and nothing of the line beside it', async () => {
+        const { question, answer } = await aQuestionAndAnAnswer();
+        await phoneOf(ben);
+        await shows(dm);
+        await reportDmLine(dm.id, question.id, 'Shall I cancel the order?', 'Harassment');
+        const sent = node.reports.at(-1);
+        const line = node.lines.find((l) => l.id === question.id)!;
+        expect(sent).toMatchObject({ messageId: question.id, reason: 'Harassment' });
+        expect(sent.disclosure).toEqual({
+            v: 1, ciphertext: line.ciphertext, nonce: line.nonce, conversationId: dm.id, lineSig: dmLineSigInMetadata(line.metadata), words: 'Shall I cancel the order?',
+        });
+        expect(signedBy({ ...sent.disclosure, id: question.id, metadata: { lineSig: sent.disclosure.lineSig } }, ana, ben)).toBe(true);
+        expect(JSON.stringify(sent)).not.toContain(node.lines.find((l) => l.id === answer.id)!.ciphertext);
     });
 });
 

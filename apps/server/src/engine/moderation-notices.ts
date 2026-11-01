@@ -9,9 +9,12 @@
 // None of them names the admin or moderator who acted, or anyone who reported: the author hears "the community's
 // moderators", and each reporter hears only about their own report.
 
-import type { PushNoticeKind } from '@beanpool/core';
+import { wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { keepNotice } from './kept-notices.js';
+
+// English's own t(): a refusal with a value in it, which member-words.ts finds again by its catalog sentence.
+const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => void;
@@ -197,6 +200,8 @@ export const POST_HIDDEN_TITLE = '🛡️ Your post is hidden for review';
 export const POST_BACK_TITLE = '🛡️ Your post is back';
 export const MUTED_TITLE = '🛡️ Posting paused';
 export const UNMUTED_TITLE = '🛡️ You can post again';
+export const REQUESTS_CLEARED_TITLE = '🛡️ Your message requests were cleared';
+export const REQUESTS_BACK_TITLE = '🛡️ You can send message requests again';
 
 /** Hidden pending review, not removed: the author can still see it, and nobody else can until a moderator looks. */
 export function postHiddenBody(title: string | null | undefined): string {
@@ -212,6 +217,18 @@ export function postBackBody(title: string | null | undefined): string {
 /** The mute, in the words both its notice and every refusal it causes use. */
 export function mutedBody(): string {
     return "Three of your posts were removed by the community's moderators in the last 30 days, so you can't post or send messages here until a moderator lifts this. You can still read, edit your profile and leave.";
+}
+
+/**
+ * Reports cleared a sender's message requests (engine/request-limits.ts), in the words their notice and every refusal it
+ * causes use. Never who reported them.
+ */
+export function requestsClearedBody(until: string): string {
+    return tr("People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.", { date: until.slice(0, 10) });
+}
+
+export function requestsBackBody(): string {
+    return 'A moderator looked at the reports, so your message requests are back and you can send new ones.';
 }
 
 export function unmutedBody(): string {
@@ -264,6 +281,14 @@ export function notifyPostsBack(cb: ModerationNoticeCallbacks, authorPubkey: str
 
 export function notifyMuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {
     tell(cb, [memberPubkey], MUTED_TITLE, mutedBody(), { kind: 'moderation_muted' });
+}
+
+export function notifyRequestsCleared(cb: ModerationNoticeCallbacks, memberPubkey: string, until: string): void {
+    tell(cb, [memberPubkey], REQUESTS_CLEARED_TITLE, requestsClearedBody(until), { kind: 'requests_cleared', until });
+}
+
+export function notifyRequestsBack(cb: ModerationNoticeCallbacks, memberPubkey: string): void {
+    tell(cb, [memberPubkey], REQUESTS_BACK_TITLE, requestsBackBody(), { kind: 'requests_back' });
 }
 
 export function notifyUnmuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {

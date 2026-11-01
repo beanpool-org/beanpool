@@ -134,7 +134,7 @@ describe("MarketplacePage: a saved search's See more on Home fills the search (C
         expect(save).toHaveTextContent('Save this search to Home');
         expect(save).toHaveAccessibleName('Save the search "fresh eggs" to Home');
         fireEvent.click(save);
-        expect(onSaveSearch).toHaveBeenCalledWith({ q: 'fresh eggs', kind: 'offer' });
+        expect(onSaveSearch).toHaveBeenCalledWith({ q: 'fresh eggs', kind: 'offer', tags: ['food.eggs'] });
     });
 
     it('Save this search to Home: the words shown and the screen-reader name are one language (review of #2166)', async () => {
@@ -269,6 +269,33 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         const detail = await screen.findByTestId('event-detail');
         expect(detail).toHaveTextContent('Hosted by Hazel');
         expect(detail).toHaveTextContent('Bindarrabi Hall');
+    });
+
+    it('Pricing Guide chip on Market: choosing an item carries its price into the form via onComposer', async () => {
+        vi.spyOn(api, 'getPricingGuideApi').mockResolvedValue({ items: [], config: {} } as any);
+        const onComposer = vi.fn();
+        const onNavigate = vi.fn();
+        render(<MarketplacePage identity={identity} onComposer={onComposer} onNavigate={onNavigate} />);
+
+        const guideChip = await screen.findByRole('button', { name: /Pricing Guide/i });
+        await act(async () => { guideChip.click(); });
+
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeInTheDocument();
+
+        const selectBtn = within(dialog).getByRole('button', { name: /Select Artisan Sourdough Loaf for offer at 8 Beans/i });
+        await act(async () => { selectBtn.click(); });
+
+        expect(onComposer).toHaveBeenCalledWith({
+            type: 'offer',
+            title: 'Artisan Sourdough Loaf',
+            description: 'Naturally leavened fresh whole wheat or white sourdough',
+            category: 'food',
+            credits: 8,
+            priceType: 'fixed',
+            repeatable: false,
+            cashAlsoNeeded: false,
+        });
     });
 });
 
@@ -433,11 +460,12 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('gives a tile with a photo and one without the same square media (aspect-square), and no VIEW button (Pictures S5)', async () => {
+    it('gives a tile with a photo and one without the same 4:3 landscape media (aspect-[4/3]), and no VIEW button (Pictures S5, market-card-43)', async () => {
         await openGrid();
         for (const title of ['Bicycle Repair', 'Chainsaw']) {
             const media = tileOf(title).querySelector('div.relative.w-full') as HTMLElement;
-            expect(media.className).toContain('aspect-square');
+            expect(media.className).toContain('aspect-[4/3]');
+            expect(media.className).not.toContain('aspect-square');
             expect(tileOf(title).textContent).not.toContain('VIEW');
         }
     });

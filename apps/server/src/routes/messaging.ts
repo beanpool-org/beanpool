@@ -9,8 +9,8 @@ import {
     createConversation, sendMessage, editMessage, deleteOwnMessage,
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
-    markConversationRead, getListedUnreadCounts, getUnreadCounts,
-    getMember, isNodeMember, isLiveVisitor, getNodeRole,
+    markConversationRead, getListedUnreadCounts, getUnreadCounts, getUnreadAnswer,
+    getMember, isNodeMember, isLiveVisitor, getNodeRole, passesReadGate, weighRequestReports,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -38,6 +38,9 @@ import {
 } from '../engine/withheld-lines.js';
 import { withRequestFor, sortRequestsOut, decideRequest, ignoreAllRequests, RequestDecisionError } from '../engine/dm-requests.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
+import { checkDmLineReport, submitDmLineReport } from '../engine/dm-line-report.js';
+import { GroupLineReportError } from '../engine/group-chat-report.js';
+import { fileMessageReport } from './message-report.js';
 import { word } from '@beanpool/core';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -352,6 +355,37 @@ router.post('/api/messages/edit', async (ctx) => {
 });
 
 /**
+ * Report one line of a direct message (engine/dm-line-report.ts): { messageId, reason, disclosure }, what the reporter's app
+ * hands over for it. The reporter is the signer, never the body, and a member here, as for /api/reports. Any line that isn't
+ * theirs to report answers as an id nobody has. The node opens nothing: it holds no key for the line. One report per
+ * reporter per line (routes/message-report.ts).
+ */
+router.post('/api/messages/report', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    if (!membersOnlyHere(ctx)) return;
+    let checked;
+    try {
+        checked = checkDmLineReport(actor, (ctx as any).requestBody || {});
+    } catch (e) {
+        if (!(e instanceof GroupLineReportError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+        return;
+    }
+    fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => {
+        const filed = submitDmLineReport(actor, checked);
+        // One on a request they received counts towards clearing its sender's requests (engine/request-limits.ts).
+        if (filed) weighRequestReports(checked.authorPubkey);
+        return filed;
+    });
+});
+
+/**
  * Delete for everyone (chat parity, 2026-09-23): the author takes their own message down, in a DM or a group
  * chat, at any age. The author is the verified signer — never a client-supplied field — so nobody can delete
  * someone else's. A convenor removing somebody ELSE's group chat message keeps its own route,
@@ -380,6 +414,28 @@ router.post('/api/messages/delete', async (ctx) => {
     } catch (e: any) {
         respondToMessagingError(ctx, e, 'delete the message');
     }
+});
+
+// How much waits for the signer here, in counts alone (never a key, a name, an id or a list): a phone asks each community it
+// keeps but isn't using, every few minutes (scratch/fable-design/DESIGN-cross-community-chat-fable.md §1.2 R3), and the web
+// app reads it for its own badge. It takes no key, so it can answer for the signer and nobody else. The read gate refuses
+// the rest; the checks here hold where the gate lets a request through (read auth opted out), as /api/notices does: a
+// visitor's row has no chats to come back to here, and a suspended member reads their own. No cached copy: a phone's
+// answer is the only thing telling it a message is waiting.
+router.get('/api/me/unread', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    if (!passesReadGate(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: word('Read access requires a member identity'), code: NOT_A_MEMBER_CODE };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = getUnreadAnswer(actor);
 });
 
 router.get('/api/messages/conversations/:publicKey', async (ctx) => {

@@ -19,7 +19,10 @@ RULES FOR THIS HEADLESS RUN
 - Do NOT run scripts/test-all.sh. CI runs the full suite on the PR. Run only the suites your change touches.
 - The worktree is new: `pnpm install --frozen-lockfile` at the repo root, then build @beanpool/core and
   @beanpool/engine before running anything — their dist is shared and goes stale across branches.
-- Stage named paths only; never `git add -A` or `git add .`. Push after each logical step.
+- Stage named paths only; never `git add -A` or `git add .`. On a first build, push after each logical step.
+- ONE PUSH PER FIX ROUND (Marty, 1 Nov): in a FIX, FIX-CI or CONTINUE stage, commit locally and push once, when the round's
+  findings are done and the local checks pass, because each push cancels and restarts GitHub's run. Exception: a build stage
+  on a long first build may still push early so work is not lost, and a run about to end must push what it has.
 - Never merge, never deploy, never touch another branch or PR, never force-push.
 - Protected — never edit: apps/native/app/(tabs)/map.tsx, UnifiedMapPin, GlobalHeader*, logo assets, deploy.sh.
 - The members' guide and the operator manual: edit only their pages (packages/beanpool-guide/content, operators).
@@ -30,3 +33,5 @@ RULES FOR THIS HEADLESS RUN
   bug, say so explicitly instead of changing it.
 - FINAL REPORT: real `git status`, `git log --oneline origin/main..HEAD`, the PR as `gh pr list --head <branch>`
   shows it, test output before/after where relevant, and anything unfinished stated plainly.
+- **While a full run holds the heavy-test lock, wait before ANY install, tsc, vitest, node test suite, build or browser run** (Marty): `while [ -d /Users/marty/.cache/heavy-test.lock ]; do sleep 30; done; <your command>` in the SAME shell. It only waits; never take or remove the lock. Reading, editing, commits, pushes and git/gh calls do not wait.
+PRE-FLIGHT (Marty, 1 Nov): before you push, run lint and the type check for every package you changed (`pnpm --filter <package> lint`, and its tsc), plus scripts/words/words.mjs lint and check if any words changed. Fix what they find, then push. These take minutes and cost a full test run when skipped (#2667 lint, #2643 route list). A new or renamed route also goes through test-guest-view, as NEW ROUTES says.

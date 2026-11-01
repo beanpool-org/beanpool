@@ -12,12 +12,27 @@ export const POST_TAGS_CHARS = 200;
 
 /** The ids a stored `posts.tags` holds, in its order; [] for none. */
 export function postTagsOf(stored: unknown): string[] {
-    return typeof stored === 'string' && stored ? stored.split(' ').filter(Boolean) : [];
+    if (Array.isArray(stored)) return stored.filter((t): t is string => typeof t === 'string' && Boolean(t));
+    if (typeof stored === 'string' && stored.trim()) return stored.trim().split(/\s+/).filter(Boolean);
+    return [];
 }
 
 /** The column's value for these ids: space-separated, '' for none. */
 export function storedPostTags(ids: readonly string[]): string {
     return ids.join(' ');
+}
+
+/**
+ * An open edit form's tags once the listing's own move under it, from `from` (what the form opened with) to `now` (what a
+ * reload read): `now`, less what the member took off, plus what they put on, at most `max`. The member's own tags read the
+ * same way, with FREE_TAGS_MAX. A phone's copy from
+ * before the tags column opens the form with none and reads the real ones a moment later: they stay, since an edit takes
+ * off only what the member took off (DESIGN-owner-seeding-tags-fable.md §4.4, §4.7).
+ */
+export function editedTagsOver(from: readonly string[], edited: readonly string[], now: readonly string[], max: number = POST_TAGS_MAX): string[] {
+    const put = edited.filter((id) => !from.includes(id));
+    const stay = now.filter((id) => !from.includes(id) || edited.includes(id));
+    return [...new Set([...stay, ...put])].slice(0, max);
 }
 
 /**

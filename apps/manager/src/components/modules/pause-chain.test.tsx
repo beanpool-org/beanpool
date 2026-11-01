@@ -16,7 +16,7 @@ const dave = 'd'.repeat(64);
 const member = { publicKey: dave, callsign: 'dave', status: 'active' };
 const NEEDS_OWNER = { error: 'The community decided on dave on 2026-10-30. Only an owner can pause them again before 2026-11-29.', code: 'repause_needs_owner' };
 const SAME_REASON = { error: 'The last pause of dave gave this same reason. Pausing them again before 2026-11-29 needs a new one.', code: 'repause_same_reason' };
-const THIRD = { error: 'The community has decided on dave twice in 90 days. Ask them to propose a Decision.', code: 'third_pause' };
+const THIRD = { error: 'dave has been paused twice in 90 days already. A third time needs the community: propose a Decision.', code: 'third_pause' };
 const TRIP = { error: "You have 5 pauses whose votes are still open, so another needs an owner's fresh proof.", code: 'open_pauses_need_proof' };
 const TRIP_CODE_ASK = {
     error: 'Enter a current code from your authenticator app (or a backup code) to pause someone while five of your pauses still wait on their votes',
@@ -77,6 +77,27 @@ describe('Suspend: the chain rules refuse in the node\'s words (removal S4)', ()
         expect(await screen.findByText(/^Suspended\. Members now vote until .+ on removing them/)).toBeInTheDocument();
         await waitFor(() => expect(sent.map((s) => s.body.code)).toEqual([undefined, '123456']));
         expect(sent.every((s) => s.body.reason === 'A wave of spam from new accounts')).toBe(true);
+    });
+
+    it('the code re-sends the words it was asked for, so they hold still while its box shows; cancelling frees them', async () => {
+        mockNode([[401, TRIP_CODE_ASK]]);
+        pressSuspend('A wave of spam from new accounts', 'pw');
+        await screen.findByTestId('suspend-proof-code');
+        const reason = screen.getByLabelText('Reason (members will see this)');
+        expect(reason).toBeDisabled();
+        fireEvent.click(screen.getByTestId('suspend-proof-cancel'));
+        expect(reason).toBeEnabled();
+    });
+
+    it('Cancel on the form takes the code box with it: the words it cancelled can\'t be sent, and the next ones aren\'t locked', async () => {
+        mockNode([[401, TRIP_CODE_ASK]]);
+        pressSuspend('A wave of spam from new accounts', 'pw');
+        await screen.findByTestId('suspend-proof-code');
+        const [, formCancel] = screen.getAllByRole('button', { name: 'Cancel' });
+        fireEvent.click(formCancel);
+        expect(screen.queryByTestId('suspend-proof-code')).toBeNull();
+        fireEvent.click(screen.getByText('⏸️ Suspend'));
+        expect(screen.getByLabelText('Reason (members will see this)')).toBeEnabled();
     });
 });
 

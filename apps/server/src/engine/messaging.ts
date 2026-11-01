@@ -25,6 +25,7 @@ import {
     GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
     assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate, groupLineForReader, groupLineHearers,
 } from './group-thread.js';
+import { metadataAfterDmEdit } from './dm-line-report.js';
 import { GroupKeyError, fromEpochOf } from './group-keys.js';
 import { writeMessageTombstone, tombstoneFields } from './message-tombstone.js';
 import { eventChatUnknownTo } from './event-thread.js';
@@ -38,9 +39,10 @@ import {
     overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
 } from './withheld-lines.js';
 import {
-    openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, nodeLineInRequest, reactionRefusal,
-    requestPushDue, requestPushBody, DM_REQUEST_PENDING_CODE,
+    openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, nodeLineInRequest, reactionRefusal, newRequestRefusal,
+    DM_REQUEST_PENDING_CODE,
 } from './dm-requests.js';
+import { DM_REQUESTS_LIMITED_CODE } from './request-limits.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
@@ -304,13 +306,20 @@ export function createConversation(
     if (participants.length !== 2) throw new MessagingError('DM conversations must have exactly 2 distinct participants');
     assertMemberActive(createdBy);
     beforeWrite?.();
+    const existing = findDirectConversationRow(participants[0], participants[1]);
+    const other = participants.find(p => p !== createdBy);
+    // Reports hold them from making a new request (engine/request-limits.ts), before anything is written. One the two have
+    // already, kept for one of them while blocked included, is no new one, and asking for it answers the same either way.
+    if (!opts.asNode && other && !existing && !withheldConversationOfPair(participants[0], participants[1])) {
+        const limited = newRequestRefusal(createdBy, other);
+        if (limited) throw new MessagingError(limited, 403, DM_REQUESTS_LIMITED_CODE);
+    }
     if (cb.registerVisitor) {
         for (const p of participants) {
             if (!getMember(db, p)) cb.registerVisitor(p);
         }
     }
 
-    const existing = findDirectConversationRow(participants[0], participants[1]);
     if (existing) {
         // The person a message request in it waits for, asking for it themselves (Message on the opener's profile): that is
         // reaching out to its opener, as their own line is, so it accepts the request (engine/dm-requests.ts). Never the node.
@@ -331,7 +340,6 @@ export function createConversation(
     // Someone who has blocked the opener gets no new chat in their list: the conversation is kept for the opener alone
     // (engine/withheld-lines.ts), answered and announced to them exactly as a new one is, and asked for again it is the
     // same one. Every refusal and limit above has run first, so the answer is the one anybody else would get.
-    const other = participants.find(p => p !== createdBy);
     if (!opts.asNode && other && hasBlocked(other, createdBy)) {
         const { conversation: kept, created } = db.transaction(() => {
             const opened = openWithheldConversation(createdBy, other, crypto.randomUUID(), createdAt);
@@ -565,8 +573,7 @@ export function sendMessage(
     // admin a request waits for, they are that admin's line and accept it too.
     if (opts.nodeAuthored) nodeLineInRequest(effectiveConvId, authorPubkey);
     const through = opts.nodeAuthored ? undefined : lineThroughRequest(effectiveConvId, authorPubkey);
-    if (through?.kind === 'refused') throw new MessagingError(through.message, 403, DM_REQUEST_PENDING_CODE);
-    const requestLine = through?.kind === 'request';
+    if (through?.kind === 'refused') throw new MessagingError(through.message, 403, through.code ?? DM_REQUEST_PENDING_CODE);
 
     const participantKeys = participants.map(p => p.public_key as string);
     // Someone in it has blocked the author (engine/member-blocks.ts): the line is kept for the author alone
@@ -598,8 +605,8 @@ export function sendMessage(
                     unmutedRecipients(withheldConvId, participantKeys),
                     authorPubkey,
                     '💬 New Message',
-                    requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
-                    requestLine ? { screen: 'requests', conversationId: withheldConvId } : { screen: 'chat', conversationId: withheldConvId },
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: withheldConvId },
                     'chat',
                     'chat.message'
                 );
@@ -672,18 +679,15 @@ export function sendMessage(
                 const senderMember = getMember(db, authorPubkey) as any;
                 // A push names people in words, never a slice of their key.
                 const senderName = senderMember?.callsign || 'A member';
-                // A message request's line says so, at most once an hour per person (engine/dm-requests.ts). One folded into
-                // the hour's single push does the push's work all the same and drops it, as a withheld line does above, and so
-                // does one in a request its recipient ignored, which the line leaves ignored.
-                const send = through?.kind === 'request' && (through.ignored || !requestPushDue(through.to, pushConvId))
-                    ? cb.rehearsePushNotification
-                    : cb.dispatchPushNotification;
+                // A message request alerts nobody until it is accepted (engine/dm-requests.ts): its line does the push's work
+                // all the same and drops it, as a withheld line does above, whatever became of the request.
+                const send = through?.kind === 'request' ? cb.rehearsePushNotification : cb.dispatchPushNotification;
                 send?.(
                     unmutedRecipients(pushConvId, recipients),
                     authorPubkey,
                     '💬 New Message',
-                    requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
-                    requestLine ? { screen: 'requests', conversationId: pushConvId } : { screen: 'chat', conversationId: pushConvId },
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: pushConvId },
                     'chat',
                     'chat.message'
                 );
@@ -986,6 +990,9 @@ export function editMessage(
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
         }
+    } else {
+        // New sealed bytes, so a new signature, or none (engine/dm-line-report.ts).
+        storedMetadata = metadataAfterDmEdit(row.metadata ?? null, metadata);
     }
 
     const sentAtMs = new Date(row.timestamp).getTime();
@@ -1003,11 +1010,7 @@ export function editMessage(
     if (withheld) {
         setOverlayEdit(messageId, authorPubkey, storedCiphertext, storedNonce, editedAt);
     } else {
-        if (isGroupChat) {
-            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
-        } else {
-            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
-        }
+        db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
         // An edit from while they were blocked, still over their own read, gives way to this one.
         if (!isGroupChat) clearOverlayEdit(messageId, authorPubkey);
     }

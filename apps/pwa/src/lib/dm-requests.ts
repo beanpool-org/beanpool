@@ -13,6 +13,7 @@ import {
     t,
     type RequestMode,
     type DmRequestCore,
+    type RequestReportOutcome,
     REQUEST_CARDS_SHOWN,
     IGNORE_ALL_FROM,
     requestModeOf,
@@ -21,10 +22,13 @@ import {
     requestAfterRead,
     decisionFailureWords,
     requestPendingRefusal,
+    requestReportRefused,
+    requestReportNotSentWords,
 } from '@beanpool/core';
 export {
     type RequestMode,
     type DmRequestCore,
+    type RequestReportOutcome,
     REQUEST_CARDS_SHOWN,
     IGNORE_ALL_FROM,
     requestModeOf,
@@ -33,6 +37,8 @@ export {
     requestAfterRead,
     decisionFailureWords,
     requestPendingRefusal,
+    requestReportRefused,
+    requestReportNotSentWords,
 };
 import type { ApiMessage, Conversation, DmRequest } from './api';
 import { checkDmThread, dmLineShownText, dmThreadInShownOrder } from './e2e-crypto';
@@ -46,6 +52,8 @@ export interface RequestPreviewLine {
     id: string;
     /** The line's words as the thread check judged them: a photo's caption, empty for none. */
     text: string;
+    /** The words that opened here, and nothing standing in for them: what a report of the line hands over. */
+    words: string;
     /** A photo: shown as a placeholder until Accept, never fetched. */
     photo: boolean;
 }
@@ -75,7 +83,7 @@ export function requestPreviewLines(
             const photo = m.type === 'image';
             // A photo's body is its caption, usually empty: shown only when its words opened.
             const text = photo ? (view?.text ?? '') : dmLineShownText(view);
-            return { id: m.id, text, photo };
+            return { id: m.id, text, words: view?.text ?? '', photo };
         });
 }
 

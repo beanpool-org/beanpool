@@ -501,7 +501,7 @@ async function main(): Promise<void> {
             `PUBLIC_READ_PATTERNS ${re} has an example in this sweep (a new public pattern must be listed here)`);
     }
     /** The other reads that take a point (2b), each read with one as well. */
-    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/home', '/api/shops']);
+    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/global/demand', '/api/home', '/api/shops']);
     const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads
         : withPoint.has(p) ? [p, `${p}?lat=-28.55&lng=153.51`, `${p}?lat=${LONE_AT.lat}&lng=${LONE_AT.lng}`]
             : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
@@ -564,6 +564,7 @@ async function main(): Promise<void> {
         [POSTS]: "section 7: each place, distance, order, radius and page is its area's",
         '/api/global/home': "section 7b: the nearby count is of the listings whose area is within 50 km, and the bisection finds the area",
         '/api/global/communities': "section 7c: each distance and the order are from the place each community shows (the public directory's)",
+        '/api/global/demand': "the count is of the people in a fixed tile (engine/place-circles.ts), nothing below 3, and no listing is near it: test-place-circles.ts differences it",
         '/api/home': "section 7d: the find card is the landing card's own body (7b), and each listing's and event's distance the listing's visitors' read (7)",
         '/api/shops': "section 7e: the shops, their order and each distance are those of the listings' own visitors' read (7) at that point",
     };
@@ -608,7 +609,7 @@ async function main(): Promise<void> {
         walk(src);
         const KNOWN: Record<string, number> = {
             [path.join('routes', 'marketplace.ts')]: 1, // the listing (POSTS)
-            [path.join('routes', 'global-directory.ts')]: 2, // the communities and the landing card
+            [path.join('routes', 'global-directory.ts')]: 3, // the communities, the landing card and the count of people waiting (test-place-circles.ts differences it)
             [path.join('routes', 'home.ts')]: 1, // Home in one read (/api/home)
             [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
             [path.join('routes', 'events.ts')]: 2, // the event form's pin → its zone (/api/events/zone): members only, answers a zone and no listing
@@ -1206,6 +1207,9 @@ async function main(): Promise<void> {
             // One line of the pruned club's chat, reported with a key of the right shape: past the body checks to who may read it.
             'POST /api/groups/:id/chat/report': { messageId: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f', reason: 'Sentinel check',
                 disclosure: { epoch: 1, mk: Buffer.alloc(32, 7).toString('base64') } },
+            // A line of the pruned account's DM, reported with a disclosure of the right shape: past the body checks to who may read it.
+            'POST /api/messages/report': { messageId: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f', reason: 'Sentinel check',
+                disclosure: { v: 1, ciphertext: 'c2VudGluZWw=', nonce: 'x25519-xc20p-v2:AAAA', conversationId: 'sentinel', lineSig: null, words: 'Sentinel' } },
             // The pruned convenor: inviting Grid, changing Alice's role, renaming the group.
             'POST /api/groups/:id/members': { targetPubkey: grid.pk },
             'PATCH /api/groups/:id/members/:pubkey': { role: 'member' },
@@ -1316,8 +1320,8 @@ async function main(): Promise<void> {
             'GET /api/federation/reachable-peers',
             'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',
             'POST /api/funnel-event',
-            'GET /api/global/communities', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
-            'DELETE /api/global/watches/:id',
+            'GET /api/global/communities', 'GET /api/global/demand', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
+            'DELETE /api/global/watches/:id', 'POST /api/global/circles/:id/starting',
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/chat/report', 'POST /api/groups/:id/join',
             'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/former', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
@@ -1354,7 +1358,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/bursts/:id/undo', 'POST /api/local/admin/commons/projects',
             'POST /api/local/admin/commons/reject', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data', 'POST /api/local/admin/decisions',
             'POST /api/local/admin/decisions/:id/accelerate', 'POST /api/local/admin/decisions/:id/halt', 'POST /api/local/admin/decisions/:id/hide-case',
-            'POST /api/local/admin/decisions/:id/hide-reply', 'GET /api/local/admin/diagnostics',
+            'POST /api/local/admin/decisions/:id/hide-reply', 'POST /api/local/admin/decisions/:id/owner-decision', 'GET /api/local/admin/diagnostics',
             'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/directory/promise',
             'POST /api/local/admin/directory/promise', 'GET /api/local/admin/disputes',
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',
@@ -1368,7 +1372,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/members/:pubkey/burst/remove',
             'POST /api/local/admin/members/:pubkey/offboard', 'GET /api/local/admin/members/:pubkey/offboard/preview',
             'POST /api/local/admin/members/:pubkey/rekey/cancel', 'POST /api/local/admin/members/:pubkey/rekey/complete', 'POST /api/local/admin/members/:pubkey/rekey/issue-code',
-            'GET /api/local/admin/members/:pubkey/rekey/status', 'POST /api/local/admin/members/:pubkey/rekey/proposals/:newPubkey/decline', 'POST /api/local/admin/members/:pubkey/unmute', 'GET /api/local/admin/members/muted',
+            'GET /api/local/admin/members/:pubkey/rekey/status', 'POST /api/local/admin/members/:pubkey/rekey/proposals/:newPubkey/decline', 'POST /api/local/admin/members/:pubkey/unmute', 'GET /api/local/admin/members/muted', 'GET /api/local/admin/members/request-limits', 'POST /api/local/admin/members/:pubkey/request-limit/undo',
             'GET /api/local/admin/node-roles', 'POST /api/local/admin/node-roles', 'DELETE /api/local/admin/node-roles/:pubkey/:role',
             'GET /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens/:id/revoke',
             'POST /api/local/admin/node/config', 'GET /api/local/admin/offbox-backups/download', 'POST /api/local/admin/offbox-backups/list',
@@ -1434,7 +1438,7 @@ async function main(): Promise<void> {
             'GET /api/members/preferences', 'POST /api/members/preferences',
             'GET /api/messages/:conversationId', 'GET /api/messages/:id/attachment', 'POST /api/messages/conversation',
             'GET /api/messages/conversations/:publicKey', 'POST /api/messages/delete', 'POST /api/messages/edit', 'POST /api/messages/mark-read',
-            'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/request', 'POST /api/messages/request/ignore-all',
+            'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/report', 'POST /api/messages/request', 'POST /api/messages/request/ignore-all',
             'POST /api/messages/send',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
@@ -1446,7 +1450,7 @@ async function main(): Promise<void> {
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
-            'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
+            'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/confirm', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
             'POST /api/peek', 'GET /api/peek/mine', 'POST /api/peek/stop',
             'GET /api/pricing-guide', 'POST /api/pricing-guide/admin/aggregate', 'POST /api/pricing-guide/admin/config',
@@ -1459,7 +1463,7 @@ async function main(): Promise<void> {
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',
             'POST /api/recovery/collect/hub',
-            'POST /api/recovery/community-copy', 'POST /api/recovery/community-copy/status', 'DELETE /api/recovery/community-copy',
+            'POST /api/recovery/community-copy', 'POST /api/recovery/community-copy/half', 'POST /api/recovery/community-copy/status', 'DELETE /api/recovery/community-copy',
             'POST /api/recovery/collect/mine', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/sso-nonce',
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
@@ -1500,6 +1504,8 @@ async function main(): Promise<void> {
             // An owner's assistant's photo upload beside it (agent/photo-upload-route.ts): the same bearer, an owner's grant ticked
             // "May post for me" only.
             'POST /mcp/photos', 'GET /mcp/photos',
+            // And a photo link under it (agent/owner-photos.ts): a live token and nothing else, upload only.
+            'POST /mcp/photos/u/:token', 'PUT /mcp/photos/u/:token', 'GET /mcp/photos/u/:token',
             // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
             'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
             'POST /api/local/admin/agent/grants/:id/remove-made',

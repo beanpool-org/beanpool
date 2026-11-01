@@ -269,3 +269,18 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `updateEnterpriseLocation` and `clearEnterpriseLocation` in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage in `node-client.test.ts`.
 **Learning:** Testing enterprise location helpers verified `POST` and `DELETE` requests to `/api/local/admin/treasury/:pubkey/location` with coordinate payloads, admin credentials/2FA session headers, and error handling for failed requests.
 **Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.
+
+## 2026-10-28 - [manager tests] RecoveryCopiesLine component unit tests
+**Gap:** `RecoveryCopiesLine` component and `useRecoveryCopies` hook in `apps/manager/src/components/modules/RecoveryCopiesLine.tsx` were untested.
+**Learning:** Testing `useRecoveryCopies` requires using `resolveNodeApiUrl(nodeUrl, '/api/community/info')` when matching mocked `globalThis.fetch` calls.
+**Action:** Continue identifying remaining untested module components in `apps/manager/src/components/modules/`.
+
+## 2026-10-28 - [manager tests] photo-resize error handling unit tests
+**Gap:** Canvas context creation returning `null` and `FileReader` error branches in `resizePhotoFile` (`apps/manager/src/lib/photo-resize.ts`) were untested.
+**Learning:** Testing `resizePhotoFile` error branches required extending `stubPipeline` in `photo-resize.test.ts` to mock `FileReader.prototype.onerror` and `HTMLCanvasElement.prototype.getContext` returning `null`, verifying promise rejections with expected error messages.
+**Action:** Continue identifying error recovery paths in utility functions across `apps/manager/src/lib/`.
+
+## 2026-11-01 - [manager tests] replication token helpers unit tests
+**Gap:** `getReplicationTokenStatus`, `generateReplicationToken`, `setReplicationTokenMode`, and `clearReplicationToken` in `apps/manager/src/lib/node-client.ts` were untested directly.
+**Learning:** Asserting fetch call URLs in `node-client.test.ts` requires wrapping endpoints with `resolveNodeApiUrl(nodeUrl, path)` to account for default proxy routing logic in tests.
+**Action:** Continue identifying utility functions with missing direct unit assertions across `apps/manager/src/lib/`.

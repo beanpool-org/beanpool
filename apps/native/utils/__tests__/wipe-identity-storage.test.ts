@@ -26,12 +26,18 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_saved_nodes: JSON.stringify([{ url: 'https://test.beanpool.org', name: 'Test' }]),
             pillar_sync_cursor: '42',
             'pillar:outbox': '[]',
+            // The communities this account turned alerts off for (push-registrations.ts): its own choice, and where it belongs.
+            beanpool_push_alerts_off: JSON.stringify(['https://test.beanpool.org']),
+            // The communities this account still owes a leave (push-registrations.ts): where it belonged, too.
+            beanpool_push_leaves_owed: JSON.stringify(['https://test.beanpool.org']),
             // The communities this key asked to join (#1179 review 4109868126): they say where the member lives.
             beanpool_knocks: JSON.stringify({ pubkey: 'ab'.repeat(32), knocks: [{ node: 'https://near.example', name: 'Near' }] }),
             // The background sync's notes on them (sync-notices.ts): this key was an owner there, and saw this many
             // open requests. Both name the key (#2523 review 4383895884).
             beanpool_knock_role_checked: JSON.stringify({ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32), role: 'owner', at: 1 }),
             beanpool_admin_knocks_last_count: JSON.stringify({ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32), count: 2 }),
+            // The offer to bring this key's listings: it names the key and the community it joined.
+            beanpool_bring_listings: JSON.stringify({ publicKey: 'ab'.repeat(32), from: 'https://global.beanpool.org', to: 'https://test.beanpool.org', name: 'Test', at: 1 }),
             // The member's profile: none of it keyed to the account, so the next account's profile publish and its
             // knocks would send this photo, bio and contact as its own.
             beanpool_canonical_profile: JSON.stringify({ avatar: 'bundled://koala', bio: 'Grows tomatoes', contactValue: '0400 000 000' }),

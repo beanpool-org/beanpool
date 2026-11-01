@@ -1,10 +1,11 @@
 #!/bin/bash
 # test-all.sh — BeanPool automated check runner with concurrency capping & scope auto-detection.
 #
-# `bash scripts/test-all.sh --all` is the gate before anything merges to main (Marty, 2026-09-30): it runs every
-# check with no diff-scoping, and a run that passes every check on a clean, committed tree appends a record to
-# <git common dir>/test-all-green that scripts/test-all-merge-check.sh reads. scripts/test-all-pr.sh runs it on a PR
-# merged with current main.
+# GitHub is the merge gate (Marty, 1 Nov 2026; docs/merge-gate.md): .github/workflows/ci.yml runs this script's checks,
+# split across shards, on a PR and on its merge queue entry. On a Mac, for a lane or scripts/merge-queue/tripwire.sh, it
+# decides no merge. `bash scripts/test-all.sh --all` runs every check with no diff-scoping, and a run that passes every
+# check on a clean, committed tree appends a record to <git common dir>/test-all-green that
+# scripts/test-all-merge-check.sh reads. scripts/test-all-pr.sh runs it on a PR merged with current main.
 
 set -o pipefail
 
@@ -221,7 +222,9 @@ skip_check() {
 }
 
 # A check that needs another to finish first waits here; a run without that other check (a CI shard) does not wait.
+# On CI, browser shards already install Chromium in an earlier step, so the browser checks don't need to wait for contrast.
 wait_for_check() {
+  [ -z "${CI:-}" ] || return 0
   selected "$1" || return 0
   while [ ! -f "$LOGDIR/$1.rc" ]; do sleep 1; done
 }
@@ -288,7 +291,7 @@ run_server_suites() {
 
 # Core Monorepo Checks. The *_ARGS expansions are deliberately unquoted: empty off-CI, they must
 # disappear rather than become an empty argument that turbo would reject. Launch order is start order under the
-# slot cap: the long ones (build, then the server suites behind it, test, settings_phone) go first.
+# slot cap: the long ones (build, then the server suites behind it, test, settings_phone_width) go first.
 run_check "build"         pnpm turbo run build
 if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ] || [ $HAS_ENGINE_CHANGES -eq 1 ]; then
   run_check "server_suites" run_server_suites
@@ -297,17 +300,23 @@ else
 fi
 run_check "test"          pnpm turbo run test --continue $TURBO_TEST_ARGS $TEST_ALL_TEST_SLICE
 
-# e2e/fresh-proof.mjs (owner-delete S4a): an owner's fresh-proof box is on screen at the press, survives a second Manage
-# press, and never offers a spent code.
-# Node Settings on a phone. Owners open /settings from the app's Manage button, in the phone's own browser, so every
+# Node Settings on a phone. Owners open /settings from the app Manage button, in the phone browser, so every
 # screen has to work at 320px wide with large text. apps/manager/e2e/phone-width.mjs builds Settings into a temp
 # folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
-# a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
-# e2e/in-page-confirm.mjs: every in-page question is on top and answerable, from a modal (Keepers → Revoke) or the page.
-# The browser is downloaded once and cached. On CI it and its system libraries are installed once, before any check starts
-# (.github/workflows/ci.yml): apt takes one install at a time, and these checks each running `--with-deps` side by side
-# failed on dpkg's lock (run 39768723431). So no check here installs system libraries, on CI or off it.
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions && pnpm --filter @beanpool/manager test:fresh-proof && pnpm --filter @beanpool/manager test:in-page-confirm'
+# a modal or the app sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
+run_check "settings_phone_width" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell chromium && pnpm --filter @beanpool/manager test:phone-width'
+
+# Connected assistants (admin MCP S3) on a phone: Access & Security cards at 320px wide, normal and 1.3x text, light and dark.
+run_check "settings_phone_assistants" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell chromium && pnpm --filter @beanpool/manager test:connected-assistants'
+
+# Assistant suggestions (admin MCP S4) on a phone: Triage & Moderation cards at 320px wide, normal and 1.3x text, light and dark.
+run_check "settings_phone_suggestions" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell chromium && pnpm --filter @beanpool/manager test:agent-suggestions'
+
+# Fresh-proof (owner-delete S4a): an owner fresh-proof box is on screen at the press, survives a second Manage press, never offers spent code.
+run_check "settings_phone_fresh_proof" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell chromium && pnpm --filter @beanpool/manager test:fresh-proof'
+
+# In-page question (owner-delete S4b item 6): top element and answerable from page or inside modal, at 1280px and 320px.
+run_check "settings_phone_in_page_confirm" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell chromium && pnpm --filter @beanpool/manager test:in-page-confirm'
 
 # The web app in dark mode, every class string at once (PR #1833: five review rounds each found a new shape of the same
 # fault). apps/pwa/e2e/dark-class-check.mjs builds src/index.css with the app's vite config (the shipped rules, byte for
@@ -396,7 +405,7 @@ run_check "deploy_package" bash scripts/test-deploy-package.sh
 # instant, and it is the only check here that tests this script rather than the product.
 run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 
-# The merge gate rests on this script's green record, scripts/test-all-merge-check.sh and scripts/test-all-pr.sh, and
+# A Mac's run rests on this script's green record, scripts/test-all-merge-check.sh and scripts/test-all-pr.sh, and
 # on check-deps-installed.mjs telling a stale install from broken code. This runs all four against a throwaway
 # repository with a stub `gh` (no GitHub, no network). A few seconds.
 run_check "merge_gate" bash scripts/test-merge-gate.sh
@@ -415,7 +424,8 @@ run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 run_check "balance_writes" node scripts/check-balance-writes.mjs
 
 # A migration file that is on origin/main has run on the live registrar and will never run there again, so an edit
-# to it reaches only new databases. New numbered files only. Instant; skipped where there is no origin/main.
+# to it reaches only new databases. New numbered files only. Instant; with no origin/main it reports as skipped, not as a
+# pass, and CI's shard fetches origin/main for it (.github/workflows/ci.yml, "Fetch origin/main").
 run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 
 # The public directory (front doors S13): the directory-register Edge Function rules (supabase/functions/directory-register/
@@ -427,8 +437,10 @@ run_check "directory_register" bash scripts/test-directory-register.sh
 # Every GitHub workflow pins its actions to a full commit SHA, says what its token may do, and gates the job that moves
 # the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
 # the repository's workflows and each edit the check exists to catch. check-ci-shards.test.mjs: every check here runs in
-# exactly one of CI's shards (.github/workflows/ci.yml) and the required check's name is on the aggregate job alone. Instant.
-run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs
+# exactly one of CI's shards (.github/workflows/ci.yml), the required check's name is on the aggregate job alone, and the
+# merge queue's ruleset and trigger are what the gate rests on. scripts/merge-queue: the board, requeue, tripwire and self-test
+# against a stand-in gh and a throwaway origin; selftest.test.mjs is the test the self-test's throwaway PRs make fail. Seconds.
+run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs scripts/merge-queue/merge-queue.test.mjs scripts/merge-queue/selftest.test.mjs
 
 # No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.
@@ -443,13 +455,15 @@ run_website_colours() {
   node --test scripts/website-colours.test.mjs
 }
 run_check "website_colours" run_website_colours
-run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs'
+run_check "website_contrast_light" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs --theme=light'
+run_check "website_contrast_dark"  bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs --theme=dark'
 # beanpool.org/status, the public status line of our servers (mothership slice A8): drawn from a stubbed status.json at
 # 320 px, light and dark, each state in words and its token colour, nothing wider than the screen; a late, missing or
-# unknown status said in words; nothing from the status drawn as markup. Its Chromium is the one website_contrast
-# installs, so it starts once that has finished. Seconds.
+# unknown status said in words; nothing from the status drawn as markup. Off CI its Chromium is the one
+# website_contrast_light installs, so it starts once that has finished (on CI Chromium is installed upfront and it does
+# not wait). Seconds.
 run_website_status() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_light
   node --test scripts/website-status.test.mjs
 }
 run_check "website_status" run_website_status
@@ -458,19 +472,21 @@ run_check "website_status" run_website_status
 run_check "website_global_link" node --test scripts/website-global-link.test.mjs
 # beanpool.org/android, the direct APK download (front doors S5): one release from apps/website-src/android-apk.json on
 # every language's page, the signing key the site already names for App Links, no translation made stale by a release,
-# the home page's and /global's lines to it; drawn at 320 px with text at 130 %, light and dark. Its Chromium is the one
-# website_contrast installs, so it starts once that has finished. Seconds.
+# the home page's and /global's lines to it; drawn at 320 px with text at 130 %, light and dark. Off CI its Chromium is
+# the one website_contrast_light installs, so it starts once that has finished (on CI Chromium is installed upfront and
+# it does not wait). Seconds.
 run_website_android() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_light
   node --test scripts/website-android.test.mjs
 }
 run_check "website_android" run_website_android
 # beanpool.org/start, "Start a community" on its own page (Marty, 29 Oct 2026): in all 25 languages, the sections in order,
 # the home page a teaser with a button and no install code (and still id="run-a-node" for the released apps' and
 # socialism.org's link), no page linking the old anchor, the apps' address a page in the tree; drawn at 320 px with text at
-# 130 %, light and dark. Its Chromium is the one website_contrast installs, so it starts once that has finished. Seconds.
+# 130 %, light and dark. Off CI its Chromium is the one website_contrast_light installs, so it starts once that has
+# finished (on CI Chromium is installed upfront and it does not wait). Seconds.
 run_website_start() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_light
   node --test scripts/website-start.test.mjs
 }
 run_check "website_start" run_website_start
@@ -480,7 +496,7 @@ run_check "website_links" node --test scripts/website-links.test.mjs scripts/web
 
 # website-s6: every page in the 24 languages, hreflang, footer row, read in banner, RTL, check
 run_website_lang() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_dark
   node --test scripts/website-lang.test.mjs
 }
 run_check "website_lang" run_website_lang
@@ -539,7 +555,16 @@ for i in "${!PIDS[@]}"; do
     read -r RC < "$LOGDIR/$NAME.rc"
   fi
   if [ "$RC" = "0" ]; then
-    PASS=$((PASS + 1))
+    # A check with nothing to compare exits 0, so PASS would hide it: run on GitHub with no origin/main, migration_steps
+    # read as a pass in 0 s on every pull request. It prints "⚪ SKIP: <why>" (turbo and node --test may put a prefix before
+    # it), and is then reported as skipped, with the reason, and a run with one records no green.
+    SKIP_WHY=$(grep -aF -m1 '⚪ SKIP: ' "$LOGDIR/$NAME.log" | sed 's/.*⚪ SKIP: //' | cut -c1-160)
+    if [ -n "$SKIP_WHY" ]; then
+      echo "$SKIP_WHY" > "$LOGDIR/$NAME.skip"
+      SKIPPED_NAMES+=("$NAME")
+    else
+      PASS=$((PASS + 1))
+    fi
   else
     FAIL=$((FAIL + 1))
     FAILED_NAMES+=("$NAME")
@@ -554,6 +579,7 @@ echo "╠═══════════════════════�
 
 for i in "${!NAMES[@]}"; do
   NAME="${NAMES[$i]}"
+  [ -f "$LOGDIR/$NAME.skip" ] && continue
   STATUS="✅ PASS"
   RC=1
   if [ -f "$LOGDIR/$NAME.rc" ]; then
@@ -575,7 +601,10 @@ for i in "${!NAMES[@]}"; do
 done
 
 for sn in "${SKIPPED_NAMES[@]}"; do
-  printf "║  %-16s ⚪ SKIPPED\n" "$sn"
+  SKIP_WHY=$(cat "$LOGDIR/$sn.skip" 2>/dev/null)
+  printf "║  %-16s ⚪ SKIPPED  %s\n" "$sn" "$SKIP_WHY"
+  # On the run's page too: a green shard with a skip inside is a warning there, not a tick and nothing else.
+  [ -z "${GITHUB_ACTIONS:-}" ] || [ -z "$SKIP_WHY" ] || echo "::warning title=test-all skipped $sn::$SKIP_WHY"
 done
 
 WALL=$(($(date +%s) - RUN_START))
@@ -665,7 +694,7 @@ fi
 # Cleanup
 [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 
-# The merge gate's record (scripts/test-all-lib.sh): only an --all run, not --fast or narrowed by TEST_ALL_ONLY, in which
+# The local record (scripts/test-all-lib.sh): only an --all run, not --fast or narrowed by TEST_ALL_ONLY, in which
 # every check ran and passed.
 if [ $FAIL -eq 0 ] && [ $ALL_REQUESTED -eq 1 ] && [ $FAST -eq 0 ] && [ -z "$TEST_ALL_ONLY" ] && [ ${#SKIPPED_NAMES[@]} -eq 0 ]; then
   echo ""
@@ -673,4 +702,11 @@ if [ $FAIL -eq 0 ] && [ $ALL_REQUESTED -eq 1 ] && [ $FAST -eq 0 ] && [ -z "$TEST
 fi
 
 # Exit with failure if anything failed
-[ $FAIL -eq 0 ]
+[ $FAIL -eq 0 ] || exit 1
+
+# On GitHub a skip is a failure: GitHub is the gate, a shard's exit is all the required check reads, and a check that
+# compared nothing has proved nothing. Off GitHub a skip already costs the run its green record, above.
+if [ -n "${GITHUB_ACTIONS:-}" ] && [ ${#SKIPPED_NAMES[@]} -gt 0 ]; then
+  echo "❌ Skipped on GitHub, which is the merge gate: ${SKIPPED_NAMES[*]}. A check that compared nothing is not a pass."
+  exit 1
+fi

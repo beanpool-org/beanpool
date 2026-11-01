@@ -3,10 +3,11 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
+import type { CircleCard, CircleDemand } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
-import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard } from '@beanpool/core';
-import { readCommunityCard, t } from '@beanpool/core';
+import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
+import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -1035,6 +1036,8 @@ export interface Conversation {
      */
     avatarUrl?: string | null;
     category?: string | null;
+    /** A group chat's kind when it has one: a place circle's name is shown in the reader's language (core's groupNameShown). */
+    groupKind?: string | null;
     peerLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
     /** The member's mute on this chat (set on the phone), null when not muted. */
@@ -1145,8 +1148,14 @@ export async function editMessageApi(
     authorPubkey: string,
     ciphertext: string,
     nonce: string,
+    lineSig?: DmLineSig,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce, ...(lineSig ? { metadata: { lineSig } } : {}) });
+}
+
+/** Report one line of a direct message with what this reporter hands over for it (core dm-line-report.ts). */
+export async function reportDmLineApi(messageId: string, reason: string, disclosure: DmLineDisclosure): Promise<{ success: boolean; duplicate?: boolean }> {
+    return request('POST', '/api/messages/report', { messageId, reason, disclosure });
 }
 
 export async function toggleMessageReactionApi(
@@ -1159,6 +1168,21 @@ export async function toggleMessageReactionApi(
 
 export async function getConversations(publicKey: string): Promise<ConversationsAnswer> {
     return request('GET', `/api/messages/conversations/${encodeURIComponent(publicKey)}`);
+}
+
+/**
+ * What waits for the signer in this community, in counts alone (GET /api/me/unread): the Chat badge's number, without the
+ * whole list. A visitor's row never joined, so the counts route refuses it, yet what is sent to it still waits, in the one
+ * list it may read; an older node at a pasted address has no such route. Both read their number from the list.
+ */
+export async function getMyUnread(publicKey: string): Promise<UnreadAnswer> {
+    try {
+        return await request('GET', '/api/me/unread');
+    } catch (e) {
+        if (!isRouteMissing(e) && (e as { code?: unknown } | null)?.code !== 'not_a_member') throw e;
+        const list = await getConversations(publicKey);
+        return { unread: list.totalUnread, requests: list.requests?.count ?? 0, asOf: new Date().toISOString() };
+    }
 }
 
 /**
@@ -1352,6 +1376,9 @@ export interface MarketplacePost {
     /** How far from the point a read gave (`lat`/`lng`), as the node measured it: km, null for a listing with no place. */
     distanceKm?: number | null;
     photos?: string[];
+    tags?: string | string[];
+    /** The tags its author typed, absent for none (DESIGN-tags-free-entry-fable.md §2). */
+    freeTags?: string[];
     /** The shop this listing belongs to, or null/undefined. */
     shopId?: string | null;
     authorEnergyCycled?: number;
@@ -1463,6 +1490,10 @@ export async function getMarketplacePosts(filter?: {
     online?: boolean;
     /** Enterprise's listings as its keeper reads them: includes paused listings (routes/marketplace.ts). */
     keeper?: boolean;
+    /** Tag filter: comma-separated tag ids or array (routes/marketplace.ts, DESIGN-owner-seeding-tags-fable.md §4.6) */
+    tags?: string | string[];
+    /** Listings carrying exactly one of these typed tags, as stored (`free=`, DESIGN-tags-free-entry-fable.md §4). */
+    free?: string[];
 }, signal?: AbortSignal): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
@@ -1476,6 +1507,11 @@ export async function getMarketplacePosts(filter?: {
     if (filter?.audienceScope) params.set('audienceScope', filter.audienceScope);
     if (filter?.targetGroupId) params.set('targetGroupId', filter.targetGroupId);
     if (filter?.q) params.set('q', filter.q);
+    if (filter?.tags) {
+        const tagVal = Array.isArray(filter.tags) ? filter.tags.filter(Boolean).join(',') : filter.tags;
+        if (tagVal) params.set('tags', tagVal);
+    }
+    if (filter?.free?.length) params.set('free', filter.free.join(','));
     if (filter?.limit) params.set('limit', String(filter.limit));
     if (filter?.offset) params.set('offset', String(filter.offset));
     if (filter?.lat != null && filter?.lng != null) {
@@ -1501,6 +1537,8 @@ export async function createMarketplacePost(post: {
     photos?: string[];
     repeatable?: boolean;
     cashAlsoNeeded?: boolean;
+    tags?: string[];
+    freeTags?: string[];
     /** #143 step 4: how far the listing travels. Omitted → the server defaults it to 'local'. */
     reach?: PostReach;
     /** Peer ids, only meaningful with reach 'peers'. An empty list makes the server keep it local. */
@@ -1548,6 +1586,10 @@ export interface Group {
     id: string;
     name: string;
     slug: string;
+    /** 'circle' on a place circle (@beanpool/core place-circle.ts): its name and purpose are shown in the member's language. */
+    kind?: 'circle';
+    /** A place circle's own rows, for someone in it. */
+    circle?: CircleCard;
     description?: string;
     avatarUrl?: string | null;
     category: GroupCategory;
@@ -1593,6 +1635,8 @@ export async function getGroups(filter?: { category?: string; q?: string; member
 }
 
 export interface YourChat {
+    /** 'circle' on a place circle: its name is shown in the member's language. */
+    groupKind?: string;
     kind: 'group' | 'enterprise' | 'event';
     badge: string | null;
     lifecycle?: 'ongoing' | 'bounded';
@@ -1854,6 +1898,9 @@ export async function updateMarketplacePost(
         lng?: number;
         repeatable?: boolean;
         photos?: string[];
+        tags?: string[];
+        /** Named only when the member changed them: absent leaves them, [] clears them. */
+        freeTags?: string[];
         shopId?: string | null;
         // Events (docs/events-on-the-map.md §2.2). A cleared end is '' — the node sets start + 2 hours.
         eventStartAt?: string;
@@ -2022,8 +2069,18 @@ export async function getRatingsGiven(publicKey: string): Promise<{ ratings: Rat
  * the node's own rule), its longitude wrapped first: Home's point can be a Distance centre past the date line, which the
  * node refuses (listings-near.ts wrapLng). The phone's is utils/community-directory.ts watchPlace.
  */
-export async function watchPlace(lat: number, lng: number): Promise<{ success: boolean }> {
-    return request('POST', '/api/global/watches', roundPointToArea(lat, wrapLng(lng)));
+export async function watchPlace(lat: number, lng: number, opts: { wouldHelp?: boolean } = {}): Promise<{ success: boolean }> {
+    return request('POST', '/api/global/watches', { ...roundPointToArea(lat, wrapLng(lng)), ...opts });
+}
+
+/** "I'm starting one here", on or off, by someone in the place circle: the answer is the card as it now stands. */
+export async function setCircleStarting(id: string, starting: boolean): Promise<CircleCard> {
+    return (await request<{ circle: CircleCard }>('POST', `/api/global/circles/${encodeURIComponent(id)}/starting`, { starting })).circle;
+}
+
+/** The Find card's read, for the empty Market: the waiting count and the member's own circle, from their own area. */
+export async function getFindCard(): Promise<{ demand?: CircleDemand | null; circle?: (CircleCard & { id: string }) | null }> {
+    return request('GET', '/api/global/home');
 }
 
 // ===================== REPORTS =====================
@@ -2336,6 +2393,14 @@ export interface Decision {
     /** A vote on removing a member whose reply an admin took down: when, and their public reason (the reply itself is gone). */
     replyHiddenAt?: string | null;
     replyHiddenReason?: string | null;
+    /**
+     * A pause's own vote too few members could vote on, which an owner decided (removal by vote S6): when, the owner's public
+     * reason (null once an admin has hidden the case: it may repeat the accusation), and when the vote closed with it carried
+     * out (null if enough members voted by then, and they decided).
+     */
+    ownerDecidedAt?: string | null;
+    ownerDecidedReason?: string | null;
+    ownerDecisionCarriedAt?: string | null;
     /** A vote on removing a member: who brought it, by name (absent from a node from before). */
     proposer?: RemovalProposer;
 }
@@ -2346,7 +2411,7 @@ export interface Decision {
  * closed. `name` is null when the node can't know it.
  */
 export interface RemovalProposer {
-    kind: 'admin' | 'password' | 'member';
+    kind: 'admin' | 'owner' | 'password' | 'member';
     name: string | null;
 }
 
@@ -2366,6 +2431,10 @@ export interface DecisionTally {
     supportRatio: number;
     thresholdRequired: number;
     passed: boolean;
+    /** A vote on removing a member: the fewest Yes votes that remove them, whatever the share (3; absent from a node from before). */
+    minYes?: number;
+    /** A pause's own vote fewer than 3 members could vote on, so its quorum can't be met: an owner may decide it. */
+    tooFewToVote?: boolean;
 }
 
 export interface DecisionWithTally extends Decision {
@@ -2671,10 +2740,10 @@ export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer). `photos`: JPEG data URLs, at most five
 // (lib/photo-resize.ts), checked by the node as a member's own listing's are.
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; photos?: string[] }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 /**
@@ -2690,6 +2759,8 @@ export async function treasuryPostEvent(treasury: string, body: {
     lat?: number;
     lng?: number;
     photos?: string[];
+    tags?: string[];
+    freeTags?: string[];
     /** ISO UTC. The end is optional; the node sets start + 2 hours. */
     eventStartAt: string;
     eventEndAt?: string;

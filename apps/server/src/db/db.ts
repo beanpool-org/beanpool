@@ -1210,6 +1210,25 @@ export function addHealthAccessLogToken(d: Database.Database): boolean {
 }
 
 /**
+ * A member's one active poll was also a UNIQUE index on posts(author_pubkey) for active polls. Owners and admins may now
+ * have as many as the owners' "Owner and admin limit" (Marty, 31 Oct; engine/owner-admin-limit.ts), so the number is
+ * engine/posts.ts assertActivePollRoom alone (createPost's and resumePost's) and the index, under the SAME name, is
+ * a plain one: an older image booted back on this data runs `CREATE UNIQUE INDEX IF NOT EXISTS` with that name, finds it,
+ * and so never fails its schema on an owner's second open poll. At every boot, before the schema.sql exec, which makes
+ * the plain one on a fresh install (no posts table here yet: nothing to do). Returns whether it replaced a unique one.
+ */
+export function makeActivePollIndexPlain(d: Database.Database = db): boolean {
+    if (!d.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'posts'`).get()) return false;
+    const idx = d.prepare(`SELECT "unique" AS u FROM pragma_index_list('posts') WHERE name = 'idx_posts_author_active_poll'`).get() as { u: number } | undefined;
+    const wasUnique = idx?.u === 1;
+    d.transaction(() => {
+        if (wasUnique) d.exec(`DROP INDEX idx_posts_author_active_poll`);
+        d.exec(`CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
+    })();
+    return wasUnique;
+}
+
+/**
  * A shop picks one of the Market's categories (Marty, 25 Oct 2026). On a node made before, the shops table's `kind`
  * becomes `category` (schema.sql: RENAME COLUMN keeps its place and its CHECK, which then names `category`, as a fresh
  * install has it), and every shop moves to the category its kind became (@beanpool/core SHOP_CATEGORY_KINDS): a kind
@@ -1247,7 +1266,8 @@ function moveShopKindsToCategories(): void {
 
 /**
  * The columns a vote on removing a member carries for removal by vote's Amendment A (schema.sql `decisions`): the member's
- * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down.
+ * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down; and for slice S6, an
+ * owner's decision on a vote too few members could vote on.
  */
 export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['subject_reply', 'TEXT'],
@@ -1258,6 +1278,11 @@ export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['reply_hidden_at', 'DATETIME'],
     ['reply_hidden_by', 'TEXT'],
     ['reply_hidden_reason', 'TEXT'],
+    // Removal by vote S6: an owner decided a vote too few members could vote on (decisions-engine.ts ownerDecideTooFew).
+    ['owner_decided_at', 'DATETIME'],
+    ['owner_decided_by', 'TEXT'],
+    ['owner_decided_reason', 'TEXT'],
+    ['owner_decision_carried_at', 'DATETIME'],
 ];
 
 /**
@@ -1430,6 +1455,9 @@ export function initSchema() {
     // schema.sql like its neighbours; NULL on every existing row, none of which names a message.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_message_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN disclosure TEXT`).run(); } catch { }
+    // The message request a report's reporter received (engine/request-limits.ts). Before schema.sql, which indexes it.
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN request_conversation_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN request_wording TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
     // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.
@@ -1622,7 +1650,7 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
     try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
-    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
+    try { if (makeActivePollIndexPlain()) console.log('[DB] The one-active-poll index is a plain one now (owners and admins may have more)'); } catch (e) { console.warn('[DB] Could not make the active-poll index plain:', (e as Error)?.message || e); }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_at DATETIME`).run(); } catch { }
@@ -1669,6 +1697,9 @@ export function initSchema() {
     // Its tags (schema.sql; DESIGN-owner-seeding-tags-fable.md §4.5). '' on every existing row: nothing is tagged until its
     // author tags it. Their words reach search_keywords through state-engine's once-only keywordsWithTagsOnce.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
+    // The tags its author typed (schema.sql; DESIGN-tags-free-entry-fable.md §2). '' on every existing row, so no boot pass
+    // and no row rewritten. An older image booted on this file names its columns in every INSERT, and the default applies.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN free_tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
     // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.
@@ -2019,6 +2050,14 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN verified_handle TEXT`).run(); } catch { }
     // The listing promise in the mirrored directory (mothership A2, engine/directory-cache.ts). No table yet on a database
     // from before G5: schema.sql makes it with them.
+    // The place circle (engine/place-circles.ts): the flag on a watch, and what makes a group a circle. Plain ADD COLUMNs.
+    try { db.prepare(`ALTER TABLE place_watches ADD COLUMN would_help INTEGER NOT NULL DEFAULT 0 CHECK (would_help IN (0, 1))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN kind TEXT CHECK (kind IS NULL OR kind = 'circle')`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN place_cell TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_done_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_community_key TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_starter TEXT REFERENCES members(public_key)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_starting_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN promise TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN closing_on TEXT`).run(); } catch { }

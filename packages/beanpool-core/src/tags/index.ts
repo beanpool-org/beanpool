@@ -3,9 +3,10 @@
  * in any of the 25 languages into tag ids (DESIGN-owner-seeding-tags-fable.md §4.2, §4.7). The picker's search, suggestTags,
  * the Market's search and the assistant's tags_search all read one index, built once per language.
  */
-import { CONTEXT_SEPARATOR, currentLanguage, currentWords, t, type Words } from '../words.js';
-import { joinCompounds, plainWords } from '../search-terms.js';
+import { CONTEXT_SEPARATOR, currentLanguage, currentWords, t, wordsFor, type UiLang, type Words } from '../words.js';
+import { compoundWords, joinCompounds, plainWords } from '../search-terms.js';
 import { TAG_LIBRARY, type TagDef } from './library.js';
+import { SEARCH_TAGS_MAX } from './post-tags.js';
 
 export { TAG_LIBRARY, type TagDef } from './library.js';
 
@@ -115,6 +116,8 @@ export interface TagIndex {
     /** The tags a label in this language names (an untranslated tag's is its English), as byName reads it: never by a
      *  translated tag's English label or an old synonym word. */
     byLabel(text: string): readonly string[];
+    /** The tags an English label names, on any device: what the typed-tag field holds beside byLabel (typed-tags.ts). */
+    byEnglish(text: string): readonly string[];
     /** The tags an English broader word is on: a tag's words (for it and everything under it) or its aliases. */
     byAlias(text: string): readonly string[];
     /** The tags named inside a word of a script written without spaces: "新鲜柠檬出售" (fresh lemons for sale) holds 柠檬. The
@@ -158,6 +161,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
     const translate = words ? words.t : t;
     const names = new Map<string, string[]>();
     const ownNames = new Map<string, string[]>();
+    const englishNames = new Map<string, string[]>();
     const aliases = new Map<string, string[]>();
     const labels = new Map<string, string>();
     const own: Array<[string, string]> = [];
@@ -171,6 +175,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
         add(names, label, tag.id);
         add(ownNames, label, tag.id);
         add(names, en, tag.id);
+        add(englishNames, en, tag.id);
         for (const key of tag.synonymKeys ?? []) add(names, key, tag.id);
         for (const w of tag.words ?? []) add(aliases, w, tag.id);
         for (const w of tag.aliases ?? []) add(aliases, w, tag.id);
@@ -198,6 +203,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
             return mine.length ? mine : find(names, text);
         },
         byLabel: (text) => find(ownNames, text),
+        byEnglish: (text) => find(englishNames, text),
         byAlias: (text) => find(aliases, text),
         inside(text) {
             let run = tagText(text);
@@ -248,10 +254,117 @@ export function buildTagIndex(words?: Translate): TagIndex {
 
 let cached: { words: Words; index: TagIndex } | undefined;
 
+const langIndices = new Map<string, TagIndex>();
+
 /** The device language's index, built on first use and again after every setLanguage (a language switch, or new words for
- *  the same language). */
-export function tagIndex(): TagIndex {
-    const words = currentWords();
-    if (cached?.words !== words) cached = { words, index: buildTagIndex(words) };
-    return cached.index;
+ *  the same language). Can also take an explicit language string, Words, or Translate object. */
+export function tagIndex(langOrWords?: string | Words | Translate): TagIndex {
+    if (!langOrWords) {
+        const words = currentWords();
+        if (cached?.words !== words) cached = { words, index: buildTagIndex(words) };
+        return cached.index;
+    }
+    if (typeof langOrWords === 'string') {
+        if (langOrWords === currentLanguage()) return tagIndex();
+        let idx = langIndices.get(langOrWords);
+        if (!idx) {
+            const w = wordsFor(langOrWords as UiLang);
+            idx = buildTagIndex(w);
+            langIndices.set(langOrWords, idx);
+        }
+        return idx;
+    }
+    return buildTagIndex(langOrWords);
 }
+
+/** An English plural's singular forms to try: berries → berry, tomatoes → tomato, lemons → lemon. */
+export function singulars(word: string): string[] {
+    if (!word || typeof word !== 'string') return [];
+    const out: string[] = [];
+    if (word.length > 4 && word.endsWith('ies')) out.push(`${word.slice(0, -3)}y`);
+    if (word.length > 4 && /(?:oes|ches|shes|xes|sses)$/.test(word)) out.push(word.slice(0, -2));
+    if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) out.push(word.slice(0, -1));
+    return out;
+}
+
+export function lookupPhrase(words: string[], find: (text: string) => readonly string[]): readonly string[] {
+    if (!words || words.length === 0) return [];
+    const found = find(words.join(' '));
+    if (found.length) return found;
+    const head = words.slice(0, -1);
+    const lastWord = words[words.length - 1];
+    if (!lastWord) return [];
+    for (const last of singulars(lastWord)) {
+        const again = find([...head, last].join(' '));
+        if (again.length) return again;
+    }
+    return [];
+}
+
+/**
+ * Resolves a search query's typed words into tag ids through the label index (DESIGN-owner-seeding-tags-fable.md §4.7).
+ * Reads the member's language and English: "limón" in Spanish resolves to `food.fruit.lemon`, and "citrus" to the
+ * citrus fruits. Tops (the 17 categories) are omitted because category is its own field. At most `limit` (default SEARCH_TAGS_MAX)
+ * unique tag ids returned.
+ */
+export function searchTagsFor(query: string, options: { index?: TagIndex; limit?: number } = {}): string[] {
+    const text = query.trim();
+    if (!text) return [];
+    const index = options.index ?? tagIndex();
+    const limit = options.limit ?? SEARCH_TAGS_MAX;
+    const out = new Set<string>();
+
+    const addIds = (ids: readonly string[]) => {
+        for (const id of ids) {
+            if (id.includes('.')) {
+                out.add(id);
+                if (out.size >= limit) return true;
+            }
+        }
+        return false;
+    };
+
+    const searchWith = (idx: TagIndex) => {
+        // First try the whole query as a name/label or alias: e.g. "limón", "citrus", "free-range eggs"
+        const wholeWords = compoundWords(text);
+        if (wholeWords.length === 0) return false;
+        const wholeByName = lookupPhrase(wholeWords, idx.byName);
+        if (wholeByName.length > 0) {
+            addIds(wholeByName);
+            return true;
+        }
+        const wholeByAlias = lookupPhrase(wholeWords, idx.byAlias);
+        if (wholeByAlias.length > 0) {
+            addIds(wholeByAlias);
+            return true;
+        }
+
+        // Part words (handling compounds as in suggestTags and search-terms)
+        const words = compoundWords(text);
+        if (words.length > 0) {
+            for (let n = Math.min(idx.maxWords, words.length); n >= 1; n--) {
+                for (let i = 0; i + n <= words.length; i++) {
+                    const phraseWords = words.slice(i, i + n);
+                    const byName = lookupPhrase(phraseWords, idx.byName);
+                    if (byName.length > 0) {
+                        if (addIds(byName)) return true;
+                    } else if (n === 1) {
+                        const byAlias = lookupPhrase(phraseWords, idx.byAlias);
+                        if (byAlias.length > 0) {
+                            if (addIds(byAlias)) return true;
+                        }
+                        const inside = idx.inside(phraseWords[0]);
+                        if (inside.length > 0) {
+                            if (addIds(inside)) return true;
+                        }
+                    }
+                }
+            }
+        }
+        return out.size > 0;
+    };
+
+    searchWith(index);
+    return [...out];
+}
+

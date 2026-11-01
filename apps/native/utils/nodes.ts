@@ -109,7 +109,8 @@ export function loadSavedRequestSigning(): Promise<void> {
 /**
  * Take `url` off the phone's list of communities. A profile change still waiting to reach it goes with it
  * (pending-profile-sync.ts): it is no longer the phone's to send. A community followed to its new address carried
- * its change there first (address-follow.ts).
+ * its change there first (address-follow.ts). A community that goes for good is told to drop this phone's push token
+ * first: call this from inside account-leaves-phone.ts `forgetCommunityPush`.
  */
 export async function removeSavedNode(url: string) {
     let nodes = await getSavedNodes();

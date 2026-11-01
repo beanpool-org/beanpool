@@ -28,7 +28,8 @@
  *   the route's own validator (engine/post-fields.ts assertPostFields, in createPost) like any post's.
  * - Photos are required: 1–4, from three fields together: `photos`, each a base64 JPEG or WebP of at most the per-photo cap
  *   (state-engine.ts MAX_PHOTO_BASE64_CHARS); `photo_urls`, public addresses this server fetches; `photo_ids`, photos
- *   uploaded first to POST /mcp/photos (slice S4, agent/owner-photos.ts: a hosted assistant can't write a photo's base64).
+ *   uploaded first to POST /mcp/photos or a photo link (slice S4, agent/owner-photos.ts: a hosted assistant can't write a photo's
+ *   base64, and `photo_upload_link` makes the link).
  *   Each made here what the apps send (at most 800 px, no metadata: storage/photo-thumbnails.ts resizeToStoredPhoto), then
  *   held to the routes' photo rule. One the node can't read (cut off after a whole header) is refused, never stored as
  *   sent. No composer offers a preset tile instead of a photo, so neither does this.
@@ -48,12 +49,23 @@
  *   Bean. 200 edits a day; remove_all_i_made once a day. The owner's own "Remove its posts" in Settings
  *   (agent/grants-route.ts) runs the same removal (removeAllMadeBy), for a disconnected assistant too, and both write an
  *   ADMIN line naming the ids removed.
+ * - Tags T4 (DESIGN-tags-free-entry-fable.md §8, §5; DESIGN-owner-seeding-tags-fable.md §2.6): every create and update_post takes
+ *   `tags`, ids from the library in core (tags_search, agent/owner-reads.ts, finds them), and `free_tags`, the words the
+ *   library lacks, each held to core's rule through the engine's own check (engine/post-fields.ts assertFreeTags). Neither is
+ *   required: a listing posts with none, as in the composer. Both are held before a photo is fetched or an upload claimed
+ *   (heldTags), refused in the tool's words and never dropped: an unknown id with the three nearest (nearestTagIds). An edit
+ *   that names neither leaves them; [] clears; a tag the listing already carries passes, as in the apps; null on an edit is
+ *   refused, since a client that fills every field would otherwise clear them unasked. The tools' words say library first,
+ *   and that a list of tags never goes in a description, which is what assistants did before this.
  * - An answer carries the new post's id and its link in the app (`/?post=<id>`, a path the assistant joins to the address in
  *   its welcome), an event's start and end as its members see them, and the day's count: no key, no token, nothing about
  *   another member. An event's times must carry their offset: one without would be read in this server's own zone.
  */
 import crypto from 'node:crypto';
-import { approximateLocation, PRICING_CATEGORIES } from '@beanpool/core';
+import {
+    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, plainWords, POST_TAGS_MAX, postTagsOf,
+    PRICING_CATEGORIES, singulars, TAG_LIBRARY, tagIndex,
+} from '@beanpool/core';
 import { db } from '../db/db.js';
 import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { featureOffFor } from '../routes/profile-feature-gate.js';
@@ -61,6 +73,7 @@ import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS, removePost, upd
 import { logger } from '../logger.js';
 import { createEventFromBody } from '../routes/event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
+import { assertFreeTags } from '../engine/post-fields.js';
 import { assertMayAddPhotos, assertMayEditPhotos, assertMayPost } from '../engine/probation.js';
 import { enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -75,9 +88,12 @@ import { memberErrorText } from '../routes/member-error-text.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import {
     admitAgentCreate, admitAgentEdit, admitAgentRemoveAll, agentCreatesToday, agentEditsToday, agentPhotosToday, agentPostsPerDay, returnAgentCreate,
-    returnAgentEdit, AGENT_EDITS_PER_DAY, AGENT_LIST_MAX, AGENT_PHOTOS_PER_DAY,
+    returnAgentEdit, AGENT_EDITS_PER_DAY, AGENT_LIST_MAX, agentPhotosPerDay,
 } from './limits.js';
-import { claimUploadedPhotos, fetchPhoto, photoDayFull, PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_KEEP_MS } from './owner-photos.js';
+import {
+    claimUploadedPhotos, fetchPhoto, issuePhotoLink, photoDayFull, PHOTO_LINK_CURL, PHOTO_LINK_KEEP_MS, PHOTO_LINK_PATH, PHOTO_LINKS_PER_GRANT,
+    PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_KEEP_MS,
+} from './owner-photos.js';
 import { grantStillLive } from './suggestions.js';
 import { listOAuthGrants } from './oauth.js';
 import { listAutomationTokens } from '../automation-tokens.js';
@@ -189,7 +205,7 @@ const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> =
     photos: {
         there: () => false,
         asks: `add 1 to ${AGENT_POST_PHOTOS_MAX} photos first: photo_urls (public addresses of images this server fetches), photo_ids (uploaded `
-            + 'first to /mcp/photos) or photos (base64 JPEG or WebP)',
+            + 'first, to an address photo_upload_link gives or to /mcp/photos) or photos (base64 JPEG or WebP)',
     },
     start_at: { there: isText, asks: 'when it starts, in ISO 8601 with its offset' },
     place_name: { there: isText, asks: 'the name of the place, e.g. "The old bowls club" (or online: true)' },
@@ -223,6 +239,105 @@ function unzonedTime(args: Record<string, unknown>): string | null {
     return field
         ? `${field} must carry its offset from UTC, in ISO 8601: e.g. 2026-11-07T10:00:00+11:00, or Z for UTC. Without one this server would read it in its own time zone.`
         : null;
+}
+
+/**
+ * The library's tags for some words, nearest first: the index the pickers read (@beanpool/core tagIndex; a server's is the
+ * English labels, aliases and synonym words), on the whole text, then on each word and an English plural's singular, since it
+ * matches a label from what it is given: "lemons" alone finds nothing, nor does "sourdough bread". What a word names exactly
+ * comes before what merely starts with it, and a joining word finds nothing: "and" alone starts 41 labels, which would bury
+ * the pears in "apples and pears" past the list's cut, and an assistant would then type a free twin of a library tag. Never a top.
+ */
+const JOINING_WORDS = new Set(['a', 'an', 'and', 'at', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
+export function libraryTagsFor(text: string): string[] {
+    const index = tagIndex();
+    const found = new Set(index.search(text, TAG_LIBRARY.length));
+    const asked = plainWords(text).filter((word) => !JOINING_WORDS.has(word)).flatMap((word) => [word, ...singulars(word)]);
+    for (const q of asked) for (const id of index.byName(q)) if (id.includes('.')) found.add(id);
+    for (const q of asked) for (const id of index.search(q, TAG_LIBRARY.length)) found.add(id);
+    return [...found];
+}
+
+/** How many letters apart two ids are (Levenshtein). */
+function lettersApart(a: string, b: string): number {
+    let above = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+        const line = [i];
+        for (let j = 1; j <= b.length; j++) line[j] = Math.min(above[j] + 1, line[j - 1] + 1, above[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        above = line;
+    }
+    return above[b.length];
+}
+
+/** The longest an id or a free tag is read and said back in a refusal. */
+const REFUSED_ID_CHARS = 80;
+const REFUSED_TAG_CHARS = 40;
+
+/**
+ * The three tags nearest an id the library does not have: those its last part names (the most specific: `food.fruit.lemons`,
+ * or a plain word sent as an id), then the closest spellings of the whole id. Never a top: the category is its own field.
+ */
+export function nearestTagIds(id: string): string[] {
+    const typed = id.slice(0, REFUSED_ID_CHARS).toLowerCase();
+    const spelt = TAG_LIBRARY.filter((tag) => tag.id.includes('.'))
+        .map((tag) => ({ id: tag.id, apart: lettersApart(typed, tag.id) }))
+        .sort((a, b) => a.apart - b.apart)
+        .map((tag) => tag.id);
+    return [...new Set([...libraryTagsFor(typed.slice(typed.lastIndexOf('.') + 1)), ...spelt])].slice(0, 3);
+}
+
+function unknownTagWords(id: string): string {
+    const near = nearestTagIds(id);
+    return `tags: there is no library tag "${cleanMemberText(id, REFUSED_ID_CHARS)}". The nearest are ${near.slice(0, -1).join(', ')} and ${near[near.length - 1]}: `
+        + 'send one of those, find others with tags_search, or put what the library lacks in free_tags.';
+}
+
+/** The tags on a create or an edit, by the names the engine takes them under: a field left out is left out here. */
+interface TagFields { tags?: string[]; freeTags?: string[] }
+type HeldTags = { ok: true; fields: TagFields } | { ok: false; error: string };
+
+/** The words of a refusal the engine throws; null when it passes. */
+function refusedBy(check: () => unknown): string | null {
+    try {
+        check();
+        return null;
+    } catch (e) {
+        return memberErrorText(e, 'that tag cannot be used');
+    }
+}
+
+/**
+ * A call's `tags` and `free_tags`, held before anything is spent on it (a photo fetched, an upload claimed, one of the day's
+ * posts or edits), or why not in the tool's words: createPost and updatePost hold them again, as any post's. `stored` is the
+ * listing an edit changes, whose own tags pass as the engine passes them; on an edit null is refused, as it is for a title.
+ */
+function heldTags(args: Record<string, unknown>, stored?: { tags?: string; free_tags?: string }): HeldTags {
+    const fields: TagFields = {};
+    const refuse = (error: string): HeldTags => ({ ok: false, error });
+    for (const [field, max, what] of [['tags', POST_TAGS_MAX, 'library ids from tags_search'], ['free_tags', FREE_TAGS_MAX, 'tags, each one text']] as const) {
+        const sent = args[field];
+        if (sent === undefined || (sent === null && !stored)) continue;
+        if (sent === null) return refuse(`${field} is a list: send [] to take them all off, or leave it out to keep them.`);
+        if (!Array.isArray(sent)) return refuse(`${field} is a list of ${what}.`);
+        // At most this many are read, however many a call sends.
+        if (sent.length > max) return refuse(`${field}: at most ${max} on a listing (this call sends ${sent.length}): take some off.`);
+        if (sent.some((v) => typeof v !== 'string')) return refuse(`${field} is a list of ${what}.`);
+        if (field === 'tags') {
+            const kept = postTagsOf(stored?.tags);
+            const unknown = (sent as string[]).find((id) => !isTagId(id) && !kept.includes(id));
+            if (unknown !== undefined) return refuse(unknownTagWords(unknown));
+            fields.tags = sent;
+        } else {
+            const kept = freeTagsOf(stored?.free_tags);
+            for (const text of sent as string[]) {
+                const why = refusedBy(() => assertFreeTags([text], kept));
+                if (why) return refuse(`free_tags: "${cleanMemberText(text, REFUSED_TAG_CHARS)}" is refused: ${why}`);
+            }
+            const together = refusedBy(() => { fields.freeTags = assertFreeTags(sent, kept); });
+            if (together) return refuse(`free_tags: ${together}`);
+        }
+    }
+    return { ok: true, fields };
 }
 
 const BLOCKED = new Set(['disabled', 'suspended', 'pruned']);
@@ -371,7 +486,7 @@ async function photosFrom(grant: AgentGrant, args: Record<string, unknown>): Pro
         return { ok: false, error: `Add a photo first: every Offer, Need and event needs 1 to ${AGENT_POST_PHOTOS_MAX} photos, from photo_urls, photo_ids or photos.` };
     }
     if (total > AGENT_POST_PHOTOS_MAX) return { ok: false, error: `At most ${AGENT_POST_PHOTOS_MAX} photos a post, photos, photo_urls and photo_ids together.` };
-    if (urls.length && agentPhotosToday(grant.id) + urls.length > AGENT_PHOTOS_PER_DAY) return { ok: false, error: photoDayFull(grant.id) };
+    if (urls.length && agentPhotosToday(grant.id) + urls.length > agentPhotosPerDay()) return { ok: false, error: photoDayFull(grant.id) };
     const uploads = claimUploadedPhotos(grant.id, ids);
     if (!uploads.ok) return uploads;
     const refuse = (error: string): Photos => {
@@ -423,6 +538,13 @@ function gate(grant: AgentGrant): string | null {
 }
 
 const NOT_TICKED = 'This assistant was connected without "May post for me", so it cannot post. The owner can connect it again with that ticked.';
+
+/** Why this grant can't upload a photo, for a grant that does not post: both upload doors' words, and photo_upload_link's. */
+export function noUploadWords(grant: AgentGrant): string {
+    return grant.role !== 'owner'
+        ? "Only an owner's assistant can upload photos: an admin's cannot post."
+        : 'This assistant was connected without "May post for me", so it cannot upload photos. The owner can connect it again with that ticked.';
+}
 
 /** UTC midnight of `now`'s day: the grant's day, as limits.ts counts it. */
 const utcMidnight = (now: number): string => `${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`;
@@ -529,6 +651,8 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
         return { ok: false, error: "beans must be more than 0: an enterprise's listing has a price, as its form asks." };
     }
     const shopId = str(args.shop_id, 200);
+    const tagged = heldTags(args);
+    if (!tagged.ok) return tagged;
     const photos = await photosFrom(grant, args);
     if (!photos.ok) return photos;
     return withPhotos(grant, photos, () => {
@@ -552,7 +676,7 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
                 const repeatable = kind === 'offer' ? args.repeatable !== false : args.repeatable === true;
                 post = createPost(kind, category, title, description, credits, priceType, enterprise, lat, lng,
                     photos.photos, repeatable, undefined, undefined,
-                    { createdBy: owner, beforeWrite: () => { assertAssistantDay(grant); limit.beforeWrite(); }, shopId, createdVia: createdViaOf(grant) });
+                    { createdBy: owner, beforeWrite: () => { assertAssistantDay(grant); limit.beforeWrite(); }, shopId, createdVia: createdViaOf(grant), ...tagged.fields });
                 if (post) limit.stored(post.id);
             } else {
                 assertNotMuted(owner);
@@ -560,7 +684,7 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
                 // The owners' "Assistant posts a day", in place of the member's own 100 (the director, 30 Oct).
                 post = createPost(kind, category, title, description, credits, priceType, owner, lat, lng,
                     photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
-                    { beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant) });
+                    { beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant), ...tagged.fields });
                 if (post) syncPulseMarketplaceGate();
             }
             if (!post) {
@@ -619,6 +743,8 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
     if (missing) return { ok: false, error: missing };
     const who = authorFor(grant, args.as_enterprise, false);
     if (!who.ok) return who;
+    const tagged = heldTags(args);
+    if (!tagged.ok) return tagged;
     const photos = await photosFrom(grant, args);
     if (!photos.ok) return photos;
     return withPhotos(grant, photos, () => {
@@ -633,6 +759,7 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
             ...roundedPin(args),
             eventStartAt: str(args.start_at, 64), eventEndAt: str(args.end_at, 64), eventTz: str(args.timezone, 64),
             eventPlaceName: str(args.place_name, 500), eventOnline: args.online === true, eventLink: str(args.link, 2000),
+            ...tagged.fields,
         };
         const timeOut: EventTimeOut = {};
         try {
@@ -679,26 +806,44 @@ const PHOTO_URLS_SCHEMA = {
     items: { type: 'string', maxLength: 2048, description: 'a public http or https address of a JPEG, WebP or PNG' },
     description: `public addresses of images this server fetches itself (a JPEG, WebP or PNG, at most ${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB and `
         + `${AGENT_PHOTO_MAX_INPUT_SIDE} pixels a side, in 8 seconds; never a private address): the way for an assistant that cannot send a file. `
-        + `At most ${AGENT_PHOTOS_PER_DAY} fetched and uploaded a day. ${PHOTOS_RULE}.`,
+        + `Fetched and uploaded together, at most connection_info's photos.perDay a day. ${PHOTOS_RULE}.`,
 };
 const PHOTO_IDS_SCHEMA = {
     type: 'array', maxItems: AGENT_POST_PHOTOS_MAX,
-    items: { type: 'string', pattern: '^ph_[0-9a-f]{32}$', description: 'a photoId POST /mcp/photos answered' },
-    description: 'photos uploaded first: POST each image (a JPEG, WebP or PNG, at most 5 MB) as the whole body to /mcp/photos on this server, with '
-        + 'its Content-Type and the same Authorization header; the photoId it answers goes here. Each is used once, by this assistant, '
-        + `within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. ${PHOTOS_RULE}.`,
+    items: { type: 'string', pattern: '^ph_[0-9a-f]{32}$', description: 'a photoId an upload answered' },
+    description: 'photos uploaded first: send each image (a JPEG, WebP or PNG, at most 5 MB) to the address photo_upload_link gives (no header but its '
+        + 'Content-Type), or POST it as the whole body to /mcp/photos on this server, with its Content-Type and the same Authorization header; the '
+        + `photoId it answers goes here. Each is used once, by this assistant, within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. ${PHOTOS_RULE}.`,
 };
 /** The three photo fields, on every tool that takes photos. */
 const PHOTO_PROPS = { photo_urls: PHOTO_URLS_SCHEMA, photo_ids: PHOTO_IDS_SCHEMA, photos: PHOTOS_SCHEMA };
+const TAGS_SCHEMA = {
+    type: 'array', maxItems: POST_TAGS_MAX,
+    items: { type: 'string', description: 'a tag id from tags_search, e.g. food.fruit.lemon' },
+    description: `library tags, the first choice: at most ${POST_TAGS_MAX} ids from tags_search, the list the apps' tag picker offers. Optional, but a tagged listing is `
+        + 'easier to find. Ids only: an unknown one is refused with the three nearest',
+};
+const FREE_TAGS_SCHEMA = {
+    type: 'array', maxItems: FREE_TAGS_MAX,
+    items: { type: 'string', description: 'one tag, e.g. 2nd hand' },
+    description: `your own tags, only for what the library lacks, after tags_search: at most ${FREE_TAGS_MAX}, beside the library's, each ${FREE_TAG_MIN_CHARS} to `
+        + `${FREE_TAG_MAX_CHARS} characters and at most ${FREE_TAG_MAX_WORDS} words, never an email, a phone number, a web address or an @handle. Public with the listing, `
+        + 'never translated, found only by its own letters. One tag per item: a comma parts two',
+};
+/** Both tag fields, on every create. */
+const TAG_PROPS = { tags: TAGS_SCHEMA, free_tags: FREE_TAGS_SCHEMA };
+/** What a description field says: assistants used to write "Tags: music, live, gig" into it. */
+const NO_TAGS_HERE = 'never a list of tags: those go in tags and free_tags';
 const LISTING_PROPS = {
     title: { type: 'string', maxLength: AGENT_TITLE_MAX.listing, description: `what it is, in a few words: at most ${AGENT_TITLE_MAX.listing} characters` },
-    description: { type: 'string', description: 'the details a member reads' },
+    description: { type: 'string', description: `the details a member reads; ${NO_TAGS_HERE}` },
     category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: 'the Market category, as the apps offer them' },
     beans: { type: 'number', minimum: 0, description: 'the price in Beans (0 is free); required where this community has Beans, none where it has not' },
     price_type: { type: 'string', enum: ['fixed', 'hourly'], description: 'fixed (default) or hourly' },
     repeatable: { type: 'boolean', description: 'stays up after each trade' },
     lat: { type: 'number', description: 'latitude of the place on the map, rounded to about 100 m as the apps do; required unless use_my_area' },
     lng: { type: 'number', description: 'longitude of the place on the map, rounded the same; required unless use_my_area' },
+    ...TAG_PROPS,
     ...PHOTO_PROPS,
 };
 /** create_offer's and create_need's input, made when the tools are listed: a price is required only where Beans are on. */
@@ -746,6 +891,8 @@ const POST_OUT = {
     },
     required: ['postId', 'kind', 'asEnterprise', 'link', 'postsToday', 'postsPerDay'],
 };
+/** Every create's and update_post's description says it, for an assistant that reads no field's. */
+const TAGS_WORDS = 'tag it from the library first (tags, ids from tags_search), use free_tags only for what the library lacks, and never list tags in its description';
 const LIMITS_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), which never use up the member's own "
     + "posts a day from the apps; its photos count against the member's photo room (connection_info's posts.photoRoom); the post is the "
     + "owner's, deleted as any post is, and moderators see it was made by an assistant";
@@ -781,7 +928,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
     {
         name: 'create_offer',
         title: 'Post an Offer',
-        reads: `nothing: it posts an Offer in the Market as the member this assistant acts for, with 1 to ${AGENT_POST_PHOTOS_MAX} photos; ${LIMITS_WORDS}`,
+        reads: `nothing: it posts an Offer in the Market as the member this assistant acts for, with 1 to ${AGENT_POST_PHOTOS_MAX} photos; ${TAGS_WORDS}; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
         posts: true,
@@ -795,7 +942,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
     {
         name: 'create_need',
         title: 'Post a Need',
-        reads: `nothing: it posts a Need in the Market as the member this assistant acts for, with 1 to ${AGENT_POST_PHOTOS_MAX} photos; ${LIMITS_WORDS}`,
+        reads: `nothing: it posts a Need in the Market as the member this assistant acts for, with 1 to ${AGENT_POST_PHOTOS_MAX} photos; ${TAGS_WORDS}; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
         posts: true,
@@ -809,7 +956,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         name: 'create_event',
         title: 'Post an event',
         reads: `nothing: it posts an event for this community as the member this assistant acts for, or as an enterprise they keep, with 1 to `
-            + `${AGENT_POST_PHOTOS_MAX} photos; ${LIMITS_WORDS}`,
+            + `${AGENT_POST_PHOTOS_MAX} photos; ${TAGS_WORDS}; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
         posts: true,
@@ -818,7 +965,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
             type: 'object',
             properties: {
                 title: { type: 'string', maxLength: AGENT_TITLE_MAX.event, description: `the event's name: at most ${AGENT_TITLE_MAX.event} characters` },
-                description: { type: 'string', description: 'what happens, for whom' },
+                description: { type: 'string', description: `what happens, for whom; ${NO_TAGS_HERE}` },
                 start_at: { type: 'string', description: 'when it starts: ISO 8601 with its offset, e.g. 2026-11-07T10:00:00+11:00 (Z for UTC); one without is refused' },
                 end_at: { type: 'string', description: 'when it ends: ISO 8601 with its offset, as start_at; left out, the server\'s default length' },
                 timezone: { type: 'string', description: 'the IANA zone it is in, e.g. Australia/Melbourne' },
@@ -828,6 +975,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
                 online: { type: 'boolean', description: 'online instead of in person: no place, a link' },
                 link: { type: 'string', description: 'the join link of an online event' },
                 as_enterprise: { type: 'string', description: 'host as an enterprise: its ref from my_enterprises' },
+                ...TAG_PROPS,
                 ...PHOTO_PROPS,
             },
             // In person (online not true) place_name, lat and lng are required too (REQUIRED.eventInPerson), in their words.
@@ -841,7 +989,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         name: 'create_enterprise_listing',
         title: "Post an enterprise's Offer or Need",
         reads: `nothing: it posts an Offer or a Need in the Market as an enterprise the member this assistant acts for keeps now (as_enterprise, `
-            + `from my_enterprises), with 1 to ${AGENT_POST_PHOTOS_MAX} photos; an enterprise's Need needs a live Offer of its own first; ${LIMITS_WORDS}`,
+            + `from my_enterprises), with 1 to ${AGENT_POST_PHOTOS_MAX} photos; an enterprise's Need needs a live Offer of its own first; ${TAGS_WORDS}; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, an enterprise's key, or another member's data",
         ownerOnly: true,
         posts: true,
@@ -851,11 +999,46 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         outputSchema: POST_OUT,
         run: (grant, args) => createListing(grant, { kind: args.kind === 'need' ? 'need' : 'offer', args, enterprise: true }),
     },
+    {
+        name: 'photo_upload_link',
+        title: 'Get an address to upload photos to',
+        reads: `nothing: it makes a private address on this server that takes photos for ${PHOTO_LINK_KEEP_MS / 60_000} minutes, for an assistant that `
+            + `runs commands but can't send this connection's Authorization header. For each image run \`${PHOTO_LINK_CURL}\` (a JPEG, WebP or PNG, at `
+            + `most ${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB, at least ${AGENT_PHOTO_MIN_SIDE} pixels on its shorter side, each a request of its own): it `
+            + 'answers a photoId, and create_offer, create_need, create_event or create_enterprise_listing take those as photo_ids. One address takes many '
+            + `photos, until it expires; at most ${PHOTO_LINKS_PER_GRANT} are live at once, a new one replacing the oldest. Keep the address to yourself, as a password`,
+        never: "this connection's secret, a list of uploads or a photo back: the address takes uploads and reads nothing",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        outputSchema: {
+            type: 'object',
+            properties: {
+                url: { type: 'string', description: 'where to send each image: a secret, in effect a password, until it expires' },
+                expiresAt: { type: 'string' }, photosLeftToday: { type: 'number' },
+            },
+            required: ['url', 'expiresAt', 'photosLeftToday'],
+        },
+        run: (grant, _args, _boundary, nodeUrl) => {
+            if (grant.role !== 'owner' || !grant.canPost) return { ok: false, error: noUploadWords(grant) };
+            const replaced = getReplacedInfo();
+            if (replaced) return { ok: false, error: `${replaced.message} This server takes no new photos; use the one that took over.` };
+            // A node with no public address names itself by the host the assistant reached, which may not read as one (mcp-route.ts nodeUrlFor).
+            if (!nodeUrl || !/^https?:\/\//.test(nodeUrl)) return { ok: false, error: 'This server cannot name its own address now: give the photos by photo_urls instead.' };
+            const { token, expiresAt } = issuePhotoLink(grant);
+            return {
+                ok: true, rows: 1,
+                result: { url: `${nodeUrl}${PHOTO_LINK_PATH}/${token}`, expiresAt, photosLeftToday: Math.max(0, agentPhotosPerDay() - agentPhotosToday(grant.id)) },
+            };
+        },
+    },
 ];
 
 /** A post this grant made, as it is now: for update_post, remove_post and the undo list. */
 interface MadeRow {
     id: string; type: string; status: string; active: number; title: string; author_pubkey: string; created_by: string | null; created_at: string;
+    tags: string; free_tags: string;
 }
 
 /** The words for a post that is not this assistant's to change (design §2.3). */
@@ -867,7 +1050,7 @@ const NOT_MADE_HERE = 'That is not a post this assistant made: edit or remove it
  */
 function madePost(grant: AgentGrant, postId: unknown): { ok: true; row: MadeRow } | { ok: false; error: string } {
     if (typeof postId !== 'string' || !postId.trim()) return { ok: false, error: 'post_id is required: the id a create answered, or my_posts lists.' };
-    const row = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at FROM posts
+    const row = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at, tags, free_tags FROM posts
         WHERE id = ? AND created_via = ? AND origin_node IS NULL`).get(postId.trim().slice(0, 200), createdViaOf(grant)) as MadeRow | undefined;
     if (!row) return { ok: false, error: NOT_MADE_HERE };
     if (row.author_pubkey !== grant.member && !(row.created_by === grant.member && canOperateTreasury(grant.member, row.author_pubkey))) {
@@ -905,7 +1088,7 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
     const tooLong = updates.title !== undefined ? titleTooLong(args, event ? AGENT_TITLE_MAX.event : AGENT_TITLE_MAX.listing) : null;
     if (tooLong) return { ok: false, error: tooLong };
     if (event && (args.category !== undefined || args.beans !== undefined || args.price_type !== undefined)) {
-        return { ok: false, error: 'An event has no category or price: send title, description or photos.' };
+        return { ok: false, error: 'An event has no category or price: send title, description, tags, free_tags or photos.' };
     }
     if (args.category !== undefined) {
         const category = typeof args.category === 'string' ? args.category.trim() : '';
@@ -922,12 +1105,15 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
         updates.credits = beans;
     }
     if (args.price_type !== undefined) updates.priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
+    const tagged = heldTags(args, row);
+    if (!tagged.ok) return tagged;
+    Object.assign(updates, tagged.fields);
     // New photos in place of the ones it has, from any of the three fields, as a create takes them.
     const newPhotos = PHOTO_FIELDS.some((k) => args[k] !== undefined) ? await photosFrom(grant, args) : null;
     if (newPhotos && !newPhotos.ok) return newPhotos;
     if (newPhotos) updates.photos = newPhotos.photos;
     if (!Object.keys(updates).length) {
-        return { ok: false, error: 'Send at least one field to change: title, description, category, beans, price_type, or photos (photo_urls, photo_ids or photos).' };
+        return { ok: false, error: 'Send at least one field to change: title, description, category, beans, price_type, tags, free_tags, or photos (photo_urls, photo_ids or photos).' };
     }
     const edit = (): ToolResult => {
         if (!admitAgentEdit(grant.id)) {
@@ -1033,7 +1219,7 @@ function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: str
     const n = Math.floor(Number(args.limit));
     const limit = Number.isFinite(n) && n >= 1 ? Math.min(n, AGENT_LIST_MAX) : 20;
     const where = status === 'live' ? `AND active = 1 AND status != 'cancelled'` : status === 'removed' ? `AND (active = 0 OR status = 'cancelled')` : '';
-    const rows = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at FROM posts
+    const rows = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at, tags, free_tags FROM posts
         WHERE created_via = ? AND origin_node IS NULL ${where} ORDER BY created_at DESC LIMIT ?`).all(createdViaOf(grant), limit) as MadeRow[];
     const total = (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE created_via = ? AND origin_node IS NULL ${where}`).get(createdViaOf(grant)) as { c: number }).c;
     return {
@@ -1045,6 +1231,9 @@ function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: str
                 by: r.author_pubkey === grant.member ? 'me' : `enterprise:${enterpriseRef(r.author_pubkey)}`,
                 link: `/?post=${encodeURIComponent(r.id)}`,
                 title: fence(boundary, `post ${r.id}, title`, r.title),
+                // What an edit replaces: update_post takes the whole new list of either.
+                tags: postTagsOf(r.tags),
+                freeTags: fence(boundary, `post ${r.id}, free tags`, freeTagsOf(r.free_tags).join(', ')),
             })),
             _notice: MEMBER_TEXT_NOTICE,
         },
@@ -1064,7 +1253,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         name: 'my_posts',
         title: 'Posts this assistant made',
         reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
-            + 'its link and its title, fenced; the live ones (the default), the removed ones, or all',
+            + 'its link, its library tags, and its title and its own tags, fenced; the live ones (the default), the removed ones, or all',
         never: "a post made in the app or by another assistant, another member's data, or a key",
         memberText: true,
         ownerOnly: true,
@@ -1090,8 +1279,8 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
     {
         name: 'update_post',
         title: 'Edit a post this assistant made',
-        reads: `nothing: it changes the title, description, category, price or photos of a live post THIS assistant made, as the app's edit does, `
-            + `at most ${AGENT_EDITS_PER_DAY} edits a day; any other post is refused`,
+        reads: `nothing: it changes the title, description, category, price, tags or photos of a live post THIS assistant made, as the app's edit does, `
+            + `at most ${AGENT_EDITS_PER_DAY} edits a day; any other post is refused; ${TAGS_WORDS}; tags or free_tags sent is the whole new list of that kind, left out it stays`,
         never: "anything but the post's id and its link, or another member's data; it never moves Beans",
         ownerOnly: true,
         posts: true,
@@ -1101,10 +1290,13 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
             properties: {
                 ...POST_ID_PROP,
                 title: { type: 'string', description: `the new title: at most ${AGENT_TITLE_MAX.listing} characters for an Offer or a Need, ${AGENT_TITLE_MAX.event} for an event` },
-                description: { type: 'string', description: 'the new details' },
+                description: { type: 'string', description: `the new details; ${NO_TAGS_HERE}` },
                 category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: "an Offer's or a Need's new Market category" },
                 beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
                 price_type: { type: 'string', enum: ['fixed', 'hourly'] },
+                // Each the whole new list, or left out to leave them: an assistant reads what a post carries in my_posts.
+                tags: { ...TAGS_SCHEMA, description: `the whole new list in place of the ones it has (my_posts lists them; [] takes them all off; left out, they stay): ${TAGS_SCHEMA.description}` },
+                free_tags: { ...FREE_TAGS_SCHEMA, description: `the whole new list in place of the ones it has (my_posts lists them; [] takes them all off; left out, they stay): ${FREE_TAGS_SCHEMA.description}` },
                 // New photos, in place of the ones it has, from any of the three fields as a create takes them.
                 photo_urls: { ...PHOTO_URLS_SCHEMA, description: `in place of the ones it has: ${PHOTO_URLS_SCHEMA.description}` },
                 photo_ids: { ...PHOTO_IDS_SCHEMA, description: `in place of the ones it has: ${PHOTO_IDS_SCHEMA.description}` },

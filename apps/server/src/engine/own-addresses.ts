@@ -5,11 +5,13 @@
  *
  * The set is the union of, and ONLY of, config this node already trusts:
  *   1. the hostname of resolvePublicNodeUrl(): the registrar's `publicAddress.hostname`, else `<name>.beanpool.org`,
- *      else CF_RECORD_NAME; and CF_RECORD_NAME as well while an own address (an IP, a domain) is stored there, so one
- *      never hides the name the server is given, set before or after it (S2 review 4305409688);
+ *      else CF_RECORD_NAME; and CF_RECORD_NAME as well whenever it is set: a name this node published is never
+ *      un-published by a claim or by an own address, set before or after it (rename S1, design
+ *      scratch/fable-design/DESIGN-rename-primary-name-fable.md §2; S2 review 4305409688);
  *   2. env BEANPOOL_ADDRESSES, a comma list (custom domains, a reverse proxy's names);
- *   3. the addresses an owner or admin confirmed in Settings (node_config `ownerAddresses`, carried in the take-over
- *      envelope beside `publicAddress`, so a promoted standby keeps them);
+ *   3. the addresses an owner or admin confirmed in Settings, and the address a claim replaced (keepReplacedAddress)
+ *      (node_config `ownerAddresses`, carried in the take-over envelope beside `publicAddress`, so a promoted standby
+ *      keeps them);
  *   4. every BeanPool registrar name this key has held, current and former, whatever the registrar last said of it
  *      (node_config `registrarNames`, engine/registrar-names.ts; carried in the take-over envelope too). No registrar
  *      answer takes one away: not `none` (a registrar that lost its data answers that to every key), not `released`,
@@ -59,9 +61,9 @@
  */
 
 import { domainToASCII } from 'node:url';
-import { getNodeConfig, isOwnPublicAddress, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
+import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES } from '../state-engine.js';
 import { registrarNames, registrarNamesVersion } from './registrar-names.js';
-import { isBeanPoolName, isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
+import { isCertifiableHost, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress } from './host-kinds.js';
 import { logger } from '../logger.js';
 
 // The shapes of a host live in host-kinds.ts (pure, so `beanpool claim` reads them too); here as they always were.
@@ -156,10 +158,8 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     };
     const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
     add(url ? normalizeAddress(url) : null, 'public-address');
-    if (isOwnPublicAddress(config.publicAddress)) {
-        const given = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null });
-        add(given ? normalizeAddress(given) : null, 'public-address');
-    }
+    const given = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null });
+    add(given ? normalizeAddress(given) : null, 'public-address');
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');
     for (const r of names) add(r.address, 'registrar', r.role === 'former');
@@ -202,13 +202,28 @@ export function publishedAddresses(): string[] {
     return configuredAddresses().filter((a) => namesThisCommunity(a) && !a.former && !a.lost).map((a) => a.address);
 }
 
+/**
+ * The published names members can be sent to now: all of them but a current registrar name the registrar doesn't say is
+ * live (a gated rename still pending, paused, revoked), which has no route yet, though a real node also has it as
+ * publicAddress (item 1) (#1275 review 4118422613).
+ */
+function reachableAddresses(): string[] {
+    const notLive = new Set(registrarNames().filter((r) => r.role === 'current' && r.status !== 'live').map((r) => r.address));
+    return publishedAddresses().filter((a) => !notLive.has(a));
+}
+
+/**
+ * Whether this community is published anywhere but `host`, so a claim of `host` changes where members and newcomers are
+ * sent, and asks the owner's fresh proof (routes/public-address.ts; design §6).
+ */
+export function publishedBesides(host: string): boolean {
+    return reachableAddresses().some((a) => a !== host);
+}
+
 /** Whether `host` is one of this community's names that is lost (above): refused, and counted as such (member-signature.ts). */
 export function isLostAddress(host: string): boolean {
     return configuredAddresses().some((a) => a.address === host && a.lost);
 }
-
-/** A beanpool.org name, or a public IP or name a public CA can certify (so one in the Internet's DNS): never a home-network host. */
-const reachableFromInternet = (a: string) => isBeanPoolName(a) || isCertifiableHost(a);
 
 /**
  * Where this community lives now, for `/api/community/info` and Settings (lost-name L4, design
@@ -223,15 +238,41 @@ const reachableFromInternet = (a: string) => isBeanPoolName(a) || isCertifiableH
  */
 export function primaryAddress(): string | null {
     const published = publishedAddresses();
-    const current = registrarNames().filter((r) => r.role === 'current');
-    const live = current.find((r) => r.status === 'live' && published.includes(r.address));
+    const live = registrarNames().find((r) => r.role === 'current' && r.status === 'live' && published.includes(r.address));
     if (live) return live.address;
-    // A registrar name the registrar doesn't say is live (a gated rename still pending, paused, revoked) is never where
-    // members are sent, though a real node also has it as publicAddress (item 1): the next of its names, else none, so
-    // the web app says nothing rather than point at a name with no route yet (#1275 review 4118422613).
-    const notLive = new Set(current.filter((r) => r.status !== 'live').map((r) => r.address));
-    const usable = published.filter((a) => !notLive.has(a));
-    return usable.find((a) => !isIpLiteral(a) && reachableFromInternet(a)) ?? usable.find(reachableFromInternet) ?? usable[0] ?? null;
+    // The next of its names, else none, so the web app says nothing rather than point at a name with no route yet.
+    return preferredAddress(reachableAddresses());
+}
+
+/**
+ * A claim of `claimed` answered: the address it replaces, where the community lived until now (primaryAddress), goes on the
+ * owner-confirmed list (3). So a name this node published is never un-published by a claim, and it travels in the take-over
+ * envelope to a standby that has no CF_RECORD_NAME of it (design §2). Called before the claim is recorded and stored, while
+ * primaryAddress still says the old address; a name that was only waiting or paused is not primaryAddress, and is not
+ * copied. Past MAX_OWNER_ADDRESSES too: that bounds what a Settings session or `beanpool claim` adds, and this keeps a name
+ * the community already goes by. Returns the address replaced, or null when the claim replaces none.
+ */
+export function keepReplacedAddress(claimed: string): string | null {
+    const replaced = primaryAddress();
+    if (!replaced || replaced === claimed) return null;
+    const owned = ownerConfirmedAddresses();
+    if (!owned.includes(replaced)) {
+        updateNodeConfig({ ownerAddresses: [...owned, replaced] });
+        forgetOwnAddresses();
+    }
+    return replaced;
+}
+
+/**
+ * A registrar name this community let go (Release, Take offline) comes off the owner-confirmed list: a claim may have put it
+ * there (keepReplacedAddress), and a name let go is never published or sent to. It is accepted through its hold from the
+ * record of names (4), as any former name is.
+ */
+export function dropReleasedAddress(host: string | null): void {
+    const owned = ownerConfirmedAddresses();
+    if (!host || !owned.includes(host)) return;
+    updateNodeConfig({ ownerAddresses: owned.filter((a) => a !== host) });
+    forgetOwnAddresses();
 }
 
 /**

@@ -126,9 +126,9 @@ describe('requestAfterOwnLine', () => {
 
 describe('the words when a decision fails', () => {
     it('no answer, or a page that was not the node\'s: the offline sentence', () => {
-        expect(decisionFailureWords(new TypeError('Failed to fetch'))).toBe('Connect to your community to accept or ignore.');
-        expect(decisionFailureWords(Object.assign(new Error('Bad Gateway'), { status: 502, unsaid: true }))).toBe('Connect to your community to accept or ignore.');
-        expect(decisionFailureWords(null)).toBe('Connect to your community to accept or ignore.');
+        expect(decisionFailureWords(new TypeError('Failed to fetch'))).toBe('Connect to your community to accept or decline.');
+        expect(decisionFailureWords(Object.assign(new Error('Bad Gateway'), { status: 502, unsaid: true }))).toBe('Connect to your community to accept or decline.');
+        expect(decisionFailureWords(null)).toBe('Connect to your community to accept or decline.');
     });
     it('the node\'s refusal: its own words', () => {
         const gone = Object.assign(new Error('There is no message request for you in this chat.'), { status: 404, code: 'request_not_found' });

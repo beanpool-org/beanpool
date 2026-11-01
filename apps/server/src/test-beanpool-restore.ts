@@ -48,7 +48,6 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import net from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
@@ -651,30 +650,15 @@ console.log('\n— 9. the real node (index.ts) waits while the lock is held —'
 {
     const HELD = 'data/.node-running.lock is held: a beanpool restore or another node is using this data folder';
     const started: ChildProcess[] = [];
-    const freePort = () => new Promise<number>((resolve) => {
-        const s = net.createServer();
-        s.listen(0, '127.0.0.1', () => { const p = (s.address() as net.AddressInfo).port; s.close(() => resolve(p)); });
-    });
-    const canListen = (port: number) => new Promise<boolean>((resolve) => {
-        const s = net.createServer();
-        s.once('error', () => resolve(false));
-        s.listen(port, '0.0.0.0', () => s.close(() => resolve(true)));
-    });
-    /** Probe ephemeral ports for index.ts's four listeners (PORT_HTTP, PORT_HTTPS, PORT_P2P, and PORT_P2P + 1). */
-    const ports = async () => {
-        const http = await freePort();
-        const https = await freePort();
-        for (;;) {
-            const p2p = await freePort();
-            if (p2p < 65_000 && ![http, https].includes(p2p) && ![http, https].includes(p2p + 1) && await canListen(p2p + 1)) {
-                return { PORT_HTTP: String(http), PORT_HTTPS: String(https), PORT_P2P: String(p2p) };
-            }
-        }
-    };
+    // Flake cause: ports previously probed ephemeral ports trying to find an unused number p2p
+    // where p2p + 1 was also free because index.ts hardcoded PORT_P2P_WS = PORT_P2P + 1. Under heavy load, ephemeral
+    // ports are recycled rapidly, causing "no free pair of ports for libp2p" or port collisions while the node
+    // waits for the lock. Passing port 0 lets the OS kernel allocate ports atomically without collisions (as in test-clean-stop).
+    const ports = () => ({ PORT_HTTP: '0', PORT_HTTPS: '0', PORT_P2P: '0', PORT_P2P_WS: '0' });
     const startNode = async () => {
         const child = spawn(process.execPath, ['--import', 'tsx', path.join(SRC, 'index.ts')], {
             env: {
-                ...process.env, BEANPOOL_DATA_DIR: DATA_DIR, ...(await ports()),
+                ...process.env, BEANPOOL_DATA_DIR: DATA_DIR, ...ports(),
                 // As test-clean-stop runs it: nothing leaves this machine.
                 DISABLE_UPDATE_CHECK: 'true', DIRECTORY_REGISTRY_URL: 'http://127.0.0.1:9/',
                 CF_API_TOKEN: '', CF_ZONE_ID: '', CF_RECORD_NAME: '', PUBLIC_ADDRESS_AUTO: '', PUBLIC_ADDRESS_NAME: '', ADMIN_PASSWORD: '',

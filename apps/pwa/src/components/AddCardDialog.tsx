@@ -14,7 +14,7 @@
  */
 import { useRef, useState, type ReactNode } from 'react';
 import {
-    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, t, word,
+    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t, word,
     type HomeDecideShow, type HomeSearchKind, type SkySettings, type WordKey,
 } from '@beanpool/core';
 import { type PickerGroup, type PickerRow } from '../lib/home-layout';
@@ -212,7 +212,7 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
         );
     }
     if (type !== 'search') return null;
-    const submit = () => onSubmit({ q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
+    const submit = () => onSubmit(searchFromSheet(start, { q: words, kind, category, km }));
     return (
         <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>
             <form onSubmit={(e) => { e.preventDefault(); if (words) submit(); }}>

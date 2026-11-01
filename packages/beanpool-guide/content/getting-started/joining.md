@@ -19,6 +19,8 @@ A community that lets anyone join sent you its link? On the phone app, the link 
 
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
+On a busy day, joining the global community with 12 secret words can start with a quick check from Cloudflare, on a page of its own, to keep automated sign-ups out. Cloudflare sees the browser that takes the check. If the check doesn't work for you, or you'd rather not take it, sign in instead: a sign-in never needs it.
+
 ## Joining with an invite
 
 An invite is a link, a QR code or a code. A code looks like **INV-** followed by letters, or a long code that starts with **BP-**.
@@ -104,7 +106,7 @@ Any member can invite people, unless the community has chosen that only its admi
 - Show them the QR code, or tap **Share Invite** to send the link and the code.
 - In the web app, open **People**, then **Invites**, and tap **Generate New Invite**. Then **Copy** or **Share** it.
 - Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again.
-- You can make 20 invites a day, and have 50 that nobody has used yet. An invite nobody uses is deleted after its 30 days, and leaves **Pending**.
+- You can make 20 invites a day, and have 50 that nobody has used yet. For an owner or admin, both numbers are the owners' **Owner and admin limit** instead (100 unless an owner changes it). An invite nobody uses is deleted after its 30 days, and leaves **Pending**.
 
 A community's admins can turn invites off for the whole community.
 

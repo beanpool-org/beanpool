@@ -286,6 +286,8 @@ describe('every column the node sends survives the write, on a sync and on a pus
         carried_callsign: 'Ann', // the author's name as the node sent it, for a listing whose author the directory doesn't hold
         carried_avatar: null, // and their face: this copy names none
         carried_banner: null, // and an enterprise's shop banner: a member's listing names none (market-banner-cache.test.ts)
+        tags: '',
+        free_tags: '',
     };
     const directNeed = (extra: Record<string, unknown> = {}) => offer({
         id: 'post-d', type: 'need', title: 'Lift to the station', audienceScope: 'direct', targetPubkey: ME, assignedTo: ME, ...extra,

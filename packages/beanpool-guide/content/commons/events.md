@@ -78,6 +78,8 @@ In the web app the title box is **What's happening**, the pin buttons are **📍
 
 You can have 5 upcoming events at a time. A group's events count against the group, and an enterprise's against the enterprise.
 
+If you are an owner or admin of your community, you can have as many as your owners' **Owner and admin limit** allows instead: 100 unless an owner changes it. It counts the same way, and it goes with the role: if you stop being an owner or admin, the 5 apply again at once.
+
 ## Running your event
 
 Open your event. As the host you can:

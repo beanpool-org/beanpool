@@ -60,7 +60,7 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
     'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'search', 'decide', 'groups',
-    'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
+    'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
     ...toolHomeCardIds(),
 ]);
 /** A tool's card this build draws: worked out on the phone from the tool's document, so the node sends nothing for it. */
@@ -649,7 +649,7 @@ export function pickerGroups(
             state: full && state === 'add' ? 'full' : state,
             count: entry.multiple && n > 0 ? t('{n} of {max} on Home', { n: Math.min(n, max), max }) : null,
             status: status[entry.id] ? t(status[entry.id]!) : null,
-            hasSettings: !!entry.readSettings,
+            hasSettings: !!entry.readSettings && entry.id !== 'tools',
         });
     }
     return { groups: groups.filter(g => g.rows.length > 0), full };
@@ -964,7 +964,8 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             // Worked out on the phone; drawn only where a place is known (CARD-FRAME §4).
             case 'sky': return skyOf(answer, { settings }, ctx.place) !== null;
             case 'community': return true;
-            // A tool's card: a member's, worked out on the phone (asks: 'none'), so drawn whenever it is on their Home.
+            // A Your tools card (home-tools-card) or a tool's card: worked out on the phone (asks: 'none').
+            case 'tools': return !!answer.me;
             default: return isToolHomeCard(type) ? !!answer.me : c[id] !== undefined;
         }
     };

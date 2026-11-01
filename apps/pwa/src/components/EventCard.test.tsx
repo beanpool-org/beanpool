@@ -27,6 +27,34 @@ function renderAt320(ui: React.ReactElement) {
     return render(<div style={{ width: 320 }}>{ui}</div>);
 }
 
+describe('an event\'s tags on its page (DESIGN-owner-seeding-tags-fable.md §4.4)', () => {
+    it('the chips, in the member\'s language, each opening the tag; an id this library can\'t label shows as nothing', () => {
+        const onOpenTag = vi.fn();
+        render(<EventDetail post={{ ...baseEvent, tags: ['food.fruit.lemon', 'food.from-a-newer-library'] }} identity={identity} onOpenTag={onOpenTag} />);
+        const row = screen.getByTestId('post-detail-tags');
+        expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['#Lemon']);
+        fireEvent.click(within(row).getByRole('button', { name: 'Filter marketplace by tag Lemon' }));
+        expect(onOpenTag).toHaveBeenCalledWith('food.fruit.lemon');
+    });
+
+    it('a tag its host typed shows as #word and opens exactly that tag', () => {
+        const onOpenFreeTag = vi.fn();
+        render(<EventDetail post={{ ...baseEvent, freeTags: ['live music'] }} identity={identity} onOpenTag={vi.fn()} onOpenFreeTag={onOpenFreeTag} />);
+        const row = screen.getByTestId('post-detail-tags');
+        expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['#live music']);
+        fireEvent.click(within(row).getByRole('button', { name: 'Filter marketplace by tag #live music' }));
+        expect(onOpenFreeTag).toHaveBeenCalledWith('live music');
+    });
+
+    it('no tags, or only ones it can\'t label: no row', () => {
+        const { unmount } = render(<EventDetail post={baseEvent} identity={identity} onOpenTag={vi.fn()} />);
+        expect(screen.queryByTestId('post-detail-tags')).toBeNull();
+        unmount();
+        render(<EventDetail post={{ ...baseEvent, tags: ['food.from-a-newer-library'] }} identity={identity} onOpenTag={vi.fn()} />);
+        expect(screen.queryByTestId('post-detail-tags')).toBeNull();
+    });
+});
+
 describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
     beforeEach(() => { vi.mocked(api.rsvpEvent).mockReset(); });
     afterEach(() => { document.documentElement.style.fontSize = ''; });

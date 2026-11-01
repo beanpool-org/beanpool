@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { searchTermsFor } from '@beanpool/core';
-import { marketSearchToSave, matchesExpandedSearch } from './search';
+import { marketSearchQuery, marketSearchToSave, matchesExpandedSearch, searchRows } from './search';
 
 describe('matchesExpandedSearch', () => {
     it('finds a word between Chinese or full-width punctuation, mid-run (#1781)', () => {
@@ -38,16 +38,54 @@ describe('matchesExpandedSearch', () => {
     });
 });
 
+describe('a listing found by a tag its author typed (DESIGN-tags-free-entry-fable.md §4)', () => {
+    it('its words find it, though the title and description do not hold them', () => {
+        expect(matchesExpandedSearch('hand', 'Old laptop', 'Works well', undefined, ['2nd hand'])).toBe(true);
+        expect(matchesExpandedSearch('hand', 'Old laptop', 'Works well')).toBe(false);
+    });
+});
+
 describe('marketSearchToSave: Save this search to Home on the web (Marty, 7 Oct)', () => {
     it('takes the words, Offers or Needs from the tab, the category and the distance filter', () => {
-        expect(marketSearchToSave({ type: 'offer', category: 'food', radiusKm: 5 }, 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5 });
-        expect(marketSearchToSave({ type: 'need', category: 'all', radiusKm: null }, ' help  moving ')).toEqual({ q: 'help moving', kind: 'need' });
-        expect(marketSearchToSave({ type: 'all', category: 'tools', radiusKm: 12 }, 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 25 });
-        expect(marketSearchToSave({ type: 'for-you', category: 'all', radiusKm: 100 }, 'eggs')).toEqual({ q: 'eggs', kind: 'any' });
+        expect(marketSearchToSave({ type: 'offer', category: 'food', radiusKm: 5 }, 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5, tags: ['food.eggs'] });
+        expect(marketSearchToSave({ type: 'need', category: 'all', radiusKm: null }, ' help  moving ')).toEqual({ q: 'help moving', kind: 'need', tags: ['tech.repair.it-support', 'general.sharing.volunteer', 'transport.delivery.moving'] });
+        expect(marketSearchToSave({ type: 'all', category: 'tools', radiusKm: 12 }, 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 25, tags: ['tools.power.drills'] });
+        expect(marketSearchToSave({ type: 'for-you', category: 'all', radiusKm: 100 }, 'eggs')).toEqual({ q: 'eggs', kind: 'any', tags: ['food.eggs'] });
+    });
+    it('keeps what the words resolve to and the chip that is on, the chip first', () => {
+        expect(marketSearchToSave({ type: 'all', category: 'all', radiusKm: null }, 'lemon')?.tags).toEqual(['food.fruit.lemon']);
+        expect(marketSearchToSave({ type: 'all', category: 'all', radiusKm: null }, 'lemon', 'food.fruit.orange')?.tags).toEqual(['food.fruit.orange', 'food.fruit.lemon']);
     });
     it('offers nothing without words, or under Events or Polls', () => {
         expect(marketSearchToSave({ type: 'all', category: 'all', radiusKm: null }, '  ')).toBeNull();
         expect(marketSearchToSave({ type: 'event', category: 'all', radiusKm: null }, 'market day')).toBeNull();
         expect(marketSearchToSave({ type: 'poll', category: 'all', radiusKm: null }, 'compost')).toBeNull();
+    });
+});
+
+describe('what the node is asked, and what a search draws from', () => {
+    const row = (id: string, title: string, extra: Record<string, unknown> = {}) => ({ id, title, description: '', ...extra });
+
+    it('asks with the terms the phone asks with, synonyms in them', () => {
+        expect(marketSearchQuery('sofa').split(' ')).toContain('couch');
+    });
+
+    it('the node\'s answer in its order, then what else the feed holds that the words match', () => {
+        const answer = [row('a', 'Lemon jam'), row('b', 'Lemon cake')];
+        const feed = [row('c', 'Lemon curd'), row('a', 'Lemon jam'), row('d', 'Kettle')];
+        expect(searchRows(answer, feed, 'lemon').map(p => p.id)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('a row the node found on a word it keeps stays, though its title doesn\'t hold the words', () => {
+        expect(searchRows([row('a', 'Old couch')], [], 'furniture').map(p => p.id)).toEqual(['a']);
+    });
+
+    it('with no words (a tag filter alone) everything the feed holds goes on, for the tag to narrow', () => {
+        expect(searchRows([row('a', 'One')], [row('b', 'Two')], '').map(p => p.id)).toEqual(['a', 'b']);
+    });
+
+    it('a peer\'s copy that shares an id with one of this node\'s stays', () => {
+        const rows = searchRows([row('a', 'Lemon jam')], [row('a', 'Lemon jam', { _remoteNode: 'https://peer.example' })], 'lemon');
+        expect(rows).toHaveLength(2);
     });
 });

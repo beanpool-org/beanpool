@@ -26,7 +26,7 @@ function mockNode(answers: Array<[number, unknown]>) {
             const [status, json] = answers[Math.min(sent.length - 1, answers.length - 1)];
             return reply(status, status === 200 ? { success: true, config: { enabled: body.enabled, intervalHours: body.intervalHours, keep: body.keep } } : json);
         }
-        return reply(200, { updateAvailable: false, currentVersion: '1.4.2', connectors: [], enabled: false });
+        return reply(200, { updateAvailable: false, currentVersion: '1.2.28', connectors: [], enabled: false });
     }));
     return sent;
 }

@@ -49,6 +49,7 @@ import { enrolSsoKeeper, type KeeperEnrolmentResult } from './keeper-enrolment';
 import type { BeanPoolIdentity } from './identity';
 import { rememberConnectWanted, signInCopiesAt, vaultTicket, VaultError, VAULT_MESSAGES, type VaultFailure } from './vault';
 import type { SignInCopies } from './vault-config';
+import type { CopyCommunity } from '@beanpool/core';
 import { copiesRuleNow } from './copies-rule';
 
 /**
@@ -127,6 +128,11 @@ export async function connectAndDeposit(options: {
     onSignedIn: () => void | Promise<void>;
     /** The sheet closed: a sign-in still going deposits nothing once it is done. */
     signal: AbortSignal;
+    /**
+     * The member's communities, sealed inside the copy when their tick is on (utils/copy-communities.ts, vault rethink
+     * VR5). Null or absent: no list, the copy as before lists.
+     */
+    communities?: readonly CopyCommunity[] | null;
 }): Promise<KeeperEnrolmentResult> {
     const { provider, identity, signal } = options;
     if (options.phoneLock && !(await options.phoneLock())) {
@@ -171,7 +177,9 @@ export async function connectAndDeposit(options: {
         // Refused here rather than sealed to nothing: a copy sealed to a missing subject can never be opened.
         return notLinked(identity, provider, "That sign-in didn't say which account it was, so nothing was linked. Try again.");
     }
-    const result = await enrolSsoKeeper({ identity, provider, sub, idToken: signin.idToken, ticket: grant.ticket });
+    const result = await enrolSsoKeeper({
+        identity, provider, sub, idToken: signin.idToken, ticket: grant.ticket, communities: options.communities,
+    });
     return result.error ? notLinked(identity, provider, result.error, result.failure) : result;
 }
 
@@ -185,6 +193,7 @@ async function connectAtCommunity(options: {
     identity: BeanPoolIdentity;
     onSignedIn: () => void | Promise<void>;
     signal: AbortSignal;
+    communities?: readonly CopyCommunity[] | null;
 }): Promise<KeeperEnrolmentResult> {
     const { provider, url, identity, signal } = options;
     if (!url) return { enrolled: [], generation: null, skipped: [], available: 0, error: 'No node configured yet.' };
@@ -204,6 +213,7 @@ async function connectAtCommunity(options: {
         sub: extractSub(signin.idToken),
         idToken: signin.idToken,
         nonce: signin.nonce,
+        communities: options.communities,
     });
 }
 

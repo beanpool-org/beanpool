@@ -177,7 +177,7 @@ function ListingPicture({ l, className, size = 'thumb' }: { l: ShopfrontListing;
     return (
         <span className={`${className} bg-nature-100 dark:bg-nature-800 flex items-center justify-center overflow-hidden`} aria-hidden="true">
             {url ? (
-                <img src={url} alt="" onError={() => setFailed(true)} className="w-full h-full object-cover" />
+                <img src={url} alt="" onError={() => setFailed(true)} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} />
             ) : (
                 <CategoryTile category={l.category} size={size} />
             )}
@@ -204,7 +204,7 @@ export function ShopfrontFeatured({ listings, showsBeans, onOpen }: { listings: 
                             aria-label={price ? t('{title}, {price}', { title: l.title, price }) : l.title}
                             className="min-w-0 p-0 flex flex-col justify-start text-left rounded-xl overflow-hidden bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 cursor-pointer hover:border-nature-400 dark:hover:border-nature-600 transition-colors"
                         >
-                            <ListingPicture l={l} className="block w-full aspect-square" size="grid" />
+                            <ListingPicture l={l} className="block w-full aspect-[4/3]" size="grid" />
                             <span className="block p-2">
                                 <span className="block text-sm font-bold leading-snug text-nature-900 dark:text-white line-clamp-2 break-words">{l.title}</span>
                                 {price && <span className="block text-sm font-extrabold text-bp-ink-brand mt-0.5">{price}</span>}

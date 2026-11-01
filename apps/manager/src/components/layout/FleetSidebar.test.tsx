@@ -175,5 +175,17 @@ describe('FleetSidebar Component', () => {
             const seedlingEl = screen.getByText('🌱');
             expect(seedlingEl).toHaveAttribute('aria-hidden', 'true');
         });
+
+        it('renders real node version in footer when provided, and no number when omitted', () => {
+            const { unmount } = render(<FleetSidebar {...singleNodeProps} version="1.2.28" />);
+            expect(screen.getByText('Sovereign Node v1.2.28')).toBeInTheDocument();
+            expect(screen.queryByText(/1\.4\.2/)).not.toBeInTheDocument();
+            unmount();
+
+            render(<FleetSidebar {...singleNodeProps} version={undefined} />);
+            expect(screen.getByText('Sovereign Node')).toBeInTheDocument();
+            expect(screen.queryByText(/v\d+\.\d+\.\d+/)).not.toBeInTheDocument();
+            expect(screen.queryByText(/1\.4\.2/)).not.toBeInTheDocument();
+        });
     });
 });

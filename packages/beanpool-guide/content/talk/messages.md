@@ -106,11 +106,14 @@ Tap their name at the top of the chat to open their profile (an enterprise's pag
 
 ## Message requests
 
-Where your community's owners have turned on message requests, a first message from someone you haven't added as a friend, messaged before, or traded with arrives as a **message request**. You can read it before deciding. The sender cannot write anything more until you accept, and they are never told if you ignore the request or block them. Messages from your community's admins and moderators, and chats that come with a trade, always arrive straight away.
+Where your community's owners have turned on message requests, a first message from someone you haven't added as a friend, messaged before, or traded with arrives as a **message request**. It makes no notification and adds to no count. You can read it before deciding. The sender cannot write anything more until you accept, and they are never told if you decline or report it. Messages from your community's admins and moderators, and chats that come with a trade, always arrive straight away.
 
 If your community turns message requests off, every message arrives straight away, and any request still waiting becomes an ordinary chat. See "How this community works".
 
-- **On your phone**: in **Talk** under **Messages**, tap the **Requests** pill at the top. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Ignore** to dismiss it without letting them know. You can also tap **Block** to block them. If you have several requests waiting, you can tap **Ignore all**. A push notification that says someone wants to message you opens this Requests section directly when tapped.
-- **In the web app**: the same **Requests** pill appears above your list of chats.
-- **When you send a request**: your first message is sent as a request. While you wait for them to accept, you cannot send further messages or photos, and you see **Sent as a request. {name} will see it under Requests. You can write more once they accept.**
+- **On your phone**: in **Talk** under **Messages**, tap the **Message requests** row at the top. It is there while a request is waiting. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Decline** to dismiss it without letting them know. If you have several requests waiting, you can tap **Decline all**.
+- **In the web app**: the same **Message requests** row appears above your list of chats.
+- **Report**: tap **Report** on a request, choose a reason and send it. That reports the message to your community's moderators and blocks the sender. If they have deleted the message, your report of them goes without its words: the moderators see your reason and who you reported. They are still blocked. See "Reporting a problem".
+- **When you send a request**: your first message is sent as a request. While you wait for them to accept, you cannot send further messages or photos, and you see **Sent as a request. {name} will see it under Message requests. You can write more once they accept.**
 - **Cancel request**: beside the waiting line on both the phone and the web, you can tap **Cancel request**. This withdraws your request and removes your first message for both of you. You can then write a fresh message if you wish.
+- **Links**: a link in a message request can't be tapped until you accept it.
+- **If people report your requests**: where your community's owners have turned this on, enough reports from people you wrote to clear your waiting requests, and you can't send new ones for 7 days, longer if it happens again. You are told when it happens. You can still answer people who wrote to you, and post. A moderator can undo it.

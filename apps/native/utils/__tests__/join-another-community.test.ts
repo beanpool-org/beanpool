@@ -51,6 +51,18 @@ beforeEach(() => {
 });
 
 describe('joining another community with an invite', () => {
+    it('registers this phone\'s token where it is missing once the community is on its list, and a registration that fails fails nothing', async () => {
+        const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
+        const order: string[] = [];
+        d.addSavedNode = vi.fn(async () => { order.push('saved'); });
+        const registerPush = vi.fn(async () => { order.push('registered'); });
+        await joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, { ...d, registerPush });
+        expect(order).toEqual(['saved', 'registered']);
+
+        const failing = vi.fn(async () => { throw new Error('no connection'); });
+        await expect(joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, { ...d, registerPush: failing })).resolves.toBeDefined();
+    });
+
     it('redeems on the new community (not the one it came from) with the member’s key, and stays there', async () => {
         const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
         const joined = await joinAnotherCommunity({ targetUrl: `${LOCAL}/`, code: 'ABCD2345', identity: me, returnUrl: GLOBAL, knownName: 'Mullum' }, d);
@@ -69,6 +81,27 @@ describe('joining another community with an invite', () => {
         expect(mem.get('beanpool_anchor_url')).toBe(GLOBAL);
         expect(d.calls.slice(-2)).toEqual([`close:${LOCAL}`, `init:${GLOBAL}`]);
         expect(d.addSavedNode).not.toHaveBeenCalled();
+    });
+
+    it('notes the offer to bring the member’s listings, with where they came from, and only after they are in', async () => {
+        const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
+        d.noteBringOffer = vi.fn(async () => true);
+        await joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL, knownName: 'Mullum' }, d);
+        expect(d.noteBringOffer).toHaveBeenCalledWith({ publicKey: me.publicKey, from: GLOBAL, to: LOCAL, name: 'Mullumbimby', alreadyMember: false });
+    });
+
+    it('a refused invite notes no offer', async () => {
+        const d = deps(async () => { throw new Error('This invite is for a different key.'); });
+        d.noteBringOffer = vi.fn(async () => true);
+        await expect(joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, d)).rejects.toThrow();
+        expect(d.noteBringOffer).not.toHaveBeenCalled();
+    });
+
+    it('joining never waits on the offer: one that can\'t be noted changes nothing', async () => {
+        const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
+        d.noteBringOffer = vi.fn(async () => { throw new Error('storage full'); });
+        await expect(joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, d))
+            .resolves.toEqual({ url: LOCAL, name: 'Mullumbimby', alreadyMember: false });
     });
 
     it('with no answer from the new community’s health, keeps the name it was given', async () => {

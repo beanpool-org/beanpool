@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, isLang, type Lang } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -56,6 +56,7 @@ import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
+import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
@@ -63,7 +64,8 @@ import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/m
 import { dropToolStateOf } from './engine/tool-state.js';
 import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
-import { setRequestBroadcast, heldFromUnread, expireOldRequests, tickRequestPushFolds, dropRequestsOf } from './engine/dm-requests.js';
+import { setRequestBroadcast, heldFromUnread, countRequestsWaitingFor, expireOldRequests, dropRequestsOf } from './engine/dm-requests.js';
+import { evaluateRequestReports, liftRequestLimit, requestReceived, dropRequestLimitsOf } from './engine/request-limits.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
@@ -246,7 +248,7 @@ import {
     previewAdmitsInvite,
 } from './engine/invites.js';
 import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
-import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
+import { avatarUrlOf, GROUP_KIND_CIRCLE, PLACE_CIRCLE_WORDS, word, wordsFor } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -328,6 +330,7 @@ import {
     type SyncPollVote,
     type SyncPayload,
     createGroup as createGroupEngine,
+    addCircleMember as addCircleMemberEngine,
     getGroup as getGroupEngine,
     listGroups as listGroupsEngine,
     getGroupMembers as getGroupMembersEngine,
@@ -535,8 +538,8 @@ function selectInChunks<T = any>(
  * Generate hidden search keywords by expanding post content through the synonym map, and its tags' words.
  * e.g. title "Fresh Lemons" → keywords "fruit citrus produce food tree" (engine/search-keywords.ts)
  */
-export function generateSearchKeywords(title: string, description: string, category: string, tags: readonly string[] = []): string {
-    return postSearchKeywordsWithSynonyms(title, description, category, tags);
+export function generateSearchKeywords(title: string, description: string, category: string, tags: readonly string[] = [], freeTags: readonly string[] = []): string {
+    return postSearchKeywordsWithSynonyms(title, description, category, tags, freeTags);
 }
 
 // ===================== TYPES =====================
@@ -605,13 +608,15 @@ export interface AbuseReport {
     postMadeByAssistant?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
-    /** The group chat message a report names, with its key (engine/group-chat-report.ts), or absent. */
+    /** The chat message a report names (engine/group-chat-report.ts, engine/dm-line-report.ts), or absent. */
     targetMessageId?: string;
     /**
      * That message's chat and whether it is a photo line, never its words: the moderators' view opens it on its own
      * (GET /api/local/admin/reports/:id/message). `removed` once it was deleted or removed, or is not on this server.
      */
     groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
+    /** The same for a direct message's line, which names no chat: the moderators' view opens it on its own too. */
+    directMessage?: { photo: boolean; removed: boolean } | null;
 }
 
 export type { FriendEntry };
@@ -1114,8 +1119,6 @@ function armMainServerTimers(): void {
         // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
         try { rollDueSeries(broadcast); } catch (e) { console.warn('[Events] Series roll failed:', e); }
         try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
-        // A message request push folded in the last hour goes as one, naming nobody, once the hour is over (engine/dm-requests.ts).
-        try { tickRequestPushFolds(dispatchPushNotification); } catch (e) { console.warn('[Push] Request push fold failed:', e); }
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
@@ -1196,7 +1199,7 @@ export function becomeMainServerInPlace(): void {
  * Also rebuilds the FTS5 index to ensure it's in sync.
  */
 function backfillSearchKeywords(): void {
-    const posts = db.prepare(`SELECT id, title, description, category, tags FROM posts WHERE search_keywords = '' OR search_keywords IS NULL`).all() as any[];
+    const posts = db.prepare(`SELECT id, title, description, category, tags, free_tags FROM posts WHERE search_keywords = '' OR search_keywords IS NULL`).all() as any[];
     if (posts.length === 0) return;
 
     console.log(`🔍 Backfilling FTS5 search keywords for ${posts.length} posts...`);
@@ -1223,7 +1226,7 @@ function backfillSearchKeywords(): void {
         if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
         const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
         for (const p of posts) {
-            const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general', postTagsOf(p.tags));
+            const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general', postTagsOf(p.tags), freeTagsOf(p.free_tags));
             update.run(keywords, p.id);
         }
         if (touch) db.exec(touch);
@@ -1295,17 +1298,17 @@ export function keywordsWithTagsOnce(): void {
         db.transaction(() => {
             const touch = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_touch_updated_at'`).get() as { sql: string } | undefined)?.sql;
             if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
-            const page = db.prepare(`SELECT rowid, id, title, description, category, tags, search_keywords FROM posts WHERE rowid > ? ORDER BY rowid LIMIT 500`);
+            const page = db.prepare(`SELECT rowid, id, title, description, category, tags, free_tags, search_keywords FROM posts WHERE rowid > ? ORDER BY rowid LIMIT 500`);
             const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
             for (let after = 0; ;) {
-                const rows = page.all(after) as Array<{ rowid: number; id: string; title: string | null; description: string | null; category: string | null; tags: string | null; search_keywords: string | null }>;
+                const rows = page.all(after) as Array<{ rowid: number; id: string; title: string | null; description: string | null; category: string | null; tags: string | null; free_tags: string | null; search_keywords: string | null }>;
                 if (rows.length === 0) break;
                 for (const p of rows) {
                     const held = (p.search_keywords ?? '').trim();
                     if (!held) continue;
                     const category = p.category || 'general';
                     const write = held === category ? postSearchKeywords : postSearchKeywordsWithSynonyms;
-                    const keywords = write(p.title || '', p.description || '', category, postTagsOf(p.tags));
+                    const keywords = write(p.title || '', p.description || '', category, postTagsOf(p.tags), freeTagsOf(p.free_tags));
                     if (keywords !== p.search_keywords) { update.run(keywords, p.id); changed++; }
                 }
                 after = rows[rows.length - 1].rowid;
@@ -1543,6 +1546,7 @@ import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVers
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
+import { preferredAddress, reachableFromInternet } from './engine/host-kinds.js';
 import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -5686,6 +5690,8 @@ export function createPost(
         shopId?: unknown;
         /** Its tags: ids from the library in core (engine/post-fields.ts assertPostTags). */
         tags?: unknown;
+        /** The tags its author typed (engine/post-fields.ts assertFreeTags). */
+        freeTags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
@@ -5696,9 +5702,10 @@ export function createPost(
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
     // number of Beans never reaches a listing, whichever route made it.
-    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng, tags: options?.tags };
+    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng, tags: options?.tags, freeTags: options?.freeTags };
     assertPostFields(postFields, 'create');
     if (options?.tags !== undefined) options = { ...options, tags: postFields.tags };
+    if (options?.freeTags !== undefined) options = { ...options, freeTags: postFields.freeTags };
     title = postFields.title as string;
     description = postFields.description as string;
     category = postFields.category as string;
@@ -5748,7 +5755,7 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
     // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
     // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
     // sent back unchanged, is not held to a length limit it was stored before (#1493).
-    const storedText = db.prepare('SELECT title, description, category, tags FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    const storedText = db.prepare('SELECT title, description, category, tags, free_tags FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     // A keeper may edit their enterprise's Offer or Need signed with their own key: the signed caller only, by the rule the
@@ -7178,6 +7185,21 @@ export function getListedUnreadCounts(pubkey: string): Record<string, number> {
     return counts;
 }
 
+/** The unread lines in the chats a member's list shows: the push's badge, and `unread` in GET /api/me/unread. */
+export function getListedUnreadTotal(pubkey: string): number {
+    return Object.values(getListedUnreadCounts(pubkey)).reduce((sum, count) => sum + count, 0);
+}
+
+/**
+ * What waits for a member here, in counts alone (GET /api/me/unread, @beanpool/core UnreadAnswer): the two numbers their
+ * conversation list gives as `totalUnread` and `requests.count`, without building that list. `asOf` is taken first, so
+ * no line it claims to cover came after the count.
+ */
+export function getUnreadAnswer(pubkey: string): UnreadAnswer {
+    const now = Date.now();
+    return { unread: getListedUnreadTotal(pubkey), requests: countRequestsWaitingFor(pubkey, now), asOf: new Date(now).toISOString() };
+}
+
 export function ensureTransactionConversation(postId: string, buyerPubkey: string, sellerPubkey: string): string {
     return ensureTransactionConversationEngine(getMessagingCb(), postId, buyerPubkey, sellerPubkey);
 }
@@ -7412,6 +7434,19 @@ export function isReportRateLimited(reporterPubkey: string, now: number = Date.n
     return row.c >= REPORTS_PER_REPORTER_PER_HOUR;
 }
 
+/**
+ * After a report filed elsewhere that may count towards clearing `sender`'s message requests (routes/messaging.ts, a line's
+ * report): the limit, if the reports reach one, and they are told (engine/request-limits.ts).
+ */
+export function weighRequestReports(sender: string): boolean {
+    return evaluateRequestReports(moderationNoticeCb, sender);
+}
+
+/** A moderator undoes a limit on sending message requests. False when none holds. */
+export function liftRequestsLimit(pubkey: string): boolean {
+    return liftRequestLimit(moderationNoticeCb, pubkey);
+}
+
 export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
     // A member of this node, not just a row: a pruned account, or a re-keyed phone's old key, reports nobody.
     if (!isNodeMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
@@ -7420,10 +7455,14 @@ export function submitReport(reporterPubkey: string, targetPubkey: string, reaso
     const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt);
+    // A report of a person who wrote to them as a request counts towards clearing their requests (engine/request-limits.ts):
+    // it is how both apps report one whose line is gone. A report of a post or a Pulse item is about that, not a request.
+    const request = targetPostId || targetPulseItemId ? null : requestReceived(reporterPubkey, targetPubkey, false);
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, request_conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt, request);
     // On the global profile, enough established reporters hide the post until a moderator looks (G3). A report of
     // a member or a Pulse item never hides anything.
     if (targetPostId && !targetPulseItemId) evaluateAutoHide(moderationNoticeCb, targetPostId);
+    if (request) evaluateRequestReports(moderationNoticeCb, targetPubkey);
     return { id, reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, reason: safeReason, createdAt, status: 'pending' };
 }
 
@@ -7486,7 +7525,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
-               gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name
+               gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name,
+               CASE WHEN json_valid(ar.disclosure) THEN json_extract(ar.disclosure, '$.kind') END as disclosure_kind
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
@@ -7558,7 +7598,10 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
             }
             : null,
         targetMessageId: r.target_message_id || undefined,
-        groupMessage: r.target_message_id
+        directMessage: r.disclosure_kind === DM_LINE_DISCLOSURE_KIND
+            ? { photo: r.gm_type === 'image', removed: !r.gm_type || r.gm_type === 'removed' }
+            : null,
+        groupMessage: r.target_message_id && r.disclosure_kind !== DM_LINE_DISCLOSURE_KIND
             ? {
                 groupId: r.gm_group_id ?? null,
                 groupName: r.gm_group_name ?? null,
@@ -8728,14 +8771,18 @@ export const REMOVAL_IS_THE_VOTE_CODE = 'removal_is_the_vote';
  */
 export type PruneDoor = 'direct' | 'owner-branch' | 'settles-removal';
 
-/** The removal the community voted for that is waiting out its grace window for this member, if there is one. */
-export function removalInGraceOf(publicKey: string): { id: string; gracePeriodEndsAt: string | null } | null {
+/**
+ * The removal waiting out its grace window for this member, if there is one: one the community voted for, or, too few being
+ * able to vote, one an owner decided (`decidedByOwner`, decisions-engine ownerDecideTooFew; removal by vote S6), which no
+ * vote passed, so nothing may say the community voted for it.
+ */
+export function removalInGraceOf(publicKey: string): { id: string; gracePeriodEndsAt: string | null; decidedByOwner: boolean } | null {
     const row = db.prepare(`
-        SELECT id, grace_period_ends_at FROM decisions
+        SELECT id, grace_period_ends_at, owner_decision_carried_at FROM decisions
         WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
         ORDER BY created_at DESC LIMIT 1
-    `).get(publicKey) as { id: string; grace_period_ends_at: string | null } | undefined;
-    return row ? { id: row.id, gracePeriodEndsAt: row.grace_period_ends_at } : null;
+    `).get(publicKey) as { id: string; grace_period_ends_at: string | null; owner_decision_carried_at: string | null } | undefined;
+    return row ? { id: row.id, gracePeriodEndsAt: row.grace_period_ends_at, decidedByOwner: !!row.owner_decision_carried_at } : null;
 }
 
 /**
@@ -8882,6 +8929,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         // The message requests they made, and the ones waiting for them, with a tombstone each; one of theirs nobody accepted,
         // in a real conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
         dropRequestsOf(publicKey);
+        // Any limit on sending them, with a tombstone each (engine/request-limits.ts).
+        dropRequestLimitsOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
@@ -9072,6 +9121,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // And their message requests, made or waiting for them, a tombstone each; one of theirs nobody accepted, in a real
         // conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
         dropRequestsOf(publicKey);
+        // Any limit on sending them, with a tombstone each (engine/request-limits.ts).
+        dropRequestLimitsOf(publicKey);
         // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.
         dropWithheldNotesOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
@@ -9452,7 +9503,14 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     };
     let host: string | null = null;
     const pa: any = config?.publicAddress;
-    if (pa) {
+    // A name still waiting for approval has no route. Where a claim of it replaced an address, kept on the owner-confirmed
+    // list (engine/own-addresses.ts keepReplacedAddress), that is where this community lives until the name is approved:
+    // the directory, the card and an assistant are not sent to a name that leads nowhere. As primaryAddress says.
+    const waiting = !!pa && typeof pa === 'object' && pa.status === 'pending';
+    const kept = waiting && Array.isArray(config?.ownerAddresses)
+        ? preferredAddress(config.ownerAddresses.flatMap((a) => usable(typeof a === 'string' ? a : null) ?? []).filter(reachableFromInternet))
+        : null;
+    if (pa && !kept) {
         if (rules.publicAddress === 'any' && typeof pa === 'string' && pa.trim()) {
             host = usable(pa.trim());
         } else if (typeof pa === 'object') {
@@ -9468,7 +9526,7 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     if (!host && cf && rules.cfRecordName !== 'never') {
         host = usable(rules.cfRecordName === 'in-zone' && !cf.includes('.') ? `${cf}.beanpool.org` : cf);
     }
-    return host ? `https://${host}` : null;
+    return host || kept ? `https://${host || kept}` : null;
 }
 
 /** The community's name as the directory is told it, and the health reads give it: no count and no node config read. */
@@ -10498,8 +10556,7 @@ export function dispatchPushNotification(
         if (tokens.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
-        const unreadCounts = getListedUnreadCounts(pk);
-        const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+        const totalUnread = getListedUnreadTotal(pk);
 
         // One notice per recipient, the same on each of their phones.
         const notice = newPushNotice(kind, pk, sentAt);
@@ -10741,6 +10798,41 @@ export function createGroup(params: CreateGroupParams): Group {
     return res;
 }
 
+/** A place circle, made by the node for `createdBy` and the people near them (engine/place-circles.ts). */
+export function createPlaceCircle(createdBy: string, placeCell: string): string {
+    return createGroup({
+        name: PLACE_CIRCLE_WORDS.name, description: PLACE_CIRCLE_WORDS.purpose, category: 'working_group',
+        // Hidden from everyone outside it, so an outsider's read of it is the 404 of no group at all (the engine's header).
+        joinPolicy: 'invite_only', createdBy, kind: GROUP_KIND_CIRCLE, placeCell,
+    }).id;
+}
+
+/**
+ * Seats someone in a place circle on their own "I'd help start one here". As an old app's join does: no epoch, so the
+ * chat's current key (if it has one yet) goes stale and the next writer's app rotates it to everyone seated.
+ */
+export function addPlaceCircleMember(groupId: string, pubkey: string): void {
+    const wasActive = isGroupMemberEngine(db, groupId, pubkey);
+    const res = withMembershipEpoch(groupId, pubkey, undefined, () => addCircleMemberEngine(db, groupId, pubkey),
+        { allowed: ['join', 'invite'], subject: pubkey });
+    afterGroupMembershipChange(groupId, pubkey, wasActive);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_member_updated', groupId, member: res }, getGroupActiveMemberRecipients(groupId, [pubkey]));
+    const group = getGroupEngine(db, groupId, pubkey);
+    if (group) broadcast({ type: 'group_created', group: groupAsListed(group) }, [pubkey]);
+}
+
+/** Whether a place circle may hold this key: a member here, and not suspended (a group's chat would reach them). */
+export function maySitInPlaceCircle(pubkey: string): boolean {
+    return isNodeMember(pubkey) && !engine.isSuspendedAccount(db, pubkey);
+}
+
+/** A retired circle's 30 days are up: it closes as a group closed by a vote does, its row and its lines kept. */
+export function closePlaceCircle(groupId: string): void {
+    const cancelledPosts = db.transaction(() => closeGroupByVote(groupId, CIRCLE_CLOSED_BY))();
+    afterGroupVote(groupId, { kind: 'closed', text: PLACE_CIRCLE_CLOSED, cancelledPosts });
+}
+
 export function getGroup(idOrSlug: string, viewerPubkey?: string): Group | null {
     return getGroupEngine(db, idOrSlug, viewerPubkey);
 }
@@ -10849,7 +10941,14 @@ export function groupClosedAtMany(groupIds: string[]): Map<string, string> {
 }
 
 function assertGroupNotClosed(groupId: string): void {
-    if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
+    if (groupClosedAt(groupId)) throw new Error(groupClosedBy(groupId) === CIRCLE_CLOSED_BY ? PLACE_CIRCLE_CLOSED : GROUP_CLOSED);
+}
+
+/** Why a place circle that finished takes nobody new and no new line: no vote closed it. */
+export const PLACE_CIRCLE_CLOSED = word('This circle has finished. It takes nobody new and no new messages.');
+
+function groupClosedBy(groupId: string): string | null {
+    return (db.prepare('SELECT decision_id FROM group_closures WHERE group_id = ?').get(groupId) as { decision_id: string } | undefined)?.decision_id ?? null;
 }
 
 /**
@@ -10896,6 +10995,7 @@ export function removeGroupMemberByVote(groupId: string, subject: string): void 
         .run(now, now, groupId, subject);
     reconcileGroupLeadEngine(db, groupId);
     if (groupKeyRoster(groupId).join(',') !== before) markGroupEpochStale(groupId);
+    afterLeavingCircle(groupId, subject);
 }
 
 export function setGroupJoinPolicyByVote(groupId: string, policy: JoinPolicy): void {
@@ -10913,6 +11013,7 @@ export function closeGroupByVote(groupId: string, decisionId: string): ReturnTyp
         .run(groupId, decisionId, now, now, now);
     const cancelled = cancelClosedGroupPosts(groupId);
     db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
+    afterClosingCircle(groupId);
     return cancelled;
 }
 
@@ -11017,6 +11118,7 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
     const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey),
         { allowed: ['remove'], subject: targetPubkey });
     if (res) {
+        afterLeavingCircle(groupId, targetPubkey);
         // Leaving drops their vote on the group's open votes; a removal by a convenor keeps it (§2.6).
         if (actorPubkey === targetPubkey) dropFromOpenGroupRolls(groupId, targetPubkey);
         try {

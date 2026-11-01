@@ -299,6 +299,18 @@ describe("a member's own avatar: a square in a circle, 512 px (the web's old 128
         await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledWith(identity.publicKey, expect.objectContaining({ avatar: CROPPED })));
     });
 
+    it('Profile: leaving the page cancels the saved line\'s timer, so it never fires on a page that has gone', async () => {
+        const set = vi.spyOn(globalThis, 'setTimeout');
+        const clear = vi.spyOn(globalThis, 'clearTimeout');
+        const { unmount } = render(<ProfilePage identity={identity} onBack={vi.fn()} />);
+        await screen.findByText('Your Profile');
+        fireEvent.click(screen.getByRole('button', { name: /Save Profile/i }));
+        await screen.findByText(/Profile Saved Successfully/);
+        const timer = set.mock.results[set.mock.calls.findIndex(([, ms]) => ms === 2000)].value;
+        unmount();
+        expect(clear).toHaveBeenCalledWith(timer);
+    });
+
     it('Profile: Cancel keeps the avatar it had', async () => {
         render(<ProfilePage identity={identity} onBack={vi.fn()} />);
         await screen.findByText('Your Profile');

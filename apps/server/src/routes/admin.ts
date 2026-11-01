@@ -7,6 +7,7 @@ import Router from '@koa/router';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { getVersion, shownVersion } from '../version.js';
 import {
     getAllMembers, getAllProfiles, getMember,
     getPosts, getCommunityHealth,
@@ -30,11 +31,12 @@ import {
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
-    restoreHiddenPost, liftModerationMute, pushServiceRefusals,
+    restoreHiddenPost, liftModerationMute, liftRequestsLimit, pushServiceRefusals,
     hideBurst, undoBurst,
     removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
+import { listRequestLimits } from '../engine/request-limits.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
 import { logAlertsLook, logBalanceLook, logDisputesLook, type TradeLookAction } from '../engine/community-health.js';
 import {
@@ -43,7 +45,7 @@ import {
 } from '../engine/burst-cleanup.js';
 import {
     decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply,
-    emergencySuspendRefusal, pauseChainRefusal, OPEN_PAUSES_PROOF_CODE, PAUSE_REFUSAL_CODES,
+    emergencySuspendRefusal, pauseChainRefusal, OPEN_PAUSES_PROOF_CODE, PAUSE_REFUSAL_CODES, ownerDecideTooFew, ownerDecisionRefusal,
     type OwnerOnlyAdminAction, type PauseRefusal,
 } from '../decisions-engine.js';
 import {
@@ -55,6 +57,7 @@ import { gatewayAllowlistRefusal, removedGatewaySwitchRefusal } from '../config/
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { openReportedGroupLine } from '../engine/group-chat-report.js';
+import { openReportedDmLine } from '../engine/dm-line-report.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
@@ -1323,6 +1326,7 @@ const getDiagnosticsHandler = async (ctx: any) => {
         ctx.body = {
             success: true,
             status: 'online',
+            version: shownVersion(getVersion()),
             uptimeSeconds: Math.round(process.uptime()),
             cpuLoadPercent: cpuLoad,
             memoryUsageMb: nodeRssMb,
@@ -1388,6 +1392,7 @@ const getDiagnosticsHandler = async (ctx: any) => {
                 activePeers,
                 totalPeers,
                 nodeVersion: process.version,
+                version: getVersion(),
                 platform: process.platform,
                 arch: process.arch
             }
@@ -1652,6 +1657,39 @@ router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
         return;
     }
     logger.info('ADMIN', `Lifted the mute on ${pubkey.substring(0, 12)} by ${actor ? actor.substring(0, 12) : 'owner:password'} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true };
+});
+
+/** Who can't send message requests for now, because reports cleared theirs (engine/request-limits.ts), for the moderators. */
+router.get('/api/local/admin/members/request-limits', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, limits: listRequestLimits() };
+});
+
+/**
+ * Undo a limit on sending message requests: the requests come back, and they may send new ones. Owners, admins and
+ * moderators, as lifting a mute. A moderator can't undo their own, or one on an enterprise they keep.
+ */
+router.post('/api/local/admin/members/:pubkey/request-limit/undo', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    const pubkey = ctx.params.pubkey;
+    if (isModeratorsOwn(ctx, pubkey)) {
+        ctx.status = 403;
+        ctx.body = { success: false, error: 'A moderator cannot undo a limit on themselves, or on an enterprise they keep. Ask another moderator, an admin or an owner.' };
+        return;
+    }
+    if (!getMember(pubkey)) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'Member not found' };
+        return;
+    }
+    if (!liftRequestsLimit(pubkey)) {
+        ctx.status = 409;
+        ctx.body = { success: false, error: 'No limit holds on this member' };
+        return;
+    }
+    logger.info('ADMIN', `Undid the limit on message requests of ${pubkey.substring(0, 12)} by ${actor ? actor.substring(0, 12) : 'owner:password'} (${(ctx.state as any)?.adminRole})`);
     ctx.body = { success: true };
 });
 
@@ -2072,14 +2110,15 @@ router.get('/api/local/admin/reports', async (ctx) => {
 });
 
 /**
- * GET /api/local/admin/reports/:id/message — the one group chat message a report names, opened with the key its reporter
- * handed over (engine/group-chat-report.ts openReportedGroupLine): its words and its photo, each verified against the key
- * that signed it or "could not be verified", and nothing else of the chat. 404 for a report of a post, a Pulse item or a
- * member. Owners, admins and moderators (admin-auth.ts MODERATOR_ROUTES); no cache keeps it.
+ * GET /api/local/admin/reports/:id/message — the one chat message a report names, and nothing else of the chat. A group
+ * chat's is opened with the key its reporter handed over (engine/group-chat-report.ts openReportedGroupLine): its words and
+ * its photo, each verified against the key that signed it or "could not be verified". A direct message's is what its
+ * reporter handed over, its sender's signature checked and its words their word (engine/dm-line-report.ts). 404 for a
+ * report of a post, a Pulse item or a member. Owners, admins and moderators (admin-auth.ts MODERATOR_ROUTES); no cache keeps it.
  */
 router.get('/api/local/admin/reports/:id/message', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const message = await openReportedGroupLine(ctx.params.id);
+    const message = openReportedDmLine(ctx.params.id) ?? await openReportedGroupLine(ctx.params.id);
     if (!message) {
         ctx.status = 404;
         ctx.body = { success: false, error: 'This report does not name a message' };
@@ -2410,6 +2449,34 @@ router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
+    ctx.body = { success: true };
+});
+
+// Owner: decide a vote on removing a member that too few members can vote on (removal by vote S6, design §5 point 3;
+// decisions-engine ownerDecideTooFew): an owner only, never an admin, with the fresh proof every time (requireFreshProof: the
+// phone's Manage hand-off, or the password with a current code; never an automation token) and a public reason members read
+// on the card. Recorded now; carried out when the vote closes, if it is still too few then. Every refusal, the reason's
+// included, is answered before the proof, so a code is spent only on a decision that is then made.
+router.post('/api/local/admin/decisions/:id/owner-decision', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    const { reason } = (ctx as any).requestBody || {};
+    const refusal = ownerDecisionRefusal(ctx.params.id, actor, reason);
+    if (refusal) {
+        ctx.status = refusal.status;
+        ctx.body = { error: refusal.error };
+        return;
+    }
+    const code = (ctx as any).requestBody?.code ?? ctx.get('x-fresh-proof');
+    if (!(await requireFreshProof(ctx, code, 'decide a vote too few members could vote on'))) return;
+    const result = ownerDecideTooFew(ctx.params.id, actor, reason);
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = { error: result.error };
+        return;
+    }
+    logger.info('ADMIN', `Removal vote ${ctx.params.id} decided by ${actor.substring(0, 12)}: too few members could vote on it`);
     ctx.body = { success: true };
 });
 

@@ -9,7 +9,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { App } from './App';
-import { getConversations, getMyMarketplaceTransactions } from './lib/api';
+import { getMyUnread, getMyMarketplaceTransactions } from './lib/api';
 
 if (typeof window !== 'undefined') {
     window.matchMedia = window.matchMedia || vi.fn().mockImplementation(() => ({
@@ -60,7 +60,7 @@ vi.mock('./lib/api', () => ({
     getNodeApiUrl: vi.fn(() => ''),
     registerMember: vi.fn(async () => ({ ok: true })),
     checkMembership: vi.fn(async () => ({ isMember: true })),
-    getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
+    getMyUnread: vi.fn(async () => ({ unread: 0, requests: 0, asOf: '2026-11-01T00:00:00.000Z' })),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     getCommunityHealth: vi.fn(async () => ({ online: true, version: '1.2.28' })),
     getMyActiveRecoveryCollections: vi.fn(async () => ({ count: 0, collections: [] })),
@@ -78,7 +78,7 @@ describe("the app shell and the member's own deals", () => {
         info.features = WORLDWIDE;
         render(<App />);
         await screen.findByTestId('home-page');
-        await waitFor(() => expect(getConversations).toHaveBeenCalled());
+        await waitFor(() => expect(getMyUnread).toHaveBeenCalled());
         await new Promise(r => setTimeout(r, 20));
         expect(getMyMarketplaceTransactions).not.toHaveBeenCalled();
     });

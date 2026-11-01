@@ -1,16 +1,33 @@
 /**
- * Account Protection's third way back: "Your community's admins" (vault rethink VR3, community-held placement;
- * scratch/fable-design/DESIGN-vault-rethink-fable.md §4.3 and §4.5). Turn on, after the phone's lock; On since when;
- * Remove. Shown where the community's server says it offers it (its status answer's `offered`: its rule is "this
- * server" and anyone can't walk in), and also wherever the community already keeps this member's copy (the rule may
- * have moved since: the copy is the member's until they remove it, design §4.4). The phone asks only where its rule
- * says "this server" and it isn't the global community (utils/community-copy.ts offersCommunityCopy), or where it
- * turned it on, and goes by that rule only when the server couldn't be asked.
+ * Account Protection's third way back: "Your community's admins" (vault rethink VR3, community-held placement, and VR4,
+ * shared placement; scratch/fable-design/DESIGN-vault-rethink-fable.md §4.3 and §4.5). Turn on, after the phone's lock; On
+ * since when; Remove. Shown where the community's server says it offers it (its status answer's `offered`: its rule is
+ * "this server" and anyone can't walk in; or `sharedOffered`, its rule the key vault, in a build that has one), and also
+ * wherever the community already keeps this member's copy (the rule may have moved since: the copy is the member's until
+ * they remove it, design §4.4). The phone asks only where its rule offers one of the two and it isn't the global community
+ * (utils/community-copy.ts offersCommunityCopy), or where it turned it on.
+ *
+ * **Nothing leaves on a guess.** The rule as this phone read it only says whom to ask. What the row offers is the server's
+ * own answer to the status call signed by the member's key: until it has answered, the row offers nothing, and with no
+ * answer under the key vault's rule it stays that way. And Turn on asks that again at the tap ({@link offerIn}), and
+ * sends what the row's words said a tap makes, or nothing: asking again can only narrow what goes. If the answer has
+ * moved, the row redraws with its words and the member decides having read them, so a member who read "half each" never
+ * sends the whole key. The copy and its whole key go only where the server says it keeps whole copies: a server that
+ * refuses them has already been handed the key, which under the key vault's rule ends "the node alone opens nothing".
+ * Where the rule reads "this server" and the server gave no answer, Turn on stays, as it always has, to try again: it
+ * asks first, and with still no answer it says so and nothing has left the phone.
  *
  * Says who can open the copy, plainly: the community's server, so the people who run it; nobody else. Never a false
  * success: On only once the server answered that it keeps the copy and can open it. A copy it keeps but can't open
  * (the key it locks copies with gone, or another in its place) is said as that, with what can be done: never On.
  * Holds at 320 dp and 1.3× text: every line wraps.
+ *
+ * The shared placement (vault rethink VR4, utils/community-recovery.ts): where the community's rule is BeanPool's key vault,
+ * in a build that has one, the same row makes a copy the vault and the community keep half each, and says so: it takes
+ * both, and it takes a day. On only when both keep the very same copy; begun on one side only, it says "Not finished: tap
+ * to try again". A vault that can't be asked just now never turns an On off, and a slow one holds nothing up: what the
+ * community said is shown while the vault is asked. Its own signed delete is another matter: a Remove that stopped after it
+ * is never On again, even if neither can be asked (`remove`).
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,9 +40,11 @@ import { useStyles } from '../app/ThemeContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { copiesRuleForScreen } from '../utils/copies-rule';
+import { hasVault } from '../utils/vault-config';
+import { COMMUNITY_RECOVERY_TEXT, removeSharedCopy, sharedCopySide, sharedCopyState, turnOnSharedCopy, type SharedCopySide } from '../utils/community-recovery';
 import { onCommunitySwitched } from '../utils/community-switch';
 import {
-    communityCopyStatus, offersCommunityCopy, removeCommunityCopy, turnOnCommunityCopy, type CommunityCopyStatus,
+    COMMUNITY_COPY_TEXT, communityCopyStatus, offersCommunityCopy, removeCommunityCopy, turnOnCommunityCopy, type CommunityCopyStatus,
 } from '../utils/community-copy';
 import { keyLineWords } from './key-lines';
 
@@ -33,6 +52,10 @@ import { keyLineWords } from './key-lines';
 export const COMMUNITY_ADMINS_ROW = {
     title: word("👥 Your community's admins"),
     body: word("Go and see an admin in person and they can bring your account back: the same key, Beans and all. No Google or Apple needed. Your community's server keeps the locked copy. The people who run it can open it; nobody else."),
+    // The shared placement (design §4.5).
+    bodyShared: word("Go and see an admin in person and they can bring your account back: the same key, Beans and all. No Google or Apple needed. Your community's server and BeanPool's key vault each keep half of a locked copy; it takes both, and it takes a day, so your other phones can stop it."),
+    notFinished: word('Not finished: tap to try again.'),
+    removeBodyShared: word("{community}'s server and BeanPool's key vault delete their halves of your copy. Your admins can no longer bring you back; your 12 words still work."),
     turnOn: word('Turn on'),
     on: word('On in {community} since {date}'),
     remove: word('Remove'),
@@ -57,6 +80,16 @@ export const COMMUNITY_ADMINS_ROW = {
  * offered, so no other community is asked on every visit to Account Protection.
  */
 const turnedOnKey = (url: string): string => `beanpool_community_copy_on_${url}`;
+
+/**
+ * What the community's own answer lets this phone send: its whole copy where it says it keeps those, half of a shared copy
+ * where it says it keeps those and this build can reach the vault (with the key its vouchers are signed with), else
+ * nothing. No answer is nothing: the rule as this phone read it is never a reason to send.
+ */
+function offerIn(status: CommunityCopyStatus | null): 'whole' | 'shared' | null {
+    if (status?.offered) return 'whole';
+    return status?.sharedOffered && hasVault() && status.nodeKey ? 'shared' : null;
+}
 
 /** The community's name as the row says it: its saved name, else its address. */
 function placeOf(url: string, name?: string | null): string {
@@ -83,9 +116,12 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
         secondaryText: { color: c.text.body, fontWeight: '600', fontSize: 14, textAlign: 'center' },
     }));
     const [url, setUrl] = useState<string | null>(null);
-    // Whether this phone asks the community at all (its rule, read here): the server's own answer decides the offer.
-    const [mayAsk, setMayAsk] = useState(false);
+    // The server gave no answer and the rule, as this phone read it, is "this server": Turn on stays, to try again (`turnOn`
+    // asks first). Never under the key vault's rule, and not while the server is still being asked.
+    const [noAnswerHere, setNoAnswerHere] = useState(false);
     const [status, setStatus] = useState<CommunityCopyStatus | null>(null);
+    // How the key vault's side of a shared copy stands against the community's (null: none is asked about here).
+    const [side, setSide] = useState<SharedCopySide | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [justOn, setJustOn] = useState(false);
@@ -93,30 +129,51 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
     // new one starts from nothing: the community left's "On", note or error never shows as the one now in use's (where
     // Remove would ask it to delete a copy it never held), and an answer from the one left never lands after the switch.
     const readFor = useRef<string | null>(null);
+    // Each read has a turn, and only the newest speaks: the status lands before the vault's answer, so a read still waiting
+    // on a slow vault could otherwise lay what it found over a Turn on that finished meanwhile.
+    const turn = useRef(0);
 
     const read = useCallback(async () => {
+        const mine = ++turn.current;
         const at = await getAnchorUrl().catch(() => null);
+        if (mine !== turn.current) return;
         const scope = at && identity ? `${identity.publicKey} ${at}` : null;
         if (scope !== readFor.current) {
             readFor.current = scope;
-            setMayAsk(false);
+            setNoAnswerHere(false);
             setStatus(null);
+            setSide(null);
             setJustOn(false);
             setError(null);
         }
         setUrl(at);
         if (!at) return;
         const rule = await copiesRuleForScreen(at).catch(() => null);
-        if (readFor.current !== scope) return;
+        if (mine !== turn.current) return;
         const askHere = offersCommunityCopy(at, rule);
-        setMayAsk(askHere);
         const turnedOnHere = await AsyncStorage.getItem(turnedOnKey(at)).catch(() => null);
-        if (!identity || (!askHere && !turnedOnHere)) return;
+        if (mine !== turn.current) return;
+        if (!identity || (!askHere && !turnedOnHere)) {
+            setNoAnswerHere(false);
+            return;
+        }
         const now = await communityCopyStatus(at, identity);
-        if (readFor.current !== scope) return;
+        if (mine !== turn.current) return;
+        setNoAnswerHere(!now && askHere && rule === 'server');
+        // No answer takes nothing away: what this community last said stands, with any sentence beside it (Turn on asks again).
+        if (!now) return;
+        // Said before the vault is asked, which can take 20 s: its answer only adds to this one.
         setStatus(now);
-        // Forgotten only once the server keeps nothing at all: a copy it can't open is still there to be said and removed.
-        if (now && !now.kept && !now.unopenable && turnedOnHere) await AsyncStorage.removeItem(turnedOnKey(at)).catch(() => {});
+        const nowSide = hasVault() && (now.sharedOffered || now.placement === 'shared') ? await sharedCopySide(identity, now) : null;
+        if (mine !== turn.current) return;
+        // A vault that can't be asked just now doesn't undo its own delete: a `none` that came from it stands.
+        setSide(prev => (nowSide === 'unknown' && prev === 'none' ? prev : nowSide));
+        // Finished elsewhere (Ways back): the sentence that says to tap Remove here is over.
+        if (!now.kept && !now.unopenable && nowSide === 'none') {
+            setError(e => (e === keyLineWords(COMMUNITY_RECOVERY_TEXT.offHalfway) ? null : e));
+        }
+        // Forgotten only once nothing is kept at all: a copy the server can't open, or half of one, is still there to say and remove.
+        if (!now.kept && !now.unopenable && nowSide !== 'differs' && turnedOnHere) await AsyncStorage.removeItem(turnedOnKey(at)).catch(() => {});
     }, [identity]);
     // Asked again each time Account Protection comes into view: "Where your account can be brought back from" removes it too.
     useFocusEffect(useCallback(() => { void read(); }, [read]));
@@ -124,40 +181,74 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
     useEffect(() => onCommunitySwitched(() => { void read(); }), [read]);
 
     if (!url || !identity) return null;
-    const kept = status?.kept === true;
-    const unopenable = kept ? null : status?.unopenable ?? null;
+    // The shared placement is this community's offer, in this build, once its server has said the key it signs with.
+    const offer = offerIn(status);
+    const sharedOffer = offer === 'shared';
+    const sharedState = sharedCopyState(status, side);
+    const unfinished = sharedState === 'unfinished';
+    // What it keeps decides the row's words and its Remove; only a member with nothing here goes by the offer.
+    const shared = status?.kept ? status.placement === 'shared' : sharedOffer || unfinished;
+    // On means it can bring the member back now: a whole copy, or both halves of one copy.
+    const kept = status?.kept === true && !unfinished;
+    const unopenable = status?.kept ? null : status?.unopenable ?? null;
     // The server's own word on whether it offers this (a door anyone can walk through is refused there, whatever the
-    // rule); the phone's reading of the rule only when the server couldn't be asked.
-    const offered = status ? status.offered : mayAsk;
-    // Not offered and nothing kept here: nothing to show (the global community, "BeanPool's key vault", "Nowhere").
-    if (!offered && !kept && !unopenable) return null;
+    // rule). Until it has answered, nothing; with no answer, only what `noAnswerHere` says.
+    const offered = status ? offer !== null : noAnswerHere;
+    // Not offered and nothing kept here: nothing to show (the global community, a build with no vault, "Nowhere").
+    if (!offered && !kept && !unopenable && !unfinished) return null;
     const place = placeOf(url, communityName);
+    // What the row's words say a tap makes: a tap sends that or nothing (`turnOn`). Half a pair kept where the rule has moved
+    // to "this server" has only Remove: its words are half and half, and the offer is the whole key.
+    const promised = shared ? 'shared' : 'whole';
     // Turning it on again makes a copy the server can open, where it has its key and offers it; with its key gone, it
     // can't keep one (the server refuses), so only Remove is offered.
-    const canTurnOn = offered && !kept && unopenable?.reason !== 'recovery_seal_key_missing';
+    const canTurnOn = offered && !kept && unopenable?.reason !== 'recovery_seal_key_missing' && (!status || offer === promised);
 
     const turnOn = async () => {
         setError(null);
         setJustOn(false);
         if (!(await authenticateUser(t(COMMUNITY_ADMINS_ROW.lockReason)))) return;
         setBusy(true);
+        let sharedBegun = false;
         try {
-            await turnOnCommunityCopy(url, identity);
+            // What goes must be what the server offers now and what the member read: a rule read earlier, or an answer from
+            // before the screen was left open, is a guess, and a whole key sent on one can't be taken back. If the two
+            // differ nothing is sent, and the read below draws what it says now, for the member to read.
+            const now = await communityCopyStatus(url, identity);
+            if (!now) throw new Error(COMMUNITY_COPY_TEXT.unreachable);
+            if (offerIn(now) !== promised) throw new Error(COMMUNITY_COPY_TEXT.notKept);
+            if (promised === 'whole') {
+                await turnOnCommunityCopy(url, identity);
+            } else {
+                sharedBegun = true;
+                await turnOnSharedCopy(url, identity, now.nodeKey as string);
+                setSide(null);
+            }
             await AsyncStorage.setItem(turnedOnKey(url), '1').catch(() => {});
-            setStatus(await communityCopyStatus(url, identity));
             setJustOn(true);
         } catch (e) {
+            // One side may have it already: remembered, so the row says "Not finished" from now on, not nothing.
+            if (sharedBegun) {
+                setSide(null);
+                await AsyncStorage.setItem(turnedOnKey(url), '1').catch(() => {});
+            }
             setError(keyLineWords(e instanceof Error ? e.message : String(e)));
         } finally {
+            await read();
             setBusy(false);
         }
     };
 
     const remove = () => {
-        // A copy the server can't open is no way back now: removing it takes none away, and the ask says so.
-        const [title, body] = unopenable
+        // What this Remove asks the vault with: a build with no vault can't ask it, and a server still starting has no key to say.
+        const vaultKey = shared && hasVault() ? status?.nodeKey ?? null : null;
+        // A copy the server can't open is no way back now: removing it takes none away, and the ask says so. Unless the vault may
+        // keep half of it, until it has said it doesn't: that goes too, and it is the rest of a pair the server's people could put back.
+        const [title, body] = unopenable && (!vaultKey || side === 'none')
             ? [t(COMMUNITY_ADMINS_ROW.removeCopyTitle), t(COMMUNITY_ADMINS_ROW.removeCopyBody, { community: place })]
-            : [t(COMMUNITY_ADMINS_ROW.removeTitle), t(COMMUNITY_ADMINS_ROW.removeBody, { community: place })];
+            : [t(COMMUNITY_ADMINS_ROW.removeTitle), vaultKey
+                ? t(COMMUNITY_ADMINS_ROW.removeBodyShared, { community: place })
+                : t(COMMUNITY_ADMINS_ROW.removeBody, { community: place })];
         Alert.alert(title, body, [
             { text: t(COMMUNITY_ADMINS_ROW.keep), style: 'cancel' },
             {
@@ -166,12 +257,25 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
                     setError(null);
                     setJustOn(false);
                     try {
-                        await removeCommunityCopy(url, identity);
+                        if (shared) await removeSharedCopy(url, identity, vaultKey);
+                        else await removeCommunityCopy(url, identity);
                         await AsyncStorage.removeItem(turnedOnKey(url)).catch(() => {});
-                        setStatus(await communityCopyStatus(url, identity));
+                        // What it last said is over: never On on an answer from before the removal, if the read below gets none.
+                        setStatus(null);
+                        setSide(null);
                     } catch (e) {
-                        setError(keyLineWords(e instanceof Error ? e.message : String(e)));
+                        const said = e instanceof Error ? e.message : String(e);
+                        setError(keyLineWords(said));
+                        // The vault goes first, so its half may be gone, and with no answer the read below keeps what the community last
+                        // said: the vault is asked against that, so a half with no pair never stays On. If the vault has already said it
+                        // deleted, not being able to ask again doesn't undo that. Dropped if the phone has moved to another community.
+                        if (vaultKey && status) {
+                            const asked = readFor.current;
+                            const nowSide = await sharedCopySide(identity, status);
+                            if (asked === readFor.current) setSide(nowSide === 'unknown' && said === COMMUNITY_RECOVERY_TEXT.offHalfway ? 'none' : nowSide);
+                        }
                     } finally {
+                        await read();
                         setBusy(false);
                     }
                 },
@@ -186,12 +290,13 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
     return (
         <View style={styles.row} testID="community-admins-row">
             <Text style={styles.title} accessibilityRole="header">{t(COMMUNITY_ADMINS_ROW.title)}</Text>
-            <Text style={styles.body}>{t(COMMUNITY_ADMINS_ROW.body)}</Text>
+            <Text style={styles.body}>{shared ? t(COMMUNITY_ADMINS_ROW.bodyShared) : t(COMMUNITY_ADMINS_ROW.body)}</Text>
             {kept && (
                 <Text style={styles.state} testID="community-admins-on">
                     {t(COMMUNITY_ADMINS_ROW.on, { community: place, date: dayOf(status?.since) })}
                 </Text>
             )}
+            {unfinished && <Text style={styles.state} testID="community-admins-unfinished">{t(COMMUNITY_ADMINS_ROW.notFinished)}</Text>}
             {unopenable && (
                 <View style={styles.cantOpen} testID="community-admins-cant-open">
                     <Text style={styles.cantOpenState}>{t(COMMUNITY_ADMINS_ROW.cantOpen, { community: place, date: dayOf(unopenable.since) })}</Text>
@@ -214,10 +319,10 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
                     <>
                         {canTurnOn && (
                             <Pressable style={styles.primary} onPress={turnOn} accessibilityRole="button" testID="community-admins-turn-on">
-                                <Text style={styles.primaryText}>{unopenable ? t(COMMUNITY_ADMINS_ROW.turnOnAgain) : t(COMMUNITY_ADMINS_ROW.turnOn)}</Text>
+                                <Text style={styles.primaryText}>{unopenable || unfinished ? t(COMMUNITY_ADMINS_ROW.turnOnAgain) : t(COMMUNITY_ADMINS_ROW.turnOn)}</Text>
                             </Pressable>
                         )}
-                        {(kept || unopenable) && (
+                        {(kept || unopenable || unfinished) && (
                             <Pressable style={styles.secondary} onPress={remove} accessibilityRole="button" testID="community-admins-remove">
                                 <Text style={styles.secondaryText}>{t(COMMUNITY_ADMINS_ROW.remove)}</Text>
                             </Pressable>

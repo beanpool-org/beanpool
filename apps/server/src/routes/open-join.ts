@@ -2,7 +2,7 @@
  * The open door (global profile, design §2.2): join with a one-time sign-in, or with 12 words alone, instead of an
  * invite (the two-doors design, scratch/global-node/DESIGN-global-two-doors-fable.md).
  *
- *   POST /api/join/work          { door: 'words' | 'sign-in' }  → { work: { challenge, level, parts, bits, size, expiresInSeconds } | null, turnstile: null }
+ *   POST /api/join/work          { door: 'words' | 'sign-in', turnstile? }  → { work: { challenge, level, parts, bits, size, expiresInSeconds } | null, turnstile: null }
  *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, clientIds, vault }   (the recovery nonce's shape, and `vault`)
  *   POST /api/join               { callsign, provider, idToken, nonce, recovery?: { shares }, vaultTicket?, work? }
  *                                { door: 'words', callsign, work }
@@ -40,6 +40,16 @@
  *
  * The level is set when the challenge is issued and not checked again at the join: a challenge is good for ten minutes,
  * and the ceilings below are checked at the join itself.
+ *
+ * ## The person check on a busy day (services/door-check.ts)
+ *
+ * From `checkFromLevel` a 12-words join needs a person check, where the node has the keys and the owners left it on: the
+ * work route answers 429 `check_required` with `turnstile: { siteKey, page }` before any work is handed out, so no phone
+ * spends any, and the sentence points to the sign-in door, which never needs a check. The client takes the check, and
+ * asks again with `turnstile`, the token: a pass for that key, or 403 `check_failed`. The join asks again at its own level
+ * (`check_required`, before the work is checked, so the work is not spent), so challenges stocked up while the door was
+ * quiet buy nothing. 429, not 403: an app from before the check says the sentence and stays on the door, where 403 would
+ * tell it the door is shut. When Cloudflare can't be asked the requirement drops and the log says so.
  *
  * ## Signed by the joiner's new key, all of them
  *
@@ -177,8 +187,9 @@ import {
     type OpenJoinOutcome,
     type OpenJoinRefusal,
 } from '../engine/open-join.js';
-import { doorCeilingReached, doorLevel, noteWordsJoin, WORDS_PROVIDER, type DoorCeiling } from '../engine/door-signal.js';
+import { doorCeilingReached, doorLevel, doorNumbers, noteWordsJoin, WORDS_PROVIDER, type DoorCeiling } from '../engine/door-signal.js';
 import { checkDoorWork, issueDoorWork, type DoorWorkRefusal } from '../services/door-work.js';
+import { doorCheckAsked, doorCheckPassed, forgetDoorCheckPass, siteverifyUp, verifyDoorCheck, type DoorCheckPage } from '../services/door-check.js';
 import { OpenJoinKeyMissing, openJoinKeyState } from '../services/open-join-key.js';
 import { vaultTicketKeys, VAULT_TICKET_KEYS_ENV } from '../services/vault-ticket-keys.js';
 import { keepsNoCopies, recoveryCopies, NO_COPIES_HERE, NO_COPIES_HERE_MESSAGE } from '../config/recovery-copies.js';
@@ -308,6 +319,37 @@ function refuseWork(ctx: any, code: DoorWorkRefusal): void {
     recordFunnelEvent('open_join_failed', code);
     ctx.status = 400;
     ctx.body = { error: WORK_REFUSALS[code], code };
+}
+
+/** No check where the door asks for one (services/door-check.ts): said before any work is spent, with the way to it. */
+function checkRequired(ctx: any, check: DoorCheckPage): void {
+    ctx.status = 429;
+    ctx.body = {
+        error: word('Lots of people are joining right now, so a 12-words account starts with a quick check. Sign in to join now, or try again later.'),
+        code: 'check_required',
+        turnstile: check,
+    };
+}
+
+function checkFailed(ctx: any): void {
+    ctx.status = 403;
+    ctx.body = { error: word('That check didn\'t pass. Try again, or sign in to join now.'), code: 'check_failed' };
+}
+
+/**
+ * Whether a 12-words join from this network may go on: no check is asked here now, this key has passed one, or the token
+ * it sent passes. False once the refusal is written. Dropped when, and only when, the server's own probe says Cloudflare
+ * can't be asked (services/door-check.ts): a client's input is never that evidence.
+ */
+async function pastDoorCheck(ctx: any, actor: string, ipHash: string, token?: unknown): Promise<boolean> {
+    const check = doorCheckAsked(doorLevel('words', ipHash).level, doorNumbers().checkFromLevel);
+    if (!check || doorCheckPassed(actor)) return true;
+    const sent = token !== undefined && token !== null;
+    const verdict = sent ? await verifyDoorCheck(token, actor) : null;
+    if (verdict === 'passed') return true;
+    if (verdict === 'failed') { checkFailed(ctx); return false; }
+    if (await siteverifyUp(sent)) { checkRequired(ctx, check); return false; }
+    return true;
 }
 
 /** `count` false leaves the join funnel alone: adding a sign-in (`/api/join/link`) is no join. */
@@ -555,7 +597,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
     router.post('/api/join/work', async (ctx) => {
         const actor = joiningKey(ctx);
         if (!actor) return;
-        const door = ((ctx as any).requestBody || {}).door;
+        const { door, turnstile } = (ctx as any).requestBody || {};
         if (!isDoorWorkDoor(door)) return badRequest(ctx, "'door' must be 'words' or 'sign-in'.");
         if (door === 'words' && !wordsDoorOpen()) return signInRequired(ctx);
         // No sweep here: the signal reads only the last hour and day, which a day-old hash is outside of, and the joins
@@ -565,9 +607,10 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         // Told here, before the phone does any work it could not use.
         const ceiling = doorCeilingReached(door, ipHash);
         if (ceiling) return networkBusy(ctx, ceiling, false);
+        // Before any work is handed out, so nobody spends any on a join the door would refuse.
+        if (door === 'words' && !(await pastDoorCheck(ctx, actor, ipHash, turnstile))) return;
         const { level } = doorLevel(door, ipHash);
         ctx.status = 200;
-        // Turnstile (design §5) is not built: no discount is offered, and none is needed.
         ctx.body = { work: level === null ? null : issueDoorWork(actor, door, level), turnstile: null };
     });
 
@@ -580,7 +623,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
     });
 
     /** `POST /api/join` with `door: 'words'` (the header's "Two doors"). */
-    function wordsJoin(ctx: any, actor: string, body: any): void {
+    async function wordsJoin(ctx: any, actor: string, body: any): Promise<void> {
         if (!wordsDoorOpen()) return signInRequired(ctx);
         for (const field of ['provider', 'idToken', 'nonce', 'recovery', 'vaultTicket']) {
             if (body[field] !== undefined && body[field] !== null) {
@@ -597,6 +640,11 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         const ipHash = addressHash(ctx);
         const ceiling = doorCeilingReached('words', ipHash);
         if (ceiling) return networkBusy(ctx, ceiling);
+        // At the level of this moment, before the work: a refusal here spends none of it.
+        if (!(await pastDoorCheck(ctx, actor, ipHash))) {
+            recordFunnelEvent('open_join_failed', 'check_required');
+            return;
+        }
         const work = checkDoorWork(body.work, actor, 'words');
         if (!work.ok) return refuseWork(ctx, work.code);
 
@@ -611,6 +659,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
             return;
         }
         if (!outcome.ok) return refuse(ctx, outcome.reason, null, outcome.ceiling);
+        forgetDoorCheckPass(actor);
         noteWordsJoin();
         ctx.status = 200;
         ctx.body = { success: true, member: outcome.member, door: 'words' };

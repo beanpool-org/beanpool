@@ -24,6 +24,9 @@
  *  H. A carried seal key (a take-over): copies locked with the key it replaced are locked again with the live one.
  *  I. A copy this server can't open (its seal key gone or another): no code is made or spent, the admin is told to
  *     re-key, and the phone's poll and lost-answer ask both answer 503.
+ *  L. The shared placement (vault rethink VR4): under "BeanPool's key vault" this server keeps only its half, and the
+ *     bring-back answers with that half and the community's voucher, signed by the node key; the half alone opens nothing,
+ *     and joined to the vault's it gives the SAME key and the words. It removes and re-locks as a copy does.
  *
  * Run (from apps/server): SERVER_SUITES_ONLY="test-bring-back" TEST_ALL_JOBS=2 node ../../scripts/run-server-suites.mjs
  */
@@ -37,8 +40,10 @@ process.env.BEANPOOL_ADDRESSES = 'mullum.test';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { generateKeyPair } from '@libp2p/crypto/keys';
 import {
-    communityCopyFromRelease, isKeySealedCopy, openReleaseOnDevice, openSeedWithCopyKey, sealSeedToCopyKey,
+    checkVaultVoucher, communityCopyFromRelease, communityHalfFromRelease, isKeySealedCopy, joinCopyKeyHalves, openReleaseOnDevice, openSeedWithCopyKey,
+    sealSeedToCopyKey, splitCopyKey, vaultCopyDigest,
     PUSH_NOTICE_KINDS,
 } from '@beanpool/core';
 import { db } from './db/db.js';
@@ -49,8 +54,9 @@ import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { cleanRekeyCode, resetRekeyWrongCodesForTests } from './engine/rekey-redeem.js';
+import { BRING_BACK_ACCOUNT_GONE, cleanRekeyCode, resetRekeyWrongCodesForTests } from './engine/rekey-redeem.js';
 import { setNodeRole } from './config/node-role.js';
+import { setPrivateKeyForTests } from './p2p.js';
 import { setRecoveryCopies, NO_COPIES_HERE } from './config/recovery-copies.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { ensureRecoverySealKey, installCarriedRecoverySealKey, recoverySealKeyPath, rewrapCommunityCopiesFromRetiredKeys } from './services/recovery-seal-key.js';
@@ -192,7 +198,7 @@ async function runTests() {
         setRecoveryCopies('vault');
         const atVault = await turnOn(mia);
         assert(atVault.status === 409 && atVault.json.code === 'not_offered' && !copyRow(mia.pubKeyHex),
-            `under "BeanPool's key vault" the community-held copy isn't offered (VR4's shared placement is not built) (got ${atVault.status} ${atVault.json.code})`);
+            `under "BeanPool's key vault" the community-held copy isn't offered: the shared placement keeps a half, section L (got ${atVault.status} ${atVault.json.code})`);
         setRecoveryCopies('none');
         const atNone = await turnOn(mia);
         assert(atNone.status === 409 && atNone.json.code === NO_COPIES_HERE && !copyRow(mia.pubKeyHex), `under "Nowhere" nothing is kept (got ${atNone.status} ${atNone.json.code})`);
@@ -389,6 +395,10 @@ async function runTests() {
         adminPruneUser(kim.pubKeyHex, COMMUNITY_DECISION_ACTOR);
         const afterPrune = await bindByNumber(adminSession, kim.pubKeyHex, code3, a3.json.match);
         assert(afterPrune.status >= 400 && (await poll(p3, code3)).json.state !== 'released', `a member removed since the code is not brought back (got ${afterPrune.status})`);
+        // Design §4.4: a phone that asks on that code is told what is true, since a new code wouldn't help. Nothing is written.
+        const lateAsk = await ask(makeKeypair(), code3);
+        assert(lateAsk.status === 404 && lateAsk.json.code === 'code_not_valid' && lateAsk.json.error === BRING_BACK_ACCOUNT_GONE,
+            `a phone asking on it hears the community no longer has the account (got ${lateAsk.status} ${lateAsk.json.error})`);
         const prunedIssue = await issueBringBack(adminSession, kim.pubKeyHex);
         assert(prunedIssue.status >= 400 && prunedIssue.json.error !== undefined, 'and no new code is made for them');
         void BRING_BACK_GONE;
@@ -598,6 +608,142 @@ async function runTests() {
         const lateDecline = await as(adminSession, 'POST', `/api/local/admin/members/${wes.pubKeyHex}/rekey/proposals/${makeKeypair().pubKeyHex}/decline`, {});
         assert(/^BB-/.test(wesCode ?? '') && cancelled.status === 200 && lateDecline.status === 404 && lateDecline.json.error === BRING_BACK_NO_LIVE_CODE,
             `Not theirs on a cancelled bring-back code says no bring-back code is waiting (got ${cancelled.status}, ${lateDecline.status} ${lateDecline.json.error})`);
+    }
+
+    // ── L ──
+    section('L. The shared placement: this server keeps only its half; a bring-back answers with it and the community\'s voucher');
+    {
+        const nodeIdentity = await generateKeyPair('Ed25519');
+        setPrivateKeyForTests(nodeIdentity);
+        const nodeKey = Buffer.from(nodeIdentity.publicKey.raw).toString('hex');
+        const halfOf = (kp: Keypair) => {
+            const made = sealSeedToCopyKey(kp.seed, { words: kp.words ?? null });
+            return { made, ...splitCopyKey(made.copyKey), digest: vaultCopyDigest(made.copy) };
+        };
+        const putHalf = (kp: Keypair, half: unknown, copy: unknown) => signedReq(kp, 'POST', '/api/recovery/community-copy/half', { half, copy });
+
+        const lea = join('LeaMember', fromSeed(sha256(Buffer.from('lea')), undefined));
+        const m = halfOf(lea);
+        setRecoveryCopies('server');
+        const atServer = await copyStatus(lea);
+        assert(atServer.json.offered === true && atServer.json.sharedOffered === false && atServer.json.nodeKey === nodeKey,
+            'under "This server" the whole copy is offered, not the half, and the status says the node key');
+        const refusedAtServer = await putHalf(lea, m.nodeHalf, m.digest);
+        assert(refusedAtServer.status === 409 && refusedAtServer.json.code === 'not_offered' && !copyRow(lea.pubKeyHex), 'under "This server" a half is refused, and nothing kept');
+        setRecoveryCopies('none');
+        const refusedAtNone = await putHalf(lea, m.nodeHalf, m.digest);
+        assert(refusedAtNone.status === 409 && refusedAtNone.json.code === NO_COPIES_HERE && !copyRow(lea.pubKeyHex), 'under "Nowhere" a half is refused, and nothing kept');
+        setRecoveryCopies('vault');
+        const atVault = await copyStatus(lea);
+        assert(atVault.json.offered === false && atVault.json.sharedOffered === true && atVault.json.kept === false,
+            'under "BeanPool\'s key vault" the half is offered, and the whole copy (an app from before it, the web) is not');
+        process.env.NODE_PROFILE = 'global';
+        const openDoor = await putHalf(lea, m.nodeHalf, m.digest);
+        const openStatus = await copyStatus(lea);
+        assert(openDoor.status === 409 && openDoor.json.code === 'not_offered' && openStatus.json.sharedOffered === false && !copyRow(lea.pubKeyHex),
+            'never where anyone can walk in: an admin must have seen the person');
+        delete process.env.NODE_PROFILE;
+        for (const [half, copy] of [['short', m.digest], [m.nodeHalf, 'short'], [undefined, undefined], [m.made.copyKey + 'x', m.digest]]) {
+            const bad = await putHalf(lea, half, copy);
+            assert(bad.status === 400 && bad.json.code === 'bad_half' && !copyRow(lea.pubKeyHex), `a half of the wrong shape is refused (${bad.status})`);
+        }
+
+        const on = await putHalf(lea, m.nodeHalf, m.digest);
+        assert(on.status === 200 && on.json.kept === true && !!on.json.since, `the half is kept, with since when (got ${on.status})`);
+        const row = copyRow(lea.pubKeyHex)!;
+        assert(JSON.parse(row.kdf_params).alg === 'node-wrap-xc20p-v1' && JSON.parse(row.kdf_params).inner === 'copykey-half-v1',
+            'the stored row is the recovery seal\'s wrap, naming a half');
+        const rowText = JSON.stringify(row);
+        assert(!rowText.includes(m.nodeHalf) && !rowText.includes(m.digest), 'the half and its digest are not in the stored row in the clear');
+        const st = await copyStatus(lea);
+        assert(st.json.kept === true && st.json.placement === 'shared' && st.json.copy === m.digest && st.json.since === on.json.since,
+            'the status says a half is kept, of which copy');
+        const shares = await signedReq(lea, 'POST', '/api/recovery/shares/status', {});
+        assert(shares.json.communityCopy?.since === on.json.since && shares.json.communityCopy?.placement === 'shared' && shares.json.communityCopy?.copy === m.digest && shares.json.nodeKey === nodeKey,
+            'the copies\' status lists it as a half, of which copy, with the node key the phone matches the vault\'s copy by');
+        const admin0 = await adminStatus(ownerSession, lea.pubKeyHex);
+        assert(admin0.json.communityCopy?.kept === true && admin0.json.communityCopy?.placement === 'shared', 'the admin sees it can be brought back');
+
+        // A bring-back: the code and the number as for a whole copy.
+        putPushTokenRow(lea.pubKeyHex, 'ExponentPushToken[lea-old-phone]', 'android');
+        pushed.length = 0;
+        const issued = await issueBringBack(ownerSession, lea.pubKeyHex);
+        assert(issued.status === 200 && /^BB-/.test(issued.json.code ?? ''), `a half is enough for a bring-back code (got ${issued.status})`);
+        const code = issued.json.code as string;
+        const phone = makeKeypair();
+        const a = await ask(phone, code);
+        const bound_ = await bindByNumber(ownerSession, lea.pubKeyHex, code, a.json.match);
+        assert(bound_.status === 200 && bound_.json.broughtBack === true && bound_.json.placement === 'shared', `the number confirms it, and says the placement (got ${bound_.status})`);
+        await flush();
+        assert(pushed.length === 1 && pushed[0].body === PUSH_NOTICE_KINDS['account.bring-back-started'].body,
+            `the phones are told at the code, and never told it is back: the vault holds it a day, and tells them itself (got ${pushed.length})`);
+
+        const answer = await poll(phone, code);
+        assert(answer.status === 200 && answer.json.state === 'released' && answer.json.memberKey === lea.pubKeyHex && typeof answer.json.voucher === 'string' && !('voucherFor' in answer.json),
+            `the phone's poll has its release and a voucher (got ${answer.status} ${answer.json.state})`);
+        const binding = { collectionId: code, holderType: 'community-half' };
+        const released = communityHalfFromRelease(openReleaseOnDevice(answer.json.release, phone.seed, binding));
+        assert(released.half === m.nodeHalf && released.copy === m.digest, 'the release opens, with this phone\'s key, to this server\'s half and the digest of its copy');
+        let otherOpened = false;
+        try { openReleaseOnDevice(answer.json.release, makeKeypair().seed, binding); otherOpened = true; } catch { /* as it should */ }
+        let asWhole = false;
+        try { openReleaseOnDevice(answer.json.release, phone.seed, { collectionId: code, holderType: 'community' }); asWhole = true; } catch { /* as it should */ }
+        assert(!otherOpened && !asWhole, 'it opens for no other key, and never as a whole copy');
+        const nothing = (() => { try { openSeedWithCopyKey(m.made.copy, released.half, lea.pubKeyHex); return false; } catch { return true; } })();
+        assert(nothing, 'this server\'s half, with the copy in hand, opens nothing');
+        const joined = openSeedWithCopyKey(m.made.copy, joinCopyKeyHalves(m.vaultHalf, released.half), lea.pubKeyHex);
+        assert(Buffer.from(joined.seed).equals(Buffer.from(lea.seed)), 'joined to the vault\'s half, it opens to the same key');
+
+        const expires = new Date(issued.json.expiresAt).getTime();
+        const voucher = checkVaultVoucher(answer.json.voucher, { now: Date.now(), key: phone.pubKeyHex });
+        assert(voucher.ok && voucher.voucher.community === nodeKey && voucher.voucher.member === lea.pubKeyHex && voucher.voucher.phone === phone.pubKeyHex
+            && voucher.voucher.copy === m.digest && voucher.voucher.exp === expires,
+            'the voucher is signed by the node key, for this member, this phone and this copy, until the code\'s end');
+        assert(checkVaultVoucher(answer.json.voucher, { now: Date.now(), key: makeKeypair().pubKeyHex }).ok === false, 'it is no use to any other phone');
+        const again = await poll(phone, code);
+        const lost = await ask(phone, code);
+        assert(again.json.voucher === answer.json.voucher && lost.json.voucher === answer.json.voucher, 'a poll and a lost answer get the same voucher: one code, one hold at the vault');
+        const log = db.prepare('SELECT operator_pubkey FROM bring_back_log WHERE member_pubkey = ?').all(lea.pubKeyHex) as { operator_pubkey: string }[];
+        assert(log.length === 1, 'the log row names who and when');
+        assert(memberRow(lea.pubKeyHex)?.status === 'active', 'the account is untouched');
+
+        // No node key to sign with (still starting): the phone is told to ask again, never handed a release without one.
+        setPrivateKeyForTests(undefined);
+        const noKey = await poll(phone, code);
+        const noKeyStatus = await copyStatus(lea);
+        assert(noKey.status === 503 && noKey.json.code === 'node_key_not_ready' && noKeyStatus.json.nodeKey === null, `no node key yet: 503, and asked again (got ${noKey.status} ${noKey.json.code})`);
+        setPrivateKeyForTests(nodeIdentity);
+
+        // A carried seal key locks a half again like any copy, under its own holder type.
+        const rae = join('RaeMember');
+        const r = halfOf(rae);
+        await putHalf(rae, r.nodeHalf, r.digest);
+        const before = copyRow(rae.pubKeyHex)!;
+        installCarriedRecoverySealKey(crypto.randomBytes(32).toString('base64'));
+        const relocked = rewrapCommunityCopiesFromRetiredKeys();
+        const after = await copyStatus(rae);
+        assert(relocked >= 1 && copyRow(rae.pubKeyHex)!.copy_ct !== before.copy_ct && after.json.kept === true && after.json.copy === r.digest,
+            `a carried seal key: the half is locked again with it, and still opens (${relocked} relocked)`);
+
+        // Its name in the clear says which holder it is bound to; a row that lies about it doesn't open.
+        const liar = join('LiamMember');
+        const l = halfOf(liar);
+        await putHalf(liar, l.nodeHalf, l.digest);
+        db.prepare('UPDATE community_copies SET kdf_params = ? WHERE owner_pubkey = ?').run(JSON.stringify({ alg: 'node-wrap-xc20p-v1', inner: 'copykey-xc20p-v1' }), liar.pubKeyHex);
+        const liarStatus = await copyStatus(liar);
+        assert(liarStatus.json.kept === false && liarStatus.json.unopenable?.reason === 'recovery_seal_unopenable', 'a half can\'t be read as a whole copy: said as a copy this server can\'t open');
+
+        // Removals are a copy's: the member's own, a re-key and deleting the account.
+        const off = await signedReq(rae, 'DELETE', '/api/recovery/community-copy', {});
+        assert(off.status === 200 && off.json.removed === 1 && !copyRow(rae.pubKeyHex) && tombstoned(rae.pubKeyHex), 'turning it off deletes the half, with a tombstone');
+        const nia = join('NiaMember');
+        const n = halfOf(nia);
+        await putHalf(nia, n.nodeHalf, n.digest);
+        const rkCode = (await issueRekey(ownerSession, nia.pubKeyHex)).json.code as string;
+        const rkPhone = makeKeypair();
+        const rkAsk = await ask(rkPhone, rkCode);
+        const moved = await bindByNumber(ownerSession, nia.pubKeyHex, rkCode, rkAsk.json.match);
+        assert(moved.status === 200 && !copyRow(nia.pubKeyHex) && tombstoned(nia.pubKeyHex), `a re-key removes the half with the key it opened (got ${moved.status})`);
     }
 
     console.log(`\n${passed}/${run} checks passed`);

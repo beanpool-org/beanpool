@@ -177,6 +177,8 @@ export function ApplianceSection({
     const [updateInfo, setUpdateInfo] = useState<string | null>(null);
     const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
     const [checkingUpdate, setCheckingUpdate] = useState(false);
+    const [checkedVersion, setCheckedVersion] = useState<string | null>(null);
+    const nodeVersion = checkedVersion || diag?.version;
 
     // Disk Health & Clean Storage state
     const [diskHealth, setDiskHealth] = useState<DiskHealth | null>(diag?.diskHealth || null);
@@ -312,6 +314,9 @@ export function ApplianceSection({
         setScheduleKnown(false);
         setScheduleConfig(null);
         setScheduleReadFailed(false);
+        setCheckedVersion(null);
+        setUpdateInfo(null);
+        setUpdateAvailable(false);
         loadSnapshots();
         loadScheduleConfig();
         load2faStatus();
@@ -495,12 +500,18 @@ export function ApplianceSection({
                 return;
             }
             const data = await res.json();
+            if (data.currentVersion) {
+                setCheckedVersion(data.currentVersion);
+            }
             if (data.updateAvailable) {
                 setUpdateAvailable(true);
-                setUpdateInfo(`Update Available: v${data.latestVersion} (current: v${data.currentVersion || '1.4.2'})`);
+                const latestStr = data.latestVersion ? `: v${String(data.latestVersion).replace(/^v/, '')}` : '';
+                const currentStr = data.currentVersion ? ` (current: v${String(data.currentVersion).replace(/^v/, '')})` : '';
+                setUpdateInfo(`Update Available${latestStr}${currentStr}`);
             } else {
                 setUpdateAvailable(false);
-                setUpdateInfo(`Up to date (current release: v${data.currentVersion || '1.4.2'})`);
+                const currentStr = data.currentVersion ? ` (current release: v${String(data.currentVersion).replace(/^v/, '')})` : '';
+                setUpdateInfo(`Up to date${currentStr}`);
             }
         } catch (e: unknown) {
             setUpdateAvailable(false);
@@ -752,10 +763,12 @@ export function ApplianceSection({
                         <div className="p-3.5 rounded-xl bg-nature-950 border border-nature-800">
                             <span className="text-[10px] uppercase font-bold text-nature-400 tracking-wider">Node Version</span>
                             <div className="text-lg font-black text-white font-mono mt-0.5 flex items-center gap-2">
-                                <span>{diag?.callsign ? 'v1.4.2' : 'v1.4.2'}</span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
-                                    Release
-                                </span>
+                                <span>{nodeVersion ? (nodeVersion.startsWith('v') ? nodeVersion : `v${nodeVersion}`) : ''}</span>
+                                {nodeVersion ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
+                                        Release
+                                    </span>
+                                ) : null}
                             </div>
                             <span className="text-[10px] text-nature-400">Standalone sovereign node</span>
                         </div>

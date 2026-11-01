@@ -62,11 +62,13 @@ import {
     recoveryWordsMatchPublicKey,
     openListedFragment,
     KEEPER_ALG_RELEASE,
+    type CopyCommunity,
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { clearToRestore, restoreFromVault, saveRestoredAccount, type ConfirmReplace, type NameOnNode } from './restore-account';
+import { saveCommunitiesFromCopy } from './copy-communities';
 import { signInWithGoogle, signInWithApple, signInWithFacebook, signInWithProvider, SsoSignInError } from './sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from './sso-providers';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
@@ -381,6 +383,8 @@ export async function recoverAccountWithSso(options: {
     let restoredSeed: Uint8Array;
     /** The 12 words, when the copy carried them (a sign-in connected from a phone that had them). */
     let restoredWords: string[] | null = null;
+    /** The member's communities, when the copy carried a list (vault rethink VR5): saved once the account is. */
+    let restoredCommunities: CopyCommunity[] | null = null;
 
     if (isSingleBlobSso(ssoFrag.kdfParams)) {
         // New-format single-blob SSO: entire seed is sealed in this one fragment, and the 12 words with
@@ -401,6 +405,7 @@ export async function recoverAccountWithSso(options: {
             throw new Error('Decrypted recovery seed has invalid length.');
         }
         restoredWords = opened.words;
+        restoredCommunities = opened.communities;
         // Why a copy gave no words, never the words themselves. 'absent' is every copy made before copies
         // carried them, and every copy from a phone without them: the ordinary case, and not a problem.
         if (opened.wordsStatus === 'unreadable' || opened.wordsStatus === 'mismatch') {
@@ -502,6 +507,9 @@ export async function recoverAccountWithSso(options: {
     // app storage goes first (restore-account.ts `saveRestoredAccount`). Nothing after the gate reads the old anchor:
     // every node call above went to `finalAnchorUrl`.
     await saveRestoredAccount(cleared, finalAnchorUrl);
+    // The copy's list of communities, when it carried one: saved beside the community the account was restored at. Never
+    // fails the restore.
+    await saveCommunitiesFromCopy(restoredCommunities);
 
     options.onProgress?.({ step: 'done', message: 'Account restored successfully!' });
     return {
@@ -614,5 +622,8 @@ export async function finishSsoRestore(
     const identity = await restoreFromVault(restored, anchorUrl, { ...options, clearPending: clearPendingVaultRestore });
     // The vault keeps a copy for this account (it just released one): its holds are worth asking about at app open.
     await noteVaultCopy(identity.publicKey, true);
+    // The copy's list of communities, when it carried one (vault rethink VR5): the rest of the member's communities, saved
+    // beside the one they chose. Never fails the restore.
+    await saveCommunitiesFromCopy(restored.communities);
     return identity;
 }

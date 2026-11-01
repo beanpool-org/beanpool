@@ -14,18 +14,24 @@ import { MarketplaceCard } from '../components/MarketplaceCard';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
+import { PostTagChips } from '../components/PostTagChips';
 import { SharePostButtons } from '../components/SharePost';
 import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
+import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
+    editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
+    tagIndex,
 } from '@beanpool/core';
+import type { ComposerDraft } from '../tools/builder';
+import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -69,7 +75,7 @@ import { iRated, reviewTargetOf } from '../lib/trade-review';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { standingFromRefusal } from '../lib/standing-refusal';
 
-import { marketSearchFromLink, marketSearchToSave, matchesExpandedSearch } from '../lib/search';
+import { marketSearchFromLink, marketSearchQuery, marketSearchToSave, matchesExpandedSearch, searchRows } from '../lib/search';
 import { SAVE_SEARCH_BUTTON, saveSearchLabel, type HomeSearchSettings } from '@beanpool/core';
 import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -119,6 +125,7 @@ interface Props {
      */
     onSaveSearch?: (settings: HomeSearchSettings) => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
+    onComposer?: (draft: ComposerDraft) => void;
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
     onRefreshTransactions?: () => void;
@@ -303,7 +310,7 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -316,6 +323,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [beansOnlyPicked, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnlyPicked, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
+    const [selectedTag, setSelectedTag] = useState<string | null>(null);
+    // A `#tag` tapped: the Market with exactly that typed tag (DESIGN-tags-free-entry-fable.md §4). One filter by tag at a time.
+    const [selectedFree, setSelectedFree] = useState<string | null>(null);
+    const [editTags, setEditTags] = useState<string[]>([]);
+    // The tags the form opened with, moved on by a reload's: what the save compares with, as on the phone (app/post/[id].tsx).
+    const editTagsFrom = useRef<string[]>([]);
+    const [editFreeTags, setEditFreeTags] = useState<string[]>([]);
+    const editFreeTagsFrom = useRef<string[]>([]);
+    const [searchResults, setSearchResults] = useState<MarketplacePost[] | null>(null);
+    // The words that answer was for: under new words it stands only as rows the words match, until their read lands.
+    const [searchResultsWords, setSearchResultsWords] = useState('');
+    const searchTimerRef = useRef<any>(null);
+    // Asks the node again for the search on screen: each read of the list does, so what it brought in reaches the search.
+    const searchAgainRef = useRef<(() => void) | null>(null);
+    const [listReads, setListReads] = useState(0);
     const [groupFilter, setGroupFilter] = useState<string>('all');
     const [userGroups, setUserGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
@@ -543,6 +565,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 
+    // A tag chip on a listing or an event: the Market filtered by it, the page left as Back leaves it (§4.4).
+    const openTag = (id: string) => {
+        setSelectedTag(id);
+        setSelectedFree(null);
+        setSelectedPost(null);
+        setSelectedTxId(null);
+    };
+    const openFree = (tag: string) => {
+        setSelectedFree(tag);
+        setSelectedTag(null);
+        setSelectedPost(null);
+        setSelectedTxId(null);
+    };
+
     // Reset detail view when bottom tab is double-tapped
     useEffect(() => {
         if (marketClickCount > 0) {
@@ -562,6 +598,63 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         if (q) setSearchQuery(q);
         onSearchOpened?.();
     }, [openSearch, onSearchOpened]);
+
+    // Debounced server search: the phone's terms for the words, and the tags they resolve to through the label index (q AND
+    // tags, §4.7), read from where the list is read. A push lands on the answer as it lands on the list (lib/live-posts).
+    useEffect(() => {
+        let active = true;
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        const q = searchQuery.trim();
+        const terms = q ? marketSearchQuery(q) : '';
+        const resolvedTags = q ? searchTagsFor(q) : [];
+        const searchTagIds = [...new Set([...(selectedTag ? [selectedTag] : []), ...resolvedTags])].slice(0, 20);
+        // Words that leave nothing to ask (quote marks alone) are no read: without `q` it would be every listing.
+        if (!terms && searchTagIds.length === 0 && !selectedFree) {
+            setSearchResults(null);
+            return;
+        }
+        const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
+        const fits = (p: MarketplacePost) => postFitsList(p, filter) && fitsNear(p) && matchesExpandedSearch(q, p.title, p.description, p.tags, p.freeTags);
+        const offView = onLivePostChange(change => setSearchResults(prev => prev && applyLivePostChange(prev, change, fits)));
+        let out = false;
+        const read = async () => {
+            // A read already out stands: answers slower than the list's reads would each be thrown away for the next.
+            if (out) return;
+            out = true;
+            const liveMark = liveChangeMark();
+            try {
+                const results = await readNearestInCircle(near, 50, page => getMarketplacePosts({
+                    ...filter,
+                    ...nearParams(near),
+                    ...(terms ? { q: terms } : {}),
+                    ...(searchTagIds.length > 0 ? { tags: searchTagIds } : {}),
+                    ...(selectedFree ? { free: [selectedFree] } : {}),
+                    limit: 50,
+                    ...page,
+                }));
+                if (active) {
+                    setSearchResults(replayLiveChanges(liveMark, results, fits));
+                    setSearchResultsWords(q);
+                }
+            } catch {
+                if (active) setSearchResults(null);
+            } finally {
+                out = false;
+            }
+        };
+        // From the first read on: a read of the list landing mid-typing is no reason to ask with half a word.
+        searchTimerRef.current = setTimeout(() => {
+            searchAgainRef.current = read;
+            read();
+        }, 300);
+        return () => {
+            active = false;
+            searchAgainRef.current = null;
+            offView();
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
+    }, [searchQuery, selectedTag, selectedFree, typeFilter, categoryFilter, beansOnly, groupFilter, near, fitsNear]);
+    useEffect(() => { searchAgainRef.current?.(); }, [listReads]);
 
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
@@ -650,6 +743,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Edit mode
     const [editMode, setEditMode] = useState(false);
+    // A listing read again while its form is open: the picker shows the tags it now has, the member's own changes on top.
+    const selectedPostTags = storedPostTags(postTagsOf(selectedPost?.tags));
+    useEffect(() => {
+        if (!editMode) return;
+        const now = postTagsOf(selectedPostTags);
+        const from = editTagsFrom.current;
+        if (selectedPostTags === storedPostTags(from)) return;
+        editTagsFrom.current = now;
+        setEditTags((edited) => editedTagsOver(from, edited, now));
+    }, [selectedPostTags, editMode]);
+    // The same for the tags its author typed: an edit that never touched them keeps them.
+    const selectedPostFreeTags = storedFreeTags(freeTagsOf(selectedPost?.freeTags));
+    useEffect(() => {
+        if (!editMode) return;
+        const from = editFreeTagsFrom.current;
+        if (selectedPostFreeTags === storedFreeTags(from)) return;
+        const now = freeTagsOf(selectedPostFreeTags);
+        editFreeTagsFrom.current = now;
+        setEditFreeTags((edited) => editedTagsOver(from, edited, now, FREE_TAGS_MAX));
+    }, [selectedPostFreeTags, editMode]);
     const [editType, setEditType] = useState<'offer' | 'need'>('offer');
     const [editCategory, setEditCategory] = useState('other');
     const [editTitle, setEditTitle] = useState('');
@@ -661,6 +774,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState<boolean>(false);
     const [saving, setSaving] = useState(false);
+    // The form's values are one listing's: however a listing is left (a tag chip, the Market tab tapped again, a link), its
+    // edit ends with it, or the next listing the member may edit opens in the form and Save writes the first's words on it.
+    useEffect(() => {
+        setEditMode(false);
+        setEditPhotos([]);
+    }, [selectedPost?.id]);
 
     // Accept & Complete Inline Forms
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
@@ -848,6 +967,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // until the 300s backstop, which is exactly the window this stage widened.
                 lastRefreshTimeRef.current = Date.now();
                 setFillStamp(n => n + 1);
+                setListReads(n => n + 1);
             } catch (e: any) {
                 if (isMembersOnlyRefusal(e)) {
                     setMembersOnly(true);
@@ -1186,9 +1306,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         if (searchQuery.trim()) {
             filtered = filtered.filter(p => {
                 if (p.type === 'poll' && typeFilter !== 'poll') return false;
-                return matchesExpandedSearch(searchQuery, p.title, p.description);
+                // The node's answer stands for the words, unless a tag filter is on: it asks for the words OR the tags, so there
+                // the words still narrow the tag's listings.
+                if (searchResults !== null && !selectedTag && !selectedFree && searchResultsWords === searchQuery.trim()) return true;
+                return matchesExpandedSearch(searchQuery, p.title, p.description, p.tags, p.freeTags);
             });
         }
+
+        // Tag filter (§4.4 post detail tap)
+        if (selectedTag) {
+            filtered = filtered.filter(p => {
+                const pTags = postTagsOf(p.tags);
+                return pTags.some(t => t === selectedTag || t.startsWith(selectedTag + '.'));
+            });
+        }
+        if (selectedFree) filtered = filtered.filter(p => freeTagsOf(p.freeTags).includes(selectedFree));
 
         // Blocked user filtering
         const blocked = getBlockedUsers();
@@ -1404,6 +1536,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onChangeThisDateOnly={(p) => onNavigate?.('map-copy-event', movedCopyContext(p.id))}
                         onEdit={(p) => onNavigate?.('map-edit-event', p.id)}
                         onOpenProfile={onOpenProfile}
+                        onOpenTag={openTag}
+                        onOpenFreeTag={openFree}
                         onChange={(p) => { setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                         onCancelled={(p) => { if (p) setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                     />
@@ -1783,6 +1917,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {selectedPost.description}
                             </p>
                         )}
+
+                        <PostTagChips tags={selectedPost.tags} freeTags={selectedPost.freeTags} onPick={openTag} onPickFree={openFree} className="mb-5" />
 
                         {/* Photos */}
                         {selectedPost.photos && selectedPost.photos.length > 0 && (
@@ -2884,6 +3020,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
                                         setEditPhotos(selectedPost.photos || []);
+                                        editTagsFrom.current = postTagsOf(selectedPost.tags);
+                                        setEditTags(editTagsFrom.current);
+                                        editFreeTagsFrom.current = freeTagsOf(selectedPost.freeTags);
+                                        setEditFreeTags(editFreeTagsFrom.current);
                                         setEditShop({ kind: 'hidden' });
                                         setEditInShop(false);
                                         const post = selectedPost;
@@ -2974,6 +3114,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <option key={cat.id} value={cat.id}>{t('{emoji} {label}', { emoji: cat.emoji, label: t(cat.label) })}</option>
                                     ))}
                                 </select>
+
+                                {/* TagPicker (§4.4) */}
+                                <div className="mb-3">
+                                    <TagPicker
+                                        tags={editTags}
+                                        onChange={setEditTags}
+                                        freeTags={editFreeTags}
+                                        onFreeTagsChange={setEditFreeTags}
+                                        category={editCategory}
+                                        title={editTitle}
+                                        description={editDescription}
+                                    />
+                                </div>
 
                                 {/* Title */}
                                 <input
@@ -3129,6 +3282,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             try {
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
+                                                const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
+                                                const freeTagsChanged = storedFreeTags(editFreeTags) !== storedFreeTags(editFreeTagsFrom.current);
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
                                                     type: editType,
                                                     category: editCategory,
@@ -3138,6 +3293,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     priceType: editPriceType,
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,
+                                                    ...(tagsChanged ? { tags: editTags } : {}),
+                                                    ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
                                                     ...(shopId !== undefined ? { shopId } : {}),
                                                 });
                                                 setSelectedPost(result.post);
@@ -3219,7 +3376,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // "Save this search to Home": a member's search, Offers and Needs only (not under Events or Polls).
     const toSave = onSaveSearch && !isVisitor && isMember !== false
-        ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery) : null;
+        ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery.trim() ? searchQuery : selectedFree ?? '', selectedTag || undefined) : null;
     // The category the Category chip names while one is picked.
     const filterCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
 
@@ -3294,6 +3451,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </button>
                     </>)}
                 </div>
+                {(selectedTag || selectedFree) && (() => {
+                    const label = selectedFree ?? tagIndex().label(selectedTag ?? '');
+                    if (!label) return null;
+                    return (
+                        <div className="flex items-center gap-1.5 mt-2">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                                #{label}
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedTag(null); setSelectedFree(null); }}
+                                    className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:text-emerald-950 dark:hover:text-white font-bold ml-1 cursor-pointer"
+                                    aria-label={t('Clear tag filter')}
+                                >
+                                    ✕
+                                </button>
+                            </span>
+                        </div>
+                    );
+                })()}
                 {toSave && (
                     <button
                         type="button"
@@ -3544,7 +3720,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {loading ? (
                 <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
             ) : membersOnly ? null : (() => {
-                let filtered = clientFilter(posts);
+                let filtered = clientFilter(searchResults !== null ? searchRows(searchResults, posts, searchQuery) : posts);
 
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {
@@ -3619,7 +3795,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </p>
                 ) : null;
 
-                const narrowed = !!searchQuery.trim() || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
+                const narrowed = !!searchQuery.trim() || !!selectedTag || !!selectedFree || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
                     || groupFilter !== 'all' || beansOnly || foundingOnly;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: fillPending ? FILL_BELOW : filtered.length + fillRows.length })
                     ? <ExampleListings />
@@ -4023,6 +4199,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <p data-testid="market-near-empty" className="m-0 mb-2 px-1 text-sm font-bold text-nature-700 dark:text-nature-300">
                                     {t('Nothing within 250 km yet.')}
                                 </p>
+                                {!isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                 {fillPending ? (
                                     <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
                                 ) : fillSection}
@@ -4047,6 +4224,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-sm font-bold text-nature-700 dark:text-nature-300 mb-3">
                                             {nearbyListings ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                         </p>
+                                        {nearbyListings && !isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                         {nearbyListings && (
                                             <div className="mb-4">
                                                 <button
@@ -4197,9 +4375,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 isOpen={showPricingGuide}
                 onClose={() => setShowPricingGuide(false)}
                 reporterPubkey={identity?.publicKey}
-                onSelectOfferItem={() => {
+                onSelectOfferItem={(item, effectivePrice) => {
                     setShowPricingGuide(false);
-                    onNavigate?.('map-post');
+                    const draft: ComposerDraft = {
+                        type: 'offer',
+                        title: item.name,
+                        description: item.description,
+                        category: normalizeCategory(item.category),
+                        credits: effectivePrice,
+                        priceType: 'fixed',
+                        repeatable: false,
+                        cashAlsoNeeded: false,
+                    };
+                    if (onComposer) {
+                        onComposer(draft);
+                    } else {
+                        onNavigate?.('map-post');
+                    }
                 }}
             />
 

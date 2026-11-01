@@ -30,6 +30,13 @@
  *  7. Settings: the claim sends the loopback origin; status shows the tunnel; New tunnel key (rotate) restarts the tunnel
  *     on the new token, and a refusal or a standby changes nothing; Take offline stops the child and clears the address;
  *     Restart tunnel with no address says so.
+ * 24-33. One connector per live name (rename S2, design scratch/fable-design/DESIGN-rename-primary-name-fable.md §1): two
+ *     names run side by side, each on its own token and metrics port; one crashes, rotates, is refused, paused or released
+ *     alone; Take offline of the new name leaves the old one up; a start asks /status?name= again; a name the community
+ *     never went by gets no child; the bound holds; and a server with one name does and asks nothing new.
+ * 34. A Release lands while /status is held: the late `live` answer starts no child and leaves the record `released`.
+ * 35. Both tunnels refused, the old name first: the stored name's check takes the way, and the old name's heal goes out on
+ *     the next check, not a debounce later.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-tunnel-connector.ts
  */
@@ -47,9 +54,10 @@ import {
     initTunnelConnector, syncTunnel, restartTunnel, startTunnelForTakeover, persistAddress, getTunnelStatus, dockerSocketMounted,
     setTunnelConnectorForTests, tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN,
 } from './services/tunnel-connector.js';
-import { reconcile, checkAddressRequest } from './services/public-address-agent.js';
+import { reconcile, checkAddressRequest, tick } from './services/public-address-agent.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { noteTurnedAway } from './config/turned-away-names.js';
+import { registrarNames } from './engine/registrar-names.js';
 import { writeAddressRequestFile } from './address-request.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { useFakeCloudflared, type FakeTunnel } from './tunnel-test-fake.js';
@@ -185,6 +193,63 @@ async function main(): Promise<void> {
         const f = fakes();
         return f.length === 1 && f[0].env.TUNNEL_TOKEN === token && tunnelConnectorForTests().pid === f[0].pid;
     }, ms);
+    /** Until exactly one fake runs, on `token`, and it is no stored name's: a name the community moved off, alone. */
+    const upOn2 = (token: string, ms?: number) => until(() => {
+        const f = fakes();
+        return f.length === 1 && f[0].env.TUNNEL_TOKEN === token;
+    }, ms);
+    /** The tokens running now, sorted. */
+    const onTokens = () => fakes().map((f) => f.env.TUNNEL_TOKEN).sort();
+    const runningAll = (...tokens: string[]) => until(() => JSON.stringify(onTokens()) === JSON.stringify([...tokens].sort()));
+    const fakeOn = (token: string) => fakes().find((f) => f.env.TUNNEL_TOKEN === token);
+    const metricsOf = (r: { argv: string[] } | undefined) => r?.argv[r.argv.indexOf('--metrics') + 1];
+    const asked = (name: string) => statuses().filter((c) => c.name === name).length;
+    /** The agent's own tick, past its quiet wait: what a running server does every 5 to 15 minutes. */
+    let tickNow = Date.now() + 1_000_000_000;
+    const agentTick = () => tick((tickNow += 3_600_000));
+    /** Settings' Release of `name`, a name the key holds besides the stored one: its child stops, and no other's. */
+    const letGo = async (name: string): Promise<boolean> => {
+        const was = reg.holder, wasOffline = reg.offline;
+        reg.holder = (b) => (b?.name === name ? { name, held: 'you', state: 'live', since: 1 } : was(b));
+        reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });
+        const before = fakes().map((f) => f.pid);
+        const rel = await settingsPost!('/api/local/admin/public-address/release-name', { name });
+        reg.holder = was;
+        reg.offline = wasOffline;
+        const left = before.filter((pid) => alive(pid));
+        return rel.status === 200 && (await until(() => !fakes().some((f) => f.env.TUNNEL_TOKEN === `eyJ.token-${name}`))) && left.length >= before.length - 1;
+    };
+    /** `name` stored with a tunnel, then `next` claimed over it: two names, each with its own child. */
+    const twoNames = async (name: string, next: string): Promise<{ oldT: string; newT: string; oldPid: number; newPid: number }> => {
+        const oldT = `eyJ.token-${name}`, newT = `eyJ.token-${next}`;
+        reg.status = (n) => (n ? live(n, `eyJ.token-${n}`) : { status: 'none' });
+        reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        reg.holder = (b) => ({ name: b?.name, held: 'free' });
+        if ((await settingsPost!('/api/local/admin/public-address/claim', { name, mode: 'tunnel' })).status !== 200) throw new Error(`claim of ${name}`);
+        await until(() => !!fakeOn(oldT));
+        const oldPid = fakeOn(oldT)!.pid;
+        if ((await settingsPost!('/api/local/admin/public-address/claim', { name: next, mode: 'tunnel' })).status !== 200) throw new Error(`claim of ${next}`);
+        await until(() => !!fakeOn(newT));
+        return { oldT, newT, oldPid, newPid: fakeOn(newT)?.pid ?? 0 };
+    };
+    /**
+     * A name the community is left on, nothing stored, as an owner ends it: Release is refused (it would end the only way in
+     * with no word to anyone), so it is claimed back and taken offline. True once its child stopped.
+     */
+    const endLastName = async (name: string): Promise<boolean> => {
+        const refused = await settingsPost!('/api/local/admin/public-address/release-name', { name });
+        if (refused.status !== 409 || !/where members reach this community/.test(refused.body?.error || '')) return false;
+        const back = await settingsPost!('/api/local/admin/public-address/claim', { name, mode: 'tunnel' });
+        const off = await settingsPost!('/api/local/admin/public-address/offline');
+        return back.status === 200 && off.status === 200 && (await until(() => fakes().length === 0));
+    };
+    /** Back to nothing stored and nothing running, for the next section. Old names first, while the stored name is main. */
+    const clearNames = async (...names: string[]) => {
+        for (const n of names) await letGo(n);
+        await settingsPost!('/api/local/admin/public-address/offline');
+        reg.status = () => ({ status: 'none' });
+        reg.holder = (b) => ({ name: b?.name, held: 'free' });
+    };
     const T1 = 'eyJhIjoiYWxwaGEtMSJ9.token-one-4f1c9a2e';
     const servers: { app: http.Server | null } = { app: null };
     let settingsPost: ((p: string, body?: unknown) => Promise<{ status: number; body: any }>) | null = null;
@@ -256,6 +321,13 @@ async function main(): Promise<void> {
             assert(rows.filter((l) => l.message.includes('no such host')).length === 1, `20 identical errors → one line (${rows.filter((l) => l.message.includes('no such host')).length})`);
             assert(!tunnelLogs().some((l) => l.message.includes('SECRET-HEADER')), 'a debug line is never forwarded');
             assert(!tunnelLogs().some((l) => l.message.includes(T1)) && rows.some((l) => l.message.includes('[tunnel token]')), 'the token is never logged');
+            // A failed request's address, which may be a photo link's (agent/owner-photos.ts): a secret in its path.
+            fake.say({ level: 'error', message: 'Request failed', error: 'Get "https://node.example/mcp/photos/u/LINK-SECRET-88": EOF' });
+            await until(() => tunnelLogs().some((l) => l.message.includes('Request failed')), 3_000);
+            await sleep(150);
+            assert(!tunnelLogs().some((l) => l.message.includes('LINK-SECRET-88')) && !(getTunnelStatus().reason ?? '').includes('LINK-SECRET-88')
+                && tunnelLogs().some((l) => l.message.includes('/mcp/photos/u/…')), `a photo link's secret is in no line, nor in the status Settings shows (${getTunnelStatus().reason})`);
+            fake.say('Provided Tunnel token is not valid.');
             await sleep(150);
             const st = getTunnelStatus();
             assert(st.state === 'retrying' && st.reason === 'Provided Tunnel token is not valid.', `not connected yet, and why: the error, not the pointer to help after it (${st.state}: ${st.reason})`);
@@ -531,6 +603,8 @@ async function main(): Promise<void> {
                 return { status: res.status, body: await res.json().catch(() => null) as any };
             };
 
+            // alpha, this suite's name so far, goes first: a claim over a live name keeps that name's child (24).
+            assert((await post('/api/local/admin/public-address/offline')).status === 200 && pa() === null, 'alpha is taken offline');
             reg.claim = (b) => live(b.name, 'eyJ.token-beta');
             const claimed = await post('/api/local/admin/public-address/claim', { name: 'beta', mode: 'tunnel' });
             const c = claims().at(-1)!;
@@ -778,6 +852,10 @@ async function main(): Promise<void> {
             const off = await post('/api/local/admin/public-address/offline');
             const sent = reg.calls.filter((c) => c.path === '/api/registrar/offline')[offs];
             assert(off.status === 200 && sent?.body?.name === 'owner-next', `Take offline releases the stored name by name (${JSON.stringify(sent?.body)})`);
+            // owner-pick, the name owner-next moved the community off, is still this key's: its child runs until it is released.
+            assert(await upOn2('eyJ.token-owner-pick'), `owner-pick's tunnel still runs (${fakes().map((f) => f.env.TUNNEL_TOKEN).join(', ')})`);
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            assert(await endLastName('owner-pick'), 'all that is left, it is not released by name; claimed back and taken offline, its tunnel stops');
             // A claim that gets no answer here in time but completes at the registrar: said, so the owner sees the key holds it.
             let finish: () => void = () => {};
             reg.claim = (b) => new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow')); });
@@ -965,7 +1043,8 @@ async function main(): Promise<void> {
             const rel = await releasing;
             assert(claim.status === 200 && rel.status === 409 && !offlines().slice(o0).some((c) => c.body?.name === 'race-late') && pa()?.name === 'race-late' && pa()?.status === 'live',
                 `D1: a claim during /holder stores the name, and the release is refused, nothing sent (claim ${claim.status} release ${rel.status} ${JSON.stringify(rel.body)} sent ${JSON.stringify(offlines().slice(o0).map((c) => c.body))} stored ${pa()?.name})`);
-            assert(await upOn('eyJ.token-race-late'), 'and the claimed name\'s tunnel runs');
+            assert(await until(() => tunnelConnectorForTests().runningToken === 'eyJ.token-race-late'), 'and the claimed name\'s tunnel runs');
+            assert(await letGo('race-stored'), 'beside the one it moved off, until that is released');
 
             // D2b: nothing stored; Settings' status read stores the owner's pending pick while /holder is pending.
             await post('/api/local/admin/public-address/offline');
@@ -1094,6 +1173,349 @@ async function main(): Promise<void> {
             reg.claim = claimNow;
             reg.holder = (b) => ({ name: b?.name, held: 'free' });
             await post('/api/local/admin/public-address/offline');
+        });
+
+        await section('24. two names: a claim of a new name leaves the old name\'s child running, on its own token and metrics port', async () => {
+            const n0 = fake.runs().length;
+            const { oldT, newT, oldPid, newPid } = await twoNames('two-old', 'two-new');
+            assert(await runningAll(oldT, newT), `both names run (${onTokens().join(', ')}; on main the old one's child stops at the claim)`);
+            assert(alive(oldPid) && !fake.exits().some((e) => e.pid === oldPid), 'the old child was never stopped: no gap for the apps still on that name');
+            assert(fake.runs().slice(n0).filter((r) => r.env.TUNNEL_TOKEN === oldT).length === 1, 'nor started twice');
+            assert(tunnelConnectorForTests().pid === newPid && tunnelConnectorForTests().runningToken === newT, 'what Settings reads is the stored name\'s');
+            const a = fakeOn(oldT), b = fakeOn(newT);
+            assert(!!metricsOf(a) && !!metricsOf(b) && metricsOf(a) !== metricsOf(b), `each on its own metrics port (${metricsOf(a)}, ${metricsOf(b)})`);
+            assert(metricsOf(a)!.startsWith('127.0.0.1:') && metricsOf(b)!.startsWith('127.0.0.1:'), 'both on loopback');
+            const keys = Object.keys(b!.env).filter((k) => !(process.platform === 'darwin' && k === '__CF_USER_TEXT_ENCODING')).sort();
+            assert(keys.join() === 'HOME,PATH,TUNNEL_TOKEN' && !JSON.stringify(a!.argv).includes(oldT) && !JSON.stringify(b!.argv).includes(newT),
+                `each with only its own token, in its environment (${keys.join(', ')})`);
+            // Each child's health is read at its own port.
+            fake.readyFor(oldT, 200, 3);
+            fake.readyFor(newT, 503);
+            assert(await until(() => getTunnelStatus().others?.[0]?.connections === 3), `the old name is connected (${JSON.stringify(getTunnelStatus().others)})`);
+            assert(getTunnelStatus().state === 'starting' && getTunnelStatus().others?.[0]?.host === 'two-old.beanpool.org' && getTunnelStatus().others?.[0]?.connections === 3,
+                `Settings reads the stored name's state, and the other's beside it (${JSON.stringify(getTunnelStatus())})`);
+            fake.readyFor(newT, 200);
+            assert(await until(() => getTunnelStatus().state === 'connected'), `and the new one in its own time (${getTunnelStatus().state})`);
+            // Its log says which name, and never its token.
+            fake.sayTo(oldT, { level: 'warn', message: `echoing ${oldT} back` });
+            assert(await until(() => tunnelLogs().some((l) => l.message.includes('two-old.beanpool.org: echoing [tunnel token] back'))), 'its lines say which name, and hide its token');
+            await agentTick();
+            assert(asked('two-old') >= 1, `the agent's tick asks /status?name= about it (${asked('two-old')})`);
+            assert(await runningAll(oldT, newT) && fakeOn(oldT)?.pid === oldPid && fakeOn(newT)?.pid === newPid, 'and with the same tokens nothing restarts');
+            await clearNames('two-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('25. one name crashing stops no other, and backs off alone', async () => {
+            fake.ready(200);
+            const { oldT, newT, oldPid, newPid } = await twoNames('crash-old', 'crash-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            assert(await until(() => getTunnelStatus().state === 'connected'), 'the stored name is connected');
+            const n0 = fake.runs().filter((r) => r.env.TUNNEL_TOKEN === oldT).length;
+            fake.crashFor(oldT, true);
+            process.kill(oldPid, 'SIGKILL');
+            assert(await until(() => fake.runs().filter((r) => r.env.TUNNEL_TOKEN === oldT).length >= n0 + 3, 15_000), `the crashed name is started again, and again (${fake.runs().filter((r) => r.env.TUNNEL_TOKEN === oldT).length - n0})`);
+            assert(alive(newPid) && !fake.exits().some((e) => e.pid === newPid), 'the other name\'s child never noticed');
+            assert(getTunnelStatus().state === 'connected' && tunnelConnectorForTests().crashes === 0, `the stored name stays connected, with no crash of its own (${getTunnelStatus().state}, ${tunnelConnectorForTests().crashes})`);
+            const other = () => tunnelConnectorForTests().tunnels.find((t) => t.host === 'crash-old.beanpool.org');
+            assert((other()?.crashes ?? 0) >= 2, `the back-off counts on the name that crashed (${other()?.crashes})`);
+            assert(await until(() => /stopped|exit code|has stopped/.test(getTunnelStatus().others?.[0]?.reason || ''), 3_000), `Settings sees why, on that name (${JSON.stringify(getTunnelStatus().others)})`);
+            assert(tunnelLogs().some((l) => /crash-old\.beanpool\.org: cloudflared stopped/.test(l.message)), 'and the log names it');
+            fake.crashFor(oldT, false);
+            // Connected, not merely started: a child started before the fix records itself, then exits on the crash file.
+            assert(await until(() => getTunnelStatus().others?.[0]?.state === 'connected', 10_000), `fixed: it comes back after its wait (${JSON.stringify(getTunnelStatus().others)})`);
+            // And the other way round: the stored name crashes alone.
+            const oldNow = fakeOn(oldT)!.pid;
+            fake.crashFor(newT, true);
+            process.kill(newPid, 'SIGKILL');
+            assert(await until(() => (tunnelConnectorForTests().crashes ?? 0) >= 2, 15_000), `the stored name backs off (${tunnelConnectorForTests().crashes})`);
+            assert(alive(oldNow) && fakeOn(oldT)?.pid === oldNow, 'and the old name\'s child keeps running');
+            fake.crashFor(newT, false);
+            assert(await until(() => !!fakeOn(newT), 5_000), 'fixed too');
+            await clearNames('crash-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('26. a new token for one name restarts that child alone', async () => {
+            const { oldT, newT, oldPid, newPid } = await twoNames('rot-old', 'rot-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            const T_NEW = 'eyJ.rot-old-second-key';
+            reg.status = (n) => live(n!, n === 'rot-old' ? T_NEW : newT);
+            await agentTick();
+            assert(await runningAll(T_NEW, newT), `the tick runs the old name's new token (${onTokens().join(', ')})`);
+            assert(!alive(oldPid) && fake.exits().some((e) => e.pid === oldPid && e.signal === 'SIGTERM'), 'its old child got SIGTERM');
+            assert(fakeOn(newT)?.pid === newPid && pa()?.name === 'rot-new' && pa()?.tunnelToken === newT, 'the stored name\'s child and token are untouched');
+            assert(!JSON.stringify(getNodeConfig()).includes(T_NEW), 'and the other name\'s token is not stored anywhere');
+            // And the stored name's New tunnel key restarts the stored name's child alone.
+            const nowOld = fakeOn(T_NEW)!.pid;
+            const rot = await settingsPost!('/api/local/admin/public-address/rotate');
+            assert(rot.status === 200 && await runningAll(T_NEW, 'T-rotate-rot-new'), `New tunnel key restarts only the stored name (${rot.status}, ${onTokens().join(', ')})`);
+            assert(fakeOn(T_NEW)?.pid === nowOld, 'the other child did not restart');
+            await clearNames('rot-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('27. Cloudflare refuses one name\'s tunnel: only that name is asked about, and never claimed', async () => {
+            const { oldT, newT, newPid } = await twoNames('dead-old', 'dead-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            fake.readyFor(oldT, 503);
+            fake.readyFor(newT, 200);
+            const c0 = claims().length, h0 = heals().length, a0 = asked('dead-old');
+            const refuseOld = (token: string) => setInterval(() => fake.sayTo(token, UNAUTHORIZED), 60);
+            // A new token at the registrar: run.
+            const T_NEW = 'eyJ.dead-old-second';
+            reg.status = (n) => live(n!, n === 'dead-old' ? T_NEW : newT);
+            let spam = refuseOld(oldT);
+            assert(await runningAll(T_NEW, newT).then(async (r) => r || runningAll(T_NEW, newT)), `past the threshold, its new token runs (${onTokens().join(', ')})`);
+            clearInterval(spam);
+            assert(asked('dead-old') > a0 && claims().length === c0 && heals().length === h0, 'asked by name; no claim, no heal for a new token');
+            assert(getTunnelStatus().state === 'connected' && fakeOn(newT)?.pid === newPid && pa()?.tunnelToken === newT, 'and the stored name is untouched');
+            // The same token: gone at Cloudflare though the name is live. A heal, never a claim.
+            const T_HEALED = 'eyJ.dead-old-healed';
+            fake.readyFor(T_NEW, 503);
+            reg.heal = (b) => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: T_HEALED, changed: ['tunnel', 'dns'] });
+            spam = refuseOld(T_NEW);
+            assert(await until(() => heals().length === h0 + 1, 6_000), `one heal of that name (${heals().length - h0})`);
+            assert(await runningAll(T_HEALED, newT), `its fresh token runs (${onTokens().join(', ')})`);
+            clearInterval(spam);
+            assert(heals().at(-1)?.body?.name === 'dead-old' && heals().at(-1)?.body?.origin === LOOPBACK_ORIGIN && claims().length === c0, `to this server's loopback, and no claim (${JSON.stringify(heals().at(-1)?.body)})`);
+            // The registrar says nothing of it: a refused tunnel is stopped; the stored name goes on, the record keeps the name.
+            fake.readyFor(T_HEALED, 503);
+            reg.status = (n) => (n === 'dead-old' ? { status: 'none' } : live(n!, newT));
+            spam = refuseOld(T_HEALED);
+            assert(await until(() => !fakeOn(T_HEALED), 6_000), `a refused tunnel nobody speaks for stops (${onTokens().join(', ')})`);
+            clearInterval(spam);
+            assert(fakeOn(newT)?.pid === newPid, 'and only that one');
+            await clearNames('dead-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('28. the registrar pauses one name: the sweep\'s pause is healed, the admin\'s stops that tunnel until it is lifted', async () => {
+            const { oldT, newT, newPid } = await twoNames('pause-old', 'pause-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            const c0 = claims().length, h0 = heals().length;
+            const paused = (name: string, reason: string) => ({ status: 'paused', name, hostname: `${name}.beanpool.org`, mode: 'tunnel', reason, since: 1 });
+            const T_HEALED = 'eyJ.pause-old-healed';
+            reg.status = (n) => (n === 'pause-old' ? paused(n, 'content-swap') : live(n!, newT));
+            reg.heal = (b) => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: T_HEALED, changed: ['tunnel', 'dns'] });
+            await agentTick();
+            assert(heals().length === h0 + 1 && heals().at(-1)?.body?.name === 'pause-old' && claims().length === c0, `the sweep's pause: a heal of that name, never a claim (${heals().length - h0})`);
+            assert(await runningAll(T_HEALED, newT), `its fresh tunnel runs (${onTokens().join(', ')})`);
+            reg.status = (n) => (n === 'pause-old' ? paused(n, 'admin') : live(n!, newT));
+            await agentTick();
+            assert(await runningAll(newT) && heals().length === h0 + 1, `the admin's pause: no heal, and its tunnel stops (${onTokens().join(', ')})`);
+            assert(pa()?.name === 'pause-new' && fakeOn(newT)?.pid === newPid, 'the stored name goes on');
+            reg.status = (n) => live(n!, n === 'pause-old' ? T_HEALED : newT);
+            await agentTick();
+            assert(await runningAll(T_HEALED, newT), `lifted, the next tick runs it again (${onTokens().join(', ')})`);
+            // The registrar re-making it answers pending, or says nothing of it: what runs keeps running, and it is asked again.
+            const pid = fakeOn(T_HEALED)!.pid;
+            for (const word of [{ status: 'pending', name: 'pause-old', hostname: 'pause-old.beanpool.org', reason: 'provisioning' }, { status: 'none' }, live('pause-new', newT)]) {
+                reg.status = (n) => (n === 'pause-old' ? word : live(n!, newT));
+                await agentTick();
+                assert(fakeOn(T_HEALED)?.pid === pid, `${word.status}${(word as any).name ? ` of ${(word as any).name}` : ''}: its child runs on (${onTokens().join(', ')})`);
+            }
+            const before = asked('pause-old');
+            await agentTick();
+            assert(asked('pause-old') === before + 1, 'and it is still asked about');
+            await clearNames('pause-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('29. a name released stops its own child and no other, and is asked about no more', async () => {
+            const { oldT, newT, oldPid, newPid } = await twoNames('rel-old', 'rel-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            await agentTick();
+            const before = asked('rel-old');
+            assert(before >= 1, 'it is asked about while it is held');
+            assert(await letGo('rel-old'), 'Release lets it go');
+            assert(!alive(oldPid) && fake.exits().some((e) => e.pid === oldPid && e.signal === 'SIGTERM'), `its child got SIGTERM (on main nothing stops it: there it stopped at the claim)`);
+            assert(fakeOn(newT)?.pid === newPid && alive(newPid) && pa()?.name === 'rel-new', 'the stored name\'s child never noticed');
+            await agentTick();
+            await sleep(200);
+            assert(asked('rel-old') === before && !fakeOn(oldT), `the tick asks nothing more of it, and nothing starts it again (${asked('rel-old') - before})`);
+            await clearNames();
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('30. the new name taken offline: the old name keeps its tunnel, on a server with nothing stored', async () => {
+            const { oldT, oldPid, newPid } = await twoNames('back-old', 'back-new');
+            assert(await until(() => onTokens().length === 2), `both run (${onTokens().join(', ')})`);
+            const off = await settingsPost!('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null && !alive(newPid), `Take offline stops the name it released (${off.status})`);
+            assert(alive(oldPid) && fakeOn(oldT)?.pid === oldPid, 'the old name keeps running: the community falls back to a name that answers');
+            assert(getTunnelStatus().state === 'off' && getTunnelStatus().others?.length === 1, `Settings says the stored name's tunnel is off, and the other's is up (${JSON.stringify(getTunnelStatus())})`);
+            // The agent's refresh stops at nothing stored, but this does not.
+            const T_NEW = 'eyJ.back-old-second';
+            reg.status = (n) => (n === 'back-old' ? live(n, T_NEW) : { status: 'none' });
+            await agentTick();
+            assert(await runningAll(T_NEW), `the tick still asks about it, and runs its new token (${onTokens().join(', ')})`);
+            const pid = fakeOn(T_NEW)!.pid;
+            const restart = await settingsPost!('/api/local/admin/public-address/restart-tunnel');
+            assert(restart.status === 200 && await until(() => !!fakeOn(T_NEW) && fakeOn(T_NEW)!.pid !== pid), `Restart tunnel restarts what runs (${restart.status} ${JSON.stringify(restart.body)})`);
+            assert(await endLastName('back-old'), 'all that is left, it is not released by name; claimed back and taken offline, its tunnel stops');
+            await clearNames();
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('31. a start: the stored name at once, the old name from /status?name=, and a standby neither', async () => {
+            const { oldT, newT } = await twoNames('boot-old', 'boot-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            await resetTunnelConnectorForTests();
+            assert(await until(() => fakes().length === 0), 'the process is gone');
+            // Nothing answers: the stored name needs no registrar, and the old one waits for it.
+            reg.status = () => [503, { error: 'down' }];
+            await syncTunnel();
+            await agentTick();
+            assert(await runningAll(newT), `with the registrar down the stored name runs alone (${onTokens().join(', ')})`);
+            assert(!JSON.stringify(getNodeConfig()).includes(oldT), 'the old name\'s token was never stored: that is why it waits');
+            reg.status = (n) => live(n!, `eyJ.token-${n}`);
+            await agentTick();
+            assert(await runningAll(oldT, newT), `the registrar back, the next tick brings it up (${onTokens().join(', ')})`);
+            setNodeRole('backup');
+            const st = await syncTunnel();
+            assert(st.state === 'off' && await until(() => fakes().length === 0), `a standby runs neither (${onTokens().join(', ')})`);
+            const n = statuses().length;
+            await agentTick();
+            assert(statuses().length === n, 'and asks nothing about them');
+            setNodeRole('primary');
+            await syncTunnel();
+            await agentTick();
+            assert(await runningAll(oldT, newT), `the main server again, both (${onTokens().join(', ')})`);
+            // A take-over waiting on its tunnel step holds both; the step starts both.
+            const journal = path.join(DATA!, 'takeover-journal.json');
+            fs.writeFileSync(journal, JSON.stringify({ v: 1, id: 'test-journal-2', state: 'restarting', steps: { restart: { at: new Date().toISOString() }, audit: { at: new Date().toISOString() } } }));
+            await resetTunnelConnectorForTests();
+            await syncTunnel();
+            await agentTick();
+            assert(await until(() => fakes().length === 0), `held, neither runs (${onTokens().join(', ')})`);
+            await startTunnelForTakeover();
+            assert(await runningAll(oldT, newT), `the take-over's step brings up both, the other from /status (${onTokens().join(', ')})`);
+            fs.rmSync(journal);
+            await clearNames('boot-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('32. only a name the community went by gets a child; the bound holds; one token is one child', async () => {
+            const post = settingsPost!;
+            reg.claim = (b) => (b.name === 'wait-one' ? { status: 'pending', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel' } : live(b.name, `eyJ.token-${b.name}`));
+            reg.status = (n) => live(n!, `eyJ.token-${n}`);
+            assert((await post('/api/local/admin/public-address/claim', { name: 'wait-one', mode: 'tunnel' })).status === 200, 'a claim that only waits');
+            assert((await post('/api/local/admin/public-address/claim', { name: 'over-it', mode: 'tunnel' })).status === 200, 'then another name');
+            await agentTick();
+            assert(await runningAll('eyJ.token-over-it') && asked('wait-one') === 0, `the waiting name was never this community's: no child, even if its key gets it (${onTokens().join(', ')})`);
+            noteTurnedAway('late-name', 'late-claim');
+            await agentTick();
+            assert(await runningAll('eyJ.token-over-it') && asked('late-name') === 0, 'nor a late claim');
+            await clearNames();
+
+            setTunnelConnectorForTests({ maxTunnels: 2 });
+            const { oldT, newT } = await twoNames('cap-one', 'cap-two');
+            assert((await post('/api/local/admin/public-address/claim', { name: 'cap-three', mode: 'tunnel' })).status === 200, 'a third name');
+            await agentTick();
+            assert(await runningAll(newT, 'eyJ.token-cap-three') && !fakeOn(oldT), `past the bound the oldest gives way (${onTokens().join(', ')})`);
+            setTunnelConnectorForTests({ maxTunnels: 3 });
+            await agentTick();
+            assert(await runningAll(oldT, newT, 'eyJ.token-cap-three'), `within it, all three (${onTokens().join(', ')})`);
+            await clearNames('cap-one', 'cap-two');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+
+            const SAME = 'eyJ.one-tunnel-two-rows';
+            reg.claim = (b) => live(b.name, SAME);
+            reg.status = (n) => live(n!, SAME);
+            assert((await post('/api/local/admin/public-address/claim', { name: 'same-one', mode: 'tunnel' })).status === 200, 'one token');
+            assert((await post('/api/local/admin/public-address/claim', { name: 'same-two', mode: 'tunnel' })).status === 200, 'answered for a second name');
+            await agentTick();
+            assert(await runningAll(SAME), `one child on it (${onTokens().join(', ')})`);
+            await clearNames('same-one');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('33. a server with one name does exactly what it did: one child, the usual port, nothing more asked', async () => {
+            const post = settingsPost!;
+            updateNodeConfig({ publicAddress: null, registrarNames: [] } as any);   // a server that never held another name
+            await syncTunnel();
+            reg.status = (n) => (n ? live(n, 'eyJ.token-only-name') : { status: 'none' });
+            const n0 = fake.runs().length;
+            assert((await post('/api/local/admin/public-address/claim', { name: 'only-name', mode: 'tunnel' })).status === 200, 'one name is claimed');
+            assert(await upOn('eyJ.token-only-name'), 'one child, on it');
+            assert(metricsOf(fake.lastRun() ?? undefined) === `127.0.0.1:${fake.port}`, `on the usual metrics port (${metricsOf(fake.lastRun() ?? undefined)})`);
+            assert(!('others' in getTunnelStatus()) && Object.keys(getTunnelStatus()).join() === 'state,since,connections,reason,version',
+                `the status Settings reads has the fields it always had (${Object.keys(getTunnelStatus()).join()})`);
+            const s0 = statuses().length;
+            const pid = tunnelConnectorForTests().pid;
+            await agentTick();
+            assert(statuses().length === s0 + 1 && statuses().at(-1)?.name === 'only-name', `a tick asks one /status, about that name (${statuses().length - s0})`);
+            await agentTick();
+            assert(tunnelConnectorForTests().pid === pid && fakes().length === 1 && fake.runs().length === n0 + 1, 'and restarts nothing');
+            const again = await restartTunnel();
+            assert(again?.state === 'starting' && await upOn('eyJ.token-only-name') && !alive(pid!), `Restart tunnel: a new child, the old one gone (${again?.state})`);
+            await post('/api/local/admin/public-address/offline');
+            assert(await until(() => fakes().length === 0) && getTunnelStatus().state === 'off', `Take offline stops it (${getTunnelStatus().state})`);
+            reg.status = () => ({ status: 'none' });
+        });
+
+        await section('34. a Release lands while /status is held: the late live answer starts nothing and writes nothing', async () => {
+            const host = 'late-old.beanpool.org';
+            const { oldT, newT, oldPid, newPid } = await twoNames('late-old', 'late-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            const row = () => registrarNames().find((e) => e.address === host);
+            const startsOf = () => fake.runs().filter((r) => r.env.TUNNEL_TOKEN === oldT).length;
+            let answer: (a: unknown) => void = () => {};
+            const held = new Promise((r) => { answer = r; });
+            reg.status = (n) => (n === 'late-old' ? held : live(n!, newT));
+            const a0 = asked('late-old');
+            const ticking = agentTick();
+            assert(await until(() => asked('late-old') === a0 + 1), `the tick waits on /status?name=late-old (${asked('late-old') - a0})`);
+            assert(await letGo('late-old'), 'Release lets it go meanwhile');
+            assert(!alive(oldPid) && row()?.status === 'released', `its child stopped, and the record says released (${row()?.status})`);
+            const n0 = startsOf();
+            answer(live('late-old', oldT));
+            await ticking;
+            await sleep(200);
+            assert(!tunnelConnectorForTests().tunnels.some((t) => t.host === host) && !fakeOn(oldT) && startsOf() === n0,
+                `the late answer starts no child (${startsOf() - n0}, ${onTokens().join(', ')}; a name let go was still "other" before)`);
+            assert(row()?.status === 'released', `and the record stays released (${row()?.status})`);
+            assert(fakeOn(newT)?.pid === newPid && pa()?.name === 'late-new', 'the stored name never noticed');
+            await clearNames();
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
+        });
+
+        await section('35. both tunnels refused, the old name first: the old name is healed on the next check, not a debounce later', async () => {
+            const { oldT, newT } = await twoNames('both-old', 'both-new');
+            assert(await runningAll(oldT, newT), `both run (${onTokens().join(', ')})`);
+            // A debounce far past this section: only a retry of the skipped heal can send one in time.
+            setTunnelConnectorForTests({ healDebounceMs: 300_000 });
+            fake.readyFor(oldT, 503);
+            fake.readyFor(newT, 503);
+            let answerOld: (a: unknown) => void = () => {}, answerNew: (a: unknown) => void = () => {};
+            const heldOld = new Promise((r) => { answerOld = r; });
+            const heldNew = new Promise((r) => { answerNew = r; });
+            reg.status = (n) => (n === 'both-old' ? heldOld : heldNew);
+            const T_HEALED = 'eyJ.both-old-healed';
+            reg.heal = (b) => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: T_HEALED, changed: ['tunnel', 'dns'] });
+            const a0 = asked('both-old'), b0 = asked('both-new'), c0 = claims().length, h0 = heals().length;
+            const refuse = (token: string) => setInterval(() => fake.sayTo(token, UNAUTHORIZED), 60);
+            const spamOld = refuse(oldT);
+            assert(await until(() => asked('both-old') === a0 + 1, 6_000), `the old name's check goes first (${asked('both-old') - a0})`);
+            const spamNew = refuse(newT);
+            assert(await until(() => asked('both-new') === b0 + 1, 6_000), `then the stored name's, which takes the way (${asked('both-new') - b0})`);
+            // The old name's answer calls for a heal while the stored name's check holds the way: none can go out now.
+            answerOld(live('both-old', oldT));
+            await sleep(300);
+            assert(heals().length === h0, `no heal goes out meanwhile (${heals().length - h0})`);
+            reg.status = (n) => live(n!, n === 'both-old' ? oldT : newT);
+            answerNew(live('both-new', newT));
+            assert(await until(() => claims().length === c0 + 1, 6_000), `the stored name is made again (${claims().length - c0})`);
+            assert(await until(() => heals().length === h0 + 1, 6_000), `and the old name is healed on the next check (${heals().length - h0}; before, its debounce was spent on the skipped heal)`);
+            assert(heals().at(-1)?.body?.name === 'both-old' && claims().slice(c0).every((c) => c.body?.name === 'both-new'), `by a heal of that name, never a claim (${JSON.stringify(heals().at(-1)?.body)})`);
+            assert(await runningAll(T_HEALED, newT), `its fresh token runs (${onTokens().join(', ')})`);
+            clearInterval(spamOld);
+            clearInterval(spamNew);
+            setTunnelConnectorForTests({ healDebounceMs: 2_000 });
+            await clearNames('both-old');
+            assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

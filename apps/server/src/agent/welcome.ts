@@ -44,12 +44,15 @@ export function welcomeInstructions(f: WelcomeFacts): string {
         : '';
     const cannotAct = f.canSuggest ? 'approve a suggestion' : 'act on a report or a join request, or send an announcement';
     // A post is done the moment it is made: the assistant says it did it, unlike a suggestion. Its photos (slice S4): a hosted
-    // assistant can't write a photo's base64 in its call, so it is told the two ways that need none (agent/owner-photos.ts;
+    // assistant can't write a photo's base64 in its call, so it is told the ways that need none (agent/owner-photos.ts;
     // /mcp/photos is its PHOTO_UPLOAD_PATH, written out here so this file imports nothing).
     const posts = f.canPost
         ? ` A post is made at once, public to members: post only what ${f.callsign} asked for, and after each say that you posted it, with its link.`
-            + ' For its photos give photo_urls (public addresses of images, which this server fetches) or photo_ids (each image uploaded first to '
-            + '/mcp/photos on this server); base64 photos are for a program that has the files.'
+            + ' For its photos give photo_urls (public addresses of images, which this server fetches) or photo_ids (each image uploaded first: '
+            + 'photo_upload_link gives an address to curl each image to, and a program that sends your token can POST to /mcp/photos on this server); '
+            + 'base64 photos are for a program that has the files.'
+            // Tags T4: assistants wrote "Tags: music, live, gig" into descriptions.
+            + ' Tag a post from the library first (tags, ids from tags_search); free_tags are only for what the library lacks; never write tags into a description.'
         : '';
     return [
         `You are connected to "${f.community}", a BeanPool community server at ${f.url}, acting for ${f.callsign}, who is an ${f.role} there. `

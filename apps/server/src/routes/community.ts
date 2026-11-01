@@ -39,6 +39,7 @@ import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE
 import { pushKeyHex } from '../engine/push-notices.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { cleanRekeyCode, proposeRekey, rekeyRedeemStatus, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
+import { NodeKeyNotReady, withVoucher } from '../services/node-voucher.js';
 import { recordKeySuccession, rekeyedFromOf } from '../engine/key-succession.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText, normaliseLang } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
@@ -1175,8 +1176,9 @@ router.post('/api/invite/generate', async (ctx) => {
         ctx.body = { error: 'publicKey is required' };
         return;
     }
-    // 20 made a day and 50 unused at once, per member (W-main, engine/writer-bounds.ts), checked once the maker is known
-    // to be a member who may invite at all (their 403 below comes first), before anything is written. Where only admins
+    // 20 made a day and 50 unused at once, per member, an owner's or admin's the owners' setting (W-main,
+    // engine/writer-bounds.ts), checked once the maker is known to be a member who may invite at all (their 403 below
+    // comes first), before anything is written. Where only admins
     // invite (config/door.ts), a member who is no owner or admin is answered 403 `admins_only` before the limit.
     let invite: ReturnType<typeof generateInvite>;
     try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
@@ -1547,7 +1549,7 @@ router.post('/api/member/re-enroll', async (ctx) => {
 
     try {
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = proposeRekey(cleanCode, cleanNew, clientLimiterKey(ctx));
+        ctx.body = await withVoucher(proposeRekey(cleanCode, cleanNew, clientLimiterKey(ctx)));
     } catch (e: any) {
         if (e instanceof RekeyRedeemRefusal) {
             ctx.status = e.status;
@@ -1555,8 +1557,9 @@ router.post('/api/member/re-enroll', async (ctx) => {
             return;
         }
         // A bring-back's lost answer is its release again, opened from the recovery seal (engine/bring-back.ts): a server
-        // that can't open it answers as the status route below does, and the phone asks again; never a refusal it shows.
-        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) {
+        // that can't open it, or can't sign its voucher yet, answers as the status route below does, and the phone asks
+        // again; never a refusal it shows.
+        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable || e instanceof NodeKeyNotReady) {
             ctx.status = 503;
             ctx.body = { error: e.message, code: (e as any).code };
             return;
@@ -1579,11 +1582,11 @@ router.get('/api/member/re-enroll/status', async (ctx) => {
     }
     ctx.set('Cache-Control', 'private, no-store');
     try {
-        ctx.body = rekeyRedeemStatus(ctx.query.code, signer);
+        ctx.body = await withVoucher(rekeyRedeemStatus(ctx.query.code, signer));
     } catch (e: any) {
         // A bring-back's release is opened from the recovery seal at the poll (engine/bring-back.ts): a server that can't
-        // open it (no seal key, a standby) says so, and the phone asks again.
-        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) {
+        // open it (no seal key, a standby), or can't sign its voucher yet, says so, and the phone asks again.
+        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable || e instanceof NodeKeyNotReady) {
             ctx.status = 503;
             ctx.body = { error: e.message, code: (e as any).code };
             return;

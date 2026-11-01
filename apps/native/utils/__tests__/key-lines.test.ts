@@ -43,6 +43,7 @@ import {
     formatTimeLeft, scanProblemMessage as signinScanProblem, type PairingLookup,
 } from '../settings-signin';
 import { REKEY_TEXT } from '../rekey-redeem';
+import { COMMUNITY_RECOVERY_TEXT } from '../community-recovery';
 import { claimOutcomeMessage, type ClaimOutcome } from '../node-claim';
 import { NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE, stillKeptLine, type KeptCommunity } from '../delete-here';
 import { NAMES_COPY, UNREACHABLE, firstSentence } from '../names-list';
@@ -106,6 +107,7 @@ const WHOLE: string[] = [
     'Could not reach the node.', 'The node refused the sign-in.',
     SIGNIN_QUESTION, SIGNIN_WARNING, AGENT_QUESTION, AGENT_WARNING, DIGITS_PRIVATE,
     ...Object.values(REKEY_TEXT),
+    ...Object.values(COMMUNITY_RECOVERY_TEXT),
     'That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.',
     'That isn’t a community address the app can use.',
     'That is not a community address the app can use.', 'Could not reach the server.', "That address doesn't answer like a BeanPool server.",
@@ -136,13 +138,17 @@ describe('key-lines.ts: the whole sentences it knows', () => {
     });
 
     it('every sentence it knows whole is one of those, or one of the source files writes it (sentences a function says)', () => {
-        const sources = ['utils/takeover-unlock.ts', 'utils/settings-signin.ts', 'utils/rekey-redeem.ts', 'utils/node-claim.ts', 'utils/community-copy.ts'];
+        const sources = ['utils/takeover-unlock.ts', 'utils/settings-signin.ts', 'utils/rekey-redeem.ts', 'utils/node-claim.ts', 'utils/community-copy.ts', 'utils/community-recovery.ts'];
         const unknown = knownKeyLines().filter((line) => !WHOLE.includes(line) && !sources.some((file) => writtenIn(file, line)));
         expect(unknown).toEqual([]);
         // The ones read from the sources above are still written there.
         for (const line of WHOLE.filter((l) => !knownKeyLines().includes(l))) expect(keyLineWords(line), line).toBe(line);
         // The names list's inline refusals are still written in names-list.ts.
         for (const line of NAMES_LIST_INLINE) expect(writtenIn('utils/names-list.ts', line), line).toBe(true);
+    });
+
+    it('the node\'s refusal of a removed member\'s bring-back is the sentence both apps translate: it arrives in English', () => {
+        for (const file of ['../server/src/engine/rekey-redeem.ts', '../pwa/src/lib/web-rekey.ts']) expect(writtenIn(file, REKEY_TEXT.accountGone), file).toBe(true);
     });
 
     it('a line it doesn\'t know, a node\'s own, is shown as it came, in any language', () => {

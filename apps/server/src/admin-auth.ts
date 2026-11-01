@@ -558,6 +558,9 @@ export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: str
     { method: 'POST', path: '/api/local/admin/posts/:id/restore' },
     { method: 'GET', path: '/api/local/admin/members/muted' },
     { method: 'POST', path: '/api/local/admin/members/:pubkey/unmute' },
+    // Reports clearing a sender's message requests (engine/request-limits.ts): who is limited, and the undo.
+    { method: 'GET', path: '/api/local/admin/members/request-limits' },
+    { method: 'POST', path: '/api/local/admin/members/:pubkey/request-limit/undo' },
     // Clean-up by burst (engine/burst-cleanup.ts, S9): the digest, one account's burst, hiding its posts and the undo.
     // Removing its accounts is not here: that stays with owners and admins.
     { method: 'GET', path: '/api/local/admin/bursts' },
@@ -730,7 +733,7 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
 /**
  * An owner's fresh proof, every time, for the rare actions that can lose the community's data or address, or lock an owner
  * out (design case 18 §5 and amendment 1: replacing the recovery code, taking the address offline, releasing a name or
- * claiming over a live one, retiring the password, break-glass mode and codes, enrolling an owner key, granting or taking
+ * claiming one while the node publishes another address, retiring the password, break-glass mode and codes, enrolling an owner key, granting or taking
  * owner or admin, making an automation token, the gateway settings, and removing, re-pointing or shortening off-box
  * backups). Called after requireAdminRole(ctx, ['owner'], …). What it asks depends on the credential checkAdminAuth took:
  *   automation token     never: 403 token_not_allowed;

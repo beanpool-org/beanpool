@@ -421,6 +421,43 @@ export function CommunityShapeSection({
                             </div>
                         </ShapeRow>
                     )}
+
+                    {/* doorCheck (if present) */}
+                    {settings.doorCheck !== undefined && (
+                        <ShapeRow
+                            id="doorCheck"
+                            icon="🛡️"
+                            name={t('A person check on busy days')}
+                            summary={t('When lots of people are joining, a 12-words join starts with a Cloudflare check. Needs the TURNSTILE keys on the server; without them it does nothing.')}
+                            displayValue={settings.doorCheck.value ? t('On') : t('Off')}
+                            lock={settings.doorCheck.lock}
+                            isOwner={isOwner && !standby}
+                            isOpen={openSetting === 'doorCheck'}
+                            onToggle={() => handleOpenRow('doorCheck', settings.doorCheck?.value)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={Boolean(draftValue)}
+                                        onChange={(e) => setDraftValue(e.target.checked)}
+                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
+                                    />
+                                    <span>{t('Ask for a person check on busy days')}</span>
+                                </label>
+                                <RowControls
+                                    onSave={() => handleSave('doorCheck')}
+                                    onCancel={handleCancel}
+                                    consequence={consequenceText}
+                                    note={note}
+                                    onNoteChange={setNote}
+                                    saving={saving}
+                                    error={rowError}
+                                    saveDisabled={draftValue === settings.doorCheck?.value}
+                                />
+                            </div>
+                        </ShapeRow>
+                    )}
                 </div>
             </div>
 
@@ -553,8 +590,8 @@ export function CommunityShapeSection({
                             id="dmRequests"
                             icon="💬"
                             name={t('First message from someone new')}
-                            summary={t('On: it waits under Requests until the person accepts.')}
-                            displayValue={settings.dmRequests.value ? t('Waits under Requests') : t('Arrives straight away')}
+                            summary={t('On: it waits under Message requests until the person accepts.')}
+                            displayValue={settings.dmRequests.value ? t('Waits under Message requests') : t('Arrives straight away')}
                             lock={settings.dmRequests.lock}
                             isOwner={isOwner && !standby}
                             isOpen={openSetting === 'dmRequests'}
@@ -568,7 +605,7 @@ export function CommunityShapeSection({
                                         onChange={(e) => setDraftValue(e.target.checked)}
                                         className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
                                     />
-                                    <span>{t('Hold first message under Requests')}</span>
+                                    <span>{t('Hold first message under Message requests')}</span>
                                 </label>
                                 <RowControls
                                     onSave={() => handleSave('dmRequests')}
@@ -1161,6 +1198,7 @@ export function logSettingName(setting: string): string {
     const table: Record<string, string> = {
         join: t('Who can join'),
         wordsDoor: t('12 words at the open door'),
+        doorCheck: t('A person check on busy days'),
         knocks: t('Requests to join'),
         beans: t('Beans'),
         knownFloor: t('Known floor for confirmed members'),

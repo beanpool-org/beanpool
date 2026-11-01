@@ -103,6 +103,7 @@ export interface StorageCleanResult {
 
 export interface DiagnosticsResponse {
     status: string;
+    version?: string | null;
     uptimeSeconds: number;
     cpuLoadPercent: number;
     memoryUsageMb: number;
@@ -229,6 +230,8 @@ export interface NodeReport {
     targetMessageId?: string;
     /** That message's chat and whether it is a photo line, never its words; `removed` once it is gone. */
     groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
+    /** The same for one direct message line, which names no chat (open it with fetchReportedDirectMessage). */
+    directMessage?: { photo: boolean; removed: boolean } | null;
     [key: string]: unknown;
 }
 
@@ -1396,6 +1399,46 @@ export async function fetchReportedMessage(
     };
 }
 
+/** The direct message line a report names: its sender's signature checked, its words the reporter's (server: engine/dm-line-report.ts). */
+export interface ReportedDirectLine {
+    id: string;
+    signedAt: string | null;
+    authorPubkey: string | null;
+    authorCallsign: string | null;
+    signer: string | null;
+    signature: 'verified' | 'unsigned' | 'unverified';
+    words: { state: 'reported'; text: string };
+    photo: boolean;
+    line: 'same' | 'changed' | 'gone';
+}
+
+/**
+ * Opens the direct message line a report names (GET /api/local/admin/reports/:id/message). A signature reads as verified
+ * only when the node says exactly that with a signer; anything else the node sends reads as not verified.
+ */
+export async function fetchReportedDirectMessage(
+    nodeUrl: string,
+    reportId: string,
+    adminPassword?: string,
+    tfaToken?: string,
+): Promise<ReportedDirectLine> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) throw new Error('Valid report ID is required');
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/message`);
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken), credentials: 'same-origin' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}: ${res.statusText}`);
+    const m = json?.message ?? {};
+    const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+    const signer = str(m.signer);
+    const signature: ReportedDirectLine['signature'] = m.signature === 'verified' && signer ? 'verified' : m.signature === 'unsigned' ? 'unsigned' : 'unverified';
+    return {
+        id: str(m.id) ?? reportId, signedAt: signature === 'verified' ? str(m.signedAt) : null,
+        authorPubkey: str(m.authorPubkey), authorCallsign: str(m.authorCallsign), signer: signature === 'verified' ? signer : null, signature,
+        words: { state: 'reported', text: typeof m.words?.text === 'string' ? m.words.text : '' }, photo: m.photo === true,
+        line: m.line === 'changed' || m.line === 'gone' ? m.line : 'same',
+    };
+}
+
 /**
  * Acts on a report: takes the reported post down (the author is told, with the reason), takes a reported Pulse
  * item off the feed, or neither (marks it handled). Never suspends anyone: that stays in People & Safety.
@@ -1578,6 +1621,34 @@ export async function removeBurstAccounts(
 
 export async function undoBurstHide(nodeUrl: string, actionId: string, adminPassword?: string, tfaToken?: string): Promise<{ restored: number; keptHidden: number }> {
     return burstRequest(nodeUrl, `/api/local/admin/bursts/${encodeURIComponent(actionId)}/undo`, 'POST', {}, adminPassword, tfaToken);
+}
+
+/** Which way reports reached a limit on sending message requests (the server's engine/request-limits.ts). */
+export type RequestLimitHow = 'words_newcomer' | 'same_wording' | 'many_reports';
+
+export interface RequestLimitRow {
+    id: string;
+    publicKey: string;
+    callsign: string | null;
+    how: RequestLimitHow;
+    madeAt: string;
+    until: string;
+}
+
+/** Who can't send message requests for now, because reports cleared theirs. None on a node from before this (404 or 403). */
+export async function fetchRequestLimits(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<RequestLimitRow[]> {
+    try {
+        const d = await burstRequest<{ limits?: RequestLimitRow[] }>(nodeUrl, '/api/local/admin/members/request-limits', 'GET', undefined, adminPassword, tfaToken);
+        return Array.isArray(d.limits) ? d.limits : [];
+    } catch (e: unknown) {
+        if (e instanceof BurstRequestError && (e.status === 404 || e.status === 403)) return [];
+        throw e;
+    }
+}
+
+/** Undo one: their requests come back, and they can send new ones. */
+export async function undoRequestLimit(nodeUrl: string, pubkey: string, adminPassword?: string, tfaToken?: string): Promise<void> {
+    await burstRequest(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/request-limit/undo`, 'POST', {}, adminPassword, tfaToken);
 }
 
 export async function generateNodeInvite(
@@ -2908,6 +2979,13 @@ export interface AdminDecisionItem {
     subjectReply?: string | null;
     replyHiddenAt?: string | null;
     replyHiddenReason?: string | null;
+    /**
+     * A pause's own vote too few members could vote on, which an owner decided (removal by vote S6): when, the owner's public
+     * reason, and when the vote closed with it carried out. Absent from a node from before.
+     */
+    ownerDecidedAt?: string | null;
+    ownerDecidedReason?: string | null;
+    ownerDecisionCarriedAt?: string | null;
     /** Totals only — the node never serves who voted how. */
     tally: {
         totalVoters: number;
@@ -2918,6 +2996,10 @@ export interface AdminDecisionItem {
         noWeight: number;
         supportRatio: number;
         thresholdRequired: number;
+        /** A removal: the fewest Yes votes that remove anyone (3). Absent from a node from before. */
+        minYes?: number;
+        /** A pause's own vote fewer than 3 members could vote on: an owner may decide it (ownerDecideRemoval). */
+        tooFewToVote?: boolean;
     };
 }
 
@@ -3019,6 +3101,18 @@ export async function fetchNodePrivatePreview(nodeUrl: string): Promise<boolean 
     }
 }
 
+/**
+ * An owner decides a vote on removing a member that too few members can vote on (removal by vote S6): the reason (10+
+ * characters) is public on the vote, and it is carried out when the vote closes if still too few could vote. An owner
+ * only, with the fresh proof every time (server requireFreshProof): `code` carries it; a refusal that asks for it throws
+ * FreshProofRequiredError.
+ */
+export async function ownerDecideRemoval(
+    nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string, code?: string,
+): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/owner-decision`, { reason, ...proofField(code) }, adminPassword, tfaToken);
+}
+
 /** The admin brake. The written reason (10+ characters) is public on the Decision. */
 export async function haltDecision(nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
     return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/halt`, { reason }, adminPassword, tfaToken);
@@ -3091,6 +3185,8 @@ export interface RekeyStatusResponse {
         kept: boolean;
         since: string | null;
         unopenable?: { since: string; reason: 'recovery_seal_key_missing' | 'recovery_seal_unopenable' } | null;
+        /** What it keeps: the copy and its key, or its half of a copy BeanPool's key vault keeps (vault rethink VR4). */
+        placement?: 'whole' | 'shared' | null;
     };
     /** This node's bring-backs of the member, newest first: who and when. */
     bringBacks?: Array<{ operatorPubkey: string; releasedAt: string }>;
@@ -3140,6 +3236,8 @@ export interface CompleteRekeyResponse {
     signInCopiesRemoved?: number;
     /** A Bring back code's number was typed (vault rethink VR3): nothing moved, and `newPubkey` is absent. */
     broughtBack?: boolean;
+    /** A bring-back's: `shared` means their phone now waits out BeanPool's key vault's day (vault rethink VR4). */
+    placement?: 'whole' | 'shared';
 }
 
 /**
@@ -3170,10 +3268,11 @@ export interface OffboardPreviewResponse {
         callsign: string;
     }>;
     /**
-     * Where the community votes, the removal it voted for that this offboarding settles and completes (removal by vote S3);
-     * the node refuses the preview for anyone without one. Null where votes are off, and absent from a node before S3.
+     * Where the community votes, the removal this offboarding settles and completes (removal by vote S3): one it voted for, or
+     * one an owner decided because too few could vote (`decidedByOwner`, S6; absent from a node before it). The node refuses
+     * the preview for anyone without one. Null where votes are off, and absent from a node before S3.
      */
-    settlesRemoval?: { decisionId: string; gracePeriodEndsAt: string | null } | null;
+    settlesRemoval?: { decisionId: string; gracePeriodEndsAt: string | null; decidedByOwner?: boolean } | null;
 }
 
 export interface OffboardResponse {

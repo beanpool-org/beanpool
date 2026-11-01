@@ -98,6 +98,7 @@ export const SUITES = [
     'test-open-door-counters',
     'test-door-work',
     'test-door-signal',
+    'test-door-check',
     'test-nonce-store-global',
     'test-words-member',
     'test-web-door',
@@ -109,6 +110,7 @@ export const SUITES = [
     'test-member-area',
     'test-distance-search',
     'test-tags-search',
+    'test-free-tags',
     'test-distance-query-parsing',
     'test-guest-view',
     'test-private-preview',
@@ -117,6 +119,7 @@ export const SUITES = [
     'test-post-badge-once-a-read',
     'test-distance-search-perf',
     'test-global-directory',
+    'test-place-circles',
     'test-home',
     'test-home-deal-step',
     'test-home-answer-parse-lands',
@@ -226,7 +229,9 @@ export const SUITES = [
     'test-mcp-owner-posts',
     'test-mcp-owner-reads',
     'test-mcp-owner-undo',
+    'test-mcp-owner-tags',
     'test-mcp-owner-photos',
+    'test-mcp-photo-link',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',
@@ -313,6 +318,7 @@ export const SUITES = [
     'test-detached-pwa',
     'test-dos-caps',
     'test-writer-bounds',
+    'test-owner-admin-limits',
     'test-money-limits',
     'test-money-limits-gate',
     'test-economic-hardening',
@@ -333,6 +339,7 @@ export const SUITES = [
     'test-request-binding',
     'test-nonce-store',
     'test-nonce-store-cap',
+    'test-nonce-pressure',
     'test-loopback-audience',
     'test-address-offers',
     'test-staff-seen-prune',
@@ -343,6 +350,7 @@ export const SUITES = [
     'test-registrar-provisioning',
     'test-registrar-notices',
     'test-public-url-callers',
+    'test-rename-main-name',
     'test-own-address',
     'test-read-auth-default',
     'test-privacy-defaults',
@@ -398,6 +406,7 @@ export const SUITES = [
     'test-push-leave-statement',
     'test-push-access-token',
     'test-push-notices',
+    'test-unread-count',
     'test-push-tokens-at-rest',
     'test-push-repeat-folds',
     'test-settings',
@@ -503,6 +512,7 @@ export const SUITES = [
     'test-removal-doors',
     'test-removal-fairness',
     'test-removal-chain',
+    'test-removal-small',
     'test-viewer-helpers',
     'test-visitors-cant-act',
     'test-doors-key-case',
@@ -584,6 +594,8 @@ export const SUITES = [
     'test-groups-chat',
     'test-group-chat-photo',
     'test-group-chat-report',
+    'test-dm-line-report',
+    'test-request-limits',
     'test-chat-parity',
     'test-dm-never-plaintext',
     'test-group-keys-http',
@@ -678,6 +690,11 @@ export const VARIANTS = [
     // Messaging IDOR (A2-2/A2-3/A2-15) with read auth opted out: another member, a key that is no member and an unsigned
     // caller still cannot read a member's conversations (#2119). The plain run covers read auth ON.
     { name: 'test-messaging-idor', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+
+    // A member's unread counts on a local node, where requests are off and `requests` is 0; and there with read auth opted
+    // out, where the route's own checks are all there is (a global node won't start with it off).
+    { name: 'test-unread-count', tag: 'local', label: 'local profile, requests off', env: { UNREAD_LOCAL_NODE: '1' } },
+    { name: 'test-unread-count', tag: 'readauth-off', label: 'read auth opted out', env: { UNREAD_LOCAL_NODE: '1', ENFORCE_READ_AUTH: 'false' } },
 
     // Member-read IDOR (A2-16 family): one member cannot read another member's invites or notification preferences.
     // The plain run makes both 403 assertions; this covers the operator opt-out, where the invites one still holds, the

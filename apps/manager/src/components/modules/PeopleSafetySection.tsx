@@ -10,6 +10,7 @@ import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
+import { RequestLimitsCard } from './RequestLimitsCard';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -18,6 +19,7 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBr
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 import { nodeCredential } from '../../lib/profiles';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
+import { ReportedDirectMessage } from './ReportedDirectMessage';
 import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
 
@@ -75,6 +77,7 @@ export function PeopleSafetySection({
     const [burstsHere, setBurstsHere] = useState(false);
     const [burstAnchor, setBurstAnchor] = useState<string | null>(null);
     const [burstReload, setBurstReload] = useState(0);
+    const [limitsReload, setLimitsReload] = useState(0);
 
     const loadReports = async () => {
         if (!activeNode?.url) return;
@@ -382,6 +385,9 @@ export function PeopleSafetySection({
 
             {subTab === 'moderation' && (
                 <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Message requests cleared by reports" resetKey={activeNode.id}>
+                        <RequestLimitsCard nodeUrl={activeNode.url} reloadKey={limitsReload} adminPassword={nodeCredential(activeNode)} tfaToken={getTfaSessionToken(activeNode.id)} />
+                    </SectionErrorBoundary>
                     {hasDoorMembers && (
                         <SectionErrorBoundary sectionName="Accounts that joined together" resetKey={activeNode.id}>
                             <BurstDigestCard
@@ -428,6 +434,7 @@ export function PeopleSafetySection({
                                 onClick={() => {
                                     onRefresh();
                                     loadReports();
+                                    setLimitsReload((n) => n + 1);
                                 }}
                                 className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs text-white font-bold transition-all min-h-[48px] lg:min-h-0"
                             >
@@ -555,7 +562,16 @@ export function PeopleSafetySection({
                                                 <p className="text-xs text-white m-0">
                                                     {report.reason || report.description || 'No reason provided'}
                                                 </p>
-                                                {report.targetMessageId && report.id && (
+                                                {report.directMessage && report.id && (
+                                                    // One direct message line: its signature checked, its words the reporter's (server: engine/dm-line-report.ts).
+                                                    <ReportedDirectMessage
+                                                        nodeUrl={activeNode.url}
+                                                        reportId={String(report.id)}
+                                                        adminPassword={nodeCredential(activeNode)}
+                                                        tfaToken={getTfaSessionToken(activeNode.id)}
+                                                    />
+                                                )}
+                                                {report.targetMessageId && !report.directMessage && report.id && (
                                                     // A locked group chat's message, reported with its key (server: engine/group-chat-report.ts).
                                                     <ReportedGroupMessage
                                                         nodeUrl={activeNode.url}

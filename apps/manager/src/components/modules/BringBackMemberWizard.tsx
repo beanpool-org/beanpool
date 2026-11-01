@@ -20,12 +20,16 @@ import { askedAt, rekeyLink, rekeyTimeLeft, REKEY_PROPOSALS_POLL_MS } from './Re
  * flow: a BB- code, their new phone asks on it and shows two digits, the admin types them, and the node releases the copy
  * to that phone alone. Nothing moves and nobody is suspended. An owner for an owner or admin (the node's rule, as a
  * re-key's), with the fresh proof. The same brakes as Re-key's step 2: the phones that asked on the code, read every few
- * seconds, each with Not theirs, and a warning when codes like it are being guessed at.
+ * seconds, each with Not theirs, and a warning when codes like it are being guessed at. Where this server keeps only its half
+ * of the member's copy (vault rethink VR4), the number gets their phone that half and this community's word for BeanPool's
+ * key vault, and the vault holds it a day: this window says so, and never says they are back.
  */
 
 /** The admin's two ways, side by side (design §4.5). */
 export const BRING_BACK_WORDS = 'Brings back the same key: their Beans, name, chats and every community. Only for someone you have checked in person. They need their new phone here.';
 export const REKEY_INSTEAD_WORDS = 'Re-key gives a new key, for someone whose way back is gone. Their Beans and history move; chats will say the key changed.';
+/** The shared placement's day (vault rethink VR4, design §4.5): the admin says so to the person in front of them. */
+export const SHARED_DAY_WORDS = 'Their copy is kept half here and half at BeanPool’s key vault. It takes a day after you type the number, so their other phones can stop it.';
 /** The admin's line on the code's screen (design §4.4). */
 export const ONLY_IN_PERSON = 'Only bring back someone you have checked in person.';
 
@@ -49,6 +53,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState(false);
+    const [doneShared, setDoneShared] = useState(false);
     const [stopped, setStopped] = useState(false);
     const [now, setNow] = useState(() => Date.now());
     const proof = useFreshProof();
@@ -160,7 +165,10 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         try {
             const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, code, match, adminPassword, tfaToken, ...(fresh ? [fresh] : []));
             proof.close();
-            if (res.broughtBack) setDone(true);
+            if (res.broughtBack) {
+                setDoneShared(res.placement === 'shared');
+                setDone(true);
+            }
             else setError('The node did not bring them back. Open the member again and check.');
         } catch (err: unknown) {
             if (proof.checkError(err, (c) => confirmNumber(c), fresh)) return;
@@ -216,8 +224,17 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
 
                 {done ? (
                     <div className="space-y-3" data-testid="bring-back-done">
-                        <p className="text-sm font-bold text-emerald-300 m-0 break-words">@{member.callsign} has their account back on their new phone.</p>
-                        <p className="m-0 leading-relaxed break-words">Nothing moved: the same key, their Beans, name, chats and every community. Their other phones were told.</p>
+                        {doneShared ? (
+                            <>
+                                <p className="text-sm font-bold text-emerald-300 m-0 break-words">@{member.callsign}’s new phone has this community’s half.</p>
+                                <p className="m-0 leading-relaxed break-words">BeanPool’s key vault now holds the rest for a day, so their other phones can stop it. Then the same key comes back on their new phone. Nothing moved.</p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm font-bold text-emerald-300 m-0 break-words">@{member.callsign} has their account back on their new phone.</p>
+                                <p className="m-0 leading-relaxed break-words">Nothing moved: the same key, their Beans, name, chats and every community. Their other phones were told.</p>
+                            </>
+                        )}
                         <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-semibold">Done</button>
                     </div>
                 ) : statusFailed ? (
@@ -230,6 +247,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
                 ) : !code ? (
                     <div className="space-y-3">
                         <p className="m-0 leading-relaxed break-words" data-testid="bring-back-words">{BRING_BACK_WORDS}</p>
+                        {status.communityCopy?.placement === 'shared' && <p className="m-0 leading-relaxed break-words" data-testid="bring-back-shared">{SHARED_DAY_WORDS}</p>}
                         <p className="m-0 leading-relaxed break-words text-nature-400">{REKEY_INSTEAD_WORDS}</p>
                         <p className="m-0 font-bold break-words" data-testid="bring-back-can">
                             {kept

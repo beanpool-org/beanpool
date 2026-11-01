@@ -16,7 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { foldApostrophes, HOME_SEARCH_MAX_CHARS, readSearchSettings, searchFromMarket, searchTermsFor, t, tierIndexForCredit, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, listingFreeTags, readSearchSettings, searchFromMarket, searchTermsFor, postTagsOf, searchTagsFor, t, tierIndexForCredit, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -57,11 +57,12 @@ export function marketSearchFromLink(value: string | string[] | undefined): stri
  * the pill (All and For You are both); the category only while its chip is on screen, as it filters; the Distance chip's
  * radius as the card's smallest distance that holds it.
  */
-export function marketSearchToSave(state: Pick<MarketFilterState, 'type' | 'category' | 'radiusKm'>, search: string): HomeSearchSettings | null {
+export function marketSearchToSave(state: Pick<MarketFilterState, 'type' | 'category' | 'radiusKm'>, search: string, tag?: string | null): HomeSearchSettings | null {
     if (state.type === 'events' || state.type === 'polls') return null;
     const row = marketSecondRow(state.type);
     const category = row.kind === 'filters' && row.category && state.category !== 'all' ? state.category : null;
-    return searchFromMarket({ q: search, kind: state.type === 'offers' ? 'offer' : state.type === 'needs' ? 'need' : 'any', category, radiusKm: state.radiusKm });
+    const tags = tag ? [tag] : undefined;
+    return searchFromMarket({ q: search, kind: state.type === 'offers' ? 'offer' : state.type === 'needs' ? 'need' : 'any', category, radiusKm: state.radiusKm, tags });
 }
 
 /** The search Save to Home hands to Home, as Home's route param (`/(tabs)?saveSearch=…`) carries it. */
@@ -88,12 +89,31 @@ export function marketSearchQuery(search: string): string {
 }
 
 /**
- * Whether a listing's title or description holds one of the search's terms: the Market's own filter, for a node without FTS.
+ * Whether the node's answer stands for the search on screen, as on the web: then the Market's own filter leaves it be. The
+ * node finds what marketSearchMatches cannot compare: a folded accent (limón by limon), a joined compound (wifi finds
+ * wi-fi), the start of a word in a listing's keywords (lem finds what is tagged lemon). `answered` is the words the answer
+ * was asked for; null for no answer, and for one read under a tag filter: that read asks for the words OR the tag, so there
+ * the words still narrow it.
+ */
+export function marketAnswerStands(search: string, answered: string | null): boolean {
+    return answered !== null && answered === search.trim();
+}
+
+/**
+ * Whether a listing's title, description or a tag its author typed holds one of the search's terms: the Market's own filter,
+ * for what no answer of the node's stands for (marketAnswerStands): the phone's copy, or an answer until its words' read lands.
+ * It compares what is written, so it never runs over an answer that stands.
  * The apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
  */
-export function marketSearchMatches(p: { title?: string | null; description?: string | null }, search: string): boolean {
-    const text = foldApostrophes(`${(p.title ?? '').toLowerCase()} ${(p.description ?? '').toLowerCase()}`);
-    return searchTermsFor(search).some(term => text.includes(foldApostrophes(term)));
+export function marketSearchMatches(p: { title?: string | null; description?: string | null; tags?: unknown; freeTags?: unknown; free_tags?: unknown }, search: string): boolean {
+    const text = foldApostrophes(`${p.title ?? ''} ${p.description ?? ''} ${listingFreeTags(p).join(' ')}`.toLowerCase());
+    if (searchTermsFor(search).some(term => text.includes(foldApostrophes(term)))) return true;
+    const resolved = searchTagsFor(search);
+    if (resolved.length > 0) {
+        const postTags = postTagsOf(p.tags);
+        if (resolved.some(r => postTags.some(t => t === r || t.startsWith(`${r}.`)))) return true;
+    }
+    return false;
 }
 
 export type MarketExtraFilter = 'distance' | 'trust' | 'beans';

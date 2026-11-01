@@ -26,6 +26,7 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 - A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind (see below). Once handled it stays marked, and under **All** it takes its place by date.
 - Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused.
 - A report of a group chat message shows the message itself (see "A message from a group's chat" below). It is about the message's author.
+- A report of a direct message shows what its reporter handed over (see "A direct message" below). It is about the message's author.
 
 ![The Triage and Moderation screen in Settings](images/people-moderation.webp)
 
@@ -53,6 +54,21 @@ You open Settings from the app's **🛡️ Moderate** button (it reads "Moderate
 
 The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that.
 
+## A direct message
+
+A direct message is end-to-end encrypted, and it has no key of its own to hand over: the one key opens the whole chat, so no app ever sends it. A member who reports one sends that message still sealed, its sender's signature over it, and the words as they read them. Your server checks the signature and opens nothing. The report shows:
+
+- **Signature verified**: the member named really did send this sealed message to the reporter. Its sender can't take that back: the report keeps the sealed message, so deleting or changing it afterwards changes nothing here, and the report says it happened.
+- **Could not be verified**: the signature doesn't match the message, so nothing shows who wrote it.
+- **No signature**: it came from an older app, which doesn't sign its messages. Only your server's records say who sent it.
+- **What the reporter says it says**: their own words, in every case. The signature proves who sent the sealed message, not what it says. Weigh those words as you would any member's account.
+
+A photo stays sealed. No other message in the chat comes with a report, and nobody in the chat is told who reported it. Settings has no button to take a direct message down: its sender can delete it, and the owners and admins can suspend its sender.
+
+Report on a message request does the same, and blocks the sender for the member who reported them. If the sender deleted the message before the member tapped Report, or your server refused the message's report, you get a report of the person instead: the member's reason, and no message. **Child safety** still alerts you. If the member is over the hourly limit for reports, the sender is blocked and no report reaches you.
+
+Enough of these reports clear a sender's requests with no moderator needed, where **Reported posts hidden automatically** is on. The sender's waiting requests leave every list, and they can't send new ones for 7 days, then 14, 28 and 56 on a repeat, and at most 90. It takes two people reporting the same words, on a line of 40 or more letters or digits, or three people reporting anything, or one person when the sender is a 12-words newcomer on probation. Only someone a request reached counts, and one person's accounts count once. Words are compared only as reporters handed them over: your server can't read a sealed line. It is not a pause: the sender can still answer people who wrote to them, and post, and they are told in words. **Message requests cleared by reports**, at the top of Reports, names them, and **Undo** brings their requests back and lets them send new ones. Their reports stay in your queue. A pause or a mute clears a member's waiting requests too, until you lift it.
+
 ## A message from a group's chat
 
 A group's chat is end-to-end encrypted: your server stores it but cannot read it, and neither can you. So a member who reports a message there sends that one message's own key with the report. Your server keeps the key with the report and opens nothing when the report comes in; a standby copies both. When a report is shown in **Reports** or **Triage & Moderation**, Settings asks the server to open that one message with that key, and shows:
@@ -77,12 +93,18 @@ In **Triage & Moderation**, find the post in the posts list and delete it.
 
 **Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: "The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report." The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed.
 
+## A place circle
+
+On the global community, people waiting near the same place who said they would help start a community are put in a place circle together, once there are 3 of them within about 25 km. A circle is an ordinary group, hidden from anyone outside it, and made by the server, not by a member. Its name, its purpose and who can join it stay as they are, so its convenor cannot turn it into something else.
+
+A report on a line in a circle's chat reaches you like a report on any group's chat, and the same actions apply. There is no action that closes a whole circle yet. Act on the people in it: warn, suspend or remove. A circle closes by itself 30 days after a community starts near it. A suspended account is not put in a circle, and neither are two people when one has blocked the other.
+
 ## Automated safety and reports
 
 On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **How this community works** (under Safety):
 
 - **Limits on new accounts (probation)**: New accounts have small daily posting and messaging limits during their first days, protecting the community from rapid spam.
-- **Reported posts hidden automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Off by default on local communities (where reports wait for a moderator to review).
+- **Reported posts hidden automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Reports clear a sender's message requests by the same switch. Off by default on local communities (where reports wait for a moderator to review).
 - **Repeat offenders muted automatically (auto-mute)**: A member whose posts moderators have removed 3 times in 30 days is automatically muted from posting and messaging until a moderator lifts it.
 
 ### How posts are hidden by reports

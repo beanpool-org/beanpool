@@ -6,7 +6,7 @@ import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders,
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus, type EventZone } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import {
-    sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    sealDmLine, signDmLine, DM_LINE_SIG_KEY, dmLineDisclosureFor, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
@@ -29,11 +29,11 @@ import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
 import { clearPendingProfileChange, nameRefusedForGood, pendingNameRefused, pendingProfileChange } from './pending-profile-sync';
-import { emitAppEvent } from './app-events';
+import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { reportKind, t, requestAfterOwnLine, requestAfterRead } from '@beanpool/core';
+import { reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -429,7 +429,9 @@ async function _doInitDB() {
             event_repeat_until TEXT,
             carried_callsign TEXT,
             carried_avatar TEXT,
-            carried_banner TEXT
+            carried_banner TEXT,
+            tags TEXT NOT NULL DEFAULT '',
+            free_tags TEXT NOT NULL DEFAULT ''
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -743,6 +745,29 @@ ${TOOL_DOCS_TABLE}
         // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
         // polls; NULL where it says nothing). The split by answer travels inside poll_options.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
+        // #2631/#2637 tag library: posts.tags space-separated tag ids (DESIGN-owner-seeding-tags-fable.md §4.5). F2: posts.free_tags,
+        // the member's own tags, the node's JSON list as it stores it (DESIGN-tags-free-entry-fable.md §2). Either one missing, the
+        // copy holds none of them for listings that have not changed since, so the whole copy is read again.
+        const postColumns = (await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).map(c => c.name);
+        const missingTagColumns = ['tags', 'free_tags'].filter(column => !postColumns.includes(column));
+        if (missingTagColumns.length > 0) {
+            newCopyGeneration();
+            try {
+                const file = dbFileOf.get(database);
+                const { syncCursorKeysOf } = await import('../services/pillar-sync');
+                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
+            } catch (e) {
+                console.warn('[SQLite] Could not forget the sync cursors of a copy from before tags:', e);
+            }
+            for (const column of missingTagColumns) {
+                try { await database.execAsync(`ALTER TABLE posts ADD COLUMN ${column} TEXT NOT NULL DEFAULT '';`); } catch (e) {}
+            }
+            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
+            try {
+                const { requestSync } = require('../services/pillar-sync');
+                requestSync().catch(() => {});
+            } catch (e) {}
+        }
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -1139,7 +1164,7 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     }
     const p = posts[0];
     const before = await database.getFirstAsync<any>(
-        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable FROM posts WHERE id = ?', [id]
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags, free_tags FROM posts WHERE id = ?', [id]
     );
     await acquireSyncLock();
     try {
@@ -1160,7 +1185,9 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
         (before.completed_at || null) !== (p.completed_at || p.completedAt || null) ||
         (before.updated_at || null) !== (p.updated_at || p.updatedAt || null) ||
         (before.lendable ? 1 : 0) !== (p.lendable ? 1 : 0) ||
-        (before.photos ?? null) !== syncedPhotosColumn(p);
+        (before.photos ?? null) !== syncedPhotosColumn(p) ||
+        (before.tags ?? '') !== syncedTagsColumn(p) ||
+        (before.free_tags ?? '') !== syncedFreeTagsColumn(p);
     if (changed) {
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -1537,11 +1564,23 @@ const _lastReadPushAt: Record<string, number> = {};
 /** The phone's own read marker (the Talk tab's badge counts from it); no request. */
 export async function markConversationReadLocally(conversationId: string, myPubkey: string) {
     const database = await getDb();
+    const hasUnread = await database.getFirstAsync<{ id: string }>(
+        `SELECT m.id FROM messages m
+         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+         WHERE m.conversation_id = ?
+           AND m.author_pubkey != ?
+           AND m.timestamp > IFNULL(cp.last_read_at, '2000-01-01')
+         LIMIT 1`,
+        [myPubkey, conversationId, myPubkey]
+    );
+    if (!hasUnread) return;
+
     const now = new Date().toISOString();
     await database.runAsync(
         'UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ?',
         [now, conversationId, myPubkey]
     );
+    emitAppEvent(CONVERSATION_READ_LOCALLY_EVENT, { conversationId, myPubkey });
 }
 
 export async function markConversationRead(conversationId: string, myPubkey: string) {
@@ -2161,6 +2200,8 @@ export async function createPost(post: any) {
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
         ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
+        ...(post.tags ? { tags: Array.isArray(post.tags) ? post.tags : postTagsOf(post.tags) } : {}),
+        ...(listingFreeTags(post).length > 0 ? { freeTags: listingFreeTags(post) } : {}),
         ...(shopId ? { shopId } : {}),
     };
     // "Post as → an enterprise" on the event form (NewEventModal). An enterprise's event goes through the
@@ -2244,9 +2285,10 @@ export async function createPost(post: any) {
 
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
+    const tagsStr = post.tags ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : '';
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0,
@@ -2258,6 +2300,8 @@ export async function createPost(post: any) {
          post.type === 'poll' && post.pollOpenVote === true ? 1 : 0,
          post.audienceScope || post.audience_scope || 'public',
          post.targetGroupId || post.target_group_id || null,
+         tagsStr,
+         storedFreeTags(listingFreeTags(post)),
          ...eventCacheColumns(post)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
@@ -2574,9 +2618,17 @@ export async function updateEvent(postId: string, patch: EventEditPatch, out?: {
         try {
             const database = await waitForInit();
             const photos = Array.isArray(post.photos) ? JSON.stringify(post.photos.filter((u: string) => !u.startsWith('file://'))) : null;
+            const tagsVal = patch.tags !== undefined
+                ? (Array.isArray(patch.tags) ? patch.tags.join(' ') : '')
+                : (post.tags != null ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : null);
+            const freeTagsVal = patch.freeTags !== undefined
+                ? storedFreeTags(patch.freeTags)
+                : (post.freeTags != null ? storedFreeTags(listingFreeTags(post)) : null);
+            const tagsSql = `${tagsVal !== null ? ', tags = ?' : ''}${freeTagsVal !== null ? ', free_tags = ?' : ''}`;
+            const tagsArg = [...(tagsVal !== null ? [tagsVal] : []), ...(freeTagsVal !== null ? [freeTagsVal] : [])];
             await database.runAsync(
-                `UPDATE posts SET title = ?, description = ?, lat = ?, lng = ?, photos = COALESCE(?, photos) WHERE id = ?`,
-                [post.title ?? null, post.description ?? '', post.lat ?? null, post.lng ?? null, photos, post.id]
+                `UPDATE posts SET title = ?, description = ?, lat = ?, lng = ?, photos = COALESCE(?, photos)${tagsSql} WHERE id = ?`,
+                [post.title ?? null, post.description ?? '', post.lat ?? null, post.lng ?? null, photos, ...tagsArg, post.id]
             );
         } catch (dbErr) {
             console.warn('[SQLite] Failed to cache the edited event:', dbErr);
@@ -2762,11 +2814,11 @@ export async function getTreasuryDetail(publicKey: string): Promise<any | null> 
 // Operator actions — signed as the operator; the treasury id rides the URL path (dodges the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
 /** `photos`: JPEG data URLs, at most five (utils/post-photo.ts), checked by the node as a member's own listing's are. */
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }) {
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }) {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
@@ -3404,6 +3456,14 @@ export interface Decision {
     /** A vote on removing a member whose reply an admin took down: when, and their public reason (the reply itself is gone). */
     replyHiddenAt?: string | null;
     replyHiddenReason?: string | null;
+    /**
+     * A pause's own vote too few members could vote on, which an owner decided (removal by vote S6): when, the owner's public
+     * reason (null once an admin has hidden the case: it may repeat the accusation), and when the vote closed with it carried
+     * out (null if enough members voted by then, and they decided).
+     */
+    ownerDecidedAt?: string | null;
+    ownerDecidedReason?: string | null;
+    ownerDecisionCarriedAt?: string | null;
     /** A vote on removing a member: who brought it, by name (absent from a node from before). */
     proposer?: RemovalProposer;
 }
@@ -3414,7 +3474,7 @@ export interface Decision {
  * closed. `name` is null when the node can't know it.
  */
 export interface RemovalProposer {
-    kind: 'admin' | 'password' | 'member';
+    kind: 'admin' | 'owner' | 'password' | 'member';
     name: string | null;
 }
 
@@ -3434,6 +3494,10 @@ export interface DecisionTally {
     supportRatio: number;
     thresholdRequired: number;
     passed: boolean;
+    /** A vote on removing a member: the fewest Yes votes that remove them, whatever the share (3; absent from a node from before). */
+    minYes?: number;
+    /** A pause's own vote fewer than 3 members could vote on, so its quorum can't be met: an owner may decide it. */
+    tooFewToVote?: boolean;
 }
 
 export interface DecisionWithTally extends Decision {
@@ -3541,6 +3605,13 @@ export async function updatePost(id: string, updates: any) {
         ? (Array.isArray(updates.photos) ? updates.photos : (typeof updates.photos === 'string' && updates.photos ? JSON.parse(updates.photos) : []))
         : undefined;
 
+    const tags = updates.tags !== undefined
+        ? (Array.isArray(updates.tags) ? updates.tags : postTagsOf(updates.tags))
+        : undefined;
+
+    // Named only when the member changed them: absent leaves them on the node and in the copy, [] clears them.
+    const freeTags: string[] | undefined = updates.freeTags !== undefined ? freeTagsOf(updates.freeTags) : undefined;
+
     // 1. Broadcast UPDATE to remote network
     await _signedRequest('/api/marketplace/posts/update', { 
         id, 
@@ -3553,22 +3624,26 @@ export async function updatePost(id: string, updates: any) {
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
         photos,
+        ...(tags !== undefined ? { tags } : {}),
+        ...(freeTags !== undefined ? { freeTags } : {}),
         // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
         ...(updates.shopId !== undefined ? { shopId: updates.shopId } : {}),
     });
 
     // 2. Erase from local SQLite Cache (or gracefully update it)
     const database = await getDb();
+    const tagsSql = `${tags !== undefined ? ', tags = ?' : ''}${freeTags !== undefined ? ', free_tags = ?' : ''}`;
+    const tagsArg = [...(tags !== undefined ? [tags.join(' ')] : []), ...(freeTags !== undefined ? [storedFreeTags(freeTags)] : [])];
     if (photos !== undefined) {
         const photosJson = photos && photos.length > 0 ? JSON.stringify(photos) : null;
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ? WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, ...tagsArg, id]
         );
     } else {
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ? WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...tagsArg, id]
         );
     }
 }
@@ -3703,7 +3778,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3743,6 +3818,8 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.targetGroupId || p.target_group_id || null,
             p.targetPubkey || p.target_pubkey || null,
             p.assignedTo || p.assigned_to || null,
+            syncedTagsColumn(p),
+            syncedFreeTagsColumn(p),
             ...eventCacheColumns(p),
             // A copy without the name (an older node) keeps the one the row has.
             syncedAuthorCallsign(p),
@@ -3755,6 +3832,19 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             syncedAuthorBanner(p),
         ]
     );
+}
+
+function syncedTagsColumn(p: any): string {
+    const raw = p.tags;
+    if (!raw) return '';
+    if (Array.isArray(raw)) return raw.filter(Boolean).join(' ');
+    if (typeof raw === 'string') return raw;
+    return '';
+}
+
+/** The `free_tags` column for a listing from the node: named only where there are some, so a copy with none clears them. */
+function syncedFreeTagsColumn(p: any): string {
+    return storedFreeTags(listingFreeTags(p));
 }
 
 /** The author's face URL a listing carries (the node's `authorAvatarUrl` on a by-area read), or null for a copy without one. */
@@ -6177,9 +6267,15 @@ interface DmLineToSeal {
     replyToId?: string | null;
 }
 
-function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string } {
+/** Seal a DM line, and its words (not its photo) with my signature over them (core dm-line-report.ts), for its metadata. */
+function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string; metadata?: Record<string, unknown> } {
     try {
-        return sealDmLine(text, ctx, line);
+        const sealed = sealDmLine(text, ctx, line);
+        if (line.part === 'attachment') return sealed;
+        const lineSig = signDmLine(sealed, ctx.myEdPrivHex, {
+            conversationId: ctx.conversationId, senderPubHex: line.senderPubHex, recipientPubHex: ctx.peerEdPubHex, messageId: line.messageId, at: new Date().toISOString(),
+        });
+        return { ...sealed, metadata: { [DM_LINE_SIG_KEY]: lineSig } };
     } catch {
         throw new DmNotLockedError();
     }
@@ -6576,7 +6672,8 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         replyToId: replyToIdOf(metadata),
     });
     const { ciphertext, nonce } = locked;
-    // A group line names the epoch it was sealed under, beside whatever the caller's metadata says (a reply).
+    // A group line names the epoch it was sealed under, and a DM line carries its signature, beside whatever the caller's
+    // metadata says (a reply).
     if (locked.metadata) {
         let m: any = {};
         try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
@@ -6753,7 +6850,7 @@ export async function editMessage(conversationId: string, messageId: string, new
 
     // New words: locked like a new message, or not sent (DmNotLockedError). Sealed to the line's own id, keeping the
     // line it was written after: an edit stays where its line is.
-    const { ciphertext, nonce } = await lockForConversation(conversationId, newText, {
+    const { ciphertext, nonce, metadata } = await lockForConversation(conversationId, newText, {
         senderPubHex: identity?.publicKey ?? '',
         messageId,
         ...(await sealOfLine(conversationId, messageId)),
@@ -6763,7 +6860,7 @@ export async function editMessage(conversationId: string, messageId: string, new
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to edit messages.');
     if (!identity) throw new Error('No identity found.');
 
-    const body = { messageId, authorPubkey: identity.publicKey, ciphertext, nonce };
+    const body = { messageId, authorPubkey: identity.publicKey, ciphertext, nonce, ...(metadata ? { metadata } : {}) };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/edit`, bodyString, identity.privateKey, identity.publicKey);
 
@@ -6814,6 +6911,12 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
 
     const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
     const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
+    // The caption's signature goes in the line's metadata, beside whatever the caller's says (a reply).
+    if (encCap.metadata) {
+        let m: any = {};
+        try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
+        metadata = JSON.stringify({ ...m, ...encCap.metadata });
+    }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
@@ -7859,13 +7962,18 @@ export async function reportAbuse(reporterPublicKey: string, targetPublicKey: st
         const res = await _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason: sending.reason, targetPostId: postId });
         return sending.wordsLeftOut ? { ...res, wordsLeftOut: sending.wordsLeftOut } : res;
     } catch (e: any) {
-        if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) throw e;
-        const said: any = new Error(e.nodeMessage);
-        said.status = e.status;
-        said.code = e.message;
-        said.nodeAnswered = e.nodeAnswered;
-        throw said;
+        throw reportRefusal(e);
     }
+}
+
+/** A report's refusal as the member reads it: the node's sentence when it sent one, its code kept as `code`. */
+function reportRefusal(e: any): any {
+    if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) return e;
+    const said: any = new Error(e.nodeMessage);
+    said.status = e.status;
+    said.code = e.message;
+    said.nodeAnswered = e.nodeAnswered;
+    return said;
 }
 
 
@@ -8557,6 +8665,10 @@ export interface GroupItem {
     id: string;
     name: string;
     slug: string;
+    /** 'circle' on a place circle (@beanpool/core place-circle.ts): its name and purpose are shown in the member's language. */
+    kind?: 'circle';
+    /** A place circle's own rows, for someone in it. */
+    circle?: import('@beanpool/core').CircleCard;
     description: string | null;
     avatarUrl: string | null;
     category: GroupCategory;
@@ -9247,6 +9359,24 @@ export async function deleteMessageApi(messageId: string): Promise<any> {
 /** A convenor removes somebody else's message from a group chat. Unchanged endpoint, now reachable from the chat. */
 export async function removeGroupChatMessage(groupId: string, messageId: string): Promise<any> {
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/remove`, { messageId });
+}
+
+/**
+ * Report one line of a direct message to the community's moderators (core dm-line-report.ts): the sealed line as this phone
+ * holds it, its sender's signature, and `words`, what it reads as here. No key goes, and nothing else of the chat.
+ */
+export async function reportDmLine(conversationId: string, messageId: string, words: string, reason: string): Promise<any> {
+    const database = await getDb();
+    const row = await database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?', [messageId]);
+    if (!row) throw new Error('Message not found');
+    try {
+        return await _signedRequest('/api/messages/report', {
+            messageId, reason,
+            disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId, metadata: row.metadata }, words),
+        });
+    } catch (e: any) {
+        throw reportRefusal(e);
+    }
 }
 
 /**

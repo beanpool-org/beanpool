@@ -405,7 +405,8 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
         try {
             for (const r of db.prepare(sql).all() as any[]) {
                 referenced.add(r.storage_key as string);
-                // A listing photo's small copy (storage/photo-thumbnails.ts) is kept while its photo is.
+                // A listing photo's current small copy (storage/photo-thumbnails.ts) is kept while its photo is;
+                // legacy -t files are deliberately omitted so the sweep reclaims them.
                 const thumb = thumbnailKeyOf(r.storage_key);
                 if (thumb) referenced.add(thumb);
             }

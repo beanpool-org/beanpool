@@ -7,7 +7,7 @@ import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainSer
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
-import { bodyOfSignedText, bytesOfSignedText, copiedPostTags, replaceLoneSurrogates, storedPostTags } from '@beanpool/core';
+import { bodyOfSignedText, bytesOfSignedText, copiedFreeTags, copiedPostTags, replaceLoneSurrogates, storedFreeTags, storedPostTags } from '@beanpool/core';
 import { getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
@@ -1209,6 +1209,15 @@ function postTags(rp: any): [string] {
     return [storedPostTags(copiedPostTags(rp.tags))];
 }
 
+/**
+ * free_tags: the tags its author typed (DESIGN-tags-free-entry-fable.md §2, slice F1), plain assignment, so tags taken off
+ * on the main server are off here too, held to the rule (@beanpool/core copiedFreeTags). A payload from a main server
+ * older than them says nothing, and it held none.
+ */
+function postFreeTags(rp: any): [string] {
+    return [storedFreeTags(copiedFreeTags(rp.freeTags))];
+}
+
 // members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
 // so a member who clears their area on the main server has none here either.
 
@@ -1983,8 +1992,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags, free_tags)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2030,6 +2039,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postFeatured(rp),
                         ...postCreatedVia(rp),
                         ...postTags(rp),
+                        ...postFreeTags(rp),
                     );
                     newPosts++;
                 } else {
@@ -2089,6 +2099,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         featured_at = ?,
                         created_via = COALESCE(?, created_via),
                         tags = ?,
+                        free_tags = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2127,6 +2138,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postFeatured(rp),
                         ...postCreatedVia(rp),
                         ...postTags(rp),
+                        ...postFreeTags(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );
@@ -2521,8 +2533,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     // changeGroupLineReportReason) moves updated_at, and a copy that took only the status kept the old reason,
                     // so a server that took over neither marked it nor listed it first (the review of #2470).
                     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at,
-                                    target_message_id, disclosure)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    target_message_id, disclosure, request_conversation_id, request_wording)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     reason = excluded.reason,
                                     status = excluded.status,
@@ -2539,7 +2551,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ar.status || 'pending',
                         ar.updatedAt || ar.createdAt,
                         ar.targetMessageId || null,
-                        ar.disclosure || null
+                        ar.disclosure || null,
+                        ar.requestConversationId || null,
+                        ar.requestWording || null
                     );
                 }
             }
@@ -2806,8 +2820,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // The description as the main node holds it (#1493, groupDescriptionAsCopied): the limit is on a member's
                 // new words, so one stored before it, longer, is copied unchanged and its row is never dropped.
                 const importGroup = db.prepare(`INSERT INTO groups
-                    (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at,
+                     kind, place_cell, circle_done_at, circle_community_key, circle_starter, circle_starting_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
                         slug = excluded.slug,
@@ -2815,7 +2830,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         category = excluded.category,
                         lead_pubkey = COALESCE(excluded.lead_pubkey, groups.lead_pubkey),
                         join_policy = excluded.join_policy,
-                        updated_at = excluded.updated_at
+                        updated_at = excluded.updated_at,
+                        kind = excluded.kind,
+                        place_cell = excluded.place_cell,
+                        circle_done_at = excluded.circle_done_at,
+                        circle_community_key = excluded.circle_community_key,
+                        circle_starter = excluded.circle_starter,
+                        circle_starting_at = excluded.circle_starting_at
                     WHERE excluded.updated_at IS NOT NULL
                       AND (groups.updated_at IS NULL OR excluded.updated_at > groups.updated_at)`);
                 for (const g of remote.groups) {
@@ -2823,6 +2844,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     const res = importGroup.run(
                         g.id, g.name, g.slug, groupDescriptionAsCopied(g.description), g.category || 'general',
                         g.createdBy, g.leadPubkey ?? null, g.joinPolicy || 'open', g.createdAt, g.updatedAt || g.createdAt,
+                        g.kind === 'circle' ? 'circle' : null, g.placeCell ?? null, g.circleDoneAt ?? null, g.circleCommunityKey ?? null,
+                        g.circleStarter ?? null, g.circleStartingAt ?? null,
                     );
                     if (res.changes > 0) {
                         importGroupPicture(g.id, g.avatarUrl ?? null);

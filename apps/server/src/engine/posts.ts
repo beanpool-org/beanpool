@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -16,6 +16,7 @@ import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './pos
 import { photoRefusalError, photosRefusal } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
+import { CIRCLE_CLOSED_BY } from './place-circles.js';
 import { zoneOfPin } from './event-zone.js';
 import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT, rollDueSeries } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
@@ -23,7 +24,8 @@ import { getProfileSwitches, profileLimits } from '../config/node-profile.js';
 import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
-import { assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
+import { assertFreeTags, assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
+import { ownerAdminLimit } from './owner-admin-limit.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
 import {
@@ -446,6 +448,34 @@ function placelessListingArea(authorPublicKey: string): { lat: number; lng: numb
 
 /** What a closed group answers a new post (state-engine GROUP_CLOSED is its chat's and its door's words). */
 export const GROUP_CLOSED_TO_POSTS = 'This group was closed by a vote of its members. It takes no new posts.';
+export const PLACE_CIRCLE_CLOSED_TO_POSTS = word('This circle has finished. It takes no new posts.');
+
+/** Closes every active poll past its closing time, so it no longer counts against the active-poll limits. */
+function sweepExpiredPolls(): void {
+    const nowIso = new Date().toISOString();
+    db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE type = 'poll' AND status = 'active' AND poll_closes_at <= ?").run(nowIso, nowIso);
+}
+
+/**
+ * Whether `authorPublicKey` may have one more active poll, for each way a poll goes active: createPost and resumePost
+ * (no other path makes a poll active). `ownersLimit` is ownerAdminLimit's answer for the member acting: their number in
+ * place of a member's 1, or null. The node-wide 5 is every author's, owners' and admins' too.
+ */
+function assertActivePollRoom(authorPublicKey: string, ownersLimit: number | null): void {
+    const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
+    if (ownersLimit !== null) {
+        if (authorOpen && authorOpen.c >= ownersLimit) {
+            throw new Error(tr('Rate limit: this community\'s owners allow {n} active polls at a time for owners and admins ("Owner and admin limit" in Settings)', { n: ownersLimit }));
+        }
+    } else if (authorOpen && authorOpen.c >= 1) {
+        throw new Error(word('Rate limit: You can only have 1 active poll at a time'));
+    }
+
+    const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
+    if (nodeOpen && nodeOpen.c >= 5) {
+        throw new Error(word('Rate limit: Node limit of 5 active polls reached'));
+    }
+}
 
 export function createPost(
     broadcast: BroadcastFn,
@@ -500,6 +530,8 @@ export function createPost(
         shopId?: unknown;
         /** Its tags: ids from the library in core, at most 5 (post-fields.ts assertPostTags). */
         tags?: unknown;
+        /** The tags its author typed, at most 5 (post-fields.ts assertFreeTags). */
+        freeTags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
         /**
@@ -571,9 +603,9 @@ export function createPost(
             throw new Error(unauthorized(word('Must be an active convenor or member to post to a group')));
         }
         // A group its members closed by a vote takes no new post: offers, needs, polls and events (close_group, §2.3).
-        if (db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(options.targetGroupId)) {
-            throw new Error(GROUP_CLOSED_TO_POSTS);
-        }
+        // A place circle closes by itself, and no vote closed it.
+        const closure = db.prepare('SELECT decision_id FROM group_closures WHERE group_id = ?').get(options.targetGroupId) as { decision_id: string } | undefined;
+        if (closure) throw new Error(closure.decision_id === CIRCLE_CLOSED_BY ? PLACE_CIRCLE_CLOSED_TO_POSTS : GROUP_CLOSED_TO_POSTS);
     } else if (audienceScope === 'direct') {
         if (!options?.targetPubkey && !options?.assignedTo) {
             throw new Error('targetPubkey or assignedTo is required when audienceScope is direct');
@@ -626,8 +658,7 @@ export function createPost(
         }
 
         // Sweep expired polls before rate limit check
-        const nowIso = new Date().toISOString();
-        db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE type = 'poll' AND status = 'active' AND poll_closes_at <= ?").run(nowIso, nowIso);
+        sweepExpiredPolls();
 
         const rawOpts = options?.pollOptions;
         if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
@@ -741,36 +772,35 @@ export function createPost(
     const createdAt = new Date(now).toISOString();
     // Held to the library here too, for a caller that comes past state-engine's createPost (post-fields.ts).
     const tags = options?.tags === undefined ? [] : assertPostTags(options.tags);
-    const searchKeywords = postSearchKeywords(title, description, category, tags);
+    const freeTags = options?.freeTags === undefined ? [] : assertFreeTags(options.freeTags);
+    const searchKeywords = postSearchKeywords(title, description, category, tags, freeTags);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
     // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos. A keeper's listing for
     // their enterprise charges the keeper who sent the photos, as its edit and its logo do, never the enterprise.
     const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey);
 
     db.transaction(() => {
-        if (type === 'poll') {
-            const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
-            if (authorOpen && authorOpen.c >= 1) {
-                throw new Error(word('Rate limit: You can only have 1 active poll at a time'));
-            }
-
-            const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
-            if (nodeOpen && nodeOpen.c >= 5) {
-                throw new Error(word('Rate limit: Node limit of 5 active polls reached'));
-            }
-        }
+        // An owner or admin acting (a keeper for an enterprise, by their own role) is held to the owners' "Owner and admin
+        // limit" in place of a member's 1 active poll and 5 upcoming events (engine/owner-admin-limit.ts), read now.
+        const ownersLimit = type === 'poll' || type === 'event' ? ownerAdminLimit(options?.createdBy ?? authorPublicKey) : null;
+        if (type === 'poll') assertActivePollRoom(authorPublicKey, ownersLimit);
 
         if (type === 'event') {
             // Upcoming cap (§2.2). Three separate pools: a group's events count against the group, and
             // everything else against the author — a member, or the enterprise a keeper posts for.
             // "Upcoming" is active and not yet ended; an ended event stays active until the 30-day scrub
-            // and must not hold a slot for that month.
+            // and must not hold a slot for that month. The pool is the same for an owner or admin acting;
+            // only its number is the owners' (ownersLimit).
             const upcoming = audienceScope === 'group'
                 ? db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
                               AND audience_scope = 'group' AND target_group_id = ?`).get(createdAt, options!.targetGroupId) as any
                 : db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
                               AND author_pubkey = ? AND (audience_scope IS NULL OR audience_scope != 'group')`).get(createdAt, authorPublicKey) as any;
-            if (upcoming && upcoming.c >= EVENT_UPCOMING_CAP) {
+            if (ownersLimit !== null) {
+                if (upcoming && upcoming.c >= ownersLimit) {
+                    throw new Error(tr('Limit reached: this community\'s owners allow {n} upcoming events at a time for owners and admins ("Owner and admin limit" in Settings)', { n: ownersLimit }));
+                }
+            } else if (upcoming && upcoming.c >= EVENT_UPCOMING_CAP) {
                 throw new Error(tr('Limit reached: {n} upcoming events at a time', { n: EVENT_UPCOMING_CAP }));
             }
         }
@@ -780,8 +810,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -801,7 +831,8 @@ export function createPost(
             series.repeat, series.until, series.skips,
             lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value, shopId,
             typeof options?.createdVia === 'string' && options.createdVia ? options.createdVia.slice(0, 80) : null,
-            storedPostTags(tags)
+            storedPostTags(tags),
+            storedFreeTags(freeTags)
         );
 
         if (photoColumns.length > 0) {
@@ -1505,7 +1536,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     // Its tags, as the edit sets them (held to the library by state-engine's updatePost, post-fields.ts) or as they are.
     const newTags = updates.tags !== undefined ? assertPostTags(updates.tags, existingPost.tags ?? []) : existingPost.tags ?? [];
     if (updates.tags !== undefined) { fields.push('tags = ?'); values.push(storedPostTags(newTags)); }
-    const newKeywords = postSearchKeywords(newTitle, newDesc, newCat, newTags);
+    // The tags its author typed, the same way: an edit that names none leaves them, [] or null clears them.
+    const newFreeTags = updates.freeTags !== undefined ? assertFreeTags(updates.freeTags, existingPost.freeTags ?? []) : existingPost.freeTags ?? [];
+    if (updates.freeTags !== undefined) { fields.push('free_tags = ?'); values.push(storedFreeTags(newFreeTags)); }
+    const newKeywords = postSearchKeywords(newTitle, newDesc, newCat, newTags, newFreeTags);
     fields.push('search_keywords = ?');
     values.push(newKeywords);
 
@@ -2108,7 +2142,7 @@ export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKe
 }
 
 export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string, actorPubkey?: string, keeps?: (enterprisePubkey: string) => boolean): boolean {
-    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
+    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to, type, status FROM posts WHERE id = ?").get(postId) as any;
     if (!postRow) return false;
     const mutator = resolvePostMutator(postRow, authorPublicKey, actorPubkey, keeps);
     if (!mutator) return false;
@@ -2121,6 +2155,11 @@ export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicK
     assertNotMuted(effectiveAuthor);
     // One of a shop's Offers, while the shop is closed for now: back up with the shop's reopen, never alone (engine/shops.ts).
     assertShopOpenForResume(postId);
+    // A poll back up is one more active poll: the limits createPost holds it to, for the member acting.
+    if (postRow.type === 'poll' && postRow.status === 'paused') {
+        sweepExpiredPolls();
+        assertActivePollRoom(effectiveAuthor, ownerAdminLimit(actorPubkey ?? effectiveAuthor));
+    }
     const res = db.prepare(`UPDATE posts SET status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'paused'`).run(postId, effectiveAuthor);
     if (res.changes > 0) {
         let recipients: string[] | undefined;

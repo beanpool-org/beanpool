@@ -1,7 +1,7 @@
 ---
 slug: rules
 title: Rules and how decisions work
-summary: Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers, and convenors and lead convenors.
+summary: Voting, turnout, secret ballots, who may vote, suspension, removing a member, small communities, keepers, and convenors and lead convenors.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
 ---
 
@@ -72,7 +72,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 ## How much Yes is needed
 
 - Most Decisions: 60% Yes.
-- Removing a member: 66% Yes.
+- Removing a member: 66% Yes, and at least 3 Yes votes, whatever the share. Two neighbours can't remove a third.
 - Undoing something (lifting a suspension, unfreezing credit, reinstating a member): more than half.
 - A tie always fails.
 
@@ -85,7 +85,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 
 ## Removing a member
 
-- In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. For now one thing still does without a vote: an owner can remove a member together with everyone they invited, and everyone those people invited.
+- In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. Two things still do without that vote: where too few members can vote, an owner may decide it (see "A small community"); and, for now, an owner can remove a member together with everyone they invited, and everyone those people invited.
 - If a removal passes, the member is suspended and their credit frozen at once.
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
@@ -98,13 +98,21 @@ An admin can suspend a member at once, for example to stop harm. They must give 
 
 - At the same moment, a 7-day Decision opens on removing them: "Remove …?". An admin acting on a report can suspend the same way, and the same Decision opens.
 - While it lasts, the member's listings are off the Market and the map, and they can't invite anyone or answer a request to join. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat), and finish or cancel deals they already have. It all comes back when the suspension ends.
-- It is decided as any removal is: 25% turnout and 66% Yes. The suspended member cannot vote on it, and still votes on every other Decision.
+- It is decided as any removal is: 25% turnout, 66% Yes and at least 3 Yes votes. The suspended member cannot vote on it, and still votes on every other Decision.
 - If it passes, they stay suspended for the 7 days of a removal's wait, and are then removed (see "Removing a member").
-- If it does not pass, or too few people vote, the suspension lifts when the vote closes.
+- If it does not pass, or too few people vote, the suspension lifts when the vote closes. Where too few members can vote at all, an owner may decide it (see "A small community").
 - An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.
 - An admin can suspend another admin. No vote removes an owner or admin, so whatever the vote decides, the suspension ends when it closes, and they keep their role.
 
 On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.
+
+## A small community
+
+- **At least 3 Yes votes.** Removing a member needs at least 3 Yes votes, however few vote No. In a community of 7 active members, 3 of the 6 others must say Yes; in a family of four, all three others.
+- **Too few to vote.** When fewer than 3 members, not counting the one suspended, can vote, the vote can never reach its turnout. It still runs its 7 days, and it says "Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes."
+- **The owner decides.** While that vote is open, an owner of your community's server, never an admin, may decide it, with a reason members read beside the case. The member is told, and can reply to it. If an admin hides the case as shown to be false, the owner's reason is hidden with it, and an owner can't decide a vote whose case is already hidden.
+- **When it closes,** if still fewer than 3 members could vote, the owner's decision is carried out: the member stays suspended for the 7 days of a removal's wait, and is then removed. The vote says "Decided by the owner: too few members to vote". An admin can still stop it in those 7 days, with a reason everyone can read.
+- If more members could vote by then, they decide, not the owner. If no owner decided, the suspension lifts when the vote closes, as with any vote too few people voted on. The owners hear of every decision an owner makes this way.
 
 ## A fair vote on removing a member
 
@@ -127,7 +135,7 @@ Your community's server has owners and admins. They look after it.
 - An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.
 - If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.
 - An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.
-- An admin cannot remove a member without the community's vote. Where the people who run the server have switched community votes off, the admins remove members themselves.
+- An admin cannot remove a member without the community's vote. Where too few members can vote, an owner may decide it (see "A small community"). Where the people who run the server have switched community votes off, the admins remove members themselves.
 - Admins can give members the right to vouch for newcomers.
 - Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.
 - Admins sort out stuck trades, but never one they are part of.

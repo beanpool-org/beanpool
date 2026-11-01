@@ -4,7 +4,9 @@ import { PhoneReturnLink } from '../layout/ReturnLinks';
 import type { BackLink } from '../../lib/came-from';
 import { MODERATOR_MANUAL_PAGES } from '../../lib/manual';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
+import { RequestLimitsCard } from './RequestLimitsCard';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
+import { ReportedDirectMessage } from './ReportedDirectMessage';
 import {
     REMOVAL_REASONS,
     actionNodeReport,
@@ -59,6 +61,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
     const [burstsHere, setBurstsHere] = useState(false);
     const [burstAnchor, setBurstAnchor] = useState<string | null>(null);
     const [burstReload, setBurstReload] = useState(0);
+    const [limitsReload, setLimitsReload] = useState(0);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -119,7 +122,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                     </h1>
                     <button
                         type="button"
-                        onClick={() => void load()}
+                        onClick={() => { void load(); setLimitsReload((n) => n + 1); }}
                         className="min-h-[48px] px-4 rounded-xl bg-nature-800 hover:bg-nature-700 text-sm text-white font-bold"
                     >
                         Refresh
@@ -131,6 +134,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                     A message from a locked group chat shows here only when its reporter shared its key, and only that one message.
                 </p>
 
+                <RequestLimitsCard nodeUrl={nodeUrl} reloadKey={limitsReload} />
                 <BurstDigestCard nodeUrl={nodeUrl} onOpen={setBurstAnchor} reloadKey={burstReload} onAvailability={setBurstsHere} />
                 {burstAnchor && (
                     <BurstPanel
@@ -248,7 +252,10 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                 </span>
             </div>
 
-            {report.targetMessageId ? (
+            {report.directMessage ? (
+                // One direct message line: its sender's signature checked, its words the reporter's.
+                <ReportedDirectMessage nodeUrl={nodeUrl} reportId={report.id} />
+            ) : report.targetMessageId ? (
                 // A locked group chat's message, reported with its key: opened here, verified, and nothing else of the chat.
                 <ReportedGroupMessage nodeUrl={nodeUrl} reportId={report.id} groupName={report.groupMessage?.groupName} />
             ) : hasPost ? (

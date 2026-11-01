@@ -31,6 +31,7 @@ import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
+import { PostTagChips } from './PostTagChips';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -366,6 +367,10 @@ interface EventDetailProps {
     distanceKm?: number | null;
     onShowOnMap?: (post: MarketplacePost) => void;
     onOpenProfile?: (pubkey: string) => void;
+    /** Opens the Market filtered by a tag this event carries (§4.4). Absent: its tags aren't shown. */
+    onOpenTag?: (id: string) => void;
+    /** Opens the Market with exactly this typed tag (DESIGN-tags-free-entry-fable.md §4). */
+    onOpenFreeTag?: (tag: string) => void;
     onChange?: (post: MarketplacePost) => void;
     /** After a cancel, with the event as it reads now (CANCELLED), or null when it could not be re-read. */
     onCancelled?: (post: MarketplacePost | null) => void;
@@ -385,7 +390,7 @@ interface EventDetailProps {
     onChangeThisDateOnly?: (post: MarketplacePost, date: string) => void;
 }
 
-export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate, onChangeThisDateOnly }: EventDetailProps) {
+export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onOpenTag, onOpenFreeTag, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate, onChangeThisDateOnly }: EventDetailProps) {
     const rsvp = useEventRsvp(post, identity, onChange);
     const p = rsvp.livePost;
     const [cancelling, setCancelling] = useState(false);
@@ -515,6 +520,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {p.description && (
                     <p dir="auto" className="m-0 text-sm text-nature-700 dark:text-nature-300 whitespace-pre-wrap break-words">{p.description}</p>
                 )}
+                {onOpenTag && <PostTagChips tags={p.tags} freeTags={p.freeTags} onPick={onOpenTag} onPickFree={onOpenFreeTag} />}
 
                 <p className="m-0 text-sm text-nature-600 dark:text-nature-400 min-w-0">
                     {/* One sentence with the host's name (a button) and the group's in it: the order is the language's. */}

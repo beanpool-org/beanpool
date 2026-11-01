@@ -94,11 +94,13 @@ export interface PlaceWatch {
     lng: number;
     radiusKm: number;
     createdAt: string;
+    /** They also said "I'd help start one here" (engine/place-circles.ts). */
+    wouldHelp: boolean;
 }
 
-interface WatchRecord { id: string; pubkey: string; lat: number; lng: number; radius_km: number; created_at: string; last_notified_at: string | null; updated_at: string }
+interface WatchRecord { id: string; pubkey: string; lat: number; lng: number; radius_km: number; created_at: string; last_notified_at: string | null; updated_at: string; would_help: number }
 
-const toWatch = (w: WatchRecord): PlaceWatch => ({ id: w.id, lat: w.lat, lng: w.lng, radiusKm: w.radius_km, createdAt: w.created_at });
+const toWatch = (w: WatchRecord): PlaceWatch => ({ id: w.id, lat: w.lat, lng: w.lng, radiusKm: w.radius_km, createdAt: w.created_at, wouldHelp: w.would_help === 1 });
 
 export class PlaceWatchLimitError extends Error {
     readonly code = 'watch_limit';
@@ -117,24 +119,32 @@ export function listPlaceWatches(pubkey: string): PlaceWatch[] {
 /**
  * Sets a watch on the cell holding `point` (the same cell again: its radius), and returns what is stored. The point is
  * rounded here, before any write. Throws PlaceWatchLimitError for a new cell past the limit. The caller has checked
- * the point is on the Earth and the radius is within PLACE_WATCH_RADIUS_KM.
+ * the point is on the Earth and the radius is within PLACE_WATCH_RADIUS_KM. `radiusKm` undefined: the cell keeps the
+ * radius it has, a new one the default. `wouldHelp` undefined: the cell keeps its flag, a new one none.
  */
-export function setPlaceWatch(pubkey: string, point: { lat: number; lng: number }, radiusKm: number): { watch: PlaceWatch; created: boolean } {
+export function setPlaceWatch(pubkey: string, point: { lat: number; lng: number }, radiusKm?: number, wouldHelp?: boolean): { watch: PlaceWatch; created: boolean } {
     const lat = roundToArea(point.lat);
     const lng = roundToArea(point.lng);
     return db.transaction(() => {
         const now = new Date().toISOString();
         const same = db.prepare('SELECT * FROM place_watches WHERE pubkey = ? AND lat = ? AND lng = ?').get(pubkey, lat, lng) as WatchRecord | undefined;
         if (same) {
-            if (same.radius_km !== radiusKm) db.prepare('UPDATE place_watches SET radius_km = ?, updated_at = ? WHERE id = ?').run(radiusKm, now, same.id);
-            return { watch: toWatch({ ...same, radius_km: radiusKm }), created: false };
+            const radius = radiusKm ?? same.radius_km;
+            const help = wouldHelp === undefined ? same.would_help : wouldHelp ? 1 : 0;
+            if (same.radius_km !== radius || same.would_help !== help) {
+                db.prepare('UPDATE place_watches SET radius_km = ?, would_help = ?, updated_at = ? WHERE id = ?').run(radius, help, now, same.id);
+            }
+            return { watch: toWatch({ ...same, radius_km: radius, would_help: help }), created: false };
         }
         const count = (db.prepare('SELECT COUNT(*) AS n FROM place_watches WHERE pubkey = ?').get(pubkey) as { n: number }).n;
         const limit = placeWatchLimit();
         if (count >= limit) throw new PlaceWatchLimitError(limit);
-        const row: WatchRecord = { id: crypto.randomUUID(), pubkey, lat, lng, radius_km: radiusKm, created_at: now, last_notified_at: null, updated_at: now };
-        db.prepare('INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(row.id, row.pubkey, row.lat, row.lng, row.radius_km, row.created_at, row.updated_at);
+        const row: WatchRecord = {
+            id: crypto.randomUUID(), pubkey, lat, lng, radius_km: radiusKm ?? PLACE_WATCH_RADIUS_KM.default, created_at: now,
+            last_notified_at: null, updated_at: now, would_help: wouldHelp ? 1 : 0,
+        };
+        db.prepare('INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, updated_at, would_help) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(row.id, row.pubkey, row.lat, row.lng, row.radius_km, row.created_at, row.updated_at, row.would_help);
         return { watch: toWatch(row), created: true };
     })();
 }
@@ -200,12 +210,12 @@ export function mergeReplicatedWatches(watches: unknown): WatchMerge {
     const current = db.prepare('SELECT updated_at FROM place_watches WHERE id = ?');
     const removed = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'place_watches' AND row_key = ?");
     const sameCell = db.prepare('DELETE FROM place_watches WHERE pubkey = ? AND lat = ? AND lng = ? AND id != ?');
-    const upsert = db.prepare(`INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, last_notified_at, updated_at)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    const upsert = db.prepare(`INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, last_notified_at, updated_at, would_help)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                ON CONFLICT(id) DO UPDATE SET
                                    pubkey = excluded.pubkey, lat = excluded.lat, lng = excluded.lng, radius_km = excluded.radius_km,
                                    created_at = excluded.created_at, last_notified_at = excluded.last_notified_at,
-                                   updated_at = excluded.updated_at`);
+                                   updated_at = excluded.updated_at, would_help = excluded.would_help`);
     db.transaction(() => {
         for (const raw of watches) {
             const w = raw as Partial<SyncPlaceWatch> | null;
@@ -222,7 +232,7 @@ export function mergeReplicatedWatches(watches: unknown): WatchMerge {
             const lng = roundToArea(w.lng);
             try {
                 sameCell.run(w.pubkey, lat, lng, w.id);
-                upsert.run(w.id, w.pubkey, lat, lng, w.radiusKm, w.createdAt, w.lastNotifiedAt ?? null, w.updatedAt);
+                upsert.run(w.id, w.pubkey, lat, lng, w.radiusKm, w.createdAt, w.lastNotifiedAt ?? null, w.updatedAt, w.wouldHelp === true ? 1 : 0);
                 merge.written++;
             } catch (e: any) {
                 rethrowUnlessRowRefused(e);
@@ -237,9 +247,9 @@ export function mergeReplicatedWatches(watches: unknown): WatchMerge {
 // ── telling watchers ─────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Returns how many open sockets it was written to. */
-type BroadcastFn = (event: any, recipients?: string[]) => number;
+export type BroadcastFn = (event: any, recipients?: string[]) => number;
 /** Returns how many notifications it handed to the push service. */
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => number;
+export type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => number;
 
 export interface PlaceWatchNoticeCallbacks {
     broadcast: BroadcastFn;
@@ -263,6 +273,9 @@ export function communitiesNearBody(count: number, km: number): string {
 }
 
 // ── which sightings can reach a watch ────────────────────────────────────────────────────────────────────────────
+
+/** What the index below sorts: a place, and how much it adds to a reach. */
+interface Placed { c: { lat: number; lng: number }; extraKm: number }
 
 /** A community first seen, as a run compares it with the watches. */
 export interface Sighting {
@@ -297,12 +310,12 @@ const rowOf = (lat: number): number => Math.min(ROWS - 1, Math.max(0, Math.floor
  *   - longitudes wrap at ±180°: a watch by the antimeridian looks on both sides of it.
  * Every stored place is on the Earth (the checks on place_watches, normaliseRegistryRow for a community).
  */
-export class SightingIndex {
-    private readonly rows: Sighting[][] = Array.from({ length: ROWS }, () => []);
+export class SightingIndex<S extends Placed = Sighting> {
+    private readonly rows: S[][] = Array.from({ length: ROWS }, () => []);
     /** The most any sighting here adds to a watch's radius. */
     private readonly extraKm: number = 0;
 
-    constructor(sightings: readonly Sighting[]) {
+    constructor(sightings: readonly S[]) {
         for (const s of sightings) {
             this.rows[rowOf(s.c.lat)].push(s);
             if (s.extraKm > this.extraKm) this.extraKm = s.extraKm;
@@ -311,7 +324,7 @@ export class SightingIndex {
     }
 
     /** Visits every sighting that can reach a watch of `radiusKm` at `lat`, `lng` (and a few that can't), once each. */
-    near(lat: number, lng: number, radiusKm: number, visit: (s: Sighting) => void): void {
+    near(lat: number, lng: number, radiusKm: number, visit: (s: S) => void): void {
         const reach = (radiusKm + this.extraKm + 1) / KM_PER_DEGREE;
         if (!(reach >= 0 && Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) {
             for (const row of this.rows) for (const s of row) visit(s);
@@ -338,7 +351,7 @@ export class SightingIndex {
 }
 
 /** A row's sightings from longitude `west` to `east`, within `reach` degrees of latitude of `lat`. */
-function scanRow(row: readonly Sighting[], west: number, east: number, lat: number, reach: number, visit: (s: Sighting) => void): void {
+function scanRow<S extends Placed>(row: readonly S[], west: number, east: number, lat: number, reach: number, visit: (s: S) => void): void {
     let lo = 0, hi = row.length;
     while (lo < hi) {
         const mid = (lo + hi) >>> 1;

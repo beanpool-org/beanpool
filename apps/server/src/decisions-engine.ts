@@ -46,7 +46,7 @@ import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import type { Member } from '@beanpool/engine';
-import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, GROUP_KIND_CIRCLE, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR, noteKeeperLeftProject } from './db/db.js';
 import { ledger } from './engine/ledger.js';
@@ -70,6 +70,7 @@ import {
     COMMUNITY_DECISION_ACTOR,
     isOwnerLevelActor,
     heldPrivilegedRole,
+    removalInGraceOf,
     pruneNeedsOwner,
     inviteBranchOf,
     reportSuspensionTakesPrivilegedRole,
@@ -263,6 +264,16 @@ export interface Decision {
     replyHiddenAt: string | null;
     replyHiddenBy: string | null;
     replyHiddenReason: string | null;
+    /**
+     * A pause's own vote too few members could vote on, which an owner decided (removal by vote S6, design §5 point 3:
+     * ownerDecideTooFew): when, which owner (a key or the server's password, never served to members, as adminHaltedBy
+     * isn't) and the public reason members read on the card. Carried out when the vote closes, if it is still too few
+     * (ownerDecisionCarriedAt: when the tick did); otherwise the vote ended as any vote does.
+     */
+    ownerDecidedAt: string | null;
+    ownerDecidedBy: string | null;
+    ownerDecidedReason: string | null;
+    ownerDecisionCarriedAt: string | null;
 }
 
 export interface DecisionVote {
@@ -292,6 +303,13 @@ export interface DecisionTally {
     supportRatio: number;
     thresholdRequired: number;
     passed: boolean;
+    /** The fewest Yes votes that pass it, whatever the share: REMOVAL_MIN_YES on a vote removing a member (design §5 point 1). */
+    minYes?: number;
+    /**
+     * A pause's own vote that fewer than QUORUM_FLOOR members could vote on, so its quorum can't be met (design §5 point 3):
+     * the card says so, and an owner may decide it (ownerDecideTooFew).
+     */
+    tooFewToVote?: boolean;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -337,6 +355,10 @@ function rowToDecision(r: any): Decision {
         replyHiddenAt: r.reply_hidden_at || null,
         replyHiddenBy: r.reply_hidden_by || null,
         replyHiddenReason: r.reply_hidden_reason || null,
+        ownerDecidedAt: r.owner_decided_at || null,
+        ownerDecidedBy: r.owner_decided_by || null,
+        ownerDecidedReason: r.owner_decided_reason || null,
+        ownerDecisionCarriedAt: r.owner_decision_carried_at || null,
     };
 }
 
@@ -347,12 +369,12 @@ function rowToDecision(r: any): Decision {
  * member. `name` is null when it can't be known (an account gone from this community).
  */
 export interface RemovalProposer {
-    kind: 'admin' | 'password' | 'member';
+    kind: 'admin' | 'owner' | 'password' | 'member';
     name: string | null;
 }
 
 /** A Decision as members see it: see publicDecision. */
-export type PublicDecision = Omit<Decision, 'adminHaltedBy' | 'caseHiddenBy' | 'replyHiddenBy'> & { proposer?: RemovalProposer };
+export type PublicDecision = Omit<Decision, 'adminHaltedBy' | 'caseHiddenBy' | 'replyHiddenBy' | 'ownerDecidedBy'> & { proposer?: RemovalProposer };
 
 /**
  * The params of a Decision that are a member's balance: a vote to remove someone records their balance and debt when it
@@ -367,17 +389,18 @@ function carriesMemberBalance(params: unknown): params is Record<string, unknown
 
 /**
  * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote, hid a case
- * or a reply, made an emergency suspension or paused a member is an admin key: members get the public reason on the card,
- * not the key. A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's
+ * or a reply, made an emergency suspension or paused a member, and which owner decided a vote too few could vote on, is an
+ * admin key: members get the public reason on the card, not the key. A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's
  * voters. Admin routes (/api/local/admin/*) serve decisionForAdmin.
  *
  * A vote on removing a member also says who brought it (`proposer`, Amendment A point 3): the admin who paused them by
  * name, never by key. Once an admin has hidden its case (adminHideCase), the case is gone from what members read (the
- * description, the reason in its params, a member's own title) and the admin's public reason stands in its place. A reply
- * an admin took down (adminHideReply) is gone from the row itself; members read the admin's reason (replyHiddenReason).
+ * description, the reason in its params, a member's own title, an owner's reason for deciding it) and the admin's public
+ * reason stands in its place. A reply an admin took down (adminHideReply) is gone from the row itself; members read the
+ * admin's reason (replyHiddenReason).
  */
 export function publicDecision(decision: Decision): PublicDecision {
-    const { adminHaltedBy: _haltedBy, caseHiddenBy: _hiddenBy, replyHiddenBy: _replyHiddenBy, ...kept } = decision;
+    const { adminHaltedBy: _haltedBy, caseHiddenBy: _hiddenBy, replyHiddenBy: _replyHiddenBy, ownerDecidedBy: _decidedBy, ...kept } = decision;
     // adminHideReply erased the words with the mark; a row that somehow holds both still never serves them.
     const rest = kept.replyHiddenAt ? { ...kept, subjectReply: null, subjectRepliedAt: null } : kept;
     let shown: PublicDecision = rest;
@@ -417,6 +440,7 @@ function removalProposer(decision: Decision): RemovalProposer | null {
         const by = decision.params?.pausedBy;
         if (by === 'owner:password') return { kind: 'password', name: null };
         const recorded = typeof decision.params?.pausedByName === 'string' && decision.params.pausedByName ? decision.params.pausedByName : null;
+        if (decision.params?.secondPause) return { kind: 'owner', name: recorded ?? callsignOf(by) };
         return { kind: 'admin', name: recorded ?? callsignOf(by) };
     }
     if (decision.authorPubkey === SYSTEM_AUTHOR) return null;
@@ -426,8 +450,9 @@ function removalProposer(decision: Decision): RemovalProposer | null {
 /**
  * A vote on removing a member, as members read it once an admin has hidden its case (adminHideCase): the title the node
  * gives a removal ("Remove {name}?", so a member's own title, which may carry the accusation, goes too), the admin's
- * public reason in place of the description, and no reason in its params. The member's reply, who brought it and the
- * tally stay.
+ * public reason in place of the description, and no reason in its params. An owner's reason for deciding it goes too (it
+ * may repeat the accusation): the card says an owner decided, without it, and the admins' list keeps it. The member's
+ * reply, who brought it and the tally stay.
  */
 function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecision {
     const name = (typeof decision.params?.memberName === 'string' && decision.params.memberName) || (decision.subject || '').slice(0, 8);
@@ -441,6 +466,7 @@ function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecisi
         title: tr('Remove {name}?', { name }),
         description: tr('An admin hid the case for this vote, as one shown to be false. Their reason: {reason}', { reason: decision.caseHiddenReason ?? '' }),
         params,
+        ownerDecidedReason: null,
     };
 }
 
@@ -673,6 +699,17 @@ export function quorumRatioForEffect(effect: DecisionEffect, _touches?: Decision
     return 0.30;
 }
 
+/** The fewest votes any community Decision's quorum asks (getQuorumRequired's K_min). */
+export const QUORUM_FLOOR = 3;
+
+/**
+ * At least this many Yes votes remove a member, whatever the share of votes cast (removal by vote S6, design §5 point 1;
+ * Marty 23 Oct "Accept all", Q8): two neighbours can't remove a third. A small community's 66% is two Yes to one No; with
+ * it, castlemaine's six others need three Yes, and a family of four needs all three others. Only removal: reinstating
+ * someone stays a simple majority with no floor, the cheaper direction (docs/the-commons.md §3.4).
+ */
+export const REMOVAL_MIN_YES = 3;
+
 /**
  * SQL: the member row `m` is paused and held by nothing but its open pause vote (removal by vote S2, design §3.3):
  * 'disabled', with an open pause vote naming them (isPauseVote), and neither a removal of them in its grace window nor a
@@ -771,12 +808,12 @@ export function getDecisionElectorate(decision: { opensAt?: string; closesAt?: s
 
 /**
  * Computes required quorum for a decision:
- * quorum = max( K_min, ceil(ratio * electorate) ), K_min = 3.
+ * quorum = max( K_min, ceil(ratio * electorate) ), K_min = QUORUM_FLOOR (3).
  */
 export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch; opensAt?: string; closesAt?: string }, asOfTime?: number, activeMembersCount?: number): number {
     const ratio = quorumRatioForEffect(decision.effect, decision.touches);
     const active = activeMembersCount !== undefined ? activeMembersCount : getDecisionElectorate(decision, asOfTime);
-    return Math.max(3, Math.ceil(ratio * active));
+    return Math.max(QUORUM_FLOOR, Math.ceil(ratio * active));
 }
 
 /**
@@ -1293,13 +1330,20 @@ export function getDecisionVotes(decisionId: string): DecisionVote[] {
 
 /**
  * Tally votes for a decision.
+ *
+ * A vote on removing a member (removal by vote S6, design §5): its subject's own vote is never counted, nor them in its
+ * electorate (getDecisionElectorate), whatever a row says (castDecisionVote refuses it; a vote cast before that rule, or a
+ * row a restore carried, would otherwise still count); it passes only with at least REMOVAL_MIN_YES Yes votes; and a
+ * pause's own vote too few could vote on says so (`tooFewToVote`: fewer than QUORUM_FLOOR in its electorate, so its
+ * quorum can't be met).
  */
 export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTally {
     const decision = getDecision(decisionId);
     if (!decision) throw new Error(`Decision ${decisionId} not found`);
     if (decision.scopeKind !== 'community') return tallyScopedDecision(decision);
 
-    const votes = getDecisionVotes(decisionId);
+    const removal = decision.effect === 'remove_member';
+    const votes = getDecisionVotes(decisionId).filter(v => !(removal && v.voterPubkey === decision.subject));
     const totalVoters = votes.length;
     const electorate = getDecisionElectorate(decision, asOfTime);
     const quorumRatio = quorumRatioForEffect(decision.effect, decision.touches);
@@ -1308,16 +1352,18 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
 
     let yesWeight = 0;
     let noWeight = 0;
+    let yesVotes = 0;
     for (const v of votes) {
-        if (v.support === 1) yesWeight += v.weight;
+        if (v.support === 1) { yesWeight += v.weight; yesVotes++; }
         else noWeight += v.weight;
     }
     const totalWeight = yesWeight + noWeight;
     const supportRatio = totalWeight > 0 ? yesWeight / totalWeight : 0;
     const thresholdRequired = thresholdForEffect(decision.effect, decision.touches);
+    const minYes = removal ? REMOVAL_MIN_YES : 0;
 
-    // Ties fail (§3.4). Quorum failures expire as unresolved.
-    const passed = quorumMet && totalWeight > 0 && supportRatio >= thresholdRequired && yesWeight > noWeight;
+    // Ties fail (§3.4). Quorum failures expire as unresolved. A removal needs its Yes floor too (design §5 point 1).
+    const passed = quorumMet && totalWeight > 0 && supportRatio >= thresholdRequired && yesWeight > noWeight && yesVotes >= minYes;
 
     return {
         decisionId,
@@ -1333,6 +1379,7 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
         supportRatio,
         thresholdRequired,
         passed,
+        ...(removal ? { minYes, tooFewToVote: isPauseVote(decision) && !quorumMet && electorate < QUORUM_FLOOR } : {}),
     };
 }
 
@@ -1541,6 +1588,12 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     // the window to give back.
     if (decision.effect === 'remove_member') {
         const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        // A removal too few could vote on, which an owner decided (removal by vote S6: ownerDecideTooFew, which the tick
+        // passes here as the vote closes): the vote itself did not pass, so it is the owner's. Its record says so, as the
+        // design words it, and owner_decision_carried_at marks it, in the same transaction as the grace window it opens: a
+        // decision that is blocked or void here was never carried out, and its card never says it was.
+        const byOwner = pauseVote && !!decision.ownerDecidedAt && !tallyDecision(decision.id).passed;
+        const graceReason = `${byOwner ? `${DECIDED_BY_OWNER}. ` : ''}Member suspended. 7-day grace period active before destructive removal.`;
         try {
             // A plain transaction, not a conservingTransaction: the suspension moves no Beans, so it must not wait on the
             // pot's pre-flush (#1465 review, NB-1). The Beans move at the end of the grace window (adminPruneUser).
@@ -1559,10 +1612,11 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     UPDATE decisions SET
                         status = 'execution_pending_grace',
                         grace_period_ends_at = ?,
-                        execution_reason = 'Member suspended. 7-day grace period active before destructive removal.',
+                        execution_reason = ?,
+                        owner_decision_carried_at = CASE WHEN ? THEN ? ELSE owner_decision_carried_at END,
                         updated_at = ?
                     WHERE id = ?
-                `).run(graceEndsAt, now, decisionId);
+                `).run(graceEndsAt, graceReason, byOwner ? 1 : 0, now, now, decisionId);
             })();
             broadcast({ type: 'profile_updated', publicKey: decision.subject! });
             announceDecisionUpdated(decisionId);
@@ -2311,11 +2365,17 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
             ...(secondPause ? { secondPause } : {}),
         };
         title = tr('Remove {name}?', { name: memberName });
+        // What each answer does is the card's to say, not these words': it turns on how many can vote by then, which these
+        // can't know (pauseVoteBody). Only a server role's stays here, since no vote and no owner changes that.
         description = serverRole
-            ? tr("An admin paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
-                { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason })
-            : tr('An admin paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
-                { name: memberName, date: opensAt.slice(0, 10), reason });
+            ? (secondPause
+                ? tr("An owner paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
+                    { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason })
+                : tr("An admin paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
+                    { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason }))
+            : (secondPause
+                ? tr('An owner paused {name} on {date}. Reason given: {reason}', { name: memberName, date: opensAt.slice(0, 10), reason })
+                : tr('An admin paused {name} on {date}. Reason given: {reason}', { name: memberName, date: opensAt.slice(0, 10), reason }));
         if (secondPause) description = `${secondPauseSentence(secondPause)} ${description}`;
     } else {
         effect = 'keep_suspension';
@@ -2418,6 +2478,8 @@ export function emergencySuspendRefusal(
 
 /** Why a pause's own vote closed when an admin lifted the pause by hand (adminLiftSuspension). */
 export const PAUSE_LIFTED_BY_ADMIN = word('An admin lifted the pause before the vote closed');
+/** Why a removal an owner decided, too few being able to vote, isn't lifted by hand (adminLiftSuspension): no vote passed it. */
+export const LIFT_OWNER_DECIDED_REMOVAL = 'Too few members could vote, so an owner decided to remove this member; halt that Decision instead';
 
 /**
  * An admin lifts a suspension by hand. An open vote holding it (the pause's own vote, or a "Keep this suspension?" vote
@@ -2448,11 +2510,12 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
                 : 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension',
         };
     }
-    const pendingRemoval = db.prepare(
-        "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
-    ).get(subjectPubkey);
+    const pendingRemoval = removalInGraceOf(subjectPubkey);
     if (pendingRemoval) {
-        return { success: false, status: 409, error: 'The community voted to remove this member; halt that Decision instead' };
+        return {
+            success: false, status: 409,
+            error: pendingRemoval.decidedByOwner ? LIFT_OWNER_DECIDED_REMOVAL : 'The community voted to remove this member; halt that Decision instead',
+        };
     }
     const nowIso = new Date().toISOString();
     const openKeeps = openPauseVotes(subjectPubkey);
@@ -2828,7 +2891,7 @@ export function pauseChainRefusal(
     if (coolDown) return { status: 403, error: coolDown, code: REMOVAL_COOL_DOWN_CODE };
     const name = callsignOf(subjectPubkey) || subjectPubkey.slice(0, 8);
     if (thirdPauseRefused(subjectPubkey, now)) {
-        return { status: 403, code: THIRD_PAUSE_CODE, error: tr('The community has decided on {name} twice in 90 days. Ask them to propose a Decision.', { name }) };
+        return { status: 403, code: THIRD_PAUSE_CODE, error: tr('{name} has been paused twice in 90 days already. A third time needs the community: propose a Decision.', { name }) };
     }
     const window = repauseWindow(subjectPubkey, now);
     if (window) {
@@ -2861,21 +2924,28 @@ export function pauseChainRefusal(
     return null;
 }
 
+/** How the vote before a second pause ended: its `params.secondPause.after`, which both apps' secondPauseLine read. */
+type SecondPauseAfter = 'no' | 'too_few_yes' | 'too_few' | 'stopped';
+
 /**
  * What a pause made again within REPAUSE_NEEDS_OWNER_DAYS of a vote that ended without removing them records for its card
  * (design §3.4 rule 1: "Second pause in 30 days. The last vote said No."): how that vote ended and when, or null for any
- * other pause. Read in pauseMember, after pauseChainRefusal let it through: an owner's, with a new reason.
+ * other pause. A vote only the Yes floor stopped did not say No (design §5 point 1), so it has its own `after`, which an
+ * app from before shows no line for (the stored description still says it). Read in pauseMember, after pauseChainRefusal
+ * let it through: an owner's, with a new reason.
  */
-export function secondPauseOf(subjectPubkey: string, now: number): { after: 'no' | 'too_few' | 'stopped'; endedAt: string } | null {
+export function secondPauseOf(subjectPubkey: string, now: number): { after: SecondPauseAfter; endedAt: string } | null {
     const window = repauseWindow(subjectPubkey, now);
     if (!window) return null;
-    const after = window.decision.status === 'failed' ? 'no' : window.decision.status === 'unresolved' ? 'too_few' : 'stopped';
+    const { status, executionReason } = window.decision;
+    const after = status === 'failed' ? (executionReason?.startsWith(YES_FLOOR_RECORD) ? 'too_few_yes' : 'no') : status === 'unresolved' ? 'too_few' : 'stopped';
     return { after, endedAt: new Date(window.endedAt).toISOString() };
 }
 
 /** The sentence a second pause's record opens with, in the node's English (the apps say it in the member's language). */
-function secondPauseSentence(second: { after: 'no' | 'too_few' | 'stopped' }): string {
+function secondPauseSentence(second: { after: SecondPauseAfter }): string {
     if (second.after === 'no') return tr('Second pause in 30 days. The last vote said No.');
+    if (second.after === 'too_few_yes') return tr('Second pause in 30 days. The last vote had fewer than 3 Yes votes.');
     if (second.after === 'too_few') return tr('Second pause in 30 days. Too few members voted on the last one.');
     return tr('Second pause in 30 days. The last vote was stopped before it closed.');
 }
@@ -2998,7 +3068,141 @@ function noticeReplyTakenDown(decision: Decision, push: RemovalVotePush): void {
     }
 }
 
+// ── Too few to vote (removal by vote S6: design §5 point 3, Q7) ─────────────────────────────────
+
+export const OWNER_DECISION_ONLY_OWNER = 'Only an owner can decide a vote too few members could vote on';
+export const OWNER_DECISION_NOT_PAUSE_VOTE = 'Only a vote on removing a member, opened when an admin paused them, is decided this way';
+export const OWNER_DECISION_CLOSED = 'This vote has closed, so it ends as it stands';
+export const OWNER_DECISION_ALREADY = 'An owner has already decided this vote';
+export const OWNER_DECISION_ENOUGH_VOTERS = 'Enough members can vote on this, so the community decides it, not an owner';
+export const OWNER_DECISION_CASE_HIDDEN = "An admin hid this vote's case as false, so an owner can't decide it: no member could read why. Halt the vote to lift the pause now.";
+export const OWNER_DECISION_REASON_MIN_CHARS = 10;
+export const OWNER_DECISION_REASON_MAX_CHARS = 1000;
+
+/** What the record of a removal an owner decided says, and the card's closing line (design §5 point 3, word for word). */
+export const DECIDED_BY_OWNER = 'Decided by the owner: too few members to vote';
+
+/** What is wrong with an owner's public reason for deciding a vote too few could vote on, or null (as a pause's is asked). */
+export function ownerDecisionReasonProblem(reason: unknown): string | null {
+    const clean = typeof reason === 'string' ? replaceLoneSurrogates(reason).trim() : '';
+    if (clean.length < OWNER_DECISION_REASON_MIN_CHARS) return 'A reason members can read (at least 10 characters) is required to decide this vote';
+    if (clean.length > OWNER_DECISION_REASON_MAX_CHARS) return 'Reason is too long (1000 characters at most)';
+    return null;
+}
+
+/**
+ * Why `actor` may not decide this vote as its owner now (ownerDecideTooFew), or null: its HTTP status and the words an
+ * owner reads. Writes nothing. The route asks it, the reason included, before the fresh proof, so a code is spent only on a
+ * decision that would then be made. A vote past its closing time is closed, as it is to a voter and to the member's reply,
+ * though its status waits for the tick. A case an admin hid as false takes the owner's reason with it (withCaseHidden), so a
+ * decision made then would remove a member with no reason any member can read: the owner's path is "with a public reason"
+ * (design §5 point 3).
+ */
+export function ownerDecisionRefusal(decisionId: string, actor: string | null | undefined, reason: unknown): { status: number; error: string } | null {
+    if (!decisionsOn()) return { status: 404, error: featureOffMessage('decisions') };
+    const decision = communityRemovalVote(decisionId);
+    if (!decision) return { status: 404, error: 'Decision not found' };
+    if (!isPauseVote(decision)) return { status: 400, error: OWNER_DECISION_NOT_PAUSE_VOTE };
+    if (!actor || !isOwnerLevelActor(actor)) return { status: 403, error: OWNER_DECISION_ONLY_OWNER };
+    if (decision.status !== 'open' || parseDbTime(decision.closesAt) <= Date.now()) return { status: 409, error: OWNER_DECISION_CLOSED };
+    if (decision.ownerDecidedAt) return { status: 409, error: OWNER_DECISION_ALREADY };
+    if (decision.caseHiddenAt) return { status: 409, error: OWNER_DECISION_CASE_HIDDEN };
+    // No vote removes an owner or admin (§3.8), so no owner's decision does: the pause ends with its vote, whatever it says.
+    if (decision.subject && heldPrivilegedRole(decision.subject)) return { status: 403, error: NODE_OPERATOR_VOTE_REFUSAL };
+    const reasonProblem = ownerDecisionReasonProblem(reason);
+    if (reasonProblem) return { status: 400, error: reasonProblem };
+    if (!tallyDecision(decision.id).tooFewToVote) return { status: 409, error: OWNER_DECISION_ENOUGH_VOTERS };
+    return null;
+}
+
+/**
+ * An owner decides a pause's own vote that too few members can vote on (removal by vote S6, design §5 point 3; Q7, Marty
+ * 23 Oct "Accept all"): fewer than QUORUM_FLOOR others could vote, so its quorum can't be met and, left alone, it would
+ * lift the pause whatever they think. A community of three is its owner. Only an owner (an owner's key, or the server's
+ * password; never an admin), with the fresh proof the route asks (routes/admin.ts), with a public reason members read on
+ * the card beside the case, and only while the vote is open, too few and its case not hidden: it records the decision, and
+ * the tick carries it out when the vote closes, if it is still too few then (tickDecisions: the removal's grace window
+ * opens, its record saying DECIDED_BY_OWNER). So the vote still runs its 7 days, a pause still never outlives its vote, the
+ * member reads the owner's reason and can answer it before the vote closes, and if enough members vote by then, they
+ * decide, not the owner.
+ * Any admin can still halt the removal in its grace window, with a public reason. The member is told at once, as when the
+ * vote opened; the owners are told on their alert channel, who acted and never whom (as every pause is, notePauseForOwners).
+ */
+export function ownerDecideTooFew(decisionId: string, actor: string, reason: unknown, push: RemovalVotePush = dispatchPushNotification): FairVoteResult {
+    assertPlainTablesWritable();
+    const refusal = ownerDecisionRefusal(decisionId, actor, reason);
+    if (refusal) return { success: false, ...refusal };
+    const clean = replaceLoneSurrogates(String(reason)).trim();
+    const now = new Date().toISOString();
+    const written = db.prepare(`
+        UPDATE decisions SET owner_decided_at = ?, owner_decided_by = ?, owner_decided_reason = ?, updated_at = ?
+        WHERE id = ? AND status = 'open' AND owner_decided_at IS NULL
+    `).run(now, actor, clean, now, decisionId).changes > 0;
+    if (!written) return { success: false, status: 409, error: OWNER_DECISION_ALREADY };
+    const actorRole = actor === 'owner:password' ? 'admin password' : 'owner';
+    noteSecurityEvent({
+        key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.removalsDecidedByOwner(actorRole === 'owner' ? 'by an owner' : 'by the admin password'),
+        actor, actorRole,
+    });
+    console.log(`[Decisions] ${decisionId}: too few members could vote on this removal, so an owner decided it (carried out when the vote `
+        + 'closes if it is still too few)');
+    announceDecisionUpdated(decisionId);
+    noticeOwnerDecided(getDecision(decisionId)!, push);
+    return { success: true };
+}
+
+/** What the member is told when an owner decides the vote about them (noticeOwnerDecided): no reason, no name. */
+export const OWNER_DECIDED_NOTICE_BODY = 'Too few members can vote on whether you stay here, so an owner decided. Unless more of them vote, '
+    + 'you are removed 7 days after the vote closes. Open Commons, then Decide, to read their reason and to reply.';
+
+/**
+ * An owner decided the vote about this member (ownerDecideTooFew): they are told as they were told the vote opened
+ * (noticeRemovalVoteOpened), a notice kept and sent live, and a push of that same kind, which always comes through. Neither
+ * says the reason or who: the card does, beside the case. Call once the decision is written; a notice that fails never
+ * undoes it.
+ */
+function noticeOwnerDecided(decision: Decision, push: RemovalVotePush): void {
+    if (!decision.subject) return;
+    try {
+        const noticeId = keepNotice(decision.subject, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { kind: 'removal_vote', screen: 'decide' });
+        broadcast({
+            type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body: OWNER_DECIDED_NOTICE_BODY, severity: 'info', kind: 'removal_vote',
+            ...(noticeId ? { noticeId } : {}),
+        }, [decision.subject]);
+    } catch (err) {
+        console.warn('[Decisions] the notice of an owner deciding a removal vote failed:', err);
+    }
+    try {
+        push([decision.subject], SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.removal-vote');
+    } catch (err) {
+        console.warn('[Decisions] the push of an owner deciding a removal vote failed:', err);
+    }
+}
+
+/**
+ * Whether an owner's decision on this pause's vote (ownerDecideTooFew) is carried out as it closes with `tally`: the vote
+ * did not pass by itself and is still too few to vote, and whoever decided is still an owner (a key whose owner role was
+ * taken away since decides nothing: being removed can't be undone, so this fails towards the pause lifting).
+ */
+function ownerDecisionStands(decision: Decision, tally: DecisionTally): boolean {
+    if (!isPauseVote(decision) || !decision.ownerDecidedAt || tally.passed || !tally.tooFewToVote) return false;
+    return isOwnerLevelActor(decision.ownerDecidedBy);
+}
+
 // ── Tick Engine ─────────────────────────────────────────────────────────
+
+/** How the record of a removal only the Yes floor stopped opens (notPassedWhy); no other failed vote's does (secondPauseOf). */
+const YES_FLOOR_RECORD = 'Fewer than ';
+
+/**
+ * Why a vote that met its quorum did not pass, for its record: its share short of the threshold, a tie, or, on a removal
+ * whose share would pass, fewer Yes votes than REMOVAL_MIN_YES (design §5 point 1).
+ */
+function notPassedWhy(tally: DecisionTally): string {
+    const shareWouldPass = tally.totalWeight > 0 && tally.supportRatio >= tally.thresholdRequired && tally.yesWeight > tally.noWeight;
+    if (shareWouldPass && tally.minYes) return `${YES_FLOOR_RECORD}${tally.minYes} Yes votes (${tally.yesWeight})`;
+    return `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
+}
 
 /**
  * Tick-driven close, queue evaluation, and grace expiration.
@@ -3050,11 +3254,19 @@ export function tickDecisions(asOfTime?: number): {
 
             const tally = tallyDecision(r.id, asOfTime);
 
+            // Too few could vote, and an owner decided (removal by vote S6, design §5 point 3): carried out as the vote
+            // closes, as a Yes would be, the removal's grace window saying who decided. Not if enough members could vote by
+            // now, nor if whoever decided is no owner any more: then it ends below as any vote that didn't pass.
+            if (pauseVote && ownerDecisionStands(rowToDecision(r), tally)) {
+                db.prepare("UPDATE decisions SET status = 'passed', updated_at = ? WHERE id = ?").run(now, r.id);
+                const res = executeDecision(r.id);
+                if (res.success && res.status === 'executed') executed++;
+                continue;
+            }
+
             // A pause never outlives its vote (design §3.2): No, a tie, a missed quorum or no votes at all lift it now.
             if ((r.effect === 'keep_suspension' || pauseVote) && !tally.passed) {
-                const why = !tally.quorumMet
-                    ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`
-                    : `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
+                const why = !tally.quorumMet ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})` : notPassedWhy(tally);
                 closeUnkeptSuspension(getDecision(r.id)!, tally.quorumMet ? 'failed' : 'unresolved', why, now,
                     { actor: COMMUNITY_DECISION_ACTOR, how: 'the suspension not kept' });
                 continue;
@@ -3079,11 +3291,7 @@ export function tickDecisions(asOfTime?: number): {
                         execution_reason = ?,
                         updated_at = ?
                     WHERE id = ?
-                `).run(
-                    `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`,
-                    now,
-                    r.id
-                );
+                `).run(notPassedWhy(tally), now, r.id);
                 announceDecisionUpdated(r.id);
                 continue;
             }
@@ -3872,6 +4080,8 @@ function createGroupDecision(opts: CreateScopedDecisionOptions, push: ScopedVote
             break;
         }
         case 'set_join_policy': {
+            // A circle's door is the node's rule, not its members': a vote can't open what its convenor can't (engine/place-circles.ts rule 3).
+            if ((db.prepare('SELECT kind FROM groups WHERE id = ?').get(groupId) as { kind: string | null } | undefined)?.kind === GROUP_KIND_CIRCLE) throw new Error(engine.CIRCLE_WORDS_FIXED);
             const policy = opts.params?.policy;
             if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) throw new Error(word('Choose open, ask to join, or invite only.'));
             const now = (db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string }).join_policy;

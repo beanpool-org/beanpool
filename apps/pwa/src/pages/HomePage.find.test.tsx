@@ -23,6 +23,7 @@ vi.mock('../lib/api', () => ({
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: null })),
     watchPlace: vi.fn(),
+    setCircleStarting: vi.fn(),
     getListedCommunityByHost: vi.fn(async () => null),
     // lib/knock's own calls (where a test doesn't stub them): no network here, as a browser offline would say.
     signedFetchAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
@@ -43,8 +44,10 @@ vi.mock('../components/StartCommunityScreen', () => ({
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}), onSocketOpen: vi.fn(() => () => {}), onSystemAnnouncement: vi.fn(() => () => {}) }));
 
 import * as api from '../lib/api';
+import { PLACE_CIRCLE_WORDS, t } from '@beanpool/core';
 import { HomePage, WATCH_WORDS } from './HomePage';
 import { rememberKnock } from '../lib/knock';
+import { circleIntents, setCircleIntent } from '../lib/circle-intent';
 import * as knockModule from '../lib/knock';
 
 const { done: WATCH_DONE, joinFirst: WATCH_JOIN_FIRST, needsPlace: WATCH_NEEDS_PLACE } = WATCH_WORDS;
@@ -85,6 +88,110 @@ async function memberAtLismore() {
     fireEvent.click(screen.getByTestId('town-search'));
     return screen.findByTestId('home-find-actions');
 }
+
+describe('a retired circle on Home', () => {
+    const retired = (acceptingKnocks: boolean) => ({
+        id: 'c1', people: 4, starting: null, doneAt: '2026-11-01T00:00:00.000Z',
+        community: { key: 'thrissur', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks },
+    });
+    const knocksSent = () => vi.mocked(api.signedFetchAt).mock.calls.filter(c => c[0] === 'POST');
+    /** Home read with this circle, then the town the member picks and with it the next read, the reminder set. */
+    async function twoReads(first: HomeFind['circle'], then: HomeFind['circle']) {
+        vi.mocked(api.signedFetchAt).mockClear();
+        setCircleIntent(ME.publicKey, 'c1', true);
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: first }, true))).mockResolvedValue(fresh(globalAnswer({ circle: then }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        await act(async () => { await Promise.resolve(); });
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+    }
+
+    it('sends nothing on any read: no knock, no status read, nothing, though the member set the reminder', async () => {
+        await twoReads(retired(true), retired(true));
+        expect(await screen.findByTestId('circle-ask-join')).toBeInTheDocument();
+        expect(vi.mocked(api.signedFetchAt).mock.calls).toEqual([]);
+        expect(circleIntents(ME.publicKey)).toEqual(['c1']);
+        expect(await knockModule.rememberedKnocks(ME.publicKey)).toEqual([]);
+    });
+
+    it('a community that takes no requests yet has no button, and has one on the read that says it does: still nothing is sent', async () => {
+        await twoReads(retired(false), retired(true));
+        expect(await screen.findByTestId('circle-ask-join')).toBeInTheDocument();
+        expect(vi.mocked(api.signedFetchAt).mock.calls).toEqual([]);
+    });
+
+    it('the tap sends one knock, and Home\'s waiting card takes it from there', async () => {
+        await twoReads(retired(true), retired(true));
+        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response('{}', { status: 201 }));
+        fireEvent.click(await screen.findByTestId('circle-ask-join'));
+        expect(await screen.findByTestId('home-waiting-card-https://thrissur.beanpool.org')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByTestId('circle-ask-join')).toBeNull());
+        expect(knocksSent().map(c => c[1])).toEqual(['https://thrissur.beanpool.org']);
+        expect(screen.queryByTestId('circle-asked')).toBeNull();
+        expect(circleIntents(ME.publicKey)).toEqual([]);
+    });
+
+    it('a community that answers 503 keeps the button, and the next read sends nothing: only another tap does', async () => {
+        vi.mocked(api.signedFetchAt).mockClear();
+        setCircleIntent(ME.publicKey, 'c1', true);
+        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response('busy', { status: 503 }));
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: retired(true) }, true))).mockResolvedValue(fresh(globalAnswer({ circle: retired(true) }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('circle-ask-join'));
+        expect(await screen.findByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockLater));
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(knocksSent().length).toBe(1);
+        expect(screen.getByTestId('circle-ask-join')).toBeInTheDocument();
+        expect(circleIntents(ME.publicKey)).toEqual(['c1']);
+    });
+
+    it('a community that refuses is said on the card, and stays said on the next read', async () => {
+        vi.mocked(api.signedFetchAt).mockClear();
+        setCircleIntent(ME.publicKey, 'c1', true);
+        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response(JSON.stringify({ error: 'No.', code: 'account_closed' }), { status: 403 }));
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: retired(true) }, true))).mockResolvedValue(fresh(globalAnswer({ circle: retired(true) }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('circle-ask-join'));
+        expect(await screen.findByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockRefused));
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(screen.getByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockRefused));
+        expect(screen.queryByTestId('circle-ask-join')).toBeNull();
+        expect(knocksSent().length).toBe(1);
+    });
+});
+
+describe('"I\'m starting one here" and the next read of Home', () => {
+    const open = { id: 'c1', people: 4, starting: null, doneAt: null, community: null };
+    const done = { ...open, doneAt: '2026-11-01T00:00:00.000Z', community: { key: 'thrissur', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks: true } };
+
+    it('a tap\'s answer stands until the read, and the read says what the circle is now (a community retired it)', async () => {
+        vi.mocked(api.setCircleStarting).mockResolvedValue({ ...open, starting: 'you' });
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: open }, true))).mockResolvedValue(fresh(globalAnswer({ circle: done }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('circle-starting'));
+        expect(await screen.findByTestId('circle-you-starting')).toBeInTheDocument();
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        expect(await screen.findByTestId('circle-card-done')).toBeInTheDocument();
+        expect(screen.queryByTestId('circle-card')).toBeNull();
+    });
+});
+
+describe("the \"I'd help\" button's spoken name", () => {
+    it('is the words on it, so someone using voice control can say what they see (WCAG 2.5.3)', async () => {
+        await memberAtLismore();
+        const button = screen.getByTestId('home-find-help');
+        expect(button).toHaveAccessibleName(t(PLACE_CIRCLE_WORDS.help));
+        expect(button).toHaveTextContent(t(PLACE_CIRCLE_WORDS.help));
+    });
+});
 
 describe('the web find card with no community near', () => {
     it('a member is told when one starts: the watch is sent at the point Home was read from, then the button goes', async () => {
@@ -381,6 +488,53 @@ describe('Ask to join from the web find card (front doors S2)', () => {
             expect(screen.getByTestId(`home-waiting-cancelled-${BYRON.url}`)).toHaveTextContent(CANCELLED_LINE);
             expect(screen.queryByTestId('home-find-ask-b')).toBeNull();
         });
+    });
+});
+
+describe("I'd help on the waiting card (PR #2687 review: its answer was drawn only with no community near, so here, nowhere)", () => {
+    const COMM = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+    const DEMAND = { waiting: 4, helping: null };
+
+    async function waitingNearByron(point: 'town' | 'unknown') {
+        await rememberKnock(ME.publicKey, COMM, new Date('2026-10-25T00:00:00.000Z'));
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, communities: [COMM], demand: DEMAND }, true)))
+            .mockResolvedValue(fresh(globalAnswer({ communities: [COMM], demand: DEMAND }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const help = await screen.findByTestId(`home-waiting-help-${COMM.url}`);
+        if (point === 'unknown') return help;
+        fireEvent.click(screen.getByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        return screen.findByTestId(`home-waiting-help-${COMM.url}`);
+    }
+
+    it('a tap that worked says so, and the button goes', async () => {
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        vi.mocked(api.watchPlace).mockResolvedValue({ success: true } as never);
+        fireEvent.click(await waitingNearByron('town'));
+        const note = await screen.findByTestId('home-find-watch-note');
+        expect(note).toHaveTextContent("Thanks. When three of you are near each other, you'll be introduced.");
+        expect(note.closest('[role="status"]')).not.toBeNull();
+        expect(screen.queryByTestId('home-find-actions')).toBeNull();
+        expect(screen.queryByTestId(`home-waiting-help-${COMM.url}`)).toBeNull();
+        readSpy.mockRestore();
+    });
+
+    it('a refused tap says why, and the button stays for another try', async () => {
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        vi.mocked(api.watchPlace).mockRejectedValue(new Error('You already watch 5 places.'));
+        fireEvent.click(await waitingNearByron('town'));
+        expect(await screen.findByTestId('home-find-watch-note')).toHaveTextContent('You already watch 5 places.');
+        expect(screen.getByTestId(`home-waiting-help-${COMM.url}`)).toBeInTheDocument();
+        readSpy.mockRestore();
+    });
+
+    it('with no place known it asks for one, and nothing is sent', async () => {
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        fireEvent.click(await waitingNearByron('unknown'));
+        expect(screen.getByTestId('home-find-watch-note')).toHaveTextContent(WATCH_NEEDS_PLACE);
+        expect(api.watchPlace).not.toHaveBeenCalled();
+        readSpy.mockRestore();
     });
 });
 

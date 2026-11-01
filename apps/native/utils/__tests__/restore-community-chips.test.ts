@@ -58,7 +58,7 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 import { normalizeNodeUrl } from '../node-url';
-import { chosenRestoreChoice, fieldTextFor, restoreCommunityChoices } from '../restore-community-choices';
+import { chosenRestoreChoice, fieldTextFor, restoreCommunityChoices, withCopyCommunities } from '../restore-community-choices';
 import type { SavedNode } from '../nodes';
 
 const SAVED: SavedNode[] = [
@@ -226,5 +226,55 @@ describe('the 12-words restore screen draws the chips above its address field (a
         expect(recover).toContain('recoveryAddressRef.current?.focus()');
         // The phone's saved communities are read for this screen too.
         expect(src).toMatch(/if \(mode !== 'ssoRecover' && mode !== 'recover'\) return;\s*getSavedNodes\(\)/);
+    });
+});
+
+describe("a restored copy's list of communities (vault rethink VR5)", () => {
+    const FROM_COPY = [
+        { name: 'Mullumbimby (copy)', url: 'https://mullum.beanpool.org' },
+        { name: 'Lismore Commons', url: 'https://lismore.example.org' },
+        { name: 'Kitchen garden', url: 'http://192.168.1.30:8080' },
+        // Not a community address: never offered.
+        { name: 'path', url: 'https://bad.example.org/app' },
+        { name: '', url: 'https://bare.example.org' },
+    ];
+
+    it("the chips offer the copy's communities after the phone's own, each once, by the copy's name", async () => {
+        await draw('', withCopyCommunities(SAVED, FROM_COPY));
+        expect(names()).toEqual([
+            'Global community', 'Mullumbimby', 'castlemaine.beanpool.org', 'Home server',
+            'Lismore Commons', 'Kitchen garden', 'bare.example.org', 'another address',
+        ]);
+    });
+
+    it("on a new phone (nothing saved) the copy's communities are the chips; each fills the field with its address", async () => {
+        await draw('', withCopyCommunities([], FROM_COPY));
+        expect(names()).toEqual(['Global community', 'Mullumbimby (copy)', 'Lismore Commons', 'Kitchen garden', 'bare.example.org', 'another address']);
+        for (const c of chips().slice(1, -1)) await act(async () => { c.click(); });
+        expect(calls.chose.map(normalizeNodeUrl)).toEqual([
+            'https://mullum.beanpool.org', 'https://lismore.example.org', 'http://192.168.1.30:8080', 'https://bare.example.org',
+        ]);
+    });
+
+    it('a copy without a list leaves the chips exactly as before', async () => {
+        for (const none of [null, undefined, []]) {
+            expect(withCopyCommunities(SAVED, none)).toEqual(SAVED);
+            await draw('', withCopyCommunities(SAVED, none));
+            expect(names()).toEqual(['Global community', 'Mullumbimby', 'castlemaine.beanpool.org', 'Home server', 'another address']);
+        }
+    });
+
+    it("at 320 dp with text at 1.3×, a long name from the copy wraps on a full touch target, never cut", async () => {
+        await draw('', withCopyCommunities([], [{ name: 'Gemeinschaftsgarten Nördliche Flussauen und Umgebung', url: 'https://garten.example.org' }]), 'de');
+        expect(host.querySelector('[data-wrap]')!.getAttribute('data-wrap')).toBe('wrap');
+        const chip = chips().find((c) => c.getAttribute('aria-label')?.startsWith('Gemeinschaftsgarten'))!;
+        expect(Number(chip.getAttribute('data-min-height'))).toBeGreaterThanOrEqual(48);
+        expect(chip.querySelector('span')!.getAttribute('data-lines')).toBeNull();
+    });
+
+    it("the sign-in restore offers them, and starts Which community? at the copy's first (app/welcome.tsx)", () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
+        expect(src).toContain('nodes={withCopyCommunities(savedNodes, ssoReleased.communities)}');
+        expect(src).toMatch(/const first = result\.restored\.communities\?\.\[0\];\s*if \(first\) setSsoCommunity\(fieldTextFor\(first\.url\)\);/);
     });
 });

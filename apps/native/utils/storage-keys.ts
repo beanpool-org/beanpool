@@ -27,6 +27,12 @@ export const ADMIN_KNOCKS_COUNT_STORE_KEY = 'beanpool_admin_knocks_last_count';
  */
 export const KNOCK_ROLE_STORE_KEY = 'beanpool_knock_role_checked';
 
+/**
+ * The offer to bring a member's listings to the community they joined, or that their key has had its one
+ * (utils/bring-listings.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const BRING_LISTINGS_STORE_KEY = 'beanpool_bring_listings';
+
 /** A town typed in "Find your community" (utils/typed-place.ts): where the member lives, roughly. Sign Out wipes it. */
 export const TYPED_PLACE_STORE_KEY = 'beanpool_find_typed_place';
 
@@ -204,6 +210,22 @@ export const PUSH_REGISTERED_AT_STORE_KEY = 'beanpool_push_registered_at';
 export const PUSH_REGISTRATIONS_DUE_STORE_KEY = 'beanpool_push_registrations_due';
 
 /**
+ * The communities the member turned alerts off for, one switch per community, default on (utils/push-registrations.ts):
+ * this phone's token is not registered with these. A community leaves the list as it leaves the phone, and a followed
+ * one keeps its place on it at its new address. Sign Out wipes it with the account (utils/identity.ts
+ * wipeIdentityScopedStorage).
+ */
+export const PUSH_ALERTS_OFF_STORE_KEY = 'beanpool_push_alerts_off';
+
+/**
+ * The communities on the push record told to let the token go that heard nothing: the DELETE failed and no statement was
+ * written down (utils/push-registrations.ts `leavesOwed`). Each return tries again (utils/account-leaves-phone.ts
+ * `retryLeavesOwed`). Apart from the record because the record can't say so: it also holds a moved community's old
+ * address, which must hear no DELETE. Sign Out wipes it with the account (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const PUSH_LEAVES_OWED_STORE_KEY = 'beanpool_push_leaves_owed';
+
+/**
  * This phone's last push stamp (utils/push-registrations.ts `nextPushStamp`): each registration and each leave statement
  * takes a later one, whatever the clock does. Phone-wide, not the account's: Sign Out keeps it, so a statement the old
  * account made can never outrank the registration of an account that signs in after it. Kept under this name twice, in
@@ -230,6 +252,8 @@ export const IDENTITY_THIS_DEVICE_STORE_KEY = 'beanpool_identity_this_device_onl
  * lost answer or a restart comes back to the same hold; removed once the account is saved or the restore ends.
  */
 export const VAULT_RESTORE_STORE_KEY = 'beanpool_vault_restore';
+/** A shared bring-back waiting on the key vault (utils/community-recovery.ts), in the secure store. */
+export const COMMUNITY_RESTORE_STORE_KEY = 'beanpool_community_restore';
 
 /** When one account last said "Not now" to moving its sign-in recovery to the key vault (utils/vault.ts). */
 export function vaultMoveLaterStoreKey(publicKey: string): string {
@@ -290,6 +314,15 @@ export function oneWayBackStoreKey(publicKey: string): string {
  */
 export function wordsWrittenDownStoreKey(publicKey: string): string {
     return `beanpool_words_written_down:${publicKey.toLowerCase()}`;
+}
+
+/**
+ * One account's choice whether a sign-in copy made here also carries its list of communities ('1' or '0'; absent = on,
+ * Marty's pick 9 of 27 Oct), from the tick beside Protect with (utils/copy-communities.ts, vault rethink VR5). A flag
+ * only, nothing of the list. Kept when the account leaves the phone: it is the member's say, not the phone's.
+ */
+export function copyListsCommunitiesStoreKey(publicKey: string): string {
+    return `beanpool_copy_lists_communities:${publicKey.toLowerCase()}`;
 }
 
 /** The last time the "one way back" card asked the global community about this account, and its answer (one-way-back.ts). */

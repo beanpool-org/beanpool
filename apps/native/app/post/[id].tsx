@@ -40,7 +40,9 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags } from '@beanpool/core';
+import { TagPicker } from '../../components/TagPicker';
+import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -497,6 +499,12 @@ export default function PostDetailModal() {
     // Edit form state
     const [editType, setEditType] = useState<'offer' | 'need'>('offer');
     const [editCategory, setEditCategory] = useState('general');
+    const [editTags, setEditTags] = useState<string[]>([]);
+    // The tags the form opened with, moved on by a reload's (below): what the save compares with, never a `post` that changed
+    // under the form, which would read the form's list as the member taking the tags off.
+    const editTagsFrom = useRef<string[]>([]);
+    const [editFreeTags, setEditFreeTags] = useState<string[]>([]);
+    const editFreeTagsFrom = useRef<string[]>([]);
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
     const [editCredits, setEditCredits] = useState('');
@@ -567,6 +575,26 @@ export default function PostDetailModal() {
     const [operatedTreasuries, setOperatedTreasuries] = useState<string[]>([]);
     const [isConvenor, setIsConvenor] = useState(false);
     const [deletingAsConvenor, setDeletingAsConvenor] = useState(false);
+
+    // A reload while the form is open can bring the listing's real tags (a copy from before the tags column, read again a
+    // moment after it opened): the picker shows them, the member's own changes on top.
+    useEffect(() => {
+        if (!editMode) return;
+        const now = postTagsOf(post?.tags);
+        const from = editTagsFrom.current;
+        if (storedPostTags(now) === storedPostTags(from)) return;
+        editTagsFrom.current = now;
+        setEditTags((edited) => editedTagsOver(from, edited, now));
+    }, [post?.tags, editMode]);
+    // The same for the tags its author typed: an edit that never touched them keeps them.
+    useEffect(() => {
+        if (!editMode) return;
+        const now = listingFreeTags(post);
+        const from = editFreeTagsFrom.current;
+        if (storedFreeTags(now) === storedFreeTags(from)) return;
+        editFreeTagsFrom.current = now;
+        setEditFreeTags((edited) => editedTagsOver(from, edited, now, FREE_TAGS_MAX));
+    }, [post?.free_tags, post?.freeTags, editMode]);
 
     useFocusEffect(
         useCallback(() => {
@@ -1061,6 +1089,10 @@ export default function PostDetailModal() {
     const startEdit = () => {
         setEditType(post.type);
         setEditCategory(post.category);
+        editTagsFrom.current = postTagsOf(post.tags);
+        setEditTags(editTagsFrom.current);
+        editFreeTagsFrom.current = listingFreeTags(post);
+        setEditFreeTags(editFreeTagsFrom.current);
         setEditTitle(post.title);
         setEditDescription(post.description || '');
         // In the language's way ("12,5"), so it reads back as the same price.
@@ -1097,9 +1129,13 @@ export default function PostDetailModal() {
             // Its shop: in, out (a Need never stays in one), or left as it is; a shop the member has none of yet is opened first.
             const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
             const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
+            const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
+            const freeTagsChanged = storedFreeTags(editFreeTags) !== storedFreeTags(editFreeTagsFrom.current);
             await updatePost(post.id, {
                 type: editType,
                 category: editCategory,
+                ...(tagsChanged ? { tags: editTags } : {}),
+                ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
                 title: editTitle.trim(),
                 description: editDescription.trim(),
                 credits: price?.ok ? price.value : 0,
@@ -1356,6 +1392,8 @@ export default function PostDetailModal() {
 
                 {/* Description */}
                 <Text style={styles.description}>{post.description || t('No description provided.')}</Text>
+
+                <PostTagChips tags={post.tags} freeTags={listingFreeTags(post)} inset={20} />
 
                 {/* Photos */}
                 {photos.length > 0 && (
@@ -1689,6 +1727,17 @@ export default function PostDetailModal() {
                                     {POST_CATEGORIES.map(c => <Picker.Item key={c.id} label={t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) })} value={c.id} />)}
                                 </Picker>
                             </View>
+
+                            {/* Tags */}
+                            <TagPicker
+                                value={editTags}
+                                onChange={setEditTags}
+                                freeTags={editFreeTags}
+                                onFreeTagsChange={setEditFreeTags}
+                                category={editCategory}
+                                title={editTitle}
+                                description={editDescription}
+                            />
 
                             {/* Title */}
                             <TextInput accessibilityLabel={t('Title')} style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder={t('Title')} placeholderTextColor={colors.text.muted} />

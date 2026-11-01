@@ -87,8 +87,10 @@ A local community runs on its own small server, looked after by someone local. T
 - **What it costs:** a spare computer that stays on at home, or a small rented server for a few dollars a month. The software is free.
 - **Who runs it:** you do, on your own machine or the one you rent. It doesn't need beanpool.org: it can have its own web address.
 - **What you take on:** reports from your members come to you. The community's data is yours to back up, with a recovery code. Keep two owners, and keep the server on and up to date.
-- **What you never see:** your members' chats with one person. They are locked so the server can't read them.
+- **What you never see:** your members' chats with one person. They are locked so the server can't read them. The one exception: a member who reports a message hands you that message.
 - **How long:** about half an hour, for someone who can follow a recipe.
+
+If other people near you would help, Home's **Find your community** card says how many, once it is 3 or more, and a place circle puts you in touch: see "Finding a community".
 
 To begin, tap **Start a community** in any **Why this lives in a local community** sheet, or, on the phone, on Home's **Find your community** card. It shows three ways to run one: a spare computer at home, a small rented server, or asking for help on the global community. **Copy my community's details** copies your community's name, place and how people can reach you, to paste into your new server's settings.
 

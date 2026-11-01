@@ -120,7 +120,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
-import { KEEPER_ALG_SSO_SINGLE } from '@beanpool/core';
+import { KEEPER_ALG_COPY_HALF, KEEPER_ALG_SSO_SINGLE } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
 import { closeWashSnapshotHandle } from '@beanpool/engine';
@@ -560,8 +560,17 @@ export function rewrapRowsFromRetiredKeys(): { shares: number; releases: number 
 }
 
 /**
+ * The holder type a `community_copies` row is bound to (its AAD): `community` for a whole copy and its key (vault rethink
+ * VR3), `community-half` for this server's half of a shared copy (VR4). Read from the name the wrap keeps in the clear, so
+ * a row says which it is without being opened; a row that lies about it doesn't open.
+ */
+export function communityRowHolder(storedKdfParams: string | null): 'community' | 'community-half' {
+    return parseKdf(storedKdfParams)?.inner === KEEPER_ALG_COPY_HALF ? 'community-half' : 'community';
+}
+
+/**
  * {@link rewrapRowsFromRetiredKeys} for members' community copies (vault rethink VR3, engine/community-copy.ts, the table
- * `community_copies`, bound to (owner, 'community')): a row only a retired key opens is locked again with the live one,
+ * `community_copies`, bound to (owner, 'community'), or (owner, 'community-half') for a half): a row only a retired key opens is locked again with the live one,
  * zeroed where it lay, and stamped by its touch trigger (a plain table), so a standby is sent it in the live key's lock and
  * the next take-over bundle, which carries the live key only, opens it. A row no key here opens is left as it is.
  * Idempotent. A database from before the table has none. Returns how many were locked again.
@@ -578,7 +587,7 @@ export function rewrapCommunityCopiesFromRetiredKeys(): number {
     const relocked: { owner: string; f: RecoverySealFields }[] = [];
     for (const r of rows) {
         const f: RecoverySealFields = { encryptedShare: r.copy_ct, shareIv: r.copy_iv, shareTag: r.copy_tag, kdfParams: r.kdf_params };
-        const aad = shareRowAad(r.owner_pubkey, 'community');
+        const aad = shareRowAad(r.owner_pubkey, communityRowHolder(r.kdf_params));
         if (!isNodeWrapped(f.kdfParams) || openWith(live, f, aad)) continue;
         try {
             relocked.push({ owner: r.owner_pubkey, f: sealRecoveryFields(openRecoveryFieldsUnder(f, aad, true), aad) });

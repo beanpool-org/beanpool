@@ -263,13 +263,19 @@ async function main(): Promise<void> {
             await L.send('nodeConfig', { registrarNames: [entry('livename.beanpool.org', 'current', 'paused')] });
             i = await info(L);
             assert(i.primaryAddress === 'cfname.beanpool.org', `L: with the registrar name paused, the first published name is (${JSON.stringify(i.primaryAddress)})`);
-            // As a real node stores it (#1275 review 4118422613): the current registrar name is also publicAddress (item 1,
-            // and then its only published name), and a rename the registrar hasn't made live yet (a gated one, pending) or a
-            // paused name is never the primary address: there is none, so the web app says nothing.
+            // As a real node stores it (#1275 review 4118422613): the current registrar name is also publicAddress (item 1),
+            // and a rename the registrar hasn't made live yet (a gated one, pending) or a paused name is never the primary
+            // address. On a node with no other name there is none, so the web app says nothing. CF_RECORD_NAME stays
+            // published beside it (rename S1), so here it is the primary address, where #1275 had none.
             for (const st of ['pending', 'paused']) {
-                await L.send('nodeConfig', { publicAddress: { name: 'livename', mode: 'direct', status: st }, registrarNames: [entry('livename.beanpool.org', 'current', st)] });
+                const state = { publicAddress: { name: 'livename', mode: 'direct', status: st }, registrarNames: [entry('livename.beanpool.org', 'current', st)] };
+                await U.send('nodeConfig', state);
+                i = await info(U);
+                assert(i.primaryAddress === null, `U with publicAddress set: with its only name ${st}, no primary address (${JSON.stringify({ p: i.primaryAddress, a: i.addresses })})`);
+                await U.send('nodeConfig', { publicAddress: null, registrarNames: [] });
+                await L.send('nodeConfig', state);
                 i = await info(L);
-                assert(i.primaryAddress === null, `L with publicAddress set: with its registrar name ${st}, no primary address (${JSON.stringify({ p: i.primaryAddress, a: i.addresses })})`);
+                assert(i.primaryAddress === 'cfname.beanpool.org', `L with publicAddress set: with its registrar name ${st}, CF_RECORD_NAME is the primary address, never that name (${JSON.stringify({ p: i.primaryAddress, a: i.addresses })})`);
             }
             await L.send('nodeConfig', { publicAddress: { name: 'livename', mode: 'direct', status: 'live' }, registrarNames: [entry('livename.beanpool.org', 'current', 'live')] });
             i = await info(L);

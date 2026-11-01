@@ -1848,6 +1848,89 @@ describe('ApplianceSection Component', () => {
             expect(screen.queryByText('v1.2.29')).not.toBeInTheDocument();
             expect(screen.queryByText(/current release: v1\.2\.29/i)).not.toBeInTheDocument();
         });
+
+        it('formats update available message cleanly without orphaned prefix when latestVersion is omitted', async () => {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/admin/check-update')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ updateAvailable: true, currentVersion: '1.2.28' }),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
+            }));
+
+            await act(async () => {
+                render(
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="diagnostics"
+                    />
+                );
+            });
+
+            const checkBtn = screen.getByRole('button', { name: /check release updates/i });
+            await act(async () => {
+                fireEvent.click(checkBtn);
+            });
+
+            expect(screen.getByText('Update Available (current: v1.2.28)')).toBeInTheDocument();
+            expect(screen.queryByText(/Update Available: v/)).not.toBeInTheDocument();
+        });
+
+        it('formats update available message with latest and current versions when both provided', async () => {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/admin/check-update')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ updateAvailable: true, latestVersion: '1.3.0', currentVersion: '1.2.28' }),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
+            }));
+
+            await act(async () => {
+                render(
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="diagnostics"
+                    />
+                );
+            });
+
+            const checkBtn = screen.getByRole('button', { name: /check release updates/i });
+            await act(async () => {
+                fireEvent.click(checkBtn);
+            });
+
+            expect(screen.getByText('Update Available: v1.3.0 (current: v1.2.28)')).toBeInTheDocument();
+        });
     });
 });
 

@@ -505,8 +505,9 @@ export function ApplianceSection({
             }
             if (data.updateAvailable) {
                 setUpdateAvailable(true);
+                const latestStr = data.latestVersion ? `: v${String(data.latestVersion).replace(/^v/, '')}` : '';
                 const currentStr = data.currentVersion ? ` (current: v${String(data.currentVersion).replace(/^v/, '')})` : '';
-                setUpdateInfo(`Update Available: v${String(data.latestVersion || '').replace(/^v/, '')}${currentStr}`);
+                setUpdateInfo(`Update Available${latestStr}${currentStr}`);
             } else {
                 setUpdateAvailable(false);
                 const currentStr = data.currentVersion ? ` (current release: v${String(data.currentVersion).replace(/^v/, '')})` : '';

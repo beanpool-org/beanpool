@@ -310,7 +310,7 @@ async function main(): Promise<void> {
     // told as before. test-rename-main-name has the rest.
     n0 = notices().length;
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' }, registrarNames: [] } as any);
-    const claimedDirect = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'tunnel' });
+    const claimedDirect = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'direct', publicIp: '8.8.8.8' });
     const told2aDirect = notices().slice(n0);
     const nDirect = lines('sec.address');
     assert(claimedDirect.status === 200 && nDirect.length === 1 && /address was changed, by an owner/.test(nDirect[0].detail) && (nDirect[0].high === true || nDirect[0].priority >= 4),

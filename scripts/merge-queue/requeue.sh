@@ -19,9 +19,9 @@ usage() { echo "usage: requeue.sh <PR> (--run <run id> | --no-run) --why \"<the 
 PR=""; RUN=""; WHY=""; NO_RUN=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --run) RUN="$2"; shift 2 ;;
+    --run) [ $# -ge 2 ] || usage; RUN="$2"; shift 2 ;;
     --no-run) NO_RUN=1; shift ;;
-    --why) WHY="$2"; shift 2 ;;
+    --why) [ $# -ge 2 ] || usage; WHY="$2"; shift 2 ;;
     -*) usage ;;
     *) [ -z "$PR" ] || usage; PR="$1"; shift ;;
   esac

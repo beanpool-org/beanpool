@@ -596,6 +596,196 @@ test("the director's publish command: nothing to do on a published main; otherwi
     }
 });
 
+// ─── A publish that does not land ─────────────────────────────────────────────
+
+/** Fetch origin and move the checkout to main's tip. */
+function onMain(cwd) {
+    git(cwd, 'checkout', '-q', 'main');
+    git(cwd, 'fetch', '-q', 'origin');
+    git(cwd, 'merge', '-q', '--ff-only', 'origin/main');
+}
+
+/** A page edit merging on main. */
+function pageOnMain(cwd, words) {
+    onMain(cwd);
+    editPage(cwd, 'content/ledger/gifts.md', words);
+    git(cwd, 'commit', '-q', '-am', 'a page edit');
+    git(cwd, 'push', '-q', 'origin', 'main');
+}
+
+const FAKE_GH = `#!/usr/bin/env node
+const fs = require('fs');
+const file = process.env.FAKE_GH_STATE;
+const prs = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : [];
+const a = process.argv.slice(2);
+const after = x => a[a.indexOf(x) + 1];
+if (a[0] === 'pr' && a[1] === 'create') {
+    prs.push({ url: 'https://github.com/x/y/pull/' + (prs.length + 1), head: after('--head'), state: 'OPEN' });
+    fs.writeFileSync(file, JSON.stringify(prs));
+    fs.writeFileSync(file + '.head', after('--head'));
+    console.log(prs.at(-1).url);
+} else if (a[0] === 'pr' && a[1] === 'list') {
+    console.log(prs.filter(p => p.head === after('--head') && p.state === 'OPEN').map(p => p.url).join('\\n'));
+} else if (a[0] === 'pr' && a[1] === 'close') {
+    prs.find(p => p.url === a[2]).state = 'CLOSED';
+    fs.writeFileSync(file, JSON.stringify(prs));
+} else {
+    console.error('fake gh: no answer for ' + a.join(' '));
+    process.exit(1);
+}
+`;
+
+/** What a board does, one script a run. $SIDE is a clone of origin; the PR's branch is in $FAKE_GH_STATE.head. */
+const BOARD = {
+    /** The queue takes the PR out, with main as it was. */
+    fails: 'echo "#1 NOT merged: taken out of the queue (state OPEN, run 77 failure)"; exit 1\n',
+    /** A page edit lands during the wait, and the queue takes this publish, stale now, out. */
+    editsPageAndFails: `git -C "$SIDE" fetch -q origin
+git -C "$SIDE" checkout -q --detach origin/main
+printf '\\nA page edit landed during the wait.\\n' >> "$SIDE/${PKG}/content/ledger/gifts.md"
+git -C "$SIDE" commit -q -am 'a page edit'
+git -C "$SIDE" push -q origin HEAD:main
+echo "#1 NOT merged: taken out of the queue (state OPEN, run 78 failure)"; exit 1
+`,
+    /** The queue lands the PR on main. */
+    lands: `git -C "$SIDE" fetch -q origin
+git -C "$SIDE" checkout -q --detach origin/main
+git -C "$SIDE" merge -q --no-ff -m 'land' "origin/$(cat "$FAKE_GH_STATE.head")"
+git -C "$SIDE" push -q origin HEAD:main
+echo "#1 MERGED"
+`,
+};
+
+/**
+ * GitHub around a publish: a gh on PATH that keeps pull requests in a file, and a board on the throwaway main, as publish runs the
+ * one in origin/main, that acts out `boards` in turn. The test publishes with `publish` and reads what it left with `prs`.
+ */
+function queueStandIn(repo, boards = []) {
+    const dir = path.join(repo.root, 'stand-in');
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'gh'), FAKE_GH);
+    fs.chmodSync(path.join(bin, 'gh'), 0o755);
+    boards.forEach((text, i) => fs.writeFileSync(path.join(dir, `board-${i + 1}.sh`), text));
+    fs.mkdirSync(path.join(repo.work, 'scripts/merge-queue'), { recursive: true });
+    write(repo.work, 'scripts/merge-queue/board.sh', `n=$(( $(cat "$STAND_IN/count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$STAND_IN/count"\n. "$STAND_IN/board-$n.sh"\n`);
+    git(repo.work, 'add', 'scripts/merge-queue/board.sh');
+    git(repo.work, 'commit', '-q', '-m', 'the board');
+    git(repo.work, 'push', '-q', 'origin', 'main');
+    const side = path.join(dir, 'side');
+    git(repo.root, 'clone', '-q', 'origin.git', side);
+    git(side, 'config', 'user.email', 'guide-test@example.org');
+    git(side, 'config', 'user.name', 'Guide test');
+    const state = path.join(dir, 'prs.json');
+    return {
+        publish: (...args) => spawnSync(process.execPath, [`${PKG}/scripts/publish.mjs`, ...args], {
+            cwd: repo.work, encoding: 'utf8',
+            env: { ...process.env, GITHUB_EVENT_NAME: undefined, PATH: `${bin}:${process.env.PATH}`, FAKE_GH_STATE: state, STAND_IN: dir, SIDE: side },
+        }),
+        prs: () => JSON.parse(fs.readFileSync(state, 'utf8')).map(p => p.state),
+    };
+}
+
+const branchOf = v => `guide/publish-members-v${v.guide + 1}-manual-v${v.manual}`;
+const onOrigin = (cwd, branch) => git(cwd, 'ls-remote', '--heads', 'origin', `refs/heads/${branch}`) !== '';
+
+test('a publish the queue did not land: publishing again, with a page edit in between, closes its PR, replaces its branch and lands', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        const start = versions(cwd);
+        const queue = queueStandIn(repo, [BOARD.fails, BOARD.lands]);
+        pageOnMain(cwd, 'Words waiting for their publish.');
+
+        const failed = queue.publish('--merge');
+        assert.equal(failed.status, 1, said(failed));
+        assert.match(failed.stderr, /#1 NOT merged: taken out of the queue/, "the board's reason reaches the reader");
+        assert.match(failed.stderr, /github\.com\/x\/y\/pull\/1 did not land/);
+        assert.ok(onOrigin(cwd, branchOf(start)), 'main did not change the guide, so its branch stays for the reader');
+        assert.deepEqual(queue.prs(), ['OPEN']);
+
+        pageOnMain(cwd, 'Words after the failed publish.');
+        const again = queue.publish('--merge');
+        assert.equal(again.status, 0, said(again));
+        assert.match(again.stdout, /Replacing guide\/publish-members-v/);
+        assert.match(again.stdout, /Merged\./);
+        assert.deepEqual(queue.prs(), ['CLOSED', 'OPEN'], 'the old PR closed, and a new one on the same branch name');
+
+        onMain(cwd);
+        assert.deepEqual(versions(cwd), { guide: start.guide + 1, manual: start.manual }, 'one version up, not two');
+        const guide = read(cwd, GUIDE_JSON);
+        assert.ok(guide.includes('Words waiting for their publish.') && guide.includes('Words after the failed publish.'));
+        assert.equal(build(cwd, '--pending').status, 0, 'nothing is left to publish');
+    } finally {
+        repo.cleanup();
+    }
+});
+
+test('a page edit lands while the board waits and the queue takes the publish out: it closes that PR and publishes again from the new main', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        const start = versions(cwd);
+        const queue = queueStandIn(repo, [BOARD.editsPageAndFails, BOARD.lands]);
+        pageOnMain(cwd, 'Words waiting for their publish.');
+
+        const r = queue.publish('--merge');
+        assert.equal(r.status, 0, said(r));
+        assert.match(r.stdout, /main changed the guide while this was open/);
+        assert.match(r.stdout, /Merged\./);
+        assert.deepEqual(queue.prs(), ['CLOSED', 'OPEN']);
+
+        onMain(cwd);
+        assert.deepEqual(versions(cwd), { guide: start.guide + 1, manual: start.manual });
+        assert.ok(read(cwd, GUIDE_JSON).includes('A page edit landed during the wait.'));
+        assert.equal(build(cwd, '--pending').status, 0, 'nothing is left to publish');
+    } finally {
+        repo.cleanup();
+    }
+});
+
+test('a pushed publish that never got a PR: publishing again replaces the branch', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        const start = versions(cwd);
+        const queue = queueStandIn(repo);
+        pageOnMain(cwd, 'Words waiting for their publish.');
+        const first = queue.publish('--no-pr');
+        assert.equal(first.status, 0, said(first));
+
+        pageOnMain(cwd, 'Words after the first push.');
+        const again = queue.publish('--no-pr');
+        assert.equal(again.status, 0, said(again));
+        git(cwd, 'fetch', '-q', 'origin');
+        const branch = branchOf(start);
+        assert.equal(git(cwd, 'rev-parse', `origin/${branch}~1`), git(cwd, 'rev-parse', 'origin/main'), 'one commit on top of the new main');
+        assert.match(git(cwd, 'show', `origin/${branch}:${GUIDE_JSON}`), /Words after the first push\./);
+    } finally {
+        repo.cleanup();
+    }
+});
+
+test('a run killed during its wait leaves its branch in its temporary worktree: publishing again still works', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        const start = versions(cwd);
+        const queue = queueStandIn(repo, [BOARD.lands]);
+        pageOnMain(cwd, 'Words waiting for their publish.');
+        // No finally runs on a kill: the branch stays checked out in a folder that is still there, and on origin.
+        const branch = branchOf(start);
+        git(cwd, 'worktree', 'add', '-q', '-b', branch, path.join(repo.root, 'killed'), 'origin/main');
+        git(cwd, 'push', '-q', 'origin', `${branch}:${branch}`);
+
+        const r = queue.publish('--merge');
+        assert.equal(r.status, 0, said(r));
+        assert.match(r.stdout, /Merged\./);
+    } finally {
+        repo.cleanup();
+    }
+});
+
 test('version isolation: a language publish raises that language version and leaves English untouched', () => {
     const repo = makeRepo({ withoutPages: ['ru'] });
     try {

@@ -33,13 +33,14 @@ GitHub's merge queue is the only gate to `main` (Marty, 1 Nov 2026: "drop the Ma
 ## Putting it on (the director, after this merges)
 
 1. The PR that adds this merges under the old ruleset: the last `--admin` merge.
-2. Apply: `gh api -X PUT repos/beanpool-org/beanpool/rulesets/19976145 --input .github/rulesets/protect-main.json`
-3. Check: `gh api repos/beanpool-org/beanpool/rulesets/19976145 --jq '.current_user_can_bypass, [.rules[].type]'` must say `never` and list `merge_queue`.
-4. Point the old board at the new one, by `mv`, never in place: `scratch/overnight/handover-20/board.sh` becomes `exec bash /Users/marty/projects/beanpool/scripts/merge-queue/board.sh "$@"`, once the primary tree has this.
-5. The walk below.
-6. Install the tripwire: `scripts/launchd/com.marty.beanpool-test-all-tripwire.plist.example`.
+2. Before the ruleset is applied: move the three other accounts with write access to Triage, which cannot merge, or Marty accepts in writing that they can land code with no review. `gh api repos/beanpool-org/beanpool/collaborators` lists them. Do not go on to step 3 until one of the two is done.
+3. Apply: `gh api -X PUT repos/beanpool-org/beanpool/rulesets/19976145 --input .github/rulesets/protect-main.json`
+4. Check: `gh api repos/beanpool-org/beanpool/rulesets/19976145 --jq '.current_user_can_bypass, [.rules[].type]'` must say `never` and list `merge_queue`.
+5. Point the old board at the new one, by `mv`, never in place: `scratch/overnight/handover-20/board.sh` becomes `exec bash /Users/marty/projects/beanpool/scripts/merge-queue/board.sh "$@"`, once the primary tree has this.
+6. The walk below.
+7. Install the tripwire: `scripts/launchd/com.marty.beanpool-test-all-tripwire.plist.example`.
 
-No review is required by the ruleset, deliberately. Every PR here is authored by `martyinspace`, the only code owner, who cannot approve their own PR: the old rule was only ever met by `--admin`. With no bypass it would stop every merge. The deciding review stays what it was: the director boards only what cleared it.
+The ruleset requires no review. `martyinspace` is the only code owner and cannot approve their own PR, so the old rule was only ever met by `--admin`, and with no bypass it would stop every merge. That says nothing about who else it stops: its reach is who has access, not who authors PRs. The old rule stops every other account with write access from landing code. Under this ruleset nothing does, because GitHub's Write role can merge a pull request, which is why step 2 comes first. That is unproven on a live queue, and the walk cannot show it: it runs as the admin account. The deciding review stays what it was, the director boards only what cleared it, but `board.sh` binds only those who use it: it is a convention, not a control.
 
 ## The way in
 
@@ -47,7 +48,7 @@ No review is required by the ruleset, deliberately. Every PR here is authored by
 bash scripts/merge-queue/board.sh 2700@<reviewed head> 2701@<reviewed head>
 ```
 
-Run it in the background: it stays until each PR has landed or been taken out. The `@head` is optional and worth giving. A plain number takes the head as it is now.
+Run it in the background: it stays until each PR has landed or been taken out. If the board dies, run it again: a PR still in the queue is watched, not queued twice. The `@head` is optional and worth giving. A plain number takes the head as it is now.
 
 It checks what the Mac queue checked: tier-A labels and the money list (`MONEY_PATHS` and `MONEY_LINE` in `scripts/test-all-train.sh`, read from main) set the order; the head is the one cleared and is queued by its sha, so a push since is refused; GitHub is green on it; each landing is verified by `--stat`, and that the commit is on main and carries the PR's files. It calls GitHub's `enqueuePullRequest`, not `gh pr merge`: that goes through auto-merge, which is off here, and an armed auto-merge outlives a later push. There is no quiet hour: the 03:15-03:40 pause was the Mac's `/tmp`, and GitHub has no such thing.
 
@@ -55,11 +56,11 @@ It reads a PR's changes from GitHub's files API, because `gh pr diff` is refused
 
 A conflict with main leaves the PR out with a line. `scripts/words-merge-3way.mjs` still merges word catalogs by key, by hand, on the branch: the queue cannot.
 
-A queue entry's guide and words checks compare with its first parent, what it lands on, not with main under every entry. A guide publish behind a page edit is stale, so the queue takes it out: run `pnpm guide:publish --merge` again.
+A queue entry's guide and words checks compare with its first parent, what it lands on, not with main under every entry. A guide publish behind a page edit is stale, so the queue takes it out, and `pnpm guide:publish --merge` closes it and publishes again from the new main. If the publish stops for any other reason, run it again: that replaces the PR and branch it left.
 
 ## A red in the queue
 
-The queue takes the PR out. Nothing puts it back by itself, and the board refuses that head until `requeue.sh` has.
+The queue takes the PR out. Nothing puts it back by itself, and the board refuses that head until `requeue.sh` has, even if no board was watching when it went: the journal's `QUEUED` line, written before the wait, is what it reads.
 
 1. **Read the failure.** `gh run view <run>`, and the `test-all-logs-<shard>` artifact. The board names the run.
 2. **An assertion failure stays red.** So does a failed build, lint, typecheck or a check that compared nothing. Fix it on the branch. A new head goes through the board as a new PR.

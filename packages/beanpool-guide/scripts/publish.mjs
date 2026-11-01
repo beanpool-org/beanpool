@@ -12,7 +12,8 @@
 //
 // It never touches the checkout it is run from: it builds in a temporary worktree of origin/main and removes it after.
 // Nothing to publish → it says so and exits 0, so it is safe to run after every merge. Should another guide change
-// merge while its pull request is open, --merge closes it and publishes again from the new main.
+// merge while its pull request is open, --merge closes it and publishes again from the new main. Should it stop for any
+// other reason, running it again replaces the pull request and branch it left.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -55,6 +56,34 @@ const version = (dir, file) => {
     return fs.existsSync(full) ? JSON.parse(fs.readFileSync(full, 'utf8')).version : null;
 };
 
+/** origin/main now, and whether it has changed the guide since `commit`. */
+function mainSince(commit) {
+    run('git', ['fetch', '-q', REMOTE, BASE], repo);
+    const tip = run('git', ['rev-parse', `${REMOTE}/${BASE}`], repo);
+    return { tip, guideChanged: tip !== commit && run('git', ['diff', '--name-only', commit, tip, '--', ...GUIDE], repo) !== '' };
+}
+
+/** Main changed the guide under this publish. Never fatal: the PR may be closed already, and deleting its branch closes it. */
+function supersede(url, branch, dir) {
+    console.log(`${BASE} changed the guide while this was open; closing it and publishing again from the new ${BASE}.`);
+    tryRun('gh', ['pr', 'close', url, '--comment', `Superseded: ${BASE} changed the guide before this merged.`], dir);
+    tryRun('git', ['push', '-q', REMOTE, '--delete', branch], dir);
+}
+
+/**
+ * A publish that did not land leaves its branch on origin, and its pull request. Main never took them, so this publish works out
+ * the same name and its push would be refused: close and delete them first, which is how running it again recovers.
+ */
+function clearLeftover(branch, dir) {
+    if (!run('git', ['ls-remote', '--heads', REMOTE, `refs/heads/${branch}`], dir)) return;
+    console.log(`Replacing ${branch}, left by a publish that did not land.`);
+    const open = run('gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'url', '--jq', '.[].url'], dir);
+    for (const url of open.split('\n').filter(Boolean)) {
+        run('gh', ['pr', 'close', url, '--comment', 'Superseded: a new publish replaces this one, which did not land.'], dir);
+    }
+    tryRun('git', ['push', '-q', REMOTE, '--delete', branch], dir);
+}
+
 /** One attempt from the current origin/main. Returns 'done', or 'again' when main changed the guide meanwhile. */
 function attempt() {
     run('git', ['fetch', '-q', REMOTE, BASE], repo);
@@ -90,7 +119,8 @@ function attempt() {
         const title = `Publish the guide: ${changes.join(', ') || 'regenerated files'}`;
         const langSuffix = GUIDE_LANGS.filter(l => after[`guide:${l}`] !== before[`guide:${l}`]).map(l => `-${l}-v${after[`guide:${l}`]}`).join('');
         branch = `guide/publish-members-v${after.guide}-manual-v${after.manual}${langSuffix}`;
-        run('git', ['switch', '-q', '-c', branch], dir);
+        // -C and --ignore-other-worktrees: a run killed during the board's wait leaves this branch, in a worktree no finally removed.
+        run('git', ['switch', '-q', '--ignore-other-worktrees', '-C', branch], dir);
         run('git', ['add', '--', ...PUBLISHED], dir);
         const websiteBuild = path.join(dir, 'scripts/website-build.mjs');
         if (fs.existsSync(websiteBuild)) {
@@ -106,6 +136,7 @@ function attempt() {
             console.log('Dry run: nothing pushed.');
             return 'done';
         }
+        clearLeftover(branch, dir);
         run('git', ['push', '-q', REMOTE, `${branch}:${branch}`], dir);
         console.log(`Pushed ${branch}`);
         if (noPr) return 'done';
@@ -122,16 +153,23 @@ function attempt() {
             console.log(`Merge it before another guide change merges: bash scripts/merge-queue/board.sh ${url}`);
             return 'done';
         }
-        run('git', ['fetch', '-q', REMOTE, BASE], repo);
-        const tip = run('git', ['rev-parse', `${REMOTE}/${BASE}`], repo);
-        if (tip !== base && run('git', ['diff', '--name-only', base, tip, '--', ...GUIDE], repo)) {
-            console.log(`${BASE} changed the guide while this was open; closing it and publishing again from the new ${BASE}.`);
-            run('gh', ['pr', 'close', url, '--comment', `Superseded: ${BASE} changed the guide before this merged.`], dir);
-            tryRun('git', ['push', '-q', REMOTE, '--delete', branch], dir);
+        const { tip, guideChanged } = mainSince(base);
+        if (guideChanged) {
+            supersede(url, branch, dir);
             return 'again';
         }
         // From the temporary worktree: it is origin/main, and the checkout this was run from may be behind it.
-        run('bash', ['scripts/merge-queue/board.sh', url], dir);
+        try {
+            run('bash', ['scripts/merge-queue/board.sh', url], dir);
+        } catch (e) {
+            // The board waits for a PR run and a queue run, about 45 minutes, so a page edit can land after the check above.
+            console.error(e.message);
+            if (mainSince(tip).guideChanged) {
+                supersede(url, branch, dir);
+                return 'again';
+            }
+            throw new Error(`${url} did not land. Read the lines above; running pnpm guide:publish --merge again replaces it.`);
+        }
         run('git', ['fetch', '-q', REMOTE, BASE], repo);
         const landed = run('git', ['diff', '--stat', tip, `${REMOTE}/${BASE}`, '--', ...PUBLISHED], repo);
         if (!landed) throw new Error(`${url} reports merged, but ${REMOTE}/${BASE} does not carry its files`);

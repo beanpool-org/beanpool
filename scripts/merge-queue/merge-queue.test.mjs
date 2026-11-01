@@ -82,7 +82,12 @@ if (a[0] === 'api') {
             out(p.on === 'null' ? 'null' : '1');
         }
         const p = s.prs[val('number')];
-        if (!p) die();
+        if (!p || s.unreadableState) die();
+        // A queue that ends this entry after so many reads: what a board that comes back to a queued PR sees.
+        if (p.queueEnds && p.queueEnds.reads-- <= 0) {
+            p.inQueue = false;
+            if (p.queueEnds.then === 'merge') { p.state = 'MERGED'; p.mergeCommit = p.land; }
+        }
         out([p.state, !!p.inQueue, p.head, p.mergeCommit ?? 'none'].join(' '));
     }
     const path = a.find((v) => v.startsWith('repos/')) ?? '';
@@ -154,10 +159,10 @@ function world(fn) {
             state.checks[head] ??= ['success'];
             return head;
         };
-        const exec = (name, args = [], env = {}) => {
+        const exec = (name, args = [], env = {}, timeout = 60_000) => {
             save();
             const r = spawnSync('bash', [script(name), ...args], {
-                encoding: 'utf8', timeout: 60_000,
+                encoding: 'utf8', timeout,
                 env: { ...process.env, ...GIT_ENV, PATH: `${bin}:${process.env.PATH}`, FAKE_GH_STATE: stateFile, BOARD_ROOT: clone, BOARD_POLL_SECS: '0', BOARD_WAIT_MINS: '1', MERGE_QUEUE_WAIT_SECS: '0', MERGE_QUEUE_WAIT_TRIES: '2', MERGE_QUEUE_RETRY_SECS: '0', ...env },
             });
             return { status: r.status, out: `${r.stdout}${r.stderr}`, state: read() };
@@ -327,6 +332,55 @@ test('a PR the queue takes out stays out: named, journalled, and that head refus
     assert.match(w.board([1], { BOARD_WAIT_MINS: '0' }).out, /#1 queued/, 'a new head is a new PR');
 }));
 
+const queuedLine = (head) => `2026-11-01 10:00:00 pr=1 QUEUED head=${head.slice(0, 9)} position=1\n`;
+const requeuedLine = (head) => `2026-11-01 11:00:00 pr=1 REQUEUED head=${head.slice(0, 9)}: a whole new queue run decides\n`;
+
+test('a head taken out while no board was watching stays out: only a live board writes OUT', () => world((w) => {
+    const head = w.pr(1, { on: 'out' });
+    w.setJournal(queuedLine(head));
+    const r = w.board([1]);
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /#1 left out: the queue took this head out/);
+    assert.equal(r.state.enqueued, undefined, 'a dead board does not get round the rerun rule');
+    w.setJournal(`${queuedLine(head)}${requeuedLine(head)}`);
+    assert.match(w.board([1]).out, /#1 queued/, 'requeue.sh opens it again');
+}));
+
+test('a head still in the queue, as a dead board left it, is watched and not queued again, and its landing counts', () => world((w) => {
+    const oid = w.land('apps/pwa/src/x.tsx');
+    const head = w.pr(1, { inQueue: true, land: oid, queueEnds: { reads: 1, then: 'merge' } });
+    w.setJournal(queuedLine(head));
+    const r = w.board([1]);
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /#1 is in the queue already, head 1aaaaaaaa: watching it/);
+    assert.match(r.out, /#1 MERGED/);
+    assert.equal(r.state.enqueued, undefined, 'never queued twice');
+    assert.match(w.journal(), new RegExp(`pr=1 LANDED sha=${oid.slice(0, 9)}`));
+}));
+
+test('watched, then taken out: one requeue still opens it, because watching wrote no second QUEUED', () => world((w) => {
+    const head = w.pr(1, { inQueue: true, queueEnds: { reads: 1, then: 'out' } });
+    w.setJournal(queuedLine(head));
+    const r = w.board([1]);
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /#1 taken out of the queue/);
+    assert.match(w.journal(), new RegExp(`pr=1 OUT head=${head.slice(0, 9)}`));
+    assert.equal(w.journal().match(/ QUEUED /g).length, 1);
+    w.pr(1, { head });
+    w.setJournal(`${w.journal()}${requeuedLine(head)}`);
+    assert.match(w.board([1], { BOARD_WAIT_MINS: '0' }).out, /#1 queued/);
+}));
+
+test('a queued head whose place in the queue cannot be read is left out and said so, not called taken out', () => world((w) => {
+    const head = w.pr(1);
+    w.setJournal(queuedLine(head));
+    w.state.unreadableState = true;
+    const r = w.board([1]);
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /#1 left out: GitHub did not say whether it is still in the queue/);
+    assert.equal(r.state.enqueued, undefined);
+}));
+
 test('merged is not landed: the wrong head, a commit not on main, or other files are each NOT VERIFIED', () => {
     world((w) => {
         const oid = w.land('apps/pwa/src/x.tsx');
@@ -428,6 +482,16 @@ test('requeue: a PR taken out with nothing red comes back once, and never past a
     assert.equal(w.exec('requeue.sh', ['1', '--no-run', '--run', '77', '--why', 'x']).status, 2, 'one or the other');
 }));
 
+test('requeue: --run or --why with nothing after it is a usage error: a failed shift 2 would spin for ever', () => world((w) => {
+    w.pr(1);
+    for (const args of [['1', '--run'], ['1', '--no-run', '--why'], ['1', '--run', '77', '--why']]) {
+        const r = w.exec('requeue.sh', args, {}, 15_000);
+        assert.equal(r.status, 2, `${args.join(' ')}: ${r.out}`);
+        assert.match(r.out, /usage: requeue\.sh/);
+    }
+    assert.equal(w.calls(), '', 'it asked GitHub nothing');
+}));
+
 const lockIn = (w) => ({ TRIPWIRE_LOCK: join(w.dir, 'heavy.lock'), TRIPWIRE_LOCK_SECS: '0', TRIPWIRE_LOCK_TRIES: '2' });
 
 test('tripwire: journals green or red, holds nothing, and gives the lock back', () => world((w) => {
@@ -466,6 +530,7 @@ test('self-test: with no argument it prints the walk and touches nothing', () =>
     assert.equal(r.status, 0, r.out);
     assert.match(r.out, /A PR with a failing test/);
     assert.match(r.out, /--run/);
+    assert.match(r.out, /Exit 0 only when every step above was seen\.\nRun it with --run/, 'the block is printed to its last line');
     assert.equal(w.calls(), '');
 }));
 

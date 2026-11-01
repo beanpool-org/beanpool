@@ -27,7 +27,7 @@ bad() { echo "❌ $*"; FAILED=1; }
 refuse() { echo "self-test not started: $*" >&2; exit 2; }
 
 case "${1:-}" in
-  "") sed -n '/^# With no argument/,/^# It refuses/p' "$0" | sed 's/^# \{0,1\}//'; echo "Run it with --run, after the ruleset is applied."; exit 0 ;;
+  "") sed -n '/^# With no argument/,/was seen\.$/p' "$0" | sed 's/^# \{0,1\}//'; echo "Run it with --run, after the ruleset is applied."; exit 0 ;;
   --run) ;;
   *) echo "usage: self-test.sh [--run]" >&2; exit 2 ;;
 esac

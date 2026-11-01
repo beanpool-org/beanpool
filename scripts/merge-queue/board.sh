@@ -9,7 +9,8 @@
 #   conflict with main, or GitHub not green on the head. The others still go.
 #   Queued with the head that was read here, so a push since is refused. Each landing is verified by --stat, not by the label.
 #   A PR the queue takes out stays out: this names its run and stops there, and refuses that head until
-#   scripts/merge-queue/requeue.sh has sent it back. A new head is a new PR to this.
+#   scripts/merge-queue/requeue.sh has sent it back, even if no board was watching when it went. A head still in the queue, as a
+#   board that died leaves it, is watched and not queued again. A new head is a new PR to this.
 #
 #   BOARD_PLAN_ONLY=1 prints the plan and queues nothing. Ends with one line per PR (MERGED / NOT merged). Exit 0 when every PR
 #   merged, 1 otherwise: read the lines. 2 usage, or the money list unreadable.
@@ -31,7 +32,7 @@ MONEY_PATHS=$(printf '%s\n' "$TRAIN" | sed -n "s/^MONEY_PATHS='\(.*\)'$/\1/p")
 MONEY_LINE=$(printf '%s\n' "$TRAIN" | sed -n "s/^MONEY_LINE='\(.*\)'$/\1/p")
 [ -n "$MONEY_PATHS" ] && [ -n "$MONEY_LINE" ] || { echo "the money list is unreadable on origin/main (scripts/test-all-train.sh): nothing boarded" >&2; exit 2; }
 
-NUM=(); ID=(); HEAD=(); FATE=(); MISS=(); ALONE=(); REST=(); SEEN=" "
+NUM=(); ID=(); HEAD=(); FATE=(); MISS=(); ALONE=(); REST=(); WATCH=(); SEEN=" "
 say_fate() { FATE[$1]="$2"; echo "#${NUM[$1]} $2"; [ -n "$PLAN" ] || journal "${NUM[$1]}" "${3:-HELD} $2"; }
 leave() { say_fate "$1" "left out: $2"; }
 
@@ -70,8 +71,17 @@ for arg in "$@"; do
   if [ "$draft" = true ]; then leave "$i" "a draft"; continue; fi
   if [ "$base" != main ]; then leave "$i" "based on $base, not main"; continue; fi
   case "$head" in "$cleared"*) ;; *) leave "$i" "head moved: cleared ${cleared}, now $short"; continue ;; esac
-  if [ "$(journalled "pr=$p OUT head=$short")" -gt "$(journalled "pr=$p REQUEUED head=$short")" ]; then
-    leave "$i" "the queue took this head out: read its run, then scripts/merge-queue/requeue.sh or a fix"; continue
+  # QUEUED, not OUT: only a live board writes OUT, and a head taken out while none was watching must not board again for nothing.
+  # Queued, out of the queue and not merged is taken out. Still in the queue, it is only watched: queuing it again would journal a
+  # second QUEUED that one REQUEUED could not answer.
+  if [ "$(journalled "pr=$p QUEUED head=$short")" -gt "$(journalled "pr=$p REQUEUED head=$short")" ]; then
+    read -r _ inq _ <<< "$(pr_state "$p")"
+    case "$inq" in
+      true) WATCH+=("$i"); echo "#$p is in the queue already, head $short: watching it" ;;
+      false) leave "$i" "the queue took this head out: read its run, then scripts/merge-queue/requeue.sh or a fix" ;;
+      *) leave "$i" "GitHub did not say whether it is still in the queue" ;;
+    esac
+    continue
   fi
   if [ "$mergeable" = CONFLICTING ]; then leave "$i" "conflicts with main: sync the branch (word catalogs: scripts/words-merge-3way.mjs), then board it again"; continue; fi
   if ! labels=$(gh pr view "$p" -R "$REPO" --json labels --jq '.labels[].name' 2>/dev/null); then leave "$i" "labels unreadable"; continue; fi
@@ -81,7 +91,7 @@ for arg in "$@"; do
 done
 [ -n "$PLAN" ] && exit 0
 
-QUEUED=()
+QUEUED=(${WATCH[@]+"${WATCH[@]}"})
 for i in ${ALONE[@]+"${ALONE[@]}"} ${REST[@]+"${REST[@]}"}; do
   p=${NUM[$i]}; short=$(echo "${HEAD[$i]}" | cut -c1-9)
   if ! why=$(wait_green "${HEAD[$i]}"); then leave "$i" "GitHub Test-All on $short is $why"; continue; fi

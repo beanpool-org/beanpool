@@ -139,6 +139,7 @@ describe('MessageRequestsPane on phone', () => {
                 count: 0,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted: () => {},
                 onChanged: () => {},
             })
@@ -159,6 +160,7 @@ describe('MessageRequestsPane on phone', () => {
                 count: 1,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted,
                 onChanged: () => {},
             })
@@ -192,6 +194,7 @@ describe('MessageRequestsPane on phone', () => {
                 count: 1,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted: () => {},
                 onChanged: () => {},
             })
@@ -209,7 +212,7 @@ describe('MessageRequestsPane on phone', () => {
         dbMocks.getMessages.mockResolvedValueOnce([
             { id: 'm2', type: 'image', text: 'Check this out', authorPubkey: 'bob-pubkey', timestamp: '2026-10-27T00:00:00Z' } as any,
         ]);
-        const props = { count: 1, identity: { publicKey: 'me-pubkey' }, onOpen: () => {}, onAccepted: () => {}, onChanged: () => {} };
+        const props = { count: 1, identity: { publicKey: 'me-pubkey' }, onOpen: () => {}, onBack: () => {}, onAccepted: () => {}, onChanged: () => {} };
         render(createElement(MessageRequestsPane, { ...props, entries: [entry] }));
         const withCaption = await screen.findByText(/Photo: shown when you accept/);
         expect(screen.getByText('Check this out')).toBeTruthy();
@@ -235,6 +238,7 @@ describe('MessageRequestsPane on phone', () => {
             count: 1,
             identity: { publicKey: 'me-pubkey' },
             onOpen: () => {},
+            onBack: () => {},
             onAccepted: over.onAccepted ?? (() => {}),
             onChanged: over.onChanged ?? (() => {}),
         })
@@ -364,6 +368,7 @@ describe('MessageRequestsPane on phone', () => {
                 count: 6,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted: () => {},
                 onChanged,
             })
@@ -409,6 +414,6 @@ describe('accessibility roles Android accepts', () => {
 
     it('the Requests pane keeps its landmark, on role=', () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../components/MessageRequestsPane.tsx'), 'utf-8');
-        expect(src).toMatch(/role="region"\s*\n\s*accessibilityLabel=\{t\('Requests'\)\}/);
+        expect(src).toMatch(/role="region"\s*\n\s*accessibilityLabel=\{t\('Message requests'\)\}/);
     });
 });

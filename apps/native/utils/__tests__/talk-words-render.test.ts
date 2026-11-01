@@ -786,7 +786,7 @@ describe('Talk opened on Requests (review 4395541801)', () => {
 
         expect(host.textContent).toContain('1 person wants to message you');
         expect(host.textContent).not.toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
-        await click(buttonWithText('Back to chats'), 'Back to chats');
+        await click(buttonWithText('‹ Back to chats'), 'Back to chats');
         expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
     });
 });

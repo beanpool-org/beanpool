@@ -37,9 +37,6 @@ vi.mock('../lib/blocklist', () => ({
     onBlocklistUpdated: vi.fn(() => () => {}),
 }));
 vi.mock('../lib/archetypes', () => ({ consumeChatPrefill: vi.fn(() => null) }));
-vi.mock('../components/ReportModal', () => ({
-    ReportModal: ({ targetName }: { targetName: string }) => <div data-testid="report-modal">{targetName}</div>,
-}));
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 
 /** The node: each member's list, and each conversation as GET /api/messages/:id reads it. */
@@ -319,14 +316,14 @@ describe('a request card', () => {
         node.reads[CONV] = readOf(pending(), [hello]);
         render(<MessagesPage identity={idOf(ann)} />);
         fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
-        const card = await screen.findByTestId('report-modal');
-        expect(card).toHaveTextContent('Reporting a request blocks its sender too.');
-        fireEvent.click(within(card).getByRole('radio', { name: 'Harassment' }));
-        fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' }));
+        const card = await screen.findByRole('dialog');
+        expect(within(card).getByTestId('report-note')).toHaveTextContent('Reporting a request blocks its sender too.');
+        fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
         await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
         const [messageId, reason, disclosure] = vi.mocked(reportDmLineApi).mock.calls[0];
         expect(messageId).toBe(hello.id);
-        expect(reason).toContain('Harassment');
+        expect(reason).toContain('Spam or scam');
         expect(disclosure).toMatchObject({ v: 1, ciphertext: hello.ciphertext, nonce: hello.nonce, conversationId: CONV, words: 'Hello' });
         expect(Object.keys(disclosure).sort()).toEqual(['ciphertext', 'conversationId', 'lineSig', 'nonce', 'v', 'words']);
         expect(decideMessageRequest).not.toHaveBeenCalled();
@@ -338,9 +335,9 @@ describe('a request card', () => {
         vi.mocked(reportDmLineApi).mockRejectedValueOnce(new Error('The node refused it'));
         render(<MessagesPage identity={idOf(ann)} />);
         fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
-        const card = await screen.findByTestId('report-modal');
-        fireEvent.click(within(card).getByRole('radio', { name: 'Harassment' }));
-        fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' }));
+        const card = await screen.findByRole('dialog');
+        fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
         expect(await within(card).findByText(/The node refused it/)).toBeInTheDocument();
         expect(blockUser).not.toHaveBeenCalled();
     });
@@ -351,9 +348,9 @@ describe('a request card', () => {
         vi.mocked(blockUser).mockRejectedValueOnce(new Error('Not now'));
         render(<MessagesPage identity={idOf(ann)} />);
         fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
-        const card = await screen.findByTestId('report-modal');
-        fireEvent.click(within(card).getByRole('radio', { name: 'Harassment' }));
-        fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' }));
+        const card = await screen.findByRole('dialog');
+        fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
         expect(await within(card).findByText('Reported, but not blocked. Please try again.')).toBeInTheDocument();
     });
 

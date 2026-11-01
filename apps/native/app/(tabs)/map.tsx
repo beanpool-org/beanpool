@@ -511,7 +511,7 @@ export default function MapScreen() {
             return;
         }
         setStackList(stackTapped(leaves.map((leaf) => leaf.properties.post.id)));
-        const clear = regionClearOfList(currentRegion, stackFrame, cluster);
+        const clear = regionClearOfList(currentRegion, stackFrame, points[0]);
         if (clear) mapRef.current?.animateToRegion(clear, 250);
     };
 

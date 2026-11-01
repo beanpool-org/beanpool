@@ -143,8 +143,8 @@ export function mapRestOf(index: ClusterIndex, region: MapRegion, win: WindowSiz
 }
 
 /** The region that lifts a tapped bubble clear of the list; null when it is already in view above it. */
-export function regionClearOfList(region: MapRegion, frame: MapFrame, cluster: ClusterFeature): MapRegion | null {
-    const lift = stackLift(pointIn(region, frame, cluster.geometry.coordinates[0], cluster.geometry.coordinates[1]).y, frame);
+export function regionClearOfList(region: MapRegion, frame: MapFrame, stack: MapPoint): MapRegion | null {
+    const lift = stackLift(pointIn(region, frame, stack.longitude, stack.latitude).y, frame);
     return lift > 0 ? { ...region, latitude: region.latitude - (lift / frame.height) * region.latitudeDelta } : null;
 }
 

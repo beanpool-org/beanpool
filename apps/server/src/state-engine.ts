@@ -1543,6 +1543,7 @@ import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVers
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
+import { preferredAddress } from './engine/host-kinds.js';
 import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -9459,7 +9460,14 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     };
     let host: string | null = null;
     const pa: any = config?.publicAddress;
-    if (pa) {
+    // A name still waiting for approval has no route. Where a claim of it replaced an address, kept on the owner-confirmed
+    // list (engine/own-addresses.ts keepReplacedAddress), that is where this community lives until the name is approved:
+    // the directory, the card and an assistant are not sent to a name that leads nowhere. As primaryAddress says.
+    const waiting = !!pa && typeof pa === 'object' && pa.status === 'pending';
+    const kept = waiting && Array.isArray(config?.ownerAddresses)
+        ? preferredAddress(config.ownerAddresses.flatMap((a) => usable(typeof a === 'string' ? a : null) ?? []))
+        : null;
+    if (pa && !kept) {
         if (rules.publicAddress === 'any' && typeof pa === 'string' && pa.trim()) {
             host = usable(pa.trim());
         } else if (typeof pa === 'object') {
@@ -9475,7 +9483,7 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     if (!host && cf && rules.cfRecordName !== 'never') {
         host = usable(rules.cfRecordName === 'in-zone' && !cf.includes('.') ? `${cf}.beanpool.org` : cf);
     }
-    return host ? `https://${host}` : null;
+    return host || kept ? `https://${host || kept}` : null;
 }
 
 /** The community's name as the directory is told it, and the health reads give it: no count and no node config read. */

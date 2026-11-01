@@ -18,13 +18,16 @@
  *     is asked for a current code. A first claim on a node with no address, or the same name again, stays plain, and a
  *     name that is no address label is refused before any proof is spent.
  *  5. The members' notice: the soft words once, when the new name is live and the old one really keeps working; never
- *     while it waits, and never twice; no address in what is pushed. A live tunnel name replaced keeps the critical words:
- *     this node runs one connector, so that name goes dark until slice S2.
+ *     while it waits, and never twice; no address in what is pushed. A live tunnel name with no token saved has no tunnel to
+ *     keep, so it keeps the critical words.
  *  6. The public-address agent's own claim copies and tells as Settings' does.
  *  7. A name on this server's tunnel has no route until that tunnel connects, whatever the registrar says: nobody is told
  *     before it does, on any of the ways a notice goes out, and a tunnel that cannot start tells nobody and loses nothing
- *     (the fake cloudflared, /ready as each case needs). The agent's claim over a live tunnel name never says the old
- *     address keeps working: it goes dark, as it does for Settings' claim.
+ *     (the fake cloudflared, /ready as each case needs). The agent's claim over a live tunnel name keeps that name's child
+ *     beside the new one (rename S2), so the soft words are true.
+ *  8. The three ways a community moves, end to end (rename S2): (a) its own domain, then a beanpool.org name; (b) its own
+ *     name, a gated name pending, then approved: nothing moves until it is, on any surface, and the old name keeps its
+ *     tunnel; (c) a registrar name to a registrar name, both answering.
  *
  * Run: SERVER_SUITES_ONLY=test-rename-main-name TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -162,7 +165,7 @@ async function main(): Promise<void> {
     const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { setSecurityAlertHandler } = await import('./services/security-signal.js');
     const { audienceStanding, forgetOwnAddresses, primaryAddress, publishedAddresses, formerAddresses, ownerConfirmedAddresses } = await import('./engine/own-addresses.js');
-    const { reconcile } = await import('./services/public-address-agent.js');
+    const { reconcile, tick } = await import('./services/public-address-agent.js');
     const { getTunnelStatus, resetTunnelConnectorForTests, setTunnelConnectorForTests, syncTunnel, tunnelConnectorForTests } = await import('./services/tunnel-connector.js');
     const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
     const { initTls } = await import('./services/tls.js');
@@ -466,7 +469,7 @@ async function main(): Promise<void> {
         await reconcile();
         const told = notices().slice(n0);
         assert(told.length === 1 && told[0].body === CRITICAL_BODY,
-            `a live tunnel name replaced keeps the critical words, once: one connector here, so it goes dark until slice S2 (${show(told)})`);
+            `a live tunnel name with no token saved has no tunnel to keep: the critical words, once (${show(told)})`);
     }
     {
         scene();
@@ -547,6 +550,12 @@ async function main(): Promise<void> {
         await resetTunnelConnectorForTests();
     };
     const due = () => getLocalConfig().addressNoticeDue ?? null;
+    const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    /** The tokens running now, sorted: every child the connector started, whichever name it is for. */
+    const onTokens = () => fake.runs().filter((r) => alive(r.pid)).map((r) => r.env.TUNNEL_TOKEN).sort();
+    /** The agent's own tick, past its quiet wait. */
+    let tickNow = Date.now() + 1_000_000_000;
+    const tickOnce = () => tick((tickNow += 3_600_000));
     {
         await tunnelScene({ cf: MULLUM });
         held.set('byron', withToken('byron'));
@@ -660,7 +669,7 @@ async function main(): Promise<void> {
     }
     {
         // The agent claims over a live tunnel name: an older registrar answers about the key's first name, gone, so the
-        // record still says the stored name is live and main; and the env names another. One connector here, so it goes dark.
+        // record still says the stored name is live and main; and the env names another. The old name keeps its child.
         const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
         await tunnelScene({ config: { publicAddress: oldvale } });
         fake.ready(200);
@@ -673,11 +682,124 @@ async function main(): Promise<void> {
         await reconcile();
         delete process.env.PUBLIC_ADDRESS_NAME;
         assert(stored().publicAddress?.name === 'byron' && ownerConfirmedAddresses().includes('oldvale.beanpool.org') && tunnelConnectorForTests().runningToken === 'T-byron',
-            `the agent's claim keeps the old name and moves the one connector onto the new one (${stored().publicAddress?.name}, ${show(stored().ownerAddresses)}, ${tunnelConnectorForTests().runningToken})`);
+            `the agent's claim keeps the old name, and the stored name's connector runs the new one (${stored().publicAddress?.name}, ${show(stored().ownerAddresses)}, ${tunnelConnectorForTests().runningToken})`);
         assert(await until(() => getTunnelStatus().state === 'connected'), `and it connects (${getTunnelStatus().state})`);
+        assert(await until(() => show(onTokens()) === show(['T-byron', 'T-oldvale'])), `the old name's child keeps running beside it (${show(onTokens())})`);
+        assert(await until(() => notices().length > n0) && notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY && due() === null,
+            `the old address really keeps working, so the members are told that, once (${show(notices().slice(n0))}, ${due()})`);
+    }
+
+    // ── 8 ──
+    console.log('\n— 8. the three ways a community moves —');
+    const { getDirectoryInfo } = await import('./state-engine.js');
+    const { communityCard } = await import('./routes/community-card.js');
+    const { nodeUrlFor, ownOrigin } = await import('./agent/mcp-route.js');
+    const { tlsIdentifiers } = await import('./engine/own-addresses.js');
+    /** Where each surface sends people. `want`: a host. */
+    const surfaces = () => ({
+        primary: primaryAddress(), directory: getDirectoryInfo().publicUrl, card: communityCard().host,
+        assistant: nodeUrlFor({ req: {}, host: 'unused' }), origin: ownOrigin(),
+    });
+    const onlyAt = (want: string) => show(surfaces()) === show({ primary: want, directory: `https://${want}`, card: want, assistant: `https://${want}`, origin: `https://${want}` });
+    {
+        // (a) Its own domain, then a beanpool.org name, live at once.
+        await tunnelScene({ config: { publicAddress: { mode: 'own', hostname: DOMAIN, status: 'live' }, ownerAddresses: [DOMAIN] } });
+        fake.ready(200);
+        held.set('byron', withToken('byron'));
+        const n0 = notices().length;
+        assert(onlyAt(DOMAIN), `(a) before: every surface says the domain (${show(surfaces())})`);
+        const r = await claim('byron');
+        assert(r.status === 200 && r.json?.status === 'live', `(a) the claim answers live (${r.status} ${show(r.json)})`);
+        assert(await until(() => getTunnelStatus().state === 'connected') && show(onTokens()) === show(['T-byron']), `(a) one tunnel: the domain needs none (${show(onTokens())})`);
+        assert(await until(() => notices().length > n0) && notices().slice(n0).every((n) => n.body === SOFT_BODY), `(a) the members are told, softly (${show(notices().slice(n0))})`);
+        assert(onlyAt(BYRON), `(a) after: every surface says the name (${show(surfaces())})`);
+        assert((await signedFor(DOMAIN)).status === 200 && (await signedFor(BYRON)).status === 200, '(a) a signature for either passes');
+        const i = await info();
+        assert(i.addresses?.includes(DOMAIN) && i.addresses?.includes(BYRON) && i.primaryAddress === BYRON, `(a) both are listed, the name main (${show(i.addresses)})`);
+        assert(tlsIdentifiers().includes(DOMAIN), `(a) and the domain keeps its own certificate (${show(tlsIdentifiers())})`);
+    }
+    {
+        // (b) Its own domain, a gated name pending, then approved.
+        await tunnelScene({ config: { publicAddress: { mode: 'own', hostname: DOMAIN, status: 'live' }, ownerAddresses: [DOMAIN] } });
+        fake.ready(200);
+        gated.add('byron');
+        const n0 = notices().length;
+        const r = await claim('byron');
+        assert(r.status === 200 && r.json?.status === 'pending', `(b, domain) the claim waits (${r.status} ${show(r.json)})`);
+        assert(onlyAt(DOMAIN), `(b, domain) while it waits nothing moves: not the directory, the card or an assistant (${show(surfaces())}; on main all but primaryAddress say the waiting name)`);
+        assert((await info()).primaryAddress === DOMAIN && (await signedFor(DOMAIN)).status === 200, '(b, domain) the app is told the domain, and it passes');
+        assert(notices().length === n0, `(b, domain) nobody is told (${show(notices().slice(n0))})`);
+        held.set('byron', withToken('byron'));
+        await reconcile();
+        assert(await until(() => getTunnelStatus().state === 'connected'), `(b, domain) approved, its tunnel connects (${getTunnelStatus().state})`);
+        assert(onlyAt(BYRON), `(b, domain) and only now does every surface move (${show(surfaces())})`);
+        assert(await until(() => notices().length > n0) && notices()[n0].body === SOFT_BODY && notices().length === n0 + 1, `(b, domain) told once (${show(notices().slice(n0))})`);
+        assert((await signedFor(DOMAIN)).status === 200 && (await signedFor(BYRON)).status === 200, '(b, domain) a signature for either passes');
+    }
+    {
+        // (b) A registrar name on its tunnel, a gated name pending, then approved. On main the old name's tunnel stops at the claim.
+        const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
+        const OLD = 'oldvale.beanpool.org';
+        await tunnelScene({ config: { publicAddress: oldvale } });
+        fake.ready(200);
+        held.set('oldvale', withToken('oldvale'));
+        gated.add('byron');
+        await syncTunnel();
+        assert(await until(() => getTunnelStatus().state === 'connected'), `(b, name) the old name is connected (${getTunnelStatus().state})`);
+        const pid = fake.runs().filter((x) => x.env.TUNNEL_TOKEN === 'T-oldvale').at(-1)!.pid;
+        const n0 = notices().length;
+        const r = await claim('byron');
+        assert(r.status === 200 && r.json?.status === 'pending', `(b, name) the claim waits (${r.status} ${show(r.json)})`);
         await polls();
-        assert(!notices().slice(n0).some((n) => n.body === SOFT_BODY) && due() === null,
-            `the old tunnel went dark, so nobody is told it keeps working, and nothing stays due (${show(notices().slice(n0))}, ${due()})`);
+        assert(show(onTokens()) === show(['T-oldvale']) && alive(pid), `(b, name) while it waits the old name's tunnel keeps running (${show(onTokens())}; on main it stops here)`);
+        assert(onlyAt(OLD), `(b, name) and nothing moves (${show(surfaces())})`);
+        assert((await signedFor(OLD)).status === 200, '(b, name) a signature for it passes');
+        assert(notices().length === n0, `(b, name) nobody is told anything, least of all that the address changed (${show(notices().slice(n0))})`);
+        await reconcile();
+        await tickOnce();
+        assert(alive(pid) && onlyAt(OLD), `(b, name) a tick changes nothing while it waits (${show(surfaces())})`);
+        held.set('byron', withToken('byron'));
+        await reconcile();
+        assert(await until(() => show(onTokens()) === show(['T-byron', 'T-oldvale'])), `(b, name) approved, both run (${show(onTokens())})`);
+        assert(alive(pid) && await until(() => getTunnelStatus().state === 'connected'), '(b, name) the old child never stopped');
+        assert(onlyAt(BYRON), `(b, name) and only now does every surface move (${show(surfaces())})`);
+        assert(await until(() => notices().length > n0) && notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY, `(b, name) told once, softly (${show(notices().slice(n0))})`);
+        assert((await signedFor(OLD)).status === 200 && (await signedFor(BYRON)).status === 200, '(b, name) a signature for either passes');
+    }
+    {
+        // (b) Refused: the name never comes, and the community stays where it is, its tunnel running.
+        const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
+        const OLD = 'oldvale.beanpool.org';
+        await tunnelScene({ config: { publicAddress: oldvale } });
+        fake.ready(200);
+        held.set('oldvale', withToken('oldvale'));
+        gated.add('byron');
+        await syncTunnel();
+        await until(() => getTunnelStatus().state === 'connected');
+        await claim('byron');
+        held.delete('byron');
+        await reconcile();
+        await tickOnce();
+        assert(show(onTokens()) === show(['T-oldvale']) && onlyAt(OLD), `(b, refused) nothing moved (${show(onTokens())}, ${show(surfaces())})`);
+    }
+    {
+        // (c) A registrar name to a registrar name, both live.
+        const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
+        const OLD = 'oldvale.beanpool.org';
+        await tunnelScene({ config: { publicAddress: oldvale } });
+        fake.ready(200);
+        held.set('oldvale', withToken('oldvale'));
+        held.set('byron', withToken('byron'));
+        await syncTunnel();
+        await until(() => getTunnelStatus().state === 'connected');
+        const pid = fake.runs().filter((x) => x.env.TUNNEL_TOKEN === 'T-oldvale').at(-1)!.pid;
+        const n0 = notices().length;
+        const r = await claim('byron');
+        assert(r.status === 200 && r.json?.status === 'live', `(c) the claim answers live (${r.status} ${show(r.json)})`);
+        assert(await until(() => show(onTokens()) === show(['T-byron', 'T-oldvale'])) && alive(pid), `(c) both names run, the old child never stopped (${show(onTokens())}; on main only T-byron)`);
+        assert(await until(() => notices().length > n0) && notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY, `(c) the members hear the soft words, once (${show(notices().slice(n0))}; on main the critical ones)`);
+        assert(onlyAt(BYRON) && (await info()).addresses?.includes(OLD), `(c) every surface says the new name, the old one still listed (${show(surfaces())})`);
+        assert((await signedFor(OLD)).status === 200 && (await signedFor(BYRON)).status === 200, '(c) a signature for either passes');
     }
     await resetTunnelConnectorForTests();
 

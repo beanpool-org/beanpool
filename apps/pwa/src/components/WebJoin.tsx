@@ -16,6 +16,10 @@
  * provider is visited. A sign-in carries work only when the node asks for it, solved on the way back from the provider.
  * A refused piece of work is replaced and the join sent again once, unseen; said only the second time. A node without
  * the 12-words door sees exactly today's screens.
+ *
+ * On a busy day the node may ask a 12-words join for a person check (lib/web-join.ts): Join leaves for the check's own
+ * page, and the answer carries the join on by itself. A check that doesn't load or doesn't pass is said at the two ways
+ * in, and the sign-ins never need one.
  */
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -62,6 +66,7 @@ import {
     matchAuthReturn,
     offeredProviders,
     probeMembership,
+    doorCheckUrl,
     providerAuthUrl,
     providerLabel,
     refusalMessage,
@@ -73,6 +78,7 @@ import {
     NAME_CHECK_DEBOUNCE_MS,
     type AuthReturn,
     type CallsignCheck,
+    type DoorCheck,
     type DoorOutcome,
     type JoinNonce,
     type SignInProof,
@@ -220,6 +226,10 @@ export const JOIN_WORDS = {
     tooOld: word('This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.'),
     /** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
     sharedNetwork: word('Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.'),
+    /** The person check came back without passing, or never came back: the sign-ins beside this sentence need none. */
+    checkDidNotPass: word("The quick check didn't work in this browser. Try again, or sign in to join now."),
+    /** Under the 12-words button on a busy day, before anyone leaves the page for it. */
+    checkFirst: word('Lots of people are joining right now, so this way starts with a quick check from Cloudflare. Or sign in to join now.'),
 } as const;
 
 export const UNREACHABLE = JOIN_WORDS.unreachable;
@@ -331,6 +341,13 @@ export function WordsWorkLine({ work }: { work: WordsWorkState }) {
             </p>
         );
     }
+    if (work.status === 'check') {
+        return (
+            <p role="status" data-testid="join-check-first" style={{ color: 'var(--text-primary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.5rem', marginBottom: 0 }}>
+                {t(JOIN_WORDS.checkFirst)}
+            </p>
+        );
+    }
     if (work.status === 'busy' || work.status === 'closed' || work.status === 'failed') {
         return (
             <p role="alert" data-testid="join-words-problem" style={{ color: 'var(--text-primary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.5rem', marginBottom: 0 }}>
@@ -401,11 +418,14 @@ export function WebJoin({
     const waitingForWork = useRef<AbortController | null>(null);
     // The node has asked this page's sign-in joins for work: every one from now on brings it (a busy network stays busy).
     const signInWorkWanted = useRef(false);
+    // Back from the person check with a token: the next 12-words work carries it (lib/words-work.ts passCheck).
+    const checkToken = useRef<string | null>(null);
     // The names the node has answered for, so going back and forth over one name asks once.
     const nameChecks = useRef(new Map<string, CallsignCheck>());
     // Declared before use through refs: a refused piece of work sends the join again through the same path a tap takes.
     const joinByWordsRef = useRef<(p: PendingJoin, auto?: boolean) => Promise<void>>(async () => {});
     const submitRef = useRef<(p: PendingJoin, proof: SignInProof, auto?: boolean) => Promise<void>>(async () => {});
+    const leaveForCheckRef = useRef<(p: PendingJoin, check: DoorCheck) => Promise<void>>(async () => {});
 
     const go = navigate ?? ((url: string) => window.location.assign(url));
     const here = origin ?? window.location.origin;
@@ -532,6 +552,8 @@ export function WebJoin({
                 setScreen({ name: 'already_joined', message: outcome.message, provider: proof.provider });
                 return;
             }
+            case 'check':
+                return leaveForCheckRef.current(p, outcome.check);
             case 'work': {
                 // The work was refused (it ran out, the node restarted, it was spent): new work, and the same join once
                 // more, unseen (design §3.3). Nothing was spent on the node: it checks the work before the sign-in.
@@ -629,7 +651,8 @@ export function WebJoin({
             if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] could not ask for work:', e);
             return { kind: 'work', work: null };
         }
-        if (asked.kind === 'none') return { kind: 'work', work: null };
+        // The person check is the 12-words door's: a sign-in never needs one.
+        if (asked.kind === 'none' || asked.kind === 'check') return { kind: 'work', work: null };
         if (asked.kind === 'refused') {
             const outcome = doorOutcome(asked.answer, proof.provider);
             return outcome.kind === 'rate_limited' ? { kind: 'refused', outcome } : { kind: 'work', work: null };
@@ -895,6 +918,17 @@ export function WebJoin({
     // ---------- the 12-words door ----------
 
     /**
+     * The node asked this key for the person check: off to its page, as a sign-in leaves for a provider. Kept first, so
+     * the page finds this join when it comes back, or says so when it comes back without an answer (the first effect below).
+     */
+    const leaveForCheck = useCallback(async (p: PendingJoin, check: DoorCheck) => {
+        const next = await keep({ ...p, nonce: null, checkHop: true });
+        go(doorCheckUrl(check, p.identity.publicKey, here, document.documentElement.classList.contains('dark') ? 'dark' : 'light'));
+        toProviders(next, null);
+    }, [keep, toProviders, go, here]);
+    leaveForCheckRef.current = leaveForCheck;
+
+    /**
      * Join with 12 words alone (two-doors design §2.1): the pending key, its name and the door work, in one signed
      * request. Sent like a sign-in join (marked sent first, every answer but a yes asked about), with no provider.
      * `auto`: sent again by itself after the node refused the work.
@@ -912,6 +946,9 @@ export function WebJoin({
                 k = new WordsWork(p.identity, { solver: solverRef.current, onChange: (s) => { if (mounted.current) setWork(s); } });
                 keeper.current = k;
             }
+            const sentToken = !!checkToken.current;
+            if (checkToken.current) k.passCheck(checkToken.current);
+            checkToken.current = null;
             // Ready by now at ordinary levels; otherwise the joining screen waits for it, saying so, with the way back to
             // the two doors beside it (design §3.5: always the faster door beside it).
             waitingForWork.current?.abort();
@@ -923,6 +960,14 @@ export function WebJoin({
             // Stopped waiting: the member chose another way, and nothing goes until they choose again.
             if (!mounted.current || !got) return;
             if (!got.ok) {
+                if (got.state.status === 'check') {
+                    // Asked again straight after a token: the node couldn't judge it. Said, not hopped, so this can't go
+                    // round in a circle with the member never told. Join is still there for another go.
+                    if (sentToken) return toProviders(p, { tone: 'error', text: () => t(JOIN_WORDS.checkDidNotPass) });
+                    return await leaveForCheck(p, got.state.check);
+                }
+                // The node didn't take the check's token: said at the top, because the door's next ask will say something else.
+                if (sentToken && got.state.status === 'failed') return toProviders(p, { tone: 'error', text: got.state.message });
                 // Busy or failed: said under the 12-words button (WordsWorkLine), beside the sign-ins. Shut here: the
                 // 12-words choice goes, so it is said at the top.
                 if (got.state.status !== 'closed') return toProviders(p, null);
@@ -972,7 +1017,7 @@ export function WebJoin({
         } finally {
             if (mounted.current) setBusy(false);
         }
-    }, [finish, settleAnswer, toProviders, showTaken, failed, settleSent]);
+    }, [finish, settleAnswer, toProviders, showTaken, failed, settleSent, leaveForCheck]);
     joinByWordsRef.current = joinByWords;
 
     /**
@@ -1060,6 +1105,16 @@ export function WebJoin({
                     setScreen({ name: 'lobby' });
                     return;
                 }
+                if (ret.check) {
+                    // Back from the person check: with its token the join carries on by itself; the node judges the token.
+                    const back = await keep({ ...p, checkHop: false });
+                    setName(back.identity.callsign);
+                    if (ret.check.token) {
+                        checkToken.current = ret.check.token;
+                        return joinByWords(back);
+                    }
+                    return toProviders(back, ret.check.error === 'closed' ? null : { tone: 'error', text: () => t(JOIN_WORDS.checkDidNotPass) });
+                }
                 const outcome = matchAuthReturn(ret, p);
                 if (outcome.kind === 'token') {
                     const proof: SignInProof = { provider: outcome.provider, idToken: outcome.idToken, nonce: outcome.nonce, sub: outcome.sub };
@@ -1084,6 +1139,11 @@ export function WebJoin({
                 // A key restored just now wins over an older join left pending here that never went out.
                 p = await savePendingJoin(restoredPending(restored));
                 if (cancelled) return;
+            }
+            if (p?.checkHop) {
+                // Left for the person check and back with no answer: its page didn't load (the browser's Back, a reload).
+                const back = await keep({ ...p, checkHop: false });
+                return resume(back, { tone: 'error', text: () => t(JOIN_WORDS.checkDidNotPass) });
             }
             if (p) {
                 // A reload, a closed tab, or a key restored here: carry on with the same key and name.

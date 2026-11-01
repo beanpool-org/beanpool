@@ -7,7 +7,7 @@
  * sentence beside the sign-in, which is always the other way in (WebJoin draws both).
  */
 
-import { requestDoorWork, wordsWorkRefusal, DoorUnreachableError } from './web-join';
+import { requestDoorWork, wordsWorkRefusal, DoorUnreachableError, type DoorCheck } from './web-join';
 import { solveInWorker, WORK_CANT_RUN, type DoorWorkProgress, type DoorWorkRun, type DoorWorkSolution, type DoorWorkSolver } from './door-work';
 import type { BeanPoolIdentity } from './identity';
 
@@ -24,12 +24,14 @@ export type WordsWorkState =
     | { status: 'busy'; message: string }
     /** The node takes no 12-words joins now: the sign-in is the way in. */
     | { status: 'closed'; message: string }
+    /** The door is busy, and no work was handed out: the person check comes first (WebJoin leaves for it at Join). */
+    | { status: 'check'; check: DoorCheck }
     /** No answer, or this browser couldn't do the work: tapping again tries again. */
     | { status: 'failed'; message: string };
 
 export type WordsWorkTake =
     | { ok: true; work: DoorWorkSolution }
-    | { ok: false; state: Extract<WordsWorkState, { status: 'busy' | 'closed' | 'failed' }> };
+    | { ok: false; state: Extract<WordsWorkState, { status: 'busy' | 'closed' | 'failed' | 'check' }> };
 
 /** A solution with less than this left is not sent: the join has to reach the node before the challenge runs out. */
 export const SEND_MARGIN_MS = 60_000;
@@ -69,6 +71,8 @@ export class WordsWork {
     private timer: ReturnType<typeof setTimeout> | null = null;
     private renewals = 0;
     private disposed = false;
+    /** The person check's token, for the next ask only: the node takes it once. */
+    private token: string | null = null;
 
     constructor(readonly identity: BeanPoolIdentity, private readonly o: Options = {}) {}
 
@@ -105,7 +109,7 @@ export class WordsWork {
         return { ok: false, state: { status: 'failed', message: WORK_CANT_RUN } };
     }
 
-    private end(state: Extract<WordsWorkState, { status: 'busy' | 'closed' | 'failed' }>): WordsWorkTake {
+    private end(state: Extract<WordsWorkTake, { ok: false }>['state']): WordsWorkTake {
         this.set(state);
         return { ok: false, state };
     }
@@ -114,14 +118,17 @@ export class WordsWork {
         this.ready = null;
         this.clearTimer();
         this.set({ status: 'asking' });
+        const token = this.token ?? undefined;
+        this.token = null;
         let answer;
         try {
-            answer = await (this.o.request ?? requestDoorWork)(this.identity, 'words', () => this.now());
+            answer = await (this.o.request ?? requestDoorWork)(this.identity, 'words', () => this.now(), token);
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) console.error('[WordsWork] could not ask for work:', e);
             return this.end({ status: 'failed', message: e instanceof DoorUnreachableError ? UNREACHABLE_WORK : WORK_CANT_RUN });
         }
         if (this.disposed) return this.stopped();
+        if (answer.kind === 'check') return this.end({ status: 'check', check: answer.check });
         if (answer.kind === 'refused') {
             const r = wordsWorkRefusal(answer.answer);
             return this.end({ status: r.kind, message: r.message });
@@ -158,6 +165,12 @@ export class WordsWork {
             }, renewIn);
         }
         return { ok: true, work: { challenge: ready.challenge, counters: ready.counters } };
+    }
+
+    /** Back from the person check: the next ask carries its token, and any work in hand is dropped for what that brings. */
+    passCheck(token: string): void {
+        this.token = token;
+        this.ready = null;
     }
 
     /** Hand over `ready`: the node spends a challenge once, so the next join asks for new work. */

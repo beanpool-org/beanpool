@@ -73,6 +73,7 @@ vi.mock('expo-router', async () => {
             back: () => { nav.backs++; }, canGoBack: () => nav.canGoBack, setParams: (p: Record<string, string | undefined>) => { nav.setTop?.(p); },
         },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
+        useNavigation: () => ({ getState: () => ({ routes: [], index: 0 }) }),
         useLocalSearchParams: () => {
             const [p, set] = state<Record<string, string | undefined>>(() => ({ ...nav.params }));
             nav.setTop = (next) => set((was) => ({ ...was, ...next }));

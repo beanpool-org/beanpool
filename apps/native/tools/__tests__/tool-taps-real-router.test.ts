@@ -59,6 +59,7 @@ vi.mock('expo-router', async () => {
         },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useLocalSearchParams: () => useContext(RouteCtx)?.params ?? {},
+        useNavigation: () => ({ getState: () => nav.real.snapshot() }),
     };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
@@ -240,6 +241,19 @@ describe('Your garden on the phone: each tap opens what it says (Damo, 1 Nov)', 
         expect(onTop('garden-zone')).toBeNull();
         expect(onTop('garden-no-zone')).not.toBeNull();
         expect(nav.real.routes().map((r: RealRoute) => r.name)).toEqual(['tools', 'tool/[id]']);
+    });
+
+    it('Remove my data with a Home between it and the tool (Add to Home leaves the tool under it): that screen becomes the first', async () => {
+        await chooseClimate();
+        await go(() => nav.real.router.navigate('/tools'));
+        await go(() => openTool('garden', 'zone'));
+        const before = nav.real.routes().map((r: RealRoute) => r.name);
+        expect(before).toEqual(['tools', 'tool/[id]', 'tools', 'tool/[id]']);
+        await tap('tool-menu');
+        await tap('tool-menu-remove');
+        await settle();
+        expect(onTop('garden-no-zone')).not.toBeNull();
+        expect(nav.real.routes().map((r: RealRoute) => r.name)).toEqual(before);
     });
 
     it('Remove my data on a screen a link opened straight: that screen becomes the first, whichever name the link used', async () => {

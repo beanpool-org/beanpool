@@ -11,7 +11,8 @@
  *
  * Each `navigate` pushes another of these routes, so a tool can have several screens open at once (a record over its
  * list): they share its document and its settings ({@link openScreens}), and none of them writes back what another
- * changed. The host is keyed by the screen, so "Remove my data" on a later screen goes back to the first in place.
+ * changed. "Remove my data" on a later screen takes the tool's own screens under it off the stack, or, with none directly
+ * under it, makes that screen the first in place (the host is keyed by the screen).
  *
  * For a tool that asks for `node-copy` (slice T0.4, tools/node-copy.ts): its first screen's open reconciles the phone's
  * copy with the server's, a write is followed five seconds later by one sync, the toggle is a round trip the setting
@@ -19,7 +20,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { t, toolLineText, type AnyToolScreenProps, type ToolCopyOutcome, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
@@ -85,6 +86,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     Screen: React.ComponentType<AnyToolScreenProps>;
     params: Record<string, string>;
 }) {
+    const navigation = useNavigation();
     const { colors } = useTheme();
     const { identity } = useIdentity();
     const nodeProfile = useNodeProfile();
@@ -303,10 +305,13 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                         setSettingsOpen(false);
                         tellOpenScreens(shareKey, hear, { doc: empty, stored: false, settings: left, copyNote: null });
                         // On a later screen (a record), back to the first, where the doors are: what it showed has gone.
-                        // The tool's own screens come off the stack, so no second copy of the first is left to back through;
-                        // opened straight at this one (a link, a reminder), there are none under it and it becomes the first.
+                        // The tool's own screens directly under this one come off the stack, so no second copy of the first is
+                        // left to back through; opened straight at this one (a link, a reminder, over a Home that Add to Home
+                        // laid on the tool), there are none under it and it becomes the first.
                         if (screenName !== manifest.screens[0]) {
-                            const over = (openScreens.get(shareKey)?.size ?? 1) - 1;
+                            const { routes, index } = navigation.getState() as unknown as { routes: Array<{ name: string; params?: { id?: string } }>; index: number };
+                            let over = 0;
+                            while (index - over > 0 && routes[index - over - 1].name === 'tool/[id]' && routes[index - over - 1].params?.id === manifest.id) over++;
                             if (over > 0) router.dismiss(over);
                             else router.setParams({ [TOOL_SCREEN_PARAM]: manifest.screens[0], screen: undefined, ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
                         }
@@ -314,7 +319,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 },
             },
         ]);
-    }, [owner, manifest, shareKey, hear, screenName, params, url, copy]);
+    }, [owner, manifest, shareKey, hear, screenName, params, url, copy, navigation]);
 
     const about = useCallback(() => {
         Alert.alert(t(manifest.name), t(manifest.line));

@@ -140,8 +140,9 @@ rides_alone() {
   files=$(git diff --name-only "$mb" "$1" | grep -E "$MONEY_PATHS" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && { echo "touches ledger or money paths (${files% })"; return; }
   # -G takes an extended regex: a bare | (\| would be a literal bar, and match nothing). -i: SQL is written in any case,
-  # and other columns may come before balance. A new raw write in a shape MONEY_LINE does not name still has to raise
-  # scripts/check-balance-writes.mjs's baseline, which is a money path above.
+  # and other columns may come before balance. A new UPDATE or upsert in a shape MONEY_LINE does not name still has to
+  # raise scripts/check-balance-writes.mjs's baseline, which is a money path above. That script does not count a plain
+  # INSERT: one that sets a real balance is seen by neither rule, and needs tier-A.
   files=$(git diff --name-only -i -G "$MONEY_LINE" "$mb" "$1" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && echo "changes a line that moves Beans: conservingTransaction or accounts SET balance (${files% })"
 }

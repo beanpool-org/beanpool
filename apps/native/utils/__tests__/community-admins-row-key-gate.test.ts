@@ -74,7 +74,7 @@ vi.mock('../vault-config', async (importOriginal) => ({
 vi.mock('../community-recovery', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../community-recovery')>()),
     sharedCopySide: async () => net.side,
-    turnOnSharedCopy: async () => { net.sharedTurnOns++; return { since: '2026-11-01T00:00:00.000Z' }; },
+    turnOnSharedCopy: async () => { net.sharedTurnOns++; if (net.turnOnThrows) throw new Error(net.turnOnThrows); return { since: '2026-11-01T00:00:00.000Z' }; },
 }));
 // In a build with a vault its delete is answered here. In one without, the real one runs, and says what it really says.
 vi.mock('../vault', async (importOriginal) => {
@@ -104,6 +104,7 @@ const net = vi.hoisted(() => ({
     side: 'none' as string,
     /** How it stands when it is asked after deleting its half. */
     sideOnceDeleted: 'none',
+    turnOnThrows: '',
     /** What the vault's delete throws instead of deleting. */
     vaultFails: null as Error | null,
     /** What the community's delete does instead of deleting. */
@@ -153,6 +154,7 @@ beforeEach(() => {
     net.sharedTurnOns = 0;
     net.side = 'none';
     net.sideOnceDeleted = 'none';
+    net.turnOnThrows = '';
     net.vaultFails = null;
     net.deleteFails = null;
     net.asked.length = 0;
@@ -384,6 +386,19 @@ describe('Remove on a shared copy, on the real removeSharedCopy (#2683 deciding 
             expect(net.sharedTurnOns).toBeGreaterThan(0);
             expect(on()).toBeTruthy();
             expect(notFinished()).toBeNull();
+        });
+
+        it('a Turn on after that which fails at its last check, with the vault quiet: the old answer holds nothing back there either', async () => {
+            await pair();
+            net.sideOnceDeleted = 'unknown';
+            net.deleteFails = STOPS[1][1];
+            await remove();
+            net.deleteFails = null as never;
+            net.turnOnThrows = 'Your community did not keep it.';
+            await act(async () => { (host!.querySelector('[data-testid="community-admins-turn-on"]') as HTMLElement).click(); });
+            await settle();
+            expect(host!.textContent).toContain('Your community did not keep it.');
+            expect(on(), 'both may hold the pair, and a vault that can\'t be asked never turns an On off').toBeTruthy();
         });
 
         it('Ways back finishes the Remove: the sentence that says to tap Remove here goes with it', async () => {

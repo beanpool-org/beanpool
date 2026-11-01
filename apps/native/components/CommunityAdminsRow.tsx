@@ -228,7 +228,10 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
             setJustOn(true);
         } catch (e) {
             // One side may have it already: remembered, so the row says "Not finished" from now on, not nothing.
-            if (sharedBegun) await AsyncStorage.setItem(turnedOnKey(url), '1').catch(() => {});
+            if (sharedBegun) {
+                setSide(null);
+                await AsyncStorage.setItem(turnedOnKey(url), '1').catch(() => {});
+            }
             setError(keyLineWords(e instanceof Error ? e.message : String(e)));
         } finally {
             await read();

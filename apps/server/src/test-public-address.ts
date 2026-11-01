@@ -540,8 +540,10 @@ async function run() {
         updateNodeConfig({ publicAddress: null, registrarNames: [{ address: 'old-name.beanpool.org', role: 'former', status: 'live', firstSeenAt: 1, lastSeenAt: 1, releasedByUsAt: 1 }] } as any);
         registrarStatus = 'live';
         registrarName = 'old-name';
+        process.env.CF_RECORD_NAME = 'fleet-name.beanpool.org';
         const leftRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
         const leftBody = await leftRes.json().catch(() => ({}));
+        delete process.env.CF_RECORD_NAME;
         assert(leftRes.status === 200 && leftBody.status === 'none' && !(getNodeConfig() as any).publicAddress,
             `nothing stored and an answer about another name reads offline, and stores nothing (${leftRes.status} ${JSON.stringify(leftBody.status)})`);
 

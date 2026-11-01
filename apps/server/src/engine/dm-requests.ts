@@ -101,9 +101,11 @@
  *
  * ## No alert
  *
- * A request alerts nobody and counts in no badge until it is accepted (Marty, 1 Nov 2026): it waits behind the one "Message
- * requests" row at the top of Chat. Its line does a push's work all the same and drops it, as a withheld line does, so the
- * work after the answer never tells a sender what became of it (#1403 re-review).
+ * A request alerts nobody and counts in no badge until it is accepted (Marty, 1 Nov 2026, chat design S1.1; it replaced his
+ * answer of 23 Oct, one push an hour, once the push token began going to every community a phone keeps, where a stranger's
+ * line would have reached phones set elsewhere). It waits behind the one "Message requests" row at the top of Chat. Its line
+ * does the push's work all the same and drops it, as a withheld one does, so the work after the answer never tells a sender
+ * which happened (#1403 re-review). Once it is accepted, a line pushes as any line.
  *
  * ## Where it is kept
  *
@@ -585,8 +587,8 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     if (openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
     // One the person ignored whose line its opener withdrew since (Cancel request, decideRequest), with nothing of theirs
     // kept during a block either, stays ignored for the rest of its 30 days: the line moves only the request's time, as one
-    // kept during a block does, so the opener's answers stay a waiting request's, and its push is done and dropped, as a
-    // folded one's is (PR #2540 review 4393642102). Cancelling and writing again never undoes an Ignore; the person reaching
+    // kept during a block does, so the opener's answers stay a waiting request's, and its push is done and dropped, as any
+    // request's is (PR #2540 review 4393642102). Cancelling and writing again never undoes an Ignore; the person reaching
     // out since does (answered above). One ignored before a block lifted since has the line kept during it, and is a new
     // request with this one, as above. One the person reached out in since, and cancelled, is no Ignore of theirs (above).
     if (row.state === 'ignored' && keptLinesSince(row) === 0 && !theirs) {

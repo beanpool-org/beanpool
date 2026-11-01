@@ -6,7 +6,7 @@
  *   2. a second cancel → refused (409 request_not_pending)
  *   3. the recipient can't cancel (403 not_request_opener)
  *   4. another member can't cancel (404 request_not_found)
- *   5. cancel then a new first line within the hour → a request again, and no push: a request alerts nobody until accepted
+ *   5. cancel then a new first line → a request again, and no push for it, nor for the first (count the pushes)
  *   6. an ignored request stays ignored through a cancel and a new line: no Requests entry, no push
  *   7. the cancel withdraws only the opener's lines: the recipient's own line (kept for them) stays
  *   8. a withdrawn line leaves a `messages` tombstone, and its photo row, stored object and overlays go with it
@@ -165,7 +165,7 @@ assert(send1.status === 200, `Alice sends first message: ${send1.status}`);
 const bobList1 = await call('GET', bob, `/api/messages/conversations/${bob.pk}`);
 const bobReqs1 = bobList1.body.requests?.conversations || [];
 assert(bobReqs1.length === 1 && bobReqs1[0].id === convId, `Bob has 1 request from Alice: ${bobReqs1.length}`);
-assert(pushesTo(bob).length === 0, `Bob is pushed nothing: a request alerts nobody until it is accepted (${pushesTo(bob).length})`);
+assert(pushesTo(bob).length === 0, `A request alerts nobody until it is accepted, so Bob received no push: ${pushesTo(bob).length}`);
 
 // Check messages in conversation: 1 message exists
 const msgsBefore = await call('GET', alice, `/api/messages/${convId}`);
@@ -204,7 +204,7 @@ const secondCancel = await call('POST', alice, '/api/messages/request', { conver
 assert(secondCancel.status === 409 && secondCancel.body.code === 'request_not_pending',
     `Second cancel refused (409 request_not_pending): ${secondCancel.status} ${secondCancel.body.code}`);
 
-// ── 6. Alice sends a new first line within the hour ──────────────────────────────────────────────
+// ── 6. Alice sends a new first line ──────────────────────────────────────────────────────────────
 // Count pushes before sending
 const bobPushesBefore = pushesTo(bob).length;
 const send2 = await call('POST', alice, '/api/messages/send', { conversationId: convId, authorPubkey: alice.pk, ...lockedDm() });
@@ -215,7 +215,7 @@ const bobList3 = await call('GET', bob, `/api/messages/conversations/${bob.pk}`)
 const bobReqs3 = bobList3.body.requests?.conversations || [];
 assert(bobReqs3.length === 1 && bobReqs3[0].id === convId, `Bob has 1 request again: ${bobReqs3.length}`);
 
-// No push for it either
+// No push for this one either
 const bobPushesAfter = pushesTo(bob).length;
 assert(bobPushesAfter === bobPushesBefore, `No push for the new request (was ${bobPushesBefore}, now ${bobPushesAfter})`);
 
@@ -372,7 +372,7 @@ assert(!inChats(natList, noConv) && inRequests(natList, noConv) && natList?.tota
     `it is under Nat's Requests, not in his chats or his unread count (chats ${inChats(natList, noConv)}, requests ${inRequests(natList, noConv)}, unread ${natList?.totalUnread})`);
 assert(noticesTo(nat).length === natNotices
     && !natSock.events.slice(natHeard).some(e => e.type === 'dm_request_updated' && e.request?.state === 'accepted'),
-    `Nat is pushed nothing, and hears no acceptance (${noticesTo(nat).length - natNotices} pushes)`);
+    `Nat gets no alert for a request, and hears no acceptance (${noticesTo(nat).length - natNotices} pushes)`);
 const ol2 = await sendIn(noConv, ola);
 const olaReads = await call('GET', ola, `/api/messages/${noConv}`);
 assert(ol2.status === 403 && ol2.body.code === 'dm_request_pending' && olaReads.body.conversation?.request?.from === ola.pk

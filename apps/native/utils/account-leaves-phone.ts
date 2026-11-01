@@ -2,8 +2,8 @@
  * What goes with an account when it leaves this phone, beyond its key and its app storage (identity.ts
  * `wipeIdentityScopedStorage`): its push alerts, and the communities it saved with their cached copies.
  *
- * - Push alerts. The phone registered its push token for the account with the community it was set to, and recorded
- *   each one (push-registrations.ts). The node sends that token the account's chat, escrow and recovery alerts, whose
+ * - Push alerts. The phone registered its push token for the account with every community it keeps, and recorded each
+ *   one (push-registrations.ts). The node sends that token the account's chat, escrow and recovery alerts, whose
  *   text can carry names and message previews. Left registered, the phone goes on getting them after Sign Out and after
  *   "Replace this phone's account". So each community on the record is asked to drop the token, signed by the account's
  *   own key while the phone still holds it, and no other: a community this phone never sent the token to is never sent
@@ -15,6 +15,8 @@
  *   starts or comes back, until it is confirmed. The node never drops a key's row because another key registered the
  *   same token: any community that holds the token could then silence a member's recovery alerts (server
  *   state-engine.ts `registerPushToken`, #1184 review 4110460184).
+ *   One community going while the key stays (Forget Community, Wipe Connection, alerts off) sends that community alone
+ *   the same DELETE and a statement that survives the key being on the phone: {@link unregisterPushTokenAt}.
  * - BeanPool's key vault, in a build that has one: the push token this phone gave it for the account comes out of the
  *   account's copies there, so its recovery notices stop too (utils/vault.ts `withdrawVaultPushToken`), within the
  *   same time and never holding up the leave.
@@ -40,8 +42,13 @@ import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
 import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfirmed, type NamesPinStore } from './names-list';
-import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
-import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities, stopRegistering } from './push-registrations';
+import { confirmLeave, leaveStatementsSettled, leaveWrittenDown, recordLeave } from './push-leave';
+import { markAlertsOff, markAlertsOn } from './push-alerts-off';
+import { sameCommunity } from './push-pins';
+import {
+    communitiesForAlerts, communityAddress, dropFromRecord, forgetPushRegistrations, leaveNoLongerOwed, leavesOwed, oweLeave,
+    pushRegisteredCommunities, resumeRegisteringAt, stopRegistering, stopRegisteringAt,
+} from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 import { withdrawVaultPushToken } from './vault';
 
@@ -191,6 +198,120 @@ export async function stopPushAlertsAt(
     }
     if (!token) return true;
     return unregisterAt(base, JSON.stringify({ publicKey: account.publicKey, token }), account, timeoutMs);
+}
+
+/**
+ * One community lets this phone's push token go while `account` stays on the phone: that community alone, and never
+ * {@link stopRegistering}, which would stop the key's registrations everywhere (design R2). No registration goes out
+ * there from now until {@link resumeRegisteringAt}, and one on its way is waited for; a statement that survives the key
+ * being on the phone is written down (push-leave.ts, `keyStays`); the signed DELETE goes with its stamp, and the statement
+ * is crossed off if the community took it, or else presented until it does. The community then comes off the record: the
+ * statement speaks for it, and a later Sign Out need not ask again. It stays on the record only when nothing will speak
+ * for it, the DELETE having failed with no statement written down: each later return tries again
+ * ({@link retryLeavesOwed}), and a later Sign Out asks it. The phone's token stays: every other community still holds it.
+ * Nothing is sent to a community that isn't on the record: the DELETE carries the token, and a community this phone never
+ * sent it to is never sent it (#1184 review 4110460184; one only looked at as a guest, say). Nor when the phone never got
+ * a token. True once the community is dealt with. Never throws; the DELETE gives up at `timeoutMs`, and one registration
+ * already on its way first finishes within its own timeout.
+ */
+export async function unregisterPushTokenAt(
+    account: LeavingAccount, community: string, timeoutMs: number = UNREGISTER_TIMEOUT_MS,
+): Promise<boolean> {
+    const asked = communityAddress(community);
+    if (!asked || !account.publicKey || !account.privateKey) return false;
+    await stopRegisteringAt(account.publicKey, asked);
+    // After the wait: a registration on its way recorded its community before it went out. By community, not by
+    // spelling: the row at the community is under the address on the record, however this one was typed.
+    const base = (await pushRegisteredCommunities()).find((c) => sameCommunity(c, asked));
+    if (!base) return true;
+    let token: string | null = null;
+    try {
+        token = await SecureStore.getItemAsync(PUSH_TOKEN_STORE_KEY);
+    } catch (e) {
+        console.warn(`[Push] Could not read this phone's push token to unregister it at ${base}`, e);
+        await oweLeave(base);
+        return false;
+    }
+    if (!token) {
+        await dropFromRecord([base]);
+        return true;
+    }
+    const [statement] = await recordLeave(account, token, [base], AsyncStorage, true);
+    const body = JSON.stringify({ publicKey: account.publicKey, token, ...(statement ? { leftAt: statement.leftAt } : {}) });
+    const took = await unregisterAt(base, body, account, timeoutMs);
+    if (took && statement) await confirmLeave(statement);
+    if (!took && !(statement && await leaveWrittenDown(statement))) {
+        await oweLeave(base);
+        return false;
+    }
+    await dropFromRecord([base]);
+    return true;
+}
+
+/**
+ * The app comes back (push-registrations.ts `registerWhereMissing`): each community {@link unregisterPushTokenAt} could
+ * not reach is tried again with `account`, the one on the phone, unless it is wanted again by now (the member rejoined it,
+ * or turned its alerts back on). That one owes nothing, and stays on the record, where its registration still is.
+ * Never throws.
+ */
+export async function retryLeavesOwed(account: LeavingAccount): Promise<void> {
+    try {
+        const wanted = await communitiesForAlerts(AsyncStorage);
+        await Promise.all((await leavesOwed()).map(async (base) => {
+            if (wanted.includes(base)) {
+                await leaveNoLongerOwed(base);
+                return;
+            }
+            try {
+                if (await unregisterPushTokenAt(account, base)) await leaveNoLongerOwed(base);
+            } finally {
+                resumeRegisteringAt(account.publicKey, base);
+            }
+        }));
+    } catch (e) {
+        console.warn('[Push] Could not try the communities still owed a leave again', e);
+    }
+}
+
+/**
+ * The member lets `community` go from this phone (Forget Community, Wipe Connection, the sheet's Remove, the deep link's
+ * Wipe & Join Fresh): it is told to drop this phone's token first ({@link unregisterPushTokenAt}), then
+ * `removeFromPhone` takes its row and its copy, as ever, and its alerts choice goes, so a rejoin starts from the default.
+ * No registration goes out there until that is done, however long the removal takes: the phone may stay set to it until
+ * the removal moves it on. A phone with no account just removes. Throws what `removeFromPhone` throws.
+ */
+export async function forgetCommunityPush(
+    account: LeavingAccount | null | undefined, community: string, removeFromPhone: () => Promise<void>,
+): Promise<void> {
+    const base = communityAddress(community);
+    if (!account?.publicKey || !account.privateKey || !base) {
+        await removeFromPhone();
+        return;
+    }
+    try {
+        await unregisterPushTokenAt(account, base);
+        await removeFromPhone();
+        await markAlertsOn(base).catch((e) => console.warn(`[Push] Could not clear the alerts choice for ${base}`, e));
+    } finally {
+        resumeRegisteringAt(account.publicKey, base);
+    }
+}
+
+/**
+ * The per-community switch turned off (design R8; the sheet's switch is its own slice): `community` goes on the alerts-off
+ * list, then it is told to drop this phone's token ({@link unregisterPushTokenAt}). Throws, with nothing sent, when the
+ * list can't be written. Turning it on again is `markAlertsOn`, then a registration where it is missing
+ * (services/push-notifications.ts `turnAlertsOnAt`).
+ */
+export async function turnAlertsOffAt(account: LeavingAccount, community: string): Promise<void> {
+    const base = communityAddress(community);
+    if (!base) return;
+    await markAlertsOff(base);
+    try {
+        await unregisterPushTokenAt(account, base);
+    } finally {
+        resumeRegisteringAt(account.publicKey, base);
+    }
 }
 
 /**

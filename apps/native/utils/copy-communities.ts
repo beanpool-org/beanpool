@@ -75,7 +75,10 @@ export async function communitiesForCopy(chosen: boolean | undefined): Promise<C
  * so the member finds their communities on the new phone. Only plain community addresses (node-url.ts); a community
  * already saved keeps the name this phone gave it. Never throws, and never fails the restore. Returns how many it added.
  */
-export async function saveCommunitiesFromCopy(list: readonly CopyCommunity[] | null | undefined): Promise<number> {
+export async function saveCommunitiesFromCopy(
+    list: readonly CopyCommunity[] | null | undefined,
+    registerPush: () => Promise<unknown> = async () => (await import('../services/push-notifications')).retryPushRegistrations(),
+): Promise<number> {
     if (!list?.length) return 0;
     let added = 0;
     try {
@@ -95,5 +98,8 @@ export async function saveCommunitiesFromCopy(list: readonly CopyCommunity[] | n
     } catch (e) {
         console.log(`[RESTORE] the copy's list of communities could not be saved: ${(e as Error).message}`);
     }
+    // The member's communities are back: so are their alerts (utils/push-registrations.ts). Without an account on the
+    // phone yet this does nothing, and the account's own registration covers them as it arrives.
+    if (added > 0) void registerPush().catch(() => {});
     return added;
 }

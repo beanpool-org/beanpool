@@ -10,6 +10,7 @@ import { getLastSyncTime } from '../services/pillar-sync';
 import { communityName, realName } from './community-name';
 import { fetchMembership } from './membership-probe';
 import { communitySwitched } from './community-switch';
+import { sameCommunity } from './push-pins';
 
 // The communities this phone knows, for the BeanPool sheet: which one is in use, whether each answers and
 // whether the member belongs to it, and switching between them. It used to live in the header's own modal;
@@ -139,12 +140,19 @@ export function useCommunities() {
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Remove'), style: 'destructive', onPress: async () => {
-                    await removeSavedNode(row.url).catch(() => {});
-                    setRows(prev => prev.filter(r => r.url !== row.url));
+                    const takeOffList = async () => {
+                        await removeSavedNode(row.url).catch(() => {});
+                        setRows(prev => prev.filter(r => r.url !== row.url));
+                    };
+                    // The row of the community in use comes off the list, but the phone stays set to it and it comes
+                    // back with the next read (nodes.ts getSavedNodes): its alerts stay.
+                    if (sameCommunity(row.url, active)) return takeOffList();
+                    const { forgetCommunityPush } = await import('./account-leaves-phone');
+                    await forgetCommunityPush(identity, row.url, takeOffList);
                 },
             },
         ]);
-    }, []);
+    }, [identity, active]);
 
     const current = rows.find(r => r.url === active) ?? null;
     return { active, current, rows, lastSync, switching, switchTo, remove };

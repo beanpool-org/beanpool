@@ -201,15 +201,15 @@ async function main(): Promise<void> {
     const annList0 = await listOf(ann);
     assert(d1.status === 200 && !!annList0?.conversations?.some((c: any) => c.id === deeConv) && annList0.totalUnread === 1,
         `Dee's line reaches Ann: in her list, one unread (${show(d1)}; unread ${annList0?.totalUnread})`);
-    // On the global profile Dee's first line is a message request, which alerts nobody (Marty, 1 Nov 2026) until Ann's line
-    // accepts it: then his next line is the push the stub hears.
+    // On the global profile Dee's first line is a message request, which alerts nobody until it is accepted
+    // (engine/dm-requests.ts); Ann's own line accepts it, and that one pushes Dee on either profile.
+    const annsPush = process.env.BLOCKS_GLOBAL_NODE ? 0 : 1;
+    assert(pushesTo(ann).length === annsPush && pushesTo(dee).length === 1,
+        `and the pushes the stub hears from the dispatcher (Ann ${pushesTo(ann).length}, Dee ${pushesTo(dee).length})`);
     if (process.env.BLOCKS_GLOBAL_NODE) {
-        assert(pushesTo(ann).length === 0, `a request is no push (the stub hears the dispatcher: ${pushesTo(ann).length})`);
         const d1b = await call('POST', dee, '/api/messages/send', dm(deeConv, dee));
         await sleep(150);
         assert(d1b.status === 200 && pushesTo(ann).length === 1, `her answer accepted it, so his next line is a push (${pushesTo(ann).length})`);
-    } else {
-        assert(pushesTo(ann).length === 1, `and a push (the stub hears the dispatcher: ${pushesTo(ann).length})`);
     }
     await call('POST', ann, '/api/messages/mark-read', { conversationId: deeConv });
     // The answers a stored line and a new conversation get, to hold the withheld ones to.

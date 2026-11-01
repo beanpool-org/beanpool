@@ -30,7 +30,7 @@ What the operator sees the second they log in — status, then what needs them, 
 community:
 
 1. **Header** — community name, public domain, appliance status:
-   `🟢 Online · Ledger balanced (0 drift) · Backed up 3h ago · v1.4.2` (the ledger part only after an audit is run;
+   `🟢 Online · Ledger balanced (0 drift) · Backed up 3h ago · v1.2.28` (the ledger part only after an audit is run;
    before that, `Ledger not audited yet`)
 2. **Action required** — either `All clear` or the live list: each of the server's alerts in the node's words (the
    same set and count as the phone's "This server has alerts: N", from the owner's diagnostics, each linking to the

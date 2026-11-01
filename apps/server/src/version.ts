@@ -19,6 +19,9 @@ export function getVersion(): string {
     return cached;
 }
 
+/** The version to show a person: null where none could be resolved (resolveVersion's last resort), never a made-up number. */
+export const shownVersion = (version: string): string | null => (version === '0.0.0' ? null : version);
+
 /**
  * The commit this server runs (git's short hash of the working directory's checkout), or 'unknown' where there is no
  * git (the image has none). Asked of git once and kept: /api/version answers it to anyone, and running git for every

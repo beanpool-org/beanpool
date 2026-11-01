@@ -567,7 +567,6 @@ export function sendMessage(
     if (opts.nodeAuthored) nodeLineInRequest(effectiveConvId, authorPubkey);
     const through = opts.nodeAuthored ? undefined : lineThroughRequest(effectiveConvId, authorPubkey);
     if (through?.kind === 'refused') throw new MessagingError(through.message, 403, DM_REQUEST_PENDING_CODE);
-    const requestLine = through?.kind === 'request';
 
     const participantKeys = participants.map(p => p.public_key as string);
     // Someone in it has blocked the author (engine/member-blocks.ts): the line is kept for the author alone
@@ -673,9 +672,9 @@ export function sendMessage(
                 const senderMember = getMember(db, authorPubkey) as any;
                 // A push names people in words, never a slice of their key.
                 const senderName = senderMember?.callsign || 'A member';
-                // A message request alerts nobody until it is accepted (Marty, 1 Nov 2026): its line does the push's work all
-                // the same and drops it, as a withheld line does above, so the work after the answer tells its sender nothing.
-                const send = requestLine ? cb.rehearsePushNotification : cb.dispatchPushNotification;
+                // A message request alerts nobody until it is accepted (engine/dm-requests.ts): its line does the push's work
+                // all the same and drops it, as a withheld line does above, whatever became of the request.
+                const send = through?.kind === 'request' ? cb.rehearsePushNotification : cb.dispatchPushNotification;
                 send?.(
                     unmutedRecipients(pushConvId, recipients),
                     authorPubkey,

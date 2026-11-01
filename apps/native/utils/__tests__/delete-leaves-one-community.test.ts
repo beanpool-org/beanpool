@@ -58,7 +58,7 @@ import {
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { PURGE_NOT_CONFIRMED, PURGE_NO_ANSWER, PURGE_TIMEOUT_MS } from '../node-post';
 import { boundSignatureValid } from './server-signature-check';
-import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { PUSH_ALERTS_OFF_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
 const BELLINGEN = 'https://bellingen.beanpool.org';
@@ -520,6 +520,15 @@ describe('leaving a community by itself', () => {
         expect(JSON.parse(mem.async.get(PUSH_REGISTERED_AT_STORE_KEY)!)).toEqual([BELLINGEN]);
         expect(savedUrls()).toEqual([BELLINGEN]);
         expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('its alerts choice goes with it, so a rejoin starts from the default; another community\'s stays', async () => {
+        await kimsPhone();
+        mem.async.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([MULLUM, BELLINGEN]));
+
+        await leaveThisCommunity(MULLUM, BELLINGEN);
+
+        expect(JSON.parse(mem.async.get(PUSH_ALERTS_OFF_STORE_KEY)!)).toEqual([BELLINGEN]);
     });
 
     it('a profile change waiting to reach the community left goes with it; one waiting for the next stays (pending-profile-sync.ts)', async () => {

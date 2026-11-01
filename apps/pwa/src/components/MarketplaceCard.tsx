@@ -187,7 +187,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 and the blue "(You)" are parts of it wherever the language puts them. A copy has no name:
                                 its line, as on the full card, and as a span since this row is one. */}
                             {copy ? (
-                                <span data-testid="listing-copy-line" className="min-w-0 text-xs font-semibold text-nature-700 dark:text-nature-300 break-words">{copyPriceLine(copy)}</span>
+                                <span data-testid="listing-copy-line" className="min-w-0 max-w-full text-xs font-semibold text-nature-700 dark:text-nature-300 break-words">{copyPriceLine(copy)}</span>
                             ) : isOwnPost ? (
                                 <Sentence
                                     text={elderCard ? t('by {name} ⛰️ {you}', { name: authorName }) : t('by {name} {you}', { name: authorName })}

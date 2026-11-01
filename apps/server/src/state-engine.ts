@@ -66,6 +66,7 @@ import { dropToolStateOf } from './engine/tool-state.js';
 import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { setRequestBroadcast, heldFromUnread, countRequestsWaitingFor, expireOldRequests, dropRequestsOf } from './engine/dm-requests.js';
+import { evaluateRequestReports, liftRequestLimit, requestReceived, dropRequestLimitsOf } from './engine/request-limits.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
@@ -7436,6 +7437,19 @@ export function isReportRateLimited(reporterPubkey: string, now: number = Date.n
     return row.c >= REPORTS_PER_REPORTER_PER_HOUR;
 }
 
+/**
+ * After a report filed elsewhere that may count towards clearing `sender`'s message requests (routes/messaging.ts, a line's
+ * report): the limit, if the reports reach one, and they are told (engine/request-limits.ts).
+ */
+export function weighRequestReports(sender: string): boolean {
+    return evaluateRequestReports(moderationNoticeCb, sender);
+}
+
+/** A moderator undoes a limit on sending message requests. False when none holds. */
+export function liftRequestsLimit(pubkey: string): boolean {
+    return liftRequestLimit(moderationNoticeCb, pubkey);
+}
+
 export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
     // A member of this node, not just a row: a pruned account, or a re-keyed phone's old key, reports nobody.
     if (!isNodeMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
@@ -7444,10 +7458,14 @@ export function submitReport(reporterPubkey: string, targetPubkey: string, reaso
     const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt);
+    // A report of a person who wrote to them as a request counts towards clearing their requests (engine/request-limits.ts):
+    // it is how both apps report one whose line is gone. A report of a post or a Pulse item is about that, not a request.
+    const request = targetPostId || targetPulseItemId ? null : requestReceived(reporterPubkey, targetPubkey, false);
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, request_conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt, request);
     // On the global profile, enough established reporters hide the post until a moderator looks (G3). A report of
     // a member or a Pulse item never hides anything.
     if (targetPostId && !targetPulseItemId) evaluateAutoHide(moderationNoticeCb, targetPostId);
+    if (request) evaluateRequestReports(moderationNoticeCb, targetPubkey);
     return { id, reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, reason: safeReason, createdAt, status: 'pending' };
 }
 
@@ -8914,6 +8932,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         // The message requests they made, and the ones waiting for them, with a tombstone each; one of theirs nobody accepted,
         // in a real conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
         dropRequestsOf(publicKey);
+        // Any limit on sending them, with a tombstone each (engine/request-limits.ts).
+        dropRequestLimitsOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
@@ -9104,6 +9124,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // And their message requests, made or waiting for them, a tombstone each; one of theirs nobody accepted, in a real
         // conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
         dropRequestsOf(publicKey);
+        // Any limit on sending them, with a tombstone each (engine/request-limits.ts).
+        dropRequestLimitsOf(publicKey);
         // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.
         dropWithheldNotesOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }

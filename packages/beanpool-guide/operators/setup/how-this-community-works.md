@@ -41,7 +41,7 @@ A member can show their own in-person event on the global community from their p
 ## Safety
 
 - **Limits on new accounts**: Small daily posting and messaging limits for new members' first days.
-- **Reported posts hidden automatically**: Automatically hide posts reported by three independent groups until a moderator reviews them.
+- **Reported posts hidden automatically**: Automatically hide posts reported by three independent groups until a moderator reviews them. Reports clear a sender's message requests by this switch too.
 - **Repeat offenders muted automatically**: Automatically mute members with multiple takedowns.
 
 ## Connections

@@ -10,7 +10,7 @@ import {
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
     markConversationRead, getListedUnreadCounts, getUnreadCounts, getUnreadAnswer,
-    getMember, isNodeMember, isLiveVisitor, getNodeRole, passesReadGate,
+    getMember, isNodeMember, isLiveVisitor, getNodeRole, passesReadGate, weighRequestReports,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -377,7 +377,12 @@ router.post('/api/messages/report', async (ctx) => {
         ctx.body = { error: e.message, code: e.code };
         return;
     }
-    fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => submitDmLineReport(actor, checked));
+    fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => {
+        const filed = submitDmLineReport(actor, checked);
+        // One on a request they received counts towards clearing its sender's requests (engine/request-limits.ts).
+        if (filed) weighRequestReports(checked.authorPubkey);
+        return filed;
+    });
 });
 
 /**

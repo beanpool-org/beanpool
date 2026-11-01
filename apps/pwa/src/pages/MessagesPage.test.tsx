@@ -1309,6 +1309,15 @@ describe("MessagesPage: the node's refusal in the composer (G11-e, design G11 §
         expect(composer.value).toBe('hello there');
     });
 
+    // R1 (engine/request-limits.ts): reports cleared their requests, and the composer says so where it was refused.
+    it("403 dm_requests_limited on a send: the node's words above the composer, word for word, and no alert", async () => {
+        const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+        vi.mocked(sendMessageApi).mockRejectedValue(refusal(403, 'dm_requests_limited', LIMITED));
+        await typeAndSend('hello there');
+        expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe(LIMITED);
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
     it("403 moderation_muted on a send: the node's words, word for word", async () => {
         vi.mocked(sendMessageApi).mockRejectedValue(refusal(403, 'moderation_muted', MUTED));
         await typeAndSend('hello there');

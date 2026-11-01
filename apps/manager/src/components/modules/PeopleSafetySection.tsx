@@ -10,6 +10,7 @@ import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
+import { RequestLimitsCard } from './RequestLimitsCard';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -76,6 +77,7 @@ export function PeopleSafetySection({
     const [burstsHere, setBurstsHere] = useState(false);
     const [burstAnchor, setBurstAnchor] = useState<string | null>(null);
     const [burstReload, setBurstReload] = useState(0);
+    const [limitsReload, setLimitsReload] = useState(0);
 
     const loadReports = async () => {
         if (!activeNode?.url) return;
@@ -383,6 +385,9 @@ export function PeopleSafetySection({
 
             {subTab === 'moderation' && (
                 <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Message requests cleared by reports" resetKey={activeNode.id}>
+                        <RequestLimitsCard nodeUrl={activeNode.url} reloadKey={limitsReload} adminPassword={nodeCredential(activeNode)} tfaToken={getTfaSessionToken(activeNode.id)} />
+                    </SectionErrorBoundary>
                     {hasDoorMembers && (
                         <SectionErrorBoundary sectionName="Accounts that joined together" resetKey={activeNode.id}>
                             <BurstDigestCard
@@ -429,6 +434,7 @@ export function PeopleSafetySection({
                                 onClick={() => {
                                     onRefresh();
                                     loadReports();
+                                    setLimitsReload((n) => n + 1);
                                 }}
                                 className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs text-white font-bold transition-all min-h-[48px] lg:min-h-0"
                             >

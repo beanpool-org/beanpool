@@ -74,6 +74,8 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     // is asked: a code must not be spent on a server that can't write the decision.
     /^\/api\/local\/admin\/decisions\/[^/]+\/(hide-case|hide-reply|owner-decision)\/?$/,
     /^\/api\/local\/admin\/members\/[^/]+\/rekey\/(issue-code|cancel|proposals\/[^/]+\/decline)\/?$/,
+    // A moderator's undo of a limit on sending message requests (engine/request-limits.ts).
+    /^\/api\/local\/admin\/members\/[^/]+\/request-limit\/undo\/?$/,
     // A recovery fragment released: the log of which fragments left the community.
     /^\/api\/recovery\/collect\/(hub|sso)\/?$/,
     // A link's commissioning ceiling.

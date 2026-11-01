@@ -39,9 +39,10 @@ import {
     overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
 } from './withheld-lines.js';
 import {
-    openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, nodeLineInRequest, reactionRefusal,
+    openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, nodeLineInRequest, reactionRefusal, newRequestRefusal,
     DM_REQUEST_PENDING_CODE,
 } from './dm-requests.js';
+import { DM_REQUESTS_LIMITED_CODE } from './request-limits.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
@@ -305,13 +306,20 @@ export function createConversation(
     if (participants.length !== 2) throw new MessagingError('DM conversations must have exactly 2 distinct participants');
     assertMemberActive(createdBy);
     beforeWrite?.();
+    const existing = findDirectConversationRow(participants[0], participants[1]);
+    const other = participants.find(p => p !== createdBy);
+    // Reports hold them from making a new request (engine/request-limits.ts), before anything is written. One the two have
+    // already, kept for one of them while blocked included, is no new one, and asking for it answers the same either way.
+    if (!opts.asNode && other && !existing && !withheldConversationOfPair(participants[0], participants[1])) {
+        const limited = newRequestRefusal(createdBy, other);
+        if (limited) throw new MessagingError(limited, 403, DM_REQUESTS_LIMITED_CODE);
+    }
     if (cb.registerVisitor) {
         for (const p of participants) {
             if (!getMember(db, p)) cb.registerVisitor(p);
         }
     }
 
-    const existing = findDirectConversationRow(participants[0], participants[1]);
     if (existing) {
         // The person a message request in it waits for, asking for it themselves (Message on the opener's profile): that is
         // reaching out to its opener, as their own line is, so it accepts the request (engine/dm-requests.ts). Never the node.
@@ -332,7 +340,6 @@ export function createConversation(
     // Someone who has blocked the opener gets no new chat in their list: the conversation is kept for the opener alone
     // (engine/withheld-lines.ts), answered and announced to them exactly as a new one is, and asked for again it is the
     // same one. Every refusal and limit above has run first, so the answer is the one anybody else would get.
-    const other = participants.find(p => p !== createdBy);
     if (!opts.asNode && other && hasBlocked(other, createdBy)) {
         const { conversation: kept, created } = db.transaction(() => {
             const opened = openWithheldConversation(createdBy, other, crypto.randomUUID(), createdAt);
@@ -566,7 +573,7 @@ export function sendMessage(
     // admin a request waits for, they are that admin's line and accept it too.
     if (opts.nodeAuthored) nodeLineInRequest(effectiveConvId, authorPubkey);
     const through = opts.nodeAuthored ? undefined : lineThroughRequest(effectiveConvId, authorPubkey);
-    if (through?.kind === 'refused') throw new MessagingError(through.message, 403, DM_REQUEST_PENDING_CODE);
+    if (through?.kind === 'refused') throw new MessagingError(through.message, 403, through.code ?? DM_REQUEST_PENDING_CODE);
 
     const participantKeys = participants.map(p => p.public_key as string);
     // Someone in it has blocked the author (engine/member-blocks.ts): the line is kept for the author alone

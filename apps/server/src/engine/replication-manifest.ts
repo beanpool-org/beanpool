@@ -291,7 +291,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     abuse_reports: {
         kind: 'replicated-except', payload: 'abuseReports', watermark: 'updated_at',
-        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at target_message_id disclosure'),
+        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at target_message_id disclosure request_conversation_id request_wording'),
         except: {
             suspended_member: { reason: "read only by a cancel of a re-key code made before codes kept the member's earlier status (member-wizards.ts cancelRekeyCode); a server that took over reads it as not known, which keeps the member suspended, and Lift suspension lifts it" },
         },
@@ -521,6 +521,8 @@ export const TABLES: Record<string, TableEntry> = {
     // that takes over holds back the same lines and lists the same requests. Only a real conversation's: one kept for a
     // blocked opener alone is never in a copy (withheld_conversations), and its row starts travelling when it becomes real.
     dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by state_before reached_out_at reach_out_withdrawn_at updated_at', { rows: REAL_CONVERSATIONS }),
+    // A limit on sending message requests (engine/request-limits.ts), so a standby that takes over refuses and clears the same.
+    request_limits: plain('id sender_pubkey made_at until how lifted_at updated_at'),
 
     // ── Not copied today, and the design says they should be ──
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },

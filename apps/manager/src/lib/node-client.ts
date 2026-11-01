@@ -1623,6 +1623,34 @@ export async function undoBurstHide(nodeUrl: string, actionId: string, adminPass
     return burstRequest(nodeUrl, `/api/local/admin/bursts/${encodeURIComponent(actionId)}/undo`, 'POST', {}, adminPassword, tfaToken);
 }
 
+/** Which way reports reached a limit on sending message requests (the server's engine/request-limits.ts). */
+export type RequestLimitHow = 'words_newcomer' | 'same_wording' | 'many_reports';
+
+export interface RequestLimitRow {
+    id: string;
+    publicKey: string;
+    callsign: string | null;
+    how: RequestLimitHow;
+    madeAt: string;
+    until: string;
+}
+
+/** Who can't send message requests for now, because reports cleared theirs. None on a node from before this (404 or 403). */
+export async function fetchRequestLimits(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<RequestLimitRow[]> {
+    try {
+        const d = await burstRequest<{ limits?: RequestLimitRow[] }>(nodeUrl, '/api/local/admin/members/request-limits', 'GET', undefined, adminPassword, tfaToken);
+        return Array.isArray(d.limits) ? d.limits : [];
+    } catch (e: unknown) {
+        if (e instanceof BurstRequestError && (e.status === 404 || e.status === 403)) return [];
+        throw e;
+    }
+}
+
+/** Undo one: their requests come back, and they can send new ones. */
+export async function undoRequestLimit(nodeUrl: string, pubkey: string, adminPassword?: string, tfaToken?: string): Promise<void> {
+    await burstRequest(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/request-limit/undo`, 'POST', {}, adminPassword, tfaToken);
+}
+
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,

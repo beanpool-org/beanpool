@@ -23,7 +23,7 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const alerts = vi.hoisted(() => ({ said: [] as string[] }));
+const alerts = vi.hoisted(() => ({ said: [] as string[], opened: [] as string[] }));
 /** The composer's box and Send, and the screen's DeviceEventEmitter listeners, as the stand-ins below hand them over. */
 const composer = vi.hoisted(() => ({ type: null as null | ((t: string) => void), send: null as null | (() => void) }));
 const events = vi.hoisted(() => ({ on: {} as Record<string, Set<() => void>> }));
@@ -68,7 +68,7 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         Alert: { alert: (title: string, body?: string, buttons?: Array<{ text?: string }>) => { alerts.said.push(title); if (body) alerts.said.push(body); for (const b of buttons ?? []) if (b.text) alerts.said.push(b.text); } },
         Share: { share: async () => ({}) },
-        Linking: { openURL: async () => {}, openSettings: async () => {} },
+        Linking: { openURL: async (url: string) => { alerts.opened.push(url); }, openSettings: async () => {} },
         DeviceEventEmitter: {
             addListener: (name: string, fn: () => void) => { (events.on[name] ??= new Set()).add(fn); return { remove() { events.on[name]?.delete(fn); } }; },
             emit() {},
@@ -317,6 +317,26 @@ describe('a request waiting for this member, on the phone', () => {
         await tap('React');
         await tap('React with 👍');
         expect(callsOf('toggleMessageReactionApi')).toBe(1);
+    });
+
+    // R1 (Marty, 1 Nov 2026): a request's link is a stranger's, and the last thing a spammer wants is for it to work.
+    it('a link in a request reads as its words and opens nothing; once it is accepted it opens', async () => {
+        const url = 'https://spam.example/win';
+        const linkOf = () => Array.from(host.querySelectorAll<HTMLElement>('*')).find(e => e.textContent === url && e.children.length === 0) ?? null;
+        let conv = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST as Record<string, unknown> };
+        standIn({
+            getConversation: () => Promise.resolve(conv),
+            getMessages: [{ id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: `Free money at ${url}`, rawTimestamp: iso(now - 60_000), timestamp: '' }],
+            syncSingleConversation: true,
+            decideMessageRequest: () => { conv = { ...conv, request: { ...KOFI_REQUEST, state: 'accepted' } }; return Promise.resolve({ request: conv.request }); },
+        });
+        alerts.opened.length = 0;
+        await open();
+        expect(host.textContent).toContain(`Free money at ${url}`);
+        expect(linkOf()).toBeNull();
+        await tap('Accept');
+        await act(async () => { linkOf()?.click(); });
+        expect(alerts.opened).toEqual([url]);
     });
 
     it('Accept, Decline, Report in place of the box, and a line has no Report of its own: the one on the bar blocks', async () => {

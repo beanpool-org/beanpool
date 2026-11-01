@@ -596,6 +596,7 @@ export const SUITES = [
     'test-group-chat-photo',
     'test-group-chat-report',
     'test-dm-line-report',
+    'test-request-limits',
     'test-chat-parity',
     'test-dm-never-plaintext',
     'test-group-keys-http',

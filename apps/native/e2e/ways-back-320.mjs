@@ -25,7 +25,7 @@
  * community that no longer offers it.
  *
  * And the shared placement (vault rethink VR4, §4.3): the row offered, on, and "Not finished"; the list with half a copy
- * at the vault, half a pair, and a half no community on this phone owns; and Restore your account's four rows
+ * at the vault, half a pair, a half no community on this phone owns, and one it can't place yet; and Restore your account's four rows
  * (components/welcome/RestoreMenu.tsx), in the screen's colours.
  *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
@@ -243,6 +243,15 @@ const WAYS = {
         communities: [
             { url: MULLUM, name: 'Mullumbimby', vaultRef: 'label-1', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-05T04:05:06.000Z', placement: 'shared', copy: 'digest-1' } } },
             { url: 'https://bellingen.beanpool.org', name: 'Bellingen', vaultRef: 'label-3', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-07T04:05:06.000Z', placement: 'shared', copy: 'digest-3' } } },
+        ],
+        pending: [],
+    },
+    // A half nobody has claimed while a community that may hold the rest hasn't answered: listed, with no Remove of its own.
+    notplaced: {
+        vault: { kind: 'listed', copies: [], communityCopies: [{ ref: 'label-2', copy: 'digest-2', since: '2026-10-06', lastReleasedAt: null }] },
+        communities: [
+            { url: 'https://bellingen.beanpool.org', name: 'Bellingen', status: null },
+            { url: GLOBAL, name: 'Global community', vaultRef: 'label-1', status: { providers: [], generation: 0 } },
         ],
         pending: [],
     },
@@ -492,6 +501,7 @@ try {
             ['state=adminsonly', "Ways back, only the copy for your community's admins"],
             ['state=cantopen', "Ways back, a copy for your community's admins its server can't open"],
             ['state=shared', 'Ways back, half at the key vault and half at the community, half a pair, and a stray half'],
+            ['state=notplaced', "Ways back, a half this phone can't place yet"],
         ];
         for (const [query, label] of WAYS_CASES) {
             await open(`place=ways&${query}&scheme=${scheme}`);

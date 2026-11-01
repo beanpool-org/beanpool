@@ -23,7 +23,9 @@
  *   proxy's page, vault-move.ts `removeCommunityCopy`). Anything short of that is "not removed", and a community's
  *   delete is then remembered and tried again (with the guard against a newer copy, vault-move.ts). The copy for a
  *   community's admins (VR3) goes on its own answer too; one that doesn't land is said as not removed, never remembered.
- *   A shared copy (VR4) is one way back in two places, so one Remove asks both, the vault first.
+ *   A shared copy (VR4) is one way back in two places, so one Remove asks both, the vault first. A vault half no community
+ *   claims has a Remove of its own only once no community could still be keeping the rest ({@link strayVaultHalves}): while one
+ *   hasn't said, it is listed with none, because that Remove can't be taken back and the half may be half of a working pair.
  * - **Remove everything**: the vault's `all`, when it listed a copy or couldn't say, and a delete for every copy each
  *   community listed. A community that couldn't be asked has nothing removed, and the result says so: the phone never
  *   deletes a copy it was never shown, at a community it couldn't see.
@@ -45,7 +47,7 @@ import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, remove
 import { removeEverythingAsksVault, sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
 
 export {
-    beforeRemoving, everyoneAnswered, isPending, knownCopies, removeEverythingAsksVault, sameCommunity, strayVaultHalves, unopenableAdminsCopies, vaultCopiesBySignIn, vaultHalfOf, vaultHalves, wordsOnly,
+    beforeRemoving, everyoneAnswered, isPending, knownCopies, otherHalfMissing, removeEverythingAsksVault, sameCommunity, strayVaultHalves, unopenableAdminsCopies, unplacedVaultHalves, vaultCopiesBySignIn, vaultHalfOf, vaultHalves, wordsOnly,
     type BeforeRemoving, type CommunityPart, type CopyAt, type NotAnswered, type Removal, type VaultPart, type WaysBack,
 } from './ways-back-state';
 

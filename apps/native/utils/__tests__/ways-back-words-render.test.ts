@@ -105,6 +105,7 @@ vi.mock('../ways-back', async (importOriginal) => {
         removeCommunityCopyFrom: async (_i: unknown, c: { url: string }, provider: string) => { fx.removed.push([c.url, provider]); return { removed: false, why: 'remembered' }; },
         removeEverything: async () => { fx.removed.push('everything'); return fx.everything; },
         removeAdminsCopyFrom: async (_i: unknown, c: { url: string }) => { fx.removed.push([c.url, 'admins']); return fx.adminsRemoval; },
+        removeVaultHalf: async (_i: unknown, ref: string) => { fx.removed.push(['vault-half', ref]); return { removed: true }; },
     };
 });
 
@@ -147,6 +148,29 @@ const TWO_GOOGLE: WaysBack = {
     communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }],
     pending: [],
 };
+
+/** Half a copy at the vault, a community that may hold the other half and didn't answer, and one that said it isn't its own. */
+const HALF: NonNullable<Extract<WaysBack['vault'], { kind: 'listed' }>['communityCopies']>[number] = { ref: 'label-bell', copy: 'digest', since: '2026-10-29', lastReleasedAt: null };
+const HALF_NOT_PLACED: WaysBack = {
+    vault: { kind: 'listed', copies: [], communityCopies: [HALF] },
+    communities: [
+        { url: BELL, name: 'Bellingen', status: null },
+        { url: GLOBAL, name: 'Global community', vaultRef: 'label-global', status: { providers: [], generation: 0 } },
+    ],
+    pending: [],
+};
+/** The same half, with every community heard and none of them its keeper: stray for certain. */
+const HALF_STRAY: WaysBack = {
+    vault: { kind: 'listed', copies: [], communityCopies: [HALF] },
+    communities: [{ url: GLOBAL, name: 'Global community', vaultRef: 'label-global', status: { providers: [], generation: 0 } }],
+    pending: [],
+};
+const KEEPS_NONE = 'Keeps no copy of your account.';
+const STRAY_NAME = 'Half a copy for another community';
+const STRAY_LINE = 'Half of a locked copy. No community on this phone holds its other half.';
+const NOT_PLACED_NAME = 'Half a copy for a community';
+const NOT_PLACED_LINE = "Half of a locked copy. This phone can't tell yet whether one of your communities holds its other half. Open this screen again later.";
+const MISSING_LINE = "The other half isn't at BeanPool's key vault, so this can't bring your account back. Account Protection can try again.";
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -244,6 +268,16 @@ describe('every sentence through t(), in every state and every confirm (pseudo-l
         me.identity.mnemonic = [];
         await mount('xx');
         wholly('words only, no words on the phone');
+    });
+
+    it("a half this phone can't place yet, and a stray one (#2683 review)", async () => {
+        fx.ways = HALF_NOT_PLACED;
+        await mount('xx');
+        wholly('a half not placed');
+        act(() => root?.unmount());
+        fx.ways = HALF_STRAY;
+        await mount('xx');
+        wholly('a stray half');
     });
 
     it("a copy its server keeps but can't open: listed as that, never a way back, and Remove asks plainly (#2626)", async () => {
@@ -399,6 +433,59 @@ describe('what each confirm offers, and what a result says (English)', () => {
         const a = alerts.shown.at(-1)!;
         expect(a.body).toContain("BeanPool's key vault deletes its copies at once, and from its backups within 30 days, or later if the vault is paused in that time.");
         expect(a.body).toContain("Each community's server deletes its copy.");
+    });
+
+    it("a half whose community didn't answer: listed and said so, with no Remove that could break up a pair (#2683 review)", async () => {
+        fx.ways = HALF_NOT_PLACED;
+        await mount('en');
+        const text = host!.textContent!;
+        expect(text).not.toContain(STRAY_NAME);
+        expect(text).not.toContain(STRAY_LINE);
+        expect(buttonNamed(STRAY_NAME), "the review's Remove").toBeUndefined();
+        // Not hidden: the vault told this phone about it, so its section says so, and is neither empty nor "keeps none".
+        const atVault = text.slice(text.indexOf("BeanPool's key vault"), text.indexOf("Your communities' servers"));
+        expect(atVault).toContain(NOT_PLACED_NAME);
+        expect(atVault).toContain(NOT_PLACED_LINE);
+        expect(atVault).toContain('Kept since 29 Oct 2026');
+        expect(atVault).not.toContain(KEEPS_NONE);
+        expect(all('button').filter(b => b.textContent === 'Remove'), 'no Remove anywhere on this list').toEqual([]);
+        expect(fx.removed).toEqual([]);
+    });
+
+    it('a community still starting holds its half and has no node key to say: not stray, and its half is not called missing (#2683 review)', async () => {
+        fx.ways = {
+            vault: { kind: 'listed', copies: [], communityCopies: [HALF] },
+            communities: [{ url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-29T04:05:06.000Z', placement: 'shared', copy: 'digest' } } }],
+            pending: [],
+        };
+        await mount('en');
+        const text = host!.textContent!;
+        expect(text).not.toContain(STRAY_NAME);
+        expect(buttonNamed(STRAY_NAME)).toBeUndefined();
+        expect(text).toContain(NOT_PLACED_LINE);
+        expect(text).not.toContain(MISSING_LINE);
+    });
+
+    it('Remove everything still reaches a half this phone can\'t place, and its confirm says what goes and what stays', async () => {
+        fx.ways = HALF_NOT_PLACED;
+        fx.everything = { vault: { removed: true }, communities: [], admins: [], notAsked: [{ url: BELL, name: 'Bellingen' }] };
+        await mount('en');
+        await click(buttonNamed('Remove everything'), 'Remove everything');
+        const a = alerts.shown.at(-1)!;
+        expect(a.body).toContain("BeanPool's key vault deletes its copies at once, and from its backups within 30 days, or later if the vault is paused in that time.");
+        expect(a.body).toContain("Bellingen didn't answer, so anything kept there stays.");
+    });
+
+    it('a half no community can hold, with every community heard, keeps its row and its Remove, and goes from the vault alone (the control)', async () => {
+        fx.ways = HALF_STRAY;
+        await mount('en');
+        const text = host!.textContent!;
+        expect(text).toContain(STRAY_NAME);
+        expect(text).toContain(STRAY_LINE);
+        expect(text).not.toContain(NOT_PLACED_NAME);
+        await click(buttonNamed(STRAY_NAME), 'Remove the stray half');
+        await press('Remove');
+        expect(fx.removed).toEqual([['vault-half', 'label-bell']]);
     });
 
     it("the copy Mullumbimby keeps for its admins (VR3): its row with since when, its own confirm, and only what Mullumbimby answered", async () => {

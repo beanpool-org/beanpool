@@ -148,7 +148,8 @@ export default function WaysBackScreen() {
     const onRemove = (copy: CopyAt) => {
         if (!identity || !ways || busy) return;
         if (copy.at === 'vault-half') {
-            // Half a copy no community on this phone says is its own: it goes from the vault alone, and is no way back.
+            // Half a copy no community on this phone can be keeping the rest of (`strayVaultHalves`): it goes from the vault alone,
+            // and is no way back.
             confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), t('Remove this copy?'), VAULT_DELETES(), () => {
                 void (async () => {
                     setBusy(true);

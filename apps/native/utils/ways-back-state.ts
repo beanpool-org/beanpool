@@ -43,7 +43,7 @@ export type CopyAt =
     | { at: 'vault'; provider: SsoProvider }
     | { at: 'community'; url: string; provider: SsoProvider }
     | { at: 'admins'; url: string }
-    /** A community copy at the vault that no community saved on this phone says is its own: it goes alone, by its label. */
+    /** A community copy at the vault no community saved on this phone can be keeping the rest of: it goes alone, by its label. */
     | { at: 'vault-half'; ref: string };
 
 /** What a removal did. `remembered`: a community's delete that didn't land, kept and tried again. */
@@ -102,9 +102,45 @@ function adminsCopyWorks(w: WaysBack, c: CommunityPart): boolean {
     return copy.placement !== 'shared' || vaultHalfOf(w, c)?.copy === copy.copy;
 }
 
-/** The vault's community copies no community on this phone says are its own: listed and removable, never a way back. */
-export function strayVaultHalves(w: WaysBack): VaultCommunityCopy[] {
+/**
+ * Whether community `c` could hold the other half of a vault copy nobody has claimed: it didn't answer, or it says it keeps a
+ * half, or a copy it can't open, and gave no node key to tell which (a server still starting has none to give). One that says
+ * what it keeps, and that is no half, holds none, whatever it said of its key: a server from before VR4 says nothing of it.
+ */
+function mayHoldAHalf(c: CommunityPart): boolean {
+    if (c.vaultRef) return false;
+    return !c.status || c.status.adminsCopy?.placement === 'shared' || !!c.status.adminsCopyUnopenable;
+}
+
+/** The vault's community copies no community on this phone has said are its own. */
+function unclaimedVaultHalves(w: WaysBack): VaultCommunityCopy[] {
     return vaultHalves(w).filter(h => !w.communities.some(c => c.vaultRef === h.ref));
+}
+
+/**
+ * The unclaimed halves no community on this phone can be keeping the rest of: listed and removable, never a way back. A
+ * community's silence is never read as "not mine" (#2683 review): that half may be one half of a working pair, and Remove here
+ * deletes it for good.
+ */
+export function strayVaultHalves(w: WaysBack): VaultCommunityCopy[] {
+    return w.communities.some(mayHoldAHalf) ? [] : unclaimedVaultHalves(w);
+}
+
+/**
+ * The unclaimed halves a community that hasn't said may be keeping the rest of: listed, as everything the vault lists is, with
+ * no Remove of their own until it says. Remove everything still takes them, and says what stays.
+ */
+export function unplacedVaultHalves(w: WaysBack): VaultCommunityCopy[] {
+    return w.communities.some(mayHoldAHalf) ? unclaimedVaultHalves(w) : [];
+}
+
+/**
+ * Whether community `c`'s half has lost the vault's: the vault listed, and has no half of this copy for it. With no label for
+ * `c`, an unclaimed half may be the very one, so that is never said; a vault that lists no half at all has none for anyone.
+ */
+export function otherHalfMissing(w: WaysBack, c: CommunityPart): boolean {
+    if (w.vault.kind !== 'listed' || (!c.vaultRef && unclaimedVaultHalves(w).length > 0)) return false;
+    return vaultHalfOf(w, c)?.copy !== c.status?.adminsCopy?.copy;
 }
 
 /**

@@ -53,7 +53,7 @@ deploy.sh replaces everything in the server folder except the data folder and .e
 
 ## Is there a new version?
 
-The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**: press **Check Release Updates**, and Settings says which version your server runs and whether a newer one is out. Until you press it the tiles don't show your server's real version (the Node Version tile always says v1.4.2). Your server's address followed by /api/version always does.
+The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**: press **Check Release Updates**, and Settings says which version your server runs and whether a newer one is out. Settings shows your server's real version on the Node Version tile, and your server's address followed by /api/version does too.
 
 To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out.
 

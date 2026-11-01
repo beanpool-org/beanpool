@@ -103,6 +103,7 @@ export interface StorageCleanResult {
 
 export interface DiagnosticsResponse {
     status: string;
+    version?: string | null;
     uptimeSeconds: number;
     cpuLoadPercent: number;
     memoryUsageMb: number;

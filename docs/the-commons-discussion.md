@@ -1124,7 +1124,7 @@ Tight prose. No code. Answer by question ID.
 - **IA Overhaul:** Every fleet artifact—the multi-node selector, cluster topology graph ([`TopologyModule.tsx`](file:///Users/marty/projects/beanpool/apps/manager/src/components/modules/TopologyModule.tsx)), cross-node metrics comparison, and AI summary modules ([`AiServicesModule.tsx`](file:///Users/marty/projects/beanpool/apps/manager/src/components/modules/AiServicesModule.tsx))—is removed.
 
 **The Operator Home Screen:** The second an operator logs into `/settings`, they see a clean, single-screen **Community Pulse & Appliance Status**:
-1. **Community Header:** Community callsign and name (e.g., *Bindarrabi Community · Northern NSW*), node public domain, and overall appliance status: `🟢 Online · Ledger Balanced (0 Drift) · Backed Up 3h Ago · v1.4.2`.
+1. **Community Header:** Community callsign and name (e.g., *Bindarrabi Community · Northern NSW*), node public domain, and overall appliance status: `🟢 Online · Ledger Balanced (0 Drift) · Backed Up 3h Ago · v1.2.28`.
 2. **Action Required Banner (Zero or Highlighted):** A prominent banner that either reads `All Clear: No pending member reports, stalled trades, or system alerts` or highlights immediate tasks: `⚠️ 1 report pending review`, `🎟️ 2 invites awaiting activation`, or `💾 Storage at 82%`.
 3. **Four Vital Metric Cards:**
    - **Members:** `28 Active · 3 Onboarded this week · 4 Appointed Vouchers`

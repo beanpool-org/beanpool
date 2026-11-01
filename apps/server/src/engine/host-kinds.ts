@@ -83,8 +83,10 @@ export function isCertifiableHost(host: string): boolean {
  * The first of `hosts` to send newcomers to: a name before an IP address (a name survives a change of server, a number does
  * not), and only a host the Internet can reach before one on the home network. Null for none.
  */
+/** A beanpool.org name, or a public IP or name a public CA can certify (so one in the Internet's DNS): never a home-network one. */
+export const reachableFromInternet = (a: string): boolean => isBeanPoolName(a) || isCertifiableHost(a);
+
 export function preferredAddress(hosts: readonly string[]): string | null {
-    const reachableFromInternet = (a: string) => isBeanPoolName(a) || isCertifiableHost(a);
     return hosts.find((a) => !isIpLiteral(a) && reachableFromInternet(a)) ?? hosts.find(reachableFromInternet) ?? hosts[0] ?? null;
 }
 

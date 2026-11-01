@@ -654,7 +654,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // offline, the install's late claim): Settings shows it offline. Any other answer is only written on
             // the name it concerns, below.
             if (result.status === 'live' && answersAboutAnotherName(result, stored, nameAskedFor())) {
-                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored), ...serverSide() };
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored ?? { status: 'none' }), ...serverSide() };
                 return;
             }
             if (result.status === 'live' && publicAddressGeneration() !== since) {

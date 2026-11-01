@@ -1543,7 +1543,7 @@ import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVers
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
-import { preferredAddress } from './engine/host-kinds.js';
+import { preferredAddress, reachableFromInternet } from './engine/host-kinds.js';
 import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -9480,7 +9480,7 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     // the directory, the card and an assistant are not sent to a name that leads nowhere. As primaryAddress says.
     const waiting = !!pa && typeof pa === 'object' && pa.status === 'pending';
     const kept = waiting && Array.isArray(config?.ownerAddresses)
-        ? preferredAddress(config.ownerAddresses.flatMap((a) => usable(typeof a === 'string' ? a : null) ?? []))
+        ? preferredAddress(config.ownerAddresses.flatMap((a) => usable(typeof a === 'string' ? a : null) ?? []).filter(reachableFromInternet))
         : null;
     if (pa && !kept) {
         if (rules.publicAddress === 'any' && typeof pa === 'string' && pa.trim()) {

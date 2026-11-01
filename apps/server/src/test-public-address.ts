@@ -30,7 +30,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import Koa from 'koa';
 import { startP2P } from './p2p.js';
-import { initStateEngine, getNodeConfig } from './state-engine.js';
+import { initStateEngine, getNodeConfig, updateNodeConfig } from './state-engine.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { buildAttestation, ATTEST_DOMAIN, REQUEST_DOMAIN, PROTOCOLS, SEND_PROTO, nodePubkeyHex } from './services/registrar-client.js';
 import { tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN } from './services/tunnel-connector.js';
@@ -534,6 +534,16 @@ async function run() {
         } finally {
             delete process.env.PUBLIC_ADDRESS_NAME;
         }
+
+        // Take offline left nothing stored, and the registrar answers an unnamed ask with this key's other live name: a
+        // fleet node after a rename. The panel reads `status`: with none it says it can't reach the registrar.
+        updateNodeConfig({ publicAddress: null, registrarNames: [{ address: 'old-name.beanpool.org', role: 'former', status: 'live', firstSeenAt: 1, lastSeenAt: 1, releasedByUsAt: 1 }] } as any);
+        registrarStatus = 'live';
+        registrarName = 'old-name';
+        const leftRes = await fetch(`${baseUrl}/api/local/admin/public-address/status`);
+        const leftBody = await leftRes.json().catch(() => ({}));
+        assert(leftRes.status === 200 && leftBody.status === 'none' && !(getNodeConfig() as any).publicAddress,
+            `nothing stored and an answer about another name reads offline, and stores nothing (${leftRes.status} ${JSON.stringify(leftBody.status)})`);
 
         console.log(`\n⭐️ ALL ${testsPassed}/${testsRun} PUBLIC ADDRESS & TUNNEL TESTS PASSED.`);
     } finally {

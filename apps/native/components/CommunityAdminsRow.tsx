@@ -166,7 +166,12 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
         setStatus(now);
         const nowSide = hasVault() && (now.sharedOffered || now.placement === 'shared') ? await sharedCopySide(identity, now) : null;
         if (mine !== turn.current) return;
-        setSide(nowSide);
+        // A vault that can't be asked just now doesn't undo its own delete: a `none` that came from it stands.
+        setSide(prev => (nowSide === 'unknown' && prev === 'none' ? prev : nowSide));
+        // Finished elsewhere (Ways back): the sentence that says to tap Remove here is over.
+        if (!now.kept && !now.unopenable && nowSide === 'none') {
+            setError(e => (e === keyLineWords(COMMUNITY_RECOVERY_TEXT.offHalfway) ? null : e));
+        }
         // Forgotten only once nothing is kept at all: a copy the server can't open, or half of one, is still there to say and remove.
         if (!now.kept && !now.unopenable && nowSide !== 'differs' && turnedOnHere) await AsyncStorage.removeItem(turnedOnKey(at)).catch(() => {});
     }, [identity]);
@@ -217,6 +222,7 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
             } else {
                 sharedBegun = true;
                 await turnOnSharedCopy(url, identity, now.nodeKey as string);
+                setSide(null);
             }
             await AsyncStorage.setItem(turnedOnKey(url), '1').catch(() => {});
             setJustOn(true);

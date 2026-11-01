@@ -8,6 +8,7 @@
  * member's tap really does, and what the row says when it stops halfway (#2683 deciding pass, community-recovery.ts:168).
  * Nothing is contacted.
  */
+import { communitySwitched } from '../community-switch';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import * as ReactAll from 'react';
@@ -359,6 +360,43 @@ describe('Remove on a shared copy, on the real removeSharedCopy (#2683 deciding 
             expect(on()).toBeNull();
             expect(notFinished()).toBeTruthy();
             expect(host!.textContent).toContain(HALFWAY);
+        });
+
+        it('the vault goes quiet after its delete and the community answers the read after: never On again, above the sentence that says the admins cannot', async () => {
+            await pair();
+            net.sideOnceDeleted = 'unknown';
+            net.deleteFails = STOPS[1][1];
+            await remove();
+            expect(net.removals).toEqual(vaultGone());
+            expect(on()).toBeNull();
+            expect(notFinished()).toBeTruthy();
+            expect(host!.textContent).toContain(HALFWAY);
+        });
+
+        it('a Turn on after that, with the vault still quiet, reads On: the old answer holds nothing back', async () => {
+            await pair();
+            net.sideOnceDeleted = 'unknown';
+            net.deleteFails = STOPS[1][1];
+            await remove();
+            net.deleteFails = null as never;
+            await act(async () => { (host!.querySelector('[data-testid="community-admins-turn-on"]') as HTMLElement).click(); });
+            await settle();
+            expect(net.sharedTurnOns).toBeGreaterThan(0);
+            expect(on()).toBeTruthy();
+            expect(notFinished()).toBeNull();
+        });
+
+        it('Ways back finishes the Remove: the sentence that says to tap Remove here goes with it', async () => {
+            await pair();
+            net.deleteFails = STOPS[1][1];
+            await remove();
+            expect(host!.textContent).toContain(HALFWAY);
+            net.status = ok({ kept: false, since: null, offered: false, sharedOffered: true, nodeKey: NODE_KEY });
+            net.side = 'none';
+            await act(async () => { communitySwitched(); });
+            await settle();
+            expect(host!.textContent).not.toContain(HALFWAY);
+            expect(removeButton()).toBeNull();
         });
 
         it('the vault deleted and its answer was lost: asked again it keeps none, so On goes, though it said nothing at the time', async () => {

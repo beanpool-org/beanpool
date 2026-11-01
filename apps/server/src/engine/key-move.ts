@@ -27,7 +27,8 @@ function hasStamp(table: string): boolean {
  *
  * On the main server (`keepStamps: false`), inside completeRekey's conservingTransaction: each row is stamped as any
  * change is (the touch triggers, db/schema.sql), so a standby's next copy carries the move. `at` stamps the member's own
- * row and their open-door record.
+ * row and their open-door record. The one exception is a copy of an event (engine/event-copy.ts), which keeps its stamp
+ * here too: see the posts, below.
  *
  * On a standby following its main server's re-key (`keepStamps: true`, {@link followReplicatedRekeys}), inside the
  * import's transaction: each moved row keeps the stamp it had. The main server's own rows, stamped by its move, come in
@@ -40,17 +41,21 @@ function hasStamp(table: string): boolean {
  */
 export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, opts: { keepStamps: boolean }): void {
     const keepStamps = opts.keepStamps;
-    /** The rows of `table` that `cond` (SQL, the old key its one parameter) picks get `set` (SQL, the new key its one). */
-    const rewrite = (table: string, set: string, cond: string): void => {
+    /**
+     * The rows of `table` that `cond` (SQL, the old key its one parameter) picks get `set` (SQL, the new key its one). Those
+     * `keptAnyway` (SQL, no parameters) also picks keep their stamp on the main server too.
+     */
+    const rewrite = (table: string, set: string, cond: string, keptAnyway?: string): void => {
         const update = db.prepare(`UPDATE ${table} SET ${set} WHERE ${cond}`);
-        if (!keepStamps || !hasStamp(table)) {
+        const kept = keepStamps ? cond : keptAnyway ? `(${cond}) AND (${keptAnyway})` : null;
+        if (!kept || !hasStamp(table)) {
             update.run(newKey, oldKey);
             return;
         }
         // The touch triggers stamp any row an UPDATE leaves `updated_at` alone on, so each stamp is put back after. An
         // UPDATE of `updated_at` to another value fires none of them (`WHEN NEW.updated_at IS OLD.updated_at`), and the
         // members one fires only for its listed columns, which `updated_at` is not.
-        const before = db.prepare(`SELECT rowid AS r, updated_at AS u FROM ${table} WHERE ${cond}`).all(oldKey) as { r: number; u: string | null }[];
+        const before = db.prepare(`SELECT rowid AS r, updated_at AS u FROM ${table} WHERE ${kept}`).all(oldKey) as { r: number; u: string | null }[];
         update.run(newKey, oldKey);
         const restore = db.prepare(`UPDATE ${table} SET updated_at = ? WHERE rowid = ? AND updated_at IS NOT ?`);
         for (const b of before) restore.run(b.u, b.r, b.u);
@@ -93,14 +98,17 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('marketplace_transactions', 'seller_pubkey');
     move('marketplace_transactions', 'dispute_resolved_by');
 
-    // (f) posts
-    move('posts', 'author_pubkey');
-    move('posts', 'accepted_by');
-    move('posts', 'created_by');
+    // (f) posts. A copy of an event shows no author, and this move stamps a member's rows at one instant: a copy stamped with
+    // them would read beside a listing that names them, with the same time to the millisecond (engine/event-copy.ts). So it
+    // keeps its stamp, and no delta sends it again: a standby makes this same move itself (followReplicatedRekeys).
+    const movePost = (column: string): void => rewrite('posts', `${column} = ?`, `${column} = ?`, 'shown_from_host IS NOT NULL');
+    movePost('author_pubkey');
+    movePost('accepted_by');
+    movePost('created_by');
     // Who may read a post addressed to one member, and who does a task (engine/posts.ts): left on the old key, the
     // member could read neither on the new one.
-    move('posts', 'target_pubkey');
-    move('posts', 'assigned_to');
+    movePost('target_pubkey');
+    movePost('assigned_to');
 
     // (g) poll_votes
     move('poll_votes', 'voter_pubkey');

@@ -34,6 +34,7 @@ import * as Crypto from 'expo-crypto';
 import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
+import { ShowOnGlobalTick, showEventOnGlobal } from './ShowOnGlobalRow';
 import { createPost, fetchEventZone, fetchEventZones, fetchGroups, getBalance, getTreasuries, isRouteMissing, updateEvent } from '../utils/db';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { askForPostPhoto } from '../utils/post-photo';
@@ -141,6 +142,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     // member submits before fetchGroups/getTreasuries have answered and filled the real "Post as" list.
     const [copiedHost, setCopiedHost] = useState<HostOption | null>(null);
     const [isCopy, setIsCopy] = useState(false);
+    // "Also show this on the global community": off, every time (DESIGN-list-on-global-fable.md §2).
+    const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     // Event times. The device's zone is read once per opening, the one Intl call (§7 item 7).
@@ -242,6 +245,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     // cannot be sent either — the audience is cleared when the host is picked, and again on the way out.
     const enterpriseHosts = host.key.startsWith('ent:');
     const effectiveAudience = effectiveEventAudience(host, audienceGroupId);
+    // The member's own new event for the whole community, on a local community: what "Also show this on the global community" is for.
+    const ownForEveryone = !editOf && !effectiveAudience && host.key === 'me' && nodeProfile?.profile === 'local';
 
     const reset = () => {
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false); exactPin.current = null;
@@ -251,6 +256,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         zoneTicket.current++;
         setCopiedHost(null); setIsCopy(false); setHostLetsIn(null);
         setRepeat('never'); setRepeatUntil('');
+        setAlsoOnGlobal(false);
     };
 
     // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
@@ -566,6 +572,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             });
             const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, tz);
             const done = t('Your event is in the Market feed.');
+            if (alsoOnGlobal && answer?.post) void showEventOnGlobal(answer.post, identity).catch(() => {});
             reset();
             Alert.alert(t('Event created'), [done, ...dst].join('\n\n'));
             onSuccess?.();
@@ -955,6 +962,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 <Text style={styles.warningBody}>{t('The event will show UPDATED and everyone going will be told.')}</Text>
                             </View>
                         )}
+
+                        <ShowOnGlobalTick enabled={ownForEveryone && !online} online={ownForEveryone && online} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} />
 
                         {editOf ? (
                             <View style={styles.field}>

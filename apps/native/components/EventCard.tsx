@@ -13,7 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
-import { listPhotoUrl, t } from '@beanpool/core';
+import { copyCardLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
 import { router } from 'expo-router';
 import { CategoryTile } from './CategoryTile';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
@@ -66,6 +66,8 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         : null;
     const placeLine = eventPlaceLine(post, distance);
     const photo = eventCoverPhoto(post);
+    // A member's copy, on the global community: where it is from in place of the counts, and nothing to answer here.
+    const copy = eventCopyOf(post);
     // "Your events" is built from /api/events/mine, which carries no counts — and "0 going" on an event the
     // viewer is going to is not a smaller truth, it is a wrong one. A row that does not know keeps quiet.
     const countsKnown = post.goingCount != null || post.interestedCount != null
@@ -175,13 +177,14 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                     {!!repeats && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {repeats}</Text>}
                     <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
                     {!!placeLine && <Text style={styles.meta} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
-                    {countsKnown && <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
+                    {copy?.from && <Text style={styles.meta} numberOfLines={2} testID="event-copy-line">{copyCardLine(copy.from)}</Text>}
+                    {countsKnown && !copy && <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
                 </View>
             </View>
             {/* The host is running it: no Going / Interested on their own event (round 2, B4). */}
             {isOwnEvent(post, currentPubkey) ? (
                 <Text style={styles.hosting} numberOfLines={1}>{t("You're hosting this event")}</Text>
-            ) : (
+            ) : copy ? null : (
                 <View style={styles.rsvpRow}>
                     {rsvpButton('going', t('Going'))}
                     {rsvpButton('interested', t('Interested'))}

@@ -485,7 +485,8 @@ async function main(): Promise<void> {
         // Version 6: posts with the three repeating-event columns, event_rsvps with occurrence_at (event times slice 4).
         // Version 7: shops with photo_ref, and shop_photos (a shop's banner).
         // Version 9: posts with free_tags (tags slice F1).
-        assert(snap?.tableHashes?.v === 9 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 10: posts with shown_from_host and shown_from_post_id (a member's copy of an event, slice G2′).
+        assert(snap?.tableHashes?.v === 10 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

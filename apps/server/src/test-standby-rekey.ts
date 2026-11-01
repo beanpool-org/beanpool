@@ -22,7 +22,8 @@
  *  3. Rex is re-keyed on the main server. The standby's next pull is a delta and imports: Rex is his new key there, the old
  *     key is replaced there, every row that named him names the new key as on the main server, his old recovery copies are
  *     gone, and the balances are the main server's. His row keeps the main server's stamp, so a change the main server
- *     makes after the re-key (his bio) reaches the standby by the next delta.
+ *     makes after the re-key (his bio) reaches the standby by the next delta. His copy of an event (engine/event-copy.ts)
+ *     keeps its stamp on both servers: no delta carries that move, and the standby's own makes it.
  *  4. Sue is re-keyed, and the standby's next pull is a whole copy: it imports, the same, and the replica check agrees.
  *  5. Tom is re-keyed, and the standby gets it as a main server from before this version sends it (no replaced keys): the
  *     import fails on the callsign index, as every pull did. With both servers on this version, its next pull heals it,
@@ -140,6 +141,9 @@ async function child(): Promise<void> {
             // A post the peer addressed to them alone, and a task the peer gave them: who may read it and who does it.
             db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to, created_at, updated_at)
                         VALUES (?, 'request', 'general', 'Kindling', 'For you', 0, ?, 'direct', ?, ?, ?, ?)`).run(`post-${t}-for`, a.peer, a.pk, a.pk, now, now);
+            // Their copy of an event from their own community: a re-key leaves its stamp, so only the standby's own move reaches it.
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, shown_from_host, created_at, updated_at)
+                        VALUES (?, 'event', 'community', 'Street party', 'Bring a plate', 0, ?, '', ?, ?)`).run(`post-${t}-copy`, a.pk, now, now);
             db.prepare(`INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at) VALUES (?, ?, 'going', '', ?)`).run(`post-${t}`, a.pk, now);
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?), (?, ?, ?)').run(a.pk, a.peer, now, a.peer, a.pk, now);
             db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment, transaction_id, created_at)
@@ -160,6 +164,10 @@ async function child(): Promise<void> {
             const kept = sealRecoveryFields({ encryptedShare: `keeper-${t}`, shareIv: 'iv', shareTag: 'tag', kdfParams: null }, shareRowAad(a.peer, 'member'));
             insertShare.run(a.peer, 'member', a.pk, 2, kept.encryptedShare, kept.shareIv, kept.shareTag, kept.kdfParams, now, now);
             return true;
+        },
+        'post-row': async (a: { id: string }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare('SELECT author_pubkey, updated_at FROM posts WHERE id = ?').get(a.id) ?? null;
         },
         rekey: async (a: { oldPk: string; newPk: string; operator: string }) => {
             const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
@@ -492,12 +500,24 @@ async function main(): Promise<void> {
 
         // ── 3. A re-key, copied as a delta ──
         console.log('\n— 3. Rex is re-keyed on the main server; the standby\'s next pull is a delta —');
+        const copyStamp: string = (await main.send('post-row', { id: 'post-rex-copy' })).updated_at;
+        const listingStamp: string = (await main.send('post-row', { id: 'post-rex' })).updated_at;
         require_(await main.send('rekey', { oldPk: rex.pk, newPk: rex2.pk, operator: owner }), 'Rex is re-keyed to his new phone\'s key');
         const delta = await standby.send('pull', {});
         assert(delta.ok === true && delta.whole === false, `the standby imports the delta (${JSON.stringify({ ok: delta.ok, error: delta.error, whole: delta.whole })})`);
         const rexAfter = await agree(main, standby, 'Rex', rex, rex2);
         assert(rexAfter.s.members[rex2.pk]?.updated_at === rexAfter.m.members[rex2.pk]?.updated_at,
             `his row keeps the main server's stamp (${rexAfter.s.members[rex2.pk]?.updated_at} / ${rexAfter.m.members[rex2.pk]?.updated_at})`);
+        const [copyOnMain, copyOnStandby, listingOnMain, listingOnStandby] = [
+            await main.send('post-row', { id: 'post-rex-copy' }), await standby.send('post-row', { id: 'post-rex-copy' }),
+            await main.send('post-row', { id: 'post-rex' }), await standby.send('post-row', { id: 'post-rex' }),
+        ];
+        assert(listingOnMain.author_pubkey === rex2.pk && listingOnMain.updated_at !== listingStamp && listingOnStandby.updated_at === listingOnMain.updated_at,
+            `control: his listing is stamped by the move, and the standby takes the main server's stamp (${listingStamp} → ${listingOnMain.updated_at} / ${listingOnStandby.updated_at})`);
+        assert(copyOnMain.author_pubkey === rex2.pk && copyOnMain.updated_at === copyStamp,
+            `his copy of an event is the new key's on the main server, its stamp unmoved (${copyStamp} → ${copyOnMain.updated_at})`);
+        assert(copyOnStandby.author_pubkey === rex2.pk && copyOnStandby.updated_at === copyStamp,
+            `and on the standby, whose own move reached it with no delta carrying it (${copyOnStandby.author_pubkey === rex2.pk ? 'moved' : 'not moved'}, ${copyOnStandby.updated_at})`);
         // Since #1768 the main server deletes a re-keyed member's own copies (they rebuild the replaced seed) with a tombstone,
         // and renames the copies they keep for others.
         assert(rexAfter.s.keyRows[rex2.pk]['recovery_shares.owner_pubkey'] === 0 && rexAfter.s.keyRows[rex.pk]['recovery_shares.owner_pubkey'] === 0

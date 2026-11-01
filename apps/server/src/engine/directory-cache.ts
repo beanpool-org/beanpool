@@ -614,7 +614,20 @@ export function listedCommunityCount(): number {
 }
 
 // The listed communities by their address's host, built from the rows `listed()` holds and again when they change.
-let byHost: { rows: ReturnType<typeof listed>; map: Map<string, { key: string; name: string | null }> } | null = null;
+let byHost: { rows: ReturnType<typeof listed>; map: Map<string, DirectoryRow> } | null = null;
+
+function listedRowAt(host: string): DirectoryRow | null {
+    const rows = listed();
+    if (!byHost || byHost.rows !== rows) {
+        const map = new Map<string, DirectoryRow>();
+        for (const { row } of rows) {
+            const at = row.url ? audienceOf(row.url) : null;
+            if (at && !map.has(at)) map.set(at, row);
+        }
+        byHost = { rows, map };
+    }
+    return byHost.map.get(host) ?? null;
+}
 
 /**
  * The listed community whose address is `host`, in the form a member's app signs a host (audienceOf: lower case, no
@@ -622,16 +635,27 @@ let byHost: { rows: ReturnType<typeof listed>; map: Map<string, { key: string; n
  * list any address, so a match is a reason to warn, never proof whose address it is.
  */
 export function listedCommunityAt(host: string): { key: string; name: string | null } | null {
+    const row = listedRowAt(host);
+    return row ? { key: row.key, name: row.name } : null;
+}
+
+/** How long after its last push a row is shown (supabase directory_listed: front doors S13), should the mirror have stopped. */
+const SHOWN_FOR_MS = 7 * DAY_MS;
+
+/**
+ * The community at `host` (audienceOf's form) if a stranger is shown it now: listed, named, with an address, pushed within
+ * 7 days. Else null. What a copy's from-line and door are drawn from (engine/event-copy.ts), and nothing the phone said.
+ */
+export function shownCommunityAt(host: string, now: number = Date.now()): DirectoryRow | null {
+    const found = listedRowAt(host);
+    if (!found?.name || !found.url || !found.registryUpdatedAt) return null;
+    return now - Date.parse(found.registryUpdatedAt) <= SHOWN_FOR_MS ? found : null;
+}
+
+/** Changes when the rows do: a copy's from-line is drawn from them, so a read's ETag holds this too. */
+export function directoryStamp(): string {
     const rows = listed();
-    if (!byHost || byHost.rows !== rows) {
-        const map = new Map<string, { key: string; name: string | null }>();
-        for (const { row } of rows) {
-            const at = row.url ? audienceOf(row.url) : null;
-            if (at && !map.has(at)) map.set(at, { key: row.key, name: row.name });
-        }
-        byHost = { rows, map };
-    }
-    return byHost.map.get(host) ?? null;
+    return `${rows.length}:${(db.prepare('SELECT MAX(updated_at) AS at FROM directory_cache WHERE listed = 1').get() as { at: string | null }).at ?? ''}`;
 }
 
 /** A listed community with a place, and when this node first saw it. */

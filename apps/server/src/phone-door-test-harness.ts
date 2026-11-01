@@ -46,6 +46,7 @@
  *   profileSwitch {name, value} a profile switch's override in node_config (`true`/`false`), as an operator sets one
  * For apps/native/utils/__tests__/bring-listings-e2e.test.ts (Lounge L7):
  *   archive                     the node's own retention run (archiveStaleListings), as its hourly tick makes it
+ *   directory {url, name}       one community in the mirrored directory (engine/directory-cache.ts), as a mirror run writes it
  *   requests                    every request this node has received, `METHOD /path?query`, in order: what a test holds
  *                               against the requests the phone made, so a call from another node would show
  *   quit                        exit
@@ -96,6 +97,7 @@ async function main(): Promise<void> {
     const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { initClaimCode } = await import('./claim-code.js');
     const { archiveStaleListings } = await import('./engine/posts.js');
+    const { normaliseRegistryRow, writeDirectoryRows } = await import('./engine/directory-cache.js');
 
     // Counted at the door, before any route: a request nothing routes is a request all the same.
     const requests: string[] = [];
@@ -270,6 +272,10 @@ async function main(): Promise<void> {
             return true;
         },
         archive: () => archiveStaleListings(broadcast),
+        directory: ({ url, name }: { url?: string; name?: string }) => {
+            const row = normaliseRegistryRow({ node_id: url, shown_name: name, node_url: url, last_seen_at: new Date().toISOString(), accepting_knocks: true });
+            return writeDirectoryRows(row ? [row] : [], new Date().toISOString()) && true;
+        },
         requests: () => requests,
         quit: () => process.exit(0),
     };

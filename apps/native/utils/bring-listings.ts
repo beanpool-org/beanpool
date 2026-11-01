@@ -323,7 +323,7 @@ function photoUrlOf(photo: unknown, from: string): string | null {
 }
 
 /** The listing's photos as the data URLs a new post sends; `missed` could not be fetched, `later` might yet be. */
-async function photosOf(post: OwnListing, from: string, deps: BringDeps): Promise<{ photos: string[]; missed: number; later: boolean }> {
+export async function photosOf(post: Pick<OwnListing, 'photos'>, from: string, deps: Pick<BringDeps, 'fetchPhoto'>): Promise<{ photos: string[]; missed: number; later: boolean }> {
     const photos: string[] = [];
     let missed = 0;
     let later = false;

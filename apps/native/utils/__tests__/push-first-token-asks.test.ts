@@ -10,9 +10,13 @@
  *   - a failed invite: the phone opens the community to redeem, which saves it, and the row stays when the redeem fails;
  *   - Add & Connect with no answer to its probe: it saves first, and writes a mark only on a good probe.
  *
- * So before the first token at a community that isn't the one the phone is set to and isn't on the record, the community
- * is asked with the membership probe, and the token goes on only when it answers that the key is a member. No answer
- * leaves it for a later chance. The other way a community gets on the due list (no token to be had yet) asks the same.
+ * So before the first token at a community that isn't on the record, the community is asked with the membership probe,
+ * and the token goes on only when it answers that the key is a member. No answer leaves it for a later chance. The other
+ * way a community gets on the due list (no token to be had yet) asks the same.
+ *
+ * The community the phone is set to is asked too, except at a start. A look sets the phone there as well, and a community
+ * that had just said no was on the due list, so a switch or a return handed it the token (deciding review 4434633314).
+ * Only a start goes there unasked, as ever.
  *
  * Real modules throughout: the doors, the phone's storage code, the registrations and the probe. Nothing contacts a node:
  * fetch is a fake community per address (fake-communities.ts), which answers the probe only to a request signed by the
@@ -95,7 +99,8 @@ afterEach(() => {
 const aReturn = () => registerWhereMissing(phoneToken, 'android');
 /** The app starts with the account on it (app/_layout.tsx, services/push-notifications.ts `registerForPushNotifications`). */
 const aStart = () => registerAccountForPush(kim.publicKey, phoneToken, 'android').then(() => {});
-const ASKS: Array<[string, () => Promise<void>]> = [['at a return (registerWhereMissing)', aReturn], ['at a start (registerAccountForPush)', aStart]];
+/** How, and how often that asks her own community: a start never asks the one the phone is set to. */
+const ASKS: Array<[string, () => Promise<void>, number]> = [['at a return (registerWhereMissing)', aReturn, 1], ['at a start (registerAccountForPush)', aStart, 0]];
 
 const at = (community: string, sent: Sent[] = nodes.sent) => sent.filter((s) => s.community === community);
 const tokens = (community: string, from = 0) => at(community, nodes.sent.slice(from)).filter((s) => s.method === 'POST' && s.path === '/api/push-tokens');
@@ -164,7 +169,7 @@ const DOORS: Array<[string, () => Promise<void>]> = [
 ];
 
 describe.each(DOORS)('%s leaves a community she never joined on the list, unmarked', (_door, door) => {
-    it.each(ASKS)('%s it is asked, says no, and gets no token', async (_how, ask) => {
+    it.each(ASKS)('%s it is asked, says no, and gets no token', async (_how, ask, homeProbes) => {
         await door();
         expect(await isGuestNode(BYRON)).toBe(false);
 
@@ -174,9 +179,9 @@ describe.each(DOORS)('%s leaves a community she never joined on the list, unmark
         expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
         expect(recorded()).not.toContain(BYRON);
         expect(probes(BYRON)).toHaveLength(1);
-        // Her own community is not held up, and is not asked.
+        // Her own community is not held up.
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
-        expect(probes(MULLUM)).toEqual([]);
+        expect(probes(MULLUM)).toHaveLength(homeProbes);
     });
 });
 
@@ -206,7 +211,7 @@ describe('a community that answers', () => {
         expect(JSON.stringify(probe)).not.toContain(PHONE_TOKEN);
     });
 
-    it('the community the phone is set to is not asked, as ever: a knock\'s answer reaches the phone that way', async () => {
+    it('at a start the community the phone is set to is not asked, as ever: a knock\'s answer reaches the phone that way', async () => {
         await kimOnMullum();
         mem.async.set(ANCHOR, BYRON);
         await addSavedNode(BYRON);
@@ -301,7 +306,7 @@ describe('a community that says no is left alone', () => {
         expect(RETRY_LONGEST_WAIT_MS).toBeGreaterThan(RETRY_FIRST_WAIT_MS);
     });
 
-    it('joining it later lands at once: the wait was for a question, and the one she joined needs none', async () => {
+    it('joining it later lands at once: the wait was for a question, and the community she joined answers yes', async () => {
         await kimOnMullum();
         await addSavedNode(BYRON);
         await aReturn();
@@ -320,6 +325,7 @@ describe('a community that says no is left alone', () => {
         );
         await registered;
 
+        expect(probes(BYRON)).toHaveLength(2);
         expect(tokens(BYRON)).toHaveLength(1);
         expect(nodes.has(BYRON, kim.publicKey)).toBe(true);
         expect(due()).toEqual([]);
@@ -341,13 +347,138 @@ describe('a community that says no is left alone', () => {
     });
 });
 
+describe('the phone set to a community that has just said no (deciding review 4434633314)', () => {
+    /** The phone moves there, and services/push-notifications.ts runs what is due (`onCommunitySwitched`). */
+    const aSwitchTo = (community: string) => {
+        mem.async.set(ANCHOR, community);
+        return retryDueRegistrations(phoneToken, 'android');
+    };
+
+    /** Kim on Mullum with Byron on the list, unmarked, as a restored list leaves it. The first return asks Byron: no. */
+    const byronSaidNo = async (): Promise<void> => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        await kimOnMullum();
+        await addSavedNode(BYRON);
+        await aReturn();
+        expect(probes(BYRON)).toHaveLength(1);
+        expect(due()).toMatchObject([{ community: BYRON, refusals: 1 }]);
+    };
+
+    const nothingReachedByron = () => {
+        expect(tokens(BYRON)).toEqual([]);
+        expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+        expect(recorded()).not.toContain(BYRON);
+    };
+
+    it('a switch once the wait is over: it is asked again, says no again, and gets no token', async () => {
+        await byronSaidNo();
+        vi.setSystemTime(Date.now() + RETRY_FIRST_WAIT_MS);
+
+        await aSwitchTo(BYRON);
+
+        expect(probes(BYRON)).toHaveLength(2);
+        nothingReachedByron();
+    });
+
+    it('a switch inside the wait, then a return before any mark lands: the same', async () => {
+        await byronSaidNo();
+
+        await aSwitchTo(BYRON);
+        expect(probes(BYRON)).toHaveLength(1);
+        await aReturn();
+
+        expect(probes(BYRON)).toHaveLength(2);
+        nothingReachedByron();
+    });
+
+    it('a switch inside the wait, marked as a guest, then a return after the wait: the same', async () => {
+        await byronSaidNo();
+
+        await aSwitchTo(BYRON);
+        await markGuestNode(BYRON);
+        vi.setSystemTime(Date.now() + RETRY_FIRST_WAIT_MS);
+        await aReturn();
+
+        expect(probes(BYRON)).toHaveLength(2);
+        nothingReachedByron();
+    });
+
+    it('control: a community never asked before the switch gets nothing, not even the question', async () => {
+        await kimOnMullum();
+        await addSavedNode(BYRON);
+
+        await aSwitchTo(BYRON);
+
+        expect(probes(BYRON)).toEqual([]);
+        nothingReachedByron();
+    });
+
+    it('control: marked as a guest before any question, then a switch and a return: nothing at all', async () => {
+        await kimOnMullum();
+        await addSavedNode(BYRON);
+        await markGuestNode(BYRON);
+        await aReturn();
+
+        await aSwitchTo(BYRON);
+        await aReturn();
+
+        expect(probes(BYRON)).toEqual([]);
+        nothingReachedByron();
+    });
+
+    it('a start while the phone is set there sends it, unasked, as ever: only a start does', async () => {
+        await byronSaidNo();
+        mem.async.set(ANCHOR, BYRON);
+
+        await aStart();
+
+        expect(probes(BYRON)).toHaveLength(1);
+        expect(tokens(BYRON)).toHaveLength(1);
+    });
+
+    it('a registration that failed at a knock is on the record, so it is not asked, and lands at the next chance', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        await kimOnMullum();
+        mem.async.set(ANCHOR, BYRON);
+        await addSavedNode(BYRON);
+        await markGuestNode(BYRON);
+        nodes.answer = (s) => (s.community === BYRON ? 500 : 'up');
+        await aStart();
+        expect(recorded()).toContain(BYRON);
+        expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+
+        nodes.answer = () => 'up';
+        vi.setSystemTime(Date.now() + RETRY_FIRST_WAIT_MS);
+        await retryDueRegistrations(phoneToken, 'android');
+
+        expect(probes(BYRON)).toEqual([]);
+        expect(nodes.has(BYRON, kim.publicKey)).toBe(true);
+    });
+
+    it('the accepted loss: a knocking phone with no token at its start waits for its next start', async () => {
+        await kimOnMullum();
+        mem.async.set(ANCHOR, BYRON);
+        await addSavedNode(BYRON);
+        await markGuestNode(BYRON);
+        await registerAccountForPush(kim.publicKey, async () => { throw new TypeError('Network request failed'); }, 'android');
+        expect(due().map((d) => d.community)).toContain(BYRON);
+
+        await retryDueRegistrations(phoneToken, 'android');
+        expect(probes(BYRON)).toHaveLength(1);
+        expect(tokens(BYRON)).toEqual([]);
+
+        await aStart();
+        expect(tokens(BYRON)).toHaveLength(1);
+    });
+});
+
 describe('while the question is out', () => {
     /** Kim, a member at Byron, and the question to Byron out and unanswered. */
     const askingByron = async (): Promise<{ asking: Promise<void> }> => {
         await kimOnMullum();
         await addSavedNode(BYRON);
         nodes.join(kim.publicKey, BYRON);
-        nodes.answer = (s) => (s.path.startsWith('/api/community/membership/') ? 'hold' : 'up');
+        nodes.answer = (s) => (s.community === BYRON && s.path.startsWith('/api/community/membership/') ? 'hold' : 'up');
         const asking = aReturn();
         await vi.waitFor(() => expect(nodes.held).toHaveLength(1));
         return { asking };

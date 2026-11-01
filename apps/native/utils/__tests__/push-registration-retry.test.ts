@@ -138,8 +138,9 @@ const recorded = () => (JSON.parse(mem.async.get(PUSH_REGISTERED_AT_STORE_KEY) ?
 const registrations = (from = 0) => nodes.sent.slice(from).filter((s) => s.method === 'POST' && s.path === '/api/push-tokens');
 const stored = () => JSON.parse(mem.async.get(PUSH_LEAVE_STATEMENTS_STORE_KEY) ?? '[]') as LeaveStatement[];
 
-/** Kim signs in on the phone while it is set to `community`: her key is written, and the app registers her. */
+/** Kim, a member of `community`, signs in on the phone while it is set there: her key is written, and the app registers her. */
 async function kimSignsIn(community = MULLUM): Promise<void> {
+    nodes.join(kim.publicKey, community);
     await importIdentity(kim);
     mem.async.set(ANCHOR, community);
     await registerAccountForPush(kim.publicKey, phoneToken, 'android');
@@ -575,6 +576,7 @@ describe('#1258\'s rules hold for a retry', () => {
 
         // Ben's 12 words replace her account on this phone, set to Byron; still no connection, and his registration fails.
         offline();
+        nodes.join(ben.publicKey, BYRON);
         await saveRestoredAccount({ identity: ben, replacesAnother: true }, BYRON);
         expect((await loadIdentity())?.publicKey).toBe(ben.publicKey);
         expect(due()).toEqual([]);

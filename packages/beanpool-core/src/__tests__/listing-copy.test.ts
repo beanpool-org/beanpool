@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLanguage } from '../words.js';
+import { setLanguage, type UiLang } from '../words.js';
 import { beansPriceWords, copyCardLine, copyPriceLine, copyPriceOf, copyPriceText, eventCopyColumn, eventCopyOf, type EventCopy, type ShownFromLine } from '../event-copy.js';
 
 const es = JSON.parse(readFileSync(fileURLToPath(new URL('../../words/es.json', import.meta.url)), 'utf8'));
@@ -20,6 +21,37 @@ describe('a copy of an Offer or a Need, in words (slice G1′)', () => {
 
     it('says the line Marty asked for, word for word', () => {
         expect(copyPriceLine({ from, price: { beans: 20, per: 'fixed' } })).toBe("20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.");
+    });
+
+    it('a Need is answered, not bought: the director\'s words, in all four forms, read from the row\'s own type', () => {
+        const price = { beans: 20, per: 'fixed' } as const;
+        expect(copyPriceLine({ from, price, need: true })).toBe("20 Beans in Mullumbimby · You can't answer this until Mullumbimby welcomes you.");
+        expect(copyPriceLine({ from: null, price, need: true })).toBe("20 Beans in another community · You can't answer this here.");
+        expect(copyPriceLine({ from, price: null, need: true })).toBe("You can't answer this until Mullumbimby welcomes you.");
+        expect(copyPriceLine({ from: null, price: null, need: true })).toBe("This is from another community, so you can't answer it here.");
+
+        const node = { shownCopy: true, shownFrom: from, shownPrice: '20 fixed' };
+        expect(copyPriceLine(eventCopyOf({ ...node, type: 'need' })!)).toContain("You can't answer this");
+        expect(copyPriceLine(eventCopyOf({ shown_from: eventCopyColumn(node), type: 'need' })!)).toContain("You can't answer this");
+        expect(copyPriceLine(eventCopyOf({ shown_from: '{not json', type: 'need' })!)).toBe("This is from another community, so you can't answer it here.");
+        // The Offer's line stays, and an event's row is what it was.
+        expect(copyPriceLine(eventCopyOf({ ...node, type: 'offer' })!)).toBe("20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.");
+        expect(eventCopyOf({ shownCopy: true, shownFrom: from, type: 'event' })).toEqual({ from });
+    });
+
+    it('a Need\'s line reads in every language through the words layer, its name and price where the language puts them', () => {
+        const dir = fileURLToPath(new URL('../../words/', import.meta.url));
+        const langs = readdirSync(dir).filter((f) => f.endsWith('.json'));
+        expect(langs.length).toBeGreaterThanOrEqual(24);
+        const english = copyPriceLine({ from, price: { beans: 20, per: 'fixed' }, need: true });
+        for (const file of langs) {
+            setLanguage(file.replace('.json', '') as UiLang, [JSON.parse(readFileSync(join(dir, file), 'utf8'))]);
+            const line = copyPriceLine({ from, price: { beans: 20, per: 'fixed' }, need: true });
+            expect(line, file).not.toBe(english);
+            expect(line.split('Mullumbimby').length, file).toBe(3);
+            expect(line, file).toContain('20');
+            expect(copyPriceLine({ from: null, price: null, need: true }), file).not.toBe("This is from another community, so you can't answer it here.");
+        }
     });
 
     it('says what the Beans are for, and that a free listing is free', () => {

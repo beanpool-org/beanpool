@@ -143,6 +143,7 @@ vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls,
 
 import { LanguageProvider } from '../../components/LanguageProvider';
 import PostDetailScreen from '../../app/post/[id]';
+import { SHOWN_ON_GLOBAL_STORE_KEY } from '../storage-keys';
 
 const NODE = 'https://mullum.example';
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -623,6 +624,8 @@ describe("a member's copy on the global community, on the listing's page (slice 
         ['an enterprise\'s, to its keeper', () => listing({ repeatable: 0, author_pubkey: ENT, author_callsign: 'Farm Co', lat: -28.68731, lng: 153.52219 }), () => { node.keeperOf = [ENT]; }],
         ['from a linked community', () => mine({ origin_node: 'https://other.example' }), () => {}],
         ['already finished', () => mine({ status: 'completed' }), () => {}],
+        ['paused', () => mine({ status: 'paused' }), () => {}],
+        ['in a deal', () => mine({ status: 'pending' }), () => {}],
         ['on the global community itself', () => mine(), onGlobal],
     ] as const) {
         it(`no offer on a listing ${why}`, async () => {
@@ -633,4 +636,16 @@ describe("a member's copy on the global community, on the listing's page (slice 
             expect(offered()).toBe(false);
         });
     }
+
+    it('a paused listing with a copy resting keeps its row: Stop showing is still theirs', async () => {
+        const row = mine({ status: 'paused' });
+        store.map.set(SHOWN_ON_GLOBAL_STORE_KEY, JSON.stringify([{
+            publicKey: ME.publicKey, home: NODE, homeId: row.id, copyId: 'copy-1', sent: '', sentAt: 0, photo: '', skips: [], resting: true,
+        }]));
+        await open(row);
+        await settle();
+        expect(offered()).toBe(true);
+        expect(host.textContent).toContain('Stop showing');
+        expect(host.textContent).not.toContain('Shown on the global community');
+    });
 });

@@ -48,7 +48,7 @@ Visitors to the global community can see this listing's photos and its rough are
 
 On your own Offer or Need, for everyone, with a place, you can tick **Also show this on the global community**. It is off until you tick it, and your phone can also do it later from the listing's own page. A lendable Offer counts as an Offer. An enterprise's listing, and one for a group or one person, can't be shown.
 
-Your phone posts a copy there with your own key. Your community's server does nothing and learns nothing. The copy has the listing's words, its photos, its place rounded to about 10 km, and its price in words, with this line: "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you." It shows no name, and nobody can message you from it.
+Your phone posts a copy there with your own key. Your community's server does nothing and learns nothing. The copy has the listing's words, its photos, its place rounded to about 10 km, and its price in words, with this line: "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you." A Need says "You can't answer this" instead. It shows no name, and nobody can message you from it.
 
 Nobody can buy it, take it up or start a deal on it there, and the global community has no Beans. Someone who wants it asks to join your community, and it is yours to deal with once they are welcomed. If your community isn't in the directory, the copy shows with no community's name and no way to ask.
 

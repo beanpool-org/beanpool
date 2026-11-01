@@ -29,6 +29,8 @@ export interface EventCopy {
     from: ShownFromLine | null;
     /** An Offer's or Need's price at home; null on an event. */
     price?: CopyPrice | null;
+    /** A Need: nobody buys or takes one, so its line says so in its own words. */
+    need?: boolean;
 }
 
 /** How a price is kept and sent: '20 fixed'. */
@@ -51,21 +53,21 @@ function fromLineOf(raw: unknown): ShownFromLine | null {
 }
 
 /** What a post row says of being a copy: the node's own read (`shownCopy`, `shownFrom`, `shownPrice`), or the phone's cached column. */
-export function eventCopyOf(post: { shownCopy?: unknown; shownFrom?: unknown; shownPrice?: unknown; shown_from?: unknown } | null | undefined): EventCopy | null {
-    if (post?.shownCopy === true) return copyOf(post.shownFrom, post.shownPrice);
+export function eventCopyOf(post: { shownCopy?: unknown; shownFrom?: unknown; shownPrice?: unknown; shown_from?: unknown; type?: unknown } | null | undefined): EventCopy | null {
+    if (post?.shownCopy === true) return copyOf(post.shownFrom, post.shownPrice, post.type);
     if (typeof post?.shown_from !== 'string' || !post.shown_from) return null;
     try {
         const kept = JSON.parse(post.shown_from);
-        return copyOf(kept, kept?.price);
+        return copyOf(kept, kept?.price, post.type);
     } catch {
-        return { from: null };
+        return { from: null, ...(post.type === 'need' ? { need: true } : {}) };
     }
 }
 
 /** A copy from what a row holds. An event has no price, so an event's reads as it always did. */
-function copyOf(line: unknown, rawPrice: unknown): EventCopy {
+function copyOf(line: unknown, rawPrice: unknown, type: unknown): EventCopy {
     const price = copyPriceOf(rawPrice);
-    return { from: fromLineOf(line), ...(price ? { price } : {}) };
+    return { from: fromLineOf(line), ...(price ? { price } : {}), ...(type === 'need' ? { need: true } : {}) };
 }
 
 /** A phone's cached column for a post from the node: the line and the price, `{}` for a copy with neither, null for any other post. */
@@ -90,13 +92,24 @@ export function beansPriceWords(price: CopyPrice): string {
 
 /**
  * An Offer's or Need's line on a copy, on its card and its page: "20 Beans in Mullumbimby · You can't buy or take this until
- * Mullumbimby welcomes you." The name is the directory row's. With no row there is no name and no door, so it says neither.
+ * Mullumbimby welcomes you." A Need's says "You can't answer this". The name is the directory row's. With no row there is no
+ * name and no door, so it says neither.
  */
 export function copyPriceLine(copy: EventCopy): string {
     if (!copy.from) {
+        if (copy.need) {
+            return copy.price
+                ? t("{price} in another community · You can't answer this here.", { price: beansPriceWords(copy.price) })
+                : t("This is from another community, so you can't answer it here.");
+        }
         return copy.price
             ? t("{price} in another community · You can't buy or take this here.", { price: beansPriceWords(copy.price) })
             : t("This is from another community, so you can't buy or take it here.");
+    }
+    if (copy.need) {
+        return copy.price
+            ? t("{price} in {community} · You can't answer this until {community} welcomes you.", { price: beansPriceWords(copy.price), community: copy.from.name })
+            : t("You can't answer this until {community} welcomes you.", { community: copy.from.name });
     }
     return copy.price
         ? t("{price} in {community} · You can't buy or take this until {community} welcomes you.", { price: beansPriceWords(copy.price), community: copy.from.name })

@@ -1298,10 +1298,6 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
-/**
- * The member already has a deal under way on this listing (engine/escrow.ts DEAL_OPEN_CODE): 409, its code, and the deal's id,
- * so an app says so and opens that deal. The deal is the caller's own (the buyer or requester this route was entitled to).
- */
 function respondCopyNoDeal(ctx: any, err: any): boolean {
     if (err?.code !== LISTING_COPY_CODE) return false;
     ctx.status = 409;
@@ -1309,6 +1305,10 @@ function respondCopyNoDeal(ctx: any, err: any): boolean {
     return true;
 }
 
+/**
+ * The member already has a deal under way on this listing (engine/escrow.ts DEAL_OPEN_CODE): 409, its code, and the deal's id,
+ * so an app says so and opens that deal. The deal is the caller's own (the buyer or requester this route was entitled to).
+ */
 function respondDealOpen(ctx: any, err: any): boolean {
     if (err?.code !== DEAL_OPEN_CODE) return false;
     ctx.status = 409;

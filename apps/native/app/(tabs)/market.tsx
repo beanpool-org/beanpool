@@ -1693,7 +1693,7 @@ export default function MarketScreen() {
                                 <Text style={[styles.gridPriceText, { color: dealChip === 'in-trust' ? colors.text.onBrand : colors.text.onGold, fontWeight: '900' }]}>{listingChipWords(dealChip)}</Text>
                             </View>
                         )}
-                        {!isPulse && showsBeans && (
+                        {!isPulse && showsBeans && !copy && (
                             <View style={[styles.gridBadge, styles.gridPriceEnd]}>
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
@@ -1767,7 +1767,7 @@ export default function MarketScreen() {
                             )}
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
-                            {!isPulse && showsBeans && (
+                            {!isPulse && showsBeans && !copy && (
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
                                     style={styles.compactPrice}
@@ -1874,7 +1874,7 @@ export default function MarketScreen() {
                                     </View>
                                 )}
                             </View>
-                            {!isPulse && showsBeans && (
+                            {!isPulse && showsBeans && !copy && (
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
                                     style={[styles.price, { fontSize: 16 }]}

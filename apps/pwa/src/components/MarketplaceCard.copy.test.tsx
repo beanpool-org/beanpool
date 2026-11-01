@@ -20,11 +20,37 @@ const plain = { ...copy, authorPublicKey: 'abc', authorCallsign: 'Robin', shownC
 afterEach(cleanup);
 
 describe('a copy of a listing on the web', () => {
-    it.each(['grid', 'list'] as const)('its %s card has the line and no author', (viewMode) => {
+    it.each(['grid', 'list', 'compact'] as const)('its %s card has the line and no author', (viewMode) => {
         render(<MarketplaceCard post={copy} viewMode={viewMode} />);
         expect(screen.getByTestId('listing-copy-line').textContent).toBe(LINE);
         expect(document.body.textContent).not.toContain('Anonymous');
         expect(document.body.textContent).not.toContain('hidden');
+        expect(document.body.textContent).not.toMatch(/\bby\b/);
+    });
+
+    it.each(['grid', 'list', 'compact'] as const)('where Beans are on, its %s card draws no 0 beside the line, and a plain listing keeps its price (the control)', (viewMode) => {
+        const { unmount } = render(<MarketplaceCard post={copy} viewMode={viewMode} beansMarked={false} />);
+        expect(screen.getByTestId('listing-copy-line').textContent).toBe(LINE);
+        expect(document.querySelector('img[alt="B"]')).toBeNull();
+        unmount();
+        render(<MarketplaceCard post={plain} viewMode={viewMode} beansMarked={false} />);
+        expect(document.querySelector('img[alt="B"]')).not.toBeNull();
+    });
+
+    it.each(['grid', 'list', 'compact'] as const)('a Need\'s %s card says it can\'t be answered, not bought', (viewMode) => {
+        render(<MarketplaceCard post={{ ...copy, type: 'need' }} viewMode={viewMode} />);
+        expect(screen.getByTestId('listing-copy-line').textContent).toBe("20 Beans in Mullumbimby · You can't answer this until Mullumbimby welcomes you.");
+    });
+
+    it('a Need on a visitor\'s card and page says the same, its screen-reader name too', () => {
+        const need = { ...copy, type: 'need' };
+        const line = "20 Beans in Mullumbimby · You can't answer this until Mullumbimby welcomes you.";
+        render(<VisitorCard post={need} beans={false} distanceKm={null} onOpen={() => undefined} />);
+        expect(screen.getByTestId('visitor-card-terms').textContent).toBe(line);
+        expect(visitorCardName(need, false, null)).toContain(line);
+        cleanup();
+        render(<VisitorPostDetail post={need} beans={false} distanceKm={null} onJoin={() => undefined} />);
+        expect(screen.getByTestId('event-copy-door').textContent).toContain(line);
     });
 
     it('a plain listing keeps its author (the control)', () => {

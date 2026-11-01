@@ -21,7 +21,10 @@ import type { HomeEvent } from '../utils/show-on-global';
 
 export const showOnGlobalLabel = () => t('Also show this on the global community');
 export const showOnGlobalHint = () => t("Anyone there can see it, with its times, its rough area and this community's name. Not your name, the place or your note. To go, they ask to join.");
-export const showListingOnGlobalHint = () => t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To buy or take it, they ask to join.");
+/** `need`: a Need is answered, not bought (its line on a copy, @beanpool/core copyPriceLine). */
+export const showListingOnGlobalHint = (need = false) => need
+    ? t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To answer it, they ask to join.")
+    : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To buy or take it, they ask to join.");
 const joinFirstWords = () => t('Join the global community to show this there');
 
 /** A listing as the phone's own row holds it, as show-on-global reads one. */
@@ -72,11 +75,11 @@ const unreachable = () => Alert.alert(showOnGlobalLabel(), t("The global communi
 /**
  * The composer's tick. Off until the member ticks it, and off again if the form moves away from what it is for (Online, a
  * group, another host): a tick nobody can see must not go with the event. `online`: an event that would have the offer
- * but for being online, told why not. `listing`: an Offer or a Need, whose words say what goes of one.
+ * but for being online, told why not. `listing`: an Offer or a Need, whose words say what goes of one; `need`, which of them.
  */
-export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, listing = false }: { enabled: boolean; online?: boolean; checked: boolean; onChange: (next: boolean) => void; listing?: boolean }) {
+export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, listing = false, need = false }: { enabled: boolean; online?: boolean; checked: boolean; onChange: (next: boolean) => void; listing?: boolean; need?: boolean }) {
     const styles = useStyles(makeStyles);
-    const hint = listing ? showListingOnGlobalHint() : showOnGlobalHint();
+    const hint = listing ? showListingOnGlobalHint(need) : showOnGlobalHint();
     const { offer, ask } = useOffer(enabled);
     const [busy, setBusy] = useState(false);
     // The form outlives its sheet: an answer landing once this row has gone would tick the next event, against "off, every time".
@@ -100,7 +103,7 @@ export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, l
             <View style={styles.row} testID="show-on-global-join">
                 <View style={styles.col}>
                     <Text style={styles.title}>{joinFirstWords()}</Text>
-                    <Text style={styles.hint}>{t("You can show it from the event's page once you have.")}</Text>
+                    <Text style={styles.hint}>{listing ? t("You can show it from the listing's page once you have.") : t("You can show it from the event's page once you have.")}</Text>
                 </View>
             </View>
         );
@@ -154,7 +157,10 @@ export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event
         });
     }, [enabled, event.id, identity]);
     useEffect(read, [read]);
-    if (!enabled || !identity || (!shown && !offer)) return null;
+    // A listing off the board here is offered nothing: only what it has running stays to stop. This is what the row knows, and
+    // showOnGlobal asks the community itself, for what it can't (a hide by reports).
+    const offBoard = listing && event.status !== 'active';
+    if (!enabled || !identity || (!shown && (!offer || offBoard))) return null;
     if (!shown && offer === 'join') {
         return (
             <Pressable onPress={() => void import('expo-router').then(({ router }) => router.push('/join-global'))} style={styles.row} accessibilityRole="button" testID="show-on-global-join">
@@ -188,7 +194,7 @@ export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event
                     ? <Text style={styles.title}>{!resting ? t('Shown on the global community')
                         : listing ? t("It comes down while this is off the board here, and goes back up when it's on again.")
                         : t("It comes down while you're on holiday, and goes back up when you're back.")}</Text>
-                    : <Text style={styles.hint}>{listing ? showListingOnGlobalHint() : showOnGlobalHint()}</Text>}
+                    : <Text style={styles.hint}>{listing ? showListingOnGlobalHint(event.type === 'need') : showOnGlobalHint()}</Text>}
                 <Pressable onPress={act} disabled={busy} style={[styles.action, busy && styles.asking]} accessibilityRole="button" accessibilityState={{ busy }} testID="show-on-global-act">
                     <Text style={styles.link}>{shown ? t('Stop showing') : showOnGlobalLabel()}</Text>
                 </Pressable>

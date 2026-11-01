@@ -2,10 +2,10 @@
   "_meta": {
     "language": "es",
     "name": "Spanish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, front doors S15: the community card); gemini-3.8-flash-high (machine draft, front doors S15 words: look around global first); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G2 event copy: the door)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, front doors S15: the community card); gemini-3.8-flash-high (machine draft, front doors S15 words: look around global first); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-23",
+    "updated": "2026-11-02",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "frijoles",
@@ -830,5 +830,9 @@
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} en {community} · No puedes comprar ni tomar esto hasta que {community} te dé la bienvenida.",
   "{price} in another community · You can't buy or take this here.": "{price} en otra comunidad · Aquí no puedes comprar ni tomar esto.",
   "You can't buy or take this until {community} welcomes you.": "No puedes comprar ni tomar esto hasta que {community} te dé la bienvenida.",
-  "This is from another community, so you can't buy or take it here.": "Esto es de otra comunidad, así que aquí no puedes comprarlo ni tomarlo."
+  "This is from another community, so you can't buy or take it here.": "Esto es de otra comunidad, así que aquí no puedes comprarlo ni tomarlo.",
+  "{price} in {community} · You can't answer this until {community} welcomes you.": "{price} en {community} · No puedes responder a esto hasta que {community} te dé la bienvenida.",
+  "{price} in another community · You can't answer this here.": "{price} en otra comunidad · Aquí no puedes responder a esto.",
+  "You can't answer this until {community} welcomes you.": "No puedes responder a esto hasta que {community} te dé la bienvenida.",
+  "This is from another community, so you can't answer it here.": "Esto es de otra comunidad, así que aquí no puedes responder."
 }

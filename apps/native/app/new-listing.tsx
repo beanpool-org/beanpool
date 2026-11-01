@@ -993,7 +993,7 @@ export default function NewListingScreen() {
                                 </Text>
                             )}
 
-                            <ShowOnGlobalTick enabled={nodeProfile?.profile === 'local' && postLat !== null && postLng !== null} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} listing />
+                            <ShowOnGlobalTick enabled={nodeProfile?.profile === 'local' && postLat !== null && postLng !== null} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} listing need={postType === 'need'} />
 
                             {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
                                 trading partners: a reach chooser on a node with no peers is a decision about nothing.

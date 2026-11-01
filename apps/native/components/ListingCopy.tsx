@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { copyCardLine, copyPriceLine, eventCopyOf, listingFreeTags, t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
@@ -65,7 +66,10 @@ export function ListingCopyDetail({ post }: { post: any }) {
             <Pressable onPress={goBack} style={styles.back} accessibilityRole="button">
                 <Text style={styles.backText}>{t('← Back')}</Text>
             </Pressable>
-            <ScrollView contentContainerStyle={styles.scroll}>
+            {/* The report box's words and Send are the last things here, and under edge-to-edge the window doesn't resize for the
+                keyboard: as EventDetail, drawn from the same route. No keyboardVerticalOffset: this screen draws its own header. */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                 {photos.length > 0 && <PhotoCarousel photos={photos} height={220} borderRadius={14} />}
                 <Text style={styles.kind}>{post.type === 'need' ? t('NEED') : t('OFFER')}</Text>
                 <Text style={styles.title}>{post.title}</Text>
@@ -91,6 +95,7 @@ export function ListingCopyDetail({ post }: { post: any }) {
                     </>
                 )}
             </ScrollView>
+            </KeyboardAvoidingView>
         </View>
     );
 }

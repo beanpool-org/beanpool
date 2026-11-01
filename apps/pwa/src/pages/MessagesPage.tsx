@@ -327,7 +327,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // offline: the next poll tries again
         } finally {
             markingReadRef.current.delete(convId);
-            if (markAgainRef.current.delete(convId)) void markReadIfNeeded(convId, 1);
+            if (markAgainRef.current.delete(convId) && activeConvRef.current?.id === convId) void markReadIfNeeded(convId, 1);
         }
     };
     // Keys handed to members who lack them, once per group per page (GroupKeyring.serveMissing).

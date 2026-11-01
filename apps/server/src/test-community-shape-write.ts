@@ -431,6 +431,7 @@ async function main(): Promise<void> {
         await refusedClean(`${key}: the server's, not changed here`, () => change({ [key]: false }), 400, 'not_changeable');
     }
     await refusedClean('12 words at the door of a community with no open door', () => change({ wordsDoor: true }), 400, 'not_changeable');
+    await refusedClean('a person check at a community with no open door', () => change({ doorCheck: true }), 400, 'not_changeable');
     await refusedClean('the open door as who can join, in the door\'s own words', () => change({ join: 'open' }), 409, 'door_open_refused', /strangers would hold credit/);
     await refusedClean('a switch that is no true or false', () => change({ knocks: 'no' }), 400, 'bad_setting');
     await refusedClean('a good change beside a bad one (all or nothing)', () => change({ decisions: false, autoMute: 'yes' }), 400, 'bad_setting');
@@ -504,6 +505,11 @@ async function main(): Promise<void> {
     await refusedClean('Listed on the global kind (profile)', () => change({ listed: true }), 409, 'profile', lockWhy(g, 'listed'));
     await refusedClean('requests to join where invites are off (invites_off)', () => change({ knocks: true }), 409, 'invites_off');
     nMark = noticeMark();
+    assert(np.getConfiguredSwitches().doorCheck === true, 'the person check on busy days is on by default on the global kind');
+    const noCheck = await change({ doorCheck: false });
+    assert(noCheck.status === 200 && np.getConfiguredSwitches().doorCheck === false, `an owner can turn the person check off (${show(noCheck)})`);
+    await change({ doorCheck: true });
+    assert(np.getConfiguredSwitches().doorCheck === true, 'and on again');
     const words = await change({ wordsDoor: false });
     assert(words.status === 200 && np.getConfiguredSwitches().ssoRequiredForJoin === true && !np.getNodeFeatures().wordsDoor,
         `the global kind's 12-words door off: a sign-in only (${show(words)})`);

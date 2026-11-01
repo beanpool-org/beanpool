@@ -23,6 +23,9 @@ export default defineConfig({
             // (apps/vault's harness, from source), whose API imports the sign-in checks: from their source here, so the
             // test never waits on a build of a package the app doesn't depend on.
             '@beanpool/signin': fileURLToPath(new URL('../../packages/beanpool-signin/src/index.ts', import.meta.url).href),
+            // A native view that doesn't load outside a device. Every door screen imports the check's sheet, so every test
+            // that renders one would have to mock it; door-check-sheet-render.test.ts mocks it for what it checks.
+            'react-native-webview': fileURLToPath(new URL('./utils/__tests__/webview-stub.ts', import.meta.url).href),
         },
     },
     test: {

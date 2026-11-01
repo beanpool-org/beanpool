@@ -413,12 +413,17 @@ function gitIn(cwd, ...args) {
  * (packages/beanpool-guide/scripts/build.mjs, findBase): where this branch left origin/main; else the commit before
  * HEAD. CI's shard for this check fetches origin/main (ci.yml, "Fetch origin/main"), on a pull request's merge commit
  * and on a train branch; with no origin/main, a pull request's merge commit has main's tip as its first parent. On a
- * push to main, origin/main is HEAD, so the base is main before the push. A merge with no origin/main outside a pull
- * request is not compared (its first parent need not be main), and says so.
+ * push to main, origin/main is HEAD, so the base is main before the push. A merge queue entry's base is its first parent,
+ * what it lands on: main and the entries ahead. A merge with no origin/main outside a pull request is not compared (its
+ * first parent need not be main), and says so.
  */
 export function baselineBase({ cwd = ROOT, env = process.env } = {}) {
     const head = gitIn(cwd, 'rev-parse', 'HEAD');
     if (!head) return { ref: null, why: 'this is not a git checkout' };
+    if (env.GITHUB_EVENT_NAME === 'merge_group') {
+        const landsOn = gitIn(cwd, 'rev-parse', '--verify', '--quiet', 'HEAD^1');
+        if (landsOn) return { ref: landsOn, why: 'what this merge queue entry lands on' };
+    }
     const hasOriginMain = gitIn(cwd, 'rev-parse', '--verify', '--quiet', 'origin/main^{commit}') !== null;
     const forked = hasOriginMain ? gitIn(cwd, 'merge-base', 'HEAD', 'origin/main') : null;
     if (forked && forked !== head) return { ref: forked, why: 'where this branch left origin/main' };

@@ -211,11 +211,11 @@ describe('NodeIdentityPanel Component', () => {
             fireEvent.click(saveBtn);
         });
 
-        const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
-            call[0].includes('/api/local/update-identity')
+        const updateCall = vi.mocked(fetch).mock.calls.find((call) =>
+            typeof call[0] === 'string' && call[0].includes('/api/local/update-identity')
         );
         expect(updateCall).toBeDefined();
-        const body = JSON.parse(updateCall[1].body);
+        const body = JSON.parse(updateCall![1]?.body as string);
         expect(body.communityName).toBe('Byron Bay Exchange');
         expect(body.callsign).toBe('byron');
     });

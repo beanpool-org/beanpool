@@ -3673,5 +3673,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "Un proprietario ha deciso quando troppo pochi membri potevano votare, ma ora possono farlo in abbastanza, quindi decide questa votazione. Il motivo: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "Un proprietario ha deciso quando troppo pochi membri potevano votare, ma ora possono farlo in abbastanza, quindi decide questa votazione.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "Troppo pochi membri possono votare, quindi se non votano altri, il ritorno di {name} avviene alla chiusura di questa votazione.",
-  "Not executed: a reinstatement vote cancelled it": "Non eseguita: annullata da una votazione di reintegro"
+  "Not executed: a reinstatement vote cancelled it": "Non eseguita: annullata da una votazione di reintegro",
+  "Not sure what to charge? View the Community Pricing Guide": "Non sai quanto chiedere? Consulta la Guida ai prezzi della comunità"
 }

@@ -283,6 +283,20 @@ export function readDecideSettings(raw: unknown): HomeDecideSettings {
 }
 
 /**
+ * A Your tools card (slice home-tools-card): the tool IDs the member chose to keep on Home.
+ */
+export type HomeToolsSettings = { tools: string[] };
+
+/** A Your tools card's settings, tolerant: an array of unique tool id strings (at most 12), [] for anything odd. */
+export function readToolsSettings(raw: unknown): HomeToolsSettings {
+    const s = isPlainObject(raw) ? raw : {};
+    const tools = Array.isArray(s.tools)
+        ? [...new Set(s.tools.filter((id): id is string => typeof id === 'string' && id.trim().length > 0 && id.length <= HOME_FRAME_LIMITS.idChars).map(id => id.trim()))].slice(0, 12)
+        : [];
+    return { tools };
+}
+
+/**
  * Whether the reader can invite here: invites are on, and where only admins invite the node has said they are an owner
  * or admin (apps/native utils/home-cards.ts `invitesForReader`, the same rule). A role not heard yet counts as no.
  */
@@ -348,6 +362,11 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     {
         id: 'invite', name: word('Grow your community'), line: word('Ways to invite people you know.'), group: 'start', asks: 'none',
         onNode: (a, role) => notGlobal(a) && homeInvitesForReader(a.features, role),
+    },
+    // The member's tools card (slice home-tools-card): tools the member chose to keep on Home.
+    {
+        id: 'tools', name: word('Your tools'), line: word('A card you fill with the tools you use.'),
+        group: 'you', asks: 'none', onNode: everywhere, readSettings: readToolsSettings,
     },
     // Each tool's card, worked out on the device from its document (tools/index.ts): one spread, so a tool needs no line here.
     ...toolHomeCardTypes(),

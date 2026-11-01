@@ -1,0 +1,33 @@
+html, body {
+    margin: 0;
+    min-height: 100%;
+    background: #ffffff;
+    color: #1f2937;
+    font-family: system-ui, -apple-system, Roboto, sans-serif;
+}
+
+/* The app says which it is showing, and its choice wins over the phone's. */
+@media (prefers-color-scheme: dark) {
+    html:not(.light), html:not(.light) body { background: #0f172a; color: #e2e8f0; }
+}
+html.dark, html.dark body { background: #0f172a; color: #e2e8f0; }
+
+/* 320 px wide at 130% text: the widget is 300 px at least, so the margin stays under 10 px. */
+main {
+    box-sizing: border-box;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 24px 8px;
+    text-align: center;
+}
+
+#widget { min-height: 65px; }
+
+#back {
+    display: inline-block;
+    margin-top: 24px;
+    padding: 12px;
+    color: inherit;
+}
+
+#back[hidden] { display: none; }

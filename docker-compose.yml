@@ -201,6 +201,12 @@ services:
       # The open door's busy day (apps/server/src/engine/door-signal.ts doorBusy): past this many open-door joins in 24 hours a
       # 12-words join asks at least work level 3. EMPTY = 300; 0 switches it off.
       - DOOR_BUSY_NEW_MEMBERS_PER_DAY=${DOOR_BUSY_NEW_MEMBERS_PER_DAY:-}
+      # The open door's person check on busy days (apps/server/src/services/door-check.ts): Cloudflare Turnstile, on its own
+      # page on another origin (apps/door-check). All three or none. EMPTY = no check at all: only a node that wants one
+      # sets them, and no node needs Cloudflare.
+      - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
+      - TURNSTILE_PAGE_URL=${TURNSTILE_PAGE_URL:-}
       # Request binding (apps/server/src/engine/own-addresses.ts, engine/member-signature.ts). Both EMPTY by default.
       # BEANPOOL_ADDRESSES: extra names members' apps may sign for here, comma-separated (a domain of your own, a
       # proxy's name). EMPTY = the public address and the owner-confirmed ones only. A server WITH an address refuses

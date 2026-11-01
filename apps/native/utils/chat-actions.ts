@@ -136,9 +136,9 @@ export interface ChatViewer {
     /** A group's convenor or an event's host: may remove other people's messages. */
     isModerator?: boolean;
     /**
-     * A locked group chat: someone else's line can be reported to the community's moderators with its key (group chat
-     * photos S6). Nowhere else: an event chat and an enterprise thread are node-readable and keep their own report, and a
-     * DM reports the person.
+     * A locked group chat or a DM: someone else's line can be reported to the community's moderators, with its key (group
+     * chat photos S6) or its sender's signature (R0). Nowhere else: an event chat and an enterprise thread are node-readable
+     * and keep their own report.
      */
     reportsLines?: boolean;
     now?: number;
@@ -154,7 +154,7 @@ export interface MessageActions {
     remove: boolean;
     /** Reported when the author's own message is past the edit window (and would otherwise be editable). */
     editClosed?: boolean;
-    /** "Report message": someone else's line in a locked group chat, reported with its key (set only when on offer). */
+    /** "Report message": someone else's line in a locked group chat or a DM (set only when on offer). */
     report?: boolean;
 }
 
@@ -296,12 +296,12 @@ export function canReplyToMessage(m: ChatMessage, viewer: ChatViewer): boolean {
 }
 
 /**
- * Report a message (group chat photos S6): someone else's line in a locked group chat, one this phone opened and named, so
- * it holds the key to hand over. Never a system line, a tombstone, a line still in flight or one shown as nobody's.
+ * Report a message (group chat photos S6, R0): someone else's line in a locked group chat or a DM, one this phone opened and
+ * named, so it holds what to hand over. Never a system line, a tombstone, a line still in flight or one shown as nobody's.
  * Observers may report: they read the chat.
  */
 export function canReportMessage(m: ChatMessage, viewer: ChatViewer): boolean {
-    if (viewer.kind !== 'group' || !viewer.reportsLines) return false;
+    if ((viewer.kind !== 'group' && viewer.kind !== 'dm') || !viewer.reportsLines) return false;
     if (!viewer.myPubkey || isMine(m, viewer)) return false;
     if (isSystemLine(m) || isTombstone(m) || m.unattributed) return false;
     return !inFlight(m);

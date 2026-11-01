@@ -6,7 +6,7 @@ import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders,
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus, type EventZone } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import {
-    sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    sealDmLine, signDmLine, DM_LINE_SIG_KEY, dmLineDisclosureFor, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
@@ -6232,9 +6232,15 @@ interface DmLineToSeal {
     replyToId?: string | null;
 }
 
-function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string } {
+/** Seal a DM line, and its words (not its photo) with my signature over them (core dm-line-report.ts), for its metadata. */
+function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string; metadata?: Record<string, unknown> } {
     try {
-        return sealDmLine(text, ctx, line);
+        const sealed = sealDmLine(text, ctx, line);
+        if (line.part === 'attachment') return sealed;
+        const lineSig = signDmLine(sealed, ctx.myEdPrivHex, {
+            conversationId: ctx.conversationId, senderPubHex: line.senderPubHex, recipientPubHex: ctx.peerEdPubHex, messageId: line.messageId, at: new Date().toISOString(),
+        });
+        return { ...sealed, metadata: { [DM_LINE_SIG_KEY]: lineSig } };
     } catch {
         throw new DmNotLockedError();
     }
@@ -6631,7 +6637,8 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         replyToId: replyToIdOf(metadata),
     });
     const { ciphertext, nonce } = locked;
-    // A group line names the epoch it was sealed under, beside whatever the caller's metadata says (a reply).
+    // A group line names the epoch it was sealed under, and a DM line carries its signature, beside whatever the caller's
+    // metadata says (a reply).
     if (locked.metadata) {
         let m: any = {};
         try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
@@ -6808,7 +6815,7 @@ export async function editMessage(conversationId: string, messageId: string, new
 
     // New words: locked like a new message, or not sent (DmNotLockedError). Sealed to the line's own id, keeping the
     // line it was written after: an edit stays where its line is.
-    const { ciphertext, nonce } = await lockForConversation(conversationId, newText, {
+    const { ciphertext, nonce, metadata } = await lockForConversation(conversationId, newText, {
         senderPubHex: identity?.publicKey ?? '',
         messageId,
         ...(await sealOfLine(conversationId, messageId)),
@@ -6818,7 +6825,7 @@ export async function editMessage(conversationId: string, messageId: string, new
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to edit messages.');
     if (!identity) throw new Error('No identity found.');
 
-    const body = { messageId, authorPubkey: identity.publicKey, ciphertext, nonce };
+    const body = { messageId, authorPubkey: identity.publicKey, ciphertext, nonce, ...(metadata ? { metadata } : {}) };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/edit`, bodyString, identity.privateKey, identity.publicKey);
 
@@ -6869,6 +6876,12 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
 
     const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
     const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
+    // The caption's signature goes in the line's metadata, beside whatever the caller's says (a reply).
+    if (encCap.metadata) {
+        let m: any = {};
+        try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
+        metadata = JSON.stringify({ ...m, ...encCap.metadata });
+    }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
@@ -9302,6 +9315,20 @@ export async function deleteMessageApi(messageId: string): Promise<any> {
 /** A convenor removes somebody else's message from a group chat. Unchanged endpoint, now reachable from the chat. */
 export async function removeGroupChatMessage(groupId: string, messageId: string): Promise<any> {
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/remove`, { messageId });
+}
+
+/**
+ * Report one line of a direct message to the community's moderators (core dm-line-report.ts): the sealed line as this phone
+ * holds it, its sender's signature, and `words`, what it reads as here. No key goes, and nothing else of the chat.
+ */
+export async function reportDmLine(conversationId: string, messageId: string, words: string, reason: string): Promise<any> {
+    const database = await getDb();
+    const row = await database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?', [messageId]);
+    if (!row) throw new Error('Message not found');
+    return _signedRequest('/api/messages/report', {
+        messageId, reason,
+        disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId, metadata: row.metadata }, words),
+    });
 }
 
 /**

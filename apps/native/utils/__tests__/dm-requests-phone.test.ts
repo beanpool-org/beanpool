@@ -92,6 +92,7 @@ const dbMocks = vi.hoisted(() => ({
     decideMessageRequest: vi.fn(),
     ignoreAllMessageRequests: vi.fn(),
     getMessages: vi.fn(async () => [] as any[]),
+    reportDmLine: vi.fn(async () => ({ success: true })),
     syncSingleConversation: vi.fn(async () => {}),
     deleteLocalMessage: vi.fn(async () => {}),
 } as Record<string, any>));
@@ -100,8 +101,15 @@ vi.mock('../db', () => ({
     decideMessageRequest: (...args: any[]) => dbMocks.decideMessageRequest(...args),
     ignoreAllMessageRequests: (...args: any[]) => dbMocks.ignoreAllMessageRequests(...args),
     getMessages: (...args: any[]) => dbMocks.getMessages(...args),
+    reportDmLine: (...args: any[]) => dbMocks.reportDmLine(...args),
     syncSingleConversation: (...args: any[]) => dbMocks.syncSingleConversation(...args),
     deleteLocalMessage: (...args: any[]) => dbMocks.deleteLocalMessage(...args),
+}));
+
+vi.mock('../../components/ReportMessageSheet', () => ({
+    ReportMessageSheet: ({ onSubmit }: any) => createElement('button', {
+        'data-testid': 'report-sheet-submit', onClick: () => { onSubmit('Harassment').catch(() => {}); },
+    }, 'Submit'),
 }));
 
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
@@ -249,7 +257,7 @@ describe('MessageRequestsPane on phone', () => {
         const onChanged = vi.fn();
         renderCard({ onChanged });
 
-        fireEvent.click(screen.getByTestId('request-ignore'));
+        fireEvent.click(screen.getByTestId('request-decline'));
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
         expect(alerts.said).toEqual([]);
     });
@@ -275,55 +283,71 @@ describe('MessageRequestsPane on phone', () => {
 
         dbMocks.decideMessageRequest.mockRejectedValueOnce(new Error('Network request failed'));
         renderCard();
-        fireEvent.click(screen.getByTestId('request-ignore'));
+        fireEvent.click(screen.getByTestId('request-decline'));
         await waitFor(() => expect(alerts.said.length).toBe(2));
         expect(alerts.said[1].title).toBe('Connect to your community to accept or ignore.');
     });
 
     // Review 4399651364: blockUser answers false rather than throwing (no account on the phone, the list not written, the
-    // sender already on it), and the card ignored the answer: a Block that didn't happen looked like one that did.
-    const confirmBlock = async () => {
-        fireEvent.click(screen.getByTestId('request-block'));
-        const block = alerts.said[0].buttons?.find(b => b.style === 'destructive');
-        expect(block).toBeDefined();
-        await block.onPress();
+    // sender already on it), and a card that ignores the answer shows a block that didn't happen as one that did.
+    const reportFrom = async (onChanged: () => void) => {
+        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', text: 'Buy my crypto', metadata: {} }]);
+        renderCard({ onChanged });
+        await screen.findByText('Buy my crypto');
+        fireEvent.click(screen.getByTestId('request-report'));
     };
 
-    it('Block: the sender on the list drops the card, and says nothing more', async () => {
-        const onChanged = vi.fn();
-        renderCard({ onChanged });
-
-        await confirmBlock();
-        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Blocked from a message request');
-        expect(onChanged).toHaveBeenCalledTimes(1);
-        expect(alerts.said.length).toBe(1);
+    it('a request has three buttons: Accept, Decline, Report', () => {
+        renderCard();
+        for (const name of ['Accept', 'Decline', 'Report']) expect(screen.getByRole('button', { name })).toBeTruthy();
+        expect(screen.queryByTestId('request-block')).toBeNull();
     });
 
-    it("Block that didn't happen: says so, and the card stays", async () => {
-        blockMocks.blockUser.mockResolvedValueOnce(false);
-        blockMocks.isUserBlocked.mockResolvedValueOnce(false);
+    it('Report: reports the line it shows with its words, blocks its sender, files no second report, and the card drops on OK', async () => {
         const onChanged = vi.fn();
-        renderCard({ onChanged });
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-req-1', 'line-1', 'Buy my crypto', 'Harassment');
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('Reported');
+        expect(onChanged).not.toHaveBeenCalled();
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
 
-        await confirmBlock();
-        expect(blockMocks.isUserBlocked).toHaveBeenCalledWith('bob-pubkey');
-        expect(alerts.said.length).toBe(2);
-        expect(alerts.said[1].title).toBe('That did not go through. Please try again.');
+    it('a report the node did not take blocks nobody, and the card stays', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(new Error('Network request failed'));
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).not.toHaveBeenCalled();
         expect(onChanged).not.toHaveBeenCalled();
     });
 
-    it('Block of a sender already on the list: the card drops, as for a new block', async () => {
+    it("a block that didn't happen: says the report went and the block did not, and the card stays", async () => {
         blockMocks.blockUser.mockResolvedValueOnce(false);
-        blockMocks.isUserBlocked.mockResolvedValueOnce(true);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(false);
         const onChanged = vi.fn();
-        renderCard({ onChanged });
-
-        await confirmBlock();
-        expect(onChanged).toHaveBeenCalledTimes(1);
-        expect(alerts.said.length).toBe(1);
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.isUserBlocked).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('Reported, but not blocked. Please try again.');
+        expect(onChanged).not.toHaveBeenCalled();
     });
 
-    it('offers Ignore all when count >= 6 and calls ignoreAllMessageRequests on confirm', async () => {
+    it('a sender already on the list: reported, and the card drops', async () => {
+        blockMocks.blockUser.mockResolvedValueOnce(false);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(true);
+        await reportFrom(vi.fn());
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(alerts.said[0].title).toBe('Reported');
+    });
+
+    it('offers Decline all when count >= 6 and calls ignoreAllMessageRequests on confirm', async () => {
         const entries = Array.from({ length: 6 }, (_, i) => ({
             id: `conv-${i}`,
             name: `User ${i}`,
@@ -345,15 +369,15 @@ describe('MessageRequestsPane on phone', () => {
             })
         );
 
-        const ignoreAllBtn = screen.getByRole('button', { name: 'Ignore all' });
+        const ignoreAllBtn = screen.getByRole('button', { name: 'Decline all' });
         expect(ignoreAllBtn).toBeTruthy();
 
         fireEvent.click(ignoreAllBtn);
         expect(alerts.said.length).toBe(1);
-        expect(alerts.said[0].title).toContain('Ignore all 6 requests?');
+        expect(alerts.said[0].title).toContain('Decline all 6 requests?');
 
         // Confirm ignore all
-        const confirmBtn = alerts.said[0].buttons?.find(b => b.text === 'Ignore all');
+        const confirmBtn = alerts.said[0].buttons?.find(b => b.text === 'Decline all');
         expect(confirmBtn).toBeDefined();
         await confirmBtn.onPress();
 

@@ -339,7 +339,7 @@ describe('a request waiting for this member, on the phone', () => {
         it('a request its opener cancelled: Ignore goes back to Talk too, and says nothing', async () => {
             const navigate = vi.spyOn(router, 'navigate');
             await kofiAsks(() => Promise.reject(GONE()));
-            await tap('Ignore');
+            await tap('Decline');
             expect(navigate).toHaveBeenCalledWith('/(tabs)/chats');
             expect(alerts.said).toEqual([]);
             navigate.mockRestore();
@@ -360,7 +360,7 @@ describe('a request waiting for this member, on the phone', () => {
             await kofiAsks(() => Promise.reject(answer));
             await tap('Accept');
             answer = new Error('Network request failed');
-            await tap('Ignore');
+            await tap('Decline');
             expect(alerts.said).toEqual(['Connect to your community to accept or ignore.', 'Connect to your community to accept or ignore.']);
         });
     });

@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
@@ -50,6 +50,9 @@ import { listingHeaderStatusWords } from '../../utils/listing-status-words';
 import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
 import { Sentence } from '../../components/Sentence';
 import { signedRequestWords } from '../../components/signed-request-lines';
+import { ReportMessageSheet } from '../../components/ReportMessageSheet';
+import { reportedAlertBody } from '../../utils/reportReasons';
+import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn, wordsOfLine } from '../../utils/request-report';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
 // the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
@@ -146,6 +149,7 @@ function ChatScreen({ id }: { id: string }) {
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
     const [peerName, setPeerName] = useState(() => t('Loading...'));
     const [peerPubkey, setPeerPubkey] = useState<string | null>(null);
+    const [reportingLine, setReportingLine] = useState<{ item: any; blocks: boolean } | null>(null);
     const [isPeerBlocked, setIsPeerBlocked] = useState(false);
     const [peerAvatar, setPeerAvatar] = useState<string | null>(null);
     // True when this thread is a 2-party DM (the only threads we E2E-encrypt).
@@ -742,6 +746,7 @@ function ChatScreen({ id }: { id: string }) {
 
     // A request holds every send until it is decided, or the node has answered; the opener's, once their line is in, until
     // the other accepts. Not an edit of that line, which the node and the web allow (PR #2540 review 4394827275).
+    const requestLine = requestMode === 'to-me' ? requestLineIn(messages, identity?.publicKey) : null;
     const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);
     // Asked before the composer empties the box, so a refused send keeps what was typed.
     const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && !requestHoldsSends;
@@ -1120,7 +1125,28 @@ function ChatScreen({ id }: { id: string }) {
         myPubkey: identity?.publicKey ?? null,
         canPost: !isPeerBlocked,
         isModerator: false,
+        reportsLines: true,
     }), [identity?.publicKey, isPeerBlocked]);
+
+    // One line reported to the moderators, as its sender's signature and these words (core dm-line-report.ts). `blocks`:
+    // Report on a request, which blocks its sender too (utils/request-report.ts). The sheet stays under the dialog until OK.
+    const submitLineReport = async (reason: string) => {
+        if (!reportingLine) return;
+        const { item, blocks } = reportingLine;
+        try {
+            if (blocks && peerPubkey) await reportRequestAndBlock(String(id), item, peerPubkey, reason);
+            else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason);
+            hapticSuccess();
+            Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => {
+                setReportingLine(null);
+                if (blocks) router.navigate('/(tabs)/chats');
+            } }]);
+        } catch (e: any) {
+            hapticWarning();
+            Alert.alert(e instanceof ReportedNotBlockedError ? t('Reported, but not blocked. Please try again.') : chatActionErrorMessage({ status: e?.status ?? null, message: e?.message, nodeAnswered: !!e?.nodeAnswered }));
+            throw e; // the box keeps the choice and the words
+        }
+    };
 
     /** Escrow events, join notices and the like: a centred grey line with the deal actions under it. */
     const renderSystemMessage = (item: any) => {
@@ -1358,6 +1384,10 @@ function ChatScreen({ id }: { id: string }) {
                 onEdit={handleEditPress}
                 onDelete={() => handleDeletePress(item)}
                 onRemove={() => { /* a DM has no convenor: nobody removes anybody else's message here */ }}
+                onReport={() => {
+                    setActiveMessageActionsId(null);
+                    setReportingLine({ item, blocks: false });
+                }}
                 onPickEmoji={handleEmojiSelect}
                 onPressUrl={openUrl}
                 editing={editingMessage?.id === item.id}
@@ -1671,7 +1701,7 @@ function ChatScreen({ id }: { id: string }) {
                             {t('{name} wants to message you', { name: peerName })}
                         </Text>
                         <Text style={styles.toMeSubtitle}>
-                            {t('Accept to reply. If you ignore it, they are not told.')}
+                            {t('Accept to reply. If you decline, they are not told.')}
                         </Text>
                         <View style={styles.toMeButtons}>
                             <Pressable
@@ -1699,7 +1729,7 @@ function ChatScreen({ id }: { id: string }) {
                             </Pressable>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Ignore', undefined, 'button: ignore a message request')}
+                                accessibilityLabel={t('Decline', undefined, 'button: decline a message request')}
                                 style={[styles.toMeIgnoreBtn, decidingRequest && { opacity: 0.7 }]}
                                 disabled={decidingRequest}
                                 onPress={async () => {
@@ -1716,7 +1746,17 @@ function ChatScreen({ id }: { id: string }) {
                                     }
                                 }}
                             >
-                                <Text style={styles.toMeIgnoreBtnText}>{t('Ignore', undefined, 'button: ignore a message request')}</Text>
+                                <Text style={styles.toMeIgnoreBtnText}>{t('Decline', undefined, 'button: decline a message request')}</Text>
+                            </Pressable>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Report', undefined, 'button: report a message request')}
+                                testID="request-report"
+                                style={[styles.toMeIgnoreBtn, (decidingRequest || !requestLine) && { opacity: 0.7 }]}
+                                disabled={decidingRequest || !requestLine}
+                                onPress={() => { if (requestLine) setReportingLine({ item: requestLine, blocks: true }); }}
+                            >
+                                <Text style={[styles.toMeIgnoreBtnText, { color: colors.feedback.danger.fg }]}>{t('Report', undefined, 'button: report a message request')}</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -1727,7 +1767,7 @@ function ChatScreen({ id }: { id: string }) {
                         style={[styles.waitingContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
                     >
                         <Text style={styles.waitingText}>
-                            {t('Sent as a request. {name} will see it under Requests. You can write more once they accept.', { name: peerName })}
+                            {t('Sent as a request. {name} will see it under Message requests. You can write more once they accept.', { name: peerName })}
                         </Text>
                         <Pressable
                             accessibilityRole="button"
@@ -1798,6 +1838,13 @@ function ChatScreen({ id }: { id: string }) {
                 />
             )}
 
+            <ReportMessageSheet
+                isOpen={!!reportingLine}
+                photo={false}
+                blocks={reportingLine?.blocks}
+                onSubmit={submitLineReport}
+                onClose={() => setReportingLine(null)}
+            />
             {/* Full-screen image viewer — opened from a tapped chat image (the 800 px photo, from the
                 local cache so it's instant/offline after first view).
                 The Modal is its own full-screen window, outside this screen's SafeAreaView, so the close

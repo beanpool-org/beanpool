@@ -6,7 +6,7 @@ import { toEd25519Pkcs8 } from '@beanpool/core';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { ApiMessage } from '../lib/api';
-import { decideMessageRequest, ignoreAllMessageRequests, getMessageAttachmentApi, sendMessageApi, toggleMessageReactionApi, createConversationApi, getConversationMessages } from '../lib/api';
+import { decideMessageRequest, ignoreAllMessageRequests, getMessageAttachmentApi, reportDmLineApi, sendMessageApi, toggleMessageReactionApi, createConversationApi, getConversationMessages } from '../lib/api';
 import { blockUser } from '../lib/blocklist';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { lockForDm } from '../lib/dm-lock';
@@ -66,6 +66,7 @@ vi.mock('../lib/api', () => ({
     getEventChat: vi.fn(),
     sendMessageApi: vi.fn(),
     editMessageApi: vi.fn(),
+    reportDmLineApi: vi.fn(async () => ({ success: true })),
     toggleMessageReactionApi: vi.fn(),
     getMessageAttachmentApi: vi.fn(async () => { throw new Error('a photo in a request must not be fetched'); }),
     completeMarketplaceTransaction: vi.fn(),
@@ -160,7 +161,7 @@ async function ringDoorbell(): Promise<void> {
 }
 const chips = () => screen.findByTestId('conversation-filter-chips');
 async function openRequests(): Promise<HTMLElement> {
-    fireEvent.click(await within(await chips()).findByRole('button', { name: /Requests/ }));
+    fireEvent.click(await screen.findByTestId('message-requests-row'));
     return screen.findByTestId('message-requests');
 }
 
@@ -174,6 +175,7 @@ beforeEach(() => {
     vi.mocked(decideMessageRequest).mockReset();
     vi.mocked(ignoreAllMessageRequests).mockReset();
     vi.mocked(blockUser).mockClear();
+    vi.mocked(reportDmLineApi).mockClear();
     vi.mocked(getMessageAttachmentApi).mockClear();
     vi.mocked(sendMessageApi).mockReset();
     vi.mocked(toggleMessageReactionApi).mockReset();
@@ -181,20 +183,29 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-describe('the Requests pill', () => {
-    it('shows how many people want to message you, apart from the unread counts', async () => {
+describe('the Message requests row', () => {
+    it('is one plain row at the top of Chat: no count and no badge, and no filter pill', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         render(<MessagesPage identity={idOf(ann)} />);
-        const pill = await within(await chips()).findByRole('button', { name: /Requests/ });
-        expect(pill).toHaveTextContent('Requests');
-        expect(within(pill).getByTestId('conversation-filter-count-requests')).toHaveTextContent('1');
-        expect(pill).toHaveAccessibleName('Requests, 1 person wants to message you');
+        const row = await screen.findByTestId('message-requests-row');
+        expect(row).toHaveAccessibleName('Message requests');
+        expect(row.textContent).not.toMatch(/\d/);
+        expect(screen.queryByTestId('conversation-filter-count-requests')).toBeNull();
+        expect(Array.from((await chips()).querySelectorAll('button')).map(b => b.textContent)).toEqual(['All', 'Transactions', 'Direct', 'Groups']);
     });
 
-    it('counts every request the node has, not just the ones it named', async () => {
+    it('shows no number however many wait', async () => {
         node.list = annListWith([requestEntry(bo, CONV)], 120);
         render(<MessagesPage identity={idOf(ann)} />);
-        await waitFor(() => expect(screen.getByTestId('conversation-filter-count-requests')).toHaveTextContent('99+'));
+        expect((await screen.findByTestId('message-requests-row')).textContent).not.toMatch(/\d/);
+    });
+
+    it('Back to chats leaves the requests', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        render(<MessagesPage identity={idOf(ann)} />);
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Back to chats' }));
+        expect(await screen.findByTestId('message-requests-row')).toBeInTheDocument();
+        expect(screen.queryByTestId('message-requests')).toBeNull();
     });
 
     it('is not there where requests are off (no `requests` in the list), nor when none are waiting', async () => {
@@ -205,7 +216,7 @@ describe('the Requests pill', () => {
         node.list = annListWith([]);
         render(<MessagesPage identity={idOf(ann)} />);
         await act(async () => {});
-        expect(within(await chips()).queryByRole('button', { name: /Requests/ })).toBeNull();
+        expect(screen.queryByTestId('message-requests-row')).toBeNull();
     });
 
     it('goes when requests are turned off while it is open, and the list is back on All, never on no chip at all', async () => {
@@ -216,7 +227,7 @@ describe('the Requests pill', () => {
         node.list = { conversations: [], totalUnread: 0, deletedAccounts: [] };
         await ringDoorbell();
         const bar = await chips();
-        await waitFor(() => expect(within(bar).queryByRole('button', { name: /Requests/ })).toBeNull());
+        await waitFor(() => expect(screen.queryByTestId('message-requests')).toBeNull());
         expect(within(bar).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
         expect(screen.queryByTestId('message-requests')).toBeNull();
     });
@@ -231,8 +242,7 @@ describe('a request card', () => {
         const card = within(list).getByTestId('request-card');
         expect(card).toHaveTextContent('Bo wants to message you');
         expect(await within(card).findByText("Hi, it's Bo from the egg stall")).toBeInTheDocument();
-        for (const b of ['Accept', 'Ignore', 'Block']) expect(within(card).getByRole('button', { name: b })).toBeInTheDocument();
-        expect(within(card).getByRole('button', { name: 'Report Bo' })).toBeInTheDocument();
+        for (const b of ['Accept', 'Decline', 'Report']) expect(within(card).getByRole('button', { name: b })).toBeInTheDocument();
         expect(within(card).queryByText('Bo added you')).toBeNull();
         expect(within(list).getByText('1 person wants to message you')).toBeInTheDocument();
     });
@@ -291,36 +301,60 @@ describe('a request card', () => {
         expect(await screen.findByText('Hello')).toBeInTheDocument();
     });
 
-    it('Ignore tells the node and the card goes; the sender is told nothing by this app either', async () => {
+    it('Decline tells the node and the card goes; the sender is told nothing by this app either', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
         vi.mocked(decideMessageRequest).mockImplementation(async () => { node.list = annListWith([]); return IGNORED as never; });
         render(<MessagesPage identity={idOf(ann)} />);
-        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Ignore' }));
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Decline' }));
         await waitFor(() => expect(screen.queryByTestId('request-card')).toBeNull());
         expect(decideMessageRequest).toHaveBeenCalledWith(CONV, 'ignore');
         expect(screen.getByText("No requests. A first message from someone you haven't added or talked to arrives here.")).toBeInTheDocument();
         expect(sendMessageApi).not.toHaveBeenCalled();
     });
 
-    it('Block asks first, then blocks through the community\'s list', async () => {
+    it('Report reports the line, as sealed and signed, with its words, then blocks its sender, and files no second report', async () => {
+        const hello = line(bo, 'Hello');
         node.list = annListWith([requestEntry(bo, CONV)]);
-        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
-        const confirm = vi.fn(() => true);
-        vi.stubGlobal('confirm', confirm);
+        node.reads[CONV] = readOf(pending(), [hello]);
         render(<MessagesPage identity={idOf(ann)} />);
-        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Block' }));
-        await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey, ann.publicKey, expect.any(String)));
-        expect(confirm).toHaveBeenCalledWith('Block Bo?\n\nThis will hide their messages and posts, and notify moderation.');
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
+        const card = await screen.findByTestId('report-modal');
+        expect(card).toHaveTextContent('Reporting a request blocks its sender too.');
+        fireEvent.click(within(card).getByRole('radio', { name: 'Harassment' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' }));
+        await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
+        const [messageId, reason, disclosure] = vi.mocked(reportDmLineApi).mock.calls[0];
+        expect(messageId).toBe(hello.id);
+        expect(reason).toContain('Harassment');
+        expect(disclosure).toMatchObject({ v: 1, ciphertext: hello.ciphertext, nonce: hello.nonce, conversationId: CONV, words: 'Hello' });
+        expect(Object.keys(disclosure).sort()).toEqual(['ciphertext', 'conversationId', 'lineSig', 'nonce', 'v', 'words']);
         expect(decideMessageRequest).not.toHaveBeenCalled();
     });
 
-    it('Report opens the report form for the sender', async () => {
+    it('a report the node did not take blocks nobody, and says so', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        vi.mocked(reportDmLineApi).mockRejectedValueOnce(new Error('The node refused it'));
         render(<MessagesPage identity={idOf(ann)} />);
-        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report Bo' }));
-        expect(await screen.findByTestId('report-modal')).toHaveTextContent('Bo');
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
+        const card = await screen.findByTestId('report-modal');
+        fireEvent.click(within(card).getByRole('radio', { name: 'Harassment' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' }));
+        expect(await within(card).findByText(/The node refused it/)).toBeInTheDocument();
+        expect(blockUser).not.toHaveBeenCalled();
+    });
+
+    it('a block that does not go through says the report went and the block did not', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        vi.mocked(blockUser).mockRejectedValueOnce(new Error('Not now'));
+        render(<MessagesPage identity={idOf(ann)} />);
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
+        const card = await screen.findByTestId('report-modal');
+        fireEvent.click(within(card).getByRole('radio', { name: 'Harassment' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' }));
+        expect(await within(card).findByText('Reported, but not blocked. Please try again.')).toBeInTheDocument();
     });
 
     it('offline: says so, keeps the card and its buttons, and changes nothing', async () => {
@@ -331,7 +365,7 @@ describe('a request card', () => {
         const card = within(await openRequests()).getByTestId('request-card');
         fireEvent.click(within(card).getByRole('button', { name: 'Accept' }));
         expect(await within(card).findByText(OFFLINE)).toBeInTheDocument();
-        for (const b of ['Accept', 'Ignore', 'Block']) expect(within(card).getByRole('button', { name: b })).toBeEnabled();
+        for (const b of ['Accept', 'Decline', 'Report']) expect(within(card).getByRole('button', { name: b })).toBeEnabled();
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
     });
 
@@ -365,7 +399,7 @@ describe('a request card', () => {
         render(<MessagesPage identity={idOf(ann)} />);
         const list = await openRequests();
         await within(list).findByText('Hello');
-        fireEvent.click(within(within(list).getAllByTestId('request-card')[0]).getByRole('button', { name: 'Ignore' }));
+        fireEvent.click(within(within(list).getAllByTestId('request-card')[0]).getByRole('button', { name: 'Decline' }));
         await waitFor(() => expect(screen.getAllByTestId('request-card')).toHaveLength(1));
         await act(async () => { open(); });
         expect(await screen.findByText('Cy here')).toBeInTheDocument();
@@ -406,12 +440,12 @@ describe('a request card', () => {
         vi.mocked(decideMessageRequest).mockRejectedValue(Object.assign(new Error(STANDBY_WORDS), { status: 503, code: 'standby' }));
         render(<MessagesPage identity={idOf(ann)} />);
         const card = within(await openRequests()).getByTestId('request-card');
-        fireEvent.click(within(card).getByRole('button', { name: 'Ignore' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Decline' }));
         expect(await within(card).findByText(STANDBY_WORDS)).toBeInTheDocument();
     });
 });
 
-describe('Ignore all', () => {
+describe('Decline all', () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => requestEntry(person(`P${i}`), crypto.randomUUID()));
 
     it('is offered when more than five wait, asks first, then ignores them all', async () => {
@@ -420,8 +454,8 @@ describe('Ignore all', () => {
         vi.stubGlobal('confirm', confirm);
         vi.mocked(ignoreAllMessageRequests).mockImplementation(async () => { node.list = annListWith([]); return { success: true, ignored: 6 }; });
         render(<MessagesPage identity={idOf(ann)} />);
-        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Ignore all' }));
-        expect(confirm).toHaveBeenCalledWith("Ignore all 6 requests? They won't be told.");
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Decline all' }));
+        expect(confirm).toHaveBeenCalledWith("Decline all 6 requests? They won't be told.");
         await waitFor(() => expect(screen.queryAllByTestId('request-card')).toHaveLength(0));
         expect(ignoreAllMessageRequests).toHaveBeenCalledTimes(1);
     });
@@ -429,12 +463,12 @@ describe('Ignore all', () => {
     it('is not offered for five or fewer; and nothing is ignored when the member says no', async () => {
         node.list = annListWith(many(5));
         const { unmount } = render(<MessagesPage identity={idOf(ann)} />);
-        expect(within(await openRequests()).queryByRole('button', { name: 'Ignore all' })).toBeNull();
+        expect(within(await openRequests()).queryByRole('button', { name: 'Decline all' })).toBeNull();
         unmount();
         node.list = annListWith(many(7));
         vi.stubGlobal('confirm', vi.fn(() => false));
         render(<MessagesPage identity={idOf(ann)} />);
-        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Ignore all' }));
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Decline all' }));
         expect(ignoreAllMessageRequests).not.toHaveBeenCalled();
         expect(screen.getAllByTestId('request-card')).toHaveLength(7);
     });
@@ -455,7 +489,7 @@ describe('the chat in request mode, for the person it is for', () => {
         await screen.findByTestId('request-mode');
     }
 
-    it('reads the lines, with Accept, Ignore and Block in place of the composer, and nothing else to tap in a line', async () => {
+    it('reads the lines, with Accept, Decline and Report in place of the composer, and nothing else to tap in a line', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
         render(<MessagesPage identity={idOf(ann)} />);
@@ -463,7 +497,7 @@ describe('the chat in request mode, for the person it is for', () => {
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
         const bar = screen.getByTestId('request-mode');
         expect(bar).toHaveTextContent('Bo wants to message you');
-        for (const b of ['Accept', 'Ignore', 'Block']) expect(within(bar).getByRole('button', { name: b })).toBeInTheDocument();
+        for (const b of ['Accept', 'Decline', 'Report']) expect(within(bar).getByRole('button', { name: b })).toBeInTheDocument();
         expect(screen.getAllByText('Hello').length).toBeGreaterThan(0);
         expect(screen.queryByRole('button', { name: 'React to message' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Reply to message' })).toBeNull();
@@ -524,13 +558,13 @@ describe('the chat in request mode, for the person it is for', () => {
         expect(screen.queryByTestId('request-mode')).toBeNull();
     });
 
-    it('Ignore goes back to the requests', async () => {
+    it('Decline goes back to the requests', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
         vi.mocked(decideMessageRequest).mockImplementation(async () => { node.list = annListWith([]); return IGNORED as never; });
         render(<MessagesPage identity={idOf(ann)} />);
         await openFromCard();
-        fireEvent.click(within(screen.getByTestId('request-mode')).getByRole('button', { name: 'Ignore' }));
+        fireEvent.click(within(screen.getByTestId('request-mode')).getByRole('button', { name: 'Decline' }));
         expect(await screen.findByTestId('message-requests')).toBeInTheDocument();
         expect(screen.queryByTestId('request-mode')).toBeNull();
     });
@@ -597,7 +631,7 @@ describe('the sender\'s side', () => {
         node.list = boList(pending());
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
         render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
         expect(screen.queryByRole('button', { name: 'React to message' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Reply to message' })).toBeNull();
@@ -616,7 +650,7 @@ describe('the sender\'s side', () => {
         expect(screen.queryByTestId('request-first-line')).toBeNull();
         expect(screen.queryByTitle('Send photo')).toBeNull();
         await act(async () => { open(); });
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
         expect(screen.queryByTestId('request-first-line')).toBeNull();
     });
 
@@ -704,7 +738,7 @@ describe('the sender\'s side', () => {
         node.gates[CONV] = new Promise<void>(() => {});
         fireEvent.change(screen.getByPlaceholderText('Message...'), { target: { value: 'Hello again' } });
         fireEvent.click(screen.getByTitle('Send message'));
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
         expect(sendMessageApi).toHaveBeenCalledTimes(1);
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
     });
@@ -750,7 +784,7 @@ describe('the sender\'s side', () => {
         // His list: the chat among his chats, and no Requests at all.
         const list = render(<MessagesPage identity={idOf(bo)} />);
         expect((await screen.findAllByText('Ann')).length).toBeGreaterThan(0);
-        expect(within(await chips()).queryByRole('button', { name: /Requests/ })).toBeNull();
+        expect(screen.queryByTestId('message-requests-row')).toBeNull();
         list.unmount();
 
         // Ann, who blocks him, reads the request her line made as waiting: his lines never reach her.
@@ -758,7 +792,7 @@ describe('the sender\'s side', () => {
         node.list = { ...boList(hers), conversations: [{ ...boList(hers).conversations[0], peerCallsign: 'Bo' }] };
         node.reads[CONV] = readOf(hers, [herLine]);
         render(<MessagesPage identity={idOf(ann)} openConversationId={CONV} />);
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Bo will see it under Requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Bo will see it under Message requests. You can write more once they accept.');
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
         expect(screen.queryByText('Are you still there?')).toBeNull();
     });

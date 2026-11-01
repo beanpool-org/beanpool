@@ -32,7 +32,7 @@ export function PostTagChips({ tags, freeTags, onPick, onPickFree, className = '
                     className={CHIP}
                     aria-label={t('Filter marketplace by tag {tag}', { tag: label })}
                 >
-                    #{label}
+                    <span className="min-w-0">#{label}</span>
                 </button>
             ))}
             {typed.map(tag => (
@@ -43,7 +43,7 @@ export function PostTagChips({ tags, freeTags, onPick, onPickFree, className = '
                     className={CHIP}
                     aria-label={t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
                 >
-                    #{tag}
+                    <span className="min-w-0">#{tag}</span>
                 </button>
             ))}
         </div>

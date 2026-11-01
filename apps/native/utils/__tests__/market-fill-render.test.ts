@@ -265,6 +265,12 @@ describe("what the node found stays on the phone, as on the web (review of #2691
         expect(text()).toContain(title);
     });
 
+    it.each(['"', "'", '""', "' '"])('words that leave nothing to ask (%s) are no answer: the search shows nothing, never every listing', async (q) => {
+        await search(q, [found('Bike')]);
+        expect(node.asked.at(-1)).not.toContain('q=');
+        expect(text()).not.toContain('Bike');
+    });
+
     it('with no answer the words narrow the phone\'s copy: a true non-match stays out', async () => {
         holds([listing('near-kettle', 'Old kettle'), listing('near-jam', 'Limon jam')]);
         node.fail = true;

@@ -934,7 +934,7 @@ export default function MarketScreen() {
                         const data = await res.json();
                         const parsed = normalizeServerPosts(data, anchorUrl);
                         setSearchResults(parsed);
-                        setSearchResultsWords(selectedTag || selectedFree ? null : q);
+                        setSearchResultsWords(selectedTag || selectedFree || !expandedQ ? null : q);
                     } else {
                         setSearchResults(null); // Fall back to local filtering
                     }

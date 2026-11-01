@@ -54,7 +54,7 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { setMemberPhoto, haversineKm, getNearbySet } from '@beanpool/engine';
+import { setMemberPhoto, haversineKm, getNearbySet, neighbourhoodOf } from '@beanpool/engine';
 import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 
@@ -572,7 +572,9 @@ async function main(): Promise<void> {
             se.addWsClient(f);
         }
         const setSwitch = (on: boolean) => db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('nodeProfile.nearbyListings', ?)").run(on ? 'true' : 'false');
-        const nearCount = keys.filter(pk => { const a = area.memberAreaFor?.(pk); return a && haversineKm(a.lat, a.lng, PLACE.lat, PLACE.lng) <= radiusKm; }).length;
+        // Measured as the node measures it on the global profile (#1965): from the listing's neighbourhood, not its place.
+        const centre = neighbourhoodOf(PLACE.lat, PLACE.lng);
+        const nearCount = keys.filter(pk => { const a = area.memberAreaFor?.(pk); return a && haversineKm(a.lat, a.lng, centre.lat, centre.lng) <= radiusKm; }).length;
         const costOf = (what: string, event: unknown) => {
             const timesOn: number[] = [], timesOff: number[] = [];
             let sentOn = 0, sentOff = 0;

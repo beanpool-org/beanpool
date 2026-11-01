@@ -234,13 +234,13 @@ async function forgetIfGone(pair: CopyPair, identity: BeanPoolIdentity, deps: Co
 }
 
 /**
- * A send landed, and the pair takes it in. If a Stop showing came while it was on its way the pair has gone and stays gone,
- * and what just landed comes down. One already on its way out is left to go.
+ * A send landed, and the pair takes it in. If a Stop showing came while it was on its way the pair stays gone, and what just
+ * landed comes down, asked again in case that Stop's own remove got there first. A pair going to rest is left to its rest.
  */
 async function recordSend(sent: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<void> {
     const stored = await storedPair(sent.copyId);
-    if (!stored) await takeDown(sent, identity, deps);
-    else if (!stored.leaving) await savePair(sent);
+    if (stored && !stored.leaving) await savePair(sent);
+    else if (!stored?.resting) await takeDown(sent, identity, deps);
 }
 
 async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIdentity, deps: CopyDeps): Promise<CopyResult> {

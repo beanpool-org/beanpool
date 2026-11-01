@@ -660,6 +660,8 @@ describe('an in-person event shown on the global community (the phone against tw
                 const home = await rested(me, 'Stopped at the end');
                 const gate = held();
                 await staysStopped(me, home.id, tendCopies(me, homeHeld(gate, home.id)), gate);
+                // Not one up and taken down again: only the first copy ever reached global.
+                expect(await copyCount(me)).toBe(1);
             }, START_MS);
 
             it.each(['going', 'landed'] as const)('at the holiday\'s end, with the new copy %s: it comes down', async (when) => {
@@ -667,6 +669,26 @@ describe('an in-person event shown on the global community (the phone against tw
                 const home = await rested(me, 'Stopped on its way back');
                 const gate = held();
                 await staysStopped(me, home.id, tendCopies(me, globalHeld(gate, /\/api\/marketplace\/posts$/, when)), gate);
+            }, START_MS);
+
+            it('with its remove reaching global before the send does: the copy still comes down', async () => {
+                const me = await memberOfBoth('Mid Cleo');
+                const home = await eventAtHome(me, 'Overtaken');
+                globalDown = true;
+                await showOnGlobal(home, local.url, me, deps());
+                globalDown = false;
+                const sending = held();
+                const tend = tendCopies(me, globalHeld(sending, /\/api\/marketplace\/posts$/, 'going'));
+                await within(sending.at);
+                const removing = held();
+                const stop = stopShowing(home.id, me, globalHeld(removing, /\/remove$/, 'landed'));
+                await within(removing.at);
+                sending.release();
+                await within(tend);
+                removing.release();
+                await within(stop);
+                expect(await liveCopies(me)).toEqual([]);
+                expect(await pairOf(home.id, me.publicKey)).toBeNull();
             }, START_MS);
 
             it('with an edit\'s answer on its way back: the pair doesn\'t return', async () => {

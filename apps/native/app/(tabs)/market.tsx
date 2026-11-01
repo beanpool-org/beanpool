@@ -43,7 +43,7 @@ import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '
 import {
     MARKET_TYPE_PILLS, marketFilterFromLink, marketSearchFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
-    marketSearchQuery, marketSearchMatches, marketSearchToSave, saveSearchParam,
+    marketSearchQuery, marketAnswerStands, marketSearchMatches, marketSearchToSave, saveSearchParam,
 } from '../../utils/market-filters';
 import { SaveSearchButton } from '../../components/SaveSearchButton';
 import { localDaysAgo } from '../../utils/feed-sections';
@@ -60,7 +60,7 @@ import { exampleListingsOn, showExampleListings } from '../../utils/example-list
 import { MarketCircleLine } from '../../components/MarketCircleLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listingChips, listingChipWords, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, type WordKey } from '@beanpool/core';
+import { listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, type WordKey } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
@@ -589,6 +589,8 @@ export default function MarketScreen() {
     }, []);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
+    // A `#tag` tapped: the Market with exactly that typed tag (DESIGN-tags-free-entry-fable.md §4). One filter by tag at a time.
+    const [selectedFree, setSelectedFree] = useState<string | null>(null);
     const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
     const [posts, setPosts] = useState<any[]>([]);
     // First-run loading: until posts load or a pillar sync completes THIS session, show a
@@ -619,6 +621,8 @@ export default function MarketScreen() {
         return () => { live = false; ended.remove(); };
     }, [identity?.publicKey]));
     const [searchResults, setSearchResults] = useState<any[] | null>(null);
+    // The words that answer was for (marketAnswerStands): null when a tag filter was on, as it asks for the words OR the tag.
+    const [searchResultsWords, setSearchResultsWords] = useState<string | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     /**
@@ -721,15 +725,23 @@ export default function MarketScreen() {
         }, [filter, groupFilter, identity?.publicKey, userGroupsKey, escrowMode])
     );
 
-    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string, new?: string, tag?: string }>();
+    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string, new?: string, tag?: string, free?: string }>();
 
     // A tag chip tapped on a post detail page opens the Market filtered by that tag (§4.4)
     useEffect(() => {
         if (params.tag) {
             setSelectedTag(params.tag);
+            setSelectedFree(null);
             router.setParams({ tag: '' });
         }
     }, [params.tag]);
+    useEffect(() => {
+        if (params.free) {
+            setSelectedFree(params.free);
+            setSelectedTag(null);
+            router.setParams({ free: '' });
+        }
+    }, [params.free]);
 
     // The Start something sheet opens the Market on its Poll or Event form (DESIGN-commons-ux §3.2).
     useEffect(() => {
@@ -884,7 +896,7 @@ export default function MarketScreen() {
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         
         const q = searchQuery.trim();
-        if (!q && !selectedTag) {
+        if (!q && !selectedTag && !selectedFree) {
             setSearchResults(null);
             setIsSearching(false);
             return;
@@ -912,7 +924,8 @@ export default function MarketScreen() {
                 const resolvedTags = q ? searchTagsFor(q) : [];
                 const searchTagIds = [...new Set([...(selectedTag ? [selectedTag] : []), ...resolvedTags])].slice(0, 20);
                 const tagsParam = searchTagIds.length > 0 ? `${qParam ? '&' : ''}tags=${encodeURIComponent(searchTagIds.join(','))}` : '';
-                const queryPrefix = (qParam || tagsParam) ? `?${qParam}${tagsParam}` : '?';
+                const freeParam = selectedFree ? `${qParam || tagsParam ? '&' : ''}free=${encodeURIComponent(selectedFree)}` : '';
+                const queryPrefix = (qParam || tagsParam || freeParam) ? `?${qParam}${tagsParam}${freeParam}` : '?';
 
                 // Nearest first where the node sorts by distance and the phone already knows where it is.
                 const near = marketSearchDistanceParams(nodeProfile, myLocation);
@@ -922,6 +935,7 @@ export default function MarketScreen() {
                         const data = await res.json();
                         const parsed = normalizeServerPosts(data, anchorUrl);
                         setSearchResults(parsed);
+                        setSearchResultsWords(selectedTag || selectedFree || !expandedQ ? null : q);
                     } else {
                         setSearchResults(null); // Fall back to local filtering
                     }
@@ -937,7 +951,7 @@ export default function MarketScreen() {
             active = false;
             if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         };
-    }, [searchQuery, selectedTag, filter, categoryFilter, nodeProfile, myLocation]);
+    }, [searchQuery, selectedTag, selectedFree, filter, categoryFilter, nodeProfile, myLocation]);
 
     const loadPosts = async (): Promise<boolean> => {
         const queryFilter = marketFeedQuery(filter, groupFilter, identity?.publicKey);
@@ -1005,6 +1019,8 @@ export default function MarketScreen() {
     };
     const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.fill;
     const filterCtx = { blockedUsers, favCategories };
+    // No answer has no words, whatever the last one was for: a failed read leaves the phone's copy, which the words must narrow.
+    const answerStands = marketAnswerStands(searchQuery, searchResults !== null ? searchResultsWords : null);
 
     let filteredPosts = basePosts.filter(p => {
         // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
@@ -1013,18 +1029,16 @@ export default function MarketScreen() {
         // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
         if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
 
-        // Synonym-aware local search: expand query using synonym map
-        // Works on ALL servers, even those without FTS5 deployed
-        if (searchQuery.trim()) {
-            const serverHasFTS = searchResults !== null && searchResults.length > 0 && 'search_keywords' in searchResults[0];
-            if (!serverHasFTS && !marketSearchMatches(p, searchQuery)) return false;
-        }
+        // The node's answer stands for its words, as on the web. Synonym-aware local search for everything else: the phone's
+        // copy, and an answer until the read for these words lands.
+        if (searchQuery.trim() && !answerStands && !marketSearchMatches(p, searchQuery)) return false;
 
         // Tag filter (§4.4 post detail tap)
         if (selectedTag) {
             const pTags = postTagsOf(p.tags);
             if (!pTags.some(t => t === selectedTag || t.startsWith(selectedTag + '.'))) return false;
         }
+        if (selectedFree && !listingFreeTags(p).includes(selectedFree)) return false;
         return true;
     });
 
@@ -1051,7 +1065,7 @@ export default function MarketScreen() {
     const fillNeeded = marketFillWanted({
         profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
         // A tag filter reads as words do, nearest first from anywhere, so there is no elsewhere to fill from.
-        searching: searchQuery.trim().length > 0 || !!selectedTag, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
+        searching: searchQuery.trim().length > 0 || !!selectedTag || !!selectedFree, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
         shownNear: filteredPosts,
     });
     const fillKey = `${filter}|${categoryFilter}`;
@@ -1086,7 +1100,7 @@ export default function MarketScreen() {
         : [];
 
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0 || !!selectedTag;
+    const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0 || !!selectedTag || !!selectedFree;
 
     // A few example cards while the Market is nearly empty, where the node asks for them (utils/example-listings.ts):
     // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
@@ -1177,8 +1191,8 @@ export default function MarketScreen() {
                     />
                 </Pressable>
             </View>
-            {selectedTag && (() => {
-                const label = tagIndex().label(selectedTag);
+            {(selectedTag || selectedFree) && (() => {
+                const label = selectedFree ?? tagIndex().label(selectedTag ?? '');
                 if (!label) return null;
                 return (
                     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 2 }}>
@@ -1198,7 +1212,7 @@ export default function MarketScreen() {
                                 #{label}
                             </Text>
                             <Pressable
-                                onPress={() => setSelectedTag(null)}
+                                onPress={() => { setSelectedTag(null); setSelectedFree(null); }}
                                 hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Clear tag filter')}
@@ -1368,10 +1382,11 @@ export default function MarketScreen() {
     });
     // "Save this search to Home" (Marty, 7 Oct): a member's search, Offers and Needs only, handed to Home, which opens the
     // saved search's own sheet with it (or says why it can't: the same search there, five there, Home full).
-    const toSave = identity && !refusal ? marketSearchToSave(filterState, searchQuery, selectedTag || undefined) : null;
+    const toSave = identity && !refusal ? marketSearchToSave(filterState, searchQuery.trim() ? searchQuery : selectedFree ?? '', selectedTag || undefined) : null;
     const clearAllFilters = () => {
         setSearchQuery('');
         setSelectedTag(null);
+        setSelectedFree(null);
         setFilter('all');
         dispatchCategoryPanel({ kind: 'pick', category: 'all' });
         setEventWindow('all');

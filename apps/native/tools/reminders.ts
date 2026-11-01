@@ -11,6 +11,7 @@
 import { Platform } from 'react-native';
 import { t, TOOL_LIMITS, type ToolDue, type ToolManifest } from '@beanpool/core';
 import { phoneTool } from './index';
+import { toolPath } from './route-params';
 
 /** Android's channel for every tool's reminders: its own, so a member can quieten them without the community's alerts. */
 export const TOOL_REMINDER_CHANNEL = 'tools';
@@ -202,5 +203,5 @@ export function toolReminderRoute(n: { remote: boolean; data: unknown }, activeC
     const tool = phoneTool(bpTool);
     if (!tool) return null;
     const known = typeof screen === 'string' && tool.manifest.screens.includes(screen) && screen !== tool.manifest.screens[0];
-    return `/tool/${encodeURIComponent(tool.manifest.id)}${known ? `?screen=${encodeURIComponent(screen as string)}` : ''}`;
+    return toolPath(tool.manifest.id, known ? screen as string : undefined);
 }

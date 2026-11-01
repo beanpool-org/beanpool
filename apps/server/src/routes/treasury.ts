@@ -862,7 +862,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
         }
         try {
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { tags: b.tags });
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { tags: b.tags, freeTags: b.freeTags });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) }; }
@@ -880,7 +880,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
         }
         try {
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { tags: b.tags });
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { tags: b.tags, freeTags: b.freeTags });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) }; }
@@ -914,7 +914,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
             const limit = enterprisePostLimit(treasury, actor);
             // `shopId`: the enterprise's own shop, raw: the engine refuses any other (engine/shops.ts assertShopForPost).
-            const post = createPost('offer', String(category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId, tags: b.tags });
+            const post = createPost('offer', String(category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId, tags: b.tags, freeTags: b.freeTags });
             if (!post) { ctx.status = 400; ctx.body = { error: word('Failed to create offer') }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };
@@ -944,7 +944,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (Array.isArray(b.photos)) assertMayAddPhotos(actor, Math.min(b.photos.length, 5));
             const limit = enterprisePostLimit(treasury, actor);
             // A Need never goes in a shop: a `shopId` sent is refused in the engine's words, never dropped.
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId, tags: b.tags });
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId, tags: b.tags, freeTags: b.freeTags });
             if (!post) { ctx.status = 400; ctx.body = { error: word('Failed — the treasury needs a live Offer first (offer covenant)') }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };

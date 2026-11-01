@@ -9,6 +9,8 @@
  * - Chips wrap cleanly
  * - 44dp minimum touch target sizes
  * - Sheet scrolls vertically
+ * - A typed tag of the most characters and words fits (DESIGN-tags-free-entry-fable.md, F2): its chip wraps, the Add row and the
+ *   refusal's words hold inside 320dp
  * - Screenshots saved to scratch/screenshots/
  */
 import fs from 'node:fs';
@@ -87,6 +89,7 @@ globalThis.__theme = { theme: scheme, colors };
 
 function Harness() {
     const [tags, setTags] = useState(['food.fruit.lemon', 'garden.produce']);
+    const [freeTags, setFreeTags] = useState(['2nd hand', 'wwwwwwwwwwwwwwwwwwwwwwwwwwwwww']);
     return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16 }}>
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.heading, marginBottom: 8 }}>
@@ -100,6 +103,8 @@ function Harness() {
                 <TagPicker
                     value={tags}
                     onChange={setTags}
+                    freeTags={freeTags}
+                    onFreeTagsChange={setFreeTags}
                     category="food"
                     title="Meyer Lemons & Rosemary"
                     description="Fresh homegrown organic lemons and sprigs of rosemary."
@@ -187,6 +192,32 @@ try {
         const searchShot = path.join(OUT_DIR, `phone-tag-picker-search-${scheme}-320.png`);
         await page.screenshot({ path: searchShot, fullPage: false });
         console.log(`Saved phone search shot: ${searchShot}`);
+
+        // A typed tag: the Add row, then a refusal's words, then the longest tag as a chip in the sheet.
+        await searchInput.fill('excellent condition');
+        await page.getByTestId('tag-picker-add-typed').waitFor({ timeout: 3000 });
+        const typedShot = path.join(OUT_DIR, `phone-tag-picker-typed-${scheme}-320.png`);
+        await page.screenshot({ path: typedShot, fullPage: false });
+        console.log(`Saved phone typed shot: ${typedShot}`);
+        await searchInput.press('Enter');
+        await page.getByRole('button', { name: 'Remove #excellent condition' }).first().waitFor({ timeout: 3000 });
+        await searchInput.fill('me@example.org');
+        await page.getByText('A tag is a word to find your listing by, not a contact').waitFor({ timeout: 3000 });
+        const refusedShot = path.join(OUT_DIR, `phone-tag-picker-refused-${scheme}-320.png`);
+        await page.screenshot({ path: refusedShot, fullPage: false });
+        console.log(`Saved phone refused shot: ${refusedShot}`);
+
+        const overflow = await page.evaluate((width) => {
+            const wide = [...document.querySelectorAll('[data-testid="tag-picker-sheet"] *, [data-testid="tag-picker"] *')]
+                .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.right > width + 0.5 || r.left < -0.5); })
+                .map((el) => (el.textContent || el.tagName).slice(0, 40));
+            return { wide, scroll: document.documentElement.scrollWidth };
+        }, WIDTH);
+        if (overflow.wide.length > 0 || overflow.scroll > WIDTH) throw new Error(`${scheme}: past ${WIDTH}dp: ${JSON.stringify(overflow)}`);
+        const small = await page.evaluate(() => [...document.querySelectorAll('[data-testid="tag-picker-sheet"] [role="button"]')]
+            .filter((el) => el.getBoundingClientRect().height < 44).map((el) => el.textContent));
+        if (small.length > 0) throw new Error(`${scheme}: under 44dp: ${JSON.stringify(small)}`);
+        console.log(`${scheme}: nothing past ${WIDTH}dp, every target 44dp or more`);
 
         await context.close();
     }

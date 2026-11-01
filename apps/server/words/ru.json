@@ -10,5 +10,7 @@
   "Add a photo first": "Сначала добавьте фото",
   "Only a pending message request can be cancelled.": "Можно отменить только ожидающий запрос сообщения.",
   "Only the person who sent a message request can cancel it.": "Только отправитель запроса сообщения может отменить его.",
-  "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Отправьте conversationId, чат, и decision, 'accept', 'ignore' или 'cancel'."
+  "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Отправьте conversationId, чат, и decision, 'accept', 'ignore' или 'cancel'.",
+  "This community has a new address": "У этого сообщества новый адрес",
+  "This community is also at {address}. The old address keeps working.": "Это сообщество теперь доступно и по адресу {address}. Старый адрес продолжает работать."
 }

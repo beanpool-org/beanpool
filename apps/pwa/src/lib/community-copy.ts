@@ -27,6 +27,11 @@ export interface WebCommunityCopyStatus {
     offered: boolean;
     /** It keeps a copy it can't open now, since when and why: never On, never a way back. Null otherwise, and from a server from before. */
     unopenable: { since: string | null; reason: WebCommunityCopyUnopenableReason } | null;
+    /**
+     * It keeps its half of a copy BeanPool's key vault keeps (vault rethink VR4): the member's phone made it, and only a phone
+     * can remove it, since the web app has no key vault client (design VR6).
+     */
+    shared?: boolean;
 }
 
 /** The server's `unopenable`, read. A reason this browser doesn't know is still "can't open", never "kept". */
@@ -60,7 +65,7 @@ export async function webCommunityCopyStatus(): Promise<WebCommunityCopyStatus |
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
         if (typeof body.kept !== 'boolean') return null;
         const unopenable = body.kept ? null : unopenableOf(body.unopenable);
-        return { kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true, unopenable };
+        return { kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true, unopenable, shared: body.kept && body.placement === 'shared' };
     } catch {
         return null;
     }

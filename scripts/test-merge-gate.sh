@@ -142,7 +142,7 @@ has "stopped run (local): ...held output included" "$KEPT/test.log" "stub test: 
 case "$KEPT" in */tmp.*) rm -rf "$KEPT" ;; esac
 
 # A CI shard's run of the same copy: only the checks TEST_ALL_ONLY names run and are reported, and a check that waits for
-# build (native_phone_width) or for website_contrast (website_status) starts at once when that check is not in the run,
+# build (native_phone_width) or for website_contrast_light (website_status) starts at once when that check is not in the run,
 # instead of waiting for ever (alarm: 120 s). Both then fail fast here: their scripts are not in this copy.
 rm -f "$S/started/"*
 env TEST_ALL_ONLY="deploy_preserve native_phone_width website_status" STUB_STARTED="$S/started" PATH="$S/bin:$PATH" \

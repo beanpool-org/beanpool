@@ -85,6 +85,13 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
         if (answer.state === 'released') {
             // A bring-back (vault rethink VR3): the member's SAME key, from the copy they keep with this community.
             if (finishing.current) return;
+            // Half of it is at BeanPool's key vault, which a browser can't reach yet (VR4): said, and nothing is tried here.
+            if (answer.phoneOnly) {
+                await abandonWebRekey(k, deps).catch(() => {});
+                setError(() => t('Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.'));
+                setPhase('form');
+                return;
+            }
             finishing.current = true;
             try {
                 const m = await finishWebBringBack(k, openWebBringBack(code, k, answer), deps);

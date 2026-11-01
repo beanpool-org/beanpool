@@ -54,6 +54,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // lib/web-rekey.ts WEB_REKEY_TEXT: a re-key code's answers (the phone's rekey-redeem.ts says two of them the same).
     'Your admin said this device isn’t yours, so nothing changed. Ask them to try again with you there.': word('Your admin said this device isn’t yours, so nothing changed. Ask them to try again with you there.'),
     'That code isn’t valid any more. Ask the admin for a new one.': word('That code isn’t valid any more. Ask the admin for a new one.'),
+    // A bring-back's code for an account the community has since removed (the server's refusal, design §4.4).
+    'This community no longer has your account. Use your 12 words or another way back.': word('This community no longer has your account. Use your 12 words or another way back.'),
     'That code is for another community. Open the link your admin gave you, or ask them for a new code.': word('That code is for another community. Open the link your admin gave you, or ask them for a new code.'),
     'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.': word('Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.'),
     // lib/takeover-unlock.ts: a take-over or restore code pasted into Settings, and why the browser won't open the keys.

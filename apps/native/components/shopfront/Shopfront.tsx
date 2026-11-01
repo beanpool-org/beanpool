@@ -60,7 +60,7 @@ const makeStyles = ({ colors }: { colors: AppColors }) => StyleSheet.create({
 
     tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
     tile: { borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
-    tilePhoto: { width: '100%', aspectRatio: 1, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center' },
+    tilePhoto: { width: '100%', aspectRatio: 4 / 3, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center' },
     tileEmoji: { fontSize: 36 },
     tileText: { padding: 8, gap: 2 },
     tileTitle: { fontSize: 14, lineHeight: 19, fontWeight: '700', color: colors.text.heading },
@@ -238,7 +238,7 @@ function ListingPicture({ l, style, size = 'thumb' }: { l: ShopfrontListing; sty
     return (
         <View style={[style, { overflow: 'hidden' }]}>
             {l.photo ? (
-                <Image source={{ uri: listPhotoUrl(l.photo) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" accessibilityIgnoresInvertColors />
+                <Image source={{ uri: listPhotoUrl(l.photo) }} style={{ width: '100%', height: '100%' }} contentFit="cover" contentPosition={{ top: '33%', left: '50%' }} cachePolicy="memory-disk" accessibilityIgnoresInvertColors />
             ) : (
                 <CategoryTile category={l.category} size={size} />
             )}

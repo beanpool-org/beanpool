@@ -777,3 +777,20 @@ test('the members\' guide: Commons pages mention "Start something" and describe 
     }
 });
 
+
+test("the members' guide: what the key vault keeps says only what the code does (#2683 deciding pass)", () => {
+    const { guide } = sourceGuides();
+    const page = guide.guides.find(g => g.slug === 'recovery');
+    assert.ok(page, 'the guide page "recovery" exists');
+    const text = page.blocks.flatMap(b => b.type === 'ul' ? b.items : [b.text]).join('\n');
+
+    // The vault is told which community when a copy is made (the keyholder reads it from the deposit box) and when a voucher
+    // is shown. It keeps neither, but whoever holds its secret can test community keys against the fingerprint.
+    assert.ok(!text.includes("doesn't know which community"), 'it is told, and keeps nothing that says: it is not that it can\'t know');
+    assert.ok(text.includes('Nothing the key vault keeps says which community that is.'));
+    assert.ok(text.includes("Anyone with the running vault's secret could still work the community out"));
+
+    // A hold's requester_key is whichever key asked: on a phone holding another account, that account's (rekey-redeem beginRekey).
+    assert.ok(!text.includes("the new phone's one-time key"), 'not always a one-time key');
+    assert.ok(text.includes("then it is the public half of that account's key"));
+});

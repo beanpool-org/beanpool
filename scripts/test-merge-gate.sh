@@ -152,17 +152,20 @@ has "shard run: the three checks named ran" "$S/out" "Total: 1 passed, 2 failed,
 if grep -qE "settings_phone|server_suites|secrets_guard" "$S/out"; then bad "shard run: reports a check it was not given"; else ok "shard run: reports no other check"; fi
 
 # A check that passes having compared nothing prints "⚪ SKIP: <why>". On GitHub migration_steps read as a pass in 0 s on every
-# pull request: the report says skipped, with the reason, and the run's page gets a warning. Under turbo the line has a prefix.
+# pull request: the report says skipped, with the reason, the run's page gets a warning, and the shard fails, because GitHub is
+# the merge gate (Marty, 1 Nov 2026) and a shard's exit is all the required check reads. Under turbo the line has a prefix.
 echo 'echo "@beanpool/guide:test: ⚪ SKIP: no origin/main to compare with"' > "$S/scripts/test-deploy-preserve.sh"
 echo 'echo "fine"; echo "stub deploy_preserve: ran"' > "$S/scripts/test-deploy-health.sh"
 env TEST_ALL_ONLY="deploy_preserve deploy_health" GITHUB_ACTIONS=true PATH="$S/bin:$PATH" bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1; SKIP_RC=$?
-[ "$SKIP_RC" = 0 ] && ok "skip: a check with nothing to compare fails nothing" || bad "skip: exit $SKIP_RC, wanted 0"
+[ "$SKIP_RC" = 1 ] && ok "skip: on GitHub a check with nothing to compare fails the shard" || bad "skip: exit $SKIP_RC on GitHub, wanted 1"
+has "skip: ...and says why" "$S/out" "Skipped on GitHub, which is the merge gate: deploy_preserve"
 has "skip: reported as skipped, with its reason" "$S/out" "⚪ SKIPPED  no origin/main to compare with"
 has "skip: ...counted as skipped, and the other check as passed" "$S/out" "Total: 1 passed, 0 failed, 1 skipped"
 has "skip: ...a warning on the run's page" "$S/out" "::warning title=test-all skipped deploy_preserve::no origin/main to compare with"
 if grep -E "deploy_preserve +✅" "$S/out" >/dev/null; then bad "skip: it still reads as a pass"; else ok "skip: not a plain PASS"; fi
 # -u: this suite runs on GitHub too, where the run below would inherit GITHUB_ACTIONS and be on GitHub after all.
-env -u GITHUB_ACTIONS TEST_ALL_ONLY="deploy_preserve" PATH="$S/bin:$PATH" bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1
+env -u GITHUB_ACTIONS TEST_ALL_ONLY="deploy_preserve" PATH="$S/bin:$PATH" bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1; SKIP_RC=$?
+[ "$SKIP_RC" = 0 ] && ok "skip: off GitHub it fails nothing (and records no green)" || bad "skip: exit $SKIP_RC off GitHub, wanted 0"
 if grep -qF "::warning" "$S/out"; then bad "skip: an annotation outside GitHub Actions"; else ok "skip: no annotation off GitHub"; fi
 
 # The check itself, in a checkout with no origin/main (a real git, this script's own copy): it says SKIP, and test-all reports that.

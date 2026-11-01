@@ -15,14 +15,15 @@ on:
   # The concurrency group below already cancels superseded runs, so the extra cost is one run
   # per stacked branch push.
   #
-  # Every path but Markdown, except the guide's pages: they are Markdown, and a PR that changes
-  # only them (every guide PR, since they no longer touch the published copies) must still get
-  # the guide check. Later patterns win, so the last line puts them back.
+  # Every path too, Markdown included. A paths filter leaves a PR of only .md files with no run, so the
+  # required check never reports and the PR could only merge with --admin. There is no --admin now
+  # (docs/merge-gate.md), and such a PR is about 2% of merges (9 of main's last 400).
   pull_request:
-    paths:
-      - '**'
-      - '!**/*.md'
-      - 'packages/beanpool-guide/**/*.md'
+  # THE MERGE GATE (Marty, 1 Nov 2026: "drop the Mac and go GH"). A PR in GitHub's merge queue is tested here, on top of the
+  # PRs ahead of it, by this same matrix: the ruleset (.github/rulesets/protect-main.json) requires the check below on the
+  # queue's commit as well as the PR's, and nothing else reports it. docs/merge-gate.md has the rules.
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -142,9 +143,10 @@ jobs:
           overwrite: true
           retention-days: 14
 
-  # THE REQUIRED CHECK. The "Protect main" ruleset requires a check named exactly "Run BeanPool Test-All Pipeline" and
-  # matches it by name, so this job carries it and no other job may (scripts/check-ci-shards.test.mjs). It passes only when
-  # every shard passed: a failed, cancelled or skipped shard fails it. always(), so it reports even then.
+  # THE REQUIRED CHECK, on a pull request and on a merge queue entry. The "Protect main" ruleset requires a check named
+  # exactly "Run BeanPool Test-All Pipeline" and matches it by name, so this job carries it and no other job may
+  # (scripts/check-ci-shards.test.mjs). It passes only when every shard passed: a failed, cancelled or skipped shard fails
+  # it, and a check skipped inside a shard fails that shard (test-all.sh). always(), so it reports even then.
   test-all:
     name: Run BeanPool Test-All Pipeline
     needs: shard

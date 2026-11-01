@@ -4,8 +4,8 @@
 // the repo:
 //
 //   pnpm guide:publish --merge    open a pull request off origin/main that writes the published copies, each
-//                                 collection one version higher where its text changed, merge it (squash, admin) and
-//                                 show that the merge landed
+//                                 collection one version higher where its text changed, send it through the merge
+//                                 queue (scripts/merge-queue/board.sh, which waits for it) and show that the merge landed
 //   pnpm guide:publish            the same, but stop once the pull request is open
 //   pnpm guide:publish --dry-run  show what would be published; push nothing
 //   pnpm guide:publish --no-pr    push the branch; open no pull request (the tests use this)
@@ -119,7 +119,7 @@ function attempt() {
         const url = run('gh', ['pr', 'create', '--base', BASE, '--head', branch, '--title', title, '--body', body], dir).split('\n').pop();
         console.log(url);
         if (!merge) {
-            console.log(`Merge it before another guide change merges: gh pr merge ${url} --squash --admin`);
+            console.log(`Merge it before another guide change merges: bash scripts/merge-queue/board.sh ${url}`);
             return 'done';
         }
         run('git', ['fetch', '-q', REMOTE, BASE], repo);
@@ -130,7 +130,8 @@ function attempt() {
             tryRun('git', ['push', '-q', REMOTE, '--delete', branch], dir);
             return 'again';
         }
-        run('gh', ['pr', 'merge', url, '--squash', '--admin'], dir);
+        // From the temporary worktree: it is origin/main, and the checkout this was run from may be behind it.
+        run('bash', ['scripts/merge-queue/board.sh', url], dir);
         run('git', ['fetch', '-q', REMOTE, BASE], repo);
         const landed = run('git', ['diff', '--stat', tip, `${REMOTE}/${BASE}`, '--', ...PUBLISHED], repo);
         if (!landed) throw new Error(`${url} reports merged, but ${REMOTE}/${BASE} does not carry its files`);

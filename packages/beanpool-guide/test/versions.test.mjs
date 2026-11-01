@@ -30,7 +30,7 @@ Object.assign(process.env, {
     GIT_CONFIG_KEY_2: 'core.fsmonitor', GIT_CONFIG_VALUE_2: 'false',
 });
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const node = (cwd, script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
+const node = (cwd, script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: undefined } });
 const build = (cwd, ...args) => node(cwd, `${PKG}/scripts/build.mjs`, ...args);
 /** The check as a GitHub Actions run of `event` (pull_request, push, workflow_dispatch) runs it. */
 const ciCheck = (cwd, event) => spawnSync(process.execPath, [`${PKG}/scripts/build.mjs`, '--check'],
@@ -274,6 +274,19 @@ function handPublish(cwd, change) {
 }
 const changeText = g => { g.guides[0].blocks[0] = { type: 'p', text: 'Words that no page says.' }; };
 
+// This suite runs inside GitHub's own runs, and in the merge queue its event would send an author's build in a throwaway repo to
+// the commit before HEAD: red on every queue entry, and on no pull request.
+test('the run this suite is in does not reach the throwaway repos: only ciCheck names an event', () => {
+    const before = process.env.GITHUB_EVENT_NAME;
+    process.env.GITHUB_EVENT_NAME = 'merge_group';
+    try {
+        assert.equal(node(process.cwd(), '-p', 'String(process.env.GITHUB_EVENT_NAME)').stdout.trim(), 'undefined');
+    } finally {
+        if (before === undefined) delete process.env.GITHUB_EVENT_NAME;
+        else process.env.GITHUB_EVENT_NAME = before;
+    }
+});
+
 test('a published copy over 1 MiB on main is still found: a PR that leaves it alone passes the check', () => {
     const repo = makeRepo();
     try {
@@ -443,6 +456,56 @@ test("in CI's checkout of a pull request — its merge commit, two commits deep,
         const shallow = ciCheckout(pagesOnly, 1);
         assert.equal(shallow.status, 1, said(shallow));
         assert.match(shallow.stderr, /fetch-depth: 2/);
+    } finally {
+        repo.cleanup();
+    }
+});
+
+test('a merge queue entry is compared with what it lands on: a publish ahead of a page edit is not one change doing both', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        openPr(cwd, 'first', c => editPage(c, 'content/ledger/gifts.md', 'Words waiting for their publish.'));
+        assert.deepEqual(mergeOnMain(cwd, 'first'), []);
+        const main = git(cwd, 'rev-parse', 'origin/main');
+        // The director's publish of those words, and a page edit, each a branch off main.
+        git(cwd, 'checkout', '-q', '-b', 'publish', main);
+        assert.equal(build(cwd, '--publish').status, 0);
+        git(cwd, 'add', '-A');
+        git(cwd, 'commit', '-q', '-m', 'publish');
+        openPr(cwd, 'pages', c => editPage(c, 'content/ledger/gifts.md', 'Words a later PR adds.'));
+
+        // The queue's branch: a squash commit on main for each PR, the one ahead first, and CI's checkout of it with origin/main fetched.
+        const queued = (n, ...branches) => {
+            git(cwd, 'checkout', '-q', '--detach', main);
+            for (const b of branches) { git(cwd, 'merge', '-q', '--squash', b); git(cwd, 'commit', '-q', '-m', `squash ${b}`); }
+            git(cwd, 'push', '-q', 'origin', `HEAD:refs/heads/gh-readonly-queue/main/pr-${n}-abc`);
+            const tip = git(cwd, 'rev-parse', 'HEAD');
+            git(cwd, 'checkout', '-q', 'main');
+            const dir = fs.mkdtempSync(path.join(repo.root, 'queue-'));
+            git(dir, 'init', '-q');
+            git(dir, 'remote', 'add', 'origin', `file://${path.join(repo.root, 'origin.git')}`);
+            git(dir, 'fetch', '-q', '--no-tags', '--depth=2', 'origin', `+refs/heads/gh-readonly-queue/main/pr-${n}-abc:refs/remotes/queue`);
+            git(dir, 'checkout', '-q', '--detach', 'refs/remotes/queue');
+            // As ci.yml's "Fetch origin/main": both ends 50 deep, the head by its sha (by a ref that is up to date, nothing deepens).
+            git(path.join(repo.root, 'origin.git'), 'config', 'uploadpack.allowAnySHA1InWant', 'true');
+            git(dir, 'fetch', '-q', '--no-tags', '--depth=50', 'origin', '+refs/heads/main:refs/remotes/origin/main', tip);
+            assert.equal(git(dir, 'merge-base', 'HEAD', 'origin/main'), main, 'the step gives a merge base: main under every entry');
+            return { dir, parent: git(dir, 'rev-parse', 'HEAD^1') };
+        };
+
+        const behindPublish = queued(2, 'publish', 'pages');
+        const ok = ciCheck(behindPublish.dir, 'merge_group');
+        assert.equal(ok.status, 0, said(ok));
+        assert.match(ok.stdout, new RegExp(`checked against ${behindPublish.parent.slice(0, 10)}`));
+        const asIfOneChange = ciCheck(behindPublish.dir, 'pull_request');
+        assert.equal(asIfOneChange.status, 1, 'compared with main under both, the two PRs read as one change');
+        assert.match(asIfOneChange.stderr, /AND publishes them/);
+
+        // The other way round the publish is stale: its text is not the pages' now. That red is right: publish again.
+        const staleBehindPages = ciCheck(queued(3, 'pages', 'publish').dir, 'merge_group');
+        assert.equal(staleBehindPages.status, 1, said(staleBehindPages));
+        assert.match(staleBehindPages.stderr, /is not the text of the pages/);
     } finally {
         repo.cleanup();
     }

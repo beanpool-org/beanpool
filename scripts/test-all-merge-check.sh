@@ -4,7 +4,7 @@
 #   bash scripts/test-all-merge-check.sh <PR number or URL>
 #   bash scripts/test-all-merge-check.sh --head <sha> [--base <branch>]    (no GitHub lookup; its own test uses this)
 #
-# Merges into main rest on a local test-all run (Marty, 2026-09-30); this is the check a merge hook calls. test-all.sh
+# GitHub is the merge gate now (docs/merge-gate.md), so this decides no merge: it says whether a local run covers a PR. test-all.sh
 # --all appends "<epoch> <commit> <tree> <wall-seconds>" to <git common dir>/test-all-green after a run that passed
 # every check on a clean, committed tree (scripts/test-all-lib.sh). A PR is covered by a green commit G when:
 #

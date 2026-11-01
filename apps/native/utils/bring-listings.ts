@@ -378,7 +378,8 @@ async function send(offer: BringOffer, body: Record<string, unknown>, identity: 
     // A 2xx that isn't the route's answer is a proxy's or a captive portal's page: nothing is known to have landed.
     if (res.ok) return answer?.success === true ? 'ok' : 'later';
     if (res.status === 401 || res.status === 408 || res.status === 429 || res.status >= 500) return 'later';
-    return { refused: typeof answer?.error === 'string' && answer.error ? answer.error : String(res.status) };
+    // Its refusals carry words. A status with none is a page from something in front of the community: nothing is known.
+    return typeof answer?.error === 'string' && answer.error ? { refused: answer.error } : 'later';
 }
 
 /** The node's words for a member with no profile photo (engine/posts.ts assertProfileComplete), read as utils/db.ts reads them. */

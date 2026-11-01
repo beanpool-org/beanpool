@@ -103,7 +103,7 @@ describe('Ask to join, the send', () => {
     beforeEach(() => { store.clear(); sendKnock.mockReset(); rememberKnock.mockClear(); });
 
     it('a name longer than a knock takes is cut, as every other knock cuts it, so a long name is no refusal', async () => {
-        await setCircleIntent(me.publicKey, retired.id, true);
+        await setCircleIntent('a'.repeat(64), retired.id, true);
         sendKnock.mockResolvedValue({ kind: 'waiting', message: '' });
         await knockForCircle({ ...(me as object), callsign: 'Ü'.repeat(32) } as never, retired);
         expect(sendKnock.mock.calls[0][2].callsign).toBe('Ü'.repeat(20));

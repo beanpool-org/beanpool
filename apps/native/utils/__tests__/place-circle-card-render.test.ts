@@ -41,7 +41,7 @@ const readKnockStatus = vi.hoisted(() => vi.fn(async () => null));
 /** What this phone remembers of its requests. */
 const knocksHeld = vi.hoisted(() => ({ open: [] as { url: string; name: string | null; key: string | null; sentAt: string }[], cancelled: {} as Record<string, number> }));
 vi.mock('../knock', () => ({
-    readKnockStatus, cardKnockLines: () => [], sendKnock,
+    KNOCK_CALLSIGN_CHARS: 20, readKnockStatus, cardKnockLines: () => [], sendKnock,
     rememberKnock: vi.fn(async (_pk: string, c: { url: string; name: string | null; key: string | null }) => { knocksHeld.open.push({ ...c, sentAt: '2026-11-01T00:00:00.000Z' }); }),
     rememberedKnocks: vi.fn(async () => [...knocksHeld.open]),
     cancelledKnocks: vi.fn(async () => knocksHeld.cancelled),

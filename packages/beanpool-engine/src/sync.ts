@@ -331,6 +331,13 @@ export interface SyncGroup {
     joinPolicy: string;
     createdAt: string;
     updatedAt: string;
+    /** A place circle's own columns (apps/server engine/place-circles.ts). Absent from a main server older than circles. */
+    kind?: string | null;
+    placeCell?: string | null;
+    circleDoneAt?: string | null;
+    circleCommunityKey?: string | null;
+    circleStarter?: string | null;
+    circleStartingAt?: string | null;
 }
 
 /**
@@ -389,6 +396,8 @@ export interface SyncPlaceWatch {
     createdAt: string;
     lastNotifiedAt: string | null;
     updatedAt: string;
+    /** "I'd help start one here" (the place circle). Absent from a main server older than circles: not set. */
+    wouldHelp?: boolean;
 }
 
 /**
@@ -1351,6 +1360,12 @@ function groupOfRow(r: any): SyncGroup {
         joinPolicy: r.join_policy,
         createdAt: r.created_at,
         updatedAt: r.updated_at || r.created_at,
+        kind: r.kind ?? null,
+        placeCell: r.place_cell ?? null,
+        circleDoneAt: r.circle_done_at ?? null,
+        circleCommunityKey: r.circle_community_key ?? null,
+        circleStarter: r.circle_starter ?? null,
+        circleStartingAt: r.circle_starting_at ?? null,
     };
 }
 
@@ -1389,6 +1404,7 @@ function placeWatchOfRow(r: any): SyncPlaceWatch {
         createdAt: r.created_at,
         lastNotifiedAt: r.last_notified_at ?? null,
         updatedAt: r.updated_at,
+        wouldHelp: r.would_help === 1,
     };
 }
 

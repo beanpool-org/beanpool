@@ -22,7 +22,7 @@ import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
 import {
-    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, notAnsweringLately, placeWatchLimitLine, roundPointToArea, t, tn,
+    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, notAnsweringLately, placeWatchLimitLine, roundPointToArea, t, tn, shownCount, type CircleCard, type CircleDemand,
 } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
@@ -57,7 +57,7 @@ export interface DirectoryCommunity {
     answers?: 'week' | 'slow' | 'none' | null;
 }
 
-export interface PlaceWatch { id: string; lat: number; lng: number; radiusKm: number; createdAt: string }
+export interface PlaceWatch { id: string; lat: number; lng: number; radiusKm: number; createdAt: string; wouldHelp?: boolean }
 
 /** What the "Find your community" card reads, in one request. */
 export interface GlobalHome {
@@ -71,6 +71,10 @@ export interface GlobalHome {
     watches: PlaceWatch[] | null;
     /** When the node last fetched the directory; null: never, so "none" is not said (@beanpool/core find-community.ts). */
     directoryFetchedAt: string | null;
+    /** How many are waiting around here (place circle): each null below 3. Absent from an older node. */
+    demand?: CircleDemand | null;
+    /** The reader's own place circle. */
+    circle?: (CircleCard & { id: string }) | null;
 }
 
 export type Fetched<T> =
@@ -131,7 +135,37 @@ function readWatch(raw: unknown): PlaceWatch | null {
     if (!raw || typeof raw !== 'object') return null;
     const w = raw as Record<string, unknown>;
     if (typeof w.id !== 'string' || !finite(w.lat) || !finite(w.lng) || !finite(w.radiusKm)) return null;
-    return { id: w.id, lat: w.lat, lng: w.lng, radiusKm: w.radiusKm, createdAt: typeof w.createdAt === 'string' ? w.createdAt : '' };
+    return { id: w.id, lat: w.lat, lng: w.lng, radiusKm: w.radiusKm, createdAt: typeof w.createdAt === 'string' ? w.createdAt : '', ...(w.wouldHelp === true ? { wouldHelp: true } : {}) };
+}
+
+function readDemand(raw: unknown): CircleDemand | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const d = raw as Record<string, unknown>;
+    return { waiting: shownCount(d.waiting), helping: shownCount(d.helping) };
+}
+
+/** A circle as the node said it, or null. Its count holds to the floor here too, whatever a node sends. */
+export function readCircleCard(raw: unknown): CircleCard | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const c = raw as Record<string, unknown>;
+    const community = c.community && typeof c.community === 'object' ? c.community as Record<string, unknown> : null;
+    return {
+        people: shownCount(c.people),
+        starting: c.starting === 'you' || c.starting === 'someone' ? c.starting : null,
+        doneAt: typeof c.doneAt === 'string' ? c.doneAt : null,
+        community: community && typeof community.key === 'string' ? {
+            key: community.key,
+            name: typeof community.name === 'string' ? community.name : null,
+            url: typeof community.url === 'string' ? community.url : null,
+            acceptingKnocks: typeof community.acceptingKnocks === 'boolean' ? community.acceptingKnocks : null,
+        } : null,
+    };
+}
+
+function readOwnCircle(raw: unknown): (CircleCard & { id: string }) | null {
+    const id = (raw as { id?: unknown } | null)?.id;
+    const card = readCircleCard(raw);
+    return card && typeof id === 'string' && id ? { ...card, id } : null;
 }
 
 export function readGlobalHome(body: unknown): GlobalHome | null {
@@ -148,6 +182,8 @@ export function readGlobalHome(body: unknown): GlobalHome | null {
             : null,
         watches: Array.isArray(b.watches) ? b.watches.map(readWatch).filter((w): w is PlaceWatch => w !== null) : null,
         directoryFetchedAt: typeof b.directoryFetchedAt === 'string' && b.directoryFetchedAt ? b.directoryFetchedAt : null,
+        ...(b.demand ? { demand: readDemand(b.demand) } : {}),
+        ...(b.circle ? { circle: readOwnCircle(b.circle) } : {}),
     };
 }
 
@@ -231,9 +267,9 @@ export function fetchCommunities(
  * "Tell me when a community starts near here": the node keeps the ~10 km cell, never the exact point, so that cell is all
  * the phone sends (@beanpool/core roundPointToArea, the node's own rule).
  */
-export async function watchPlace(identity: BeanPoolIdentity, point: Point, base: string = GLOBAL_NODE_URL): Promise<Fetched<PlaceWatch>> {
+export async function watchPlace(identity: BeanPoolIdentity, point: Point, base: string = GLOBAL_NODE_URL, opts: { wouldHelp?: boolean } = {}): Promise<Fetched<PlaceWatch>> {
     try {
-        const res = await signedPost(base, '/api/global/watches', roundPointToArea(point.lat, point.lng), identity);
+        const res = await signedPost(base, '/api/global/watches', { ...roundPointToArea(point.lat, point.lng), ...opts }, identity);
         if (res.status === 404) return { ok: false, kind: 'unavailable', message: (await errorText(res)) ?? DIRECTORY_MESSAGES.unavailable };
         if (!res.ok) {
             const body = await res.json().catch(() => null) as { error?: unknown; code?: unknown; limit?: unknown } | null;
@@ -244,6 +280,18 @@ export async function watchPlace(identity: BeanPoolIdentity, point: Point, base:
         }
         const watch = readWatch((await res.json().catch(() => null))?.watch);
         return watch ? { ok: true, value: watch } : { ok: false, kind: 'unreachable', message: DIRECTORY_MESSAGES.unreadable };
+    } catch {
+        return { ok: false, kind: 'unreachable', message: DIRECTORY_MESSAGES.unreachable };
+    }
+}
+
+/** "I'm starting one here", on or off, by someone in the circle. The node's answer is the card as it now stands. */
+export async function setCircleStarting(identity: BeanPoolIdentity, id: string, starting: boolean, base: string = GLOBAL_NODE_URL): Promise<Fetched<CircleCard>> {
+    try {
+        const res = await signedPost(base, `/api/global/circles/${encodeURIComponent(id)}/starting`, { starting }, identity);
+        if (!res.ok) return { ok: false, kind: 'refused', status: res.status, message: (await errorText(res)) ?? DIRECTORY_MESSAGES.unreadable };
+        const card = readCircleCard((await res.json().catch(() => null))?.circle);
+        return card ? { ok: true, value: card } : { ok: false, kind: 'unreachable', message: DIRECTORY_MESSAGES.unreadable };
     } catch {
         return { ok: false, kind: 'unreachable', message: DIRECTORY_MESSAGES.unreachable };
     }

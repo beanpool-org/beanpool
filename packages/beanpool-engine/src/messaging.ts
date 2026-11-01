@@ -81,6 +81,8 @@ export interface Conversation {
      */
     avatarUrl?: string | null;
     category?: string | null;
+    /** A group chat's groups.kind ('circle'), when it has one: its name is shown in the reader's language (core's groupNameShown). */
+    groupKind?: string | null;
     peerLastReadAt?: string | null;
     myLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
@@ -112,7 +114,7 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
             CASE WHEN c.post_id IS NOT NULL THEN 'cancelled' ELSE 'active' END
         ) as post_status,
         m.type as last_msg_type, m.system_type as last_sys_type, m.timestamp as last_msg_time,
-        g.id as group_row_id, g.avatar_ref as group_avatar_ref, g.category as group_category
+        g.id as group_row_id, g.avatar_ref as group_avatar_ref, g.category as group_category, g.kind as group_kind
         FROM conversations c
         JOIN conversation_participants cp ON c.id = cp.conversation_id
         LEFT JOIN posts p ON c.post_id = p.id
@@ -215,7 +217,7 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
             peerAvatar,
             // A group chat is the group's: its own picture, not one member's face (Pictures S4).
             ...(r.type === 'group_thread' && r.group_row_id
-                ? { avatarUrl: groupPictureUrlOf(r.group_row_id, r.group_avatar_ref), category: r.group_category ?? null }
+                ? { avatarUrl: groupPictureUrlOf(r.group_row_id, r.group_avatar_ref), category: r.group_category ?? null, ...(r.group_kind ? { groupKind: r.group_kind } : {}) }
                 : {}),
             peerLastReadAt: peerLastReadByConv.get(r.id) || null,
             myLastReadAt: myLastReadByConv.get(r.id) || null,

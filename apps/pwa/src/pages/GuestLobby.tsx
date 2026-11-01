@@ -243,7 +243,7 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
 
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* Opened at a name this community had before: where it lives now (lost-name L4). */}
-                <FormerAddressBanner />
+                <FormerAddressBanner isGuest />
                 {/* The mobile header, as a member's: the page's name in the middle, Join where Settings sits. */}
                 <LobbyHeader tab={tab} title={title} onHelp={() => setHelpOpen(true)} onJoin={() => openJoin('guard')} joinDisabled={canHoldKey === null} />
                 {helpOpen && (

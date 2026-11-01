@@ -1102,7 +1102,7 @@ export function App() {
                 )}
 
                 {/* Opened at a name this community had before: where it lives now (lost-name L4). */}
-                <FormerAddressBanner signedIn />
+                <FormerAddressBanner signedIn isGuest={isGuest} />
 
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
                 <MobileHeader

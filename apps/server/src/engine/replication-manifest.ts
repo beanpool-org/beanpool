@@ -222,6 +222,9 @@ export const TABLES: Record<string, TableEntry> = {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
         },
+        // On a copy of an event alone: every other post's move is stamped, and a delta carries it.
+        movedByRekey: Object.fromEntries(['author_pubkey', 'accepted_by', 'created_by', 'target_pubkey', 'assigned_to'].map((c) =>
+            [c, 'a copy of an event keeps its stamp through the move, or a read would tie it to its author\'s listings (engine/key-move.ts)'])),
     },
     // A photo taken off a listing travels as a `post_photos` tombstone (engine/posts.ts updatePost), judged against the
     // main server's stamp.

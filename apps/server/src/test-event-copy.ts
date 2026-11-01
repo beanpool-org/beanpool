@@ -17,7 +17,8 @@
  *   9. a local community ignores the field
  *  10. no read goes by who wrote it: a reader's block, the author's holiday or pause and a new name move their listings,
  *      each proved by a control, and leave a copy reading as it did, in every list, delta, count and tag; a block leaves the
- *      frames a real socket hears of a copy as they were, made, edited, rolled on and taken down
+ *      frames a real socket hears of a copy as they were, made, edited, rolled on and taken down; a re-key stamps their
+ *      listings at one instant and leaves a copy's stamp where it was, so a sync can't tie the two and a delta doesn't send it
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-event-copy)
  */
@@ -509,6 +510,37 @@ async function main() {
     const named = await call('GET', setPath(cardCursor), watcher, undefined, { 'If-None-Match': cardTag });
     assert(named.status === 200 && rows(named.body).some(p => p.id === plainA), `control: a new name on a listing's author moves the tag and sends the listing (${named.status})`);
     assert(!rows(named.body).some(p => p.id === copyA), 'and leaves their copy out of the delta');
+
+    // A re-key stamps a member's rows at one instant. A copy stamped with them would read as `hidden` beside a listing that
+    // names them, with the same time to the millisecond, and one full sync would tie the two (the review of #2711). Their two
+    // listings are the control: they share the instant, so the check can see one, and only the copy stays out of it.
+    const { moveMemberKeyRows } = await import('./engine/key-move.js');
+    const moving = member('RekeyedAuthor');
+    const movedTo = keypair();
+    const rekeyWhen = { eventStartAt: inHours(26), eventEndAt: inHours(28) };
+    const movingCopy: string = (await postCopy(moving, 'Walk before a new phone', rekeyWhen)).body?.post?.id;
+    const movingPlain: string = (await postCopy(moving, 'Listing before a new phone', { ...rekeyWhen, shownFrom: undefined })).body?.post?.id;
+    const movingOther: string = (await postCopy(moving, 'Another before a new phone', { ...rekeyWhen, shownFrom: undefined })).body?.post?.id;
+    const copyStamp: string = stored(movingCopy)?.updated_at;
+    await tick();
+    const rekeyCursor = new Date().toISOString();
+    await tick();
+    moveMemberKeyRows(moving.pubKeyHex, movedTo.pubKeyHex, new Date().toISOString(), { keepStamps: false });
+    const synced = rows((await call('GET', '/api/marketplace/posts?sync=true&types=event&limit=200', watcher)).body);
+    const syncedCopy = synced.find(p => p.id === movingCopy);
+    const syncedPlain = synced.find(p => p.id === movingPlain);
+    const syncedOther = synced.find(p => p.id === movingOther);
+    assert(syncedPlain?.authorPublicKey === movedTo.pubKeyHex && syncedPlain?.updatedAt > rekeyCursor && syncedPlain?.updatedAt === syncedOther?.updatedAt,
+        `a re-key, control: their two listings name the new key, stamped at one instant (${syncedPlain?.updatedAt} / ${syncedOther?.updatedAt})`);
+    assert(syncedCopy?.authorPublicKey === 'hidden' && !!syncedCopy?.updatedAt && syncedCopy?.updatedAt !== syncedPlain?.updatedAt,
+        `a re-key: a sync can't tie the copy to their listing by its stamp (${syncedCopy?.updatedAt} / ${syncedPlain?.updatedAt})`);
+    assert(stored(movingCopy)?.updated_at === copyStamp, `a re-key: the copy keeps the stamp it had (${copyStamp} → ${stored(movingCopy)?.updated_at})`);
+    const rekeyDelta = rows((await call('GET', deltaPath(rekeyCursor), watcher)).body);
+    assert(rekeyDelta.some(p => p.id === movingPlain), 'a re-key, control: a delta sends their listing again');
+    assert(!rekeyDelta.some(p => p.id === movingCopy), 'a re-key: and not the copy, which would arrive beside it with nothing of its own to explain it');
+    assert(stored(movingCopy)?.author_pubkey === movedTo.pubKeyHex, 'a re-key: the copy is the new key\'s all the same');
+    const movedOwn = await byId(movingCopy, movedTo);
+    assert(movedOwn?.authorPublicKey === movedTo.pubKeyHex && movedOwn?.shownCopy === true, 'a re-key: its author reads it as theirs on the new key, to tend it');
 
     // A count: Home's "events soon", where a node shows it (guestListingsOnly off). A count that fell by the copy too would say the same.
     setSwitch('guestListingsOnly', 'false');

@@ -50,6 +50,13 @@ vi.mock('react-native', () => {
     };
 });
 
+vi.mock('../app-events', () => ({
+    CONVERSATION_READ_LOCALLY_EVENT: 'conversation_read_locally',
+    emitAppEvent: (name: string, payload?: unknown) => {
+        rn.listeners.get(name)?.forEach(fn => fn(payload));
+    },
+}));
+
 vi.mock('expo-router', () => {
     const Tabs = ({ children }: { children?: unknown }) => createElement('nav', null, children as any);
     Tabs.Screen = ({ name, options }: { name: string; options: Record<string, any> }) => createElement('button', {

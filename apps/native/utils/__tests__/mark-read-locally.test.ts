@@ -19,7 +19,7 @@ const dbAdapter = {
     }),
     execAsync: vi.fn(async () => {}),
     getAllAsync: vi.fn(async () => []),
-    getFirstAsync: vi.fn(async () => null as any),
+    getFirstAsync: vi.fn(async (_query?: string, _params?: any[]) => null as any),
     closeAsync: vi.fn(async () => {}),
     withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
 };
@@ -60,11 +60,19 @@ beforeEach(() => {
     events.emitted = [];
     events.runAsyncCalls = [];
     vi.mocked(dbAdapter.getFirstAsync).mockReset();
+    vi.mocked(dbAdapter.getFirstAsync).mockImplementation(async (query?: string) => {
+        if (query?.includes('PRAGMA user_version')) return { user_version: 100 };
+        return null;
+    });
 });
 
 describe('markConversationReadLocally', () => {
     it('updates conversation_participants last_read_at and emits CONVERSATION_READ_LOCALLY_EVENT', async () => {
-        vi.mocked(dbAdapter.getFirstAsync).mockResolvedValueOnce({ id: 'msg-1' });
+        vi.mocked(dbAdapter.getFirstAsync).mockImplementation(async (query?: string) => {
+            if (query?.includes('PRAGMA user_version')) return { user_version: 100 };
+            if (query?.includes('SELECT m.id FROM messages')) return { id: 'msg-1' };
+            return null;
+        });
         await markConversationReadLocally('conv-123', 'pk-my-key');
 
         // Check SQL update
@@ -81,7 +89,10 @@ describe('markConversationReadLocally', () => {
     });
 
     it('does not update SQLite or emit event when there are no unread messages', async () => {
-        vi.mocked(dbAdapter.getFirstAsync).mockResolvedValueOnce(null);
+        vi.mocked(dbAdapter.getFirstAsync).mockImplementation(async (query?: string) => {
+            if (query?.includes('PRAGMA user_version')) return { user_version: 100 };
+            return null;
+        });
         await markConversationReadLocally('conv-123', 'pk-my-key');
 
         expect(events.runAsyncCalls.length).toBe(0);

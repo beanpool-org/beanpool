@@ -167,21 +167,23 @@ export default function WaysBackScreen() {
             // The copy a community keeps for its admins to bring the member back from (VR3): the row's own words.
             const at = ways.communities.find(c => sameCommunity(c.url, copy.url));
             if (!at) return;
-            // One its server can't open is no way back now: the ask says what removing it does, and nothing more.
-            const cantOpen = !at.status?.adminsCopy && !!at.status?.adminsCopyUnopenable;
-            // A shared copy (VR4) is one way back in two places: its one Remove asks both.
-            const shared = at.status?.adminsCopy?.placement === 'shared' || !!vaultHalfOf(ways, at);
+            // A shared copy (VR4) is one way back in two places: its one Remove asks both. The vault is asked by this member's label
+            // for the community, so a build with no vault, or a server still starting, leaves it out, and so does the ask.
+            const vaultToo = !!at.vaultRef && (at.status?.adminsCopy?.placement === 'shared' || !!vaultHalfOf(ways, at));
+            // One its server can't open is no way back now: the ask says what removing it does, and nothing more. Unless the vault
+            // keeps half of it: that goes too, and it is the rest of a pair the people who run the server could still put back.
+            const cantOpen = !vaultToo && !at.status?.adminsCopy && !!at.status?.adminsCopyUnopenable;
             confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), cantOpen ? t('Remove this copy?') : t('Remove this way back?'),
                 cantOpen
                     ? t("{community}'s server deletes the copy it can't open. Your 12 words still work.", { community: at.name })
-                    : shared
+                    : vaultToo
                         ? t(WAYS_BACK_LINES.removeShared, { community: at.name })
                         : t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
                 () => {
                     void (async () => {
                         setBusy(true);
                         try {
-                            await after([adminsResult(at.name, await removeAdminsCopyFrom(identity, at, { vaultToo: shared }))]);
+                            await after([adminsResult(at.name, await removeAdminsCopyFrom(identity, at, { vaultToo }))]);
                         } finally {
                             setBusy(false);
                         }

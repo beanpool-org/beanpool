@@ -239,6 +239,77 @@ describe('the shared placement: half at the key vault, half at the community (va
         expect(fx.alerts[0].body).toContain("server and BeanPool's key vault delete their halves");
     });
 
+    // #2683 deciding pass, CommunityAdminsRow.tsx:234 and :247: a member is never asked about less than goes, nor told a keeper
+    // deletes what it was never asked to.
+    describe('what Remove asks about is what goes', () => {
+        const CANT_OPEN = { ...OFFER, unopenable: { since: '2026-10-05T00:00:00.000Z', reason: 'recovery_seal_key_missing' } };
+        const ASK_BOTH = "mullum.beanpool.org's server and BeanPool's key vault delete their halves of your copy. Your admins can no longer bring you back; your 12 words still work.";
+        const ASK_CANT_OPEN = "mullum.beanpool.org's server deletes the copy it can't open. Your 12 words still work.";
+        const ASK_COMMUNITY = "mullum.beanpool.org's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.";
+        beforeEach(() => { alertsPress.remove = true; });
+
+        for (const [what, side] of [
+            ['the vault keeps a copy for this community', 'differs'],
+            ['the vault can\'t say', 'unknown'],
+            ['the vault hasn\'t answered yet', () => new Promise<never>(() => {})],
+        ] as const) {
+            it(`a copy the server can't open, and ${what}: the ask says the vault's half goes too, as it may`, async () => {
+                fx.answers[MULLUM] = CANT_OPEN;
+                fx.side = side;
+                await mount();
+                await click('community-admins-remove');
+                expect(fx.alerts).toEqual([{ title: 'Remove this way back?', body: ASK_BOTH }]);
+                expect(fx.removedShared).toEqual([MULLUM]);
+            });
+        }
+
+        it('a copy the server can\'t open, and the vault has said it keeps nothing: the copy alone goes, and the ask says that', async () => {
+            fx.answers[MULLUM] = CANT_OPEN;
+            fx.side = 'none';
+            await mount();
+            await click('community-admins-remove');
+            expect(fx.alerts).toEqual([{ title: 'Remove this copy?', body: ASK_CANT_OPEN }]);
+        });
+
+        it('a copy the server can\'t open where the key vault\'s rule no longer holds: the vault is never asked, and the ask says that', async () => {
+            fx.rules[MULLUM] = 'server';
+            fx.answers[MULLUM] = { ...CANT_OPEN, sharedOffered: false };
+            fx.side = 'differs';
+            await mount();
+            await click('community-admins-remove');
+            expect(fx.alerts).toEqual([{ title: 'Remove this copy?', body: ASK_CANT_OPEN }]);
+            expect(fx.removedShared).toEqual([]);
+            expect(fx.removed).toEqual([MULLUM]);
+        });
+
+        it('half a copy kept here, in a build with no vault: the vault is never asked, so the ask never says it deletes', async () => {
+            fx.vault = false;
+            store.set(`beanpool_community_copy_on_${MULLUM}`, '1');
+            fx.answers[MULLUM] = SHARED;
+            await mount();
+            await click('community-admins-remove');
+            expect(fx.alerts).toEqual([{ title: 'Remove this way back?', body: ASK_COMMUNITY }]);
+            expect(fx.removedShared).toEqual([MULLUM]);
+        });
+
+        it('a server still starting has no node key to say: the vault can\'t be asked for its half, so the ask says the community alone', async () => {
+            fx.answers[MULLUM] = { ...SHARED, nodeKey: null };
+            fx.side = 'unknown';
+            await mount();
+            await click('community-admins-remove');
+            expect(fx.alerts).toEqual([{ title: 'Remove this way back?', body: ASK_COMMUNITY }]);
+            expect(fx.removedShared).toEqual([MULLUM]);
+        });
+
+        it('a working pair: both, as before (the control)', async () => {
+            fx.answers[MULLUM] = SHARED;
+            fx.side = 'matches';
+            await mount();
+            await click('community-admins-remove');
+            expect(fx.alerts).toEqual([{ title: 'Remove this way back?', body: ASK_BOTH }]);
+        });
+    });
+
     it('a whole copy kept since the rule moved is still a whole copy: its own words, and no vault asked to remove it', async () => {
         fx.answers[MULLUM] = { ...OFFER, kept: true, since: '2026-10-05T00:00:00.000Z', placement: 'whole' };
         fx.side = 'none';

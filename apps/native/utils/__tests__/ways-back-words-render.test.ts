@@ -92,6 +92,8 @@ const fx = vi.hoisted(() => ({
     writtenDown: false,
     everything: null as any,
     removed: [] as unknown[],
+    /** What the screen told `removeAdminsCopyFrom` about the vault, each time. */
+    vaultToo: [] as (boolean | undefined)[],
     adminsRemoval: { removed: true } as any,
 }));
 vi.mock('../ways-back', async (importOriginal) => {
@@ -104,14 +106,17 @@ vi.mock('../ways-back', async (importOriginal) => {
         removeVaultCopy: async (_i: unknown, provider: string) => { fx.removed.push(['vault', provider]); return { removed: true }; },
         removeCommunityCopyFrom: async (_i: unknown, c: { url: string }, provider: string) => { fx.removed.push([c.url, provider]); return { removed: false, why: 'remembered' }; },
         removeEverything: async () => { fx.removed.push('everything'); return fx.everything; },
-        removeAdminsCopyFrom: async (_i: unknown, c: { url: string }) => { fx.removed.push([c.url, 'admins']); return fx.adminsRemoval; },
+        removeAdminsCopyFrom: async (_i: unknown, c: { url: string }, opts?: { vaultToo?: boolean }) => { fx.removed.push([c.url, 'admins']); fx.vaultToo.push(opts?.vaultToo); return fx.adminsRemoval; },
         removeVaultHalf: async (_i: unknown, ref: string) => { fx.removed.push(['vault-half', ref]); return { removed: true }; },
     };
 });
 
-import { pseudoLocalise, setLanguage } from '@beanpool/core';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import WaysBackScreen from '../../app/ways-back';
+import { setTestCatalogsFor } from '../words-catalogs';
 import type { WaysBack } from '../ways-back';
 
 const WORDS = 'apple banana cherry delta eagle fabric garden hollow island jungle kettle lemon'.split(' ');
@@ -167,23 +172,37 @@ const HALF_STRAY: WaysBack = {
 };
 const KEEPS_NONE = 'Keeps no copy of your account.';
 const STRAY_NAME = 'Half a copy for another community';
+/** The accessible name of a stray half's Remove: the word on the button, then the row's own name. */
+const STRAY_REMOVE = `Remove ${STRAY_NAME}`;
 const STRAY_LINE = 'Half of a locked copy. No community on this phone holds its other half.';
 const NOT_PLACED_NAME = 'Half a copy for a community';
 const NOT_PLACED_LINE = "Half of a locked copy. This phone can't tell yet whether one of your communities holds its other half. Open this screen again later.";
 const MISSING_LINE = "The other half isn't at BeanPool's key vault, so this can't bring your account back. Account Protection can try again.";
+const PAIR_LINE = 'A locked copy your community can open with its half, after a day.';
+const ASK_BOTH = "Mullumbimby's server and BeanPool's key vault delete their halves of your copy. Your admins can no longer bring you back; your 12 words still work.";
+const ASK_COMMUNITY = "Mullumbimby's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.";
+const ASK_CANT_OPEN = "Mullumbimby's server deletes the copy it can't open. Your 12 words still work.";
+const SINCE = '2026-10-29T04:05:06.000Z';
+const CANT_OPEN = { adminsCopyUnopenable: { since: SINCE, reason: 'recovery_seal_key_missing' as const } };
+/** A half at the vault whose label is Mullumbimby's, and `keeps`, what Mullumbimby says it keeps. */
+const halfAtMullum = (keeps: object): WaysBack => ({
+    vault: { kind: 'listed', copies: [], communityCopies: [{ ref: 'label-mullum', copy: 'digest', since: '2026-10-29', lastReleasedAt: null }] },
+    communities: [{ url: MULLUM, name: 'Mullumbimby', vaultRef: 'label-mullum', status: { providers: [], generation: 0, nodeKey: 'ab'.repeat(32), ...keeps } }],
+    pending: [],
+});
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 beforeEach(() => {
-    alerts.shown.length = 0; nav.pushed.length = 0; fx.removed.length = 0;
+    alerts.shown.length = 0; nav.pushed.length = 0; fx.removed.length = 0; fx.vaultToo.length = 0;
     fx.ways = FULL; fx.writtenDown = false; fx.everything = null; fx.adminsRemoval = { removed: true };
     me.identity.mnemonic = WORDS;
     setLanguage('en');
 });
-afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; setLanguage('en'); });
+afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; setLanguage('en'); setTestCatalogsFor(null); });
 
 const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
-async function mount(lang: 'xx' | 'en'): Promise<HTMLElement> {
+async function mount(lang: UiLang): Promise<HTMLElement> {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -278,6 +297,18 @@ describe('every sentence through t(), in every state and every confirm (pseudo-l
         fx.ways = HALF_STRAY;
         await mount('xx');
         wholly('a stray half');
+        expect(all('button').find(b => b.textContent === pseudoLocalise('Remove'))?.getAttribute('aria-label')).toContain(pseudoLocalise('Remove'));
+    });
+
+    it("a vault half with no pair at its community, and one beside a copy its server can't open (#2683 deciding pass)", async () => {
+        fx.ways = halfAtMullum({});
+        await mount('xx');
+        wholly('a half alone');
+        act(() => root?.unmount());
+        fx.ways = halfAtMullum(CANT_OPEN);
+        await mount('xx');
+        wholly("a half beside a copy its server can't open");
+        buttonsFit("a half beside a copy its server can't open");
     });
 
     it("a copy its server keeps but can't open: listed as that, never a way back, and Remove asks plainly (#2626)", async () => {
@@ -441,7 +472,7 @@ describe('what each confirm offers, and what a result says (English)', () => {
         const text = host!.textContent!;
         expect(text).not.toContain(STRAY_NAME);
         expect(text).not.toContain(STRAY_LINE);
-        expect(buttonNamed(STRAY_NAME), "the review's Remove").toBeUndefined();
+        expect(buttonNamed(STRAY_REMOVE), "the review's Remove").toBeUndefined();
         // Not hidden: the vault told this phone about it, so its section says so, and is neither empty nor "keeps none".
         const atVault = text.slice(text.indexOf("BeanPool's key vault"), text.indexOf("Your communities' servers"));
         expect(atVault).toContain(NOT_PLACED_NAME);
@@ -461,7 +492,7 @@ describe('what each confirm offers, and what a result says (English)', () => {
         await mount('en');
         const text = host!.textContent!;
         expect(text).not.toContain(STRAY_NAME);
-        expect(buttonNamed(STRAY_NAME)).toBeUndefined();
+        expect(buttonNamed(STRAY_REMOVE)).toBeUndefined();
         expect(text).toContain(NOT_PLACED_LINE);
         expect(text).not.toContain(MISSING_LINE);
     });
@@ -483,9 +514,137 @@ describe('what each confirm offers, and what a result says (English)', () => {
         expect(text).toContain(STRAY_NAME);
         expect(text).toContain(STRAY_LINE);
         expect(text).not.toContain(NOT_PLACED_NAME);
-        await click(buttonNamed(STRAY_NAME), 'Remove the stray half');
+        await click(buttonNamed(STRAY_REMOVE), 'Remove the stray half');
         await press('Remove');
         expect(fx.removed).toEqual([['vault-half', 'label-bell']]);
+    });
+
+    it("a stray half's Remove says Remove: a screen reader reads its name, and a voice-control user says the word on the button (#2683 deciding pass)", async () => {
+        fx.ways = HALF_STRAY;
+        await mount('en');
+        const remove = all('button').find(b => b.textContent === 'Remove');
+        expect(remove?.getAttribute('aria-label')).toBe(STRAY_REMOVE);
+    });
+
+    it("a stray half's Remove is named in the member's own language, with the word on the button in it, in every catalog (#2683 deciding pass)", async () => {
+        const words = path.resolve(__dirname, '../../words');
+        const read = (lang: string): Record<string, string> => JSON.parse(fs.readFileSync(path.join(words, `${lang}.json`), 'utf8'));
+        const langs = fs.readdirSync(words).filter(f => /^[a-zA-Z-]+\.json$/.test(f)).map(f => f.replace('.json', ''));
+        expect(langs).toHaveLength(24);
+        for (const lang of langs) {
+            expect(read(lang).Remove, lang).toBeTruthy();
+            expect(read(lang)[STRAY_NAME], lang).toBeTruthy();
+        }
+        const fr = read('fr');
+        setTestCatalogsFor(lang => (lang === 'fr' ? [fr] : undefined));
+        fx.ways = HALF_STRAY;
+        await mount('fr');
+        const remove = all('button').find(b => b.textContent === fr.Remove);
+        expect(remove?.getAttribute('aria-label')).toBe(`${fr.Remove} ${fr[STRAY_NAME]}`);
+    });
+
+    describe("what the vault's half says about the rest of it (#2683 deciding pass)", () => {
+        const atVault = () => {
+            const text = host!.textContent!;
+            return text.slice(text.indexOf("BeanPool's key vault"), text.indexOf("Your communities' servers"));
+        };
+
+        it('its community keeps the very same copy: the pair it can open (the control)', async () => {
+            fx.ways = halfAtMullum({ adminsCopy: { since: SINCE, placement: 'shared', copy: 'digest' } });
+            await mount('en');
+            expect(atVault()).toContain('Half a copy for Mullumbimby');
+            expect(atVault()).toContain(PAIR_LINE);
+            expect(atVault()).not.toContain(STRAY_LINE);
+        });
+
+        for (const [state, keeps] of [
+            ['its community answered and keeps none', {}],
+            ['its community keeps half of another copy', { adminsCopy: { since: SINCE, placement: 'shared', copy: 'another' } }],
+            ['its community keeps a half and names no copy', { adminsCopy: { since: SINCE, placement: 'shared', copy: null } }],
+            ['its community keeps a whole copy', { adminsCopy: { since: SINCE } }],
+        ] as const) {
+            it(`${state}: no pair, so it never reads as one`, async () => {
+                fx.ways = halfAtMullum(keeps);
+                await mount('en');
+                expect(atVault()).toContain('Half a copy for Mullumbimby');
+                expect(atVault()).toContain(STRAY_LINE);
+                expect(atVault()).not.toContain(PAIR_LINE);
+            });
+        }
+
+        it("its community keeps a copy it can't open, with no digest to tell which: neither a pair it can open, nor alone, since that is half of one its people could put back", async () => {
+            fx.ways = halfAtMullum(CANT_OPEN);
+            await mount('en');
+            expect(atVault()).toContain('Half a copy for Mullumbimby');
+            expect(atVault()).toContain(NOT_PLACED_LINE);
+            expect(atVault()).not.toContain(PAIR_LINE);
+            expect(atVault()).not.toContain(STRAY_LINE);
+        });
+    });
+
+    describe('what a Remove asks about is what goes (#2683 deciding pass)', () => {
+        for (const [where, name] of [
+            ["the community's row", "Remove the copy at Mullumbimby that its server can't open"],
+            ["the vault's row", 'Remove the copy at Mullumbimby that its admins can bring you back from'],
+        ]) {
+            it(`a copy its server can't open, with a half at the vault, from ${where}: the ask says the vault's half goes too`, async () => {
+                fx.ways = halfAtMullum(CANT_OPEN);
+                await mount('en');
+                await click(buttonNamed(name), 'its Remove');
+                const a = alerts.shown.at(-1)!;
+                expect(a.title).toBe('Remove this way back?');
+                expect(a.body).toBe(ASK_BOTH);
+                await press('Remove');
+                expect(fx.vaultToo).toEqual([true]);
+            });
+        }
+
+        it("a copy its server can't open and no half at the vault: the copy alone goes, and the ask says that (the control)", async () => {
+            fx.ways = { ...halfAtMullum(CANT_OPEN), vault: { kind: 'listed', copies: [] } };
+            await mount('en');
+            await click(buttonNamed("Remove the copy at Mullumbimby that its server can't open"), "the copy's Remove");
+            const a = alerts.shown.at(-1)!;
+            expect(a.title).toBe('Remove this copy?');
+            expect(a.body).toBe(ASK_CANT_OPEN);
+            await press('Remove');
+            expect(fx.vaultToo).toEqual([false]);
+        });
+
+        it('a working pair: both are asked, as before (the control)', async () => {
+            fx.ways = halfAtMullum({ adminsCopy: { since: SINCE, placement: 'shared', copy: 'digest' } });
+            fx.writtenDown = true;
+            await mount('en');
+            await click(all('button').find(b => b.textContent === 'Remove'), 'the Remove');
+            expect(alerts.shown.at(-1)!.body).toBe(ASK_BOTH);
+            await press('Remove');
+            expect(fx.vaultToo).toEqual([true]);
+        });
+
+        it('half a copy kept here, in a build with no vault: the vault is never asked, so the ask never says it deletes', async () => {
+            fx.ways = {
+                vault: { kind: 'no-vault' },
+                communities: [{ url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, nodeKey: 'ab'.repeat(32), adminsCopy: { since: SINCE, placement: 'shared', copy: 'digest' } } }],
+                pending: [],
+            };
+            await mount('en');
+            await click(all('button').find(b => b.textContent === 'Remove'), 'the Remove');
+            expect(alerts.shown.at(-1)!.body).toBe(ASK_COMMUNITY);
+            await press('Remove');
+            expect(fx.vaultToo).toEqual([false]);
+        });
+
+        it('a server still starting has no node key to say: the vault has no label to be asked by, so the ask says the community alone', async () => {
+            fx.ways = {
+                vault: { kind: 'listed', copies: [], communityCopies: [HALF] },
+                communities: [{ url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, adminsCopy: { since: SINCE, placement: 'shared', copy: 'digest' } } }],
+                pending: [],
+            };
+            await mount('en');
+            await click(all('button').find(b => b.textContent === 'Remove'), 'the Remove');
+            expect(alerts.shown.at(-1)!.body).toBe(ASK_COMMUNITY);
+            await press('Remove');
+            expect(fx.vaultToo).toEqual([false]);
+        });
     });
 
     it("the copy Mullumbimby keeps for its admins (VR3): its row with since when, its own confirm, and only what Mullumbimby answered", async () => {

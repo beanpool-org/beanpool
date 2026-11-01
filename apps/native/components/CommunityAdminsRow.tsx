@@ -230,10 +230,13 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
     };
 
     const remove = () => {
-        // A copy the server can't open is no way back now: removing it takes none away, and the ask says so.
-        const [title, body] = unopenable
+        // What this Remove asks the vault with: a build with no vault can't ask it, and a server still starting has no key to say.
+        const vaultKey = shared && hasVault() ? status?.nodeKey ?? null : null;
+        // A copy the server can't open is no way back now: removing it takes none away, and the ask says so. Unless the vault may
+        // keep half of it, until it has said it doesn't: that goes too, and it is the rest of a pair the server's people could put back.
+        const [title, body] = unopenable && (!vaultKey || side === 'none')
             ? [t(COMMUNITY_ADMINS_ROW.removeCopyTitle), t(COMMUNITY_ADMINS_ROW.removeCopyBody, { community: place })]
-            : [t(COMMUNITY_ADMINS_ROW.removeTitle), shared
+            : [t(COMMUNITY_ADMINS_ROW.removeTitle), vaultKey
                 ? t(COMMUNITY_ADMINS_ROW.removeBodyShared, { community: place })
                 : t(COMMUNITY_ADMINS_ROW.removeBody, { community: place })];
         Alert.alert(title, body, [
@@ -244,7 +247,7 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
                     setError(null);
                     setJustOn(false);
                     try {
-                        if (shared) await removeSharedCopy(url, identity, status?.nodeKey ?? null);
+                        if (shared) await removeSharedCopy(url, identity, vaultKey);
                         else await removeCommunityCopy(url, identity);
                         await AsyncStorage.removeItem(turnedOnKey(url)).catch(() => {});
                         // What it last said is over: never On on an answer from before the removal, if the read below gets none.

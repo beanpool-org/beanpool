@@ -177,7 +177,14 @@ export function WaysBackList({
                                 return (
                                     <View key={`half-${c.url}`} style={s.copy} testID="ways-back-vault-half">
                                         <Text style={s.copyName}>{t(WAYS_BACK_LINES.vaultHalf, { community: c.name })}</Text>
-                                        <Text style={s.small}>{t(WAYS_BACK_LINES.vaultHalfLine)}</Text>
+                                        {/* A pair only when its community names this very copy. A copy it can't open has no name to give, so that is never called alone. */}
+                                        <Text style={s.small}>
+                                            {c.status?.adminsCopy?.copy === half?.copy
+                                                ? t(WAYS_BACK_LINES.vaultHalfLine)
+                                                : c.status?.adminsCopyUnopenable
+                                                    ? t(WAYS_BACK_LINES.vaultHalfNotPlacedLine)
+                                                    : t(WAYS_BACK_LINES.vaultHalfAlone)}
+                                        </Text>
                                         {half?.since && <Text style={s.small}>{t('Kept since {date}', { date: dayWords(half.since) })}</Text>}
                                         {removeButton({ at: 'admins', url: c.url }, t('Remove the copy at {community} that its admins can bring you back from', { community: c.name }))}
                                     </View>
@@ -188,7 +195,8 @@ export function WaysBackList({
                                     <Text style={s.copyName}>{t(WAYS_BACK_LINES.vaultHalfStray)}</Text>
                                     <Text style={s.small}>{t(WAYS_BACK_LINES.vaultHalfAlone)}</Text>
                                     {h.since && <Text style={s.small}>{t('Kept since {date}', { date: dayWords(h.since) })}</Text>}
-                                    {removeButton({ at: 'vault-half', ref: h.ref }, t(WAYS_BACK_LINES.vaultHalfStray))}
+                                    {/* Its name starts with the word on the button, as every Remove here does: both parts are in every catalog. */}
+                                    {removeButton({ at: 'vault-half', ref: h.ref }, t('{first} {second}', { first: t(WAYS_BACK_LINES.remove), second: t(WAYS_BACK_LINES.vaultHalfStray) }, 'two sentences, one after the other'))}
                                 </View>
                             ))}
                             {unplacedVaultHalves(ways).map(h => (

@@ -157,7 +157,7 @@ export async function turnOnSharedCopy(url: string, identity: BeanPoolIdentity, 
 /**
  * Turn it off: the vault deletes its copy and its half, then the community its half. Resolves only on both answers; throws
  * with a sentence otherwise, and what is left is "Not finished" on the row, with Remove still there. `nodeKey` null: the
- * community didn't say it, so only its half can be asked for.
+ * community didn't say it, or this build has no vault to ask, so only its half can be asked for.
  */
 export async function removeSharedCopy(url: string, identity: BeanPoolIdentity, nodeKey: string | null): Promise<void> {
     if (nodeKey) await disconnectCommunityCopy(identity, communityRefFor(identity, nodeKey)).catch((e) => { throw inThisFlow(e, COMMUNITY_RECOVERY_TEXT.pausedOff); });

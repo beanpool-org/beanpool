@@ -3,7 +3,9 @@
  * The whole key, measured where it would leave (#2683 deciding pass, CommunityAdminsRow.tsx:171). The real row, with the real
  * status read and the real turn-on (utils/community-copy.ts): only the request itself is faked, so a body with `copyKey`
  * in it is the key reaching the community's server. community-admins-row-render.test.ts holds the row's states; this one
- * holds the promise: while the status is unknown, or its read failed, no such request is ever made. Nothing is contacted.
+ * holds the promise: while the status is unknown, or its read failed, no such request is ever made. And Remove, on the same
+ * terms (#2683 deciding pass, CommunityAdminsRow.tsx:247): the real removeSharedCopy, so what is asked of whom is what a
+ * member's tap really does. Nothing is contacted.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -28,7 +30,13 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'),
         ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => s },
-        Alert: { alert: () => {} },
+        // The member says yes to whatever Remove asks, and what it asked is kept.
+        Alert: {
+            alert: (_title: string, body: string, buttons?: { style?: string; onPress?: () => void }[]) => {
+                net.asked.push(body);
+                buttons?.find(b => b.style === 'destructive')?.onPress?.();
+            },
+        },
     };
 });
 vi.mock('expo-router', async () => {
@@ -63,9 +71,21 @@ vi.mock('../vault-config', async (importOriginal) => ({
 // The vault's side is another test's (community-recovery.test.ts): here nothing may reach it, a fake or the real one.
 vi.mock('../community-recovery', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../community-recovery')>()),
-    sharedCopySide: async () => 'none',
+    sharedCopySide: async () => net.side,
     turnOnSharedCopy: async () => { net.sharedTurnOns++; return { since: '2026-11-01T00:00:00.000Z' }; },
 }));
+// In a build with a vault its delete is answered here. In one without, the real one runs, and says what it really says.
+vi.mock('../vault', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../vault')>();
+    return {
+        ...real,
+        disconnectCommunityCopy: async (identity: Parameters<typeof real.disconnectCommunityCopy>[0], ref: string) => {
+            if (!net.vault) return real.disconnectCommunityCopy(identity, ref);
+            net.removals.push(`vault ${ref}`);
+            return 1;
+        },
+    };
+});
 
 /** The community's server, as far as a request can tell: every signed POST it is sent, and what it answers. */
 const STATUS = '/api/recovery/community-copy/status';
@@ -76,10 +96,19 @@ const net = vi.hoisted(() => ({
     sent: [] as { path: string; body: any }[],
     sharedTurnOns: 0,
     status: (() => { throw new Error('unset'); }) as () => Promise<Response>,
+    /** How the vault's side of a shared copy stands. */
+    side: 'none' as string,
+    /** What Remove asked the member. */
+    asked: [] as string[],
+    /** What Remove deleted, in order: the vault's half, by its label, and the community's copy. */
+    removals: [] as string[],
 }));
 vi.mock('../node-post', () => ({
     anchorUrl: async () => 'https://mullum.beanpool.org',
-    signedDelete: async () => { throw new Error('no delete in this test'); },
+    signedDelete: async () => {
+        net.removals.push('community');
+        return new Response(JSON.stringify({ removed: true, kept: false }), { status: 200 });
+    },
     signedPost: async (_url: string, path: string, body: unknown) => {
         net.sent.push({ path, body });
         if (path === STATUS) return net.status();
@@ -88,6 +117,7 @@ vi.mock('../node-post', () => ({
 }));
 
 import { CommunityAdminsRow } from '../../components/CommunityAdminsRow';
+import { communityRefFor } from '../community-recovery';
 
 const ok = (body: unknown) => async () => new Response(JSON.stringify(body), { status: 200 });
 const OFFERED = { kept: false, since: null, offered: true, sharedOffered: false, nodeKey: 'ab'.repeat(32) };
@@ -109,6 +139,9 @@ beforeEach(() => {
     net.vault = true;
     net.sent.length = 0;
     net.sharedTurnOns = 0;
+    net.side = 'none';
+    net.asked.length = 0;
+    net.removals.length = 0;
     // Everything goes through the faked request above: anything that reached for the network itself would fail here.
     vi.stubGlobal('fetch', () => { throw new Error('no network in this test'); });
 });
@@ -210,5 +243,49 @@ describe('the copy and its whole key leave the phone only on the server\'s own w
         await act(async () => { turnOn()!.click(); });
         await settle();
         expect(keyLeft()).toHaveLength(1);
+    });
+});
+
+describe('Remove on a shared copy, on the real removeSharedCopy (#2683 deciding pass)', () => {
+    const NODE_KEY = 'ab'.repeat(32);
+    const HALF_HERE = { kept: true, since: '2026-10-05T00:00:00.000Z', offered: false, sharedOffered: true, nodeKey: NODE_KEY, placement: 'shared', copy: 'digest' };
+    const CANT_OPEN = { kept: false, since: null, offered: false, sharedOffered: true, nodeKey: NODE_KEY, unopenable: { since: '2026-10-05T00:00:00.000Z', reason: 'recovery_seal_key_missing' } };
+    const remove = async () => {
+        await act(async () => { (host!.querySelector('[data-testid="community-admins-remove"]') as HTMLElement).click(); });
+        await settle();
+    };
+    /** Its server answers `keeps` until it is asked to delete. */
+    const keeps = (answer: unknown) => {
+        net.status = () => ok(net.removals.includes('community') ? { kept: false, since: null, offered: false, sharedOffered: false, nodeKey: NODE_KEY } : answer)();
+    };
+
+    it('a build with no vault: the community is asked and its half goes, and the ask said only that', async () => {
+        net.vault = false;
+        store.set('beanpool_community_copy_on_https://mullum.beanpool.org', '1');
+        keeps(HALF_HERE);
+        await mount();
+        expect(host!.querySelector('[data-testid="community-admins-on"]'), 'the row it measured: On, with Remove').toBeTruthy();
+        await remove();
+        expect(net.removals).toEqual(['community']);
+        expect(host!.textContent, 'never the vault\'s "not set up here"').not.toContain('recovery isn');
+        expect(host!.querySelector('[data-testid="community-admins-on"]')).toBeNull();
+        expect(net.asked).toEqual(["mullum.beanpool.org's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work."]);
+    });
+
+    it('a build with a vault: the vault first, by this member\'s label for the community, then the community (the control)', async () => {
+        keeps(HALF_HERE);
+        net.side = 'matches';
+        await mount();
+        await remove();
+        expect(net.removals).toEqual([`vault ${communityRefFor(me.identity, NODE_KEY)}`, 'community']);
+    });
+
+    it('a copy the server can\'t open, and a half at the vault: both go, and the ask said both', async () => {
+        keeps(CANT_OPEN);
+        net.side = 'differs';
+        await mount();
+        await remove();
+        expect(net.removals).toEqual([`vault ${communityRefFor(me.identity, NODE_KEY)}`, 'community']);
+        expect(net.asked).toEqual(["mullum.beanpool.org's server and BeanPool's key vault delete their halves of your copy. Your admins can no longer bring you back; your 12 words still work."]);
     });
 });

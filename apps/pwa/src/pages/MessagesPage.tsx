@@ -1126,7 +1126,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 targetPubkey={reportingRequest.request.from}
                 targetName=""
                 title={t('Report this message')}
-                note={`${t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")} ${t('Reporting a request blocks its sender too.')}`}
+                note={t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")}
                 onSubmitReason={async (reason) => {
                     await reportRequestAndBlock(reportingRequest, identity, reason);
                     requestReported.current = true;
@@ -2678,7 +2678,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             or of a direct message: reported as sealed, with its sender's signature (R0). */}
                                         {(groupLine
                                             ? groupLocked && !groupLine.mine && !groupLine.unattributed && !!openGroup?.thread?.views.get(msg.id)?.signer
-                                            : activeConv?.type === 'dm' && msg.authorPubkey !== identity.publicKey && !!msg.nonce && isEncryptedNonce(msg.nonce)) && (
+                                            : activeConv?.type === 'dm' && msg.authorPubkey !== identity.publicKey && isEncryptedNonce(msg.nonce) && lineViews?.get(msg.id)?.text != null) && (
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); setReportingLine(msg); }}

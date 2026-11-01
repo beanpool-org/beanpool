@@ -53,10 +53,11 @@ export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }:
                     </View>
                     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
                         <Text style={styles.shared}>
-                            {photo
-                                ? t("This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them.")
-                                : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
-                            {blocks ? ` ${t('Reporting a request blocks its sender too.')}` : ''}
+                            {blocks
+                                ? t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")
+                                : photo
+                                    ? t("This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them.")
+                                    : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
                         </Text>
                         <ReportReasonBox onSubmit={onSubmit} onCancel={onClose} />
                     </ScrollView>

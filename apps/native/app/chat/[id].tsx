@@ -1134,7 +1134,7 @@ function ChatScreen({ id }: { id: string }) {
         if (!reportingLine) return;
         const { item, blocks } = reportingLine;
         try {
-            if (blocks && peerPubkey) await reportRequestAndBlock(String(id), item, peerPubkey, reason);
+            if (blocks) await reportRequestAndBlock(String(id), item, item.senderId, reason);
             else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason);
             hapticSuccess();
             Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => {
@@ -1285,7 +1285,8 @@ function ChatScreen({ id }: { id: string }) {
         const inRequest = requestMode !== 'none';
         const showEmojiPicker = !inRequest && activeEmojiPickerId === item.id;
         const allowed = messageActions(item, viewer);
-        const actions = inRequest ? { ...allowed, reply: false, react: false } : allowed;
+        // Nor a line's own Report: a request's is the bar's, which blocks its sender too (the web's the same).
+        const actions = inRequest ? { ...allowed, reply: false, react: false, report: false } : allowed;
 
         const handleEmojiSelect = async (emoji: string) => {
             if (!identity?.publicKey || inRequest) return;

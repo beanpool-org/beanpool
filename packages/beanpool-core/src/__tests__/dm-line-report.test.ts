@@ -24,7 +24,7 @@ const binding: DmLineSigBinding = {
     conversationId: '6f1d3c2a-9b8e-4c7d-a6f5-e4d3c2b1a090', senderPubHex: ana.pub, recipientPubHex: ben.pub,
     messageId: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', at: '2026-11-01T00:00:00.000Z',
 };
-const FROZEN_SIG = 'FROZEN_SIGNATURE_PLACEHOLDER';
+const FROZEN_SIG = 'z8iytajFvCE9k8QL7mSTBrGlBjD5HYElIHwOCydrHPdMAjmWyFPwIGt4yO5nPdeRwSjN/nHYUnYo10q9scB/DQ==';
 
 describe('the sender\'s signature', () => {
     it('signs the digest the design names, re-derived from the primitives', () => {

@@ -38,7 +38,7 @@ import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { DM_REPORT_WORDS_MAX, dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, signDmLine } from '@beanpool/core';
+import { DM_REPORT_SEALED_MAX, DM_REPORT_WORDS_MAX, dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, signDmLine } from '@beanpool/core';
 import { lockedDm } from './dm-test-payload.js';
 import { AGENT_TOOLS, type AgentGrant } from './agent/tools.js';
 
@@ -149,6 +149,10 @@ async function main(): Promise<void> {
     const other = sealed(bo, ann, conv, `another line ${crypto.randomUUID()}`);
     await send(bo, nasty);
     await send(bo, other);
+    const annRead = await call('GET', ann, `/api/messages/${conv}`);
+    const annCopy = (annRead.body?.messages ?? []).find((m: any) => m.id === nasty.id);
+    assert(JSON.parse(annCopy?.metadata ?? '{}').lineSig?.sig === JSON.parse(nasty.metadata!).lineSig.sig,
+        'the signature reaches the person the line is for, with the line, as an app reads it');
     const rep = await report(ann, nasty);
     assert(rep.status === 200 && rep.body?.report?.targetPubkey === bo.pk && rep.body?.report?.reporterPubkey === ann.pk && rep.body?.report?.targetMessageId === nasty.id,
         `the report names the line, its author and, from the signature, its reporter (${show(rep)})`);
@@ -284,6 +288,7 @@ async function main(): Promise<void> {
         ['a bad message id', { messageId: 'not-a-uuid' }],
         ['readable bytes', { disclosure: { ...disclosureOf(line7), nonce: 'plaintext-v1' } }],
         ['words past the limit', { disclosure: { ...disclosureOf(line7), words: 'x'.repeat(DM_REPORT_WORDS_MAX + 1) } }],
+        ['sealed bytes past a line\'s limit', { disclosure: { ...disclosureOf(line7), ciphertext: 'x'.repeat(DM_REPORT_SEALED_MAX + 1) } }],
     ];
     for (const [what, extra] of forms) {
         const r = await report(ann, line7, extra);

@@ -154,7 +154,7 @@ const ACCEPTED = { success: true, request: { state: 'accepted', from: bo.publicK
 const IGNORED = { success: true, request: { state: 'ignored', from: bo.publicKey, at: REQUESTED_AT } };
 const WAITING_WORDS = 'Your first message is waiting for Ann. You can write more once they accept it.';
 const STANDBY_WORDS = 'This server is a standby copy of the community, not its main server. Message requests are answered on the main server.';
-const OFFLINE = 'Connect to your community to accept or ignore.';
+const OFFLINE = 'Connect to your community to accept or decline.';
 
 async function ringDoorbell(): Promise<void> {
     await act(async () => { await Promise.all(doorbell.listeners.map(l => l())); });

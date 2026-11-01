@@ -31,6 +31,8 @@ export const DM_LINE_SIG_KEY = 'lineSig';
 export const DM_LINE_DISCLOSURE_KIND = 'dm-line';
 /** The most characters of the reporter's words one report carries: a line's own limit, in the phone's longest text. */
 export const DM_REPORT_WORDS_MAX = 8000;
+/** The most characters of sealed line one report keeps: a line's own limit (the node's writer-bounds, 64 KB of base64), and room. */
+export const DM_REPORT_SEALED_MAX = 96_000;
 
 /** What a sender signs besides the sealed bytes. */
 export interface DmLineSigBinding {
@@ -140,10 +142,11 @@ export function dmLineSignedBy(
 export function dmLineDisclosureOf(v: unknown): DmLineDisclosure | null {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
     const d = v as Record<string, unknown>;
-    if (d.v !== 1 || typeof d.ciphertext !== 'string' || !d.ciphertext || !isDmEncryptedNonce(d.nonce as string)) return null;
+    if (d.v !== 1 || typeof d.ciphertext !== 'string' || !d.ciphertext || d.ciphertext.length > DM_REPORT_SEALED_MAX) return null;
+    if (typeof d.nonce !== 'string' || d.nonce.length > 100 || !isDmEncryptedNonce(d.nonce)) return null;
     if (typeof d.conversationId !== 'string' || !d.conversationId || typeof d.words !== 'string' || d.words.length > DM_REPORT_WORDS_MAX) return null;
     if (d.lineSig !== null && d.lineSig !== undefined && !dmLineSigOf(d.lineSig)) return null;
-    return { v: 1, ciphertext: d.ciphertext, nonce: d.nonce as string, conversationId: d.conversationId, lineSig: dmLineSigOf(d.lineSig), words: d.words };
+    return { v: 1, ciphertext: d.ciphertext, nonce: d.nonce, conversationId: d.conversationId, lineSig: dmLineSigOf(d.lineSig), words: d.words };
 }
 
 /** What a reporter's app hands over for a line it holds, with the words it reads there. Long words are cut, never refused. */

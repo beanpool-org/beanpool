@@ -115,7 +115,7 @@ export function decisionFailureWords(e: unknown): string {
     // The node answered and refused (a standby, a request that is gone): its own words. A page that wasn't the node's (a
     // proxy's), or no answer at all, is the community out of reach.
     if (err && typeof err.status === 'number' && err.status > 0 && !err.unsaid && typeof err.message === 'string' && err.message.trim()) return err.message;
-    return t('Connect to your community to accept or ignore.');
+    return t('Connect to your community to accept or decline.');
 }
 
 /** The node's refusal of the opener's second line, or reaction, while their request waits (403 `dm_request_pending`). */

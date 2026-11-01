@@ -361,7 +361,7 @@ describe('a request waiting for this member, on the phone', () => {
             await tap('Accept');
             answer = new Error('Network request failed');
             await tap('Decline');
-            expect(alerts.said).toEqual(['Connect to your community to accept or ignore.', 'Connect to your community to accept or ignore.']);
+            expect(alerts.said).toEqual(['Connect to your community to accept or decline.', 'Connect to your community to accept or decline.']);
         });
     });
 

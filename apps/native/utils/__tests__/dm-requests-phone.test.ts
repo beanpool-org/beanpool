@@ -278,14 +278,14 @@ describe('MessageRequestsPane on phone', () => {
         renderCard();
         fireEvent.click(screen.getByTestId('request-accept'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(alerts.said[0].title).toBe('Connect to your community to accept or ignore.');
+        expect(alerts.said[0].title).toBe('Connect to your community to accept or decline.');
         cleanup();
 
         dbMocks.decideMessageRequest.mockRejectedValueOnce(new Error('Network request failed'));
         renderCard();
         fireEvent.click(screen.getByTestId('request-decline'));
         await waitFor(() => expect(alerts.said.length).toBe(2));
-        expect(alerts.said[1].title).toBe('Connect to your community to accept or ignore.');
+        expect(alerts.said[1].title).toBe('Connect to your community to accept or decline.');
     });
 
     // Review 4399651364: blockUser answers false rather than throwing (no account on the phone, the list not written, the

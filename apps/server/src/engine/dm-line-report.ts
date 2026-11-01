@@ -22,7 +22,9 @@ import {
 import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { verifiedFormerKeysReader } from './key-succession.js';
-import { GROUP_LINE_REPORT_FORM, GROUP_LINE_REPORT_NOT_FOUND, GROUP_LINE_REPORT_OWN, GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
+import { GROUP_LINE_REPORT_NOT_FOUND, GROUP_LINE_REPORT_OWN, GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
+
+export const DM_LINE_REPORT_FORM = 'A report of a direct message names it, gives a reason and hands over the line: { messageId, reason, disclosure }.';
 
 const MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -71,10 +73,10 @@ function keysOf(formerKeysOf: ReturnType<typeof verifiedFormerKeysReader>, pubke
 export function checkDmLineReport(reporter: string, body: { messageId?: unknown; reason?: unknown; disclosure?: unknown }): CheckedDmLineReport {
     const { messageId, reason } = body;
     if (typeof messageId !== 'string' || !MESSAGE_ID.test(messageId) || typeof reason !== 'string' || !reason.trim()) {
-        throw new GroupLineReportError(400, 'report_form', GROUP_LINE_REPORT_FORM);
+        throw new GroupLineReportError(400, 'report_form', DM_LINE_REPORT_FORM);
     }
     const handed = dmLineDisclosureOf(body.disclosure);
-    if (!handed) throw new GroupLineReportError(400, 'disclosure_form', GROUP_LINE_REPORT_FORM);
+    if (!handed) throw new GroupLineReportError(400, 'disclosure_form', DM_LINE_REPORT_FORM);
     const id = messageId.toLowerCase();
     const notFound = () => new GroupLineReportError(404, 'not_found', GROUP_LINE_REPORT_NOT_FOUND);
     const row = lineRow(id);

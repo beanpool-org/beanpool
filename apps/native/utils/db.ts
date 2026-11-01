@@ -7927,13 +7927,18 @@ export async function reportAbuse(reporterPublicKey: string, targetPublicKey: st
         const res = await _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason: sending.reason, targetPostId: postId });
         return sending.wordsLeftOut ? { ...res, wordsLeftOut: sending.wordsLeftOut } : res;
     } catch (e: any) {
-        if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) throw e;
-        const said: any = new Error(e.nodeMessage);
-        said.status = e.status;
-        said.code = e.message;
-        said.nodeAnswered = e.nodeAnswered;
-        throw said;
+        throw reportRefusal(e);
     }
+}
+
+/** A report's refusal as the member reads it: the node's sentence when it sent one, its code kept as `code`. */
+function reportRefusal(e: any): any {
+    if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) return e;
+    const said: any = new Error(e.nodeMessage);
+    said.status = e.status;
+    said.code = e.message;
+    said.nodeAnswered = e.nodeAnswered;
+    return said;
 }
 
 
@@ -9325,10 +9330,14 @@ export async function reportDmLine(conversationId: string, messageId: string, wo
     const database = await getDb();
     const row = await database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?', [messageId]);
     if (!row) throw new Error('Message not found');
-    return _signedRequest('/api/messages/report', {
-        messageId, reason,
-        disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId, metadata: row.metadata }, words),
-    });
+    try {
+        return await _signedRequest('/api/messages/report', {
+            messageId, reason,
+            disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId, metadata: row.metadata }, words),
+        });
+    } catch (e: any) {
+        throw reportRefusal(e);
+    }
 }
 
 /**

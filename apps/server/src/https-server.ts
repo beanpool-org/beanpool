@@ -369,6 +369,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/node/identity-epoch',      // split-brain guard: the signed take-over count an old main server reads at its own address (services/identity-epoch.ts)
     '/api/global/communities',       // global node (G5): the mirrored communities directory, for anyone deciding where to join
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
+    '/api/global/demand',            // global node (Lounge L2): how many are waiting around a point, a fixed tile, nothing below 3
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
     '/api/home',                     // Home in one read: public only with the visitors' view on, and then the visitors' subset (HOME_READ_EXACT)
 ]);

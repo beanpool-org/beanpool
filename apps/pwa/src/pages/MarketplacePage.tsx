@@ -21,13 +21,16 @@ import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isE
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
+import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
-    editedTagsOver, FREE_TAGS_MAX, freeTagsOf, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags, tagIndex,
+    editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
+    tagIndex,
 } from '@beanpool/core';
+import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -122,6 +125,7 @@ interface Props {
      */
     onSaveSearch?: (settings: HomeSearchSettings) => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
+    onComposer?: (draft: ComposerDraft) => void;
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
     onRefreshTransactions?: () => void;
@@ -306,7 +310,7 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -4195,6 +4199,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <p data-testid="market-near-empty" className="m-0 mb-2 px-1 text-sm font-bold text-nature-700 dark:text-nature-300">
                                     {t('Nothing within 250 km yet.')}
                                 </p>
+                                {!isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                 {fillPending ? (
                                     <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
                                 ) : fillSection}
@@ -4219,6 +4224,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-sm font-bold text-nature-700 dark:text-nature-300 mb-3">
                                             {nearbyListings ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                         </p>
+                                        {nearbyListings && !isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                         {nearbyListings && (
                                             <div className="mb-4">
                                                 <button
@@ -4369,9 +4375,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 isOpen={showPricingGuide}
                 onClose={() => setShowPricingGuide(false)}
                 reporterPubkey={identity?.publicKey}
-                onSelectOfferItem={() => {
+                onSelectOfferItem={(item, effectivePrice) => {
                     setShowPricingGuide(false);
-                    onNavigate?.('map-post');
+                    const draft: ComposerDraft = {
+                        type: 'offer',
+                        title: item.name,
+                        description: item.description,
+                        category: normalizeCategory(item.category),
+                        credits: effectivePrice,
+                        priceType: 'fixed',
+                        repeatable: false,
+                        cashAlsoNeeded: false,
+                    };
+                    if (onComposer) {
+                        onComposer(draft);
+                    } else {
+                        onNavigate?.('map-post');
+                    }
                 }}
             />
 

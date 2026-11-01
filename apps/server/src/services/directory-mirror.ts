@@ -29,20 +29,31 @@
  *      watcher what they are owed: the communities seen for the first time, and, when a push reaches them now, any an
  *      earlier run's notice could not reach them with (no phone of theirs registered here then). Each watcher hears
  *      about a community once.
+ *   4. The place circles (engine/place-circles.ts) end what a new community ended and form what three helpers can.
  *
  * A phone registering its push token (routes/community.ts) tells its member what they are owed at once
  * (tellOwedWatcher), on the same conditions as a run: a main server with the switch on.
  */
-import { getNodeRole, broadcast, dispatchPushNotification, isNodeMember, pushableMembers } from '../state-engine.js';
+import {
+    getNodeRole, broadcast, dispatchPushNotification, isNodeMember, pushableMembers, createPlaceCircle, addPlaceCircleMember, closePlaceCircle,
+    maySitInPlaceCircle,
+} from '../state-engine.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import {
     normaliseRegistryRow, writeDirectoryRows, writeMirrorStatus, MAX_DIRECTORY_ROWS, type DirectoryRow,
 } from '../engine/directory-cache.js';
 import { notifyPlaceWatchers, notifyOwedPlaceWatcher, type PlaceWatchNoticeCallbacks } from '../engine/place-watches.js';
+import { runPlaceCircles, type CircleCallbacks } from '../engine/place-circles.js';
 
 /** How the place watches reach a member: their sockets, and their phones where a marketplace push reaches them. */
 const watchNotices = (): PlaceWatchNoticeCallbacks => ({
     broadcast, dispatchPushNotification, isMember: isNodeMember, pushable: (pubkey) => pushableMembers('marketplace', pubkey),
+});
+
+/** How a place circle is made and told (engine/place-circles.ts). */
+const circleCallbacks = (): CircleCallbacks => ({
+    broadcast, dispatchPushNotification,
+    maySit: maySitInPlaceCircle, createCircle: createPlaceCircle, addToCircle: addPlaceCircleMember, closeCircle: closePlaceCircle,
 });
 
 /**
@@ -181,6 +192,15 @@ export async function runDirectoryMirror(opts: { pageRows?: number } = {}): Prom
             // The cache is written; the communities are on the card. Nothing was stamped for a watcher not told: the next
             // run tells them.
             console.error('[Directory mirror] Telling watchers failed:', e?.message || e);
+        }
+        try {
+            const circles = runPlaceCircles(circleCallbacks(), now);
+            if (circles.formed || circles.joined || circles.retired || circles.closed) {
+                console.log(`[Place circles] ${circles.formed} formed, ${circles.joined} joined one, ${circles.retired} retired, ${circles.closed} closed.`);
+            }
+        } catch (e: any) {
+            // Its own run: the cache is written and the watchers told. What it didn't do, the next run does.
+            console.error('[Place circles] The run failed:', e?.message || e);
         }
         // Quiet when nothing changed: an unchanged directory is most hours.
         if (changed) {

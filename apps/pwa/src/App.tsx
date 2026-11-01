@@ -1175,6 +1175,7 @@ export function App() {
                                     openSearch={openMarketSearch}
                                     onSearchOpened={clearMarketSearch}
                                     onSaveSearch={(settings) => { setSaveSearchToHome(settings); setActiveTab('home'); }}
+                                    onComposer={openComposerFromTool}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}
@@ -1227,6 +1228,7 @@ export function App() {
                             isOpen
                             onClose={() => setOpenGroup(null)}
                             myPubkey={identity?.publicKey}
+                            identity={identity}
                         />
                     )}
                     {openGroupVotes && (

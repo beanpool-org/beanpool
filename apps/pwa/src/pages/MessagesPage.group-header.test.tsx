@@ -40,6 +40,10 @@ let chatLocked = true;
 let nodeType = 'group_thread';
 /** Rows the node serves beside the sealed lines it stored. */
 let extraRows: any[] = [];
+/** The kind the node gives the group's row ('circle' for a place circle). */
+let groupKind: string | undefined;
+/** What the chat answer says of posting: read-only is a closed group. */
+let chatClosed = false;
 
 const served = () => [
     ...node.lines.map((l, i) => ({
@@ -48,6 +52,8 @@ const served = () => [
     })),
     ...extraRows,
 ];
+
+import { PLACE_CIRCLE_WORDS, t } from '@beanpool/core';
 
 vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({ conversations: [conv()], totalUnread: 0 })),
@@ -58,7 +64,7 @@ vi.mock('../lib/api', () => ({
     createConversationApi: vi.fn(), getEventChat: vi.fn(), sendMessageApi: vi.fn(), editMessageApi: vi.fn(),
     toggleMessageReactionApi: vi.fn(), getMessageAttachmentApi: vi.fn(), completeMarketplaceTransaction: vi.fn(), cancelMarketplaceTransaction: vi.fn(),
     getGroupChat: vi.fn(async () => ({
-        conversation: conv(), messages: served(), canPost: true,
+        conversation: conv(), messages: served(), canPost: !chatClosed, ...(chatClosed ? { readOnly: true } : {}),
         ...(chatLocked ? { encryption: { current: node.current(), stale: false, fromEpoch: 1 } } : {}),
     })),
     getGroupMembers: vi.fn(async () => node.shown.map((pk) => ({ groupId: G, memberPubkey: pk, callsign: pk === ana.publicKey ? 'Ana' : 'Ben', role: 'member', status: 'active', joinedAt: '' }))),
@@ -69,7 +75,7 @@ vi.mock('../lib/api', () => ({
 }));
 
 function conv() {
-    return { id: G, type: nodeType, name: 'Garden crew', participants: [ana.publicKey, ben.publicKey], createdBy: ana.publicKey, createdAt: '2026-10-01T00:00:00Z', unreadCount: 0 };
+    return { id: G, type: nodeType, name: 'Garden crew', participants: [ana.publicKey, ben.publicKey], createdBy: ana.publicKey, createdAt: '2026-10-01T00:00:00Z', unreadCount: 0, ...(groupKind ? { groupKind } : {}) };
 }
 
 const me: BeanPoolIdentity = { publicKey: ana.publicKey, privateKey: ana.privateKey, callsign: 'Ana', createdAt: '2026-10-01T00:00:00Z' };
@@ -83,6 +89,8 @@ beforeEach(async () => {
     chatLocked = true;
     nodeType = 'group_thread';
     extraRows = [];
+    groupKind = undefined;
+    chatClosed = false;
     // Ben opened the chat first: epoch 1 for both of them, and one line of his.
     const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
     const id = crypto.randomUUID();
@@ -103,6 +111,28 @@ async function send(composer: HTMLElement, text: string) {
     fireEvent.change(composer, { target: { value: text } });
     await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
 }
+
+describe('a place circle in Talk', () => {
+    it("is named in the reader's language, not by its stored English name: the list and the header read one title", async () => {
+        groupKind = 'circle';
+        await openChat();
+        expect(screen.getByRole('button', { name: `${t(PLACE_CIRCLE_WORDS.name)}, group info` })).toBeInTheDocument();
+        expect(screen.queryByText('Garden crew')).toBeNull();
+    });
+
+    it('any other group keeps the name its members wrote', async () => {
+        await openChat();
+        expect(screen.getByRole('button', { name: 'Garden crew, group info' })).toBeInTheDocument();
+    });
+
+    it('a finished circle refuses a line in its own words: no vote closed it', async () => {
+        groupKind = 'circle';
+        const composer = await openChat();
+        chatClosed = true;
+        await send(composer, 'Anyone still here?');
+        expect(await screen.findByText(t(PLACE_CIRCLE_WORDS.closed))).toBeInTheDocument();
+    });
+});
 
 describe("a group chat's header opens the group", () => {
     it('the avatar and name are one button, named for the group, that lands on the group (its id is the chat id)', async () => {

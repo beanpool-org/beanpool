@@ -193,7 +193,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
 
     // Commons groups: active membership only.
     const groups = db.prepare(`
-        SELECT g.id, g.name, g.category, g.join_policy, g.avatar_ref, gm.role, gc.closed_at
+        SELECT g.id, g.name, g.category, g.join_policy, g.avatar_ref, g.kind AS group_kind, gm.role, gc.closed_at
         FROM group_members gm JOIN groups g ON g.id = gm.group_id
         LEFT JOIN group_closures gc ON gc.group_id = g.id
         WHERE gm.member_pubkey = ? AND gm.status = 'active'
@@ -205,6 +205,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
             kind: 'group', badge: YOUR_CHAT_BADGES.group, id: g.id, conversationId: g.id, name: g.name,
             // The group's picture as its URL (#1486), never the picture: as every group read gives it.
             avatarUrl: groupPictureUrlOf(g.id, g.avatar_ref), role: g.role, category: g.category, joinPolicy: g.join_policy,
+            ...(g.group_kind ? { groupKind: g.group_kind } : {}),
             readOnly: !!g.closed_at, closedAt: g.closed_at ?? null,
         }, GROUP_THREAD_REMOVED_TEXT);
     }

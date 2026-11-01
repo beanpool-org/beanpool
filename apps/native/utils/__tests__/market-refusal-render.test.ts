@@ -179,6 +179,7 @@ vi.mock('../../components/NewEventModal', () => ({ NewEventModal: none }));
 vi.mock('../../components/NewPostTypeSheet', () => ({ NewPostTypeSheet: none }));
 vi.mock('../../components/OwnerWordsPrompt', () => ({ OwnerWordsPrompt: none }));
 vi.mock('../../components/ExampleListings', () => ({ ExampleListings: none }));
+vi.mock('../../components/MarketCircleLine', () => ({ MarketCircleLine: none, useFindCardRead: () => null }));
 vi.mock('../../components/NoAreaLine', () => ({ NoAreaLine: none }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: none }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: none }));

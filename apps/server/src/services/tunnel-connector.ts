@@ -908,8 +908,8 @@ async function healOtherName(host: string): Promise<void> {
         const res = await healAddress(labelOf(host), LOOPBACK_ORIGIN);
         const { changed: _changed, attest: _attest, ...healed } = res ?? {};
         const answer = await withLiveToken(healed, labelOf(host));
-        if (!stillOther(host)) return;
-        recordRegistrarAnswer({ name: labelOf(host), hostname: host, ...answer }, 'status');
+        if (!stillOther(host) || typeof answer?.status !== 'string') return;
+        recordRegistrarAnswer({ ...answer, name: labelOf(host), hostname: host }, 'status');
         const token = tokenIn(answer);
         if (token) otherTokens.set(host, token);
     } catch (e: any) {
@@ -924,16 +924,17 @@ async function healOtherName(host: string): Promise<void> {
  *  - Live: a new token is run by the sync that follows; a refused tunnel on the same token is healed.
  *  - Paused by the sweep: healed, as the stored name is (healable).
  *  - Any other word about this name (the admin's pause, released, revoked, blocked): written on the name, which stops its
- *    tunnel; the record keeps the name, and the next tick asks again if it can come back.
- *  - No word about it: `none` (a registrar that lost its data says that to every key), or an answer about another name (a
- *    registrar that does not read `name`, or a key that holds this one no more). What runs keeps running. A refused tunnel
- *    is stopped: nothing can bring it back until the registrar speaks of the name, and the next tick asks.
+ *    tunnel. The record keeps the name; the admin's pause is asked about again, and the rest come back by a claim.
+ *  - No word about it: `none` (a registrar that lost its data says that to every key), an answer about another name (a
+ *    registrar that does not read `name`, or a key that holds this one no more), or `pending` (the registrar re-making it).
+ *    What runs keeps running. A refused tunnel is stopped: nothing can bring it back until the registrar speaks of the
+ *    name, and the next tick asks.
  * Throws when nothing answered.
  */
 async function askAbout(host: string, refused = false): Promise<void> {
     const st = await addressStatus(labelOf(host));
     if (!stillOther(host)) return;
-    if (registrarHostOf(st) !== host) {
+    if (registrarHostOf(st) !== host || typeof st?.status !== 'string' || st.status === 'pending') {
         if (!refused) return;
         say('warn', `${host}: Cloudflare refuses its tunnel, and the address service says nothing of it: stopping that tunnel`);
         otherTokens.delete(host);

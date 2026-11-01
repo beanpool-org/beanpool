@@ -727,7 +727,9 @@ async function main(): Promise<void> {
         const r = await claim('byron');
         assert(r.status === 200 && r.json?.status === 'pending', `(b, domain) the claim waits (${r.status} ${show(r.json)})`);
         assert(onlyAt(DOMAIN), `(b, domain) while it waits nothing moves: not the directory, the card or an assistant (${show(surfaces())}; on main all but primaryAddress say the waiting name)`);
-        assert((await info()).primaryAddress === DOMAIN && (await signedFor(DOMAIN)).status === 200, '(b, domain) the app is told the domain, and it passes');
+        const waitingInfo = await info();
+        assert(waitingInfo.primaryAddress === DOMAIN && (await signedFor(DOMAIN)).status === 200, '(b, domain) the app is told the domain, and it passes');
+        assert(waitingInfo.addresses?.includes(BYRON), `(b, domain) the waiting name is listed among its addresses, never as main: an app moves only to primaryAddress (${show(waitingInfo.addresses)})`);
         assert(notices().length === n0, `(b, domain) nobody is told (${show(notices().slice(n0))})`);
         held.set('byron', withToken('byron'));
         await reconcile();

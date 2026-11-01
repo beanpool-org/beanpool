@@ -1291,6 +1291,16 @@ async function main(): Promise<void> {
             reg.status = (n) => live(n!, n === 'pause-old' ? T_HEALED : newT);
             await agentTick();
             assert(await runningAll(T_HEALED, newT), `lifted, the next tick runs it again (${onTokens().join(', ')})`);
+            // The registrar re-making it answers pending, or says nothing of it: what runs keeps running, and it is asked again.
+            const pid = fakeOn(T_HEALED)!.pid;
+            for (const word of [{ status: 'pending', name: 'pause-old', hostname: 'pause-old.beanpool.org', reason: 'provisioning' }, { status: 'none' }, live('pause-new', newT)]) {
+                reg.status = (n) => (n === 'pause-old' ? word : live(n!, newT));
+                await agentTick();
+                assert(fakeOn(T_HEALED)?.pid === pid, `${word.status}${(word as any).name ? ` of ${(word as any).name}` : ''}: its child runs on (${onTokens().join(', ')})`);
+            }
+            const before = asked('pause-old');
+            await agentTick();
+            assert(asked('pause-old') === before + 1, 'and it is still asked about');
             await clearNames('pause-old');
             assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
         });

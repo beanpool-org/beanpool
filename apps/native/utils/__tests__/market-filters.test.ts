@@ -11,7 +11,7 @@ import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketFilterState,
-    marketSearchFromLink, marketSearchQuery, marketSearchMatches, marketSearchToSave, saveSearchParam, readSaveSearchParam,
+    marketSearchFromLink, marketSearchQuery, marketAnswerStands, marketSearchMatches, marketSearchToSave, saveSearchParam, readSaveSearchParam,
 } from '../market-filters';
 import { CATEGORY_FILTER_CHIPS, categoryPanelReducer } from '../map-filters';
 import { CATEGORY_META } from '../../constants/categories';
@@ -290,10 +290,26 @@ describe('the Market\'s search in any script (review of #1716, finding 1)', () =
 });
 
 describe('a listing found by a tag its author typed (DESIGN-tags-free-entry-fable.md §4)', () => {
-    it("the Market's own filter runs over the node's answer, so the words of a typed tag pass it, in either shape a row comes in", () => {
+    it("the Market's own filter reads the words of a typed tag, in either shape a row comes in", () => {
         const title = { title: 'Old laptop', description: 'Works well' };
         expect(marketSearchMatches({ ...title, freeTags: ['2nd hand'] }, 'hand')).toBe(true);
         expect(marketSearchMatches({ ...title, free_tags: '["2nd hand"]' }, 'hand')).toBe(true);
         expect(marketSearchMatches(title, 'hand')).toBe(false);
+    });
+});
+
+// The screen itself, with the node's answer: market-fill-render.test.ts.
+describe('whether the node\'s answer stands for the search (review of #2691, finding 1)', () => {
+    it('for the words it was asked, however the box is spaced; not for others, and not with no answer', () => {
+        expect(marketAnswerStands('limon', 'limon')).toBe(true);
+        expect(marketAnswerStands('  limon ', 'limon')).toBe(true);
+        expect(marketAnswerStands('limon', 'limo')).toBe(false);
+        expect(marketAnswerStands('limon', null)).toBe(false);
+    });
+
+    it('the screen reads this, and no field the node never sends', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/market.tsx'), 'utf8');
+        expect(src).toMatch(/marketAnswerStands\(searchQuery, searchResults !== null \? searchResultsWords : null\)/);
+        expect(src).not.toMatch(/search_keywords/);
     });
 });

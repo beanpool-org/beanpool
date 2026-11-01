@@ -43,7 +43,7 @@ import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '
 import {
     MARKET_TYPE_PILLS, marketFilterFromLink, marketSearchFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
-    marketSearchQuery, marketSearchMatches, marketSearchToSave, saveSearchParam,
+    marketSearchQuery, marketAnswerStands, marketSearchMatches, marketSearchToSave, saveSearchParam,
 } from '../../utils/market-filters';
 import { SaveSearchButton } from '../../components/SaveSearchButton';
 import { localDaysAgo } from '../../utils/feed-sections';
@@ -620,6 +620,8 @@ export default function MarketScreen() {
         return () => { live = false; ended.remove(); };
     }, [identity?.publicKey]));
     const [searchResults, setSearchResults] = useState<any[] | null>(null);
+    // The words that answer was for (marketAnswerStands): null when a tag filter was on, as it asks for the words OR the tag.
+    const [searchResultsWords, setSearchResultsWords] = useState<string | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     /**
@@ -932,6 +934,7 @@ export default function MarketScreen() {
                         const data = await res.json();
                         const parsed = normalizeServerPosts(data, anchorUrl);
                         setSearchResults(parsed);
+                        setSearchResultsWords(selectedTag || selectedFree ? null : q);
                     } else {
                         setSearchResults(null); // Fall back to local filtering
                     }
@@ -1015,6 +1018,8 @@ export default function MarketScreen() {
     };
     const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.fill;
     const filterCtx = { blockedUsers, favCategories };
+    // No answer has no words, whatever the last one was for: a failed read leaves the phone's copy, which the words must narrow.
+    const answerStands = marketAnswerStands(searchQuery, searchResults !== null ? searchResultsWords : null);
 
     let filteredPosts = basePosts.filter(p => {
         // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
@@ -1023,12 +1028,9 @@ export default function MarketScreen() {
         // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
         if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
 
-        // Synonym-aware local search: expand query using synonym map
-        // Works on ALL servers, even those without FTS5 deployed
-        if (searchQuery.trim()) {
-            const serverHasFTS = searchResults !== null && searchResults.length > 0 && 'search_keywords' in searchResults[0];
-            if (!serverHasFTS && !marketSearchMatches(p, searchQuery)) return false;
-        }
+        // The node's answer stands for its words, as on the web. Synonym-aware local search for everything else: the phone's
+        // copy, and an answer until the read for these words lands.
+        if (searchQuery.trim() && !answerStands && !marketSearchMatches(p, searchQuery)) return false;
 
         // Tag filter (§4.4 post detail tap)
         if (selectedTag) {

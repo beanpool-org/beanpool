@@ -259,6 +259,15 @@ async function copyIsThere(pair: CopyPair, identity: BeanPoolIdentity, deps: Cop
 }
 
 /**
+ * Global's auto-hide leaves the row in place for its author, so `copyIsThere` reads a held copy as up. A rest would cancel
+ * it and the listing's return post the same words clean, with no reports on them and nobody having chosen that.
+ */
+async function heldByReports(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
+    const rows = await readJson(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, deps);
+    return Array.isArray(rows) && rows.some((row) => !!row?.hiddenByReportsAt);
+}
+
+/**
  * After a refusal, which doesn't say the copy has gone (a mute, a date that has ended, a tag one library lacks, a second
  * send of the same id). The pair goes only if global says the copy isn't up. Otherwise it stays as it was, so a cancel at
  * home can still take the copy down, and the next tend sees what wasn't sent and tries again.
@@ -525,6 +534,8 @@ async function tendPairs(identity: BeanPoolIdentity, deps: CopyDeps, now: number
             // About to rest a copy that has landed: taken down behind this phone (another phone, a moderator), it stays down. A
             // rest can't tell, since global answers a second remove as it does the first, and its return would post a new one.
             if (away && pair.sent && !pair.resting && (await forgetIfGone(pair, identity, deps).catch(() => null)) === false) continue;
+            // Held by global's reports: the copy stays as it is and the rest waits, or the rest would undo global's moderation.
+            if (away && pair.sent && !pair.resting && await heldByReports(pair, identity, deps).catch(() => false)) continue;
             // Home may have taken a minute to say: only what is still stored, and not on its way out, goes on from here.
             const still = await storedPair(copyId);
             if (!still || still.leaving) continue;

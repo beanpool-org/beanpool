@@ -1311,6 +1311,56 @@ async function stopFromCopysPage(me: BeanPoolIdentity, copyId: string): Promise<
     return stopShowing(copyId, me, deps());
 }
 
+const globalSql = (sql: string, params: unknown[]) => global_.control('sql', { sql, params });
+const holdByReports = (copyId: string) => globalSql("UPDATE posts SET hidden_by_reports_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", [copyId]);
+
+describe('a copy global\'s reports hold: a rest at home waits, so nothing comes back clean', () => {
+    it.each(homeRests)('it stays held and no new copy is posted through %s', async (why, off, on) => {
+        const me = await memberOfBoth(`Holly ${why}`);
+        const home = await listingAtHome(me, 'Plums');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await holdByReports(id);
+
+        await off(me, home);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(1);
+        expect(await copyIdOf(home.id, me)).toBe(id);
+    }, START_MS);
+
+    it('a moderator\'s restore while the listing is off the board: the rest goes ahead and the copy comes back', async () => {
+        const me = await memberOfBoth('Holly Restored');
+        const home = await listingAtHome(me, 'Pears');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await holdByReports(id);
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(1);
+
+        await globalSql('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ?', [id]);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toHaveLength(1);
+        expect(await copyCount(me)).toBe(2);
+    }, START_MS);
+
+    it('a listing finished at home still takes a held copy down and ends the pair', async () => {
+        const me = await memberOfBoth('Holly Finished');
+        const home = await listingAtHome(me, 'Quinces');
+        await showOnGlobal(home, local.url, me, deps());
+        await holdByReports(await copyIdOf(home.id, me));
+        await homeSql("UPDATE posts SET status = 'completed' WHERE id = ?", [home.id]);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+});
+
 describe('Stop showing from the copy\'s own page: all it knows is the copy\'s id', () => {
     it.each(homeRests)('the pair goes, the home row stops saying Shown, and nothing comes back through %s', async (why, off, on) => {
         const me = await memberOfBoth(`Stella ${why}`);

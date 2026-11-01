@@ -32,7 +32,7 @@ vi.mock('./lib/api', async (orig) => ({
     ...(await orig<typeof import('./lib/api')>()),
     getNodeApiUrl: vi.fn(() => ''),
     getCommunityHealth: vi.fn(async () => ({ online: true, version: '1.2.28' })),
-    getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
+    getMyUnread: vi.fn(async () => ({ unread: 0, requests: 0, asOf: '2026-11-01T00:00:00.000Z' })),
     getMyMarketplaceTransactions: vi.fn(async () => []),
 }));
 vi.mock('./components/InstallPrompt', () => ({ InstallPrompt: () => null }));

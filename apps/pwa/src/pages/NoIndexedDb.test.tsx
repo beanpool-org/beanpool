@@ -180,7 +180,7 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
         }
         // A member's polls, once someone has joined or restored (the node sends a list and a count, not an object).
         if (path === '/api/marketplace/transactions') return json(200, []);
-        if (path.startsWith('/api/messages/conversations/')) return json(200, { conversations: [], totalUnread: 0 });
+        if (path === '/api/me/unread') return json(200, { unread: 0, requests: 0, asOf: '2026-11-01T00:00:00.000Z' });
         if (path === '/api/groups') return json(200, []);
         if (path === '/api/home') {
             const h = (init.headers ?? {}) as Record<string, string>;

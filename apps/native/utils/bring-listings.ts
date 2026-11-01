@@ -11,7 +11,8 @@
  * - **The node decides.** A listing with no photo left is still sent: the community's own photo rule answers (every node
  *   today refuses it, `Add a photo first`), and a refusal is a line on the sheet, never a post that breaks the rule.
  * - **The order is the node's too.** Offers go first: a community with Beans takes a Need only from a member who has
- *   listed an Offer (core postRulesFor). Oldest first, so the newest ends up newest there.
+ *   listed an Offer (core postRulesFor). Oldest first, so the newest ends up newest there. A member with no Offer to bring
+ *   hears that in their own words, and the question comes back once they have listed one there.
  * - **Safe to run again.** Each post's id comes from the listing and the community (`broughtId`), and a run first reads
  *   what the community already holds, so a run cut off halfway, or an answer lost on the way back, posts nothing twice.
  * - **Offline.** The offer is kept (`beanpool_bring_listings`) until the run ends: a community that can't be reached
@@ -67,6 +68,8 @@ export interface BringOffer {
     /** "Not now"s so far. */
     asks?: number;
     notBefore?: number;
+    /** The community refused a Need for want of an Offer: with only Needs left, nothing is asked until one is listed there. */
+    waitsForOffer?: boolean;
 }
 
 /** What the phone keeps: an offer, or that this key had its one (`closed`). */
@@ -121,14 +124,16 @@ export type BringLine =
     /** The community refused it, in its own words. */
     | { kind: 'refused'; title: string; reason: string }
     /** The community refused the member, in its own words: no listing would go. */
-    | { kind: 'held'; reason: string };
+    | { kind: 'held'; reason: string }
+    /** The community takes a Need only from a member who has listed an Offer: no Need would go. */
+    | { kind: 'needs-offer' };
 
 export interface BringResult {
     brought: number;
     lines: BringLine[];
     /** Something is left for a later run (a community that didn't answer, a photo it couldn't give now). */
     kept: boolean;
-    /** The community wants something of the member first (a profile photo): the question comes back. */
+    /** The community wants something of the member first (a profile photo, an Offer): the question comes back. */
     held: boolean;
 }
 
@@ -207,6 +212,12 @@ export async function putOffBringOffer(offer: BringOffer, now: number = Date.now
 
 /** What the end of a run leaves: the offer closed, kept for another run, or asked again. */
 export async function settleBringOffer(offer: BringOffer, result: BringResult, now: number = Date.now()): Promise<void> {
+    // Asked again a day later, and with only Needs left not before an Offer is listed there (planBring): the answer would
+    // be the same, and "Not now", the natural reply from a member with none yet, would end what the sheet says comes back.
+    if (result.lines.some((line) => line.kind === 'needs-offer')) {
+        await store({ ...offer, accepted: false, waitsForOffer: true, notBefore: now + BRING_ASK_AGAIN_MS });
+        return;
+    }
     // Held is the community's answer, not the member's: a yes is no "Not now", so it never ends the offer. Asked again a
     // day later as one would be, and so until the offer lapses or the member says no.
     if (result.held) {
@@ -243,15 +254,26 @@ async function withTimeout<T>(ms: number, run: (signal: AbortSignal) => Promise<
     }
 }
 
-/** The member's listings on `url`, in every state: a number is the status of a refusal; no answer throws. */
-async function ownListings(url: string, identity: BeanPoolIdentity, deps: BringDeps): Promise<OwnListing[] | number> {
+/**
+ * A 403's `code` when this key has no account to read: never one (`members_only`, `not_a_member`), closed
+ * (`account_closed`) or replaced by a re-key (`key_invalidated`) (apps/server https-server.ts). Any other refusal says
+ * nothing of the account (utils/node-claim.ts ownerCheckViaRole draws the same line): a nonce already spent, a signature
+ * the node couldn't check, or a page from something in front of the node, which has no code at all.
+ */
+const NO_ACCOUNT_CODES: ReadonlySet<string> = new Set(['members_only', 'not_a_member', 'account_closed', 'key_invalidated']);
+
+/** The member's listings on `url`, in every state, or how it refused: this key has no account there, or it didn't say. No answer throws. */
+async function ownListings(url: string, identity: BeanPoolIdentity, deps: BringDeps): Promise<OwnListing[] | 'no-account' | 'refused'> {
     const rows: OwnListing[] = [];
     let next: string | null = null;
     for (let page = 0; page < MOST_PAGES; page++) {
         const path: string = `${POSTS_PATH}?author=${encodeURIComponent(identity.publicKey)}&types=offer,need&sync=true&paged=1&limit=${PAGE_ROWS}`
             + (next ? `&pageAfter=${encodeURIComponent(next)}` : '');
         const res: Response = await withTimeout(READ_TIMEOUT_MS, (signal) => deps.get(url, path, identity, signal));
-        if (!res.ok) return res.status;
+        if (!res.ok) {
+            const refusal = res.status === 403 ? await res.json().catch(() => null) as { code?: unknown } | null : null;
+            return typeof refusal?.code === 'string' && NO_ACCOUNT_CODES.has(refusal.code) ? 'no-account' : 'refused';
+        }
         const body: unknown = await res.json();
         if (!Array.isArray(body)) throw new Error('not a list of listings');
         rows.push(...body as OwnListing[]);
@@ -266,19 +288,20 @@ const typeOrder = (p: OwnListing) => (p.type === 'offer' ? 0 : 1);
 
 /**
  * What a run would do, from both communities' own answers. `unreachable`: one of them gave none, so the offer is kept.
- * `nothing`: the global community won't read this key's listings (no account there any more), so there is nothing to bring.
+ * `nothing`: the global community says this key has no account there, so there is nothing to bring. `waiting`: the
+ * community wants an Offer first, and this member has none there and none left to bring: the offer is kept, unasked.
  */
-export async function planBring(offer: BringOffer, identity: BeanPoolIdentity, deps: BringDeps = liveDeps): Promise<BringPlan | 'unreachable' | 'nothing'> {
-    let rows: OwnListing[] | number;
-    let there: OwnListing[] | number;
+export async function planBring(offer: BringOffer, identity: BeanPoolIdentity, deps: BringDeps = liveDeps): Promise<BringPlan | 'unreachable' | 'nothing' | 'waiting'> {
+    let rows: Awaited<ReturnType<typeof ownListings>>;
+    let there: Awaited<ReturnType<typeof ownListings>>;
     try {
         rows = await ownListings(offer.from, identity, deps);
-        if (typeof rows === 'number') return rows === 403 || rows === 404 ? 'nothing' : 'unreachable';
+        if (typeof rows === 'string') return rows === 'no-account' ? 'nothing' : 'unreachable';
         there = await ownListings(offer.to, identity, deps);
     } catch {
         return 'unreachable';
     }
-    if (typeof there === 'number') return 'unreachable';
+    if (typeof there === 'string') return 'unreachable';
     const held = new Set(there.map((p) => p.id));
     // Their own, for everyone, written here: never a group's, one for one person, or a copy of another community's.
     const mine = rows.filter((p) => p.authorPublicKey === identity.publicKey && !p.originNode && (p.type === 'offer' || p.type === 'need')
@@ -287,6 +310,9 @@ export async function planBring(offer: BringOffer, identity: BeanPoolIdentity, d
     const bring = mine.filter(isUp).filter((p) => !held.has(broughtId(p.id, offer.to)))
         .sort((a, b) => typeOrder(a) - typeOrder(b) || String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
     const gone = mine.filter((p) => !isUp(p) && (!!p.hiddenByReportsAt || (p.status === 'cancelled' && hasNoPhoto(p)))).map((p) => p.title);
+    // Offers sort first, so a Need at the head means none is left to bring. Any Offer of theirs there, in any state, is
+    // the rule the node applies (engine/posts.ts hasListedOffer).
+    if (offer.waitsForOffer && bring[0]?.type === 'need' && !there.some((p) => p.type === 'offer')) return 'waiting';
     return { bring, gone };
 }
 
@@ -357,6 +383,8 @@ async function send(offer: BringOffer, body: Record<string, unknown>, identity: 
 
 /** The node's words for a member with no profile photo (engine/posts.ts assertProfileComplete), read as utils/db.ts reads them. */
 const isProfilePhotoRefusal = (reason: string) => /set a profile photo/i.test(reason);
+/** The node's stable prefix (engine/posts.ts CONTRIBUTION_REQUIRED_ERROR), read as app/post/[id].tsx reads it. Its sentence is English in every language, so it is never shown. */
+const isOfferFirstRefusal = (reason: string) => reason.startsWith('CONTRIBUTION_REQUIRED');
 
 /**
  * Brings the plan's listings. `onStep` hears how many are done. Stops at the first sign the new community isn't answering:
@@ -400,9 +428,12 @@ export async function runBring(
             if (missed > 0) result.lines.push({ kind: 'fewer-photos', title: post.title });
             continue;
         }
-        if (isProfilePhotoRefusal(sent.refused)) {
+        // Each stops the run with the question to come back, so nothing here is left for a later run, and no community was
+        // out of reach. After an Offer-first refusal only Needs are left, and each would hear the same.
+        if (isProfilePhotoRefusal(sent.refused) || isOfferFirstRefusal(sent.refused)) {
             result.held = true;
-            result.lines.push({ kind: 'held', reason: sent.refused });
+            result.kept = false;
+            result.lines.push(isOfferFirstRefusal(sent.refused) ? { kind: 'needs-offer' } : { kind: 'held', reason: sent.refused });
             break;
         }
         const noneSent = photos.length === 0;
@@ -423,6 +454,7 @@ export function bringLineWords(line: BringLine, name: string): string {
         case 'no-photo': return t('"{title}" stayed behind: it has no photo, and {name} needs at least one.', { title: line.title, name });
         case 'refused': return t('"{title}" stayed behind: {reason}', { title: line.title, reason: line.reason });
         case 'held': return line.reason;
+        case 'needs-offer': return t('{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.', { name });
     }
 }
 

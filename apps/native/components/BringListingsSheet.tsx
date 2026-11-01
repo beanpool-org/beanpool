@@ -1,9 +1,9 @@
 /**
  * Home's Bring my listings sheet (utils/bring-listings.ts): looks for this key's offer each time Home comes to the front,
  * so it comes after the join's profile step, and draws nothing until the listings have been read: a community that
- * can't be reached means no sheet yet, and the offer is kept for a later visit. Once the member has said yes, what is
- * left is tried again here with no sheet at all until there is something to say. The run can be closed: it goes on, and
- * says what came of it when it ends.
+ * can't be reached means no sheet yet, and the offer is kept for a later visit, as it is while a community waits for the
+ * member's first Offer. Once the member has said yes, what is left is tried again here with no sheet at all until there
+ * is something to say. The run can be closed: it goes on, and says what came of it when it ends.
  *
  * Drawn by components/BringListingsSheetView.tsx.
  */
@@ -68,7 +68,7 @@ export function BringListingsSheet() {
             } finally {
                 busy = false;
             }
-            if (plan === 'unreachable') return;
+            if (plan === 'unreachable' || plan === 'waiting') return;
             if (plan === 'nothing' || (plan.bring.length === 0 && (offer.accepted || plan.gone.length === 0))) {
                 await closeBringOffer(publicKey);
                 return;

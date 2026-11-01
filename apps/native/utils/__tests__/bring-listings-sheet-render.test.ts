@@ -135,6 +135,7 @@ const STATES: Array<[string, BringStep]> = [
     ['the run', { step: 'bringing', done: 3, total: 12 }],
     ['what came of it', { step: 'done', name: LONG_NAME, brought: 9, lines: [{ kind: 'gone', title: 'Old bike' }], kept: true }],
     ['a long list of lines', { step: 'done', name: LONG_NAME, brought: 1, lines: LINES, kept: false }],
+    ['Needs waiting for an Offer', { step: 'done', name: LONG_NAME, brought: 0, lines: [{ kind: 'needs-offer' }], kept: false }],
 ];
 
 describe.each([['light', lightColors], ['dark', darkColors]] as const)('the sheet at 320 dp and 1.3× text, %s', (scheme, colors) => {
@@ -202,6 +203,16 @@ describe('Home\'s sheet', () => {
         await focus();
         expect(shown()).toBe(false);
         expect(calls.close).not.toHaveBeenCalled();
+        expect(calls.settle).not.toHaveBeenCalled();
+    });
+
+    it('waiting for an Offer: no sheet, nothing closed, nothing run', async () => {
+        calls.plan.mockResolvedValue('waiting');
+        await draw(createElement(BringListingsSheet));
+        await focus();
+        expect(shown()).toBe(false);
+        expect(calls.close).not.toHaveBeenCalled();
+        expect(calls.run).not.toHaveBeenCalled();
         expect(calls.settle).not.toHaveBeenCalled();
     });
 
@@ -298,6 +309,19 @@ describe('Home\'s sheet', () => {
         expect(calls.run).toHaveBeenCalledTimes(1);
         await act(async () => { finish({ brought: 2, lines: [], kept: false, held: false }); });
         await flush();
+    });
+
+    it('a Need refused for want of an Offer: said in the member\'s words, on a sheet with a way out, and the offer settled, not closed', async () => {
+        calls.run.mockResolvedValue({ brought: 0, lines: [{ kind: 'needs-offer' }], kept: false, held: true } satisfies BringResult);
+        await draw(createElement(BringListingsSheet));
+        await focus();
+        await press('bring-listings-yes');
+        expect(host.textContent).toContain('None of your listings came across.');
+        expect(host.textContent).toContain('Mullumbimby takes a Need once you have listed an Offer there. List one, and you will be asked again.');
+        expect(calls.settle).toHaveBeenCalled();
+        expect(calls.close).not.toHaveBeenCalled();
+        await press('bring-listings-done');
+        expect(shown()).toBe(false);
     });
 
     it('a run that leaves something for later says so', async () => {

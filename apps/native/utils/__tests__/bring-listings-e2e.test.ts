@@ -56,7 +56,7 @@ import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedGet, signedPost } from '../node-post';
 import { fetchNodeProfile } from '../node-profile';
 import {
-    bringLineWords, broughtId, noteBringOffer, pendingBringOffer, planBring, runBring, settleBringOffer, type BringOffer, type BringPlan,
+    BRING_ASK_AGAIN_MS, bringLineWords, broughtId, noteBringOffer, pendingBringOffer, planBring, runBring, settleBringOffer, type BringOffer, type BringPlan,
 } from '../bring-listings';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
@@ -317,13 +317,68 @@ describe('bringing listings to a first local community (the phone against two re
         expect((await found.json() as Array<{ title: string }>).map((p) => p.title)).toEqual(['Preserved']);
     }, START_MS);
 
-    it('a community with Beans takes a Need only after an Offer: with no Offer to bring, its own words say so', async () => {
+    it('a community with Beans takes a Need only after an Offer: with no Offer to bring it is said in the member\'s words, and the Needs come once they list one', async () => {
         const me = await memberOfBoth('Sage');
         await listOnGlobal(me, 'need', 'A spade', 1);
+        await listOnGlobal(me, 'need', 'A rake', 1);
         const offer = await offerFor(me);
-        const result = await runBring(offer, await planBring(offer, me) as BringPlan, me);
-        expect(result).toMatchObject({ brought: 0, kept: false, lines: [{ kind: 'refused', title: 'A spade' }] });
+        const accepted = { ...offer, accepted: true };
+        const result = await runBring(accepted, await planBring(accepted, me) as BringPlan, me);
+        expect(result).toEqual({ brought: 0, lines: [{ kind: 'needs-offer' }], kept: false, held: true });
+        expect(bringLineWords(result.lines[0], 'Mullumbimby')).toBe('Mullumbimby takes a Need once you have listed an Offer there. List one, and you will be asked again.');
         expect(await rowsOn(local, me.publicKey)).toEqual([]);
+
+        await settleBringOffer(accepted, result);
+        expect(await pendingBringOffer(me.publicKey, local.url)).toBeNull();
+        const tomorrow = Date.now() + BRING_ASK_AGAIN_MS;
+        const waiting = (await pendingBringOffer(me.publicKey, local.url, tomorrow))!;
+        expect(waiting).toMatchObject({ accepted: false, waitsForOffer: true });
+        expect(await planBring(waiting, me)).toBe('waiting');
+
+        // Their own Offer, posted there as the app posts one.
+        const listed = await signedPost(local.url, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title: 'Worm castings', description: 'A bucket', credits: 0, priceType: 'fixed',
+            authorPublicKey: me.publicKey, lat: -28.54, lng: 153.51, photos: [PNG],
+        }, me);
+        expect(await listed.json()).toMatchObject({ success: true });
+
+        const asked = (await pendingBringOffer(me.publicKey, local.url, tomorrow))!;
+        const plan = await planBring(asked, me) as BringPlan;
+        expect(plan.bring.map((p) => p.title)).toEqual(['A spade', 'A rake']);
+        const second = await runBring(asked, plan, me);
+        expect(second).toEqual({ brought: 2, lines: [], kept: false, held: false });
+        await settleBringOffer(asked, second);
+        expect((await rowsOn(local, me.publicKey)).map((p) => [p.type, p.title])).toEqual([['offer', 'Worm castings'], ['need', 'A spade'], ['need', 'A rake']]);
+        expect(await pendingBringOffer(me.publicKey, local.url, tomorrow)).toBeNull();
+    }, START_MS);
+
+    it('an Offer listed there and taken down still opens the wait: the phone reads it as the node counts it', async () => {
+        const me = await memberOfBoth('Jude');
+        await listOnGlobal(me, 'need', 'A hoe', 1);
+        const offer = await offerFor(me);
+        const accepted = { ...offer, accepted: true };
+        await settleBringOffer(accepted, await runBring(accepted, await planBring(accepted, me) as BringPlan, me));
+
+        const listed = await signedPost(local.url, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title: 'Compost', description: 'A trailer load', credits: 0, priceType: 'fixed',
+            authorPublicKey: me.publicKey, lat: -28.54, lng: 153.51, photos: [PNG],
+        }, me);
+        const { post } = await listed.json() as { post: { id: string } };
+        expect((await signedPost(local.url, '/api/marketplace/posts/remove', { id: post.id, authorPublicKey: me.publicKey }, me)).ok).toBe(true);
+
+        const asked = (await pendingBringOffer(me.publicKey, local.url, Date.now() + BRING_ASK_AGAIN_MS))!;
+        const plan = await planBring(asked, me) as BringPlan;
+        expect(plan.bring?.map((p) => p.title)).toEqual(['A hoe']);
+        expect(await runBring(asked, plan, me)).toEqual({ brought: 1, lines: [], kept: false, held: false });
+    }, START_MS);
+
+    it('a key the global community doesn\'t know: its real refusal ends the offer, and a page in front of it doesn\'t', async () => {
+        const me = await draftIdentity('Stranger');
+        await local.control('join', { key: me.publicKey, callsign: 'Stranger' });
+        const offer = { publicKey: me.publicKey, from: global_.url, to: local.url, name: 'Mullumbimby', at: Date.now() };
+        expect(await planBring(offer, me)).toBe('nothing');
+        failing.add('/api/marketplace/posts');
+        expect(await planBring(offer, me)).toBe('unreachable');
     }, START_MS);
 
     it('an Offer whose photo may yet come: its Need waits with it, says nothing, and both arrive on the next run', async () => {

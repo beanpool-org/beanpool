@@ -55,6 +55,11 @@ function answer(status: number, body: unknown, headers: Record<string, string> =
     } as unknown as Response;
 }
 
+/** An answer that is no JSON: a page from something in front of the node. */
+function page(status: number): Response {
+    return { ok: false, status, json: async () => { throw new SyntaxError('Unexpected token <'); }, headers: { get: () => null } } as unknown as Response;
+}
+
 /** Two fake communities. `sends` answers each POST (default: taken). */
 function fakes(global: OwnListing[], local: OwnListing[] = [], sends?: (body: any, n: number) => Response | Promise<Response>) {
     const posted: any[] = [];
@@ -210,6 +215,26 @@ describe('what a run reads', () => {
         const gone = fakes([]).deps;
         gone.get = vi.fn(async () => answer(403, { code: 'members_only' }));
         expect(await planBring(OFFER, identity, gone)).toBe('nothing');
+    });
+
+    it.each(['members_only', 'not_a_member', 'account_closed', 'key_invalidated'])('global refusing this key with %s: nothing to bring', async (code) => {
+        const { deps } = fakes([]);
+        deps.get = vi.fn(async () => answer(403, { error: 'No', code }));
+        expect(await planBring(OFFER, identity, deps)).toBe('nothing');
+    });
+
+    it.each([
+        ['a 403 page from something in front of the node', () => page(403)],
+        ['a 404 page', () => page(404)],
+        ['a 403 with no code', () => answer(403, { error: 'Forbidden' })],
+        ['a nonce already spent', () => answer(403, { error: 'Replay detected: nonce already used' })],
+        ['a signature it could not check', () => answer(403, { error: 'Signature validation failed' })],
+        ['a 403 with a code that says nothing of the account', () => answer(403, { error: 'No', code: 'something_else' })],
+        ['a 404 with an account code on it, which no route of the node sends', () => answer(404, { code: 'not_a_member' })],
+    ])('%s says nothing of the account: the offer is kept', async (_what, refuses) => {
+        const { deps } = fakes([]);
+        deps.get = vi.fn(async () => refuses());
+        expect(await planBring(OFFER, identity, deps)).toBe('unreachable');
     });
 
     it('a captive portal\'s page is no list of listings', async () => {
@@ -378,7 +403,7 @@ describe('a photo that fails to fetch', () => {
             deps.fetchPhoto = vi.fn(async (url: string) => (url.includes('/o/') ? { failed: 'later' as const } : { photo: PHOTO }));
             const result = await runBring({ ...OFFER, tries: BRING_MOST_TRIES - 1 }, { bring: [listing('o', { title: 'Seedlings' }), need], gone: [] }, identity, undefined, deps);
             expect(deps.post).toHaveBeenCalledTimes(2);
-            expect(result).toMatchObject({ brought: 0, kept: false, lines: [{ kind: 'photos-failed', title: 'Seedlings' }, { kind: 'refused', title: 'A ladder' }] });
+            expect(result).toEqual({ brought: 0, kept: false, held: true, lines: [{ kind: 'photos-failed', title: 'Seedlings' }, { kind: 'needs-offer' }] });
         });
     });
 
@@ -449,6 +474,116 @@ describe('what the new community answers', () => {
         expect(deps.post).toHaveBeenCalledTimes(1);
         expect(result).toEqual({ brought: 0, lines: [{ kind: 'held', reason: words }], kept: false, held: true });
         expect(bringLineWords(result.lines[0], 'Mullumbimby')).toBe(words);
+    });
+});
+
+describe('a Need on a community that wants an Offer first', () => {
+    const REFUSAL = 'CONTRIBUTION_REQUIRED: list at least one Offer before you can post Needs or accept Offers.';
+    const SENTENCE = '{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.';
+    const SAID = SENTENCE.replace('{name}', 'Mullumbimby');
+    const refuses = () => answer(400, { error: REFUSAL });
+    const needs = [listing('n1', { type: 'need', title: 'A ladder' }), listing('n2', { type: 'need', title: 'A spade' })];
+
+    it('says so once, in the member\'s words: the rest would hear the same', async () => {
+        const { deps } = fakes([], [], refuses);
+        const result = await runBring(OFFER, { bring: needs, gone: [] }, identity, undefined, deps);
+        expect(deps.post).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({ brought: 0, lines: [{ kind: 'needs-offer' }], kept: false, held: true });
+        expect(bringLineWords(result.lines[0], 'Mullumbimby')).toBe(SAID);
+    });
+
+    it('is in every language the phone ships: the node\'s own sentence has no translation', () => {
+        const dir = path.resolve(__dirname, '../../words');
+        const catalogs = fs.readdirSync(dir).filter((f) => /^[a-zA-Z-]+\.json$/.test(f) && f !== 'en.json');
+        expect(catalogs).toHaveLength(24);
+        for (const file of catalogs) {
+            const words = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'))[SENTENCE];
+            expect(words, file).toContain('{name}');
+            expect(words, file).not.toBe(SENTENCE);
+        }
+    });
+
+    it('every Offer stayed behind: each says why, and the Needs wait for one', async () => {
+        const { deps } = fakes([], [], (body) => (body.type === 'offer' ? answer(400, { error: 'Add a photo first' }) : refuses()));
+        const result = await runBring(OFFER, { bring: [listing('o', { title: 'Seedlings', photos: [] }), ...needs], gone: [] }, identity, undefined, deps);
+        expect(result).toEqual({ brought: 0, kept: false, held: true, lines: [{ kind: 'no-photo', title: 'Seedlings' }, { kind: 'needs-offer' }] });
+    });
+
+    it('a Need waiting for its photo beside it is no community out of reach: the sheet says only what is true', async () => {
+        const { deps } = fakes([], [], refuses);
+        deps.fetchPhoto = vi.fn(async (url: string) => (url.includes('/n1/') ? { failed: 'later' as const } : { photo: PHOTO }));
+        const result = await runBring(OFFER, { bring: needs, gone: [] }, identity, undefined, deps);
+        expect(result).toEqual({ brought: 0, lines: [{ kind: 'needs-offer' }], kept: false, held: true });
+    });
+
+    describe('after the refusal', () => {
+        const noted = () => noteBringOffer({ publicKey: ME, from: GLOBAL, to: LOCAL, name: 'Mullumbimby', alreadyMember: false, now: 1_000 });
+        const refused = { brought: 0, lines: [{ kind: 'needs-offer' as const }], kept: false, held: true };
+        const stored = (at: number) => pendingBringOffer(ME, LOCAL, at);
+        const anOffer = (over: Partial<OwnListing> = {}) => listing('their-own', { title: 'Their own', ...over });
+        const tomorrow = 2_000 + BRING_ASK_AGAIN_MS;
+
+        it('the offer is kept, with no yes on it, for a day: the Needs are not posted unasked', async () => {
+            await noted();
+            await settleBringOffer({ ...OFFER, accepted: true }, refused, 2_000);
+            expect(await stored(tomorrow - 1)).toBeNull();
+            expect(await stored(tomorrow)).toMatchObject({ accepted: false, waitsForOffer: true });
+        });
+
+        it('nothing is asked until an Offer is listed there: the same answer would come, and a "Not now" could end it', async () => {
+            await noted();
+            await settleBringOffer({ ...OFFER, accepted: true }, refused, 2_000);
+            const offer = (await stored(tomorrow))!;
+            expect(await planBring(offer, identity, fakes(needs).deps)).toBe('waiting');
+            expect(await planBring(offer, identity, fakes(needs, [listing('other-need', { type: 'need' })]).deps)).toBe('waiting');
+        });
+
+        it('an Offer listed there, in any state, opens it: the node counts one ever listed (engine/posts.ts hasListedOffer)', async () => {
+            await noted();
+            await settleBringOffer({ ...OFFER, accepted: true }, refused, 2_000);
+            const offer = (await stored(tomorrow))!;
+            expect(await planBring(offer, identity, fakes(needs, [anOffer()]).deps)).toMatchObject({ bring: needs });
+            expect(await planBring(offer, identity, fakes(needs, [anOffer({ status: 'cancelled', active: false })]).deps)).toMatchObject({ bring: needs });
+        });
+
+        it('an Offer still to bring can open the way itself: a photo that missed every try, say, so the question comes back', async () => {
+            const offer = { ...OFFER, waitsForOffer: true };
+            const [need] = needs;
+            const seedlings = listing('o', { title: 'Seedlings', createdAt: '2026-10-05T00:00:00.000Z' });
+            const { deps, posted } = fakes([need, seedlings]);
+            const plan = await planBring(offer, identity, deps);
+            expect(plan).toMatchObject({ bring: [{ id: 'o' }, { id: 'n1' }] });
+            expect(await runBring(offer, plan as BringPlan, identity, undefined, deps)).toEqual({ brought: 2, lines: [], kept: false, held: false });
+            expect(posted.map((p) => p.type)).toEqual(['offer', 'need']);
+        });
+
+        it('with nothing left to bring it has no Offer to wait for', async () => {
+            expect(await planBring({ ...OFFER, waitsForOffer: true }, identity, fakes([]).deps)).toEqual({ bring: [], gone: [] });
+        });
+
+        it('only the node\'s refusal starts the wait: an offer it never refused is asked as ever', async () => {
+            expect(await planBring(OFFER, identity, fakes(needs).deps)).toMatchObject({ bring: needs });
+        });
+
+        it('the question then works as any: a first "Not now" holds it a day, and a yes brings the Needs and ends the offer', async () => {
+            await noted();
+            await settleBringOffer({ ...OFFER, accepted: true }, refused, 2_000);
+            await putOffBringOffer((await stored(tomorrow))!, tomorrow);
+            expect(await stored(tomorrow)).toBeNull();
+            const accepted = await acceptBringOffer((await stored(tomorrow + BRING_ASK_AGAIN_MS))!);
+            const { deps, posted } = fakes(needs, [anOffer()]);
+            const result = await runBring(accepted, await planBring(accepted, identity, deps) as BringPlan, identity, undefined, deps);
+            expect(result).toEqual({ brought: 2, lines: [], kept: false, held: false });
+            expect(posted.map((p) => p.title)).toEqual(['A ladder', 'A spade']);
+            await settleBringOffer(accepted, result, tomorrow + BRING_ASK_AGAIN_MS);
+            expect(await stored(tomorrow + BRING_ASK_AGAIN_MS)).toBeNull();
+        });
+
+        it('it lapses as any offer does', async () => {
+            await noted();
+            await settleBringOffer({ ...OFFER, accepted: true }, refused, 2_000);
+            expect(await stored(1_001 + BRING_OFFER_KEEP_MS)).toBeNull();
+        });
     });
 });
 

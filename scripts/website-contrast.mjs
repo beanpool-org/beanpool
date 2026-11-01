@@ -30,8 +30,7 @@ const LEAFLET = path.dirname(require.resolve('leaflet/dist/leaflet.js'));
 let themes = ['light', 'dark'];
 const themeArg = process.argv.find((a) => a.startsWith('--theme='))?.split('=')[1]
     ?? (process.argv.indexOf('--theme') !== -1 ? process.argv[process.argv.indexOf('--theme') + 1] : null)
-    ?? process.env.CONTRAST_THEME
-    ?? process.env.THEME;
+    ?? process.env.CONTRAST_THEME;
 if (themeArg) {
     if (!['light', 'dark'].includes(themeArg)) {
         console.error(`Unknown theme: ${themeArg}. Must be 'light' or 'dark'.`);

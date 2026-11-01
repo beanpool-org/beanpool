@@ -347,6 +347,32 @@ describe('a request waiting for this member, on the phone', () => {
         expect(alerts.said).toContain('That message was deleted, so no report went. They are blocked.');
     });
 
+    // The deciding review of #2705: a lapsed request's line stays in the chat, and the opener's next line is a new request.
+    describe('the bar\'s Report stops at the request\'s start', () => {
+        const lapsed = { id: 'lapsed', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'From last time', rawTimestamp: iso(now - 40 * 86_400_000), timestamp: '' };
+        const reportWith = async (lines: unknown[]) => {
+            standIn({ getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST }, getMessages: lines, syncSingleConversation: true, reportDmLine: { success: true } });
+            await open();
+            await tap('Report');
+            const reasonChip = Array.from(host.querySelectorAll<HTMLElement>('[data-modal] button')).find((b) => b.textContent === 'Spam or scam');
+            await act(async () => { reasonChip!.click(); });
+            await tap('Submit report');
+        };
+
+        it('reports the line of this request', async () => {
+            await reportWith([lapsed, { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'hello Ana', rawTimestamp: iso(now - 60_000), timestamp: '' }]);
+            expect(callsOf('reportDmLine')).toBe(1);
+            expect(blocks.made).toEqual(['kofi-key']);
+        });
+
+        it('with that line deleted, never the lapsed one: it blocks, files no report, and says so, as the web does', async () => {
+            await reportWith([lapsed, { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'removed', text: 'This message was deleted', metadata: { removed: true }, rawTimestamp: iso(now - 60_000), timestamp: '' }]);
+            expect(callsOf('reportDmLine')).toBe(0);
+            expect(blocks.made).toEqual(['kofi-key']);
+            expect(alerts.said).toContain('That message was deleted, so no report went. They are blocked.');
+        });
+    });
+
     it('a request with no line here and no word from the node: Report waits, for this phone can\'t yet tell deleted from not here yet', async () => {
         standIn({
             getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },

@@ -14,7 +14,7 @@ export function EventCopyDoor({ copy }: { copy: EventCopy }) {
                 <a
                     data-testid="event-copy-ask"
                     href={`/?ask=${encodeURIComponent(copy.from.host)}`}
-                    className="inline-flex items-center justify-center min-h-[48px] px-3 rounded-xl bg-violet-700 dark:bg-violet-600 text-sm font-bold text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                    className="inline-flex items-center justify-center min-h-[48px] px-3 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-sm font-bold text-bp-commit-on no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-commit-fill focus-visible:ring-offset-1"
                 >
                     {button}
                 </a>

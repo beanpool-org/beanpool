@@ -29,5 +29,5 @@ const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     door: { marginBottom: 14 },
     line: { fontSize: 15, fontWeight: '600', color: colors.text.body, lineHeight: 21, marginBottom: 10 },
     button: { minHeight: 48, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.brand.fill },
-    buttonText: { fontSize: 15, fontWeight: '800', color: '#fff', textAlign: 'center' },
+    buttonText: { fontSize: 15, fontWeight: '800', color: colors.text.onBrand, textAlign: 'center' },
 });

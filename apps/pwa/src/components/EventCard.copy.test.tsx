@@ -72,7 +72,7 @@ describe('a copy on its page', () => {
 
 describe('a copy on the visitor\'s sheet', () => {
     it('the door, not "Join to see who\'s hosting", and no promise of a place after joining', () => {
-        render(<VisitorPostDetail post={copy} beans={false} onJoin={() => {}} />);
+        render(<VisitorPostDetail post={copy} beans={false} distanceKm={null} onJoin={() => {}} />);
         expect(screen.getByTestId('event-copy-ask').getAttribute('href')).toBe('/?ask=mullum.example.org');
         expect(screen.queryByTestId('visitor-join')).toBeNull();
         expect(screen.getByTestId('visitor-detail-place').textContent).toBe('from Mullumbimby');
@@ -80,7 +80,7 @@ describe('a copy on the visitor\'s sheet', () => {
     });
 
     it('an ordinary event keeps its Join', () => {
-        render(<VisitorPostDetail post={event} beans={false} onJoin={() => {}} />);
+        render(<VisitorPostDetail post={event} beans={false} distanceKm={null} onJoin={() => {}} />);
         expect(screen.getByTestId('visitor-join')).toBeTruthy();
         expect(screen.queryByTestId('event-copy-door')).toBeNull();
     });

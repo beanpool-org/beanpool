@@ -51,6 +51,8 @@ export function welcomeInstructions(f: WelcomeFacts): string {
             + ' For its photos give photo_urls (public addresses of images, which this server fetches) or photo_ids (each image uploaded first: '
             + 'photo_upload_link gives an address to curl each image to, and a program that sends your token can POST to /mcp/photos on this server); '
             + 'base64 photos are for a program that has the files.'
+            // Tags T4: assistants wrote "Tags: music, live, gig" into descriptions.
+            + ' Tag a post from the library first (tags, ids from tags_search); free_tags are only for what the library lacks; never write tags into a description.'
         : '';
     return [
         `You are connected to "${f.community}", a BeanPool community server at ${f.url}, acting for ${f.callsign}, who is an ${f.role} there. `

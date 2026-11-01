@@ -65,9 +65,10 @@ import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
 import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
 import { composeTargetFor } from '../../utils/compose-options';
-import { toolHomeCardType } from '@beanpool/core';
+import { toolHomeCardType, readToolsSettings } from '@beanpool/core';
 import { toolOfHomeCard } from '../../tools/index';
 import { ToolHomeBody } from '../../tools/frame';
+import { YourToolsBody } from '../../components/home/YourToolsBody';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 
 /**
@@ -1063,6 +1064,20 @@ export default function HomeScreen() {
                     onEdit={tailor ? () => setEditOpen(true) : undefined}
                 />,
             );
+            case 'tools': {
+                const settings = readToolsSettings(inst.settings);
+                return frame(
+                    <YourToolsBody
+                        tools={settings.tools}
+                        owner={identity?.publicKey ?? null}
+                        colors={colors}
+                        now={now}
+                        onChangeTools={(next) => {
+                            changeLayout(changeCardSettings(layoutRef.current, inst.id, { tools: next }, Date.now()));
+                        }}
+                    />,
+                );
+            }
             default: {
                 // A tool's card (tools/index.ts): its manifest's lines, worked out here from the tool's document on this phone.
                 const tool = toolOfHomeCard(type);
@@ -1218,7 +1233,7 @@ export default function HomeScreen() {
                     canRemove={!!menuCard && canRemoveCard(menuCard.type, pins)}
                     canUp={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1].type, pins)}
                     canDown={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1].type, pins)}
-                    onSettings={menuCard && homeCardType(menuCard.type)?.readSettings ? () => openSettings(menuCard) : undefined}
+                    onSettings={menuCard && homeCardType(menuCard.type)?.readSettings && menuCard.type !== 'tools' ? () => openSettings(menuCard) : undefined}
                     onRemove={() => { if (menuCard) onRemoveCard(menuCard); }}
                     onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'up', drawn, Date.now(), pins)); }}
                     onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'down', drawn, Date.now(), pins)); }}

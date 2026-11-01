@@ -41,6 +41,7 @@ export interface ShapeSettings {
     join: ShapeSetting<JoinState>;
     openDoor: ShapeSetting<boolean>;
     wordsDoor?: ShapeSetting<boolean>;
+    doorCheck?: ShapeSetting<boolean>;
     knocks: ShapeSetting<boolean>;
     preview: ShapeSetting<boolean>;
     beans: ShapeSetting<boolean> & {
@@ -362,6 +363,10 @@ export function getConsequenceSentence(
             return targetValue === true
                 ? t('People will be able to join with 12 secret words without a sign-in.')
                 : t('People will join with a sign-in only.');
+        case 'doorCheck':
+            return targetValue === true
+                ? t('When lots of people are joining, a 12-words join will start with a Cloudflare check, if the keys are on the server. A sign-in never needs it.')
+                : t('A 12-words join will never ask for a Cloudflare check.');
         case 'recoveryCopies':
             // Nothing moves by itself (design §5.3): each says what happens to copies already made, and the one thing this
             // server can't hold, a phone app from before the setting, which keeps sending its copies to the vault.

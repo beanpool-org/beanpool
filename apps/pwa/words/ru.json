@@ -3930,5 +3930,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "Владелец решил, когда голосовать могли слишком мало членов сообщества, но теперь их достаточно, так что решает это голосование. Причина: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "Владелец решил, когда голосовать могли слишком мало членов сообщества, но теперь их достаточно, так что решает это голосование.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "Проголосовать могут слишком мало членов сообщества, поэтому, если больше никто не проголосует, {name} вернётся, когда это голосование закроется.",
-  "Not executed: a reinstatement vote cancelled it": "Не исполнено: отменено голосованием о восстановлении"
+  "Not executed: a reinstatement vote cancelled it": "Не исполнено: отменено голосованием о восстановлении",
+  "Not sure what to charge? View the Community Pricing Guide": "Не знаете цену? Откройте Справочник цен сообщества"
 }

@@ -3543,5 +3543,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "Seorang pemilik memutuskan saat terlalu sedikit anggota yang bisa memberi suara, tetapi sekarang sudah cukup, jadi pemungutan suara ini yang memutuskan. Alasannya: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "Seorang pemilik memutuskan saat terlalu sedikit anggota yang bisa memberi suara, tetapi sekarang sudah cukup, jadi pemungutan suara ini yang memutuskan.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "Terlalu sedikit anggota yang bisa memberi suara, jadi kecuali lebih banyak yang memberi suara, {name} kembali saat pemungutan suara ini ditutup.",
-  "Not executed: a reinstatement vote cancelled it": "Tidak dilaksanakan: dibatalkan oleh pemungutan suara pemulihan"
+  "Not executed: a reinstatement vote cancelled it": "Tidak dilaksanakan: dibatalkan oleh pemungutan suara pemulihan",
+  "Not sure what to charge? View the Community Pricing Guide": "Tidak yakin berapa biayanya? Lihat Panduan Harga Komunitas"
 }

@@ -16,7 +16,8 @@ import {
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
-import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
+import { DOOR_WORK_MESSAGES, passDoorCheck, workPastCheck } from '../utils/door-work';
+import { useDoorCheck } from '../components/DoorCheckSheet';
 import { DoorChoices, DoorWorkProgress } from '../components/WordsDoor';
 import { startOneWayBack } from '../utils/one-way-back';
 import { vaultCopyKnown } from '../utils/vault';
@@ -216,6 +217,8 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
     const [doorCopies, setDoorCopies] = useState<SignInCopies>(() => signInCopiesAt());
     const [way, setWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
+    const { colors: checkColors, theme: checkTheme } = useTheme();
+    const doorCheck = useDoorCheck(checkColors, checkTheme === 'dark');
     /**
      * Another community's door that the member's Join in the app didn't open just now is taken as a link's: the router opens
      * this route in spellings no intercept can all know, and only that Join leaves the mark (utils/open-door.ts takeDoorTap).
@@ -500,7 +503,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             setSuggestions([]);
             setWorkWaiting(run.state().phase !== 'ready');
             // Stops waiting the moment the member leaves the step ("Choose another way", Back): PR #1452 review, finding 2.
-            const ready = await solutionUnlessLeft(run, stop.signal);
+            const ready = await workPastCheck(run, stop.signal, doorCheck.ask);
             if (stop.signal.aborted || ready.kind === 'cancelled') return;
             setWorkWaiting(false);
             if (ready.kind === 'refused') {
@@ -511,7 +514,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             joinSendingRef.current = true;
             setPhase('joining');
             const joining = account.createdHere ? await commitOpenDoorKey(doorUrl, account, typed) : account.identity;
-            const answer = await submitWordsJoin(doorUrl, joining, typed, run);
+            const answer = await submitWordsJoin(doorUrl, joining, typed, run, (check) => passDoorCheck(run, check, stop.signal, doorCheck.ask));
             await afterAnswer(answer, account, typed, 'words', 'join');
         } catch (e) {
             setError(errorWords(e, t('Your join could not be completed. Please try again.')));
@@ -701,7 +704,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                                     onWords={chooseWords}
                                     onSignIn={handleSignIn}
                                     disabled={loading}
-                                    busy={doorWork.busy}
+                                    busy={doorWork.busy ? phoneDoorLineWords(doorWork.busy) : null}
                                     wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                     signInNote={keeper.choose}
                                     keepsNoCopies={doorCopies === 'none'}
@@ -797,6 +800,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                     )}
                 </View>
             </KeyboardAwareScrollView>
+            {doorCheck.sheet}
         </SafeAreaView>
     );
 }

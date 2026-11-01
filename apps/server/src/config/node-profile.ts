@@ -66,6 +66,11 @@ export interface ProfileSwitches {
      *  anyone may join with a name and a little door work, no provider (routes/open-join.ts `door: 'words'`; the two-doors
      *  design §2, which made D1 "sign-in optional", 2026-10-01). Means nothing while `openJoin` is off. */
     ssoRequiredForJoin: boolean;
+    /** On a busy day the 12-words door asks for a person check first (services/door-check.ts): Cloudflare Turnstile, on a
+     *  page of its own on another origin. Means nothing without the door's three TURNSTILE_* keys in .env, so nothing here
+     *  can depend on Cloudflare unless its operator chose that. Off on a local community, whose door is shut. The owners'
+     *  setting (`doorCheck` under How this community works) is this switch's override. */
+    doorCheck: boolean;
     /** Beans move: member-to-member sends and credit. Off: the money entry points refuse, and posts carry no price. */
     beans: boolean;
     escrow: boolean;
@@ -203,6 +208,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
     local: {
         openJoin: false,
         ssoRequiredForJoin: true,
+        doorCheck: false,
         beans: true,
         escrow: true,
         enterprises: true,
@@ -233,6 +239,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         openJoin: true,
         // Two doors side by side, 12 words first (the two-doors design §2, 2026-10-01): a sign-in is optional.
         ssoRequiredForJoin: false,
+        // A person check when the door is busy (Marty, 2026-11-01). Nothing happens until the node has the keys.
+        doorCheck: true,
         beans: false,
         escrow: false,
         enterprises: false,

@@ -3,7 +3,7 @@ import {
     HOME_CARD_TYPES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS,
     HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardSettings,
     cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard, readChatSettings, readDecideSettings, readHomeLayout,
-    readSearchSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
+    readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 import { t } from '../words.js';
 import { toolHomeCardTypes } from '../tools/index.js';
@@ -284,7 +284,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
         // A tool's card (tools/index.ts) is wherever its tool is, by its own manifest: the built-in types are pinned here.
         const toolCards = new Set(toolHomeCardTypes().map(t => t.id));
-        expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'shop', 'events', 'market', 'search', 'groups', 'chat', 'joined', 'pulse', 'sky', 'notices', 'community']);
+        expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'shop', 'events', 'market', 'search', 'groups', 'chat', 'joined', 'pulse', 'sky', 'notices', 'tools', 'community']);
         expect(on(global).filter(id => toolCards.has(id))).toEqual(toolHomeCardTypes().filter(t => t.onNode(global)).map(t => t.id));
         expect(on(local)).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'safety' && id !== 'find'));
         const adminsInvite = { ...local, features: { ...local.features, door: 'admins' } };
@@ -357,6 +357,24 @@ describe('home frame §5.2 (4): the default and the words', () => {
         expect(added.ok && cardsToAsk(added.layout)).toContain('shop');
         // Not in the newcomer's starter set: a member adds it, or opens their shop from Tools.
         expect(HOME_STARTER_SET).not.toContain('shop');
+    });
+
+    it('Your tools (home-tools-card): one of a kind, For you, on every node, never asked of the node; reads tools settings tolerantly', () => {
+        const tools = HOME_CARD_TYPES.find(t => t.id === 'tools')!;
+        expect(tools).toMatchObject({ name: 'Your tools', group: 'you', asks: 'none' });
+        expect(tools.multiple).toBeUndefined();
+        expect(tools.fixed).toBeUndefined();
+        expect(tools.onNode({ profile: 'global', features: {} })).toBe(true);
+        expect(tools.onNode({ profile: 'local', features: {} })).toBe(true);
+        expect(tools.readSettings).toBe(readToolsSettings);
+        expect(readToolsSettings({ tools: ['things', 'garden'] })).toEqual({ tools: ['things', 'garden'] });
+        expect(readToolsSettings({ tools: ['things', 'things', '  garden  ', '', 123, null] })).toEqual({ tools: ['things', 'garden'] });
+        expect(readToolsSettings(null)).toEqual({ tools: [] });
+        expect(readToolsSettings('nope')).toEqual({ tools: [] });
+        const added = addCard(layout([one('steps')]), 'tools', { settings: { tools: ['things'] }, now: NOW });
+        expect(added.ok && added.layout.cards[0]).toEqual({ id: 'tools', type: 'tools', settings: { tools: ['things'] } });
+        expect(added.ok && addCard(added.layout, 'tools', { now: NOW })).toEqual({ ok: false, refused: 'on-home' });
+        expect(added.ok && cardsToAsk(added.layout)).not.toContain('tools');
     });
 });
 

@@ -1,7 +1,7 @@
 /**
- * Lists show a listing photo's small copy (Marty, board, 9 Oct: "~200 px / ~10 KB copy for lists").
+ * Lists show a listing photo's small copy (shortest side 320 px, cap 640 px, ~6-18 KB; Marty, 1 Nov).
  *
- * A Market page of 20 rows downloaded 20 full photos. Now the photo route answers `size=thumb` with a ~200 px copy of
+ * A Market page of 20 rows downloaded 20 full photos. Now the photo route answers `size=thumb` with a sharp copy of
  * the photo, kept in the image store beside it (storage/photo-thumbnails.ts), behind exactly the gates the photo has.
  *
  * Every run is the real server over TLS through the real middleware, reads signed, in its own process on its own data
@@ -9,9 +9,9 @@
  * no real bucket and no BeanPool node is contacted).
  *
  *  1. Made at upload: a listing with a real JPEG, WebP, PNG and a PNG with transparency (src/__fixtures__/photos). Each
- *     photo's small copy is in the store beside it, its longest side 200 px, the same format, the PNG's transparency
- *     kept, each at most 10 KB; served at the URL the listing read hands out with `&size=thumb`, the same type and the
- *     same cache header as the photo, the photo itself unchanged at its own URL.
+ *     photo's small copy is in the store beside it, shortest side 320 px (cap 640 px, never enlarged), the same format,
+ *     the PNG's transparency kept, each ~6-18 KB; served at the URL the listing read hands out with `&size=thumb`, the
+ *     same type and the same cache header as the photo, the photo itself unchanged at its own URL.
  *     Two hostile shapes the node's photo check accepts (review opus-1742 #1): a ~130 KB PNG of 16,777,216×1 px (16-bit
  *     RGBA), which a decoder would need over a gigabyte for, and the same with its image data stopping early (its chunks
  *     whole), which can never give a copy. No small copy, the photo itself served, the process alive with its peak
@@ -66,7 +66,7 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${MODE} ${msg}`);
 }
 const DAY = 24 * 60 * 60 * 1000;
-const THUMB_MAX_BYTES = 10 * 1024;
+const THUMB_MAX_BYTES = 25 * 1024;
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'photos');
 const fixture = (name: string): Buffer => fs.readFileSync(path.join(FIXTURES, name));
 const dataUrl = (mime: string, bytes: Buffer): string => `data:${mime};base64,${bytes.toString('base64')}`;
@@ -160,7 +160,8 @@ async function main(): Promise<void> {
     // Absent on a build without small copies (the fail-first run): the checks then fail rather than the suite crashing.
     const thumbs = await import('./storage/photo-thumbnails.js').catch(() => null);
     const settled = async (): Promise<void> => { if (thumbs) await thumbs.thumbnailsSettled(); else await new Promise(r => setTimeout(r, 300)); };
-    const thumbKeyOf = (key: string): string => key.replace(/\.(jpg|png|webp)$/, '-t.$1');
+    const thumbKeyOf = (key: string): string => key.replace(/\.(jpg|png|webp)$/, '-s.$1');
+    const oldThumbKeyOf = (key: string): string => key.replace(/\.(jpg|png|webp)$/, '-t.$1');
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
 
     await initTls();
@@ -221,10 +222,10 @@ async function main(): Promise<void> {
     // ── 1. made at upload ─────────────────────────────────────────────────────────────────────
     console.log('\n── 1. made when the photo is stored ──');
     const fixtures = [
-        { name: 'listing-800.jpg', mime: 'image/jpeg', format: 'jpeg', alpha: false },
-        { name: 'listing-800.webp', mime: 'image/webp', format: 'webp', alpha: false },
-        { name: 'listing-400.png', mime: 'image/png', format: 'png', alpha: false },
-        { name: 'listing-300-alpha.png', mime: 'image/png', format: 'png', alpha: true },
+        { name: 'listing-800.jpg', mime: 'image/jpeg', format: 'jpeg', alpha: false, expectedWidth: 320, expectedHeight: 320 },
+        { name: 'listing-800.webp', mime: 'image/webp', format: 'webp', alpha: false, expectedWidth: 427, expectedHeight: 320 },
+        { name: 'listing-400.png', mime: 'image/png', format: 'png', alpha: false, expectedWidth: 320, expectedHeight: 320 },
+        { name: 'listing-300-alpha.png', mime: 'image/png', format: 'png', alpha: true, expectedWidth: 300, expectedHeight: 300 },
     ];
     const originals = fixtures.map(f => fixture(f.name));
     const shelf = make('Thumb shelf, four photos', fixtures.map((f, i) => dataUrl(f.mime, originals[i])));
@@ -237,8 +238,8 @@ async function main(): Promise<void> {
         const kept = row.storage_key ? await readObject(store, thumbKey) : null;
         assert(!!kept, `${f.name}: its small copy is in the store beside it (${thumbKey})`);
         const meta = kept ? await sharp(kept).metadata() : null;
-        assert(!!meta && Math.max(meta.width ?? 0, meta.height ?? 0) === 200 && meta.format === f.format && !!meta.hasAlpha === f.alpha,
-            `${f.name}: 200 px on its longest side, ${f.format}${f.alpha ? ', its transparency kept' : ''} (got ${meta?.width}x${meta?.height} ${meta?.format} alpha ${meta?.hasAlpha})`);
+        assert(!!meta && meta.width === f.expectedWidth && meta.height === f.expectedHeight && meta.format === f.format && !!meta.hasAlpha === f.alpha,
+            `${f.name}: ${f.expectedWidth}x${f.expectedHeight} px, ${f.format}${f.alpha ? ', its transparency kept' : ''} (got ${meta?.width}x${meta?.height} ${meta?.format} alpha ${meta?.hasAlpha})`);
         assert(!!kept && kept.length <= THUMB_MAX_BYTES, `${f.name}: ${kept?.length} bytes, at most ${THUMB_MAX_BYTES} (the photo is ${originals[i].length})`);
         const full = await get(shelfUrls[i], carol);
         const small = await get(thumbOf(shelfUrls[i]), carol);
@@ -254,6 +255,36 @@ async function main(): Promise<void> {
             `the photo's own URL still serves the 800 px photo, unchanged (${full.bytes.length} B)`);
     }
     console.log(`   sizes: ${sizes.join('; ')}`);
+
+    // ── 1b. sizes: 3:2, 1:1, 4:5, panorama, photo already small ──────────────────────────────
+    console.log('\n── 1b. sizes: 3:2, 1:1, 4:5, a panorama, a photo already small ──');
+    {
+        const sizeSpecs = [
+            { label: '3:2 (600x400)', w: 600, h: 400, expW: 480, expH: 320 },
+            { label: '1:1 (800x800)', w: 800, h: 800, expW: 320, expH: 320 },
+            { label: '4:5 (400x500)', w: 400, h: 500, expW: 320, expH: 400 },
+            { label: 'a panorama (800x200)', w: 800, h: 200, expW: 640, expH: 160 },
+            { label: 'a photo already small (250x150)', w: 250, h: 150, expW: 250, expH: 150 },
+        ];
+        const sizePhotos = await Promise.all(sizeSpecs.map(s =>
+            sharp({ create: { width: s.w, height: s.h, channels: 3, background: { r: 60, g: 120, b: 180 } } }).jpeg().toBuffer()
+        ));
+        const sizePostId = make('Thumb sizes post', sizePhotos.map(b => dataUrl('image/jpeg', b)));
+        await settled();
+        const sizeUrls = await urlsOf(sizePostId);
+        for (const [i, s] of sizeSpecs.entries()) {
+            const row = rowOf(sizePostId, i);
+            const thumbKey = row.storage_key ? thumbKeyOf(row.storage_key) : '';
+            const kept = row.storage_key ? await readObject(store, thumbKey) : null;
+            assert(!!kept, `${s.label}: small copy created in store (${thumbKey})`);
+            const meta = kept ? await sharp(kept).metadata() : null;
+            assert(!!meta && meta.width === s.expW && meta.height === s.expH,
+                `${s.label}: resized to ${s.expW}x${s.expH} (got ${meta?.width}x${meta?.height})`);
+            const small = await get(thumbOf(sizeUrls[i]), carol);
+            assert(small.status === 200 && !!kept && small.bytes.equals(kept),
+                `${s.label}: served at &size=thumb (${small.status} ${small.bytes.length} B)`);
+        }
+    }
     {
         const wide = await longRowPng(16_777_216, 1);
         const cut = await longRowPng(16_777_216, 0.5);
@@ -301,7 +332,7 @@ async function main(): Promise<void> {
         const [url] = await urlsOf(old);
         const first = await get(thumbOf(url), carol);
         const meta = first.status === 200 ? await sharp(first.bytes).metadata().catch(() => null) : null;
-        assert(first.status === 200 && meta?.width === 200 && first.bytes.length <= THUMB_MAX_BYTES,
+        assert(first.status === 200 && meta?.width === 320 && meta?.height === 320 && first.bytes.length <= THUMB_MAX_BYTES,
             `the first request is answered with a small copy (${first.status}, ${meta?.width}x${meta?.height}, ${first.bytes.length} B)`);
         await settled();
         const kept = await readObject(store, thumbKey);
@@ -311,6 +342,25 @@ async function main(): Promise<void> {
         await writeObject(store, thumbKey, marked, { mime: 'image/jpeg' });
         const second = await get(thumbOf(url), carol);
         assert(second.status === 200 && second.bytes.equals(marked), 'the next request is served from the store, not made again');
+    }
+    {
+        // A page of requests from before still resizes one at a time:
+        const page: string[] = [];
+        for (let i = 0; i < 6; i++) {
+            const old = make(`Thumb concurrent ${i}, from before`, [TINY_PNG]);
+            const bytes = Buffer.concat([fixture('listing-800.jpg'), Buffer.from(`concurrent-item-${i}`)]);
+            const key = postPhotoKey(old, 0, sha256Hex(bytes), 'image/jpeg');
+            await writeObject(store, key, bytes, { mime: 'image/jpeg' });
+            db.prepare('UPDATE post_photos SET photo_data = NULL, storage_key = ?, sha256 = ?, bytes = ?, mime = ? WHERE post_id = ? AND order_num = 0')
+                .run(key, sha256Hex(bytes), bytes.length, 'image/jpeg', old);
+            page.push(thumbOf((await urlsOf(old))[0]));
+        }
+        const answers = await Promise.all(page.map(u => get(u, carol)));
+        assert(answers.every(r => r.status === 200 && r.bytes.length <= THUMB_MAX_BYTES),
+            `a page of 6 uncached requests: all answered (${answers.length} answers)`);
+        const peak = thumbs?.peakConcurrentResizes?.() ?? 0;
+        assert(peak <= 1, `a page of requests still resizes one at a time (peak concurrent: ${peak})`);
+        await settled();
     }
     if (fake) {
         const page: string[] = [];
@@ -392,7 +442,7 @@ async function main(): Promise<void> {
         const sample = await readObject(store, thumbKeyOf(rowOf(shelf, 0).storage_key ?? ''));
         const cols = (db.prepare("SELECT name FROM pragma_table_info('post_photos')").all() as { name: string }[]).map(c => c.name);
         assert(!cols.some(c => /thumb/i.test(c)), `post_photos has no column for it (${cols.join(', ')})`);
-        const keyRows = db.prepare("SELECT COUNT(*) AS n FROM post_photos WHERE storage_key LIKE '%-t.%'").get() as { n: number };
+        const keyRows = db.prepare("SELECT COUNT(*) AS n FROM post_photos WHERE storage_key LIKE '%-t.%' OR storage_key LIKE '%-s.%'").get() as { n: number };
         assert(keyRows.n === 0, `no row names a small copy (${keyRows.n})`);
         db.pragma('wal_checkpoint(TRUNCATE)');
         const dbFile = fs.readFileSync(path.join(dataDir, 'state.db'));
@@ -415,6 +465,10 @@ async function main(): Promise<void> {
         };
         const keptThumb = thumbKeyOf(rowOf(live, 0).storage_key!);
         await age(keptThumb);
+        // An old-key file (-t) for a live listing: the sweep reclaims it even though the photo row exists.
+        const oldThumb = oldThumbKeyOf(rowOf(live, 0).storage_key!);
+        await writeObject(store, oldThumb, jpg.subarray(0, 2000), { mime: 'image/jpeg' });
+        await age(oldThumb);
         // A small copy whose photo no row names: an old listing's, left behind.
         const strayPhoto = postPhotoKey('thumb-stray-listing', 0, sha256Hex(Buffer.from('stray')), 'image/jpeg');
         const stray = thumbKeyOf(strayPhoto);
@@ -422,7 +476,24 @@ async function main(): Promise<void> {
         await age(stray);
         await sweepOrphanedImageObjects({ db, dataDir, store });
         assert(!!(await headObject(store, keptThumb)), "the sweep keeps an aged small copy while a row names its photo");
+        assert(!(await headObject(store, oldThumb)), 'and sweeps the old-key (-t) file even while a row names its photo');
         assert(!(await headObject(store, stray)), 'and removes an aged one whose photo no row names');
+
+        // Delete paths: removing a photo removes both current (-s) and legacy (-t) small copies.
+        const delBasket = make('Thumb delete cleanup', [dataUrl('image/jpeg', jpg)]);
+        await settled();
+        const delKey = rowOf(delBasket, 0).storage_key!;
+        const delNewThumb = thumbKeyOf(delKey);
+        const delOldThumb = oldThumbKeyOf(delKey);
+        await writeObject(store, delOldThumb, jpg.subarray(0, 2000), { mime: 'image/jpeg' });
+        assert(!!(await headObject(store, delNewThumb)) && !!(await headObject(store, delOldThumb)),
+            'setup: photo has both new and legacy small copies');
+        db.prepare('DELETE FROM post_photos WHERE post_id = ?').run(delBasket);
+        deleteStoredObjects(db, [delKey], store);
+        await settled();
+        assert(!(await headObject(store, delKey)), 'the photo object is removed');
+        assert(!(await headObject(store, delNewThumb)), "the photo's small copy is removed");
+        assert(!(await headObject(store, delOldThumb)), "the photo's legacy -t small copy is also removed");
 
         const before = thumbKeyOf(rowOf(live, 0).storage_key!);
         const png = fixture('listing-400.png');
@@ -474,7 +545,7 @@ async function main(): Promise<void> {
         }
         console.log(`   20-row Market page: ${full} B of photos → ${small} B of small copies (${(100 * small / Math.max(full, 1)).toFixed(1)}%)`);
         assert(rows.length === 20, `setup: the Market read lists the 20 rows (got ${rows.length})`);
-        assert(small > 0 && small * 5 <= full, `the page's small copies are at most a fifth of its photos (${small} B vs ${full} B)`);
+        assert(small > 0 && small * 4 <= full, `the page's small copies are at most a quarter of its photos (${small} B vs ${full} B)`);
     }
 
     if (fake) await fake.stop();

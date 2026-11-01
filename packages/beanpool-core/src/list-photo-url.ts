@@ -1,5 +1,5 @@
 /**
- * The URL a list draws a listing photo from: the node's ~200 px small copy of it (`size=thumb`, apps/server
+ * The URL a list draws a listing photo from: the node's small copy of it (shortest side 320 px, `size=thumb`, apps/server
  * storage/photo-thumbnails.ts) instead of the 800 px photo. A Market page of 20 rows was 20 full photos on prepaid data
  * (Marty, board, 9 Oct). The detail screens keep the photo's own URL.
  *

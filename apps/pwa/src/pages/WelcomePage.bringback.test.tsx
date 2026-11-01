@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { communityCopyForRelease, sealReleaseToDevice, sealSeedToCopyKey } from '@beanpool/core';
+import { communityCopyForRelease, communityHalfForRelease, sealReleaseToDevice, sealSeedToCopyKey } from '@beanpool/core';
 import { WelcomePage } from './WelcomePage';
 import { generateIdentity, importIdentity, loadIdentity, loadPendingJoin } from '../lib/identity';
 import { resetCapturedAuthReturn } from '../lib/web-join';
@@ -61,6 +61,40 @@ afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     resetCapturedAuthReturn();
+});
+
+describe('a bring-back code for a copy half kept at the key vault (vault rethink VR4)', () => {
+    it('this browser can\'t reach the vault: it says to use the phone app, opens nothing, saves nothing, and lets its key go', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        let asker = '';
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+            const path = String(input).replace(/^https?:\/\/[^/]+/, '');
+            const body = init.body ? JSON.parse(String(init.body)) : undefined;
+            if (path === '/api/community/info') return json(200, LOCAL);
+            if (path.startsWith('/api/member/re-enroll/status')) {
+                return json(200, {
+                    state: 'released', callsign: 'MiaMember', communityName: 'Mullum', memberKey: MEMBER_KEY, voucher: 'a-voucher',
+                    release: sealReleaseToDevice(communityHalfForRelease({ half: Buffer.alloc(32, 7).toString('base64'), copy: 'A'.repeat(43) }), asker, { collectionId: CODE, holderType: 'community-half' }),
+                });
+            }
+            if (path === '/api/member/re-enroll') {
+                asker = body.newPublicKey;
+                return json(200, { state: 'waiting', match: '47', expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+            }
+            return json(200, {});
+        }));
+        window.history.replaceState(null, '', `/app?rekey=${CODE.toLowerCase()}`);
+        const onComplete = vi.fn();
+        render(<WelcomePage onComplete={onComplete} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+        await screen.findByTestId('web-rekey-number');
+        await act(async () => { await vi.advanceTimersByTimeAsync(WEB_REKEY_POLL_MS + 50); });
+        expect(await screen.findByText(/which only the phone app can reach\. Ask the admin for a new code, and use it in the phone app\./)).toBeTruthy();
+        expect(screen.queryByTestId('web-rekey-brought-back')).toBeNull();
+        expect(await loadIdentity()).toBeNull();
+        expect(await loadPendingJoin()).toBeNull();
+        expect(onComplete).not.toHaveBeenCalled();
+    });
 });
 
 describe('a bring-back code in the web app', () => {

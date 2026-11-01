@@ -10,6 +10,16 @@
  * answered with the member's community copy and its key, sealed to it (@beanpool/core sealReleaseToDevice). The phone
  * opens the copy and saves the account only if it makes the member's key the answer names.
  *
+ * ## The shared placement (vault rethink VR4, design §4.3 steps 3 and 4)
+ *
+ * When what this server keeps is its half of a copy the key vault keeps (engine/community-copy.ts), the poll is answered
+ * with that half, sealed to the phone, and a **voucher** (core vault-wire.ts): the community's statement, signed by this
+ * server's node key, that its admin saw this member and that the phone's key may ask for their copy. The phone takes the
+ * voucher to the vault, which holds a day (D2), so the member's other phones can Stop it, and then releases the copy and
+ * its half. This server never calls the vault and never hears how that goes. It opens nothing here: its half alone says
+ * nothing of the key, and the voucher names only keys and a digest. The vault sees which community vouched at that
+ * moment, and not before.
+ *
  * What it never does: suspend the member, hold their key, move a row, or end a session. The member's account stays
  * exactly as it was; their other phones keep working. In the community-held placement the release is at once, as a
  * re-key is (design §4.3 "Why the hold stays in the shared placement"); the member's phones are told twice, when the code
@@ -26,8 +36,8 @@ import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { logger, sanitizeMessage } from '../logger.js';
 import { getMember, dispatchPushNotification } from '../state-engine.js';
-import { communityCopyForRelease, sealReleaseToDevice, type SealedShare } from '@beanpool/core';
-import { hasCommunityCopy, openCommunityCopy } from './community-copy.js';
+import { communityCopyForRelease, communityHalfForRelease, sealReleaseToDevice, type SealedShare, type VaultVoucher } from '@beanpool/core';
+import { HALF_HOLDER, hasCommunityCopy, openCommunityCopy, type CommunityCopyPlacement } from './community-copy.js';
 import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
 import { REKEY_CODE_TTL_MS, assertMayRekey, assertNotMisspeltRow, getInvalidatedKeyInfo, type RekeyRequestRow } from './member-wizards.js';
 
@@ -58,11 +68,12 @@ function refusal(status: number, message: string, code?: string): Error {
  * The member's copy, opened here and let go at once, before a code is handed out and again before one is spent. A
  * server whose seal key is gone or another one (restored from a backup without data/recovery-seal.key, a standby promoted
  * without it) still has the row; without this the admin was told the member was back, the code was used, and the
- * phone's poll met the seal only then (its 503 reads as "not reachable", so the phone waited out the code's day).
+ * phone's poll met the seal only then (its 503 reads as "not reachable", so the phone waited out the code's day). Says
+ * what it found: the member's copy, or this server's half of it.
  */
-function assertCopyOpens(member: string): void {
+function assertCopyOpens(member: string): CommunityCopyPlacement | null {
     try {
-        openCommunityCopy(member);
+        return openCommunityCopy(member)?.placement ?? null;
     } catch (e) {
         if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) throw refusal(409, BRING_BACK_CANT_OPEN, 'copy_unopenable');
         throw e;
@@ -143,14 +154,14 @@ export function issueBringBackCode(memberPublicKey: string, operatorPubkey: stri
  * when the account or its copy is gone or this server can't open the copy (assertCopyOpens).
  */
 export function confirmBringBack(req: RekeyRequestRow, throwawayKey: string, operatorPubkey: string, now = Date.now()):
-    { success: true; broughtBack: true; oldPubkey: string; callsign: string } {
+    { success: true; broughtBack: true; oldPubkey: string; callsign: string; placement: CommunityCopyPlacement } {
     assertPlainTablesWritable();
     const member = req.old_pubkey;
     const operator = (operatorPubkey || '').trim().toLowerCase() || 'owner:password';
     const row = getMember(member);
     if (!row || row.status === 'pruned' || !hasCommunityCopy(member)) throw refusal(409, BRING_BACK_GONE, 'account_gone');
     // Before the code is spent: refused here, it still waits, and no wrong number is counted.
-    assertCopyOpens(member);
+    const placement = assertCopyOpens(member) ?? 'whole';
     const at = new Date(now).toISOString();
     db.transaction(() => {
         const done = db.prepare("UPDATE rekey_requests SET status = 'completed', new_pubkey = ?, completed_at = ? WHERE id = ? AND status = 'pending'")
@@ -165,6 +176,9 @@ export function confirmBringBack(req: RekeyRequestRow, throwawayKey: string, ope
         );
     })();
     logger.info('AUTH', `[BringBack] ${row.callsign} (${shortKey(member)}) brought back to a new phone (${shortKey(throwawayKey)}) by ${shortKey(operator)}`);
+    // In the shared placement nothing is back yet: the vault holds it a day, and it is the vault that tells the member's
+    // phones (its own notices, which can be stopped). Said here too, it would be untrue, and they would be told twice.
+    if (placement === 'shared') return { success: true, broughtBack: true, oldPubkey: member, callsign: row.callsign, placement };
     try {
         dispatchPushNotification([member], operator,
             '🔑 Your account was just brought back',
@@ -173,7 +187,7 @@ export function confirmBringBack(req: RekeyRequestRow, throwawayKey: string, ope
     } catch (e) {
         logger.warn('AUTH', `[BringBack] could not tell the member's phones: ${(e as Error)?.message || e}`);
     }
-    return { success: true, broughtBack: true, oldPubkey: member, callsign: row.callsign };
+    return { success: true, broughtBack: true, oldPubkey: member, callsign: row.callsign, placement };
 }
 
 export interface BringBackReleased {
@@ -182,8 +196,16 @@ export interface BringBackReleased {
     communityName: string;
     /** The member's key: the phone saves the opened copy only if it makes this key. */
     memberKey: string;
-    /** The member's copy and its key, sealed to the asking throwaway key, bound to the code (sealReleaseToDevice). */
+    /**
+     * The member's copy and its key, or in the shared placement this server's half, sealed to the asking throwaway key,
+     * bound to the code (sealReleaseToDevice).
+     */
     release: SealedShare;
+    /**
+     * The shared placement: what the voucher will say, for services/node-voucher.ts to sign and put here as `voucher`
+     * (the node key signs asynchronously, and this is called inside synchronous reads). Absent for a whole copy.
+     */
+    voucherFor?: Omit<VaultVoucher, 'v' | 'community'>;
 }
 
 /**
@@ -198,12 +220,17 @@ export function bringBackRelease(req: RekeyRequestRow, askingKey: string, now = 
     if (!member || member.status === 'pruned') return { state: 'gone' };
     const copy = openCommunityCopy(req.old_pubkey);
     if (!copy) return { state: 'gone' };
-    const release = sealReleaseToDevice(communityCopyForRelease(copy), askingKey, { collectionId: req.code, holderType: BRING_BACK_HOLDER });
+    const shared = copy.placement === 'shared';
+    const release = shared
+        ? sealReleaseToDevice(communityHalfForRelease(copy), askingKey, { collectionId: req.code, holderType: HALF_HOLDER })
+        : sealReleaseToDevice(communityCopyForRelease(copy), askingKey, { collectionId: req.code, holderType: BRING_BACK_HOLDER });
     return {
         state: 'released',
         callsign: member.callsign,
         communityName: getLocalConfig().communityName || '',
         memberKey: req.old_pubkey,
         release,
+        // Good for the code's day and no longer, the same bytes at every poll: one code, one voucher, one hold at the vault.
+        ...(shared ? { voucherFor: { member: req.old_pubkey, phone: askingKey, copy: copy.copy, exp: new Date(req.expires_at).getTime() } } : {}),
     };
 }

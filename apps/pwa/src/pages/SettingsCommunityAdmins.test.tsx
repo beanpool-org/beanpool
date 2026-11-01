@@ -238,6 +238,38 @@ describe("Settings: Turn on is offered on the server's own word (#2626 deciding 
         renderSettings();
         expect(await screen.findByTestId('community-admins-turn-on')).toHaveTextContent('Turn on');
     });
+
+    // As on the phone (#2683 deciding pass): a server that refuses the copy has already been handed its whole key.
+    it("while the server is still being asked there is nothing to tap, even where the rule reads 'This server'", async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        vi.mocked(copyLib.webCommunityCopyStatus).mockImplementation(() => new Promise(() => {}));
+        renderSettings();
+        await waitFor(() => expect(api.getCommunityInfo).toHaveBeenCalled());
+        await waitFor(() => expect(copyLib.webCommunityCopyStatus).toHaveBeenCalled());
+        expect(await screen.findByRole('button', { name: /Where your account can be brought back from/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('community-admins-turn-on')).toBeNull();
+    });
+
+    it("the server still can't be asked at the tap: it says so, and the whole key stays in this browser", async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        vi.mocked(copyLib.webCommunityCopyStatus).mockResolvedValue(null);
+        renderSettings();
+        fireEvent.click(await screen.findByTestId('community-admins-turn-on'));
+        expect(await screen.findByText('Couldn’t reach your community, so nothing changed. Try again in a moment.')).toBeInTheDocument();
+        expect(copyLib.webTurnOnCommunityCopy).not.toHaveBeenCalled();
+    });
+
+    it("the rule moved since the page read it: asked at the tap, the server no longer offers it, so the whole key stays in this browser", async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        offered = true;
+        renderSettings();
+        const turnOn = await screen.findByTestId('community-admins-turn-on');
+        offered = false;
+        fireEvent.click(turnOn);
+        await waitFor(() => expect(screen.queryByTestId('community-admins-turn-on')).toBeNull());
+        expect(copyLib.webTurnOnCommunityCopy).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('community-admins-on')).toBeNull();
+    });
 });
 
 describe('lib/community-copy.ts: a removal counts only on the server\'s own answer', () => {

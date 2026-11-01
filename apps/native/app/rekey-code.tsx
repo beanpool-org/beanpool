@@ -7,6 +7,11 @@
  * launch while an ask is waiting (welcome.tsx resumes it). The flow itself is utils/rekey-redeem.ts, where it is tested:
  * the key is written down before anything is sent, the phone's own account is never written over, and every step can be
  * taken again. Holds at 320 dp and 1.3× text: every row wraps, nothing has a fixed width.
+ *
+ * "My community can bring me back" (Restore your account's third row; vault rethink VR3, VR4) is this screen too, with a
+ * BB- code. Where the member's copy is shared with BeanPool's key vault, the admin's number gets the phone its community's half
+ * and voucher, and the screen waits out the vault's day (utils/community-recovery.ts): the wait survives the app closing,
+ * and outlives the code.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,13 +36,19 @@ import { upperCase } from '@beanpool/core';
 import { buildSignedHeaders } from '../utils/crypto';
 import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
+import { holdEndsWords } from '../components/hold-ends-words';
+import { VAULT_WORDS } from '../utils/vault-words';
+import {
+    advanceCommunityRestore, clearPendingCommunityRestore, COMMUNITY_RESTORE_POLL_MS, loadPendingCommunityRestore, takeSharedRelease,
+    type PendingCommunityRestore,
+} from '../utils/community-recovery';
 import { attestJustCompletedRekey } from '../utils/key-succession';
 import {
     abandonRekey, askRekey, beginRekey, cleanRekeyCode, endsRekey, finishRekey, isBringBackCode, openBringBack, parseRekeyLink, pollRekey,
     rekeyCommunityUrl, resumeRekey, REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
 } from '../utils/rekey-redeem';
 
-type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain' | 'broughtBack' | 'ended';
+type Phase = 'form' | 'asking' | 'waiting' | 'holding' | 'words' | 'linkAgain' | 'broughtBack' | 'ended';
 
 const deps: RekeyDeps = {
     slot: rekeySlotStore,
@@ -70,7 +81,7 @@ function hostOf(community: string | undefined): string {
 }
 
 export default function RekeyCodeScreen() {
-    const params = useLocalSearchParams<{ link?: string }>();
+    const params = useLocalSearchParams<{ link?: string; bringBack?: string }>();
     const { setIdentity } = useIdentity();
     const { t, lang } = useWords();
     /** Time left on the code, in words. */
@@ -136,6 +147,11 @@ export default function RekeyCodeScreen() {
     const [wroteThemDown, setWroteThemDown] = useState(false);
     /** A bring-back (vault rethink VR3) gave the 12 words back with the account. */
     const [wordsCameBack, setWordsCameBack] = useState(false);
+    /** A shared bring-back waiting at the key vault (vault rethink VR4), when it goes through, and what the vault last said. */
+    const [holding, setHolding] = useState<PendingCommunityRestore | null>(null);
+    const [holdUntil, setHoldUntil] = useState<number | null>(null);
+    const [holdNote, setHoldNote] = useState<string | null>(null);
+    const stepping = useRef(false);
     const [scanning, setScanning] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false);
@@ -193,28 +209,31 @@ export default function RekeyCodeScreen() {
     }), [t]);
 
     /**
-     * A bring-back the admin confirmed (vault rethink VR3): the member's SAME key, opened from the copy they keep with
-     * their community, saved through the restore gate (never over another account without asking), on that community.
+     * A bring-back that is here (vault rethink VR3, VR4): the member's SAME key, saved through the restore gate (never over
+     * another account without asking), on that community. `open` gives the account; `forget` drops this flow's record once
+     * it is saved.
      */
-    const onBroughtBack = useCallback(async (s: RekeySlot, answer: Extract<RekeyAnswer, { state: 'released' }>) => {
-        if (finishing.current) return;
-        finishing.current = true;
+    const saveBroughtBack = useCallback(async (
+        where: { community: string; communityName: string; callsign: string },
+        open: () => Promise<{ publicKey: string; privateKey: string; mnemonic?: string[] }>,
+        forget: () => Promise<void>,
+    ) => {
         // Loaded when a bring-back is released, as this screen loads the phone's database and saved communities.
         const restore = await import('../utils/restore-account');
         try {
-            const back = await openBringBack(s, answer, deps);
+            const back = await open();
             const cleared = await restore.clearToRestore({
                 publicKey: back.publicKey,
                 privateKey: back.privateKey,
-                callsign: answer.callsign,
+                callsign: where.callsign,
                 createdAt: new Date().toISOString(),
                 ...(back.mnemonic ? { mnemonic: back.mnemonic } : {}),
             }, confirmReplace);
-            await restore.saveRestoredAccount(cleared, s.community);
+            await restore.saveRestoredAccount(cleared, where.community);
             // The record and the key it asked with go: the account is the member's own key now.
-            await abandonRekey(deps);
+            await forget();
             const nodes = await import('../utils/nodes');
-            await nodes.addSavedNode(s.community, answer.communityName || undefined).catch(() => {});
+            await nodes.addSavedNode(where.community, where.communityName || undefined).catch(() => {});
             setIdentity(cleared.identity);
             setWordsCameBack(!!cleared.identity.mnemonic?.length);
             setPhase('broughtBack');
@@ -236,6 +255,57 @@ export default function RekeyCodeScreen() {
         }
     }, [setIdentity, confirmReplace, t]);
 
+    /** A bring-back the admin confirmed, of a whole copy (vault rethink VR3): it opens here and now. */
+    const onBroughtBack = useCallback(async (s: RekeySlot, answer: Extract<RekeyAnswer, { state: 'released' }>) => {
+        if (finishing.current) return;
+        finishing.current = true;
+        await saveBroughtBack({ community: s.community, communityName: answer.communityName, callsign: answer.callsign },
+            () => openBringBack(s, answer, deps), () => abandonRekey(deps));
+    }, [saveBroughtBack]);
+
+    /** One step on with the vault's hold (utils/community-recovery.ts), the same however often it is asked. */
+    const stepHold = useCallback(async (p: PendingCommunityRestore) => {
+        if (stepping.current || finishing.current) return;
+        stepping.current = true;
+        try {
+            const step = await advanceCommunityRestore(p);
+            if (step.status === 'held') {
+                setHolding(step.pending);
+                setHoldUntil(step.until);
+                setHoldNote(null);
+            } else if (step.status === 'waiting') {
+                setHolding(step.pending);
+                setHoldNote(keyLineWords(step.message));
+            } else if (step.status === 'stopped') {
+                setHolding(null);
+                setError(t(VAULT_WORDS.stopped));
+                setPhase('ended');
+            } else if (step.status === 'ended') {
+                setHolding(null);
+                setError(keyLineWords(step.message));
+                setPhase('ended');
+            } else {
+                finishing.current = true;
+                await saveBroughtBack({ community: step.pending.community, communityName: step.pending.communityName, callsign: step.pending.callsign },
+                    async () => step.back, clearPendingCommunityRestore);
+            }
+        } finally {
+            stepping.current = false;
+        }
+    }, [saveBroughtBack, t]);
+
+    /** The community's half and voucher, written down first: from here the wait is the key vault's. */
+    const onSharedRelease = useCallback(async (s: RekeySlot, answer: Extract<RekeyAnswer, { state: 'released' }>) => {
+        try {
+            const pending = await takeSharedRelease(s, answer, deps);
+            setHolding(pending);
+            setPhase('holding');
+        } catch (e) {
+            setError(keyLineWords(e instanceof Error ? e.message : REKEY_TEXT.changedAccount));
+            setPhase('ended');
+        }
+    }, []);
+
     /** One answer from the node, read into the screen. */
     const apply = useCallback(async (s: RekeySlot, answer: RekeyAnswer) => {
         if (answer.state === 'waiting') {
@@ -246,15 +316,18 @@ export default function RekeyCodeScreen() {
         } else if (answer.state === 'bound') {
             await onBound(s, answer);
         } else if (answer.state === 'released') {
-            await onBroughtBack(s, answer);
+            await (answer.voucher ? onSharedRelease(s, answer) : onBroughtBack(s, answer));
         } else if (answer.state === 'unreachable') {
-            setError(keyLineWords(REKEY_TEXT.unreachable));
+            // A bring-back has other ways on (design §4.4); a re-key's code still works until it expires.
+            setError(isBringBackCode(s.code)
+                ? t("Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.")
+                : keyLineWords(REKEY_TEXT.unreachable));
         } else {
             if (endsRekey(answer)) await abandonRekey(deps);
             setError(keyLineWords(answer.state === 'declined' ? REKEY_TEXT.declined : answer.state === 'gone' ? REKEY_TEXT.gone : answer.message));
             setPhase(endsRekey(answer) ? 'ended' : 'form');
         }
-    }, [onBound, onBroughtBack]);
+    }, [onBound, onBroughtBack, onSharedRelease, t]);
 
     // An ask left waiting (the app was closed): asked once more, with the same key. Once per visit to the screen: the
     // record is kept after Not now, so a second run would put the number back after the member left it.
@@ -264,6 +337,16 @@ export default function RekeyCodeScreen() {
         resumed.current = true;
         let alive = true;
         (async () => {
+            // A shared bring-back's wait outlives the code it came from: the vault, not the community, is asked now.
+            const waiting = await loadPendingCommunityRestore();
+            if (!alive) return;
+            if (waiting) {
+                setCommunity(waiting.community);
+                setHolding(waiting);
+                setHoldUntil(waiting.until);
+                setPhase('holding');
+                return;
+            }
             const r = await resumeRekey(deps);
             if (!alive || !r) return;
             setSlot(r.slot);
@@ -284,6 +367,21 @@ export default function RekeyCodeScreen() {
         }, REKEY_POLL_MS);
         return () => clearInterval(id);
     }, [phase, slot, apply]);
+
+    // While the vault holds it: at once, then every minute, for the day it takes or less.
+    const holdingFor = holding?.publicKey ?? null;
+    const holdingNow = useRef<PendingCommunityRestore | null>(null);
+    holdingNow.current = holding;
+    useEffect(() => {
+        if (phase !== 'holding' || !holdingFor) return;
+        const go = () => {
+            setNow(Date.now());
+            if (holdingNow.current) void stepHold(holdingNow.current);
+        };
+        go();
+        const id = setInterval(go, COMMUNITY_RESTORE_POLL_MS);
+        return () => clearInterval(id);
+    }, [phase, holdingFor, stepHold]);
 
     const ask = async () => {
         setError(null);
@@ -340,12 +438,14 @@ export default function RekeyCodeScreen() {
         setError(null);
     };
 
+    // Came here from "My community can bring me back", or holds such a code: the same form, in that row's words.
+    const bringingBack = params.bringBack === '1' || isBringBackCode(code) || phase === 'holding';
     const header = (
         <View style={styles.header}>
             <Pressable style={styles.backButton} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Back')}>
                 <MaterialCommunityIcons name="arrow-left" size={24} color={colors.brand.primary} />
             </Pressable>
-            <Text style={styles.headerTitle} numberOfLines={2}>{upperCase(t('Re-key code'), lang)}</Text>
+            <Text style={styles.headerTitle} numberOfLines={2}>{upperCase(bringingBack ? t('Ways back') : t('Re-key code'), lang)}</Text>
             <View style={{ width: 48 }} />
         </View>
     );
@@ -375,6 +475,21 @@ export default function RekeyCodeScreen() {
                 <Pressable style={styles.secondary} onPress={stop} accessibilityRole="button">
                     <Text style={styles.secondaryText}>{t('Not now')}</Text>
                 </Pressable>
+            </View>
+        );
+    } else if (phase === 'holding') {
+        body = (
+            <View testID="rekey-holding">
+                <Text style={styles.title} accessibilityRole="header">{t('Your account is on its way back')}</Text>
+                <Text style={styles.lead}>{t("BeanPool's key vault holds it for a day, so your other phones can stop it if this isn't you. If another phone of yours says it's you, it comes sooner.")}</Text>
+                <View style={styles.busyRow}>
+                    <ActivityIndicator color={colors.brand.primary} />
+                    <Text style={[styles.note, { marginTop: 0, flex: 1 }]} accessibilityLiveRegion="polite">
+                        {holdUntil !== null ? t('It comes through {when}.', { when: holdEndsWords(holdUntil, now) }) : t("Asking BeanPool's key vault...")}
+                    </Text>
+                </View>
+                {holdNote ? <Text style={styles.note} accessibilityLiveRegion="polite">{holdNote}</Text> : null}
+                <Text style={styles.note}>{t('You can close the app: it picks up where it left off.')}</Text>
             </View>
         );
     } else if (phase === 'words' && newWords) {
@@ -437,8 +552,12 @@ export default function RekeyCodeScreen() {
     } else {
         body = (
             <View>
-                <Text style={styles.title} accessibilityRole="header">{t('🪪 An admin gave me a re-key code')}</Text>
-                <Text style={styles.lead}>{t('Lost your phone and your 12 words? An admin of your community checked it’s you and made a code. This phone takes over your account: your Beans, your name and your history.')}</Text>
+                <Text style={styles.title} accessibilityRole="header">{bringingBack ? t('🤝 My community can bring me back') : t('🪪 An admin gave me a re-key code')}</Text>
+                <Text style={styles.lead}>
+                    {bringingBack
+                        ? t('Lost your phone and your 12 words? Go and see an admin of your community with this phone. They check it’s you and make a code. Your account comes back: the same key, your Beans, your chats and every community.')
+                        : t('Lost your phone and your 12 words? An admin of your community checked it’s you and made a code. This phone takes over your account: your Beans, your name and your history.')}
+                </Text>
                 <Pressable style={styles.secondary} onPress={openScanner} accessibilityRole="button">
                     <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.text.body} />
                     <Text style={styles.secondaryText}>{t('Scan the code on the admin’s screen')}</Text>
@@ -460,7 +579,7 @@ export default function RekeyCodeScreen() {
                     style={[styles.input, styles.codeInput]}
                     value={code}
                     onChangeText={setCode}
-                    placeholder="RK-XXXX-XXXX"
+                    placeholder={bringingBack ? 'BB-XXXX-XXXX' : 'RK-XXXX-XXXX'}
                     placeholderTextColor={colors.text.muted}
                     autoCapitalize="characters"
                     autoCorrect={false}

@@ -32,7 +32,7 @@ import {
     HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings,
+    homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
@@ -41,6 +41,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
+import { onConversationRead } from '../lib/conversation-read';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { PlaceCircleCard } from '../components/PlaceCircleCard';
 import { AskedCommunity } from '../components/AskedCommunity';
@@ -92,6 +93,7 @@ import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
+import { YourToolsCard } from '../tools/your-tools-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
 import {
@@ -358,6 +360,7 @@ function MarketListingItem({
                         decoding="async"
                         onError={onPictureError}
                         className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
+                        style={{ objectPosition: '50% 33%' }}
                     />
                 ) : (
                     <div className="w-full h-24 rounded-lg overflow-hidden mb-2">
@@ -1547,6 +1550,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         // The member put a notice away (the alert, or Home's own Mark as read): the card goes now, not at the next poll.
         const onSeen = () => { void fetchHomeRef.current('doorbell'); };
         window.addEventListener(NOTICES_SEEN_EVENT, onSeen);
+        const onRead = () => { void fetchHomeRef.current('doorbell'); };
+        const unsubRead = onConversationRead(onRead);
         const onVisibility = () => {
             if (document.hidden) return;
             if (stale || Date.now() - lastStart.current > HOME_RETURN_STALE_MS) {
@@ -1563,6 +1568,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             offLive();
             offNotice();
             window.removeEventListener(NOTICES_SEEN_EVENT, onSeen);
+            unsubRead();
             document.removeEventListener('visibilitychange', onVisibility);
             clearInterval(poll);
         };
@@ -1943,7 +1949,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             canMoveDown: i >= 0 && i < movable.length - 1,
             across: cols > 1,
             onRemove: () => removeFromHome(card.id),
-            ...(homeCardType(card.type)?.readSettings ? { onSettings: () => setSettingsFor(card) } : {}),
+            ...(homeCardType(card.type)?.readSettings && card.type !== 'tools' ? { onSettings: () => setSettingsFor(card) } : {}),
             onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, card.id, d, movable, Date.now(), pins)); },
         };
     }
@@ -2595,6 +2601,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     </HomeCard>
                 );
             }
+            case 'tools': {
+                const settings = readToolsSettings(card.settings);
+                return (
+                    <YourToolsCard
+                        key={card.id}
+                        {...common}
+                        tools={settings.tools}
+                        publicKey={publicKey}
+                        now={now}
+                        onNavigate={onNavigate}
+                        onChangeTools={(next) => {
+                            changeLayout((l) => changeCardSettings(l, card.id, { tools: next }, Date.now()));
+                        }}
+                    />
+                );
+            }
             default:
                 // A tool's card (`tool-<id>`): its lines worked out on this device from the tool's own document, never
                 // asked of the node (tools/home-card.tsx). Any other type this build doesn't draw is kept and not drawn.
@@ -2615,7 +2637,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 name: c.type === 'search' ? cardRowName(c, profile) : nameOf(c),
                 label: cardLabelName(c, profile),
                 note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? t('All tips seen') : c.type === 'sky' ? t(LIB_LINES.skyNoPlace) : t('Nothing to show now'),
-                hasSettings: !!homeCardType(c.type)?.readSettings,
+                hasSettings: !!homeCardType(c.type)?.readSettings && c.type !== 'tools',
             }));
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
     const hasPoint = !!point || !!a.me?.area;

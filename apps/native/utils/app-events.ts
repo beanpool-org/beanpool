@@ -14,6 +14,8 @@
  * One named seam fixes that: the rule lives in db.ts and is testable by mocking this module,
  * while the untestable RN plumbing is isolated here where there is nothing left to get wrong.
  */
+export const CONVERSATION_READ_LOCALLY_EVENT = 'conversation_read_locally';
+
 export function emitAppEvent(name: string, payload?: unknown): void {
     try {
         const { DeviceEventEmitter } = require('react-native');

@@ -8,17 +8,22 @@
  * seals them to the member's new phone (utils/rekey-redeem.ts openBringBack). Nothing goes to BeanPool's key vault.
  *
  * Offered only where the community keeps copies itself (`recoveryCopies: 'server'`, utils/copies-rule.ts) and never in
- * the global community, where nobody meets anyone (design §4.2, Q13). The server holds the same rule, so a phone that
- * offered it on a stale answer is refused there with the sentence, and nothing is kept. Never a false success: the row
- * says On only once the server answered that it keeps the copy.
+ * the global community, where nobody meets anyone (design §4.2, Q13). The copy and its key go only on the server's own
+ * `offered`, asked at the moment of turning it on (components/CommunityAdminsRow.tsx), never on the rule as this phone
+ * read it: a server that refuses them keeps nothing, but it has been handed the key. It holds the same rule, so a rule
+ * moved in that moment is refused there with the sentence. Never a false success: the row says On only once the server
+ * answered that it keeps the copy.
+ *
+ * Where the community's rule is the key vault (the default), the same row turns on the shared placement instead, in a
+ * build with a vault: utils/community-recovery.ts. This file's status tells them apart, by the server's own answer.
  */
 
-import { recoveryWordsMatchSeed, sealSeedToCopyKey, toEd25519Seed } from '@beanpool/core';
+import { isVaultKeyHex, recoveryWordsMatchSeed, sealSeedToCopyKey, toEd25519Seed } from '@beanpool/core';
 import { hexToBytes } from './crypto';
 import { getMnemonic, type BeanPoolIdentity } from './identity';
 import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './global-node-url';
-import type { RecoveryCopiesRule } from './vault-config';
+import { hasVault, type RecoveryCopiesRule } from './vault-config';
 import { unopenableOf, type CommunityCopyUnopenable } from './community-copy-state';
 
 export { unopenableOf, type CommunityCopyUnopenable, type CommunityCopyUnopenableReason } from './community-copy-state';
@@ -33,6 +38,14 @@ export interface CommunityCopyStatus {
     offered: boolean;
     /** It keeps a copy it can't open now (its key gone, or another): never On. Null otherwise, and from a server from before. */
     unopenable: CommunityCopyUnopenable | null;
+    /** Whether it offers the shared placement now (its rule is the key vault, and its door is not open to anyone). */
+    sharedOffered: boolean;
+    /** The key its vouchers are signed with, which a deposit at the vault names. Null from a server from before. */
+    nodeKey: string | null;
+    /** What it keeps, when `kept`: the copy and its key, or its half of a copy the vault keeps. */
+    placement: 'whole' | 'shared' | null;
+    /** The digest of the copy its half belongs to, when it keeps one. */
+    copy: string | null;
 }
 
 /** The phone's own sentences (the server's refusals come in its own words). */
@@ -42,9 +55,12 @@ export const COMMUNITY_COPY_TEXT = {
     noKey: 'This phone can’t read its own key, so no copy was made.',
 } as const;
 
-/** Whether this phone offers the community path at `url` under `rule`: "this server", and never the global community. */
+/**
+ * Whether this phone asks the community at `url` about this path under `rule`: "this server", or the key vault in a build
+ * that has one (the shared placement), and never the global community. Whom to ask, no more: the answer decides the offer.
+ */
 export function offersCommunityCopy(url: string | null | undefined, rule: RecoveryCopiesRule | null | undefined): boolean {
-    return !!url && rule === 'server' && url.trim().replace(/\/+$/, '').toLowerCase() !== GLOBAL_NODE_URL;
+    return !!url && (rule === 'server' || (rule === 'vault' && hasVault())) && url.trim().replace(/\/+$/, '').toLowerCase() !== GLOBAL_NODE_URL;
 }
 
 async function answerOf(res: Response): Promise<any> {
@@ -59,7 +75,13 @@ export async function communityCopyStatus(url: string, identity: BeanPoolIdentit
         const body = await answerOf(res);
         if (typeof body.kept !== 'boolean') return null;
         const unopenable = body.kept ? null : unopenableOf(body.unopenable);
-        return { kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true, unopenable };
+        return {
+            kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true, unopenable,
+            sharedOffered: body.sharedOffered === true,
+            nodeKey: isVaultKeyHex(body.nodeKey) ? body.nodeKey : null,
+            placement: body.kept ? (body.placement === 'shared' ? 'shared' : 'whole') : null,
+            copy: typeof body.copy === 'string' ? body.copy : null,
+        };
     } catch {
         return null;
     }

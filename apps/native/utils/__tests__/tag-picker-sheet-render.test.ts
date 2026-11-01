@@ -194,6 +194,9 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
         await press(addButton(), '+ Add');
     }
     const key = (name: string) => act(async () => { search()!.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
+    /** The clock moved on, by hand: past the wait a fresh Backspace needs, or by a held key's repeat. */
+    const stillFor = (ms = 600) => { vi.setSystemTime(Date.now() + ms); };
+    afterEach(() => { vi.useRealTimers(); });
     const done = () => press(host.querySelector('[aria-label="Done"]'), 'Done');
     const addRow = () => host.querySelector('[data-testid="tag-picker-add-typed"]');
 
@@ -327,13 +330,86 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
     it('backspace on an empty field takes the last chip off, the typed ones first; with words in the field it does not', async () => {
         await compose(['food.fruit.lemon'], ['aa']);
         await typeInSearch('b');
+        stillFor();
         await key('Backspace');
         expect(held.freeTags).toEqual(['aa']);
         await typeInSearch('');
+        stillFor();
         await key('Backspace');
         expect(held.freeTags).toEqual([]);
+        stillFor();
         await key('Backspace');
         expect(held.tags).toEqual([]);
+    });
+
+    // React Native's key press has no repeat flag. The two orders it sends a deletion in (RN 0.83, ReactEditTextInputConnectionWrapper.kt):
+    // deleteSurroundingText, and iOS, the key and then the text; setComposingText, a composing keyboard, the text and then the key.
+    describe('only a fresh Backspace on a field already empty before it takes a chip (review of #2691, finding 2)', () => {
+        const chips = () => ({ tags: held.tags, freeTags: held.freeTags });
+        const before = { tags: ['food.fruit.lemon'], freeTags: ['aa', 'bb'] };
+        const clearWord = async (repeatMs: number) => {
+            await typeInSearch('ab');
+            stillFor();
+            await key('Backspace');
+            await typeInSearch('a');
+            stillFor(repeatMs);
+            await key('Backspace');
+            await typeInSearch('');
+        };
+
+        it.each([33, 50, 100, 400, 590])('a hold that clears a word and runs on takes no chip, repeating every %i ms', async (repeatMs) => {
+            await compose(before.tags, before.freeTags);
+            await clearWord(repeatMs);
+            for (let i = 0; i < 60; i++) {
+                stillFor(repeatMs);
+                await key('Backspace');
+            }
+            expect(chips()).toEqual(before);
+        });
+
+        it('a hold from an empty field takes the one chip of its press, not one for the first repeat or those after', async () => {
+            await compose(before.tags, before.freeTags);
+            await key('Backspace');
+            expect(chips()).toEqual({ tags: before.tags, freeTags: ['aa'] });
+            stillFor(500);
+            await key('Backspace');
+            for (let i = 0; i < 60; i++) {
+                stillFor(50);
+                await key('Backspace');
+            }
+            expect(chips()).toEqual({ tags: before.tags, freeTags: ['aa'] });
+        });
+
+        it.each([0, 30])('a composing keyboard\'s last letter takes no chip: the text goes first, the key %i ms after', async (lagMs) => {
+            await compose(before.tags, before.freeTags);
+            await typeInSearch('a');
+            stillFor();
+            await typeInSearch('');
+            stillFor(lagMs);
+            await key('Backspace');
+            expect(search()!.value).toBe('');
+            expect(chips()).toEqual(before);
+        });
+
+        it('a single fresh Backspace on an empty field takes the last chip off, also just after a word was cleared and left', async () => {
+            await compose(before.tags, before.freeTags);
+            await clearWord(50);
+            stillFor();
+            await key('Backspace');
+            expect(chips()).toEqual({ tags: before.tags, freeTags: ['aa'] });
+        });
+
+        it('a key let go and pressed again is fresh: the next chip goes', async () => {
+            await compose(before.tags, before.freeTags);
+            await key('Backspace');
+            stillFor(50);
+            await key('Backspace');
+            expect(held.freeTags).toEqual(['aa']);
+            stillFor();
+            await key('Backspace');
+            expect(held.freeTags).toEqual([]);
+            expect(held.tags).toEqual(before.tags);
+        });
     });
 
     it('its chip takes it off', async () => {

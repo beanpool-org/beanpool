@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
     View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet, BackHandler,
 } from 'react-native';
@@ -11,6 +11,14 @@ import {
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { hapticTick, hapticWarning } from '../utils/haptics';
 import { dismissKeyboardWithin } from '../utils/keyboard-dismiss';
+
+/**
+ * How long the field has been still when a Backspace is a fresh press. React Native's key press has no repeat flag, and a
+ * composing Android keyboard changes the text first and sends the key after, so stillness is all the phone can tell by. Past
+ * a held key's first repeat, about 500 ms, so a hold from an empty field takes one chip; a second deliberate press this
+ * soon does nothing, and the chip's own × is there. A chip lost has no undo.
+ */
+const BACKSPACE_STILL_MS = 600;
 
 export interface TagPickerProps {
     value?: string[];
@@ -43,6 +51,8 @@ export function TagPicker({
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     // Why the last commit stayed in the field, in words, until the field changes.
     const [refused, setRefused] = useState<RefusedTag | null>(null);
+    // When the field last moved: its text changed, or a Backspace reached it.
+    const fieldMoved = useRef(0);
 
     useEffect(() => {
         if (!sheetVisible) return;
@@ -327,14 +337,21 @@ export function TagPicker({
     };
 
     const typeInField = (text: string) => {
+        fieldMoved.current = Date.now();
         setRefused(null);
         if (canType && TAG_COMMA.test(text)) enter(text, false);
         else setSearchQuery(text);
     };
 
-    // Backspace on an empty field takes the last chip off. Fired before the text changes, so the last letter is not one.
+    // A fresh Backspace on a field already empty before it takes the last chip off (as the web's !e.repeat && !composing).
+    // Every Backspace moves the field, so a hold never goes still however long it runs, and the key a composing keyboard
+    // sends after the last letter comes just after that letter went.
     const backspaceOnEmpty = (key: string) => {
-        if (!canType || key !== 'Backspace' || searchQuery.length > 0) return;
+        if (!canType || key !== 'Backspace') return;
+        const now = Date.now();
+        const fresh = now - fieldMoved.current >= BACKSPACE_STILL_MS;
+        fieldMoved.current = now;
+        if (!fresh || searchQuery.length > 0) return;
         const off = lastTagOff(held);
         if (off.freeTags.length !== freeTags.length) onFreeTagsChange?.(off.freeTags);
         else if (off.tags.length !== selectedTags.length) onChange(off.tags);

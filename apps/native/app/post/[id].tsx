@@ -40,7 +40,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, postTagsOf, storedPostTags } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -503,6 +503,8 @@ export default function PostDetailModal() {
     // The tags the form opened with, moved on by a reload's (below): what the save compares with, never a `post` that changed
     // under the form, which would read the form's list as the member taking the tags off.
     const editTagsFrom = useRef<string[]>([]);
+    const [editFreeTags, setEditFreeTags] = useState<string[]>([]);
+    const editFreeTagsFrom = useRef<string[]>([]);
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
     const [editCredits, setEditCredits] = useState('');
@@ -584,6 +586,15 @@ export default function PostDetailModal() {
         editTagsFrom.current = now;
         setEditTags((edited) => editedTagsOver(from, edited, now));
     }, [post?.tags, editMode]);
+    // The same for the tags its author typed: an edit that never touched them keeps them.
+    useEffect(() => {
+        if (!editMode) return;
+        const now = listingFreeTags(post);
+        const from = editFreeTagsFrom.current;
+        if (storedFreeTags(now) === storedFreeTags(from)) return;
+        editFreeTagsFrom.current = now;
+        setEditFreeTags((edited) => editedTagsOver(from, edited, now, FREE_TAGS_MAX));
+    }, [post?.free_tags, post?.freeTags, editMode]);
 
     useFocusEffect(
         useCallback(() => {
@@ -1080,6 +1091,8 @@ export default function PostDetailModal() {
         setEditCategory(post.category);
         editTagsFrom.current = postTagsOf(post.tags);
         setEditTags(editTagsFrom.current);
+        editFreeTagsFrom.current = listingFreeTags(post);
+        setEditFreeTags(editFreeTagsFrom.current);
         setEditTitle(post.title);
         setEditDescription(post.description || '');
         // In the language's way ("12,5"), so it reads back as the same price.
@@ -1117,10 +1130,12 @@ export default function PostDetailModal() {
             const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
             const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
             const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
+            const freeTagsChanged = storedFreeTags(editFreeTags) !== storedFreeTags(editFreeTagsFrom.current);
             await updatePost(post.id, {
                 type: editType,
                 category: editCategory,
                 ...(tagsChanged ? { tags: editTags } : {}),
+                ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
                 title: editTitle.trim(),
                 description: editDescription.trim(),
                 credits: price?.ok ? price.value : 0,
@@ -1378,7 +1393,7 @@ export default function PostDetailModal() {
                 {/* Description */}
                 <Text style={styles.description}>{post.description || t('No description provided.')}</Text>
 
-                <PostTagChips tags={post.tags} inset={20} />
+                <PostTagChips tags={post.tags} freeTags={listingFreeTags(post)} inset={20} />
 
                 {/* Photos */}
                 {photos.length > 0 && (
@@ -1717,6 +1732,8 @@ export default function PostDetailModal() {
                             <TagPicker
                                 value={editTags}
                                 onChange={setEditTags}
+                                freeTags={editFreeTags}
+                                onFreeTagsChange={setEditFreeTags}
                                 category={editCategory}
                                 title={editTitle}
                                 description={editDescription}

@@ -12,6 +12,8 @@
  * The key and the 12 words: everything, automatically. The name: carried, made unique there if it's taken. The
  * photo: re-sent by the profile step that follows. Beans, trust, posts, chats: no, they belong to each community.
  * Sign-in recovery: kept by each community, so the member is asked to protect this one too (`joinedNudge`).
+ * Their listings on the global community can follow, if they say so: Home offers it after the profile step
+ * (utils/bring-listings.ts). The join only notes the offer, and never waits on it.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,6 +31,8 @@ export interface JoinDeps {
     requestSync(): Promise<unknown>;
     /** Register this phone's push token where it is missing: the community joined, now it is on the phone's list. */
     registerPush?(): Promise<unknown>;
+    /** Optional in a test's deps; the app's always has it. */
+    noteBringOffer?(o: { publicKey: string; from: string | null; to: string; name: string; alreadyMember: boolean }): Promise<boolean>;
 }
 
 async function defaultDeps(): Promise<JoinDeps> {
@@ -36,6 +40,7 @@ async function defaultDeps(): Promise<JoinDeps> {
     const db = await import('./db');
     const nodes = await import('./nodes');
     const sync = await import('../services/pillar-sync');
+    const bring = await import('./bring-listings');
     return {
         closeDB: db.closeDB,
         initDB: db.initDB,
@@ -44,6 +49,7 @@ async function defaultDeps(): Promise<JoinDeps> {
         clearGuestNode: nodes.clearGuestNode,
         requestSync: sync.requestSync,
         registerPush: async () => (await import('../services/push-notifications')).retryPushRegistrations(),
+        noteBringOffer: bring.noteBringOffer,
     };
 }
 
@@ -115,6 +121,7 @@ export async function joinAnotherCommunity(
     }
     // Its DMs reach this phone from now on, wherever the phone is set next (utils/push-registrations.ts).
     deps.registerPush?.().catch(() => {});
+    await deps.noteBringOffer?.({ publicKey: opts.identity.publicKey, from: opts.returnUrl, to: targetUrl, name, alreadyMember }).catch(() => {});
     return { url: targetUrl, name, alreadyMember };
 }
 

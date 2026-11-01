@@ -34,6 +34,8 @@ describe('wipeIdentityScopedStorage', () => {
             // open requests. Both name the key (#2523 review 4383895884).
             beanpool_knock_role_checked: JSON.stringify({ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32), role: 'owner', at: 1 }),
             beanpool_admin_knocks_last_count: JSON.stringify({ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32), count: 2 }),
+            // The offer to bring this key's listings: it names the key and the community it joined.
+            beanpool_bring_listings: JSON.stringify({ publicKey: 'ab'.repeat(32), from: 'https://global.beanpool.org', to: 'https://test.beanpool.org', name: 'Test', at: 1 }),
             // The member's profile: none of it keyed to the account, so the next account's profile publish and its
             // knocks would send this photo, bio and contact as its own.
             beanpool_canonical_profile: JSON.stringify({ avatar: 'bundled://koala', bio: 'Grows tomatoes', contactValue: '0400 000 000' }),

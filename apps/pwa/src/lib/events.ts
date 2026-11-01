@@ -10,7 +10,7 @@
 
 import {
     deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, formatDate, localClockMs, repeatCaption, repeatChoiceKeyOf, repeatPatternFor,
-    t, tn, type EventWhenParts, type RepeatChoiceKey, type RepeatPattern, postTagsOf,
+    t, tn, type EventWhenParts, type RepeatChoiceKey, type RepeatPattern, freeTagsOf, postTagsOf, storedFreeTags,
 } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
@@ -261,6 +261,7 @@ export interface EventEditForm {
     title: string;
     description: string;
     tags?: string[];
+    freeTags?: string[];
     start: string;
     end: string;
     placeName: string;
@@ -289,6 +290,7 @@ export function eventEditForm(post: MarketplacePost): EventEditForm {
         title: post.title || '',
         description: post.description || '',
         tags: postTagsOf(post.tags),
+        freeTags: freeTagsOf(post.freeTags),
         start: clocks ? post.eventStartLocal! : isoToLocalInput(post.eventStartAt),
         end: clocks && post.eventEndLocal ? post.eventEndLocal : isoToLocalInput(post.eventEndAt),
         placeName: post.eventPlaceName || '',
@@ -310,6 +312,7 @@ export interface EventEditPayload {
     title?: string;
     description?: string;
     tags?: string[];
+    freeTags?: string[];
     eventStartAt?: string;
     eventEndAt?: string;
     eventPlaceName?: string;
@@ -374,6 +377,7 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
         const afterTags = (after.tags || []).join(' ');
         if (beforeTags !== afterTags) out.tags = after.tags;
     }
+    if (after.freeTags !== undefined && storedFreeTags(before.freeTags ?? []) !== storedFreeTags(after.freeTags)) out.freeTags = after.freeTags;
     Object.assign(out, eventRepeatEdit(before, after));
     return out;
 }

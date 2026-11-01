@@ -398,7 +398,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 ) : null}
 
                 {!!p.description && <Text style={styles.description}>{p.description}</Text>}
-                <PostTagChips tags={p.tags} />
+                <PostTagChips tags={p.tags} freeTags={p.freeTags ?? p.free_tags} />
 
                 <Text style={styles.hostLine} numberOfLines={2}>
                     {isGroupOnly && groupName

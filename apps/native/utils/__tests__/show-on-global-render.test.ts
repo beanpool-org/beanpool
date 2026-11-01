@@ -138,6 +138,18 @@ describe('the tick', () => {
         expect(byId('show-on-global-tick')).toBeNull();
         expect(byId('show-on-global-join')).toBeNull();
     });
+
+    it('a tick the form has moved off clears itself: ticked, then Online, a group or another host, it does not go with the event', async () => {
+        const changes: boolean[] = [];
+        await draw(createElement(ShowOnGlobalTick, { enabled: false, checked: true, onChange: (next: boolean) => changes.push(next) }));
+        expect(changes).toEqual([false]);
+    });
+
+    it('an online event says why there is no tick', async () => {
+        await draw(createElement(ShowOnGlobalTick, { enabled: false, online: true, checked: false, onChange: () => {} }));
+        expect(byId('show-on-global-tick')).toBeNull();
+        expect(byId('show-on-global-online')?.textContent).toBe("Online events can't be shown on the global community yet.");
+    });
 });
 
 describe.each([['light', lightColors], ['dark', darkColors]] as const)('at 320 dp × 1.3, %s', (scheme, colors) => {

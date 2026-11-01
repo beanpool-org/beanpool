@@ -54,7 +54,7 @@ import { repeatPatternFor, roundToArea } from '@beanpool/core';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
 import { fetchedPostPhoto } from '../post-photo';
-import { COPY_KEEP_ALIVE_MS, copyFields, copyResultLine, pairOf, repeatOnCopy, showOnGlobal, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
+import { COPY_KEEP_ALIVE_MS, copyFields, copyResultLine, homeHostOf, pairOf, repeatOnCopy, showOnGlobal, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
 const START_MS = 120_000;
@@ -147,6 +147,8 @@ const phoneToLocal: string[] = [];
 let globalDown = false;
 /** The next POST to global's posts route reaches it, and its answer is lost. */
 let loseNextCreate = false;
+/** Where the home community says it lives now, as a community that moved to a new main name does. */
+let mainAddress: string | null = null;
 
 const deps = (): CopyDeps => ({ global: global_.url, get: signedGet, post: signedPost, del: signedDelete, fetchPhoto: fetchedPostPhoto, hostOf: () => HOST });
 
@@ -164,6 +166,10 @@ beforeAll(async () => {
         if (toGlobal && globalDown) throw new TypeError('Network request failed');
         if (toLocal) phoneToLocal.push(`${String(init?.method ?? 'GET')} ${url.pathname}${url.search}`);
         const res = await realFetch(input, init);
+        if (toLocal && mainAddress && url.pathname === '/api/community/info') {
+            const info = await res.json() as Record<string, unknown>;
+            return new Response(JSON.stringify({ ...info, addresses: [HOST, mainAddress], primaryAddress: mainAddress }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
         if (toGlobal && loseNextCreate && init?.method === 'POST' && url.pathname === '/api/marketplace/posts') {
             loseNextCreate = false;
             throw new TypeError('Network request failed');
@@ -182,6 +188,7 @@ beforeEach(async () => {
     mem.async.clear();
     globalDown = false;
     loseNextCreate = false;
+    mainAddress = null;
     await Promise.all([global_.control('limiters'), local.control('limiters')]);
     await global_.control('profileSwitch', { name: 'probation', value: 'false' });
     await global_.control('directory', { url: `https://${HOST}`, name: 'Mullumbimby' });
@@ -308,6 +315,44 @@ describe('an in-person event shown on the global community (the phone against tw
         await tendCopies(me, deps());
         expect((await copyRow(again)).status).toBe('cancelled');
         expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('what the tick is not for never goes, whoever asks: a group\'s event, an enterprise\'s, an online one', async () => {
+        const me = await memberOfBoth('Odile');
+        const home = await eventAtHome(me, 'Committee dinner');
+        for (const notForIt of [{ ...home, audienceScope: 'group' }, { ...home, authorPublicKey: 'ab'.repeat(32) }, { ...home, eventOnline: true }]) {
+            expect(await showOnGlobal(notForIt, local.url, me, deps())).toEqual({ refused: expect.any(String) });
+        }
+        expect(await copyCount(me)).toBe(0);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('an event moved online comes off global, at the moment and in the catch-up: no copy is left at 0,0', async () => {
+        const me = await memberOfBoth('Perrin');
+        const atOnce = await eventAtHome(me, 'Moved online, phone in hand');
+        const later = await eventAtHome(me, 'Moved online from the web app');
+        await showOnGlobal(atOnce, local.url, me, deps());
+        await showOnGlobal(later, local.url, me, deps());
+        const [first, second] = [await copyIdOf(atOnce.id, me), await copyIdOf(later.id, me)];
+
+        const online = { eventOnline: true, eventLink: 'https://meet.example.org/room', eventTz: 'Australia/Sydney' };
+        await repeatOnCopy(await editAtHome(me, atOnce.id, online), me, deps());
+        expect((await copyRow(first)).status).toBe('cancelled');
+        expect(await pairOf(atOnce.id, me.publicKey)).toBeNull();
+
+        await editAtHome(me, later.id, online);
+        await tendCopies(me, deps());
+        expect((await copyRow(second)).status).toBe('cancelled');
+        expect(await pairOf(later.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('a community that moved to a new main name: a phone still on the old one goes by the new, and its name shows', async () => {
+        const me = await memberOfBoth('Remy');
+        mainAddress = 'byron.example.org';
+        await global_.control('directory', { url: `https://${mainAddress}`, name: 'Byron Shire' });
+        const home = await eventAtHome(me, 'Reached by the old name');
+        expect(await showOnGlobal(home, local.url, me, { ...deps(), hostOf: homeHostOf })).toBe('shown');
+        expect((await copyRow(await copyIdOf(home.id, me))).shown_from_host).toBe(mainAddress);
     }, START_MS);
 
     it('a repeating event carries its rule, and a date cancelled at home is cancelled on the copy', async () => {

@@ -59,10 +59,24 @@ function useOffer(enabled: boolean): { offer: 'tick' | 'join' | null; ask: () =>
 
 const unreachable = () => Alert.alert(showOnGlobalLabel(), t("The global community can't be reached right now."));
 
-/** The composer's tick. Off until the member ticks it. */
-export function ShowOnGlobalTick({ enabled, checked, onChange }: { enabled: boolean; checked: boolean; onChange: (next: boolean) => void }) {
+/**
+ * The composer's tick. Off until the member ticks it, and off again if the form moves away from what it is for (Online, a
+ * group, another host): a tick nobody can see must not go with the event. `online`: an event that would have the offer
+ * but for being online, told why not.
+ */
+export function ShowOnGlobalTick({ enabled, online = false, checked, onChange }: { enabled: boolean; online?: boolean; checked: boolean; onChange: (next: boolean) => void }) {
     const styles = useStyles(makeStyles);
     const { offer, ask } = useOffer(enabled);
+    useEffect(() => {
+        if (!enabled && checked) onChange(false);
+    }, [enabled, checked, onChange]);
+    if (online) {
+        return (
+            <View style={styles.row} testID="show-on-global-online">
+                <Text style={styles.hint}>{t("Online events can't be shown on the global community yet.")}</Text>
+            </View>
+        );
+    }
     if (offer === 'join') {
         return (
             <View style={styles.row} testID="show-on-global-join">

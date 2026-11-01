@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { audienceOf, roundToArea, t } from '@beanpool/core';
 import { SHOWN_ON_GLOBAL_STORE_KEY } from './storage-keys';
 import { GLOBAL_NODE_URL } from './global-node-url';
+import { fetchNodeProfile, getCachedNodeProfile } from './node-profile';
 import { plainOriginOf } from './node-url';
 import { signedDelete, signedGet, signedPost } from './node-post';
 import { BRING_MOST_PHOTOS, photosOf } from './bring-listings';
@@ -40,6 +41,8 @@ export interface HomeEvent {
     id: string;
     title: string;
     description?: string;
+    authorPublicKey?: string;
+    audienceScope?: string;
     lat?: number | null;
     lng?: number | null;
     photos?: string[];
@@ -84,7 +87,16 @@ export interface CopyDeps {
     del(url: string, path: string, identity: BeanPoolIdentity): Promise<Response>;
     fetchPhoto(url: string): Promise<FetchedPhoto>;
     /** The host global looks the community up by. */
-    hostOf(home: string): string | null;
+    hostOf(home: string): string | null | Promise<string | null>;
+}
+
+/**
+ * The host the directory has a community at: its main address, which a phone still on an older name of the community
+ * doesn't use. Global matches the whole host, so the older name would read as a community that isn't listed.
+ */
+export async function homeHostOf(home: string): Promise<string | null> {
+    const profile = await fetchNodeProfile(home) ?? await getCachedNodeProfile(home);
+    return profile?.primaryAddress ?? audienceOf(home);
 }
 
 const liveDeps: CopyDeps = {
@@ -93,7 +105,7 @@ const liveDeps: CopyDeps = {
     post: (...args) => signedPost(...args),
     del: (...args) => signedDelete(...args),
     fetchPhoto: async (url) => (await import('./post-photo')).fetchedPostPhoto(url),
-    hostOf: audienceOf,
+    hostOf: homeHostOf,
 };
 
 async function readPairs(): Promise<CopyPair[]> {
@@ -121,9 +133,12 @@ export async function pairOf(homeId: string, publicKey: string): Promise<CopyPai
     return (await readPairs()).find((p) => p.homeId === homeId && p.publicKey === publicKey && !p.leaving) ?? null;
 }
 
-/** An event the tick is for: in person. A group's, an enterprise's and a direct post are never offered it. */
-export function mayShowOnGlobal(home: Pick<HomeEvent, 'eventOnline'>): boolean {
-    return !isOnlineEvent(home);
+/**
+ * An event the tick is for: the member's own, at a place, for the whole community. The screens offer it for no other, and
+ * this holds whatever a screen asks: what a group was told stays in the group.
+ */
+export function mayShowOnGlobal(home: Pick<HomeEvent, 'eventOnline' | 'audienceScope' | 'authorPublicKey'>, publicKey: string): boolean {
+    return !isOnlineEvent(home) && (home.audienceScope ?? 'public') === 'public' && home.authorPublicKey === publicKey;
 }
 
 /** What a copy holds, and all it holds. Nothing else of the event leaves the phone. */
@@ -176,7 +191,7 @@ async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
     if (photos.length === 0 && later) return 'later';
     const body = {
         id: pair.copyId, ...copyFields(home, identity.publicKey), photos,
-        shownFrom: { host: deps.hostOf(pair.home), postId: pair.homeId },
+        shownFrom: { host: await deps.hostOf(pair.home), postId: pair.homeId },
     };
     const answer = await answerOf(await withTimeout((signal) => deps.post(deps.global, POSTS_PATH, body, identity, signal)));
     if (answer === 'later') return 'later';
@@ -239,6 +254,7 @@ async function repeatDates(pair: CopyPair, home: HomeEvent, identity: BeanPoolId
  * {@link tendCopies} sends it. `homeUrl` is the community the event is on.
  */
 export async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: BeanPoolIdentity, deps: CopyDeps = liveDeps): Promise<CopyResult> {
+    if (!mayShowOnGlobal(home, identity.publicKey)) return { refused: t("The global community can't show this yet.") };
     const { randomUUID } = await import('expo-crypto');
     const pair: CopyPair = (await pairOf(home.id, identity.publicKey))
         ?? { publicKey: identity.publicKey, home: plainOriginOf(homeUrl) ?? homeUrl, homeId: home.id, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
@@ -246,10 +262,17 @@ export async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: B
     return sendCopy(pair, home, identity, deps);
 }
 
-/** After an edit or a cancelled date at home: the copy follows. Nothing is said: a miss is caught up by {@link tendCopies}. */
+/**
+ * After an edit or a cancelled date at home: the copy follows, or comes down if the edit made it an event that can't be
+ * shown (moved online: it has no point to send). Nothing is said: a miss is caught up by {@link tendCopies}.
+ */
 export async function repeatOnCopy(home: HomeEvent, identity: BeanPoolIdentity, deps: CopyDeps = liveDeps): Promise<void> {
     const pair = await pairOf(home.id, identity.publicKey);
     if (!pair) return;
+    if (!mayShowOnGlobal(home, identity.publicKey)) {
+        await takeDown(pair, identity, deps);
+        return;
+    }
     await sendCopy(pair, home, identity, deps);
     const now = await pairOf(home.id, identity.publicKey);
     if (now) await repeatDates(now, home, identity, deps).catch(() => {});
@@ -282,8 +305,8 @@ async function readHome(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDe
 const isUp = (home: HomeEvent) => home.status === 'active' && home.active !== false && home.eventState !== 'cancelled' && !home.hiddenByReportsAt && !isEventEnded(home);
 
 /**
- * Each of this key's pairs brought into step from its community's own word: an event gone, cancelled, ended or hidden there
- * takes its copy down; one waiting goes; one changed follows, and one long unchanged is sent again. A community that gives
+ * Each of this key's pairs brought into step from its community's own word: an event gone, cancelled, ended, hidden or moved
+ * online there takes its copy down; one waiting goes; one changed follows, and one long unchanged is sent again. A community that gives
  * no answer changes nothing.
  */
 export async function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = liveDeps, now: number = Date.now()): Promise<void> {
@@ -295,7 +318,7 @@ export async function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = li
             }
             const home = await readHome(pair, identity, deps);
             if (home === 'later') continue;
-            if (!home || !isUp(home)) {
+            if (!home || !isUp(home) || !mayShowOnGlobal(home, identity.publicKey)) {
                 await takeDown(pair, identity, deps);
                 continue;
             }

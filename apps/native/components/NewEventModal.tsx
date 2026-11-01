@@ -245,6 +245,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     // cannot be sent either — the audience is cleared when the host is picked, and again on the way out.
     const enterpriseHosts = host.key.startsWith('ent:');
     const effectiveAudience = effectiveEventAudience(host, audienceGroupId);
+    // The member's own new event for the whole community, on a local community: what "Also show this on the global community" is for.
+    const ownForEveryone = !editOf && !effectiveAudience && host.key === 'me' && nodeProfile?.profile === 'local';
 
     const reset = () => {
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false); exactPin.current = null;
@@ -254,6 +256,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         zoneTicket.current++;
         setCopiedHost(null); setIsCopy(false); setHostLetsIn(null);
         setRepeat('never'); setRepeatUntil('');
+        setAlsoOnGlobal(false);
     };
 
     // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
@@ -570,7 +573,6 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, tz);
             const done = t('Your event is in the Market feed.');
             if (alsoOnGlobal && answer?.post) void showEventOnGlobal(answer.post, identity).catch(() => {});
-            setAlsoOnGlobal(false);
             reset();
             Alert.alert(t('Event created'), [done, ...dst].join('\n\n'));
             onSuccess?.();
@@ -961,7 +963,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             </View>
                         )}
 
-                        <ShowOnGlobalTick enabled={!editOf && !online && !effectiveAudience && host.key === 'me' && nodeProfile?.profile === 'local'} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} />
+                        <ShowOnGlobalTick enabled={ownForEveryone && !online} online={ownForEveryone && online} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} />
 
                         {editOf ? (
                             <View style={styles.field}>

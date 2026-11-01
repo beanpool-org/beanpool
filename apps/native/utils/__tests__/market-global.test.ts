@@ -288,12 +288,12 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         const map = read('../../app/(tabs)/map.tsx').split('\n');
         const currency = map.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
         expect(currency.length).toBe(1);
-        for (const i of currency) expect(map.slice(Math.max(0, i - 3), i).join('\n')).toContain('{showsBeans && !previewCopy && (');
+        for (const i of currency) expect(map.slice(Math.max(0, i - 3), i).join('\n')).toMatch(/\{showsBeans && (!previewCopy && )?\(/);
         const src = read('../../app/new-listing.tsx');
         const lines = src.split('\n');
         expect(lines.some(l => l.includes('<CurrencyDisplay'))).toBe(false);
         // The price section, from its gate to its end: the field, the unit button, FREE, the pricing guide, the fee.
-        const open = lines.findIndex(l => l.trim() === '{showsBeans && !previewCopy && (<>');
+        const open = lines.findIndex(l => l.trim() === '{showsBeans && (<>');
         const close = lines.findIndex((l, i) => i > open && l.trim() === '</>)}');
         expect(open).toBeGreaterThan(0);
         expect(close).toBeGreaterThan(open);

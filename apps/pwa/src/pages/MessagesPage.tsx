@@ -302,6 +302,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         awaitingPeerReadRef.current = ownNewest > peerRead;
     }, [messages, activeConv?.type, activeConv?.peerLastReadAt, identity?.publicKey]);
     const markingReadRef = useRef<Set<string>>(new Set());
+    // Chats a mark was asked for while one was out: a line can land after the node handled that one, so it runs once more.
+    const markAgainRef = useRef<Set<string>>(new Set());
     const markReadIfNeeded = async (convId: string, initialUnread?: number) => {
         if (!identity?.publicKey) return;
         const row = conversationsRef.current.find(c => c.id === convId);
@@ -311,7 +313,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             (activeConvRef.current?.id === convId ? activeConvRef.current.unreadCount : 0) ?? 0,
         );
         if (unread <= 0) return;
-        if (markingReadRef.current.has(convId)) return;
+        if (markingReadRef.current.has(convId)) {
+            markAgainRef.current.add(convId);
+            return;
+        }
         markingReadRef.current.add(convId);
         try {
             await markConversationReadApi(identity.publicKey, convId);
@@ -322,6 +327,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // offline: the next poll tries again
         } finally {
             markingReadRef.current.delete(convId);
+            if (markAgainRef.current.delete(convId)) void markReadIfNeeded(convId, 1);
         }
     };
     // Keys handed to members who lack them, once per group per page (GroupKeyring.serveMissing).

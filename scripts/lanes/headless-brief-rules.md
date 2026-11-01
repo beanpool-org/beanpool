@@ -19,7 +19,10 @@ RULES FOR THIS HEADLESS RUN
 - Do NOT run scripts/test-all.sh. CI runs the full suite on the PR. Run only the suites your change touches.
 - The worktree is new: `pnpm install --frozen-lockfile` at the repo root, then build @beanpool/core and
   @beanpool/engine before running anything — their dist is shared and goes stale across branches.
-- Stage named paths only; never `git add -A` or `git add .`. Push after each logical step.
+- Stage named paths only; never `git add -A` or `git add .`. On a first build, push after each logical step.
+- ONE PUSH PER FIX ROUND (Marty, 1 Nov): in a FIX, FIX-CI or CONTINUE stage, commit locally and push once, when the round's
+  findings are done and the local checks pass, because each push cancels and restarts GitHub's run. Exception: a build stage
+  on a long first build may still push early so work is not lost, and a run about to end must push what it has.
 - Never merge, never deploy, never touch another branch or PR, never force-push.
 - Protected — never edit: apps/native/app/(tabs)/map.tsx, UnifiedMapPin, GlobalHeader*, logo assets, deploy.sh.
 - The members' guide and the operator manual: edit only their pages (packages/beanpool-guide/content, operators).

@@ -99,6 +99,9 @@ LANE_CAPACITY_RE='No capacity available|UNAVAILABLE \(code 503\)'
 # A headless Claude run exits when the model stops replying. If its last words promise a later report, there is
 # no later — whatever it backgrounded is killed below and the gates judge what actually landed.
 LANE_PROMISE_RE="(I'll|I will|will) (send|post|report|update|share)|still running|when it finishes|once it finishes|in the background"
+# One push per fix round (Marty, 1 Nov 2026). ci.yml's concurrency group cancels a branch's run on every new push: 80 of 165 PR
+# runs were cancelled that way, and four runs at 14 jobs each want 56 against GitHub's 20. Every fix brief says this, in these words.
+LANE_ONE_PUSH="ONE PUSH THIS ROUND: commit locally as you go and push once, when this round's findings are done and the local checks pass, because each push cancels and restarts GitHub's run. A long first build may still push early so work is not lost, and a run about to end must push what it has."
 
 typeset -ga LANE_HELD_LOCKS
 typeset -gA LANE_SEEN_PIDS
@@ -449,26 +452,43 @@ Review THAT URL: $LANE_GH_REPO pull request $2. Confirm repo and title before po
 title first. Post each real defect as an inline review comment with file and line (gh api
 repos/$LANE_GH_REPO/pulls/$2/comments). Do not edit, commit or push anything. $3"
   fi; }
+lane_weigh_brief(){ # PR SINCE → how a deciding brief opens when no FIX stage followed the early pass. The gate counts inline
+  # comments, and a pass is clean when it adds none, so this is what keeps that count honest both ways. A false early comment
+  # gets no reply, or the reply would read as a new defect. A real one is posted afresh, or it would stay open behind a clean
+  # verdict; a run script's own LANE_DECIDE_BRIEF may say not to repeat comments, hence the override.
+  print -r -- "Final, DECIDING pass. An early fast-model pass ran and NO fix stage followed it, so its inline comments, those created after $2 (gh api repos/$LANE_GH_REPO/pulls/$1/comments --paginate), are unanswered. WEIGH each one on the code.
+- REAL and still broken: post it as your own new inline comment, with file and line. This overrides any line below that says not to repeat existing comments: the gate counts inline comments and this pass reads as clean only if it adds none, so a real finding you do not post stays open behind a clean verdict.
+- NOT real, or already fixed: post nothing inline, not even a reply, which would read as a new defect. Never edit or delete a comment.
+In your summary issue comment (gh pr comment), after its first line, list every early comment as REAL or NOT REAL with one line why. Beyond them, verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line."; }
 
 cont(){ # NAME BRANCH BRIEF-FILE — finish whatever an earlier stage on this brief left undone
-  stage "$1-CONTINUE" "$LANE_BUILD_TIMEOUT" "CONTINUE STAGE for branch $2 (fetch it and check it out in the lane worktree). A previous run worked on this brief and may have hit its time limit or been stopped. Start from git status, git diff and git log origin/$LANE_BASE..HEAD, and FINISH whatever is not yet done; if it is already complete, say ALREADY COMPLETE and stop. Commit and push per step.
+  stage "$1-CONTINUE" "$LANE_BUILD_TIMEOUT" "CONTINUE STAGE for branch $2 (fetch it and check it out in the lane worktree). A previous run worked on this brief and may have hit its time limit or been stopped. Start from git status, git diff and git log origin/$LANE_BASE..HEAD, and FINISH whatever is not yet done; if it is already complete, say ALREADY COMPLETE and stop. $LANE_ONE_PUSH
 
 $(cat "$(lane_brief_path "$3")")" build; }
 
-review(){ # BRANCH — two early passes (fixing between), then the deciding pass. Sets CLEAN and PR.
-  local i B0 B1 T
+review(){ # BRANCH — the early pass(es), then the deciding pass. Sets CLEAN and PR.
+  # AGY-built (tier B): two early passes, with a FIX stage after each that comments. It costs no Claude quota, and it finds
+  # real bypasses. Claude-built (tier A): one early pass, no FIX stage, no second pass; the deciding pass weighs what it said.
+  # Measured 1 Nov 2026 on 14 Opus lanes: Flash's comments started 272 min of Opus FIX stages, each of their pushes restarted
+  # CI, and the deciding pass still failed 10 of the 14. FIX stages on Opus cost 42% of the minutes of deciding passes.
+  local i B0 B1 T opening passes=2
   PR=$(prnum "$1"); [ -n "$PR" ] || { log "no PR for $1 — skipping review"; CLEAN=0; return; }
-  for i in 1 2; do
+  [ "$(lane_backend build)" = claude ] && passes=1
+  for i in $(seq 1 "$passes"); do
     B0=$(count "$PR"); T=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     stage "CCR-$1-$i" "$LANE_REVIEW_TIMEOUT" "$(lane_review_brief review "$PR" "Pass $i. Read existing comments first and do not repeat them; post only what is new or still broken, with file and line; if clean, one summary comment and no inline comments.")" review
     lane_gate_ran "review $1 pass $i" || { CLEAN=0; return; }
     B1=$(count "$PR"); log "review $1 pass $i: comments $B0 → $B1"
     { lane_is_count "$B0" && lane_is_count "$B1"; } || { log "comment count unavailable (GitHub API) — NOT clean"; CLEAN=0; return; }
     [ "$B1" -le "$B0" ] && break
-    stage "FIX-$1-$i" "$LANE_BUILD_TIMEOUT" "STAGE FIX — PR #$PR (branch $1; fetch and check it out in the lane worktree). Read the inline review comments created after $T: gh api repos/$LANE_GH_REPO/pulls/$PR/comments --paginate. Fix the BLOCKING ones (correctness, security, money, authorization, data loss). For OPTIONAL suggestions, reply briefly and leave them for a human — do not implement them. If a finding needs a DESIGN decision not in the docs, reply that it is parked for the maintainer. Never delete or weaken a test assertion. Commit and push per fix; run the suites you touched." build
+    if [ "$passes" = 1 ]; then log "$((B1-B0)) early comment(s) left for the deciding pass to weigh — no FIX stage on a Claude-built lane"; break; fi
+    stage "FIX-$1-$i" "$LANE_BUILD_TIMEOUT" "STAGE FIX — PR #$PR (branch $1; fetch and check it out in the lane worktree). Read the inline review comments created after $T: gh api repos/$LANE_GH_REPO/pulls/$PR/comments --paginate. Fix the BLOCKING ones (correctness, security, money, authorization, data loss). For OPTIONAL suggestions, reply briefly and leave them for a human — do not implement them. If a finding needs a DESIGN decision not in the docs, reply that it is parked for the maintainer. Never delete or weaken a test assertion. Commit each fix and run the suites you touched. $LANE_ONE_PUSH" build
   done
   # A clean early pass is corroboration, not proof: the merge is decided by the deciding pass on the strong model.
-  decide_review "$PR" "$1" 3 0 "Final, DECIDING pass: verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line.
+  opening="Final, DECIDING pass: verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line."
+  # Only when the pass left something to weigh: with no comments, that brief would ask for a verdict on each of none.
+  [ "$passes" = 1 ] && [ "$B1" -gt "$B0" ] && opening=$(lane_weigh_brief "$PR" "$T")
+  decide_review "$PR" "$1" 3 0 "$opening
 
 $LANE_DECIDE_BRIEF"; }
 
@@ -476,7 +496,7 @@ item(){ # NAME BRANCH BRIEF-FILE [BRIEF-FILE-2] — build, continue, open the PR
   [ "$LANE_BUILD_BACKEND" = agy ] && lane_fresh
   if exists "$2"; then log "branch $2 exists — resuming"; cont "$1" "$2" "$3"
   else stage "$1" "$LANE_BUILD_TIMEOUT" "$(cat "$(lane_brief_path "$3")")" build; cont "$1" "$2" "$3"; fi
-  [ -n "$4" ] && stage "$1-b" "$LANE_BUILD_TIMEOUT" "CONTINUE on branch $2 (fetch and check it out in the lane worktree): now do the SECOND brief below; skip what is already done. Commit and push per step.
+  [ -n "$4" ] && stage "$1-b" "$LANE_BUILD_TIMEOUT" "CONTINUE on branch $2 (fetch and check it out in the lane worktree): now do the SECOND brief below; skip what is already done. $LANE_ONE_PUSH
 
 $(cat "$(lane_brief_path "$4")")" build
   [ -n "$(prnum "$2")" ] || stage "$1-PR" "$LANE_BUILD_TIMEOUT" "Branch $2 exists on origin (fetch and check it out in the lane worktree). If its work is complete per the brief(s) $(lane_brief_path "$3")${4:+ and $(lane_brief_path "$4")}, open the PR now: gh pr create -R $LANE_GH_REPO --base $LANE_BASE --head $2 with a full description. Otherwise finish it first, commit, push, then open the PR." build

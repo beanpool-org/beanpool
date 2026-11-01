@@ -3043,13 +3043,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         </>
                     )}
                 </div>
-                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4, opacity: 0.8 }}>
+                {/* On the card's own ground: this line now sits over the doodles, and it's the terms. */}
+                <p data-testid="welcome-legal" className="bg-white dark:bg-nature-900 rounded-xl px-3 py-2" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4 }}>
                     <span>{t('BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance.')}</span>{' '}
                     <Sentence
                         text={t('By continuing, you agree to our {terms} and {privacy}.')}
                         parts={{
-                            terms: <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>{t('Terms of Service')}</a>,
-                            privacy: <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>{t('Privacy Policy')}</a>,
+                            terms: <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--link)', textDecoration: 'underline' }}>{t('Terms of Service')}</a>,
+                            privacy: <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--link)', textDecoration: 'underline' }}>{t('Privacy Policy')}</a>,
                         }}
                     />
                 </p>

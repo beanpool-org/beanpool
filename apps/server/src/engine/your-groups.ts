@@ -239,10 +239,10 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         try { row = loadEventForThread(id); } catch { continue; }
         if (isEventThreadExpired(row) || !canReadEventThread(row, pubkey)) continue;
         const host = isEventHost(db, row, pubkey);
-        const ev = db.prepare('SELECT event_start_at FROM posts WHERE id = ?').get(id) as any;
+        // Bolt: loadEventForThread selects event_start_at directly, avoiding an N+1 query per event.
         finish({
             kind: 'event', badge: YOUR_CHAT_BADGES.event, id, conversationId: id, name: row.title, avatarUrl: null,
-            role: host ? 'host' : 'going', eventStartAt: ev?.event_start_at ?? null, eventEndAt: row.event_end_at,
+            role: host ? 'host' : 'going', eventStartAt: row.event_start_at ?? null, eventEndAt: row.event_end_at,
             readOnly: !!eventThreadReadOnlyReason(row),
         }, EVENT_THREAD_REMOVED_TEXT);
     }

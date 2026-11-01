@@ -133,9 +133,14 @@ export function ShowOnGlobalHostRow({ event, enabled }: { event: HomeEvent; enab
     const { identity } = useIdentity();
     const { offer, ask } = useOffer(enabled);
     const [shown, setShown] = useState(false);
+    const [resting, setResting] = useState(false);
     const [busy, setBusy] = useState(false);
     const read = useCallback(() => {
-        if (enabled && identity) void import('../utils/show-on-global').then((c) => c.pairOf(event.id, identity.publicKey)).then((p) => setShown(!!p));
+        if (!enabled || !identity) return;
+        void import('../utils/show-on-global').then((c) => c.pairOf(event.id, identity.publicKey)).then((p) => {
+            setShown(!!p);
+            setResting(!!p?.resting);
+        });
     }, [enabled, event.id, identity]);
     useEffect(read, [read]);
     if (!enabled || !identity || (!shown && !offer)) return null;
@@ -168,7 +173,9 @@ export function ShowOnGlobalHostRow({ event, enabled }: { event: HomeEvent; enab
     return (
         <View style={styles.row} testID="show-on-global-host">
             <View style={styles.col}>
-                {shown ? <Text style={styles.title}>{t('Shown on the global community')}</Text> : <Text style={styles.hint}>{showOnGlobalHint()}</Text>}
+                {shown
+                    ? <Text style={styles.title}>{resting ? t("It comes down while you're on holiday, and goes back up when you're back.") : t('Shown on the global community')}</Text>
+                    : <Text style={styles.hint}>{showOnGlobalHint()}</Text>}
                 <Pressable onPress={act} disabled={busy} style={[styles.action, busy && styles.asking]} accessibilityRole="button" accessibilityState={{ busy }} testID="show-on-global-act">
                     <Text style={styles.link}>{shown ? t('Stop showing') : showOnGlobalLabel()}</Text>
                 </Pressable>

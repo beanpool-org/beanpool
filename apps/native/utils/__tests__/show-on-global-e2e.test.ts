@@ -7,7 +7,8 @@
  *   as home holds it. Global's from-line is the directory's; an unlisted host is dropped and the member told. An edit, a
  *   time change, a cancelled date and a cancel repeat. Global down, it all waits, and a phone back comes into step, a cancel
  *   included. A lost answer posts nothing twice. A refusal forgets a copy only once it has gone from global, and a series
- *   between dates isn't over. A global that predates copies keeps nothing with the member's name on.
+ *   between dates isn't over. A holiday at home takes the copy down and its end brings it back. A global that predates copies
+ *   keeps nothing with the member's name on.
  *
  *   The home harness's request log holds nothing but the phone: no call to global, and home is asked nothing it isn't always
  *   asked. The community's own fetch refuses every host but this machine. The phone's fetch is held to these two addresses.
@@ -150,6 +151,8 @@ let globalDown = false;
 let loseNextCreate = false;
 /** Where the home community says it lives now, as a community that moved to a new main name does. */
 let mainAddress: string | null = null;
+/** The home community answers everything but what the member's preferences are. */
+let homeHidesPreferences = false;
 
 const deps = (): CopyDeps => ({ global: global_.url, get: signedGet, post: signedPost, del: signedDelete, fetchPhoto: fetchedPostPhoto, hostOf: () => HOST });
 
@@ -166,6 +169,7 @@ beforeAll(async () => {
         }
         if (toGlobal && globalDown) throw new TypeError('Network request failed');
         if (toLocal) phoneToLocal.push(`${String(init?.method ?? 'GET')} ${url.pathname}${url.search}`);
+        if (toLocal && homeHidesPreferences && url.pathname === '/api/members/preferences') return new Response('{}', { status: 503 });
         const res = await realFetch(input, init);
         if (toLocal && mainAddress && url.pathname === '/api/community/info') {
             const info = await res.json() as Record<string, unknown>;
@@ -190,6 +194,7 @@ beforeEach(async () => {
     globalDown = false;
     loseNextCreate = false;
     mainAddress = null;
+    homeHidesPreferences = false;
     await Promise.all([global_.control('limiters'), local.control('limiters')]);
     await global_.control('profileSwitch', { name: 'probation', value: 'false' });
     await global_.control('directory', { url: `https://${HOST}`, name: 'Mullumbimby' });
@@ -380,6 +385,174 @@ describe('an in-person event shown on the global community (the phone against tw
         expect((await copyRow(again)).status).toBe('cancelled');
         expect(await pairOf(home.id, me.publicKey)).toBeNull();
     }, START_MS);
+
+    describe('a holiday at home: the copy leaves global with the member\'s listings, and goes back up when they\'re back', () => {
+        const holiday = async (me: BeanPoolIdentity, enabled: boolean) => {
+            expect((await signedPost(local.url, '/api/members/holiday', { enabled }, me)).ok).toBe(true);
+        };
+        const liveCopies = async (me: BeanPoolIdentity) => (await global_.control<Array<{ id: string; title: string }>>('sql', {
+            sql: "SELECT id, title FROM posts WHERE author_pubkey = ? AND status = 'active' AND active = 1", params: [me.publicKey], all: true,
+        }));
+
+        it('down at the next tend, back at the first one after, as a new copy with what changed at home in between', async () => {
+            const me = await memberOfBoth('Away Hana');
+            const home = await eventAtHome(me, 'Market day', { freeTags: ['stalls'] });
+            await showOnGlobal(home, local.url, me, deps());
+            const id = await copyIdOf(home.id, me);
+            await tendCopies(me, deps());
+            expect((await copyRow(id)).status).toBe('active');
+
+            await holiday(me, true);
+            await tendCopies(me, deps());
+            expect((await copyRow(id)).status).toBe('cancelled');
+            expect(await liveCopies(me)).toEqual([]);
+            expect((await pairOf(home.id, me.publicKey))?.resting).toBe(true);
+
+            // Nothing sends it while they're away: not a tend, not an edit at home.
+            await tendCopies(me, deps());
+            const edited = await editAtHome(me, home.id, { title: 'Market day, moved', freeTags: [] });
+            await repeatOnCopy(edited, me, deps());
+            expect(await showOnGlobal(edited, local.url, me, deps())).toBe('later');
+            expect(await liveCopies(me)).toEqual([]);
+
+            await holiday(me, false);
+            await tendCopies(me, deps());
+            const pair = await pairOf(home.id, me.publicKey);
+            expect(pair?.copyId).not.toBe(id);
+            expect(pair?.resting).toBe(false);
+            const back = await copyRow(pair!.copyId);
+            expect(back).toMatchObject({ status: 'active', title: 'Market day, moved', author_pubkey: me.publicKey, shown_from_host: HOST, shown_from_post_id: home.id, photo_count: 1 });
+            expect((await copyRow(id)).status).toBe('cancelled');
+
+            const stamp = back.updated_at;
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toHaveLength(1);
+            expect((await copyRow(pair!.copyId)).updated_at).toBe(stamp);
+        }, START_MS);
+
+        it('a date cancelled at home is cancelled on the copy that comes back', async () => {
+            const me = await memberOfBoth('Away Noor');
+            const first = new Date(inHours(14 * 24));
+            const end = new Date(first.getTime() + 2 * 3_600_000);
+            const clock = (d: Date) => d.toISOString().slice(0, 16);
+            const later = new Date(first.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+            const home = await eventAtHome(me, 'Weekly', {
+                eventStartAt: first.toISOString(), eventEndAt: end.toISOString(), eventStartLocal: clock(first), eventEndLocal: clock(end), eventTz: 'UTC',
+                eventRepeat: repeatPatternFor('weekly', clock(first).slice(0, 10)),
+            });
+            await showOnGlobal(home, local.url, me, deps());
+            await holiday(me, true);
+            await tendCopies(me, deps());
+            expect((await signedPost(local.url, `/api/events/${home.id}/skip`, { date: later }, me)).ok).toBe(true);
+            await holiday(me, false);
+            await tendCopies(me, deps());
+            const pair = await pairOf(home.id, me.publicKey);
+            expect(pair?.skips).toEqual([later]);
+            expect(String((await copyRow(pair!.copyId)).event_repeat_skips)).toContain(later);
+        }, START_MS);
+
+        it('global down when the holiday starts: the copy comes down when it answers, and the pair still waits', async () => {
+            const me = await memberOfBoth('Away Otis');
+            const home = await eventAtHome(me, 'Swap meet');
+            await showOnGlobal(home, local.url, me, deps());
+            const id = await copyIdOf(home.id, me);
+            await holiday(me, true);
+            globalDown = true;
+            await tendCopies(me, deps());
+            globalDown = false;
+            expect((await copyRow(id)).status).toBe('active');
+            expect(await pairOf(home.id, me.publicKey)).toMatchObject({ copyId: id, leaving: true, resting: true });
+
+            await tendCopies(me, deps());
+            expect((await copyRow(id)).status).toBe('cancelled');
+            await holiday(me, false);
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toHaveLength(1);
+        }, START_MS);
+
+        it('home not saying changes nothing, whichever way the holiday stands', async () => {
+            const me = await memberOfBoth('Away Pax');
+            const home = await eventAtHome(me, 'Working bee');
+            await showOnGlobal(home, local.url, me, deps());
+            const id = await copyIdOf(home.id, me);
+            homeHidesPreferences = true;
+            await holiday(me, true);
+            await tendCopies(me, deps());
+            expect((await copyRow(id)).status).toBe('active');
+            homeHidesPreferences = false;
+            await tendCopies(me, deps());
+            expect((await copyRow(id)).status).toBe('cancelled');
+
+            homeHidesPreferences = true;
+            await holiday(me, false);
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toEqual([]);
+            expect((await pairOf(home.id, me.publicKey))?.resting).toBe(true);
+        }, START_MS);
+
+        it('resting, a cancel at home, moving online and Stop showing each end it: nothing comes back', async () => {
+            const me = await memberOfBoth('Away Quin');
+            const cancelled = await eventAtHome(me, 'Cancelled while away');
+            const online = await eventAtHome(me, 'Online while away');
+            const stopped = await eventAtHome(me, 'Stopped while away');
+            for (const event of [cancelled, online, stopped]) await showOnGlobal(event, local.url, me, deps());
+            await holiday(me, true);
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toEqual([]);
+            const removed = { ok: true } as Response;
+            const noGlobal: CopyDeps = { ...deps(), post: vi.fn(async () => removed) };
+
+            expect((await signedPost(local.url, '/api/marketplace/posts/remove', { id: cancelled.id, authorPublicKey: me.publicKey }, me)).ok).toBe(true);
+            await tendCopies(me, noGlobal);
+            expect(await pairOf(cancelled.id, me.publicKey)).toBeNull();
+            await repeatOnCopy({ ...online, eventOnline: true }, me, noGlobal);
+            expect(await pairOf(online.id, me.publicKey)).toBeNull();
+            expect(await stopShowing(stopped.id, me, noGlobal)).toBe(true);
+            expect(await pairOf(stopped.id, me.publicKey)).toBeNull();
+            // Global was told nothing: there was nothing up to take down.
+            expect(noGlobal.post).not.toHaveBeenCalled();
+
+            await holiday(me, false);
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toEqual([]);
+        }, START_MS);
+
+        it('Stop showing before global has heard takes it down for good', async () => {
+            const me = await memberOfBoth('Away Rae');
+            const home = await eventAtHome(me, 'Stopped on the way down');
+            await showOnGlobal(home, local.url, me, deps());
+            const id = await copyIdOf(home.id, me);
+            await holiday(me, true);
+            globalDown = true;
+            await tendCopies(me, deps());
+            globalDown = false;
+            expect(await stopShowing(home.id, me, deps())).toBe(true);
+            expect((await copyRow(id)).status).toBe('cancelled');
+            expect(await pairOf(home.id, me.publicKey)).toBeNull();
+            await holiday(me, false);
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toEqual([]);
+        }, START_MS);
+
+        it('two tends at once, as the app coming to the front and the holiday switch can start, leave one copy', async () => {
+            const me = await memberOfBoth('Away Tully');
+            const home = await eventAtHome(me, 'Only once');
+            await showOnGlobal(home, local.url, me, deps());
+            await holiday(me, true);
+            await Promise.all([tendCopies(me, deps()), tendCopies(me, deps())]);
+            await holiday(me, false);
+            await Promise.all([tendCopies(me, deps()), tendCopies(me, deps())]);
+            expect(await liveCopies(me)).toHaveLength(1);
+        }, START_MS);
+
+        it('one tend asks home once, however many events the member has shown', async () => {
+            const me = await memberOfBoth('Away Sol');
+            for (const title of ['One', 'Two', 'Three']) await showOnGlobal(await eventAtHome(me, title), local.url, me, deps());
+            const from = phoneToLocal.length;
+            await tendCopies(me, deps());
+            expect(phoneToLocal.slice(from).filter((r) => r.includes('/api/members/preferences'))).toHaveLength(1);
+        }, START_MS);
+    });
 
     it('what the tick is not for never goes, whoever asks: a group\'s event, an enterprise\'s, an online one', async () => {
         const me = await memberOfBoth('Odile');

@@ -12,6 +12,8 @@
  *   An unchanged copy is sent again now and then, so a phone still tending it keeps it past global's 90-day retention, and
  *   one that can't falls off by itself. The pairs live here alone: a new phone tends nothing, and the copy stays the
  *   member's to take down from My posts on global.
+ * - **A holiday at home.** The member's listings leave their community's board, and the copy leaves global with them. The
+ *   pair stays, and when the holiday ends the copy goes back up as a new one ({@link CopyPair.resting}).
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
  *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
  *   pair goes only once global says the copy isn't up ({@link forgetIfGone}): it is the phone's only way to that copy.
@@ -31,6 +33,7 @@ import type { BeanPoolIdentity } from './identity';
 import type { FetchedPhoto } from './post-photo';
 
 const POSTS_PATH = '/api/marketplace/posts';
+const PREFERENCES_PATH = '/api/members/preferences';
 const TIMEOUT_MS = 60_000;
 /** A copy unchanged this long is sent again, so global's retention (90 days without a change) only takes an untended one. */
 export const COPY_KEEP_ALIVE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -77,6 +80,11 @@ export interface CopyPair {
     skips: string[];
     /** The event left the board, and global hasn't heard yet. */
     leaving?: boolean;
+    /**
+     * The member is on holiday at home: the copy comes down, and goes back up when they're back. With `leaving`, global hasn't
+     * heard yet. Without it the copy is down and the pair holds a new id, since a copy taken down can't be brought back.
+     */
+    resting?: boolean;
 }
 
 export type CopyResult = 'shown' | 'shown-no-name' | 'later' | { refused: string };
@@ -129,9 +137,9 @@ async function dropPair(pair: CopyPair): Promise<void> {
     await writePairs((await readPairs()).filter((p) => p.copyId !== pair.copyId));
 }
 
-/** This key's pair for a home event, if it is shown or waiting to be. */
+/** This key's pair for a home event, if it is shown, waiting to be, or resting: it stays theirs to stop. */
 export async function pairOf(homeId: string, publicKey: string): Promise<CopyPair | null> {
-    return (await readPairs()).find((p) => p.homeId === homeId && p.publicKey === publicKey && !p.leaving) ?? null;
+    return (await readPairs()).find((p) => p.homeId === homeId && p.publicKey === publicKey && (!p.leaving || p.resting)) ?? null;
 }
 
 /**
@@ -275,7 +283,9 @@ async function repeatDates(pair: CopyPair, home: HomeEvent, identity: BeanPoolId
 export async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: BeanPoolIdentity, deps: CopyDeps = liveDeps): Promise<CopyResult> {
     if (!mayShowOnGlobal(home, identity.publicKey)) return { refused: t("The global community can't show this yet.") };
     const { randomUUID } = await import('expo-crypto');
-    const pair: CopyPair = (await pairOf(home.id, identity.publicKey))
+    const kept = await pairOf(home.id, identity.publicKey);
+    if (kept?.resting) return 'later';
+    const pair: CopyPair = kept
         ?? { publicKey: identity.publicKey, home: plainOriginOf(homeUrl) ?? homeUrl, homeId: home.id, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
     await savePair(pair);
     return sendCopy(pair, home, identity, deps);
@@ -292,19 +302,34 @@ export async function repeatOnCopy(home: HomeEvent, identity: BeanPoolIdentity, 
         await takeDown(pair, identity, deps);
         return;
     }
+    if (pair.resting) return;
     await sendCopy(pair, home, identity, deps);
     const now = await pairOf(home.id, identity.publicKey);
     if (now) await repeatDates(now, home, identity, deps).catch(() => {});
 }
 
-/** The copy comes down. Global not answering, the pair stays marked, and {@link tendCopies} tries again. */
-async function takeDown(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
+/** Asks global to take the copy down, the pair marked first. False when global didn't answer, and it stays marked. */
+async function askDown(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
     await savePair({ ...pair, leaving: true });
     const answer = await withTimeout((signal) => deps.post(deps.global, `${POSTS_PATH}/remove`, { id: pair.copyId, authorPublicKey: identity.publicKey }, identity, signal))
         .then(answerOf).catch(() => 'later' as const);
-    if (answer === 'later') return false;
+    return answer !== 'later';
+}
+
+/** The copy comes down and the pair goes. Global not answering, {@link tendCopies} tries again. A resting pair has nothing up. */
+async function takeDown(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
+    const nothingUp = pair.resting && !pair.leaving;
+    if (!nothingUp && !(await askDown({ ...pair, resting: false }, identity, deps))) return false;
     await dropPair(pair);
     return true;
+}
+
+/** A holiday at home: the copy comes down and the pair waits with a new id for the holiday to end. */
+async function restCopy(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<void> {
+    if (!(await askDown({ ...pair, resting: true }, identity, deps))) return;
+    const { randomUUID } = await import('expo-crypto');
+    const waiting: CopyPair = { ...pair, leaving: false, resting: true, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
+    await writePairs([...(await readPairs()).filter((p) => p.copyId !== pair.copyId), waiting]);
 }
 
 /** Stop showing, and a cancel at home: the copy goes. False when global didn't answer, and it is tried again. */
@@ -324,6 +349,14 @@ async function readHome(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDe
     return Array.isArray(rows) ? (rows[0] as HomeEvent | undefined) ?? null : 'later';
 }
 
+/** Is the member on holiday at their community? `later` where it didn't say: a pair changes on its word alone. */
+async function onHoliday(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean | 'later'> {
+    const res = await withTimeout((signal) => deps.get(pair.home, `${PREFERENCES_PATH}?publicKey=${encodeURIComponent(identity.publicKey)}`, identity, signal));
+    if (!res.ok) return 'later';
+    const prefs: any = await res.json().catch(() => null);
+    return prefs && typeof prefs === 'object' ? prefs.holiday_mode === 'true' : 'later';
+}
+
 /** Nothing at home has stopped it. Whether its date has passed is another question ({@link rollsOn}). */
 const isOn = (home: HomeEvent) => home.status === 'active' && home.active !== false && home.eventState !== 'cancelled' && !home.hiddenByReportsAt;
 
@@ -340,14 +373,25 @@ function rollsOn(home: HomeEvent): boolean {
 
 /**
  * Each of this key's pairs brought into step from its community's own word: an event gone, cancelled, ended, hidden or moved
- * online there takes its copy down; a series between dates waits for the next round; one waiting goes; one changed follows,
- * and one long unchanged is sent again. A community that gives no answer changes nothing.
+ * online there takes its copy down; a series between dates waits for the next round; a holiday there rests the copy, and its
+ * end brings it back; one waiting goes; one changed follows, and one long unchanged is sent again. A community that gives no
+ * answer changes nothing.
  */
-export async function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = liveDeps, now: number = Date.now()): Promise<void> {
+export function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = liveDeps, now: number = Date.now()): Promise<void> {
+    const run = lastTend.then(() => tendPairs(identity, deps, now));
+    lastTend = run.catch(() => {});
+    return run;
+}
+
+/** One tend at a time: the app coming to the front and a holiday switched can overlap, and two would each rest a pair under a new id. */
+let lastTend: Promise<unknown> = Promise.resolve();
+
+async function tendPairs(identity: BeanPoolIdentity, deps: CopyDeps, now: number): Promise<void> {
+    const holidays = new Map<string, Promise<boolean | 'later'>>();
     for (const pair of (await readPairs()).filter((p) => p.publicKey === identity.publicKey)) {
         try {
             if (pair.leaving) {
-                await takeDown(pair, identity, deps);
+                await (pair.resting ? restCopy : takeDown)(pair, identity, deps);
                 continue;
             }
             const home = await readHome(pair, identity, deps);
@@ -360,8 +404,15 @@ export async function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = li
                 if (!rollsOn(home)) await takeDown(pair, identity, deps);
                 continue;
             }
+            if (!holidays.has(pair.home)) holidays.set(pair.home, onHoliday(pair, identity, deps));
+            const away = await holidays.get(pair.home);
+            if (away === 'later') continue;
+            if (away) {
+                if (!pair.resting) await restCopy(pair, identity, deps);
+                continue;
+            }
             if (pair.sent !== JSON.stringify(copyFields(home, identity.publicKey)) || firstPhoto(home) !== pair.photo || now - pair.sentAt >= COPY_KEEP_ALIVE_MS) {
-                await sendCopy(pair, home, identity, deps);
+                await sendCopy({ ...pair, resting: false }, home, identity, deps);
             }
             const current = (await readPairs()).find((p) => p.copyId === pair.copyId);
             if (current?.sent) await repeatDates(current, home, identity, deps);

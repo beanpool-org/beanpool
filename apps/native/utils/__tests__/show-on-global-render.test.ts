@@ -258,6 +258,18 @@ describe('Stop showing, on the host\'s page', () => {
         expect(host.textContent).not.toContain('Stop showing');
     });
 
+    it('resting for a holiday at home, the row says so and doesn\'t call it shown, and Stop showing stays on offer', async () => {
+        calls.pair.mockImplementation(async () => ({ copyId: 'c1', resting: true }));
+        await shownRow();
+        expect(host.textContent).toContain("It comes down while you're on holiday, and goes back up when you're back.");
+        expect(host.textContent).not.toContain('Shown on the global community');
+        expect(host.textContent).toContain('Stop showing');
+        calls.pair.mockImplementation(async () => ({ copyId: 'c1', resting: false }));
+        calls.stop.mockImplementation(async () => false);
+        await press('show-on-global-act');
+        expect(host.textContent).toContain('Shown on the global community');
+    });
+
     it('while it runs the row dims, says so and takes no second tap, and the answer frees it', async () => {
         let finish!: (done: boolean) => void;
         calls.stop.mockImplementation(() => new Promise<boolean>((resolve) => { finish = resolve; }));

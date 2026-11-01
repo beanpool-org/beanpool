@@ -91,7 +91,7 @@ async function verifyEdgeStatus(hostname: string, target: 'live' | 'offline', ma
                 addProbeLog('4/4', `Probe ${i + 1}/${maxAttempts} (${elapsed}s): HTTP ${status === 530 ? '530 — waiting for tunnel…' : status}`, 'info');
             } else if (target === 'offline') {
                 if (status === 530 || status === 502 || status === 520 || status === 522 || status === 523 || status === 404 || status === 0) {
-                    addProbeLog('4/4', `🔴 Probe ${i + 1}/${maxAttempts}: HTTP ${status} — Confirmed OFFLINE!`, 'warning');
+                    addProbeLog('4/4', `🔴 Probe ${i + 1}/${maxAttempts}: HTTP ${status} — ${hostname} confirmed OFFLINE!`, 'warning');
                     return true;
                 }
                 addProbeLog('4/4', `Probe ${i + 1}/${maxAttempts}: HTTP ${status} (waiting for teardown…)`, 'info');
@@ -816,14 +816,19 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             noteTurnedAway(prevConfig?.name, 'taken-offline');
             addProbeLog('2/4', `⏳ Stopping the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
-            addProbeLog('3/4', tunnel.state === 'off' ? `✅ Tunnel stopped` : `❌ Tunnel still ${describeTunnel(tunnel)}`, tunnel.state === 'off' ? 'success' : 'error');
+            // A name the community moved off keeps its own tunnel, so this server can stay public there: the owner is told so,
+            // never that it is offline. The way to end one is to claim it back and Take offline (tunnel-connector.ts otherHosts).
+            const stillAnswering = (tunnel.others ?? []).map((o) => o.host);
+            if (tunnel.state !== 'off') addProbeLog('3/4', `❌ Tunnel still ${describeTunnel(tunnel)}`, 'error');
+            else if (stillAnswering.length) addProbeLog('3/4', `⚠️ ${tr("The released name's tunnel stopped. This server still answers at {addresses}.", { addresses: stillAnswering.join(', ') })}`, 'warning');
+            else addProbeLog('3/4', `✅ Tunnel stopped`, 'success');
             if (hostname) {
                 verifyEdgeStatus(hostname, 'offline', 10).catch(err => {
                     console.warn('[PublicAddr] Edge offline probe error:', err?.message || err);
                 });
             }
             if (prevConfig?.name) addressChangedByOwner(ctx, 'offline', prevConfig.status === 'live');
-            ctx.body = { success: true, ...addressFields(ctx, result), status: 'none' };
+            ctx.body = { success: true, ...addressFields(ctx, result), status: 'none', stillAnswering };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Offline failed: ${e.message}`, 'error');
             ctx.status = 400;

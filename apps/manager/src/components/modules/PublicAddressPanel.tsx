@@ -71,6 +71,17 @@ export interface TunnelStatus {
     connections?: number;
     reason?: string | null;
     version?: string | null;
+    /** The tunnels of the other names this key holds, left out when there are none. The fields above are the stored name's. */
+    others?: { host?: string; state?: string }[];
+}
+
+/**
+ * The names this server keeps answering at besides the stored one, which Take offline leaves up, as one list for a sentence:
+ * from its answer's `stillAnswering` (hosts) or the status's `tunnel.others` (each with its host).
+ */
+function namesLeftUp(names: unknown): string {
+    if (!Array.isArray(names)) return '';
+    return names.map((n) => (typeof n === 'string' ? n : n?.host)).filter((host) => typeof host === 'string' && host).join(', ');
 }
 
 /**
@@ -508,10 +519,14 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
     };
 
     const requestOfflineConfirmation = () => {
+        const address = statusData?.hostname || statusData?.name || 'node';
+        const others = namesLeftUp(statusData?.tunnel?.others);
         setConfirmModal({
             isOpen: true,
-            title: 'Take Node Offline',
-            message: `Release public address "${statusData?.hostname || statusData?.name || 'node'}" and take the node offline from the public internet? The Cloudflare tunnel and DNS record will be torn down.`,
+            title: others ? t('Take this address offline') : 'Take Node Offline',
+            message: others
+                ? t('Release public address "{address}"? Its tunnel and DNS record will be torn down, but the node stays on the public internet: this server still answers at {others}. To end that, claim {others} back, then use Take offline.', { address, others })
+                : `Release public address "${address}" and take the node offline from the public internet? The Cloudflare tunnel and DNS record will be torn down.`,
             actionType: 'offline',
             confirmButtonText: 'Take Offline',
         });
@@ -557,7 +572,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
             }
             const data = await res.json().catch(() => ({}));
             if (res.ok) {
-                setActionMessage({ text: '✓ Public address released. Node is offline.', type: 'success' });
+                const others = namesLeftUp(data.stillAnswering);
+                setActionMessage(others
+                    ? { text: t('✓ Public address released. This server still answers at {addresses}.', { addresses: others }), type: 'warning' }
+                    : { text: '✓ Public address released. Node is offline.', type: 'success' });
                 setStatusData({ status: 'none' });
                 await loadStatus();
                 onRefreshDiag?.();
@@ -680,6 +698,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
     const tunnelToken = typeof statusData?.tunnelToken === 'string' ? statusData.tunnelToken : '';
     const tunnelTokenOwnerOnly = !tunnelToken && statusData?.tunnelTokenOwnerOnly === true;
     const keptHostname = isNone && typeof statusData?.kept?.hostname === 'string' ? statusData.kept.hostname : '';
+    const leftUp = isNone ? namesLeftUp(statusData?.tunnel?.others) : '';
     const tunnelLine = mode === 'tunnel' ? describeTunnel(statusData?.tunnel) : null;
     const tunnelOk = statusData?.tunnel?.state === 'connected';
     // This server's own IP or domain (HTTPS S4), not a BeanPool name: no tunnel, and nothing to take offline at the address
@@ -929,6 +948,13 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                         <div className="text-xs text-red-400">
                             Couldn&apos;t reach the registrar{statusData?.error ? ` — ${String(statusData.error)}` : ''}.
                         </div>
+                    )}
+
+                    {/* No stored address is not offline: a name the community moved off keeps its own tunnel after Take offline. */}
+                    {leftUp && (
+                        <p data-testid="public-address-still-answers" className="m-0 p-3 rounded-xl border border-amber-500/40 bg-bp-chip-warn-tint text-xs text-bp-chip-warn-ink break-words">
+                            {t('This server still answers at {addresses}. To end that, claim {addresses} back, then use Take offline.', { addresses: leftUp })}
+                        </p>
                     )}
 
                     {/* The server's own fault acting on an answer the address service gave (storing it, the tunnel), in every

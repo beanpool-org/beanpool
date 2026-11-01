@@ -848,5 +848,98 @@ describe('PublicAddressPanel Component', () => {
             expect(screen.queryByTestId('extra-name')).not.toBeInTheDocument();
         });
     });
+
+    // A name the community moved off keeps its own tunnel after Take offline, so this server stays public there.
+    describe.each(['dark', 'light'])('Take offline with an old name still answering, in %s', (theme) => {
+        const OLD = 'oldvale.beanpool.org';
+        const others = [{ host: OLD, state: 'connected', connections: 4 }];
+        const moved = { success: true, status: 'live', name: 'byron', hostname: 'byron.beanpool.org', mode: 'tunnel', tunnel: { state: 'connected', connections: 4, others } };
+        const waiting = { success: true, status: 'pending', name: 'byron', mode: 'tunnel', reason: 'awaiting-approval', tunnel: { state: 'off', connections: 0, others } };
+        const none = (over: Record<string, unknown> = {}) => ({ success: true, status: 'none', tunnel: { state: 'off', connections: 0 }, ...over });
+        const noneButOld = none({ tunnel: { state: 'off', connections: 0, others } });
+
+        beforeEach(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); });
+        afterEach(() => { document.documentElement.classList.remove('dark'); });
+
+        /** The node, before and after Take offline: `answer` is what the route says. */
+        const mockNode = (before: unknown, after: unknown, answer: unknown) => {
+            let done = false;
+            vi.spyOn(global, 'fetch').mockImplementation((url) => {
+                const u = String(url);
+                if (u.includes('/public-address/offline')) done = true;
+                const body = u.includes('/public-address/offline') ? answer
+                    : u.includes('/public-address/status') ? (done ? after : before)
+                        : { success: true, logs: [] };
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
+            });
+        };
+        const openDialog = async () => {
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            fireEvent.click(await screen.findByRole('button', { name: /Take offline/i }));
+            return screen.findByRole('dialog');
+        };
+
+        it('the dialog names what keeps answering and how to end it, and never says the node goes offline', async () => {
+            mockNode(moved, noneButOld, { success: true, status: 'none', stillAnswering: [OLD] });
+            const dialog = await openDialog();
+            expect(screen.getByRole('heading', { name: 'Take this address offline' })).toBeInTheDocument();
+            expect(dialog).toHaveTextContent(`Release public address "byron.beanpool.org"? Its tunnel and DNS record will be torn down, but the node stays on the public internet: this server still answers at ${OLD}. To end that, claim ${OLD} back, then use Take offline.`);
+            expect(dialog).not.toHaveTextContent('take the node offline');
+            expect(dialog).not.toHaveTextContent('Take Node Offline');
+        });
+
+        it('a gated name still waiting: the same words, for the name that waits', async () => {
+            mockNode(waiting, noneButOld, { success: true, status: 'none', stillAnswering: [OLD] });
+            const dialog = await openDialog();
+            expect(dialog).toHaveTextContent(`Release public address "byron"? Its tunnel and DNS record will be torn down, but the node stays on the public internet: this server still answers at ${OLD}.`);
+            expect(dialog).not.toHaveTextContent('take the node offline');
+        });
+
+        it('the toast never says the node is offline, and the panel\'s line says where it still answers', async () => {
+            mockNode(moved, noneButOld, { success: true, status: 'none', stillAnswering: [OLD] });
+            await openDialog();
+            fireEvent.click(screen.getByRole('button', { name: 'Take Offline' }));
+            const toast = await screen.findByText(`✓ Public address released. This server still answers at ${OLD}.`);
+            expect(toast.closest('[role="status"]')?.className).toMatch(/bg-amber-950/);
+            expect(screen.queryByText(/Node is offline/)).not.toBeInTheDocument();
+            const line = await screen.findByTestId('public-address-still-answers');
+            expect(line).toHaveTextContent(`This server still answers at ${OLD}. To end that, claim ${OLD} back, then use Take offline.`);
+            expect(line.className).toMatch(/text-bp-chip-warn-ink/);
+            expect(line.className).toMatch(/break-words/);
+        });
+
+        it('two old names are both named', async () => {
+            mockNode(none({ tunnel: { state: 'off', others: [{ host: OLD }, { host: 'older.beanpool.org' }] } }), none(), {});
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByTestId('public-address-still-answers')).toHaveTextContent(`This server still answers at ${OLD}, older.beanpool.org.`);
+        });
+
+        it('beside a name the server keeps with no record of it, the line still shows', async () => {
+            mockNode(none({ kept: { hostname: 'kept.beanpool.org' }, tunnel: { state: 'off', others } }), none(), {});
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            await screen.findByTestId('public-address-kept');
+            expect(screen.getByTestId('public-address-still-answers')).toHaveTextContent(`This server still answers at ${OLD}.`);
+        });
+
+        it('only the stored name to take offline: the words are the usual ones, and it is offline', async () => {
+            const alone = { ...moved, tunnel: { state: 'connected', connections: 4 } };
+            mockNode(alone, none(), { success: true, status: 'none', stillAnswering: [] });
+            const dialog = await openDialog();
+            expect(screen.getByRole('heading', { name: 'Take Node Offline' })).toBeInTheDocument();
+            expect(dialog).toHaveTextContent('Release public address "byron.beanpool.org" and take the node offline from the public internet? The Cloudflare tunnel and DNS record will be torn down.');
+            fireEvent.click(screen.getByRole('button', { name: 'Take Offline' }));
+            const toast = await screen.findByText('✓ Public address released. Node is offline.');
+            expect(toast.closest('[role="status"]')?.className).toMatch(/bg-emerald-950/);
+            await screen.findByText(/No public address currently assigned/);
+            expect(screen.queryByTestId('public-address-still-answers')).not.toBeInTheDocument();
+        });
+
+        it('with the new name live, the old one has its own row above, not this line', async () => {
+            mockNode(moved, moved, {});
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            await screen.findByText('byron.beanpool.org');
+            expect(screen.queryByTestId('public-address-still-answers')).not.toBeInTheDocument();
+        });
+    });
 });
 

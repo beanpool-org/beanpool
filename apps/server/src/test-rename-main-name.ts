@@ -229,6 +229,12 @@ async function main(): Promise<void> {
         const res = await localFetch(`${base}/api/local/admin/public-address/extra-names`, { headers: computer() });
         return ((await res.json().catch(() => null)) as any)?.names as any[] ?? [];
     };
+    /** One of the address panel's reads, as the owner's computer makes it. */
+    const panelRead = async (what: 'status' | 'logs') => {
+        https.resetAdminRateLimit();
+        const res = await localFetch(`${base}/api/local/admin/public-address/${what}`, { headers: computer() });
+        return (await res.json().catch(() => null)) as any;
+    };
     /** A private read, as a current app makes it: signed for `host`, through the real signature middleware. */
     const signedFor = async (host: string) => {
         resetGatewayRateLimit();
@@ -548,6 +554,16 @@ async function main(): Promise<void> {
     };
     /** Past a few of the connector's polls: long enough for a notice that was going to go out. */
     const polls = () => new Promise((r) => setTimeout(r, 150));
+    /** What Take offline left in the panel's log, once its edge probe of `host` has answered. */
+    const offlineLog = async (host: string): Promise<any[]> => {
+        for (let i = 0; i < 40; i++) {
+            const logs = (await panelRead('logs'))?.logs ?? [];
+            if (logs.some((l: any) => l.step === '4/4' && /OFFLINE/.test(l.message))) return logs;
+            await polls();
+        }
+        throw new Error(`no edge probe of ${host} in the log`);
+    };
+    const stepThree = (logs: any[]) => logs.filter((l) => l.step === '3/4');
     const withToken = (name: string) => ({ ...liveAnswer(name), tunnelToken: `T-${name}` });
     /** `scene`, with no tunnel running and cloudflared's /ready saying it has not connected. */
     const tunnelScene = async (s: Parameters<typeof scene>[0]) => {
@@ -837,6 +853,15 @@ async function main(): Promise<void> {
         await until(() => show(onTokens()) === show(['T-byron', 'T-oldvale']));
         const off = await post('/api/local/admin/public-address/offline', phone(), {});
         assert(off.status === 200 && await until(() => show(onTokens()) === show(['T-oldvale'])) && primaryAddress() === OLD, `(offline) the old name is all that is left (${off.status}, ${show(onTokens())}, ${primaryAddress()})`);
+        assert(off.json?.status === 'none' && show(off.json?.stillAnswering) === show([OLD]), `(offline) the answer names what stays public (${show(off.json)})`);
+        const offLog = await offlineLog(BYRON);
+        assert(stepThree(offLog).length === 1 && stepThree(offLog)[0].type === 'warning' && stepThree(offLog)[0].message.includes(`This server still answers at ${OLD}.`),
+            `(offline) the log says so (${show(stepThree(offLog))})`);
+        assert(!offLog.some((l) => /✅ Tunnel stopped/.test(l.message)), `(offline) and no bare "Tunnel stopped" (${show(offLog)})`);
+        assert(offLog.some((l) => l.message.includes(`${BYRON} confirmed OFFLINE`)), `(offline) the edge probe speaks of the name it probed, not the node (${show(offLog)})`);
+        const panel = await panelRead('status');
+        assert(panel?.status === 'none' && show(panel?.tunnel?.others?.map((o: any) => o.host)) === show([OLD]) && !show(panel).includes('T-oldvale'),
+            `(offline) the status the panel draws its line from names it, and never its token (${show(panel)})`);
         const refused = await post(RELEASE, phone(), { name: 'oldvale' });
         assert(refused.status === 409 && held.has('oldvale') && show(onTokens()) === show(['T-oldvale']) && primaryAddress() === OLD,
             `(offline) Release does not end it (${refused.status} ${show(refused.json)}, ${show(onTokens())}, ${primaryAddress()})`);
@@ -846,6 +871,45 @@ async function main(): Promise<void> {
         const end = await post('/api/local/admin/public-address/offline', phone(), {});
         assert(end.status === 200 && !held.has('oldvale') && await until(() => onTokens().length === 0), `(offline) and then Take offline ends it (${end.status}, ${show(onTokens())})`);
         assert(notices().length > n0, `(offline) telling the members (${show(notices().slice(n0))})`);
+        assert(show(end.json?.stillAnswering) === '[]', `(offline) nothing left, the answer says nothing is (${show(end.json)})`);
+        const endLog = await offlineLog(OLD);
+        assert(stepThree(endLog).length === 1 && stepThree(endLog)[0].type === 'success' && stepThree(endLog)[0].message === '✅ Tunnel stopped', `(offline) and the log says the tunnel stopped (${show(stepThree(endLog))})`);
+        assert((await panelRead('status'))?.tunnel?.others === undefined, '(offline) and the panel has no other name to show');
+    }
+    {
+        // A gated name still waiting gives the same: Take offline releases the name that waits, and the old name's tunnel,
+        // the only one this server runs, stays up.
+        const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
+        const OLD = 'oldvale.beanpool.org';
+        await tunnelScene({ config: { publicAddress: oldvale } });
+        fake.ready(200);
+        held.set('oldvale', withToken('oldvale'));
+        gated.add('byron');
+        await syncTunnel();
+        await until(() => getTunnelStatus().state === 'connected');
+        await claim('byron');
+        await polls();
+        const before = await panelRead('status');
+        assert(before?.status === 'pending' && show(before?.tunnel?.others?.map((o: any) => o.host)) === show([OLD]), `(waiting) the status the dialog reads names the old name (${show(before)})`);
+        const off = await post('/api/local/admin/public-address/offline', phone(), {});
+        assert(off.status === 200 && off.json?.status === 'none' && show(off.json?.stillAnswering) === show([OLD]) && show(onTokens()) === show(['T-oldvale']),
+            `(waiting) the answer names what stays public (${off.status} ${show(off.json)}, ${show(onTokens())})`);
+        const logs = (await panelRead('logs'))?.logs ?? [];   // No probe: a name that only waited has no hostname stored.
+        assert(stepThree(logs).length === 1 && stepThree(logs)[0].type === 'warning' && stepThree(logs)[0].message.includes(`This server still answers at ${OLD}.`), `(waiting) the log says so (${show(stepThree(logs))})`);
+        const panel = await panelRead('status');
+        assert(panel?.status === 'none' && show(panel?.tunnel?.others?.map((o: any) => o.host)) === show([OLD]), `(waiting) and the panel's status names it (${show(panel)})`);
+    }
+    {
+        // One name, nothing else: the answer and the log are what they always were.
+        await tunnelScene({ config: { publicAddress: { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' } } });
+        fake.ready(200);
+        held.set('oldvale', withToken('oldvale'));
+        await syncTunnel();
+        await until(() => getTunnelStatus().state === 'connected');
+        const off = await post('/api/local/admin/public-address/offline', phone(), {});
+        assert(off.status === 200 && show(off.json?.stillAnswering) === '[]' && await until(() => onTokens().length === 0), `(one name) nothing stays public, and the answer says so (${off.status} ${show(off.json)})`);
+        const logs = await offlineLog('oldvale.beanpool.org');
+        assert(stepThree(logs).length === 1 && stepThree(logs)[0].message === '✅ Tunnel stopped', `(one name) the log is the usual line (${show(stepThree(logs))})`);
     }
     {
         // The install's flag says "never used", so a name the community went by never carries it, however it was asked for:

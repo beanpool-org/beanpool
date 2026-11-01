@@ -308,7 +308,7 @@ export default function TabLayout() {
         });
 
         const readLocallySub = DeviceEventEmitter.addListener(CONVERSATION_READ_LOCALLY_EVENT, (payload?: { myPubkey?: string }) => {
-            if (payload?.myPubkey && payload.myPubkey !== identity.publicKey) return;
+            if (!payload?.myPubkey || payload.myPubkey !== identity.publicKey) return;
             void checkUnread(false);
         });
 

@@ -52,7 +52,9 @@ vi.mock('react-native', () => {
 
 vi.mock('expo-router', () => {
     const Tabs = ({ children }: { children?: unknown }) => createElement('nav', null, children as any);
-    Tabs.Screen = () => null;
+    Tabs.Screen = ({ name, options }: { name: string; options: Record<string, any> }) => createElement('button', {
+        'data-tab': name,
+    }, options?.tabBarIcon ? options.tabBarIcon({ focused: false, color: '#000' }) : null);
     return { Tabs, ErrorBoundary: () => null, usePathname: () => '/', router: { navigate: vi.fn(), push: vi.fn() } };
 });
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
@@ -175,6 +177,18 @@ describe('phone app Chat tab unread badge', () => {
         await after(0);
 
         // getGlobalUnreadCount was not called because myPubkey does not match
+        expect(vi.mocked(getGlobalUnreadCount).mock.calls.length).toBe(unreadCalls);
+    });
+
+    it('ignores conversation_read_locally events with missing or undefined myPubkey', async () => {
+        const unreadCalls = vi.mocked(getGlobalUnreadCount).mock.calls.length;
+        dbMock.unreadCount = 2;
+
+        await act(async () => {
+            emitAppEvent(CONVERSATION_READ_LOCALLY_EVENT, { conversationId: 'conv-other' } as any);
+        });
+        await after(0);
+
         expect(vi.mocked(getGlobalUnreadCount).mock.calls.length).toBe(unreadCalls);
     });
 });

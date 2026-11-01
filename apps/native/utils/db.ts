@@ -1556,6 +1556,17 @@ const _lastReadPushAt: Record<string, number> = {};
 /** The phone's own read marker (the Talk tab's badge counts from it); no request. */
 export async function markConversationReadLocally(conversationId: string, myPubkey: string) {
     const database = await getDb();
+    const hasUnread = await database.getFirstAsync<{ id: string }>(
+        `SELECT m.id FROM messages m
+         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+         WHERE m.conversation_id = ?
+           AND m.author_pubkey != ?
+           AND m.timestamp > IFNULL(cp.last_read_at, '2000-01-01')
+         LIMIT 1`,
+        [myPubkey, conversationId, myPubkey]
+    );
+    if (!hasUnread) return;
+
     const now = new Date().toISOString();
     await database.runAsync(
         'UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ?',

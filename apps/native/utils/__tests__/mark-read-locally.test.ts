@@ -59,10 +59,12 @@ import { CONVERSATION_READ_LOCALLY_EVENT } from '../app-events';
 beforeEach(() => {
     events.emitted = [];
     events.runAsyncCalls = [];
+    vi.mocked(dbAdapter.getFirstAsync).mockReset();
 });
 
 describe('markConversationReadLocally', () => {
     it('updates conversation_participants last_read_at and emits CONVERSATION_READ_LOCALLY_EVENT', async () => {
+        vi.mocked(dbAdapter.getFirstAsync).mockResolvedValueOnce({ id: 'msg-1' });
         await markConversationReadLocally('conv-123', 'pk-my-key');
 
         // Check SQL update
@@ -76,5 +78,13 @@ describe('markConversationReadLocally', () => {
             name: CONVERSATION_READ_LOCALLY_EVENT,
             payload: { conversationId: 'conv-123', myPubkey: 'pk-my-key' },
         });
+    });
+
+    it('does not update SQLite or emit event when there are no unread messages', async () => {
+        vi.mocked(dbAdapter.getFirstAsync).mockResolvedValueOnce(null);
+        await markConversationReadLocally('conv-123', 'pk-my-key');
+
+        expect(events.runAsyncCalls.length).toBe(0);
+        expect(events.emitted.length).toBe(0);
     });
 });

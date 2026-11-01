@@ -6,11 +6,14 @@ import path from 'node:path';
 import type tls from 'node:tls';
 import {
     checkVaultTicket,
+    checkVaultVoucher,
     isVaultChallenge,
+    isVaultCommunityRef,
     isVaultPushToken,
     vaultB64,
     vaultTicketNonce,
     vaultUnb64,
+    VAULT_COMMUNITY_PROVIDER,
     type VaultAnswerKind,
     type VaultTicket,
     type VaultTicketPurpose,
@@ -115,6 +118,12 @@ export const LIMITS = {
     ticketsPerAddressPerMinute: 10,
     restoresPerAccountPerDay: 5,
     depositsPerKeyPerDay: 10,
+    /**
+     * Community copies a day from one address (vault rethink VR4). A sign-in deposit costs a real provider account; a
+     * community deposit needs only a key, and keys are free, so without this one address could fill the vault's disk. A
+     * market day's worth of members behind one carrier's address stays well inside it.
+     */
+    communityDepositsPerAddressPerDay: 100,
     ceremonyCallsPerAddressPerMinute: 20,
     /**
      * Signed member calls from one address (case 16 NOTE: none had a limit; each refusal costs a keyholder signature,
@@ -129,6 +138,9 @@ export const LIMITS = {
      */
     reportsPerAddressPerMinute: 600,
 } as const;
+
+/** Community copies one member key may keep: one per community, up to the most a copy's list of communities can name. */
+export const MAX_COMMUNITY_COPIES_PER_KEY = 20;
 
 export interface VaultApiOptions {
     /** The database (and a restore in progress). On V3's image, the encrypted data partition. */
@@ -312,6 +324,14 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 
 const json = (status: number, body: unknown): Answer => ({ status, body });
 
+/**
+ * A kind of copy this vault keeps: a sign-in it checks, or a community copy (vault rethink VR4), which is no provider: no
+ * token is checked for it, and no list of providers decides whether it is kept.
+ */
+function isVaultCopyKind(value: unknown): boolean {
+    return isVaultProvider(value) || value === VAULT_COMMUNITY_PROVIDER;
+}
+
 /** The daily counts (§3): nothing per member, only totals. */
 class Counters {
     day = '';
@@ -434,6 +454,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         tickets: new RateLimiter(LIMITS.ticketsPerAddressPerMinute, 60_000),
         restores: new RateLimiter(LIMITS.restoresPerAccountPerDay, DAY_MS),
         deposits: new RateLimiter(LIMITS.depositsPerKeyPerDay, DAY_MS),
+        communityDeposits: new RateLimiter(LIMITS.communityDepositsPerAddressPerDay, DAY_MS),
         ceremony: new RateLimiter(LIMITS.ceremonyCallsPerAddressPerMinute, 60_000),
         signed: new RateLimiter(LIMITS.signedCallsPerAddressPerMinute, 60_000),
         reports: new RateLimiter(LIMITS.reportsPerAddressPerMinute, 60_000),
@@ -747,7 +768,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * Every copy for a sign-in the vault no longer keeps (shared/providers.ts), deleted with its holds and a deletion
      * record, so a restore from an older backup drops it again (§1.7). Run whenever the database opens (a start, an
      * unlock, a restore from backup), as the re-wrap is; a pass that finds none writes nothing. The provider is read from
-     * each envelope's metadata by the keyholder, since no column names it; the log says how many went, never whose.
+     * each envelope's metadata by the keyholder, since no column names it; the log says how many went, never whose. A
+     * community copy is no sign-in, and is never one of these.
      */
     async function dropRetiredCopies(): Promise<number> {
         const status = await keyholderStatus();
@@ -770,7 +792,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                         // An envelope the keyholder can't read is no copy it could release either; it is left as it is.
                         continue;
                     }
-                    if (!isVaultProvider(provider)) retired.push(current);
+                    if (!isVaultCopyKind(provider)) retired.push(current);
                 }
                 if (!retired.length) return;
                 const day = dayOf(clock());
@@ -830,6 +852,27 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         }
     }
 
+    /**
+     * A community copy's restore shows its voucher in place of a sign-in (core vault-wire.ts "Vouchers"): signed by the
+     * node key it names, unexpired, for the request's signer. The ticket is spent only when the voucher checks out, as a
+     * sign-in's is. Whether that node key means anything here is the index, which the route asks.
+     */
+    function checkVoucher(ctx: Ctx) {
+        const { ticket } = acceptTicket(ctx, 'restore');
+        const check = checkVaultVoucher(ctx.body.voucher, { now: ctx.now, key: ctx.key });
+        if (!check.ok) {
+            const words: Record<string, string> = {
+                malformed: 'That is not a community\'s voucher.',
+                signature: 'That voucher is not signed by the community it names.',
+                expired: 'That voucher has expired. Ask your community\'s admin for a new code.',
+                wrong_key: 'That voucher was made for another device.',
+            };
+            throw new HttpError(401, `voucher_${check.reason}`, words[check.reason]);
+        }
+        usedTickets.set(ticket.n, ticket.exp);
+        return check;
+    }
+
     // ─── Signed answers ─────────────────────────────────────────────────────────────────────
 
     /** The challenge a member's request carried, or null: its answer is then unsigned, as before. */
@@ -850,13 +893,16 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
 
     async function index(kind: 'sub', provider: string, sub: string): Promise<string>;
     async function index(kind: 'pk', key: string): Promise<string>;
-    async function index(kind: 'sub' | 'pk', a: string, b?: string): Promise<string> {
-        const args = kind === 'sub' ? { kind, provider: a, sub: b } : { kind, key: a };
+    async function index(kind: 'community', nodeKey: string, member: string): Promise<string>;
+    async function index(kind: 'sub' | 'pk' | 'community', a: string, b?: string): Promise<string> {
+        const args = kind === 'sub' ? { kind, provider: a, sub: b } : kind === 'community' ? { kind, key: a, member: b } : { kind, key: a };
         return (await call<{ index: string }>('index', args)).index;
     }
 
     async function metaOf(row: CopyRow) {
-        return call<{ provider: string; pubkey: string; pushTokens: string[]; lastReleasedAt: number | null }>('readMeta', { row: rowRef(row) });
+        return call<{
+            provider: string; pubkey: string; pushTokens: string[]; lastReleasedAt: number | null; community: { ref: string; copy: string } | null;
+        }>('readMeta', { row: rowRef(row) });
     }
 
     /** Push tokens from every copy a member key has: the devices holding that account. */
@@ -895,55 +941,93 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         limited(limits.tickets.take(ctx.address, ctx.now), 'tickets from this address');
         const { purpose, provider } = ctx.body;
         if (purpose !== 'deposit' && purpose !== 'restore') throw new HttpError(400, 'bad_purpose', 'A ticket is for a deposit or a restore.');
-        if (!isVaultProvider(provider)) throw new HttpError(400, 'bad_provider', 'That is not a sign-in the key vault keeps copies for.');
+        if (!isVaultCopyKind(provider)) throw new HttpError(400, 'bad_provider', 'That is not a sign-in the key vault keeps copies for.');
         const t = await call<{ ticket: string; expiresAt: number }>('signTicket', { key: ctx.key, purpose });
         counters.counts.tickets++;
         return json(200, t);
     });
 
+    /** A deposit's box refused by the keyholder, as the member's request meets it. */
+    function badBox(e: unknown): unknown {
+        return e instanceof KeyholderCallError && e.code === 'bad_box'
+            ? new HttpError(400, 'bad_box', 'The copy did not open as a deposit for this account and sign-in.')
+            : e;
+    }
+
+    /**
+     * The copy in a deposit, wrapped and stored in the row `subIndex` names: the member's own earlier copy there replaced,
+     * or another account's. `sub` is the sign-in's; a community copy has none, and the keyholder reads its index from the
+     * box again, so an envelope always sits in the row its own contents name.
+     */
+    async function keepCopy(ctx: Ctx, database: VaultDb, provider: string, subIndex: Buffer, nonce: string, sub?: string): Promise<Answer> {
+        const pkIndex = b64Bytes(await index('pk', ctx.key));
+        const existing = database.copyBySub(subIndex);
+        const sameMember = !!existing && sameBytes(existing.pk_index, pkIndex);
+        const replaced = !!existing && !sameMember;
+        const id = sameMember ? (existing as CopyRow).id : newId();
+        // The receipt (for a request with a challenge) is signed by the keyholder over the copy it opens and wraps.
+        const challenge = challengeOf(ctx.body);
+        let wrapped: { envelope: string; receipt?: string };
+        try {
+            wrapped = await call<{ envelope: string; receipt?: string }>('depositWrap', {
+                id, provider, sub, memberKey: ctx.key, box: ctx.body.box, carry: sameMember ? rowRef(existing as CopyRow) : null,
+                ...(challenge ? { challenge, signIn: nonce, replaced } : {}),
+            });
+        } catch (e) {
+            throw badBox(e);
+        }
+        const oldTokens = replaced ? (await metaOf(existing as CopyRow)).pushTokens : [];
+        const day = dayOf(ctx.now);
+        database.transaction(() => {
+            if (sameMember) {
+                database.updateEnvelope(id, b64Bytes(wrapped.envelope), day);
+            } else {
+                if (existing) database.deleteCopy(existing, day);
+                database.insertCopy({ id, sub_index: subIndex, pk_index: pkIndex, envelope: b64Bytes(wrapped.envelope), updated_day: day });
+            }
+        });
+        counters.counts.deposits++;
+        if (replaced) {
+            counters.counts.replaced++;
+            notify(oldTokens, 'vault-replaced', provider);
+        }
+        // Only once the envelope is stored: a receipt says the vault keeps the copy.
+        return json(200, { ok: true, provider, replaced, ...(wrapped.receipt ? { signed: wrapped.receipt } : {}) });
+    }
+
+    /**
+     * A community copy's deposit (vault rethink VR4, design §4.3): no sign-in, so nothing but the member's own signature
+     * and a deposit ticket stands behind it, which is why it has limits of its own. The box names the community for the
+     * keyholder alone; this process sees only the keyed index. One copy per member per community, replaced by a new one.
+     */
+    async function depositCommunityCopy(ctx: Ctx): Promise<Answer> {
+        const { ticket, nonce } = acceptTicket(ctx, 'deposit');
+        limited(limits.deposits.take(ctx.key, ctx.now), 'deposits for this account today');
+        limited(limits.communityDeposits.take(ctx.address, ctx.now), 'community copies from this address today');
+        usedTickets.set(ticket.n, ticket.exp);
+        const database = await ensureDb();
+        return withWriteLock(async () => {
+            let subIndex: Buffer;
+            try {
+                subIndex = b64Bytes((await call<{ subIndex: string }>('communityDepositIndex', { memberKey: ctx.key, box: ctx.body.box })).subIndex);
+            } catch (e) {
+                throw badBox(e);
+            }
+            if (!database.copyBySub(subIndex)) {
+                let kept = 0;
+                for (const row of database.copiesByPk(b64Bytes(await index('pk', ctx.key)))) if ((await metaOf(row)).community) kept++;
+                if (kept >= MAX_COMMUNITY_COPIES_PER_KEY) throw new HttpError(409, 'too_many_copies', 'This account keeps as many community copies as it can.');
+            }
+            return keepCopy(ctx, database, VAULT_COMMUNITY_PROVIDER, subIndex, nonce);
+        });
+    }
+
     route('POST', '/v1/copies', 'signed', false, async ctx => {
+        if (ctx.body.provider === VAULT_COMMUNITY_PROVIDER) return depositCommunityCopy(ctx);
         const { provider, identity, nonce } = await checkSignIn(ctx, 'deposit',
             () => limited(limits.deposits.take(ctx.key, ctx.now), 'deposits for this account today'));
         const database = await ensureDb();
-        return withWriteLock(async () => {
-            const subIndex = b64Bytes(await index('sub', provider, identity.sub));
-            const pkIndex = b64Bytes(await index('pk', ctx.key));
-            const existing = database.copyBySub(subIndex);
-            const sameMember = !!existing && sameBytes(existing.pk_index, pkIndex);
-            const replaced = !!existing && !sameMember;
-            const id = sameMember ? (existing as CopyRow).id : newId();
-            // The receipt (for a request with a challenge) is signed by the keyholder over the copy it opens and wraps.
-            const challenge = challengeOf(ctx.body);
-            let wrapped: { envelope: string; receipt?: string };
-            try {
-                wrapped = await call<{ envelope: string; receipt?: string }>('depositWrap', {
-                    id, provider, sub: identity.sub, memberKey: ctx.key, box: ctx.body.box, carry: sameMember ? rowRef(existing as CopyRow) : null,
-                    ...(challenge ? { challenge, signIn: nonce, replaced } : {}),
-                });
-            } catch (e) {
-                if (e instanceof KeyholderCallError && e.code === 'bad_box') {
-                    throw new HttpError(400, 'bad_box', 'The copy did not open as a deposit for this account and sign-in.');
-                }
-                throw e;
-            }
-            const oldTokens = replaced ? (await metaOf(existing as CopyRow)).pushTokens : [];
-            const day = dayOf(ctx.now);
-            database.transaction(() => {
-                if (sameMember) {
-                    database.updateEnvelope(id, b64Bytes(wrapped.envelope), day);
-                } else {
-                    if (existing) database.deleteCopy(existing, day);
-                    database.insertCopy({ id, sub_index: subIndex, pk_index: pkIndex, envelope: b64Bytes(wrapped.envelope), updated_day: day });
-                }
-            });
-            counters.counts.deposits++;
-            if (replaced) {
-                counters.counts.replaced++;
-                notify(oldTokens, 'vault-replaced', provider);
-            }
-            // Only once the envelope is stored: a receipt says the vault keeps the copy.
-            return json(200, { ok: true, provider, replaced, ...(wrapped.receipt ? { signed: wrapped.receipt } : {}) });
-        });
+        return withWriteLock(async () => keepCopy(ctx, database, provider, b64Bytes(await index('sub', provider, identity.sub)), nonce, identity.sub));
     });
 
     /**
@@ -959,7 +1043,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const holds = [];
         for (const row of database.copiesByPk(pkIndex)) {
             const meta = await metaOf(row);
-            copies.push({ provider: meta.provider, lastReleasedAt: meta.lastReleasedAt, updatedDay: row.updated_day, since: row.updated_day });
+            copies.push({
+                provider: meta.provider, lastReleasedAt: meta.lastReleasedAt, updatedDay: row.updated_day, since: row.updated_day,
+                // A community copy goes by the member's own label, which says nothing here, and its digest, which their
+                // phone holds against the digest the community's half belongs to.
+                ...(meta.community ? { community: meta.community.ref, copy: meta.community.copy } : {}),
+            });
             const hold = database.openHoldForCopy(row.id);
             if (hold) holds.push({ holdId: hold.id, provider: hold.provider, openedAt: hold.opened_at, releaseAt: hold.release_at });
         }
@@ -969,13 +1058,17 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     route('POST', '/v1/copies/delete', 'signed', false, async ctx => {
         const all = ctx.body.all === true;
         const provider = ctx.body.provider;
-        if (!all && !isVaultProvider(provider)) throw new HttpError(400, 'bad_provider', 'Say which sign-in to disconnect, or all.');
+        // A community copy is named by the member's own label for it: a delete for one takes no other community's.
+        const community = provider === VAULT_COMMUNITY_PROVIDER;
+        if (!all && !isVaultProvider(provider) && !community) throw new HttpError(400, 'bad_provider', 'Say which sign-in to disconnect, or all.');
+        if (!all && community && !isVaultCommunityRef(ctx.body.community)) throw new HttpError(400, 'bad_community', 'Say which community\'s copy to remove.');
         const database = await ensureDb();
         return withWriteLock(async () => {
             const pkIndex = b64Bytes(await index('pk', ctx.key));
             const doomed: CopyRow[] = [];
             for (const row of database.copiesByPk(pkIndex)) {
-                if (all || (await metaOf(row)).provider === provider) doomed.push(row);
+                const meta = await metaOf(row);
+                if (all || (community ? meta.community?.ref === ctx.body.community : meta.provider === provider)) doomed.push(row);
             }
             const day = dayOf(ctx.now);
             database.transaction(() => {
@@ -1035,7 +1128,62 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * device may have lost its throwaway key), another device's restore takes its place with a fresh 24 hours, told
      * and stoppable like any: never a release sooner than the old hold's.
      */
+    async function holdForRestore(ctx: Ctx, database: VaultDb, row: CopyRow, provider: string, holdId: string, beforeNewHold?: () => void): Promise<Answer> {
+        const open = database.openHoldForCopy(row.id);
+        if (open) {
+            if (open.requester_key === ctx.key) return answer(ctx, 'restore', { status: 'held', holdId: open.id, until: open.release_at });
+            if (ctx.now < open.release_at) {
+                throw new HttpError(409, 'hold_open', 'A restore of this account is already waiting on another device.', { until: open.release_at });
+            }
+        }
+        beforeNewHold?.();
+        const hold: HoldRow = {
+            id: holdId, copy_id: row.id, requester_key: ctx.key, provider, opened_at: ctx.now, release_at: ctx.now + HOLD_MS,
+            cancelled_at: null, released_at: null,
+        };
+        database.transaction(() => {
+            // A hold past its wait that its device never collected gives way to this one; that device's collect then
+            // answers `stopped` too, which the phone words as stopped or replaced (case 16 F6).
+            if (open) database.cancelHold(open.id, ctx.now);
+            database.insertHold(hold);
+        });
+        counters.counts.restores[provider] = (counters.counts.restores[provider] ?? 0) + 1;
+        counters.counts.holds++;
+        notify(await memberTokens(database, row.pk_index), 'vault-hold', provider);
+        return answer(ctx, 'restore', { status: 'held', holdId: hold.id, until: hold.release_at });
+    }
+
+    /**
+     * A community copy's restore (vault rethink VR4, design §4.3 step 4): the voucher in place of a sign-in. It finds the
+     * copy by its keyed index, so a voucher from a node key with no copy under it here finds none, and it must name the
+     * copy this vault keeps. One voucher is one hold, whatever became of it (core `vaultVoucherHoldId`): sent again it
+     * gets that same hold, and after a Stop it gets `stopped`, so a device can't wear a member down by asking again. A
+     * new hold takes a new voucher, so an admin seeing the member again. Five new ones a day per copy, as for a sign-in; a
+     * phone that asks again while another's hold waits opens none, so it uses up none.
+     */
+    async function restoreWithVoucher(ctx: Ctx): Promise<Answer> {
+        const { voucher, holdId } = checkVoucher(ctx);
+        const database = await ensureDb();
+        return withWriteLock(async () => {
+            const subIndexB64 = await index('community', voucher.community, voucher.member);
+            const row = database.copyBySub(b64Bytes(subIndexB64));
+            // The same answer for no copy and for a half that isn't this copy's: neither can be brought back from here.
+            if (!row || (await metaOf(row)).community?.copy !== voucher.copy) {
+                throw new HttpError(404, 'no_copy', 'The key vault keeps no copy this community can bring back. Your 12 words work any time.');
+            }
+            const sent = database.holdById(holdId);
+            if (sent) {
+                return sent.cancelled_at !== null
+                    ? answer(ctx, 'restore', { status: 'stopped' })
+                    : answer(ctx, 'restore', { status: 'held', holdId: sent.id, until: sent.release_at });
+            }
+            return holdForRestore(ctx, database, row, VAULT_COMMUNITY_PROVIDER, holdId,
+                () => limited(limits.restores.take(subIndexB64, ctx.now), 'restores for this account today'));
+        });
+    }
+
     route('POST', '/v1/restore', 'signed', false, async ctx => {
+        if (ctx.body.provider === VAULT_COMMUNITY_PROVIDER) return restoreWithVoucher(ctx);
         const { provider, identity } = await checkSignIn(ctx, 'restore');
         const database = await ensureDb();
         return withWriteLock(async () => {
@@ -1045,27 +1193,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             if (!row) {
                 throw new HttpError(404, 'no_copy', `The key vault keeps no copy for this ${ssoProviderLabel(provider)} account. Your 12 words work any time.`);
             }
-            const open = database.openHoldForCopy(row.id);
-            if (open) {
-                if (open.requester_key === ctx.key) return answer(ctx, 'restore', { status: 'held', holdId: open.id, until: open.release_at });
-                if (ctx.now < open.release_at) {
-                    throw new HttpError(409, 'hold_open', 'A restore of this account is already waiting on another device.', { until: open.release_at });
-                }
-            }
-            const hold: HoldRow = {
-                id: newId(), copy_id: row.id, requester_key: ctx.key, provider, opened_at: ctx.now, release_at: ctx.now + HOLD_MS,
-                cancelled_at: null, released_at: null,
-            };
-            database.transaction(() => {
-                // A hold past its wait that its device never collected gives way to this one; that device's collect then
-                // answers `stopped` too, which the phone words as stopped or replaced (case 16 F6).
-                if (open) database.cancelHold(open.id, ctx.now);
-                database.insertHold(hold);
-            });
-            counters.counts.restores[provider] = (counters.counts.restores[provider] ?? 0) + 1;
-            counters.counts.holds++;
-            notify(await memberTokens(database, row.pk_index), 'vault-hold', provider);
-            return answer(ctx, 'restore', { status: 'held', holdId: hold.id, until: hold.release_at });
+            return holdForRestore(ctx, database, row, provider, newId());
         });
     });
 

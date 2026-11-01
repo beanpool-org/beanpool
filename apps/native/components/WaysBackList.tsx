@@ -18,7 +18,7 @@ import { formatDate, t, tn, word } from '@beanpool/core';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import {
-    everyoneAnswered, knownCopies, sameCommunity, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, type CopyAt, type NotAnswered, type WaysBack,
+    everyoneAnswered, knownCopies, otherHalfMissing, sameCommunity, strayVaultHalves, unopenableAdminsCopies, unplacedVaultHalves, vaultCopiesBySignIn, vaultHalfOf, vaultHalves, wordsOnly, type CopyAt, type NotAnswered, type WaysBack,
 } from '../utils/ways-back-state';
 
 /** The screen's sentences said in more than one place (the list, its dialogs, the results): marked here, t() where shown. */
@@ -49,6 +49,17 @@ export const WAYS_BACK_LINES = {
     adminsLine: word('A locked copy an admin can bring your account back from, when they see you in person.'),
     // One its server keeps but can't open now (its key gone, or another): listed and removable, never a way back.
     adminsCantOpen: word("Its server can't open this copy now, so it can't bring your account back. Account Protection says what can be done. Your 12 words still work."),
+    // The shared placement (vault rethink VR4): half at the vault, half at the community, one way back.
+    adminsHalfLine: word("Half of a locked copy, with the other half at BeanPool's key vault. It takes both for an admin to bring your account back, when they see you in person."),
+    adminsHalfMissing: word("The other half isn't at BeanPool's key vault, so this can't bring your account back. Account Protection can try again."),
+    vaultHalf: word('Half a copy for {community}'),
+    vaultHalfStray: word('Half a copy for another community'),
+    vaultHalfLine: word('A locked copy your community can open with its half, after a day.'),
+    vaultHalfAlone: word('Half of a locked copy. No community on this phone holds its other half.'),
+    // One no community has claimed while a community that hasn't said might yet: never called stray, so never removed on a guess.
+    vaultHalfNotPlaced: word('Half a copy for a community'),
+    vaultHalfNotPlacedLine: word("Half of a locked copy. This phone can't tell yet whether one of your communities holds its other half. Open this screen again later."),
+    removeShared: word("{community}'s server and BeanPool's key vault delete their halves of your copy. Your admins can no longer bring you back; your 12 words still work."),
 } as const;
 
 /** Why the vault's copies can't be listed, in the member's words. */
@@ -136,7 +147,7 @@ export function WaysBackList({
                             <Text style={s.heading} accessibilityRole="header">{t(WAYS_BACK_LINES.vault)}</Text>
                             {ways.vault.kind === 'unknown' ? (
                                 <Text style={s.line}>{vaultUnknownWords(ways.vault.why)}</Text>
-                            ) : ways.vault.copies.length === 0 ? (
+                            ) : ways.vault.copies.length === 0 && vaultHalves(ways).length === 0 ? (
                                 <Text style={s.line}>{t(WAYS_BACK_LINES.keepsNone)}</Text>
                             ) : vaultCopiesBySignIn(ways.vault.copies).map(({ provider, copies }) => {
                                 const name = SSO_PROVIDER_NAMES[provider];
@@ -161,6 +172,40 @@ export function WaysBackList({
                                     </View>
                                 );
                             })}
+                            {ways.communities.filter(c => vaultHalfOf(ways, c)).map(c => {
+                                const half = vaultHalfOf(ways, c);
+                                return (
+                                    <View key={`half-${c.url}`} style={s.copy} testID="ways-back-vault-half">
+                                        <Text style={s.copyName}>{t(WAYS_BACK_LINES.vaultHalf, { community: c.name })}</Text>
+                                        {/* A pair only when its community names this very copy. A copy it can't open has no name to give, so that is never called alone. */}
+                                        <Text style={s.small}>
+                                            {c.status?.adminsCopy?.copy === half?.copy
+                                                ? t(WAYS_BACK_LINES.vaultHalfLine)
+                                                : c.status?.adminsCopyUnopenable
+                                                    ? t(WAYS_BACK_LINES.vaultHalfNotPlacedLine)
+                                                    : t(WAYS_BACK_LINES.vaultHalfAlone)}
+                                        </Text>
+                                        {half?.since && <Text style={s.small}>{t('Kept since {date}', { date: dayWords(half.since) })}</Text>}
+                                        {removeButton({ at: 'admins', url: c.url }, t('Remove the copy at {community} that its admins can bring you back from', { community: c.name }))}
+                                    </View>
+                                );
+                            })}
+                            {strayVaultHalves(ways).map(h => (
+                                <View key={h.ref} style={s.copy} testID="ways-back-vault-half-stray">
+                                    <Text style={s.copyName}>{t(WAYS_BACK_LINES.vaultHalfStray)}</Text>
+                                    <Text style={s.small}>{t(WAYS_BACK_LINES.vaultHalfAlone)}</Text>
+                                    {h.since && <Text style={s.small}>{t('Kept since {date}', { date: dayWords(h.since) })}</Text>}
+                                    {/* Its name starts with the word on the button, as every Remove here does: both parts are in every catalog. */}
+                                    {removeButton({ at: 'vault-half', ref: h.ref }, t('{first} {second}', { first: t(WAYS_BACK_LINES.remove), second: t(WAYS_BACK_LINES.vaultHalfStray) }, 'two sentences, one after the other'))}
+                                </View>
+                            ))}
+                            {unplacedVaultHalves(ways).map(h => (
+                                <View key={h.ref} style={s.copy} testID="ways-back-vault-half-not-placed">
+                                    <Text style={s.copyName}>{t(WAYS_BACK_LINES.vaultHalfNotPlaced)}</Text>
+                                    <Text style={s.small}>{t(WAYS_BACK_LINES.vaultHalfNotPlacedLine)}</Text>
+                                    {h.since && <Text style={s.small}>{t('Kept since {date}', { date: dayWords(h.since) })}</Text>}
+                                </View>
+                            ))}
                         </View>
                     )}
 
@@ -192,7 +237,13 @@ export function WaysBackList({
                                         {admins && (
                                             <View style={s.copy} testID="ways-back-admins-copy">
                                                 <Text style={s.copyName}>{t(WAYS_BACK_LINES.admins)}</Text>
-                                                <Text style={s.small}>{t(WAYS_BACK_LINES.adminsLine)}</Text>
+                                                <Text style={s.small}>
+                                                    {admins.placement !== 'shared'
+                                                        ? t(WAYS_BACK_LINES.adminsLine)
+                                                        : otherHalfMissing(ways, c)
+                                                            ? t(WAYS_BACK_LINES.adminsHalfMissing)
+                                                            : t(WAYS_BACK_LINES.adminsHalfLine)}
+                                                </Text>
                                                 {adminsSince && Number.isFinite(adminsSince.getTime()) && (
                                                     <Text style={s.small}>{t('Kept since {date}', { date: formatDate(adminsSince, 'day-month-year') })}</Text>
                                                 )}

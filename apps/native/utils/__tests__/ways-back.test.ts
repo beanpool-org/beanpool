@@ -39,15 +39,17 @@ vi.mock('expo-crypto', async () => {
 vi.mock('../db', () => ({ clearDB: vi.fn(async () => {}), closeDB: vi.fn(async () => {}), initDB: vi.fn(async () => {}) }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 
-import type { SealedShare } from '@beanpool/core';
+import { VAULT_COMMUNITY_PROVIDER, vaultCopyDigest, type SealedShare } from '@beanpool/core';
 import { draftIdentity, importIdentity, type BeanPoolIdentity } from '../identity';
 import { oneWayBackFromNode, oneWayBackPlace, startOneWayBack, finishOneWayBack } from '../one-way-back';
 import { SAVED_NODES_STORE_KEY, vaultCopyKnownStoreKey, vaultMoveUnfinishedStoreKey } from '../storage-keys';
 import { vaultCopyKnowledge, vaultCopyKnown } from '../vault';
 import { retryCommunityRemovals, vaultMoveOffer } from '../vault-move';
+import { communityRefFor } from '../community-recovery';
 import {
-    beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom,
-    removeEverything, removeVaultCopy, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
+    beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, otherHalfMissing, removeAdminsCopyFrom, removeCommunityCopyFrom,
+    removeEverything, removeEverythingAsksVault, removeVaultCopy, strayVaultHalves, unopenableAdminsCopies, unplacedVaultHalves, vaultCopiesBySignIn, vaultHalfOf, wordsOnly, wordsWrittenDown,
+    type CommunityPart, type WaysBack,
 } from '../ways-back';
 import { FakeVault, OTHER_KEY, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 import { boundSignatureValid } from './server-signature-check';
@@ -75,13 +77,15 @@ interface Community {
     /** When set, each request's fate (the seeded sweep): answered, refused (a 5xx), no answer, or landed with its answer lost. */
     fate: ((req: SentRequest) => Fate) | null;
     /** The copy it keeps for its admins to bring Kim back from (vault rethink VR3), since when; null: none. */
-    admins: { since: string } | null;
+    admins: { since: string; placement?: 'shared'; copy?: string } | null;
     /** A copy it keeps for its admins but can't open now (its seal key gone, or another), since when and why; null: none. */
     adminsUnopenable: { since: string; reason: string } | null;
     /** How its delete of that copy goes: as the node answers, refused (a 5xx), or a proxy's 200 page. */
     adminsDelete: 'answered' | 'refused' | 'proxy';
     /** A server from before VR3: its status never names the copy, and it has no route to delete one. */
     beforeVr3: boolean;
+    /** The key its vouchers are signed with, as its status says it (VR4); null: a server still starting; absent: one from before VR4. */
+    nodeKey?: string | null;
 }
 
 type Fate = 'answered' | 'refused' | 'down' | 'lost';
@@ -134,7 +138,7 @@ function network(): Net {
         if (req.method === 'POST' && u.pathname === '/api/recovery/shares/status') {
             if (net.statusGate) await net.statusGate;
             const status = { generation: c.generation, enrolledSso: [...c.copies], keepers: [], total: c.copies.size, threshold: 1 };
-            return json(200, c.beforeVr3 ? status : { ...status, communityCopy: c.admins, communityCopyUnopenable: c.adminsUnopenable });
+            return json(200, c.beforeVr3 ? status : { ...status, communityCopy: c.admins, communityCopyUnopenable: c.adminsUnopenable, nodeKey: c.nodeKey });
         }
         if (req.method === 'DELETE' && u.pathname === '/api/recovery/community-copy' && !c.beforeVr3) {
             if (c.adminsDelete === 'refused') return json(503, { error: 'Try again later.', code: 'standby' });
@@ -192,6 +196,259 @@ async function kimsPhone(net: Net) {
     net.vault.keep('google', 'ali-google', OTHER_KEY, SOME_COPY, '2026-10-05');
     mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), '1');
 }
+
+describe('a shared copy is one way back in two places (vault rethink VR4)', () => {
+    const half = { ref: 'label-1', copy: 'digest-1', since: '2026-10-01', lastReleasedAt: null };
+    const part = (copy: string | null, vaultRef: string | null = 'label-1') => ({
+        url: 'https://mullum.test', name: 'Mullum', vaultRef,
+        status: { providers: [], generation: 1, ...(copy ? { adminsCopy: { since: '2026-10-01', placement: 'shared' as const, copy } } : {}) },
+    });
+    const ways = (halves: typeof half[], ...communities: ReturnType<typeof part>[]) => ({ vault: { kind: 'listed' as const, copies: [], communityCopies: halves }, communities, pending: [] });
+    const PHONE = { hasWords: true, writtenDown: false };
+
+    it('both halves of one copy count as a way back, once', () => {
+        const w = ways([half], part('digest-1'));
+        expect(knownCopies(w)).toEqual([{ at: 'admins', url: 'https://mullum.test' }]);
+        expect(wordsOnly(w)).toBe(false);
+        expect(beforeRemoving(w, { at: 'admins', url: 'https://mullum.test' }, PHONE)).toBe('show-words-first');
+    });
+
+    it('half a pair is no way back, but it is kept: never "nothing is kept", and removing it asks nothing about the 12 words', () => {
+        for (const w of [ways([], part('digest-1')), ways([half], part('digest-2')), ways([half], part(null))]) {
+            expect(knownCopies(w)).toEqual([]);
+            expect(wordsOnly(w)).toBe(false);
+            expect(beforeRemoving(w, { at: 'admins', url: 'https://mullum.test' }, PHONE)).toBe('confirm');
+        }
+    });
+
+    it('Remove everything asks the vault for a copy of either kind, or when it couldn\'t say: the one test its delete and its confirm go by', () => {
+        expect(removeEverythingAsksVault(ways([half], part('digest-1'))), 'a member whose only vault copy is a shared one').toBe(true);
+        expect(removeEverythingAsksVault(ways([half], part(null, 'label-2'))), 'a stray half').toBe(true);
+        expect(removeEverythingAsksVault(ways([], part(null))), 'it listed none').toBe(false);
+        expect(removeEverythingAsksVault({ vault: { kind: 'listed', copies: [{ provider: 'google', since: '2026-10-01', lastReleasedAt: null }] }, communities: [], pending: [] })).toBe(true);
+        expect(removeEverythingAsksVault({ vault: { kind: 'unknown', why: 'paused' }, communities: [], pending: [] })).toBe(true);
+        expect(removeEverythingAsksVault({ vault: { kind: 'no-vault' }, communities: [], pending: [] })).toBe(false);
+    });
+
+    it('a half no community on this phone says is its own is listed alone, and removes alone', () => {
+        const w = ways([half], part(null, 'label-2'));
+        expect(strayVaultHalves(w)).toEqual([half]);
+        expect(wordsOnly(w)).toBe(false);
+        expect(beforeRemoving(w, { at: 'vault-half', ref: half.ref }, PHONE)).toBe('confirm');
+        expect(strayVaultHalves(ways([half], part('digest-1')))).toEqual([]);
+    });
+
+    it('with the vault unable to say, a half is not counted as a way back', () => {
+        const w = { vault: { kind: 'unknown' as const, why: 'paused' as const }, communities: [part('digest-1')], pending: [] };
+        expect(knownCopies(w)).toEqual([]);
+        expect(wordsOnly(w)).toBe(false);
+    });
+
+    describe("a community that hasn't said its label may hold the other half: nothing is stray on a guess (#2683 review)", () => {
+        /** A community whose label this phone doesn't have, for whatever reason: only what it answered differs. */
+        const unlabelled = (status: CommunityPart['status']): CommunityPart => ({ url: 'https://bell.test', name: 'Bellingen', status });
+        const SHARED = { providers: [], generation: 1, adminsCopy: { since: '2026-10-01', placement: 'shared' as const, copy: 'digest-1' } };
+        const listed = (...communities: CommunityPart[]): WaysBack => ({ vault: { kind: 'listed', copies: [], communityCopies: [half] }, communities, pending: [] });
+
+        it('one that gave no answer', () => {
+            const w = listed(unlabelled(null));
+            expect(strayVaultHalves(w)).toEqual([]);
+            expect(unplacedVaultHalves(w)).toEqual([half]);
+            expect(wordsOnly(w), 'never "nothing is kept"').toBe(false);
+        });
+
+        it('one that answered with its half and no node key, as a server still starting does (routes/keepers.ts, `nodeKeyHex`)', () => {
+            const w = listed(unlabelled(SHARED));
+            expect(everyoneAnswered(w), 'so "did everyone answer" is the wrong test: it did, and it holds the half').toBe(true);
+            expect(strayVaultHalves(w)).toEqual([]);
+            expect(unplacedVaultHalves(w)).toEqual([half]);
+        });
+
+        it("one that answered with a copy it can't open and no node key: that may be the half", () => {
+            const w = listed(unlabelled({ providers: [], generation: 1, adminsCopyUnopenable: { since: '2026-10-01', reason: 'recovery_seal_key_missing' } }));
+            expect(strayVaultHalves(w)).toEqual([]);
+            expect(unplacedVaultHalves(w)).toEqual([half]);
+        });
+
+        it('one that says what it keeps, and that is no half, holds none, whatever it said of its key: a server from before VR4 says nothing of it', () => {
+            for (const w of [
+                listed(unlabelled({ providers: [], generation: 1 })),
+                listed(unlabelled({ providers: ['google'], generation: 1 })),
+                listed(unlabelled({ providers: [], generation: 1, adminsCopy: { since: '2026-10-01' } })),
+            ]) {
+                expect(strayVaultHalves(w), 'still removable: one server on an old build must not strand it').toEqual([half]);
+                expect(unplacedVaultHalves(w)).toEqual([]);
+            }
+        });
+
+        it('every community named another label: stray, as before, even beside one that keeps a half of its own', () => {
+            const w = listed(part(null, 'label-2'), part('digest-3', 'label-3'));
+            expect(strayVaultHalves(w)).toEqual([half]);
+            expect(unplacedVaultHalves(w)).toEqual([]);
+        });
+
+        it('a half a community claimed is that community\'s, whoever else is silent; only an unclaimed one waits', () => {
+            const other = { ref: 'label-2', copy: 'digest-2', since: '2026-10-02', lastReleasedAt: null };
+            const w: WaysBack = { vault: { kind: 'listed', copies: [], communityCopies: [half, other] }, communities: [part('digest-1'), unlabelled(null)], pending: [] };
+            expect(vaultHalfOf(w, w.communities[0])).toEqual(half);
+            expect(unplacedVaultHalves(w)).toEqual([other]);
+            expect(strayVaultHalves(w)).toEqual([]);
+        });
+
+        it('no half unclaimed: nothing waits, and nothing is stray', () => {
+            const w = listed(part('digest-1'), unlabelled(null));
+            expect(unplacedVaultHalves(w)).toEqual([]);
+            expect(strayVaultHalves(w)).toEqual([]);
+        });
+
+        it('a build or a vault that lists no half has nothing to place', () => {
+            expect(unplacedVaultHalves({ vault: { kind: 'no-vault' }, communities: [unlabelled(null)], pending: [] })).toEqual([]);
+            expect(unplacedVaultHalves({ vault: { kind: 'unknown', why: 'paused' }, communities: [unlabelled(null)], pending: [] })).toEqual([]);
+            expect(unplacedVaultHalves({ vault: { kind: 'listed', copies: [] }, communities: [unlabelled(null)], pending: [] })).toEqual([]);
+        });
+
+        it("a community's half is called missing only when the phone can tell: no label and a half unclaimed could be the very one", () => {
+            const c = unlabelled(SHARED);
+            expect(otherHalfMissing(listed(c), c), 'that unclaimed half may be its other half').toBe(false);
+            expect(otherHalfMissing({ vault: { kind: 'listed', copies: [] }, communities: [c], pending: [] }, c), 'the vault keeps no half at all').toBe(true);
+            expect(otherHalfMissing({ vault: { kind: 'unknown', why: 'paused' }, communities: [c], pending: [] }, c), 'the vault could not say').toBe(false);
+            const named = part('digest-1');
+            expect(otherHalfMissing(ways([half], named), named), 'the pair').toBe(false);
+            const another = part('digest-2');
+            expect(otherHalfMissing(ways([half], another), another), 'its label, another copy').toBe(true);
+            const elsewhere = part('digest-1', 'label-2');
+            expect(otherHalfMissing(ways([half], elsewhere), elsewhere), 'its label, and the half is someone else\'s').toBe(true);
+        });
+    });
+});
+
+describe("the vault's half when its community can't be heard, on the real listing (#2683 review)", () => {
+    const NODE_KEY = 'ab'.repeat(32);
+    const SINCE = '2026-10-29T04:05:06.000Z';
+    const DIGEST = vaultCopyDigest(SOME_COPY);
+
+    /** Kim's phone after turning the shared copy on at Mullum: the vault keeps the copy and one half, Mullum the other. */
+    async function sharedAtMullum(net: Net): Promise<string> {
+        await kimsPhone(net);
+        const ref = communityRefFor(kim, NODE_KEY);
+        net.vault.copies.set(`${VAULT_COMMUNITY_PROVIDER}:${NODE_KEY}:${kim.publicKey}`, {
+            provider: VAULT_COMMUNITY_PROVIDER, sub: `${NODE_KEY}:${kim.publicKey}`, pubkey: kim.publicKey, clientCopy: SOME_COPY, pushTokens: [], lastReleasedAt: null,
+            day: '2026-10-29', community: { nodeKey: NODE_KEY, half: 'not opened here', ref },
+        });
+        Object.assign(net.communities[MULLUM], { admins: { since: SINCE, placement: 'shared', copy: DIGEST }, nodeKey: NODE_KEY });
+        return ref;
+    }
+    const HALF = (ref: string) => ({ ref, copy: DIGEST, since: '2026-10-29', lastReleasedAt: null });
+
+    it('Mullum answering: the half is its own, and nothing is left over (the control)', async () => {
+        const net = network();
+        const ref = await sharedAtMullum(net);
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].vaultRef).toBe(ref);
+        expect(vaultHalfOf(ways, ways.communities[0])).toEqual(HALF(ref));
+        expect(otherHalfMissing(ways, ways.communities[0])).toBe(false);
+        expect(strayVaultHalves(ways)).toEqual([]);
+        expect(unplacedVaultHalves(ways)).toEqual([]);
+    });
+
+    it("Mullum down: the vault's half is listed as not yet placed, never as stray with a Remove", async () => {
+        const net = network();
+        const ref = await sharedAtMullum(net);
+        net.communities[MULLUM].down = true;
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status).toBeNull();
+        expect(strayVaultHalves(ways)).toEqual([]);
+        expect(unplacedVaultHalves(ways)).toEqual([HALF(ref)]);
+    });
+
+    it("Mullum refusing with a 5xx: the same (the review's 502/503)", async () => {
+        const net = network();
+        const ref = await sharedAtMullum(net);
+        const realFetch = vi.mocked(fetch).getMockImplementation()!;
+        vi.mocked(fetch).mockImplementation(async (input: RequestInfo, init?: RequestInit) => (
+            new URL(String(input)).origin === MULLUM ? new Response('<html>502 Bad Gateway</html>', { status: 502 }) : realFetch(input, init)
+        ));
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status).toBeNull();
+        expect(strayVaultHalves(ways)).toEqual([]);
+        expect(unplacedVaultHalves(ways)).toEqual([HALF(ref)]);
+    });
+
+    it("Mullum still starting: it answers with its half and no node key yet, so the phone can't tell which half is its, and says neither stray nor missing", async () => {
+        const net = network();
+        const ref = await sharedAtMullum(net);
+        net.communities[MULLUM].nodeKey = null;
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status?.adminsCopy).toEqual({ since: SINCE, placement: 'shared', copy: DIGEST });
+        expect(ways.communities[0].vaultRef).toBeUndefined();
+        expect(everyoneAnswered(ways)).toBe(true);
+        expect(strayVaultHalves(ways)).toEqual([]);
+        expect(unplacedVaultHalves(ways)).toEqual([HALF(ref)]);
+        expect(otherHalfMissing(ways, ways.communities[0])).toBe(false);
+    });
+
+    it('Mullum back: the same half is its own again, and nothing was lost', async () => {
+        const net = network();
+        const ref = await sharedAtMullum(net);
+        net.communities[MULLUM].down = true;
+        await listWaysBack(kim);
+        net.communities[MULLUM].down = false;
+        const ways = await listWaysBack(kim);
+        expect(vaultHalfOf(ways, ways.communities[0])).toEqual(HALF(ref));
+        expect(unplacedVaultHalves(ways)).toEqual([]);
+        expect(vaultDeletes(net)).toEqual([]);
+    });
+
+    describe('a shared copy\'s Remove says which keeper stopped it (#2683 deciding pass, app/ways-back.tsx:186)', () => {
+        const toMullum = (net: Net) => deletesAt(net, MULLUM).filter((s) => s.path === '/api/recovery/community-copy');
+        const stops: [string, (v: FakeVault) => void, string][] = [
+            ['is paused', (v) => { v.locked = true; }, 'paused'],
+            ["answers in a way the phone can't check", (v) => { v.answers = 'forged'; }, 'unverified'],
+            ['refuses', (v) => { v.handle = () => ({ status: 429, body: { error: 'Too many tries.', code: 'rate_limited' } }); }, 'refused'],
+            ["doesn't answer", (v) => { v.unreachable = true; }, 'vault-unreachable'],
+        ];
+        for (const [what, breakIt, why] of stops) {
+            it(`a vault that ${what}: the removal is the vault's to explain, and the community was never asked`, async () => {
+                const net = network();
+                await sharedAtMullum(net);
+                const ways = await listWaysBack(kim);
+                breakIt(net.vault);
+                expect(await removeAdminsCopyFrom(kim, ways.communities[0], { vaultToo: true })).toEqual({ removed: false, why });
+                expect(toMullum(net)).toEqual([]);
+                expect(net.communities[MULLUM].admins, 'its half is still there').toEqual({ since: SINCE, placement: 'shared', copy: DIGEST });
+            });
+        }
+
+        it("the vault deletes and the community can't: `unreachable`, the community's (the control)", async () => {
+            const net = network();
+            await sharedAtMullum(net);
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].adminsDelete = 'refused';
+            expect(await removeAdminsCopyFrom(kim, ways.communities[0], { vaultToo: true })).toEqual({ removed: false, why: 'unreachable' });
+            expect(vaultDeletes(net)).toHaveLength(1);
+            expect(toMullum(net)).toHaveLength(1);
+        });
+
+        it('a whole copy never asks the vault, whatever the vault is doing (the control)', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].admins = { since: SINCE };
+            const ways = await listWaysBack(kim);
+            net.vault.locked = true;
+            expect(await removeAdminsCopyFrom(kim, ways.communities[0])).toEqual({ removed: true });
+            expect(vaultDeletes(net)).toEqual([]);
+        });
+    });
+
+    it('a half whose community left this phone, with every community heard: stray, and removable, as Ways back promises', async () => {
+        const net = network();
+        const ref = await sharedAtMullum(net);
+        Object.assign(net.communities[MULLUM], { admins: null, nodeKey: 'cd'.repeat(32) });
+        const ways = await listWaysBack(kim);
+        expect(strayVaultHalves(ways)).toEqual([HALF(ref)]);
+        expect(unplacedVaultHalves(ways)).toEqual([]);
+    });
+});
 
 describe('the list: every copy, since when, as far as the phone can ask', () => {
     it("the vault's copies with since, from its signed status, and each saved community's; never another key's", async () => {

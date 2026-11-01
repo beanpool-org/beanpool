@@ -3114,6 +3114,8 @@ export interface RekeyStatusResponse {
         kept: boolean;
         since: string | null;
         unopenable?: { since: string; reason: 'recovery_seal_key_missing' | 'recovery_seal_unopenable' } | null;
+        /** What it keeps: the copy and its key, or its half of a copy BeanPool's key vault keeps (vault rethink VR4). */
+        placement?: 'whole' | 'shared' | null;
     };
     /** This node's bring-backs of the member, newest first: who and when. */
     bringBacks?: Array<{ operatorPubkey: string; releasedAt: string }>;
@@ -3163,6 +3165,8 @@ export interface CompleteRekeyResponse {
     signInCopiesRemoved?: number;
     /** A Bring back code's number was typed (vault rethink VR3): nothing moved, and `newPubkey` is absent. */
     broughtBack?: boolean;
+    /** A bring-back's: `shared` means their phone now waits out BeanPool's key vault's day (vault rethink VR4). */
+    placement?: 'whole' | 'shared';
 }
 
 /**

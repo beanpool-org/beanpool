@@ -135,3 +135,8 @@ export function getP2PNode(): Libp2p {
 export function getPrivateKey(): any {
     return _privateKey;
 }
+
+/** Tests only: this node's identity, in a suite that starts no libp2p. */
+export function setPrivateKeyForTests(key: unknown): void {
+    _privateKey = key;
+}

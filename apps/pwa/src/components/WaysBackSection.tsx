@@ -36,6 +36,8 @@ export const WAYS_BACK_WEB = {
     // The copy this server keeps for its admins to bring the member back from (vault rethink VR3).
     admins: word("Your community's admins"),
     adminsLine: word('A locked copy an admin can bring your account back from, when they see you in person.'),
+    // Half of a copy, made on a phone: half here, half at the key vault this browser can't reach (vault rethink VR4). No Remove.
+    adminsHalf: word("Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app."),
     // One this server keeps but can't open now (its key gone, or another): listed and removable, never a way back.
     adminsCantOpen: word("This server can't open this copy now, so it can't bring your account back. Your community's admins, below, says what can be done. Your 12 words still work."),
 } as const;
@@ -47,6 +49,8 @@ interface Props {
     adminsCopy?: { since: string | null } | null;
     /** One it keeps for them but can't open now, since when: listed and removable, never counted as a way back. */
     adminsCopyUnopenable?: { since: string | null } | null;
+    /** Its half of a shared copy, since when (VR4): listed, with no Remove, and never this browser's to count on. */
+    adminsHalf?: { since: string | null } | null;
     /** Whether this browser holds the 12 words. */
     hasWords: boolean;
     /** Show the 12 words (Settings' View Recovery Phrase). */
@@ -65,7 +69,7 @@ const PLAIN = `${BUTTON} bg-white dark:bg-nature-900 text-nature-900 dark:text-w
 /** Which copy the confirm is for: a sign-in's, or the admins' (VR3). */
 type Asking = JoinProvider | 'admins';
 
-export function WaysBackSection({ enrolled, adminsCopy = null, adminsCopyUnopenable = null, hasWords, onShowWords, onChanged }: Props) {
+export function WaysBackSection({ enrolled, adminsCopy = null, adminsCopyUnopenable = null, adminsHalf = null, hasWords, onShowWords, onChanged }: Props) {
     const [open, setOpen] = useState(false);
     const [asking, setAsking] = useState<Asking | null>(null);
     const [busy, setBusy] = useState(false);
@@ -75,6 +79,8 @@ export function WaysBackSection({ enrolled, adminsCopy = null, adminsCopyUnopena
     const adminsSince = admins?.since ? new Date(admins.since) : null;
     const cantOpen = enrolled && !admins ? adminsCopyUnopenable : null;
     const cantOpenSince = cantOpen?.since ? new Date(cantOpen.since) : null;
+    const half = enrolled ? adminsHalf : null;
+    const halfSince = half?.since ? new Date(half.since) : null;
 
     const remove = async (which: Asking) => {
         setBusy(true);
@@ -153,7 +159,7 @@ export function WaysBackSection({ enrolled, adminsCopy = null, adminsCopyUnopena
                             <p className={`m-0 ${SMALL}`}>{t('Checking…')}</p>
                         ) : enrolled === null ? (
                             <p className={`m-0 ${SMALL}`}>{t(WAYS_BACK_WEB.notAsked)}</p>
-                        ) : copies.length === 0 && !admins && !cantOpen ? (
+                        ) : copies.length === 0 && !admins && !cantOpen && !half ? (
                             <p className={`m-0 ${SMALL}`}>{t(WAYS_BACK_WEB.keepsNone)}</p>
                         ) : copies.map(p => (
                             <div key={p} className="mt-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700">
@@ -166,6 +172,15 @@ export function WaysBackSection({ enrolled, adminsCopy = null, adminsCopyUnopena
                                 )}
                             </div>
                         ))}
+                        {half && (
+                            <div data-testid="ways-back-admins-half" className="mt-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700">
+                                <p className="m-0 text-sm font-semibold">{t(WAYS_BACK_WEB.admins)}</p>
+                                <p className={`m-0 ${SMALL}`}>{t(WAYS_BACK_WEB.adminsHalf)}</p>
+                                {halfSince && Number.isFinite(halfSince.getTime()) && (
+                                    <p className={`m-0 ${SMALL}`}>{t('Kept since {date}', { date: formatDate(halfSince, 'day-month-year') })}</p>
+                                )}
+                            </div>
+                        )}
                         {admins && (
                             <div data-testid="ways-back-admins-copy" className="mt-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700">
                                 <p className="m-0 text-sm font-semibold">{t(WAYS_BACK_WEB.admins)}</p>

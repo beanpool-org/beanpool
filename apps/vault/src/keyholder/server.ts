@@ -34,6 +34,7 @@ const HANDLERS: Record<string, Handler> = {
     confirm: (kh, a) => kh.confirmShare(a.confirmation),
     cancelPending: (kh, a) => kh.cancelPending(a.cancel),
     index: (kh, a) => ({ index: kh.index(a) }),
+    communityDepositIndex: (kh, a) => kh.communityDepositIndex(a as Parameters<Keyholder['communityDepositIndex']>[0]),
     depositWrap: (kh, a) => kh.depositWrap(a as Parameters<Keyholder['depositWrap']>[0]),
     readMeta: (kh, a) => kh.readMeta(a as Parameters<Keyholder['readMeta']>[0]),
     updateMeta: (kh, a) => kh.updateMeta(a as Parameters<Keyholder['updateMeta']>[0]),

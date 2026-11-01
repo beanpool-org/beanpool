@@ -24,6 +24,10 @@
  * Account Protection's row (components/CommunityAdminsRow.tsx) offered, turned on just now, on since a date, and kept at a
  * community that no longer offers it.
  *
+ * And the shared placement (vault rethink VR4, §4.3): the row offered, on, "Not finished", and a Remove that stopped halfway; the list with half a copy
+ * at the vault, half a pair, a half no community on this phone owns, one it can't place yet, and halves with no pair at the
+ * community they are for; and Restore your account's four rows (components/welcome/RestoreMenu.tsx), in the screen's colours.
+ *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
  * 44dp tall (the panel's own floor); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
  * Not counted: an emoji on its own (drawn in its own colours, whatever the text colour says), and Facebook's own button,
@@ -80,6 +84,7 @@ const STUBS = {
         export const signInCopiesAt = (rule) => (rule === 'none' ? 'none' : rule === 'server' ? 'community' : globalThis.__vault ? 'vault' : 'community');
         export const vaultConfig = () => null;
         export const readVaultConfig = () => null;
+        export const readRecoveryCopiesRule = (v) => v ?? 'vault';
     `,
     // The move card's surroundings (components/VaultMoveCard.tsx, VR2's reverse): the account, the theme's colours, its
     // focus as a mount, the community, the offer the page asks for, the 12 words, and no sheet. Only it imports these.
@@ -109,13 +114,30 @@ const STUBS = {
     'community-copy': `
         const ON = { kept: true, since: '2026-10-29T04:05:06.000Z', offered: true };
         export const COMMUNITY_COPY_TEXT = {};
-        export const offersCommunityCopy = (url, rule) => rule === 'server';
+        export const offersCommunityCopy = (url, rule) => rule === 'server' || (rule === 'vault' && !!globalThis.__vault);
         export const communityCopyStatus = async () => globalThis.__copy;
         export const turnOnCommunityCopy = async () => { globalThis.__copy = ON; return { since: ON.since }; };
         export const removeCommunityCopy = async () => { globalThis.__copy = { kept: false, since: null, offered: true }; };
     `,
 };
-const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet', 'LocalAuth', 'copies-rule', 'community-copy']);
+// The shared placement's side of the row (VR4): how the vault's half stands (the page's query), and nothing sealed or sent.
+STUBS['community-recovery'] = `
+    export const COMMUNITY_RECOVERY_TEXT = { offHalfway: "BeanPool's key vault no longer keeps its half, so your admins can't bring you back now. Your community hasn't confirmed it deleted its half: tap Remove to try again." };
+    export const sharedCopySide = async () => globalThis.__side ?? null;
+    export const sharedCopyState = (status, side) => {
+        if (!status) return null;
+        if (status.kept && status.placement === 'shared') return side === 'none' || side === 'differs' ? 'unfinished' : 'on';
+        return !status.kept && !status.unopenable && side === 'differs' ? 'unfinished' : null;
+    };
+    export const turnOnSharedCopy = async () => ({ since: '2026-10-29T04:05:06.000Z' });
+    // copy=shared-stops: the vault deletes its half, and the community's side stops.
+    export const removeSharedCopy = async () => {
+        if (!globalThis.__removeStops) return;
+        globalThis.__side = 'none';
+        throw new Error(COMMUNITY_RECOVERY_TEXT.offHalfway);
+    };
+`;
+const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet', 'LocalAuth', 'copies-rule', 'community-copy', 'community-recovery']);
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
@@ -127,9 +149,10 @@ const entry = path.join(work, 'entry.tsx');
 fs.writeFileSync(entry, `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { View, Text } from 'react-native';
+import { Alert, View, Text } from 'react-native';
 import { t } from '@beanpool/core';
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { RestoreMenu } from ${JSON.stringify(path.join(NATIVE, 'components/welcome/RestoreMenu'))};
 import { KeeperProtectionPanel } from ${JSON.stringify(path.join(NATIVE, 'components/KeeperProtectionPanel'))};
 import { protectionFrom } from ${JSON.stringify(path.join(NATIVE, 'utils/protection-state'))};
 import { NO_WORDS_VIEW_LINE } from ${JSON.stringify(path.join(NATIVE, 'utils/no-words-copy'))};
@@ -158,7 +181,15 @@ const hasWords = q.get('words') !== 'none';
 globalThis.__offered = q.get('offered') !== 'no';
 // A copy it keeps but can't open (#2626): its key gone (copy=cantopen-key), or another key in its place (copy=cantopen-other).
 const CANT_OPEN = { 'cantopen-key': 'recovery_seal_key_missing', 'cantopen-other': 'recovery_seal_unopenable' }[q.get('copy') || ''];
-globalThis.__copy = q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
+// The shared placement (VR4): offered here, on with both halves, half a pair ("Not finished"), and on with a Remove that will stop halfway.
+const SHARED = { offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), since: null, kept: false, placement: null, copy: null };
+const HALF_HERE = { ...SHARED, kept: true, since: '2026-10-29T04:05:06.000Z', placement: 'shared', copy: 'digest' };
+const shared = { 'shared-off': [SHARED, 'none'], 'shared-on': [HALF_HERE, 'matches'], 'shared-half': [HALF_HERE, 'none'], 'shared-stops': [HALF_HERE, 'matches'] }[q.get('copy') || ''];
+if (shared) globalThis.__side = shared[1];
+globalThis.__removeStops = q.get('copy') === 'shared-stops';
+// react-native-web's Alert draws nothing: here the member says yes.
+Alert.alert = (_title, _body, buttons) => { buttons?.find((b) => b.style === 'destructive')?.onPress?.(); };
+globalThis.__copy = shared ? shared[0] : q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
     : CANT_OPEN ? { kept: false, since: null, offered: globalThis.__offered, unopenable: { since: '2026-10-29T04:05:06.000Z', reason: CANT_OPEN } }
     : { kept: false, since: null, offered: globalThis.__offered };
 const protection = q.get('signin') === 'google' ? covered(['google']) : protectionFrom(null);
@@ -209,6 +240,39 @@ const WAYS = {
         communities: [
             { url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-29T04:05:06.000Z' } } },
             { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
+        ],
+        pending: [],
+    },
+    // Half at the vault, half at the community (VR4): one pair, half a pair, and a half no community here says is its own.
+    shared: {
+        vault: { kind: 'listed', copies: [], communityCopies: [
+            { ref: 'label-1', copy: 'digest-1', since: '2026-10-05', lastReleasedAt: null },
+            { ref: 'label-2', copy: 'digest-2', since: '2026-10-06', lastReleasedAt: null },
+        ] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', vaultRef: 'label-1', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-05T04:05:06.000Z', placement: 'shared', copy: 'digest-1' } } },
+            { url: 'https://bellingen.beanpool.org', name: 'Bellingen', vaultRef: 'label-3', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-07T04:05:06.000Z', placement: 'shared', copy: 'digest-3' } } },
+        ],
+        pending: [],
+    },
+    // A half nobody has claimed while a community that may hold the rest hasn't answered: listed, with no Remove of its own.
+    notplaced: {
+        vault: { kind: 'listed', copies: [], communityCopies: [{ ref: 'label-2', copy: 'digest-2', since: '2026-10-06', lastReleasedAt: null }] },
+        communities: [
+            { url: 'https://bellingen.beanpool.org', name: 'Bellingen', status: null },
+            { url: GLOBAL, name: 'Global community', vaultRef: 'label-1', status: { providers: [], generation: 0 } },
+        ],
+        pending: [],
+    },
+    // Halves the vault keeps for a community with no pair there: one that keeps none, and one that keeps a copy it can't open.
+    halfalone: {
+        vault: { kind: 'listed', copies: [], communityCopies: [
+            { ref: 'label-1', copy: 'digest-1', since: '2026-10-05', lastReleasedAt: null },
+            { ref: 'label-2', copy: 'digest-2', since: '2026-10-06', lastReleasedAt: null },
+        ] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', vaultRef: 'label-1', status: { providers: [], generation: 0 } },
+            { url: 'https://bellingen.beanpool.org', name: 'Bellingen', vaultRef: 'label-2', status: { providers: [], generation: 0, adminsCopyUnopenable: { since: '2026-10-06T04:05:06.000Z', reason: 'recovery_seal_key_missing' } } },
         ],
         pending: [],
     },
@@ -264,9 +328,23 @@ const WaysPage = () => {
     );
 };
 
+/** welcome.tsx's Restore your account: its page and card, its title and line, its four rows. */
+const RestorePage = () => {
+    const { colors: oc, dark } = onboardingColors(scheme);
+    return (
+        <View style={{ backgroundColor: oc.surface.page, padding: 24 }}>
+            <View style={{ width: '100%', backgroundColor: oc.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: oc.border.default }}>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: oc.text.heading, marginBottom: 8 }}>{t('🔑 Restore your account')}</Text>
+                <RestoreMenu colors={oc} dark={dark} logos={<View style={{ width: 48, height: 16 }} />} onSocial={noop} onWords={noop} onCommunity={noop} onRekey={noop} />
+            </View>
+        </View>
+    );
+};
+
 const Page = () => {
     const place = q.get('place');
     if (place === 'ways') return <WaysPage />;
+    if (place === 'restore') return <RestorePage />;
     // Settings' menu, where the move card sits (VR2's reverse, "Keep your Google recovery with your community").
     if (place === 'movecard') return (
         <View style={{ backgroundColor: colors.surface.page, padding: 16 }}>
@@ -443,6 +521,9 @@ try {
             ['state=result', 'Ways back, after Remove everything'],
             ['state=adminsonly', "Ways back, only the copy for your community's admins"],
             ['state=cantopen', "Ways back, a copy for your community's admins its server can't open"],
+            ['state=shared', 'Ways back, half at the key vault and half at the community, half a pair, and a stray half'],
+            ['state=notplaced', "Ways back, a half this phone can't place yet"],
+            ['state=halfalone', "Ways back, vault halves with no pair: one community keeps none, one can't open what it keeps"],
         ];
         for (const [query, label] of WAYS_CASES) {
             await open(`place=ways&${query}&scheme=${scheme}`);
@@ -483,6 +564,10 @@ try {
             ['copy=cantopen-key', "Account Protection, your community's admins, kept but its server's key is gone", /The people who run it can put that key back/],
             ['copy=cantopen-other', "Account Protection, your community's admins, kept under another key, offered", /Turn it on again to make a copy it can open/],
             ['copy=cantopen-other&offered=no', "Account Protection, your community's admins, kept under another key, no longer offered", /no longer makes new copies/],
+            // The shared placement (VR4).
+            ['copy=shared-off&offered=no', "Account Protection, your community's admins, half and half, offered", /each keep half of a locked copy/],
+            ['copy=shared-on&offered=no', "Account Protection, your community's admins, half and half, on", /On in Mullumbimby since/],
+            ['copy=shared-half&offered=no', "Account Protection, your community's admins, half and half, not finished", /Not finished: tap to try again/],
         ];
         for (const [query, label, shows] of ADMINS_CASES) {
             await open(`place=admins&${query}&scheme=${scheme}`);
@@ -493,6 +578,18 @@ try {
         await page.getByRole('button', { name: 'Turn on' }).click();
         await page.getByText(/If you lose this phone, go and see one of your admins/).waitFor();
         await measure(`${scheme} · Account Protection, your community's admins, turned on just now`);
+        // A Remove that stopped halfway (#2683 deciding pass): the longest line this row says, under "Not finished".
+        await open(`place=admins&copy=shared-stops&offered=no&scheme=${scheme}`);
+        await page.getByRole('button', { name: 'Remove' }).click();
+        await page.getByText(/no longer keeps its half/).waitFor();
+        await page.getByText(/Not finished: tap to try again/).waitFor();
+        await measure(`${scheme} · Account Protection, your community's admins, half and half, a Remove that stopped halfway`);
+
+        // Restore your account's four rows (VR4).
+        await open(`place=restore&scheme=${scheme}`);
+        await page.getByText('My community can bring me back').first().waitFor();
+        if ((await page.getByRole('button').count()) !== 4) problems.push(`${scheme} · Restore your account: not four rows`);
+        await measure(`${scheme} · Restore your account, four rows`);
     }
     for (const e of errors) problems.push(`page error: ${e}`);
 } finally {

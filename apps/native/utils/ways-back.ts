@@ -23,6 +23,9 @@
  *   proxy's page, vault-move.ts `removeCommunityCopy`). Anything short of that is "not removed", and a community's
  *   delete is then remembered and tried again (with the guard against a newer copy, vault-move.ts). The copy for a
  *   community's admins (VR3) goes on its own answer too; one that doesn't land is said as not removed, never remembered.
+ *   A shared copy (VR4) is one way back in two places, so one Remove asks both, the vault first. A vault half no community
+ *   claims has a Remove of its own only once no community could still be keeping the rest ({@link strayVaultHalves}): while one
+ *   hasn't said, it is listed with none, because that Remove can't be taken back and the half may be half of a working pair.
  * - **Remove everything**: the vault's `all`, when it listed a copy or couldn't say, and a delete for every copy each
  *   community listed. A community that couldn't be asked has nothing removed, and the result says so: the phone never
  *   deletes a copy it was never shown, at a community it couldn't see.
@@ -38,12 +41,13 @@ import { getSavedNodes } from './nodes';
 import { readOneWayBack } from './one-way-back';
 import type { SsoProvider } from './sso-providers';
 import { wordsWrittenDownStoreKey } from './storage-keys';
-import { disconnectFromVault, hasVault, vaultStatus, VaultError } from './vault';
+import { communityRefFor } from './community-recovery';
+import { disconnectCommunityCopy, disconnectFromVault, hasVault, vaultStatus, VaultError } from './vault';
 import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, removeAdminsCopy, retryCommunityRemovals } from './vault-move';
-import { sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
+import { removeEverythingAsksVault, sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
 
 export {
-    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly,
+    beforeRemoving, everyoneAnswered, isPending, knownCopies, otherHalfMissing, removeEverythingAsksVault, sameCommunity, strayVaultHalves, unopenableAdminsCopies, unplacedVaultHalves, vaultCopiesBySignIn, vaultHalfOf, vaultHalves, wordsOnly,
     type BeforeRemoving, type CommunityPart, type CopyAt, type NotAnswered, type Removal, type VaultPart, type WaysBack,
 } from './ways-back-state';
 
@@ -79,16 +83,31 @@ export async function listWaysBack(identity: BeanPoolIdentity): Promise<WaysBack
     }
     const [vault, communities, pending] = await Promise.all([
         askVault(identity),
-        Promise.all(places.map(async (p): Promise<CommunityPart> => ({ ...p, status: await communityCopyStatus(identity, p.url) }))),
+        Promise.all(places.map(async (p): Promise<CommunityPart> => {
+            const status = await communityCopyStatus(identity, p.url);
+            const vaultRef = labelOf(identity, status?.nodeKey);
+            return { ...p, status, ...(vaultRef ? { vaultRef } : {}) };
+        })),
         pendingCommunityRemovals(identity),
     ]);
     return { vault, communities, pending };
 }
 
+/** This member's label for a community at the vault, from the node key it said; null when it said none. */
+function labelOf(identity: BeanPoolIdentity, nodeKey: string | null | undefined): string | null {
+    if (!nodeKey || !hasVault()) return null;
+    try {
+        return communityRefFor(identity, nodeKey);
+    } catch {
+        return null;
+    }
+}
+
 async function askVault(identity: BeanPoolIdentity): Promise<VaultPart> {
     if (!hasVault()) return { kind: 'no-vault' };
     try {
-        return { kind: 'listed', copies: (await vaultStatus(identity)).copies };
+        const { copies, communityCopies } = await vaultStatus(identity);
+        return { kind: 'listed', copies, ...(communityCopies ? { communityCopies } : {}) };
     } catch (e) {
         const why = notAnswered(e);
         return { kind: 'unknown', why: why === 'refused' ? 'unreachable' : why };
@@ -118,10 +137,27 @@ export async function removeCommunityCopyFrom(
 
 /**
  * Remove the copy a community keeps for its admins to bring the member back from (vault rethink VR3): removed on the
- * community's own answer; otherwise not removed, and not remembered (vault-move.ts `removeAdminsCopy`).
+ * community's own answer; otherwise not removed, and not remembered (vault-move.ts `removeAdminsCopy`). A shared copy
+ * (VR4) goes from the vault first (`vaultToo`), on its signed answer: half a pair left there is what can be tried again.
+ * Stopped there, the community was never asked, and the reason given is the vault's: `unreachable` alone is the community's.
+ * A whole copy never asks the vault, which has nothing of it and may be paused.
  */
-export async function removeAdminsCopyFrom(identity: BeanPoolIdentity, community: CommunityPart): Promise<Removal> {
+export async function removeAdminsCopyFrom(identity: BeanPoolIdentity, community: CommunityPart, opts: { vaultToo?: boolean } = {}): Promise<Removal> {
+    if (opts.vaultToo && community.vaultRef) {
+        const atVault = await removeVaultHalf(identity, community.vaultRef);
+        if (!atVault.removed) return atVault.why === 'unreachable' ? { removed: false, why: 'vault-unreachable' } : atVault;
+    }
     return (await removeAdminsCopy(identity, community.url)) ? { removed: true } : { removed: false, why: 'unreachable' };
+}
+
+/** Remove the vault's community copy with this label: removed only on the vault's signed answer. */
+export async function removeVaultHalf(identity: BeanPoolIdentity, ref: string): Promise<Removal> {
+    try {
+        await disconnectCommunityCopy(identity, ref);
+        return { removed: true };
+    } catch (e) {
+        return { removed: false, why: notAnswered(e) };
+    }
 }
 
 export interface EverythingRemoved {
@@ -141,8 +177,7 @@ export interface EverythingRemoved {
  * never blocks on one keeper.
  */
 export async function removeEverything(identity: BeanPoolIdentity, w: WaysBack): Promise<EverythingRemoved> {
-    const askVaultToo = w.vault.kind === 'unknown' || (w.vault.kind === 'listed' && w.vault.copies.length > 0);
-    const vault: Promise<Removal | null> = askVaultToo
+    const vault: Promise<Removal | null> = removeEverythingAsksVault(w)
         ? disconnectFromVault(identity, 'all').then((): Removal => ({ removed: true }), (e): Removal => ({ removed: false, why: notAnswered(e) }))
         : Promise.resolve(null);
     const communities = Promise.all(w.communities.filter(c => c.status).map(async c => {
@@ -163,6 +198,7 @@ export async function removeEverything(identity: BeanPoolIdentity, w: WaysBack):
     }));
     // A copy a community keeps for its admins but can't open goes too: it is still the member's key, there.
     const admins = Promise.all(w.communities.filter(c => c.status?.adminsCopy || c.status?.adminsCopyUnopenable).map(async c => (
+        // The vault's half goes with the vault's `all` above, whether or not this phone can tell it from another's.
         { url: c.url, name: c.name, removal: await removeAdminsCopyFrom(identity, c) }
     )));
     return {

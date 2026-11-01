@@ -54,6 +54,7 @@ import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
+import { loadPendingCommunityRestore } from '../utils/community-recovery';
 import { retryCommunityRemovals } from '../utils/vault-move';
 import { attestOwnRekeys, declineRekey, operatorContact, rekeyToAsk } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
@@ -884,6 +885,12 @@ function RootLayoutNav() {
         if (!identity?.publicKey) return;
         let current = true;
         const waits = new Set<() => void>();
+        // A bring-back this phone is waiting on at the key vault, for another account than the one it holds: it has no
+        // welcome screen to come back through, and the wait outlives the code (utils/community-recovery.ts).
+        // Once the app itself shows, as the alert below: never under App Lock's screen, or before the navigator is there.
+        loadPendingCommunityRestore().then((waiting) => {
+            if (current && waiting) waits.add(whenAppShows(() => { if (current) router.push('/rekey-code'); }));
+        }).catch(() => {});
         const look = () => {
             vaultHoldsAtOpen(identity).then((holds) => {
                 if (!current || holds.length === 0) return;
@@ -896,7 +903,9 @@ function RootLayoutNav() {
                     // one was cut mid-word (measured on the emulator). The body says what happened.
                     Alert.alert(
                         t('Is this you?'),
-                        t('Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, you can let it through now. If not, stop it.'),
+                        holds.some(h => h.provider === 'community')
+                            ? t("Someone is getting your account back on another device, with help from a community's admins. If it was you, you can let it through now. If not, stop it.")
+                            : t('Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, you can let it through now. If not, stop it.'),
                         [
                             { text: t('Not now'), style: 'cancel' },
                             { text: t('Review'), onPress: () => router.push('/(tabs)/settings') },

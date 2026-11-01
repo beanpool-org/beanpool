@@ -7,13 +7,18 @@ import { word, wordn, type TFunction, type TnFunction } from './words.js';
 
 /**
  * What answered at the address: `own` this server's key; `other` another valid key; `other-origin` something that is no
- * attestation (a page, an origin's 404); `silence` nothing, or a Cloudflare error; `tls` a certificate a phone would refuse.
+ * attestation (a page, an origin's 404); `silence` nothing, or a Cloudflare error; `tls` a certificate a phone would refuse,
+ * or a TLS handshake that failed.
  */
 export type AddressAnswer = 'own' | 'other' | 'other-origin' | 'silence' | 'tls';
 
-/** The one next step the check leads to. */
+/**
+ * The one next step the check leads to. `home-network`: nothing outside can reach it, by its shape. `home-network-from-here`:
+ * a name this server reads as a home-network address, which says nothing of what phones outside reach (split DNS).
+ * `no-longer-ours`: a former or lost name that doesn't answer as this server, which nobody should chase.
+ */
 export type AddressStep = 'fine' | 'new-name' | 'no-dns-beanpool' | 'no-dns-own' | 'no-answer' | 'from-inside' | 'another-server'
-    | 'something-else' | 'certificate' | 'home-network';
+    | 'something-else' | 'certificate' | 'home-network' | 'home-network-from-here' | 'no-longer-ours';
 
 /** The check's words, marked here and shown with t() where each is drawn. */
 export const ADDRESS_CHECK_WORDS = {
@@ -28,8 +33,10 @@ export const ADDRESS_CHECK_WORDS = {
     fromInside: word('Checked from inside this server. A home router can fail this while phones outside reach it. Open the check link on your phone, on mobile data.'),
     anotherServer: word("Another server answers here, with a key that isn't this server's. Check where this address points."),
     somethingElse: word('Something other than a BeanPool server answers here. Check where this address points.'),
-    certificate: word("Answers, but with a certificate phones don't trust. Check that port 80 is open and this address points at this server."),
+    certificate: word('Answers, but not with a certificate phones trust. Check that port 80 is open and this address points at this server.'),
     homeNetwork: word("On a home network: nothing outside can reach it, so this server doesn't check it."),
+    homeNetworkFromHere: word("From this server this name points at a home-network address, so it can't be checked from here. Open the check link on your phone, on mobile data."),
+    noLongerOurs: word("No longer this community's address. Nothing to do."),
     /** The `/check` page, opened from outside: who answered, where, by which key, and when. */
     pageHereAt: word('This is {name} at {host}.'),
     pageHere: word('This is {name}.'),
@@ -51,5 +58,7 @@ export function addressNextStep(step: AddressStep, minutes: number | null, w: { 
         case 'something-else': return w.t(W.somethingElse);
         case 'certificate': return w.t(W.certificate);
         case 'home-network': return w.t(W.homeNetwork);
+        case 'home-network-from-here': return w.t(W.homeNetworkFromHere);
+        case 'no-longer-ours': return w.t(W.noLongerOurs);
     }
 }

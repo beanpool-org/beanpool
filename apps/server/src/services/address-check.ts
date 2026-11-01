@@ -7,8 +7,8 @@
  *   1. a DNS lookup (A, AAAA, CNAME) with `node:dns`, so a name with no answer is told from one the resolver couldn't ask;
  *   2. `https://<address>/api/attest` with a fresh nonce, three times at most, read by the name watch's own classifier
  *      (registrar-name-watch.ts classify): own · other · other-origin · silence, and `tls` for a certificate a phone would
- *      refuse, which that watch counts as silence. `own` as soon as one ask is, as the watch reads a tunnel run from two
- *      machines; a certificate fails the same way each time, so it isn't asked again.
+ *      refuse or a TLS handshake that failed, which that watch counts as silence. `own` as soon as one ask is, as the watch
+ *      reads a tunnel run from two machines; a certificate fails the same way each time, so it isn't asked again.
  *
  * The result is kept per host in node_config row ADDRESS_CHECK_KEY, per-server, as the watch's evidence is: a promoted
  * standby looks for itself. The numbers a name pointed at go with the 7-day rule (address-retention.ts).
@@ -18,9 +18,13 @@
  *
  * ssrfSafeFetch, with redirects off and strict TLS as https.request defaults to: an admin can confirm any address in
  * Settings, so what a round asks must never be something inside this server's network (a cloud's metadata address, a
- * neighbour). A name that points at a private address is not asked, and reads `home-network`, as does one no outside
- * reader could reach by its shape (a `.lan` name, a private number). The same refusal reads as silence for anything this
- * doesn't catch first.
+ * neighbour). A name that points at a private address from here is not asked, and says only that: with split DNS a home
+ * server's name reads 192.168.x inside and the public number outside, so phones may reach it perfectly well. One no outside
+ * reader could reach by its shape (a `.lan` name, a private number) isn't asked either, and says so. The same refusal reads
+ * as silence for anything this doesn't catch first.
+ *
+ * A former or lost name is still asked, as configuredAddresses keeps it: this server's key answering there is worth saying.
+ * Anything else answering there is no fault of this community's, so it gets no next step that sends the owner after it.
  *
  * No domain lock-in (memory no-domain-lock-in): it asks this server's own addresses and the resolver this machine already
  * uses, nothing of BeanPool's. A self-hosted node with its own domain gets the same round, and the words of its case.
@@ -60,8 +64,12 @@ const DNS_TRY_MS = 2_000;
 const DNS_KEPT = 8;
 /** A round of the most addresses a node can hold, every one dead, still ends inside the 15 minutes. */
 const AT_ONCE = 4;
-/** Node's codes for a certificate it refused or a TLS handshake that failed: anything else that failed is silence. */
-const TLS_FAILURE = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ALTNAME|HOSTNAME_MISMATCH|^ERR_SSL_|^ERR_TLS_/;
+/**
+ * Node's codes for a certificate it refused or a TLS handshake that failed: anything else that failed is silence. EPROTO is
+ * the handshake, on Node 22, 24 and 26: plain HTTP on the port, or a fatal alert (an edge with no certificate for the name).
+ * A hang-up in the handshake is ECONNRESET, like any dropped connection, so it stays silence.
+ */
+const TLS_FAILURE = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ALTNAME|HOSTNAME_MISMATCH|^ERR_SSL_|^ERR_TLS_|^EPROTO$/;
 
 export interface DnsSeen {
     /** `answers`: some record; `no-such-name`: the resolver says there is none; `failed`: it couldn't say. */
@@ -73,7 +81,7 @@ export interface DnsSeen {
 
 export interface AddressCheck {
     checkedAt: number;
-    /** Null when it wasn't asked: nothing outside could reach it. */
+    /** Null when it wasn't asked: a home-network address, by its shape (`dns` null) or by what its name points at from here. */
     answers: AddressAnswer | null;
     /** The last time this server's key answered here. */
     ownAt: number | null;
@@ -137,7 +145,7 @@ const ASK_OPTIONS: SsrfSafeFetchOptions = {
 /** Too long to be an attestation: whatever said it, something answered. */
 const longAnswer = (status = 200): Answer => ({ status, headers: new Headers(), text: '' });
 
-/** One GET: what answered, `tls` for a certificate refused, null for nothing (a redirect, a refusal, a timeout). */
+/** One GET: what answered, `tls` for a certificate refused or a failed handshake, null for nothing (a redirect, a refusal, a timeout). */
 async function askOnce(url: string): Promise<Answer | 'tls' | null> {
     try {
         // Tests only (BEANPOOL_TEST_EDGE_ORIGIN, as the name watch's): the whole pipeline, aimed at the suite's edge, which
@@ -262,11 +270,13 @@ function liveNamesMade(): Map<string, number> {
     return new Map(live.map((e) => [e.address, Date.parse(e.since)]));
 }
 
-export function stepOf(host: string, c: AddressCheck, made: number | undefined, certified: Set<string>, now: number): { step: AddressStep; minutes: number | null } {
+/** `letGo`: a former or lost name. Only this server's own key answering there still matters. */
+export function stepOf(host: string, c: AddressCheck, made: number | undefined, certified: Set<string>, now: number, letGo: boolean): { step: AddressStep; minutes: number | null } {
     const only = (step: AddressStep) => ({ step, minutes: null });
+    if (letGo && c.answers !== 'own') return only('no-longer-ours');
     switch (c.answers) {
         case 'own': return only('fine');
-        case null: return only('home-network');
+        case null: return only(c.dns ? 'home-network-from-here' : 'home-network');
         case 'other': return only('another-server');
         case 'other-origin': return only('something-else');
         case 'tls': return only('certificate');
@@ -288,8 +298,9 @@ export function addressReaches(now = Date.now()): Map<string, AddressReach> {
     if (Object.keys(checks).length === 0) return out;
     const made = liveNamesMade();
     const certified = new Set(heldCertificates(now).map((c) => c.host));
+    const letGo = new Set(configuredAddresses().filter((a) => a.former || a.lost).map((a) => a.address));
     for (const [host, c] of Object.entries(checks)) {
-        const { step, minutes } = stepOf(host, c, made.get(host), certified, now);
+        const { step, minutes } = stepOf(host, c, made.get(host), certified, now, letGo.has(host));
         out.set(host, {
             answers: c.answers, dns: c.dns, step, minutes, nextStep: addressNextStep(step, minutes, english),
             checkedAt: new Date(c.checkedAt).toISOString(), ownAt: c.ownAt !== null ? new Date(c.ownAt).toISOString() : null,

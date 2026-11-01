@@ -13,11 +13,15 @@
  *  1. the name leads to this server → `reach.answers === 'own'`, the words "Nothing to do", DNS kept (main: no `reach`).
  *  2. nothing answers → 'silence' and the words; and a Cloudflare 530 is silence too.
  *  3. the name doesn't resolve: a name made minutes ago says so, with its age; 31 minutes on it no longer does; an old name
- *     says what to do, an own domain and a BeanPool name each its own. A name the record doesn't hold never reads as new.
+ *     says what to do, an own domain and a BeanPool name each its own. A name the record doesn't hold never reads as new. A
+ *     real SERVFAIL is a resolver that couldn't say, not a name that isn't there: nobody is sent to fix a record for it.
  *  4. another key answers → 'other'; a page → 'other-origin'; a redirect → 'silence'. A wrong answer drops nothing: the
  *     name is still accepted and still published.
- *  5. a certificate strict TLS refuses → 'tls' (a real one: the node's own self-signed port), and its words.
- *  6. no outside reader can reach it: a `.lan` name, a private number, a name that points at one → not asked at all.
+ *  5. a certificate strict TLS refuses → 'tls' (a real one: the node's own self-signed port), and its words. So do a port
+ *     that speaks plain HTTP and a fatal TLS alert, as an edge with no certificate for the name sends. A port that hangs up
+ *     in the handshake stays silence.
+ *  6. not asked at all: a `.lan` name or a private number, which no outside reader can reach, and a name that points at a
+ *     home-network address from here, whose words claim only that (split DNS: phones outside may reach it perfectly well).
  *  7. own domain, no answer here, certificate held → the "checked from inside" words (the rule alone: stepOf, the suite
  *     holds no certificate); without a certificate, and at a BeanPool name, the plain words.
  *  8. Check now through the real route: an owner's session reaches it, a stranger's doesn't, and a second press inside
@@ -25,6 +29,8 @@
  *  9. the numbers a name pointed at go after 7 days, and out of every copy, and the rest of the row stays.
  * 10. /check: name, host, key fingerprint, time, and nothing else, for a Host header that isn't ours too; no script; never
  *     cached; in the reader's language; answers over the plain-HTTP listener too.
+ * 11. a former or lost name (through the real report): whatever answers there, nothing sends the owner after it; this
+ *     server's own key still answering there is still said.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-address-check.ts
  */
@@ -33,6 +39,7 @@ import crypto from 'node:crypto';
 import dgram from 'node:dgram';
 import http from 'node:http';
 import https from 'node:https';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, runNodeChild, type NodeProc } from './takeover-test-harness.js';
@@ -80,7 +87,7 @@ async function child(): Promise<void> {
         step: async (a: { host: string; certified: string[] }) => {
             const check = await checkModule();
             const dns = { outcome: 'answers', a: ['203.0.113.7'], aaaa: [], cname: [] } as const;
-            return check?.stepOf(a.host, { checkedAt: 0, answers: 'silence', ownAt: null, dns: { ...dns, a: [...dns.a], aaaa: [], cname: [] } }, undefined, new Set(a.certified), 0).step ?? null;
+            return check?.stepOf(a.host, { checkedAt: 0, answers: 'silence', ownAt: null, dns: { ...dns, a: [...dns.a], aaaa: [], cname: [] } }, undefined, new Set(a.certified), 0, false).step ?? null;
         },
         // What the report says of each address, at a time on its clock (ms from now).
         reaches: async (a: { offsetMs?: number }) => {
@@ -268,6 +275,21 @@ async function startEdge(sign: (seed: Uint8Array, nonce: string, ts: number) => 
     return edge;
 }
 
+// ── A port with no TLS behind it ───────────────────────────────────────────────────────────
+
+/** A fatal `handshake_failure` alert (TLS 1.2 record, level 2, description 40), as an edge with no certificate for the name sends. */
+const FATAL_ALERT = Buffer.from([0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28]);
+
+/** A port that gets a ClientHello and answers it with `reply`, or hangs up with nothing. */
+async function startBarePort(reply: Buffer | null): Promise<{ origin: string; close: () => void }> {
+    const server = net.createServer((s) => {
+        s.on('error', () => {});
+        s.once('data', () => { if (reply) s.end(reply); else s.end(); });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    return { origin: `https://localhost:${(server.address() as net.AddressInfo).port}`, close: () => server.close() };
+}
+
 // ── The suite ──────────────────────────────────────────────────────────────────────────────
 
 const MIN = 60_000;
@@ -289,6 +311,7 @@ async function main(): Promise<void> {
     const addresses = [
         'fine.beanpool.org', 'quiet.beanpool.org', 'cf530.beanpool.org', 'gone.beanpool.org', 'oldname.example.org', 'otherkey.beanpool.org',
         'apage.beanpool.org', 'moved.beanpool.org', 'badcert.example.org', 'nas.lan', '192.168.1.20', 'splitview.example.org',
+        'servfail.example.org',
     ];
     const nodes: NodeProc[] = [];
     try {
@@ -315,6 +338,7 @@ async function main(): Promise<void> {
         dns.modes.set('moved.beanpool.org', answered());
         edge.modes.set('moved.beanpool.org', { kind: 'redirect' });
         dns.modes.set('splitview.example.org', { a: ['192.168.1.20'] });
+        dns.modes.set('servfail.example.org', { rcode: 2 });
 
         const ranRound = await P.send('round');
         assert(ranRound === true, `a round runs on the main server (${ranRound}; main: no such module)`);
@@ -351,6 +375,10 @@ async function main(): Promise<void> {
             assert(r?.step === 'no-dns-beanpool' && /Ask the BeanPool project/.test(r?.nextStep), `a BeanPool name the record doesn't hold never reads as new (${r?.step})`);
             assert(reach('oldname.example.org')?.step === 'no-dns-own' && /your domain's DNS/.test(reach('oldname.example.org')?.nextStep) && !/BeanPool/.test(reach('oldname.example.org')?.nextStep),
                 `an own domain is pointed at its own DNS, and at nothing of ours (${reach('oldname.example.org')?.nextStep})`);
+            const failed = reach('servfail.example.org');
+            assert((dns.asks.get('servfail.example.org') ?? 0) >= 3, `the resolver was asked, once for each kind of record (${dns.asks.get('servfail.example.org')})`);
+            assert(failed?.dns?.outcome === 'failed' && failed?.answers === 'silence', `a real SERVFAIL: 'failed', not 'no-such-name' (${JSON.stringify(failed?.dns ?? null)})`);
+            assert(failed?.step === 'no-answer' && !/A record/.test(failed?.nextStep), `so a DNS outage sends nobody to fix a record (${failed?.step}: ${failed?.nextStep})`);
 
             const made = new Date(Date.now() - 12 * MIN).toISOString();
             const entry = (status: string) => [{ address: 'gone.beanpool.org', role: 'current', status, reason: null, since: made, formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null, lost: null }];
@@ -393,17 +421,48 @@ async function main(): Promise<void> {
             const r = (await P.send('reaches', {}))['badcert.example.org'];
             assert(r?.answers === 'tls' && r?.step === 'certificate', `'tls', from a real refused certificate (${JSON.stringify(r ?? null)})`);
             assert(/port 80/.test(r?.nextStep), `and what to open (${r?.nextStep})`);
+
+            // Node raises EPROTO for the next two, on 22, 24 and 26: neither carries a certificate code.
+            const answerAt = async (origin: string) => {
+                await P.send('env', { set: { BEANPOOL_TEST_EDGE_ORIGIN: origin } });
+                await P.send('round');
+                await P.send('env', { set: { BEANPOOL_TEST_EDGE_ORIGIN: edge.origin } });
+                return (await P.send('reaches', {}))['badcert.example.org'];
+            };
+            const plain = await answerAt(edge.origin.replace('http://127.0.0.1', 'https://localhost'));
+            assert(plain?.answers === 'tls' && plain?.step === 'certificate', `plain HTTP on the TLS port: 'tls', not silence (${plain?.answers}, ${plain?.step})`);
+            assert(plain?.nextStep === 'Answers, but not with a certificate phones trust. Check that port 80 is open and this address points at this server.',
+                `and words that hold with no certificate on offer at all (${plain?.nextStep})`);
+            for (const [what, reply, answer, step] of [
+                ['a fatal TLS alert', FATAL_ALERT, 'tls', 'certificate'],
+                ['a hang-up in the handshake', null, 'silence', 'no-answer'],
+            ] as const) {
+                const port = await startBarePort(reply);
+                try {
+                    const got = await answerAt(port.origin);
+                    assert(got?.answers === answer && got?.step === step, `${what}: '${answer}' (${got?.answers}, ${got?.step})`);
+                } finally {
+                    port.close();
+                }
+            }
             await P.send('round');
         });
 
-        console.log('\n— 6. nothing outside can reach it —');
+        console.log('\n— 6. a home-network address is not asked —');
         await section('6', async () => {
             const all = await P.send('reaches', {});
-            for (const host of ['nas.lan', '192.168.1.20', 'splitview.example.org']) {
+            for (const host of ['nas.lan', '192.168.1.20']) {
                 assert(all[host]?.answers === null && all[host]?.step === 'home-network' && (edge.asks.get(host) ?? 0) === 0,
                     `${host}: not asked, and it says why (${JSON.stringify({ answers: all[host]?.answers, step: all[host]?.step, asks: edge.asks.get(host) ?? 0 })})`);
+                assert(all[host]?.nextStep === "On a home network: nothing outside can reach it, so this server doesn't check it.", `${host}: nothing outside can reach that (${all[host]?.nextStep})`);
             }
             assert((dns.asks.get('nas.lan') ?? 0) === 0, 'a `.lan` name goes to no resolver either');
+            const split = all['splitview.example.org'];
+            assert(split?.answers === null && (edge.asks.get('splitview.example.org') ?? 0) === 0 && split?.dns?.a?.[0] === '192.168.1.20',
+                `a name that points at one from here: not asked (${JSON.stringify({ answers: split?.answers, a: split?.dns?.a, asks: edge.asks.get('splitview.example.org') ?? 0 })})`);
+            assert(split?.step === 'home-network-from-here'
+                && split?.nextStep === "From this server this name points at a home-network address, so it can't be checked from here. Open the check link on your phone, on mobile data.",
+            `and it claims only what this server can know: split DNS may serve phones outside perfectly well (${split?.step}: ${split?.nextStep})`);
         });
 
         console.log('\n— 7. no answer from here, at an own domain —');
@@ -440,6 +499,8 @@ async function main(): Promise<void> {
                 `8 days on the number is gone, the rest stays (${JSON.stringify(held.after[host])})`);
             assert(!JSON.stringify(held.copied).includes(OK_IP) && !JSON.stringify(held.copied).includes('104.21.93.179') && held.copied[host]?.answers === 'own',
                 `a copy of the database holds no number at all, whatever its age (${JSON.stringify(held.copied[host])})`);
+            const split = (await P.send('reaches', {}))['splitview.example.org'];
+            assert(split?.dns?.a?.length === 0 && split?.step === 'home-network-from-here', `with its number gone a split name still says what it said (${JSON.stringify(split?.dns)}, ${split?.step})`);
         });
 
         console.log('\n— 10. /check —');
@@ -466,6 +527,51 @@ async function main(): Promise<void> {
             assert(plain.status === 200 && visible(plain.text).startsWith('This is Byron'), `the plain-HTTP listener answers it too, for a proxy in front (${plain.status})`);
             const tunnel = await call(setup.http, 'GET', '/check', { Host: 'fine.beanpool.org', 'cf-connecting-ip': '198.51.100.9' });
             assert(tunnel.status === 200 && visible(tunnel.text).startsWith('This is Byron'), `and as the tunnel reaches it (${tunnel.status})`);
+        });
+
+        console.log('\n— 11. a name this community let go —');
+        await section('11', async () => {
+            // None of these is in BEANPOOL_ADDRESSES: a name listed there counts as listed, whatever the record says of it.
+            const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+            const entry = (address: string, role: string, status: string, more: Record<string, unknown> = {}) => ({
+                address, role, status, reason: null, since: ago(90 * DAY), formerSince: role === 'former' ? ago(40 * DAY) : null,
+                heldUntil: null, releasedByUsAt: null, renamedByUsAt: null, lost: null, ...more,
+            });
+            for (const host of ['takenover.beanpool.org', 'lostname.beanpool.org', 'stillhere.beanpool.org']) dns.modes.set(host, answered());
+            dns.modes.set('athome.beanpool.org', { a: ['192.168.1.21'] });
+            edge.modes.set('takenover.beanpool.org', { kind: 'key', seed: K.seed, pk: K.pk });
+            edge.modes.set('lostname.beanpool.org', { kind: 'key', seed: K.seed, pk: K.pk });
+            edge.modes.set('stillhere.beanpool.org', { kind: 'ours', base: setup.http });
+            await P.send('registrarNames', {
+                set: [
+                    entry('lostname.beanpool.org', 'current', 'none', { lost: { since: ago(DAY), why: 'another-key', holderKey: K.pk } }),
+                    entry('letgo.beanpool.org', 'former', 'released'),
+                    entry('takenover.beanpool.org', 'former', 'none'),
+                    entry('justmoved.beanpool.org', 'former', 'live', { since: ago(12 * MIN) }),
+                    entry('athome.beanpool.org', 'former', 'none'),
+                    entry('stillhere.beanpool.org', 'former', 'none'),
+                ],
+            });
+            await P.send('round');
+            const list = (await call(setup.https, 'GET', '/api/local/admin/app-addresses', pAdmin)).body?.addresses ?? [];
+            const at = (host: string) => list.find((a: any) => a.address === host);
+            assert(at('letgo.beanpool.org')?.former === true && at('letgo.beanpool.org')?.reach?.dns?.outcome === 'no-such-name',
+                `a real NXDOMAIN at a former name (${JSON.stringify(at('letgo.beanpool.org') ?? null)})`);
+            for (const [host, why] of [
+                ['letgo.beanpool.org', 'no DNS answer: no record to keep, and nobody to ask'],
+                ['takenover.beanpool.org', 'another key answers: nothing to check'],
+                ['justmoved.beanpool.org', 'a former name made minutes ago is no new name'],
+                ['athome.beanpool.org', 'it points at a home network from here'],
+                ['lostname.beanpool.org', 'a lost name, another key answering'],
+            ] as const) {
+                const r = at(host)?.reach;
+                assert(r?.step === 'no-longer-ours' && r?.nextStep === "No longer this community's address. Nothing to do.", `${host}, ${why} (${r?.step}: ${r?.nextStep})`);
+            }
+            assert(at('lostname.beanpool.org')?.lost === true && at('lostname.beanpool.org')?.former !== true, 'and that one is lost, not former');
+            assert(at('stillhere.beanpool.org')?.reach?.step === 'fine', `this server's key still answering at a former name is still said (${at('stillhere.beanpool.org')?.reach?.step})`);
+            assert(at('otherkey.beanpool.org')?.reach?.step === 'another-server' && at('gone.beanpool.org')?.reach?.step === 'no-dns-beanpool',
+                `a name in use, with the same answers, keeps its next step (${at('otherkey.beanpool.org')?.reach?.step}, ${at('gone.beanpool.org')?.reach?.step})`);
+            await P.send('registrarNames', { set: [] });
         });
     } finally {
         for (const n of nodes) await n.kill('SIGKILL').catch(() => {});

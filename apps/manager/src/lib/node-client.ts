@@ -230,6 +230,8 @@ export interface NodeReport {
     targetMessageId?: string;
     /** That message's chat and whether it is a photo line, never its words; `removed` once it is gone. */
     groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
+    /** The same for one direct message line, which names no chat (open it with fetchReportedDirectMessage). */
+    directMessage?: { photo: boolean; removed: boolean } | null;
     [key: string]: unknown;
 }
 
@@ -1394,6 +1396,46 @@ export async function fetchReportedMessage(
         id: str(m.id) ?? reportId, groupId: str(m.groupId), groupName: str(m.groupName), sentAt: str(m.sentAt), editedAt: str(m.editedAt),
         authorPubkey: str(m.authorPubkey), authorCallsign: str(m.authorCallsign), signer: words.state === 'verified' ? str(m.signer) : null,
         words, photo,
+    };
+}
+
+/** The direct message line a report names: its sender's signature checked, its words the reporter's (server: engine/dm-line-report.ts). */
+export interface ReportedDirectLine {
+    id: string;
+    signedAt: string | null;
+    authorPubkey: string | null;
+    authorCallsign: string | null;
+    signer: string | null;
+    signature: 'verified' | 'unsigned' | 'unverified';
+    words: { state: 'reported'; text: string };
+    photo: boolean;
+    line: 'same' | 'changed' | 'gone';
+}
+
+/**
+ * Opens the direct message line a report names (GET /api/local/admin/reports/:id/message). A signature reads as verified
+ * only when the node says exactly that with a signer; anything else the node sends reads as not verified.
+ */
+export async function fetchReportedDirectMessage(
+    nodeUrl: string,
+    reportId: string,
+    adminPassword?: string,
+    tfaToken?: string,
+): Promise<ReportedDirectLine> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) throw new Error('Valid report ID is required');
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/message`);
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken), credentials: 'same-origin' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}: ${res.statusText}`);
+    const m = json?.message ?? {};
+    const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+    const signer = str(m.signer);
+    const signature: ReportedDirectLine['signature'] = m.signature === 'verified' && signer ? 'verified' : m.signature === 'unsigned' ? 'unsigned' : 'unverified';
+    return {
+        id: str(m.id) ?? reportId, signedAt: signature === 'verified' ? str(m.signedAt) : null,
+        authorPubkey: str(m.authorPubkey), authorCallsign: str(m.authorCallsign), signer: signature === 'verified' ? signer : null, signature,
+        words: { state: 'reported', text: typeof m.words?.text === 'string' ? m.words.text : '' }, photo: m.photo === true,
+        line: m.line === 'changed' || m.line === 'gone' ? m.line : 'same',
     };
 }
 

@@ -15,10 +15,12 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { ReportReasonBox } from './ReportReasonBox';
 
-export function ReportMessageSheet({ isOpen, photo, onSubmit, onClose }: {
+export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }: {
     isOpen: boolean;
-    /** The message is a photo line: its photo goes with it. */
+    /** The message is a photo line whose photo goes with it (a group chat's; a direct message's stays sealed). */
     photo: boolean;
+    /** Report on a message request: it blocks its sender too. */
+    blocks?: boolean;
     /** Sends the report with the reason as it goes to the node; says why a send failed, then throws (the box keeps the words). */
     onSubmit: (reason: string) => Promise<void>;
     onClose: () => void;
@@ -51,9 +53,11 @@ export function ReportMessageSheet({ isOpen, photo, onSubmit, onClose }: {
                     </View>
                     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
                         <Text style={styles.shared}>
-                            {photo
-                                ? t("This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them.")
-                                : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
+                            {blocks
+                                ? t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")
+                                : photo
+                                    ? t("This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them.")
+                                    : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
                         </Text>
                         <ReportReasonBox onSubmit={onSubmit} onCancel={onClose} />
                     </ScrollView>

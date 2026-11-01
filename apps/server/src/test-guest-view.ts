@@ -1207,6 +1207,9 @@ async function main(): Promise<void> {
             // One line of the pruned club's chat, reported with a key of the right shape: past the body checks to who may read it.
             'POST /api/groups/:id/chat/report': { messageId: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f', reason: 'Sentinel check',
                 disclosure: { epoch: 1, mk: Buffer.alloc(32, 7).toString('base64') } },
+            // A line of the pruned account's DM, reported with a disclosure of the right shape: past the body checks to who may read it.
+            'POST /api/messages/report': { messageId: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f', reason: 'Sentinel check',
+                disclosure: { v: 1, ciphertext: 'c2VudGluZWw=', nonce: 'x25519-xc20p-v2:AAAA', conversationId: 'sentinel', lineSig: null, words: 'Sentinel' } },
             // The pruned convenor: inviting Grid, changing Alice's role, renaming the group.
             'POST /api/groups/:id/members': { targetPubkey: grid.pk },
             'PATCH /api/groups/:id/members/:pubkey': { role: 'member' },
@@ -1435,7 +1438,7 @@ async function main(): Promise<void> {
             'GET /api/members/preferences', 'POST /api/members/preferences',
             'GET /api/messages/:conversationId', 'GET /api/messages/:id/attachment', 'POST /api/messages/conversation',
             'GET /api/messages/conversations/:publicKey', 'POST /api/messages/delete', 'POST /api/messages/edit', 'POST /api/messages/mark-read',
-            'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/request', 'POST /api/messages/request/ignore-all',
+            'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/report', 'POST /api/messages/request', 'POST /api/messages/request/ignore-all',
             'POST /api/messages/send',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',

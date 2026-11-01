@@ -751,6 +751,16 @@ describe('Talk opened on Requests (review 4395541801)', () => {
     const NO_REQUESTS = "No requests. A first message from someone you haven't added or talked to arrives here.";
     const ROSA_ASKS = { count: 1, conversations: [{ id: 'req-rosa', peerCallsign: 'Rosa', participants: [ME.publicKey, 'rosa-key'], request: { state: 'pending', from: 'rosa-key', at: iso(now - 60_000) } }] };
 
+    it('the row at the top of Chat is plain: the words alone, no count and no badge, and it opens the requests', async () => {
+        net.answer = community({ getMessageRequests: ROSA_ASKS });
+        await renderIn('en');
+
+        const row = buttonWithText('Message requests');
+        expect(row?.textContent).toBe('Message requests');
+        await click(row, 'the Message requests row');
+        expect(host.textContent).toContain('1 person wants to message you');
+    });
+
     it('no list kept for this community: the chats are drawn, not an empty Requests with no way back', async () => {
         params.now = { filter: 'requests' };
         net.answer = community({ getMessageRequests: null });
@@ -769,14 +779,14 @@ describe('Talk opened on Requests (review 4395541801)', () => {
         expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
     });
 
-    it('control: with a list kept, the tap opens Requests on its card, with the pills to go back to All', async () => {
+    it('control: with a list kept, the tap opens Requests on its card, with a way back to the chats', async () => {
         params.now = { filter: 'requests' };
         net.answer = community({ getMessageRequests: ROSA_ASKS });
         await renderIn('en');
 
         expect(host.textContent).toContain('1 person wants to message you');
         expect(host.textContent).not.toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
-        await click(buttonWithText('All'), 'the All pill');
+        await click(buttonWithText('‹ Back to chats'), 'Back to chats');
         expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
     });
 });

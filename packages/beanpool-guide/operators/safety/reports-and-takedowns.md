@@ -26,6 +26,7 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 - A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind (see below). Once handled it stays marked, and under **All** it takes its place by date.
 - Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused.
 - A report of a group chat message shows the message itself (see "A message from a group's chat" below). It is about the message's author.
+- A report of a direct message shows what its reporter handed over (see "A direct message" below). It is about the message's author.
 
 ![The Triage and Moderation screen in Settings](images/people-moderation.webp)
 
@@ -52,6 +53,19 @@ You open Settings from the app's **🛡️ Moderate** button (it reads "Moderate
 - **Who joined with them** (on the global community, on an open report): the accounts that joined from the same internet connection within a day of the reported one. You can hide all their posts in one go, and undo that. Removing them is for the owners and admins. See "On the global community: accounts that joined together" below.
 
 The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that.
+
+## A direct message
+
+A direct message is end-to-end encrypted, and it has no key of its own to hand over: the one key opens the whole chat, so no app ever sends it. A member who reports one sends that message still sealed, its sender's signature over it, and the words as they read them. Your server checks the signature and opens nothing. The report shows:
+
+- **Signature verified**: the member named really did send this sealed message to the reporter. Its sender can't take that back: the report keeps the sealed message, so deleting or changing it afterwards changes nothing here, and the report says it happened.
+- **Could not be verified**: the signature doesn't match the message, so nothing shows who wrote it.
+- **No signature**: it came from an older app, which doesn't sign its messages. Only your server's records say who sent it.
+- **What the reporter says it says**: their own words, in every case. The signature proves who sent the sealed message, not what it says. Weigh those words as you would any member's account.
+
+A photo stays sealed. No other message in the chat comes with a report, and nobody in the chat is told who reported it. Settings has no button to take a direct message down: its sender can delete it, and the owners and admins can suspend its sender.
+
+Report on a message request does the same, and blocks the sender for the member who reported them. If the sender deleted the message before the member tapped Report, or your server refused the message's report, you get a report of the person instead: the member's reason, and no message. **Child safety** still alerts you. If the member is over the hourly limit for reports, the sender is blocked and no report reaches you.
 
 ## A message from a group's chat
 

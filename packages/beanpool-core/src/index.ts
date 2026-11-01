@@ -66,6 +66,7 @@ export * from './vault-wire.js';
 export * from './door-work.js';
 export * from './blocked-beans-note.js';
 export * from './dm-crypto.js';
+export * from './dm-line-report.js';
 export * from './poll-vote-origins.js';
 export * from './recovery-kit.js';
 export * from './home-tips.js';

@@ -43,7 +43,7 @@ Admins sign in from the app's Manage button and can do the day-to-day work: memb
 
 Moderators look after reports, and nothing else. They sign in from the app's **Moderate** button (or on a computer, by scanning the code with the app) and see one screen, **Reports**, where they can:
 
-- read every report, filtered by open, handled or dismissed, with what the post says and who reported it, or the group chat message it names, opened with the key that came with it;
+- read every report, filtered by open, handled or dismissed, with what the post says and who reported it, the group chat message it names, opened with the key that came with it, or the direct message it names, in the words the reporter gave, and whether its sender's signature checks out;
 - take down the reported post while its report is still open, with a reason the author reads;
 - take a reported Pulse item off the Pulse, again while its report is still open;
 - dismiss a report, or mark it handled;

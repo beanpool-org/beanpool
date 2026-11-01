@@ -25,6 +25,7 @@ import {
     GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
     assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate, groupLineForReader, groupLineHearers,
 } from './group-thread.js';
+import { metadataAfterDmEdit } from './dm-line-report.js';
 import { GroupKeyError, fromEpochOf } from './group-keys.js';
 import { writeMessageTombstone, tombstoneFields } from './message-tombstone.js';
 import { eventChatUnknownTo } from './event-thread.js';
@@ -982,6 +983,9 @@ export function editMessage(
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
         }
+    } else {
+        // New sealed bytes, so a new signature, or none (engine/dm-line-report.ts).
+        storedMetadata = metadataAfterDmEdit(row.metadata ?? null, metadata);
     }
 
     const sentAtMs = new Date(row.timestamp).getTime();
@@ -999,11 +1003,7 @@ export function editMessage(
     if (withheld) {
         setOverlayEdit(messageId, authorPubkey, storedCiphertext, storedNonce, editedAt);
     } else {
-        if (isGroupChat) {
-            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
-        } else {
-            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
-        }
+        db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
         // An edit from while they were blocked, still over their own read, gives way to this one.
         if (!isGroupChat) clearOverlayEdit(messageId, authorPubkey);
     }

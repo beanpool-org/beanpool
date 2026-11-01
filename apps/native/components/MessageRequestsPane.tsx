@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, Animated } from 'react-native';
-import { t, tn } from '@beanpool/core';
+import { requestReportNotSentWords, t, tn } from '@beanpool/core';
 import { decideMessageRequest, ignoreAllMessageRequests, getMessages, syncSingleConversation } from '../utils/db';
-import { blockUser, isUserBlocked } from '../utils/blocklist';
-import { requestDecisionFailureWords, requestIsGone } from '../utils/chat-actions';
+import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn } from '../utils/request-report';
+import { reportedAlertBody } from '../utils/reportReasons';
+import { chatActionErrorMessage, requestDecisionFailureWords, requestIsGone } from '../utils/chat-actions';
+import { ReportMessageSheet } from './ReportMessageSheet';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
@@ -23,24 +25,33 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
     const { theme, colors } = useTheme();
     const peer = entry.participants?.find((p: string) => p !== myPubkey) || entry.request?.from || '';
     const name = entry.peerCallsign || entry.name || peer.slice(0, 8);
-    const [preview, setPreview] = useState<{ text?: string; photo?: boolean; loading: boolean }>({ loading: true });
+    // `line` is the one Report hands over (null: none left), `canReport` that this phone can tell.
+    const [preview, setPreview] = useState<{ text?: string; photo?: boolean; loading: boolean; line?: any; canReport?: boolean }>({ loading: true });
     const [busy, setBusy] = useState(false);
+    const [reporting, setReporting] = useState(false);
 
     useEffect(() => {
         let alive = true;
+        // Cancel request then a new line keeps the chat and moves `at`: the line read before is the withdrawn one, so Report
+        // goes dim until this read is back, on a slow node too (the deciding review of #2705; the web keys its previews the same).
+        setPreview({ loading: true });
         const loadPreview = async () => {
             try {
                 // The node's word first, then the copy here: a line its opener withdrew (Cancel request) never shows from
                 // this phone's copy, and their new one does (PR #2540 review 4393642158). With no answer, the copy here.
-                await syncSingleConversation(entry.id).catch(() => false);
+                const answered = await syncSingleConversation(entry.id).catch(() => false);
                 const msgs = await getMessages(entry.id, { limit: 20 });
                 if (!alive) return;
                 const last = msgs[msgs.length - 1];
+                // The newest row may be no line of theirs (a tombstone, a failed line of mine). With none here, only the
+                // node's word says none is left: this phone may just not have it yet, and Report would say it was deleted.
+                const line = requestLineIn(msgs, myPubkey, entry.request?.at);
+                const canReport = !!line || answered !== false;
                 if (last) {
                     const hasPhoto = last.type === 'image' || !!last.metadata?.attachment;
-                    setPreview({ text: last.text, photo: hasPhoto, loading: false });
+                    setPreview({ text: last.text, photo: hasPhoto, loading: false, line, canReport });
                 } else {
-                    setPreview({ loading: false });
+                    setPreview({ loading: false, canReport });
                 }
             } catch {
                 if (alive) setPreview({ loading: false });
@@ -48,7 +59,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         };
         loadPreview();
         return () => { alive = false; };
-    }, [entry.id]);
+    }, [entry.id, entry.request?.at, myPubkey]);
 
     const handleDecide = async (decision: 'accept' | 'ignore') => {
         if (busy) return;
@@ -69,33 +80,20 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         }
     };
 
-    const handleBlock = () => {
-        if (busy) return;
-        Alert.alert(
-            t('Block {name}?', { name }),
-            t('This will hide their messages and posts, and notify moderation.'),
-            [
-                { text: t('Cancel'), style: 'cancel' },
-                {
-                    text: t('Block', undefined, 'button: block a member'),
-                    style: 'destructive',
-                    onPress: async () => {
-                        setBusy(true);
-                        try {
-                            const blocked = await blockUser(peer, myPubkey, 'Blocked from a message request');
-                            // blockUser says false rather than throwing (no account on the phone, the list not written): the
-                            // list is read back, so a block that didn't happen keeps the card and says so.
-                            if (!blocked && !(await isUserBlocked(peer))) throw new Error('Not blocked');
-                            onChanged();
-                        } catch {
-                            Alert.alert(t('That did not go through. Please try again.'));
-                        } finally {
-                            setBusy(false);
-                        }
-                    },
-                },
-            ]
-        );
+    // Report: the line's report and a block of its sender (utils/request-report.ts). The sheet stays under the dialog until OK.
+    const submitReport = async (reason: string) => {
+        try {
+            const outcome = await reportRequestAndBlock(entry.id, preview.line ?? null, peer, reason, myPubkey);
+            const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
+            Alert.alert(
+                notSent ?? t('Reported'),
+                notSent ? undefined : reportedAlertBody(undefined, reason),
+                [{ text: t('OK'), onPress: () => { setReporting(false); onChanged(); } }],
+            );
+        } catch (e: any) {
+            Alert.alert(e instanceof ReportedNotBlockedError ? t('Reported, but not blocked. Please try again.') : chatActionErrorMessage({ status: e?.status ?? null, message: e?.message, nodeAnswered: !!e?.nodeAnswered }));
+            throw e; // the box keeps the choice and the words
+        }
     };
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -205,7 +203,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
             fontWeight: '700',
             fontSize: 14,
         },
-        blockBtn: {
+        reportBtn: {
             minWidth: 70,
             minHeight: 44,
             backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50,
@@ -216,7 +214,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
             alignItems: 'center',
             paddingHorizontal: 12,
         },
-        blockBtnText: {
+        reportBtnText: {
             color: colors.feedback.danger.fg,
             fontWeight: '700',
             fontSize: 14,
@@ -282,25 +280,26 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                 </Pressable>
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={t('Ignore', undefined, 'button: ignore a message request')}
-                    testID="request-ignore"
+                    accessibilityLabel={t('Decline', undefined, 'button: decline a message request')}
+                    testID="request-decline"
                     style={[styles.ignoreBtn, busy && { opacity: 0.7 }]}
                     disabled={busy}
                     onPress={() => handleDecide('ignore')}
                 >
-                    <Text style={styles.ignoreBtnText}>{t('Ignore', undefined, 'button: ignore a message request')}</Text>
+                    <Text style={styles.ignoreBtnText}>{t('Decline', undefined, 'button: decline a message request')}</Text>
                 </Pressable>
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={t('Block', undefined, 'button: block a member')}
-                    testID="request-block"
-                    style={[styles.blockBtn, busy && { opacity: 0.7 }]}
-                    disabled={busy}
-                    onPress={handleBlock}
+                    accessibilityLabel={t('Report', undefined, 'button: report a message request')}
+                    testID="request-report"
+                    style={[styles.reportBtn, (busy || !preview.canReport) && { opacity: 0.7 }]}
+                    disabled={busy || !preview.canReport}
+                    onPress={() => setReporting(true)}
                 >
-                    <Text style={styles.blockBtnText}>{t('Block', undefined, 'button: block a member')}</Text>
+                    <Text style={styles.reportBtnText}>{t('Report', undefined, 'button: report a message request')}</Text>
                 </Pressable>
             </View>
+            {reporting && <ReportMessageSheet isOpen photo={false} blocks onSubmit={submitReport} onClose={() => setReporting(false)} />}
         </View>
     );
 }
@@ -313,9 +312,11 @@ interface MessageRequestsPaneProps {
     onOpen: (entry: any) => void;
     onAccepted: (entry: any) => void;
     onChanged: () => void;
+    /** Back to the chats: the row at the top of Chat opened this. */
+    onBack: () => void;
 }
 
-export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged }: MessageRequestsPaneProps) {
+export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack }: MessageRequestsPaneProps) {
     const { theme, colors } = useTheme();
     const [ignoringAll, setIgnoringAll] = useState(false);
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
@@ -324,12 +325,12 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
     const handleIgnoreAll = () => {
         if (ignoringAll) return;
         Alert.alert(
-            tn(count, "Ignore {n} request? They won't be told.", "Ignore all {n} requests? They won't be told."),
+            tn(count, "Decline {n} request? They won't be told.", "Decline all {n} requests? They won't be told."),
             '',
             [
                 { text: t('Cancel'), style: 'cancel' },
                 {
-                    text: t('Ignore all'),
+                    text: t('Decline all'),
                     style: 'destructive',
                     onPress: async () => {
                         setIgnoringAll(true);
@@ -352,6 +353,17 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
             paddingHorizontal: 16,
             paddingTop: 12,
             paddingBottom: 100,
+        },
+        backRow: {
+            minHeight: 44,
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 4,
+        },
+        backText: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text.body,
         },
         emptyCard: {
             padding: 24,
@@ -406,9 +418,13 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
             contentContainerStyle={[styles.container, qr ? { paddingTop: styles.container.paddingTop + qr.listInset } : {}]}
             showsVerticalScrollIndicator={false}
             role="region"
-            accessibilityLabel={t('Requests')}
+            accessibilityLabel={t('Message requests')}
             testID="message-requests"
         >
+            <Pressable accessibilityRole="button" accessibilityLabel={t('Back to chats')} testID="message-requests-back" style={styles.backRow} onPress={onBack}>
+                <Text aria-hidden={true} importantForAccessibility="no" style={styles.backText}>‹ </Text>
+                <Text style={styles.backText}>{t('Back to chats')}</Text>
+            </Pressable>
             {count === 0 ? (
                 <View style={styles.emptyCard}>
                     <Text style={styles.emptyText}>
@@ -436,12 +452,12 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                     {count >= IGNORE_ALL_FROM && (
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel={t('Ignore all')}
+                            accessibilityLabel={t('Decline all')}
                             style={[styles.ignoreAllBtn, ignoringAll && { opacity: 0.7 }]}
                             disabled={ignoringAll}
                             onPress={handleIgnoreAll}
                         >
-                            <Text style={styles.ignoreAllBtnText}>{t('Ignore all')}</Text>
+                            <Text style={styles.ignoreAllBtnText}>{t('Decline all')}</Text>
                         </Pressable>
                     )}
                 </>

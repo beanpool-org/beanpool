@@ -245,48 +245,20 @@ export default function ChatsScreen() {
         resetBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         closeBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.border.default },
         closeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },
-        requestsChipRow: {
+        requestsRow: {
             flexDirection: 'row',
-            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            minHeight: 48,
             paddingHorizontal: 16,
-            paddingBottom: 8,
-            gap: 8,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border.default,
         },
-        filterChip: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            paddingVertical: 6,
-            paddingHorizontal: 14,
-            borderRadius: 20,
-            backgroundColor: colors.surface.subtle,
-            minHeight: 36,
-        },
-        filterChipActive: {
-            backgroundColor: colors.text.body,
-        },
-        filterChipText: {
-            color: colors.text.secondary,
-            fontSize: 13,
+        requestsRowText: {
+            flex: 1,
+            fontSize: 15,
             fontWeight: '600',
-        },
-        filterChipTextActive: {
-            color: theme === 'dark' ? colors.surface.app : colors.text.inverse,
-            fontWeight: '700',
-        },
-        requestsBadge: {
-            backgroundColor: colors.accent.fill,
-            minWidth: 18,
-            height: 18,
-            borderRadius: 9,
-            paddingHorizontal: 5,
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        requestsBadgeText: {
-            color: colors.text.onAccent,
-            fontSize: 10,
-            fontWeight: '800',
+            color: colors.text.body,
         },
     }));
 
@@ -905,31 +877,18 @@ export default function ChatsScreen() {
                     <MaterialCommunityIcons name="pencil-outline" size={22} color={colors.accent.primary} />
                 </Pressable>
             </View>
-            {requests && (requests.count > 0 || messagesFilter === 'requests') && (
-                <View style={styles.requestsChipRow} data-testid="conversation-filter-chips">
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: messagesFilter === 'all' }}
-                        style={[styles.filterChip, messagesFilter === 'all' && styles.filterChipActive]}
-                        onPress={() => setMessagesFilter('all')}
-                    >
-                        <Text style={[styles.filterChipText, messagesFilter === 'all' && styles.filterChipTextActive]}>{t('All')}</Text>
-                    </Pressable>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: messagesFilter === 'requests' }}
-                        accessibilityLabel={tn(requests.count, 'Requests, {n} person wants to message you', 'Requests, {n} people want to message you')}
-                        style={[styles.filterChip, messagesFilter === 'requests' && styles.filterChipActive]}
-                        onPress={() => setMessagesFilter('requests')}
-                    >
-                        <Text style={[styles.filterChipText, messagesFilter === 'requests' && styles.filterChipTextActive]}>{t('Requests')}</Text>
-                        {requests.count > 0 && (
-                            <View style={styles.requestsBadge} data-testid="conversation-filter-count-requests">
-                                <Text style={styles.requestsBadgeText}>{requests.count}</Text>
-                            </View>
-                        )}
-                    </Pressable>
-                </View>
+            {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
+            {requests && requests.count > 0 && messagesFilter !== 'requests' && (
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Message requests')}
+                    testID="message-requests-row"
+                    style={styles.requestsRow}
+                    onPress={() => setMessagesFilter('requests')}
+                >
+                    <Text style={styles.requestsRowText}>{t('Message requests')}</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
+                </Pressable>
             )}
             </QuickReturnBlock>
             {messagesFilter === 'requests' && requests ? (
@@ -947,6 +906,7 @@ export default function ChatsScreen() {
                     onChanged={() => {
                         if (identity?.publicKey) void syncMessages(identity.publicKey);
                     }}
+                    onBack={() => setMessagesFilter('all')}
                 />
             ) : (
                 <Animated.FlatList

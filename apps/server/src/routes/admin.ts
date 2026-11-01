@@ -56,6 +56,7 @@ import { gatewayAllowlistRefusal, removedGatewaySwitchRefusal } from '../config/
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { openReportedGroupLine } from '../engine/group-chat-report.js';
+import { openReportedDmLine } from '../engine/dm-line-report.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
@@ -2075,14 +2076,15 @@ router.get('/api/local/admin/reports', async (ctx) => {
 });
 
 /**
- * GET /api/local/admin/reports/:id/message — the one group chat message a report names, opened with the key its reporter
- * handed over (engine/group-chat-report.ts openReportedGroupLine): its words and its photo, each verified against the key
- * that signed it or "could not be verified", and nothing else of the chat. 404 for a report of a post, a Pulse item or a
- * member. Owners, admins and moderators (admin-auth.ts MODERATOR_ROUTES); no cache keeps it.
+ * GET /api/local/admin/reports/:id/message — the one chat message a report names, and nothing else of the chat. A group
+ * chat's is opened with the key its reporter handed over (engine/group-chat-report.ts openReportedGroupLine): its words and
+ * its photo, each verified against the key that signed it or "could not be verified". A direct message's is what its
+ * reporter handed over, its sender's signature checked and its words their word (engine/dm-line-report.ts). 404 for a
+ * report of a post, a Pulse item or a member. Owners, admins and moderators (admin-auth.ts MODERATOR_ROUTES); no cache keeps it.
  */
 router.get('/api/local/admin/reports/:id/message', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const message = await openReportedGroupLine(ctx.params.id);
+    const message = openReportedDmLine(ctx.params.id) ?? await openReportedGroupLine(ctx.params.id);
     if (!message) {
         ctx.status = 404;
         ctx.body = { success: false, error: 'This report does not name a message' };

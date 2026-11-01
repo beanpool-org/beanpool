@@ -31,8 +31,8 @@
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12), but
  *      not while the person blocks him: it stays as she left it until she lifts the block, and his next line is the request
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
- *  10. pushes: none until it is accepted, however many requests wait; then a line pushes as any line (Marty, 1 Nov 2026,
- *      replacing R14's one push an hour)
+ *  10. no alert: a request pushes nobody until it is accepted, however many wait (Marty, 1 Nov 2026, in place of R14's
+ *      hourly push), and the accepted chat's next line pushes as any line does
  *  11. a removed sender's request goes; a deleted sender's line is blanked and their request goes (R15); neither becomes a
  *      chat or counts as unread; one waiting for a removed member goes from the node
  *  12. Ignore all
@@ -984,15 +984,19 @@ async function globalRun(): Promise<void> {
     await sleep(250);
     assert(noticesTo(pat).length === patBefore && pushesTo(pat).length === patPushes,
         `three requests: no push and no notice, for any of them (${JSON.stringify(noticesTo(pat).slice(patBefore))})`);
+    assert(typeof requestsEngine.tickRequestPushFolds === 'undefined', 'and no hour-end push waits for them: the fold is gone');
     const patList = await listOf(pat);
     assert(patList?.requests?.count === 3 && patList?.totalUnread === 0,
-        `all three wait under Requests, and his count stays 0 (${patList?.requests?.count} waiting, unread ${patList?.totalUnread})`);
+        `all three wait behind the Message requests row, and the unread count stays 0 (${patList?.requests?.count} waiting, unread ${patList?.totalUnread})`);
     const patAccepts = await decide(pat, patConvs[0], 'accept');
-    await send(patConvs[0], ivy);
+    await sleep(100);
+    assert(patAccepts.status === 200 && noticesTo(pat).length === patBefore && pushesTo(pat).length === patPushes,
+        `accepting pushes Pat nothing (${show(patAccepts)})`);
+    const ivyNext = await send(patConvs[0], ivy);
     await sleep(250);
-    assert(patAccepts.status === 200 && JSON.stringify(noticesTo(pat).slice(patBefore)) === JSON.stringify(['Ivy sent you a message'])
+    assert(ivyNext.status === 200 && JSON.stringify(noticesTo(pat).slice(patBefore)) === JSON.stringify(['Ivy sent you a message'])
         && pushesTo(pat).length === patPushes + 1,
-        `once he accepts Ivy's, her next line pushes as any line (${show(patAccepts)}; ${JSON.stringify(noticesTo(pat).slice(patBefore))})`);
+        `once accepted, Ivy's next line pushes as any line does (${show(ivyNext)}; ${JSON.stringify(noticesTo(pat).slice(patBefore))})`);
 
     // ── 11. a removed or deleted sender ─────────────────────────────────────────────────────────
     console.log('── 11. a removed or deleted sender\'s request goes ──');

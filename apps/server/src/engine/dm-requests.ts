@@ -99,13 +99,13 @@
  * makes it a new request from then, an ordinary chat while off (lineWhileOff), as one after its 30 days is: nothing is
  * stored or pushed into a chat the person can't find.
  *
- * ## Pushes
+ * ## No alert
  *
- * A request alerts nobody until it is accepted: no push and no badge (Marty, 1 Nov 2026, chat design S1.1; it replaced his
+ * A request alerts nobody and counts in no badge until it is accepted (Marty, 1 Nov 2026, chat design S1.1; it replaced his
  * answer of 23 Oct, one push an hour, once the push token began going to every community a phone keeps, where a stranger's
- * line would have reached phones set elsewhere). It waits in the person's Requests. Its line does the push's work all the
- * same and drops it, as a withheld one does, so the work after the answer never tells a sender which happened (#1403
- * re-review). Once it is accepted, a line pushes as any line.
+ * line would have reached phones set elsewhere). It waits behind the one "Message requests" row at the top of Chat. Its line
+ * does the push's work all the same and drops it, as a withheld one does, so the work after the answer never tells a sender
+ * which happened (#1403 re-review). Once it is accepted, a line pushes as any line.
  *
  * ## Where it is kept
  *

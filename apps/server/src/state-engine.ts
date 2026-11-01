@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, isLang, type Lang } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -607,13 +607,15 @@ export interface AbuseReport {
     postMadeByAssistant?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
-    /** The group chat message a report names, with its key (engine/group-chat-report.ts), or absent. */
+    /** The chat message a report names (engine/group-chat-report.ts, engine/dm-line-report.ts), or absent. */
     targetMessageId?: string;
     /**
      * That message's chat and whether it is a photo line, never its words: the moderators' view opens it on its own
      * (GET /api/local/admin/reports/:id/message). `removed` once it was deleted or removed, or is not on this server.
      */
     groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
+    /** The same for a direct message's line, which names no chat: the moderators' view opens it on its own too. */
+    directMessage?: { photo: boolean; removed: boolean } | null;
 }
 
 export type { FriendEntry };
@@ -7505,7 +7507,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
-               gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name
+               gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name,
+               CASE WHEN json_valid(ar.disclosure) THEN json_extract(ar.disclosure, '$.kind') END as disclosure_kind
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
@@ -7577,7 +7580,10 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
             }
             : null,
         targetMessageId: r.target_message_id || undefined,
-        groupMessage: r.target_message_id
+        directMessage: r.disclosure_kind === DM_LINE_DISCLOSURE_KIND
+            ? { photo: r.gm_type === 'image', removed: !r.gm_type || r.gm_type === 'removed' }
+            : null,
+        groupMessage: r.target_message_id && r.disclosure_kind !== DM_LINE_DISCLOSURE_KIND
             ? {
                 groupId: r.gm_group_id ?? null,
                 groupName: r.gm_group_name ?? null,

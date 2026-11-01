@@ -152,7 +152,11 @@ vi.mock('../node-post', () => ({
     signedGet: () => new Promise(() => {}), signedPost: () => new Promise(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
-vi.mock('../blocklist', () => ({ isUserBlocked: async () => false, getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
+const blocks = vi.hoisted(() => ({ made: [] as string[], reports: [] as unknown[][] }));
+vi.mock('../blocklist', () => ({
+    isUserBlocked: async () => false, getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
+    blockUser: async (key: string, ...report: unknown[]) => { blocks.made.push(key); blocks.reports.push(report); return true; },
+}));
 // Which screen /chat/:id draws is utils/chat-route's call (tested there); here the test names it.
 const route = vi.hoisted(() => ({ now: { view: 'dm', screenId: 'dm1' } as { view: string; screenId: string } }));
 vi.mock('../chat-route', () => ({ routeChat: async () => route.now }));
@@ -197,6 +201,8 @@ beforeEach(() => {
     root = createRoot(host);
     net.calls.length = 0;
     alerts.said.length = 0;
+    blocks.made.length = 0;
+    blocks.reports.length = 0;
     composer.type = null;
     composer.send = null;
     events.on = {};
@@ -313,6 +319,76 @@ describe('a request waiting for this member, on the phone', () => {
         expect(callsOf('toggleMessageReactionApi')).toBe(1);
     });
 
+    it('Accept, Decline, Report in place of the box, and a line has no Report of its own: the one on the bar blocks', async () => {
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+            getMessages: [{ id: 'r1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'Buy my crypto', rawTimestamp: '2026-10-27T00:00:00.000Z', timestamp: '10:00' }],
+            syncSingleConversation: true,
+        });
+        await open();
+        for (const name of ['Accept', 'Decline', 'Report']) expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent === name)).toBe(true);
+        await tapLine('Buy my crypto');
+        expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent?.includes('Report message'))).toBe(false);
+    });
+
+    // The deciding review of #2705: with the tombstone left out, a bar that needs a line would be dead for good.
+    it('a request whose line its sender deleted: the bar\'s Report blocks them, reports the person in this account\'s name, and says so', async () => {
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+            getMessages: [{ id: 'r1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'removed', text: 'This message was deleted', metadata: { removed: true }, rawTimestamp: '2026-10-27T00:00:00.000Z', timestamp: '10:00' }],
+            syncSingleConversation: true,
+        });
+        await open();
+        await tap('Report');
+        const reasonChip = Array.from(host.querySelectorAll<HTMLElement>('[data-modal] button')).find((b) => b.textContent === 'Spam or scam');
+        await act(async () => { reasonChip!.click(); });
+        await tap('Submit report');
+        expect(callsOf('reportDmLine')).toBe(0);
+        expect(blocks.made).toEqual(['kofi-key']);
+        expect(blocks.reports).toEqual([[ME.publicKey, 'Spam or scam']]);
+        expect(alerts.said).toContain('That message was deleted, so your report of them goes without its words. They are blocked.');
+    });
+
+    // The deciding review of #2705: a lapsed request's line stays in the chat, and the opener's next line is a new request.
+    describe('the bar\'s Report stops at the request\'s start', () => {
+        const lapsed = { id: 'lapsed', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'From last time', rawTimestamp: iso(now - 40 * 86_400_000), timestamp: '' };
+        const reportWith = async (lines: unknown[]) => {
+            standIn({ getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST }, getMessages: lines, syncSingleConversation: true, reportDmLine: { success: true } });
+            await open();
+            await tap('Report');
+            const reasonChip = Array.from(host.querySelectorAll<HTMLElement>('[data-modal] button')).find((b) => b.textContent === 'Spam or scam');
+            await act(async () => { reasonChip!.click(); });
+            await tap('Submit report');
+        };
+
+        it('reports the line of this request', async () => {
+            await reportWith([lapsed, { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'hello Ana', rawTimestamp: iso(now - 60_000), timestamp: '' }]);
+            expect(callsOf('reportDmLine')).toBe(1);
+            expect(blocks.made).toEqual(['kofi-key']);
+            expect(blocks.reports).toEqual([[]]); // the line's report went: the block adds no second one
+        });
+
+        it('with that line deleted, never the lapsed one: it blocks, reports the person, and says so, as the web does', async () => {
+            await reportWith([lapsed, { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'removed', text: 'This message was deleted', metadata: { removed: true }, rawTimestamp: iso(now - 60_000), timestamp: '' }]);
+            expect(callsOf('reportDmLine')).toBe(0);
+            expect(blocks.made).toEqual(['kofi-key']);
+            expect(blocks.reports).toEqual([[ME.publicKey, 'Spam or scam']]);
+            expect(alerts.said).toContain('That message was deleted, so your report of them goes without its words. They are blocked.');
+        });
+    });
+
+    it('a request with no line here and no word from the node: Report waits, for this phone can\'t yet tell deleted from not here yet', async () => {
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+            getMessages: [],
+            syncSingleConversation: false,
+        });
+        await open();
+        await tap('Report');
+        expect(host.querySelector('[data-modal]')).toBeNull();
+        expect(blocks.made).toEqual([]);
+    });
+
     describe('Accept or Ignore refused (review 4395541944)', () => {
         const refusal = (message: string, extra: Record<string, unknown>) => Object.assign(new Error(message), extra);
         const GONE = () => refusal('There is no message request for you in this chat.', { status: 404, code: 'request_not_found', nodeAnswered: true });
@@ -339,7 +415,7 @@ describe('a request waiting for this member, on the phone', () => {
         it('a request its opener cancelled: Ignore goes back to Talk too, and says nothing', async () => {
             const navigate = vi.spyOn(router, 'navigate');
             await kofiAsks(() => Promise.reject(GONE()));
-            await tap('Ignore');
+            await tap('Decline');
             expect(navigate).toHaveBeenCalledWith('/(tabs)/chats');
             expect(alerts.said).toEqual([]);
             navigate.mockRestore();
@@ -360,8 +436,8 @@ describe('a request waiting for this member, on the phone', () => {
             await kofiAsks(() => Promise.reject(answer));
             await tap('Accept');
             answer = new Error('Network request failed');
-            await tap('Ignore');
-            expect(alerts.said).toEqual(['Connect to your community to accept or ignore.', 'Connect to your community to accept or ignore.']);
+            await tap('Decline');
+            expect(alerts.said).toEqual(['Connect to your community to accept or decline.', 'Connect to your community to accept or decline.']);
         });
     });
 

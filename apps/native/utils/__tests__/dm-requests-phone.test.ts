@@ -16,6 +16,9 @@
  *      says so and the card stays (PR #2540 review 4399651364)
  *   9. MessageRequestsPane: the closed-photo line has a gap under it when a caption follows, read at render, not frozen in
  *      the sheet while the preview loads (PR #2540 review 4399651606)
+ *  10. MessageRequestsPane: Report always blocks: a line its sender deleted, or a refusal by the node, costs the report and
+ *      never the block; Report is dim whenever it is off (the deciding review of #2705)
+ *  11. MessageRequestsPane: a request whose time moved reads its line again, and Report is off until it has (same review)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -92,6 +95,7 @@ const dbMocks = vi.hoisted(() => ({
     decideMessageRequest: vi.fn(),
     ignoreAllMessageRequests: vi.fn(),
     getMessages: vi.fn(async () => [] as any[]),
+    reportDmLine: vi.fn(async () => ({ success: true })),
     syncSingleConversation: vi.fn(async () => {}),
     deleteLocalMessage: vi.fn(async () => {}),
 } as Record<string, any>));
@@ -100,8 +104,15 @@ vi.mock('../db', () => ({
     decideMessageRequest: (...args: any[]) => dbMocks.decideMessageRequest(...args),
     ignoreAllMessageRequests: (...args: any[]) => dbMocks.ignoreAllMessageRequests(...args),
     getMessages: (...args: any[]) => dbMocks.getMessages(...args),
+    reportDmLine: (...args: any[]) => dbMocks.reportDmLine(...args),
     syncSingleConversation: (...args: any[]) => dbMocks.syncSingleConversation(...args),
     deleteLocalMessage: (...args: any[]) => dbMocks.deleteLocalMessage(...args),
+}));
+
+vi.mock('../../components/ReportMessageSheet', () => ({
+    ReportMessageSheet: ({ onSubmit }: any) => createElement('button', {
+        'data-testid': 'report-sheet-submit', onClick: () => { onSubmit('Harassment').catch(() => {}); },
+    }, 'Submit'),
 }));
 
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
@@ -131,6 +142,7 @@ describe('MessageRequestsPane on phone', () => {
                 count: 0,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted: () => {},
                 onChanged: () => {},
             })
@@ -151,6 +163,7 @@ describe('MessageRequestsPane on phone', () => {
                 count: 1,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted,
                 onChanged: () => {},
             })
@@ -184,6 +197,7 @@ describe('MessageRequestsPane on phone', () => {
                 count: 1,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted: () => {},
                 onChanged: () => {},
             })
@@ -201,7 +215,7 @@ describe('MessageRequestsPane on phone', () => {
         dbMocks.getMessages.mockResolvedValueOnce([
             { id: 'm2', type: 'image', text: 'Check this out', authorPubkey: 'bob-pubkey', timestamp: '2026-10-27T00:00:00Z' } as any,
         ]);
-        const props = { count: 1, identity: { publicKey: 'me-pubkey' }, onOpen: () => {}, onAccepted: () => {}, onChanged: () => {} };
+        const props = { count: 1, identity: { publicKey: 'me-pubkey' }, onOpen: () => {}, onBack: () => {}, onAccepted: () => {}, onChanged: () => {} };
         render(createElement(MessageRequestsPane, { ...props, entries: [entry] }));
         const withCaption = await screen.findByText(/Photo: shown when you accept/);
         expect(screen.getByText('Check this out')).toBeTruthy();
@@ -227,6 +241,7 @@ describe('MessageRequestsPane on phone', () => {
             count: 1,
             identity: { publicKey: 'me-pubkey' },
             onOpen: () => {},
+            onBack: () => {},
             onAccepted: over.onAccepted ?? (() => {}),
             onChanged: over.onChanged ?? (() => {}),
         })
@@ -249,7 +264,7 @@ describe('MessageRequestsPane on phone', () => {
         const onChanged = vi.fn();
         renderCard({ onChanged });
 
-        fireEvent.click(screen.getByTestId('request-ignore'));
+        fireEvent.click(screen.getByTestId('request-decline'));
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
         expect(alerts.said).toEqual([]);
     });
@@ -270,60 +285,211 @@ describe('MessageRequestsPane on phone', () => {
         renderCard();
         fireEvent.click(screen.getByTestId('request-accept'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(alerts.said[0].title).toBe('Connect to your community to accept or ignore.');
+        expect(alerts.said[0].title).toBe('Connect to your community to accept or decline.');
         cleanup();
 
         dbMocks.decideMessageRequest.mockRejectedValueOnce(new Error('Network request failed'));
         renderCard();
-        fireEvent.click(screen.getByTestId('request-ignore'));
+        fireEvent.click(screen.getByTestId('request-decline'));
         await waitFor(() => expect(alerts.said.length).toBe(2));
-        expect(alerts.said[1].title).toBe('Connect to your community to accept or ignore.');
+        expect(alerts.said[1].title).toBe('Connect to your community to accept or decline.');
     });
 
     // Review 4399651364: blockUser answers false rather than throwing (no account on the phone, the list not written, the
-    // sender already on it), and the card ignored the answer: a Block that didn't happen looked like one that did.
-    const confirmBlock = async () => {
-        fireEvent.click(screen.getByTestId('request-block'));
-        const block = alerts.said[0].buttons?.find(b => b.style === 'destructive');
-        expect(block).toBeDefined();
-        await block.onPress();
+    // sender already on it), and a card that ignores the answer shows a block that didn't happen as one that did.
+    const reportFrom = async (onChanged: () => void) => {
+        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', rawTimestamp: '2026-10-27T00:00:00Z', metadata: {} }]);
+        renderCard({ onChanged });
+        await screen.findByText('Buy my crypto');
+        fireEvent.click(screen.getByTestId('request-report'));
     };
 
-    it('Block: the sender on the list drops the card, and says nothing more', async () => {
-        const onChanged = vi.fn();
-        renderCard({ onChanged });
-
-        await confirmBlock();
-        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Blocked from a message request');
-        expect(onChanged).toHaveBeenCalledTimes(1);
-        expect(alerts.said.length).toBe(1);
+    it('a request has three buttons: Accept, Decline, Report', () => {
+        renderCard();
+        for (const name of ['Accept', 'Decline', 'Report']) expect(screen.getByRole('button', { name })).toBeTruthy();
+        expect(screen.queryByTestId('request-block')).toBeNull();
     });
 
-    it("Block that didn't happen: says so, and the card stays", async () => {
-        blockMocks.blockUser.mockResolvedValueOnce(false);
-        blockMocks.isUserBlocked.mockResolvedValueOnce(false);
+    it('Report: reports the line it shows with its words, blocks its sender, files no second report, and the card drops on OK', async () => {
         const onChanged = vi.fn();
-        renderCard({ onChanged });
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-req-1', 'line-1', 'Buy my crypto', 'Harassment');
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('Reported');
+        expect(onChanged).not.toHaveBeenCalled();
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
 
-        await confirmBlock();
-        expect(blockMocks.isUserBlocked).toHaveBeenCalledWith('bob-pubkey');
-        expect(alerts.said.length).toBe(2);
-        expect(alerts.said[1].title).toBe('That did not go through. Please try again.');
+    it('a report the node did not take blocks nobody, and the card stays', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(new Error('Network request failed'));
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).not.toHaveBeenCalled();
         expect(onChanged).not.toHaveBeenCalled();
     });
 
-    it('Block of a sender already on the list: the card drops, as for a new block', async () => {
-        blockMocks.blockUser.mockResolvedValueOnce(false);
-        blockMocks.isUserBlocked.mockResolvedValueOnce(true);
+    it('a report over the hourly limit still blocks, and says the report did not go: the limit never costs a member their block', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(Object.assign(new Error('You have sent a lot of reports recently. Please try again in an hour.'), { status: 429 }));
         const onChanged = vi.fn();
-        renderCard({ onChanged });
-
-        await confirmBlock();
-        expect(onChanged).toHaveBeenCalledTimes(1);
-        expect(alerts.said.length).toBe(1);
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('You have sent a lot of reports recently, so this one did not go. They are blocked.');
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     });
 
-    it('offers Ignore all when count >= 6 and calls ignoreAllMessageRequests on confirm', async () => {
+    it("a block that didn't happen: says the report went and the block did not, and the card stays", async () => {
+        blockMocks.blockUser.mockResolvedValueOnce(false);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(false);
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.isUserBlocked).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('Reported, but not blocked. Please try again.');
+        expect(onChanged).not.toHaveBeenCalled();
+    });
+
+    // The deciding review of #2705: a delete leaves the request waiting and the newest row a tombstone. Handed over, the node
+    // answers 400 disclosure_form, which threw before the block; on main, Block worked here.
+    const DELETED = { id: 'line-1', senderId: 'bob-pubkey', type: 'removed', text: 'This message was deleted', metadata: { removed: true } };
+    const opacityOf = (el: Element) => Object.assign({}, ...[JSON.parse(el.getAttribute('data-style') || '{}')].flat(Infinity).filter(Boolean)).opacity;
+
+    it('a request whose line its sender deleted: Report blocks them, reports the person in this account\'s name, says so, and the card drops', async () => {
+        dbMocks.getMessages.mockResolvedValueOnce([DELETED]);
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+        await screen.findByText('This message was deleted');
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).not.toHaveBeenCalled();
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
+        expect(alerts.said[0].title).toBe('That message was deleted, so your report of them goes without its words. They are blocked.');
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
+
+    it('hands over the request\'s line, not the newest row: a failed line of mine after it is not theirs to report', async () => {
+        dbMocks.getMessages.mockResolvedValueOnce([
+            { id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', rawTimestamp: '2026-10-27T00:00:00Z', metadata: {} },
+            { id: 'mine', senderId: 'me-pubkey', text: 'No thanks', rawTimestamp: '2026-10-27T00:01:00Z', sendState: 'failed', metadata: {} },
+        ]);
+        renderCard();
+        await screen.findByText('No thanks');
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-req-1', 'line-1', 'Buy my crypto', 'Harassment');
+    });
+
+    it('a report the node refuses still blocks, reports the person instead, and says the message did not go', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(refusal('That message is not there.', { status: 404, code: 'not_found', nodeAnswered: true }));
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
+        expect(alerts.said[0].title).toBe('Your community did not take that message, so your report of them goes without its words. They are blocked.');
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
+
+    it('over the limit with a block that did not happen: never says it was reported', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(Object.assign(new Error('Too many'), { status: 429 }));
+        blockMocks.blockUser.mockResolvedValueOnce(false);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(false);
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(alerts.said[0].title).toBe('That did not go through. Please try again.');
+        expect(onChanged).not.toHaveBeenCalled();
+    });
+
+    it('Report is dim and off while the preview loads, and live once it has', async () => {
+        let finish: (lines: any[]) => void = () => {};
+        dbMocks.getMessages.mockReturnValueOnce(new Promise((r) => { finish = r; }));
+        renderCard();
+        const report = screen.getByTestId('request-report');
+        expect(opacityOf(report)).toBe(0.7);
+        fireEvent.click(report);
+        expect(screen.queryByTestId('report-sheet-submit')).toBeNull();
+        finish([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', metadata: {} }]);
+        await screen.findByText('Buy my crypto');
+        expect(opacityOf(screen.getByTestId('request-report'))).toBeUndefined();
+    });
+
+    // The deciding review of #2705: Cancel request then a new line keeps the chat's id and moves the request's `at`, and a card
+    // is keyed by the id, so it stays mounted. It read once, so Report handed over the withdrawn line.
+    it('a request whose time moved reads its line again: Report is off meanwhile, then hands over the new line', async () => {
+        const props = { count: 1, identity: { publicKey: 'me-pubkey' }, onOpen: () => {}, onBack: () => {}, onAccepted: () => {}, onChanged: () => {} };
+        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', rawTimestamp: entry.request.at, metadata: {} }]);
+        const { rerender } = render(createElement(MessageRequestsPane, { ...props, entries: [entry] }));
+        await screen.findByText('Buy my crypto');
+
+        // A new list with the same time is no reason to go to the node again.
+        rerender(createElement(MessageRequestsPane, { ...props, entries: [{ ...entry, request: { ...entry.request } }] }));
+        expect(dbMocks.syncSingleConversation).toHaveBeenCalledTimes(1);
+
+        const at = '2026-10-27T02:00:00Z';
+        let finish: (lines: any[]) => void = () => {};
+        dbMocks.getMessages.mockReturnValueOnce(new Promise((r) => { finish = r; }));
+        rerender(createElement(MessageRequestsPane, { ...props, entries: [{ ...entry, request: { ...entry.request, at } }] }));
+        await waitFor(() => expect(dbMocks.syncSingleConversation).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(opacityOf(screen.getByTestId('request-report'))).toBe(0.7));
+        fireEvent.click(screen.getByTestId('request-report'));
+        expect(screen.queryByTestId('report-sheet-submit')).toBeNull();
+
+        finish([{ id: 'line-2', senderId: 'bob-pubkey', text: 'Hello again', rawTimestamp: at, metadata: {} }]);
+        await screen.findByText('Hello again');
+        expect(screen.queryByText('Buy my crypto')).toBeNull();
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-req-1', 'line-2', 'Hello again', 'Harassment');
+    });
+
+    it('no line here and no word from the node: Report stays dim and off, for it can\'t yet tell deleted from not here yet', async () => {
+        dbMocks.syncSingleConversation.mockResolvedValueOnce(false);
+        dbMocks.getMessages.mockResolvedValueOnce([]);
+        renderCard();
+        await screen.findByText('Open the chat to read it.');
+        const report = screen.getByTestId('request-report');
+        expect(opacityOf(report)).toBe(0.7);
+        fireEvent.click(report);
+        expect(screen.queryByTestId('report-sheet-submit')).toBeNull();
+    });
+
+    it('no line here and the node has answered: Report is live, and blocks', async () => {
+        dbMocks.syncSingleConversation.mockResolvedValueOnce(true);
+        dbMocks.getMessages.mockResolvedValueOnce([]);
+        renderCard();
+        await screen.findByText('Open the chat to read it.');
+        expect(opacityOf(screen.getByTestId('request-report'))).toBeUndefined();
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
+    });
+
+    it('a sender already on the list: reported, and the card drops', async () => {
+        blockMocks.blockUser.mockResolvedValueOnce(false);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(true);
+        await reportFrom(vi.fn());
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(alerts.said[0].title).toBe('Reported');
+    });
+
+    it('offers Decline all when count >= 6 and calls ignoreAllMessageRequests on confirm', async () => {
         const entries = Array.from({ length: 6 }, (_, i) => ({
             id: `conv-${i}`,
             name: `User ${i}`,
@@ -340,20 +506,21 @@ describe('MessageRequestsPane on phone', () => {
                 count: 6,
                 identity: { publicKey: 'me-pubkey' },
                 onOpen: () => {},
+                onBack: () => {},
                 onAccepted: () => {},
                 onChanged,
             })
         );
 
-        const ignoreAllBtn = screen.getByRole('button', { name: 'Ignore all' });
+        const ignoreAllBtn = screen.getByRole('button', { name: 'Decline all' });
         expect(ignoreAllBtn).toBeTruthy();
 
         fireEvent.click(ignoreAllBtn);
         expect(alerts.said.length).toBe(1);
-        expect(alerts.said[0].title).toContain('Ignore all 6 requests?');
+        expect(alerts.said[0].title).toContain('Decline all 6 requests?');
 
         // Confirm ignore all
-        const confirmBtn = alerts.said[0].buttons?.find(b => b.text === 'Ignore all');
+        const confirmBtn = alerts.said[0].buttons?.find(b => b.text === 'Decline all');
         expect(confirmBtn).toBeDefined();
         await confirmBtn.onPress();
 
@@ -385,6 +552,6 @@ describe('accessibility roles Android accepts', () => {
 
     it('the Requests pane keeps its landmark, on role=', () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../components/MessageRequestsPane.tsx'), 'utf-8');
-        expect(src).toMatch(/role="region"\s*\n\s*accessibilityLabel=\{t\('Requests'\)\}/);
+        expect(src).toMatch(/role="region"\s*\n\s*accessibilityLabel=\{t\('Message requests'\)\}/);
     });
 });

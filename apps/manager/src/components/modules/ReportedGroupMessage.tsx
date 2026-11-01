@@ -21,7 +21,7 @@ function when(iso: string | null): string {
     return Number.isNaN(t.getTime()) ? '' : t.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function Verdict({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+export function ReportVerdict({ ok, children }: { ok: boolean; children: React.ReactNode }) {
     return (
         <span className={`px-2 py-0.5 rounded text-xs font-bold border ${ok
             ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border-emerald-500/30'
@@ -69,7 +69,7 @@ export function ReportedGroupMessage({ nodeUrl, reportId, groupName, adminPasswo
                 <p className="text-sm text-nature-300 m-0">{GONE_WORDS[words.by ?? 'none']}</p>
             ) : words.state === 'unverified' ? (
                 <div className="space-y-1">
-                    <p className="m-0"><Verdict ok={false}>Could not be verified</Verdict></p>
+                    <p className="m-0"><ReportVerdict ok={false}>Could not be verified</ReportVerdict></p>
                     <p className="text-sm text-nature-300 m-0">
                         The key that came with this report does not open this message as signed by the member who sent it, so
                         nothing here shows what they wrote. Weigh the report on the reporter's own words.
@@ -78,7 +78,7 @@ export function ReportedGroupMessage({ nodeUrl, reportId, groupName, adminPasswo
             ) : (
                 <div className="space-y-2">
                     <p className="m-0 flex flex-wrap items-center gap-2">
-                        <Verdict ok>Verified</Verdict>
+                        <ReportVerdict ok>Verified</ReportVerdict>
                         <span className="text-xs text-nature-400">
                             {`Signed by ${author ?? 'its author'}'s key${message.signer ? ` (${message.signer.slice(0, 8)}…)` : ''}`}
                             {message.sentAt ? ` · ${when(message.sentAt)}` : ''}
@@ -90,7 +90,7 @@ export function ReportedGroupMessage({ nodeUrl, reportId, groupName, adminPasswo
                     )}
                     {photo?.state === 'unverified' && (
                         <p className="m-0 flex flex-wrap items-center gap-2 text-sm text-nature-300">
-                            <Verdict ok={false}>Photo could not be verified</Verdict>
+                            <ReportVerdict ok={false}>Photo could not be verified</ReportVerdict>
                             <span>It is not the photo its author sent with these words.</span>
                         </p>
                     )}

@@ -206,6 +206,11 @@ async function main(): Promise<void> {
     const annsPush = process.env.BLOCKS_GLOBAL_NODE ? 0 : 1;
     assert(pushesTo(ann).length === annsPush && pushesTo(dee).length === 1,
         `and the pushes the stub hears from the dispatcher (Ann ${pushesTo(ann).length}, Dee ${pushesTo(dee).length})`);
+    if (process.env.BLOCKS_GLOBAL_NODE) {
+        const d1b = await call('POST', dee, '/api/messages/send', dm(deeConv, dee));
+        await sleep(150);
+        assert(d1b.status === 200 && pushesTo(ann).length === 1, `her answer accepted it, so his next line is a push (${pushesTo(ann).length})`);
+    }
     await call('POST', ann, '/api/messages/mark-read', { conversationId: deeConv });
     // The answers a stored line and a new conversation get, to hold the withheld ones to.
     const cc = await call('POST', cy, '/api/messages/conversation', { type: 'dm', participants: [cy.pk, dee.pk], createdBy: cy.pk });

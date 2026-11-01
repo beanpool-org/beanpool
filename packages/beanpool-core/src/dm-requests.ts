@@ -127,7 +127,33 @@ export function decisionFailureWords(e: unknown): string {
     // The node answered and refused (a standby, a request that is gone): its own words. A page that wasn't the node's (a
     // proxy's), or no answer at all, is the community out of reach.
     if (err && typeof err.status === 'number' && err.status > 0 && !err.unsaid && typeof err.message === 'string' && err.message.trim()) return err.message;
-    return t('Connect to your community to accept or ignore.');
+    return t('Connect to your community to accept or decline.');
+}
+
+/**
+ * What became of Report on a request: `reported`, or why the message's own report didn't go. Every one of them blocks the
+ * sender: Report always does. `refused` (the node turned the message's report down) and `no_line` (nothing is left to hand
+ * over, because its sender deleted the line) report the person instead, with the member's reason, as a block from a request
+ * always did: Child safety still alerts, and a report that can't be sent yet is queued. `over_limit` (the moderators' hourly
+ * limit) reports nobody.
+ */
+export type RequestReportOutcome = 'reported' | 'over_limit' | 'refused' | 'no_line';
+
+/**
+ * A report's failure, as Report on a request reads it: the node's refusal, which never costs a member their block, or null
+ * for no answer from it (offline, a 5xx), which throws as ever: the card stays and a second try sends the report.
+ */
+export function requestReportRefused(e: unknown): 'over_limit' | 'refused' | null {
+    const status = (e as { status?: unknown } | null | undefined)?.status;
+    if (status === 429) return 'over_limit';
+    return typeof status === 'number' && status >= 400 && status < 500 ? 'refused' : null;
+}
+
+/** What Report on a request says when the message's report didn't go, in place of "Reported". The block went through. */
+export function requestReportNotSentWords(outcome: Exclude<RequestReportOutcome, 'reported'>): string {
+    if (outcome === 'over_limit') return t('You have sent a lot of reports recently, so this one did not go. They are blocked.');
+    if (outcome === 'no_line') return t('That message was deleted, so your report of them goes without its words. They are blocked.');
+    return t('Your community did not take that message, so your report of them goes without its words. They are blocked.');
 }
 
 /** The node's refusal of the opener's second line, or reaction, while their request waits (403 `dm_request_pending`). */

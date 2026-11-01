@@ -318,7 +318,9 @@ describe('web-unread-badge: the Chat badge clears when a chat is read', () => {
         await screen.findByTestId('home-page');
 
         const chatTab = within(sidebar()).getByRole('button', { name: /Chat/ });
-        expect(within(chatTab).getByText('2')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(within(chatTab).getByText('2')).toBeInTheDocument();
+        });
 
         // Navigating to chat and opening it happens immediately (within 2 seconds of the initial poll)
         fireEvent.click(chatTab);

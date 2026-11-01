@@ -120,11 +120,16 @@ describe('NodeIdentityPanel Component', () => {
         expect(screen.getByText('Node Identity')).toBeInTheDocument();
         expect(screen.getByText(/Update the public identity, geographic location/i)).toBeInTheDocument();
 
-        // Callsign & Community Name
+        // Community Name & Callsign
+        const communityNameInput = screen.getByLabelText(/Community Name/i);
+        expect(communityNameInput).toBeInTheDocument();
+        expect(communityNameInput).toHaveAttribute('maxLength', '60');
         const callsignInput = screen.getByLabelText(/Callsign \(Short Name\)/i);
         expect(callsignInput).toBeInTheDocument();
         expect(callsignInput).toHaveAttribute('maxLength', '20');
-        expect(screen.getByLabelText(/Community Name/i)).toBeInTheDocument();
+        expect(callsignInput).toHaveAttribute('placeholder', 'e.g. mullum');
+        expect(screen.getByText('This is the name members see.')).toBeInTheDocument();
+        expect(screen.getByText('Only used where no Community Name is set.')).toBeInTheDocument();
 
         // Location search & Leaflet Map container
         expect(screen.getByPlaceholderText(/Search for a location.../i)).toBeInTheDocument();
@@ -157,6 +162,62 @@ describe('NodeIdentityPanel Component', () => {
 
         // Save button
         expect(screen.getByRole('button', { name: /save identity/i })).toBeInTheDocument();
+    });
+
+    it('renders Community Name before Callsign at the top of the panel and saves both', async () => {
+        const onRefreshDiag = vi.fn();
+        let containerEl: HTMLElement;
+        await act(async () => {
+            const rendered = render(
+                <NodeIdentityPanel
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    onRefreshDiag={onRefreshDiag}
+                />
+            );
+            containerEl = rendered.container;
+        });
+
+        const communityNameInput = screen.getByLabelText(/Community Name/i) as HTMLInputElement;
+        const callsignInput = screen.getByLabelText(/Callsign \(Short Name\)/i) as HTMLInputElement;
+
+        expect(communityNameInput).toBeInTheDocument();
+        expect(callsignInput).toBeInTheDocument();
+        expect(communityNameInput).toHaveAttribute('maxLength', '60');
+        expect(callsignInput).toHaveAttribute('maxLength', '20');
+        expect(callsignInput).toHaveAttribute('placeholder', 'e.g. mullum');
+
+        // Explanatory lines under the inputs
+        expect(screen.getByText('This is the name members see.')).toBeInTheDocument();
+        expect(screen.getByText('Only used where no Community Name is set.')).toBeInTheDocument();
+
+        // Community Name comes before Callsign in the form DOM
+        const form = containerEl!.querySelector('form')!;
+        const inputs = Array.from(form.querySelectorAll('input'));
+        const communityIndex = inputs.indexOf(communityNameInput);
+        const callsignIndex = inputs.indexOf(callsignInput);
+        expect(communityIndex).toBeGreaterThanOrEqual(0);
+        expect(callsignIndex).toBeGreaterThan(communityIndex);
+        expect(communityNameInput.compareDocumentPosition(callsignInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        // Update both fields and save
+        await act(async () => {
+            fireEvent.change(communityNameInput, { target: { value: 'Byron Bay Exchange' } });
+            fireEvent.change(callsignInput, { target: { value: 'byron' } });
+        });
+
+        const saveBtn = screen.getByRole('button', { name: /save identity/i });
+        await act(async () => {
+            fireEvent.click(saveBtn);
+        });
+
+        const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
+            call[0].includes('/api/local/update-identity')
+        );
+        expect(updateCall).toBeDefined();
+        const body = JSON.parse(updateCall[1].body);
+        expect(body.communityName).toBe('Byron Bay Exchange');
+        expect(body.callsign).toBe('byron');
     });
 
     it('hydrates initial values correctly: the name and contacts from the admin diagnostics, the callsign from /api/local/community-info, the rest from /api/node/config', async () => {

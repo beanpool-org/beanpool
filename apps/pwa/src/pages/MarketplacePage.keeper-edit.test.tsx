@@ -138,6 +138,35 @@ describe("a keeper editing their enterprise's listing on the web", () => {
             expect(update.mock.calls[0][2]).not.toHaveProperty('tags');
         });
 
+        it('the tags its author typed: an edit that left them alone sends none', async () => {
+            const { update } = await openForm({ ...eggs, freeTags: ['2nd hand'] });
+            expect(screen.getByRole('button', { name: 'Remove #2nd hand' })).toBeInTheDocument();
+            fireEvent.change(screen.getByPlaceholderText('Title') as HTMLInputElement, { target: { value: 'Two dozen eggs' } });
+            await save();
+            await waitFor(() => expect(update).toHaveBeenCalled());
+            expect(update.mock.calls[0][2]).not.toHaveProperty('freeTags');
+        });
+
+        it('one taken off goes as the rest, the last as the empty list that clears them', async () => {
+            const { update } = await openForm({ ...eggs, freeTags: ['2nd hand', 'used'] });
+            fireEvent.click(screen.getByRole('button', { name: 'Remove #used' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Remove #2nd hand' }));
+            await save();
+            await waitFor(() => expect(update).toHaveBeenCalled());
+            expect(update.mock.calls[0][2]).toMatchObject({ freeTags: [] });
+        });
+
+        it('one typed goes with the ones it had', async () => {
+            const { update } = await openForm({ ...eggs, freeTags: ['2nd hand'] });
+            fireEvent.click(screen.getByRole('button', { name: '+ Add tag' }));
+            fireEvent.change(screen.getByPlaceholderText('Search tags...'), { target: { value: 'vintage' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+            await save();
+            await waitFor(() => expect(update).toHaveBeenCalled());
+            expect(update.mock.calls[0][2]).toMatchObject({ freeTags: ['2nd hand', 'vintage'] });
+            expect(update.mock.calls[0][2]).not.toHaveProperty('tags');
+        });
+
         it('one taken off: the rest go, and taking off the last sends the empty list that clears them', async () => {
             const { update } = await openForm({ ...eggs, tags: [LEMON] });
             fireEvent.click(screen.getByRole('button', { name: 'Remove Lemon' }));

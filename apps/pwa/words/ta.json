@@ -3671,5 +3671,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "வாக்களிக்கக்கூடிய உறுப்பினர்கள் மிகக் குறைவாக இருந்தபோது ஒரு உரிமையாளர் முடிவு செய்தார், ஆனால் இப்போது போதுமானவர்கள் வாக்களிக்க முடியும், எனவே இந்த வாக்கெடுப்பே முடிவு செய்யும். காரணம்: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "வாக்களிக்கக்கூடிய உறுப்பினர்கள் மிகக் குறைவாக இருந்தபோது ஒரு உரிமையாளர் முடிவு செய்தார், ஆனால் இப்போது போதுமானவர்கள் வாக்களிக்க முடியும், எனவே இந்த வாக்கெடுப்பே முடிவு செய்யும்.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "வாக்களிக்கக்கூடிய உறுப்பினர்கள் மிகக் குறைவு, எனவே மேலும் பலர் வாக்களிக்காவிட்டால், இந்த வாக்கெடுப்பு முடியும்போது {name} திரும்புவார்.",
-  "Not executed: a reinstatement vote cancelled it": "செயல்படுத்தப்படவில்லை: மீண்டும் சேர்ப்பதற்கான வாக்கெடுப்பு இதை ரத்து செய்தது"
+  "Not executed: a reinstatement vote cancelled it": "செயல்படுத்தப்படவில்லை: மீண்டும் சேர்ப்பதற்கான வாக்கெடுப்பு இதை ரத்து செய்தது",
+  "Not sure what to charge? View the Community Pricing Guide": "எவ்வளவு கேட்பது என்று தெரியவில்லையா? சமூக விலைக் கையேட்டைக் காண்க"
 }

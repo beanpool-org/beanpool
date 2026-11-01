@@ -24,6 +24,8 @@
  *  2b. Olive sets A to keep members' copies itself (vault rethink VR2: "This server"), and Ann links a Google sign-in
  *      there: A keeps the copy, and nothing past this machine is asked (A is given this suite's Google key at its start)
  *   3. a listing, a deal to completion, a rating each way
+ *  3b. a listing a member brings with them from the global community (Lounge L7, utils/bring-listings.ts): what the phone
+ *      sends, its own id, five photos as data and no price, an ordinary post, which the node takes asking nobody
  *   4. a DM and a group line
  *   5. a knock from node B's member to node A, its answer, and the join it lets in
  *   6. a 12-words restore: Ann's new phone, from her words alone, is back in with her chats and Beans
@@ -46,7 +48,7 @@
  * src/test-no-mothership.ts).
  */
 
-import { TEST_PHOTOS } from './post-test-helper.js';
+import { TEST_PHOTO, TEST_PHOTOS } from './post-test-helper.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -543,6 +545,20 @@ async function main(): Promise<void> {
             assert(ok(rated), `Bo rates Ann (${brief(rated)})`);
             const back = await ann.post('/api/ratings', { targetPubkey: bo.pk, stars: 5, transactionId: dealId, raterPubkey: ann.pk });
             assert(ok(back), `Ann rates Bo (${brief(back)})`);
+        });
+
+        // ── 3b. A listing brought from the global community ──
+        // The phone read it from the global community and fetched its photos itself: the node gets the words and the bytes.
+        await step('3b. a listing brought along: what the phone sends is an ordinary post, and the node asks nobody', async () => {
+            const brought = await ann.post('/api/marketplace/posts', {
+                id: '6f1d3a52-9c1e-4b7a-8a55-0d2e7c4b1f90', type: 'offer', category: 'food', title: 'Seedlings from the global community', description: 'Six trays',
+                credits: 0, priceType: 'fixed', authorPublicKey: ann.pk, lat: -37.06, lng: 144.21,
+                photos: [TEST_PHOTO, TEST_PHOTO, TEST_PHOTO, TEST_PHOTO, TEST_PHOTO], repeatable: false, cashAlsoNeeded: false,
+            });
+            need(ok(brought), `Ann's listing arrives (${brief(brought)})`);
+            assert(brought.body?.post?.id === '6f1d3a52-9c1e-4b7a-8a55-0d2e7c4b1f90', 'it keeps the id the phone gave it, so a run again finds it');
+            assert(brought.body?.post?.authorPublicKey === ann.pk, 'by the key that signed it');
+            assert(brought.body?.post?.photos?.length === 5, 'with its five photos');
         });
 
         // ── 4. A DM and a group line ──

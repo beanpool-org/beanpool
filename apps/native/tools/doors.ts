@@ -58,6 +58,7 @@ export function composerDraft(
         postType: type,
         postCategory: draft.category ?? '',
         postTags: Array.isArray((draft as any).tags) ? (draft as any).tags : [],
+        postFreeTags: [],
         postTitle: draft.title,
         postDescription: draft.description ?? '',
         postCredits: type === 'offer' ? String(fee ? beans : (offer?.credits ?? 0)) : '',

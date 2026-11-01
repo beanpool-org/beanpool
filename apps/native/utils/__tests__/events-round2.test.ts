@@ -60,6 +60,7 @@ describe('the edit form and what Save sends (A2, decision 29)', () => {
         expect(before).toEqual({
             title: 'Working bee', description: 'Clearing the back garden',
             tags: [],
+            freeTags: [],
             start: new Date(2026, 8, 26, 9, 0), end: new Date(2026, 8, 26, 12, 0),
             placeName: 'Bindarrabi Hall', lat: -28.55, lng: 153.49, privateNote: 'Gate code 1234',
             photo: 'https://node/api/marketplace/posts/ev-1/photos/0?v=1', hostLetsIn: false,

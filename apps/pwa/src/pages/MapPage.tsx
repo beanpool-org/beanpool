@@ -61,6 +61,7 @@ import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
@@ -244,6 +245,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [targetGroupId, setTargetGroupId] = useState<string>('');
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
+    const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll' | 'event'>('need');
     // Events (docs/events-on-the-map.md §3). Start and end hold <input type="datetime-local"> values.
     const [eventStart, setEventStart] = useState('');
@@ -290,7 +292,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const pollPlacelessNote = placelessListingNote(nearbyLimits !== null, pollAuthorArea);
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTags, setNewPostTags] = useState<string[]>([]);
+    const [newPostFreeTags, setNewPostFreeTags] = useState<string[]>([]);
     const [eventTags, setEventTags] = useState<string[]>([]);
+    const [eventFreeTags, setEventFreeTags] = useState<string[]>([]);
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
     const [newPostCredits, setNewPostCredits] = useState('');
@@ -525,6 +529,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setNewPostDescription(openDraft.description);
         setNewPostCategory(openDraft.category ?? 'general');
         setNewPostTags([]);
+        setNewPostFreeTags([]);
         setNewPostCredits(openDraft.credits === null ? '' : String(openDraft.credits));
         setNewPostPriceType(openDraft.priceType ?? 'fixed');
         setNewPostRepeatable(openDraft.repeatable);
@@ -1010,6 +1015,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setEventIsCopy(false);
         setEventEdit(null);
         setEventTags([]);
+        setEventFreeTags([]);
         setEventOnline(false);
         setEventJoinLink('');
         setEventZone(null);
@@ -1030,7 +1036,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     /** The event form as it stands, in the shape the edit diff compares. */
     function currentEventForm(): EventEditForm {
         return {
-            title: newPostTitle, description: newPostDescription, tags: eventTags, start: eventStart, end: eventEnd,
+            title: newPostTitle, description: newPostDescription, tags: eventTags, freeTags: eventFreeTags, start: eventStart, end: eventEnd,
             placeName: eventPlaceName, lat: eventOnline ? null : postLat, lng: eventOnline ? null : postLng, privateNote: eventNote,
             photos: newPostPhotos, online: eventOnline, link: eventJoinLink, tz: eventFormZone()?.tz ?? null,
             hostLetsIn: eventHostLetsIn, repeat: eventRepeat, repeatUntil: eventRepeatUntil,
@@ -1052,6 +1058,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             pinDropMarkerRef.current = null;
         }
         setShowNewPost(false);
+        setShowPricingGuide(false);
     }
 
     /**
@@ -1150,6 +1157,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(eventOnline && eventJoinLink.trim() ? { eventLink: eventJoinLink.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
                 ...(eventTags.length > 0 ? { tags: eventTags } : {}),
+                ...(eventFreeTags.length > 0 ? { freeTags: eventFreeTags } : {}),
                 // Always the host's choice, never left to the node's default.
                 eventHostLetsIn,
             };
@@ -1183,6 +1191,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 pinDropMarkerRef.current = null;
             }
             setShowNewPost(false);
+            setShowPricingGuide(false);
             tellAdjusted(res?.eventTimeAdjusted, res?.post);
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', res?.post?.id);
@@ -1243,6 +1252,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 setAudienceScope('public');
                 setTargetGroupId('');
                 setShowNewPost(false);
+                setShowPricingGuide(false);
                 refreshPosts();
                 if (onNavigate) onNavigate('marketplace');
             } catch (e: any) {
@@ -1307,11 +1317,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 photos: newPostPhotos,
                 audienceScope,
                 ...(newPostTags.length > 0 ? { tags: newPostTags } : {}),
+                ...(newPostFreeTags.length > 0 ? { freeTags: newPostFreeTags } : {}),
                 ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
             setNewPostTitle('');
             setNewPostDescription('');
             setNewPostTags([]);
+            setNewPostFreeTags([]);
             setNewPostCredits('');
             setNewPostPriceType('fixed');
             setNewPostRepeatable(false);
@@ -1332,6 +1344,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 pinDropMarkerRef.current = null;
             }
             setShowNewPost(false);
+            setShowPricingGuide(false);
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
@@ -1774,6 +1787,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setNewPostDescription(moved ? withMovedFromLine(seriesMovedFromLine(source.eventRepeat), copy.description) : copy.description);
             setNewPostPhotos([]);
             setEventTags([]);
+            setEventFreeTags([]);
             setEventStart('');
             setEventEnd('');
             // A copy is a one-off until its host says otherwise.
@@ -1858,6 +1872,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setPinDropMode(false);
             setValidationErrors(new Set());
             setEventTags(form.tags || []);
+            setEventFreeTags(form.freeTags || []);
             setEventEdit({ id, before: form });
             setEventOnline(form.online === true);
             setEventJoinLink(form.link ?? '');
@@ -2332,6 +2347,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventEdit ? t('Edit Event') : eventIsCopy ? t('Copy Event') : t('New Post')}</span>
                     <button onClick={() => {
                         setShowNewPost(false);
+                        setShowPricingGuide(false);
                         setPostApproximate(false);
                         setAudienceScope('public');
                         setTargetGroupId('');
@@ -2761,6 +2777,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <TagPicker
                                 tags={eventTags}
                                 onChange={setEventTags}
+                                freeTags={eventFreeTags}
+                                onFreeTagsChange={setEventFreeTags}
                                 category="general"
                                 title={newPostTitle}
                                 description={newPostDescription}
@@ -2968,6 +2986,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <TagPicker
                                 tags={newPostTags}
                                 onChange={setNewPostTags}
+                                freeTags={newPostFreeTags}
+                                onFreeTagsChange={setNewPostFreeTags}
                                 category={newPostCategory}
                                 title={newPostTitle}
                                 description={newPostDescription}
@@ -3018,6 +3038,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                     onNearYou={onNavigate ? () => onNavigate('home') : undefined}
                                     onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                             </div>
+                        )}
+                        {!priceMarked && (
+                            <button
+                                type="button"
+                                onClick={() => setShowPricingGuide(true)}
+                                className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer mb-2"
+                            >
+                                <span className="text-base flex-shrink-0" aria-hidden="true">❓</span>
+                                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex-1 leading-snug">
+                                    {t('Not sure what to charge? View the Community Pricing Guide')}
+                                </span>
+                            </button>
                         )}
                         {!priceMarked && <p 
                             onClick={() => setShowCommonsInfo(true)}
@@ -3215,6 +3247,20 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         <CommonsInfoModal 
             isOpen={showCommonsInfo} 
             onClose={() => setShowCommonsInfo(false)} 
+        />
+        <PricingGuideModal
+            isOpen={showPricingGuide && showNewPost}
+            onClose={() => setShowPricingGuide(false)}
+            reporterPubkey={identity?.publicKey}
+            onSelectOfferItem={(_item, effectivePrice) => {
+                setNewPostCredits(String(effectivePrice));
+                setValidationErrors(prev => {
+                    const n = new Set(prev);
+                    n.delete('credits');
+                    return n;
+                });
+                setShowPricingGuide(false);
+            }}
         />
         {lightboxState?.isOpen && (
             <ImageLightbox

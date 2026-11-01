@@ -50,6 +50,17 @@ On the phone, tap **Not sure what to charge?** under the price. In the web app t
 
 Below the price you see what you will receive after the 1.5% market fee. Gifts have no fee.
 
+## Tags
+
+Tags help people find your post. They are optional, and they are public with your post.
+
+- Tap **+ Add** under **Tags**, on the phone and the web app. Start typing and the app offers tags from its library.
+- If none fits, type your own. Tap **Add “#…”**, press Enter, type a comma, or tap **Done**. A word that is already in the library picks that library tag.
+- A post can have five tags from the library and five of your own.
+- A tag you type is 2 to 30 characters and four words at most. It can't be an email, a phone number, a web address or an @name. The app says why before anything is sent.
+- A tag you type stays in your own words. Nobody translates it, so people find it by those words. A library tag is found in every language.
+- To take a tag off, tap it. With the box empty, backspace takes off the last one.
+
 ## Extra choices
 
 - **Repeatable:** the post stays up after each deal, and several people can take it at once. Good for a weekly lift or bread every Saturday.
@@ -77,3 +88,5 @@ While someone is asking for your post, you can still change its words and photos
 In a local community, posts do not expire. Delete them when they are done.
 
 On the global community, a listing is archived 90 days after it last changed: it comes off the Market and its photos are deleted. Saving it with **Edit Post** keeps it for another 90 days. See "The global community's limits".
+
+When you first join a local community from the global community, the phone app offers to post your listings there too, with their photos. See "More than one community".

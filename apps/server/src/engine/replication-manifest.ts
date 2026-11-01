@@ -329,7 +329,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     groups: {
         kind: 'replicated-except', payload: 'groups', watermark: 'updated_at',
-        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at'),
+        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at kind place_cell circle_done_at circle_community_key circle_starter circle_starting_at'),
         except: {
             lead_pubkey: { reason: "the import keeps the lead it has over the main server's null (COALESCE): a group whose last convenor left has no lead there and keeps the old one on the standby (not in the design; found by this net)", gap: 'G1b' },
         },
@@ -357,7 +357,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     place_watches: {
         kind: 'replicated', payload: 'placeWatches', watermark: 'updated_at',
-        columns: cols('id pubkey lat lng radius_km created_at last_notified_at updated_at'),
+        columns: cols('id pubkey lat lng radius_km created_at last_notified_at updated_at would_help'),
     },
     directory_cache: {
         kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',
@@ -679,6 +679,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     claim: { kind: 'per-server', reason: "this server's one-time claim code (its scrypt hash, id, who used it); never copied" },
     addressRequest: { kind: 'per-server', reason: "a name this server was asked to claim at install (beanpool claim); a standby never claims one; never copied" },
     endedAddressRequest: { kind: 'per-server', reason: "the last install name request this server ended, so a late registrar answer never revives it (#1579); per-server like addressRequest; never copied" },
+    addressNoticeDue: { kind: 'per-server', reason: "a new name this server claimed and must still tell its members of, once it is live (services/address-notice.ts); a standby tells nobody; never copied" },
     turnedAwayNames: { kind: 'per-server', reason: "the latest names this server turned away (ended install requests, replaced or timed-out Settings claims, names taken offline), so a late registrar answer never revives one (#1579 review); per-server like addressRequest; never copied" },
     registrarNotices: { kind: 'per-server', reason: "the notices the address service sent this server (services/registrar-notices.ts); a standby takes none and sends no seen, so its main server's never overwrite its own; each holds a live one-use reply link, so never copied, never in a backup file or the stager's copy" },
     registrarNoticeSeen: { kind: 'per-server', reason: "the highest notice id this server has had, sent back on its own /status as seen; per-server like registrarNotices; never copied" },

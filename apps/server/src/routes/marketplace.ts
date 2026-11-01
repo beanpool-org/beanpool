@@ -33,6 +33,8 @@ import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
+import { copyEventBody, copyEventUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
+import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
@@ -574,7 +576,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // phone holds the set as the tag describes it, which it does once a read has landed; the phone sends its tag on a
         // delta only. The identity epoch too: a take-over's server never confirms the old one's copy.
         const described = [nearbyTagQuery(ctx.querystring || ''), viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
-            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue(), ...(exactPart ? [exactPart] : [])].join('\n');
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue(), ...(exactPart ? [exactPart] : []), directoryStamp()].join('\n');
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 
@@ -586,7 +588,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // and while it is off the board), so the tag says which view this is: a member bound as a keeper, or unbound, changes
     // the answer and no listing, and the copy they held must not be confirmed with a 304. Every other read is tagged as before.
     const keeperPart = asKeeper && reader && author !== reader && readsAsAuthor(db, reader, author) ? ':keeper' : '';
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}`;
+    // A member's copy draws its from-line from the directory (engine/event-copy.ts), and a row's change moves no listing.
+    const directoryPart = switches.directoryMirror ? `:dir-${directoryStamp()}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -749,7 +753,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
     const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags } =
+        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -805,8 +809,10 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
         const timeOut: EventTimeOut = {};
+        // A member's copy of an event from their own community (engine/event-copy.ts); null for every other post.
+        const copy = copyOfRequest(shownFrom, (ctx as any).requestBody);
         const post = type === 'event'
-            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut)
+            ? createEventFromBody(copy ? copyEventBody((ctx as any).requestBody) : (ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut, undefined, copy)
             : createPost(
             // A listing put in a shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
             type, category || newListingCategory(shopId) || 'other', title, description || '',
@@ -845,7 +851,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Synchronize Daily Pulse marketplace gate (< 2 threshold)
         syncPulseMarketplaceGate();
 
-        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
+        ctx.body = { success: true, post: readOfCopy(post, actor), ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
@@ -948,6 +954,8 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             const fresh = updates.photos.filter((p: unknown) => !(typeof p === 'string' && own.test(p))).length;
             assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
         }
+        // A member's copy keeps to the times and the rounded pin (engine/event-copy.ts).
+        if ((db.prepare('SELECT shown_from_host FROM posts WHERE id = ?').get(id) as { shown_from_host: string | null } | undefined)?.shown_from_host != null) copyEventUpdates(updates);
         const timeOut: EventTimeOut = {};
         const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor, timeOut);
         if (!post) {
@@ -955,7 +963,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             ctx.body = { error: word('Post not found or not owned by you') };
             return;
         }
-        ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
+        ctx.body = { success: true, post: readOfCopy(post, actor), ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         if (respondShopRefusal(ctx, e)) return;
@@ -1121,6 +1129,12 @@ router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
         }
         ctx.body = rsvpEvent(id, actor, status, body.signature);
     } catch (e: any) {
+        // A member's copy: going is at home, so the answer is the door (engine/event-copy.ts).
+        if (e?.code === EVENT_COPY_CODE) {
+            ctx.status = 409;
+            ctx.body = { error: e.message, code: EVENT_COPY_CODE };
+            return;
+        }
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, word('Failed to record RSVP')) };
     }

@@ -3,7 +3,7 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
-import type { CircleCard, CircleDemand } from '@beanpool/core';
+import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
@@ -1347,6 +1347,9 @@ export async function getTransactions(publicKey?: string, limit = 50): Promise<T
 export type EventRsvpStatus = 'going' | 'interested';
 
 export interface MarketplacePost {
+    /** A member's copy of an event on the global community (@beanpool/core eventCopyOf): no author, no RSVP. */
+    shownCopy?: boolean;
+    shownFrom?: ShownFromLine;
     id: string;
     type: 'offer' | 'need' | 'poll' | 'event';
     category: string;

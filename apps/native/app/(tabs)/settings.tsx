@@ -864,6 +864,8 @@ export default function SettingsScreen() {
         try {
             await signedRequest('/api/members/holiday', { enabled: next });
             setHolidayMode(next);
+            // A copy on the global community comes down and goes back up with the member's listings here.
+            void import('../../utils/show-on-global').then((copies) => copies.tendCopies(identity)).catch(() => {});
             Alert.alert(
                 next ? t('🌴 Holiday mode on') : t('Welcome back'),
                 next

@@ -431,7 +431,7 @@ export function completeRekey(
         `).run(cleanOld, nowIso, cleanNew);
 
         // 2. Enumerate and transfer ALL 32 consumers of members.public_key (engine/key-move.ts, which a standby's copy
-        // follows with too), each row stamped so the standby's next copy carries the move.
+        // follows with too), each row but a copy of an event stamped so the standby's next copy carries the move.
         moveMemberKeyRows(cleanOld, cleanNew, nowIso, { keepStamps: false });
         if (keepSuspended) db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, cleanNew);
 

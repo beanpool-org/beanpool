@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -317,6 +317,8 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
                 // Whole sentences for the screen reader, each in the member's language, said one after another.
                 const what = e.place ? t('{title}, at {place}', { title: e.title, place: e.place }) : e.title;
                 const when = t('{when}: {what}', { when: eventHomeWhen(e), what: sentence(what) });
+                const copyFrom = eventCopyOf(e)?.from;
+                const from = copyFrom ? sentence(copyFromLine(copyFrom)) : null;
                 const marked = e.rsvp ? t(RSVP_SAID[e.rsvp]) : null;
                 const away = far ? t('{distance} away.', { distance: far }) : null;
                 const opens = t('Opens the event.');
@@ -325,7 +327,7 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
                         key={e.id}
                         colors={colors}
                         text={eventLine(e)}
-                        a11y={[when, marked, away, opens].filter(Boolean).join(' ')}
+                        a11y={[when, from, marked, away, opens].filter(Boolean).join(' ')}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: e.id } })}
                         right={trailing ? <Text style={s.trailing}>{trailing}</Text> : undefined}
                         testID={`home-event-${e.id}`}

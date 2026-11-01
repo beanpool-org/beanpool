@@ -288,6 +288,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
         carried_banner: null, // and an enterprise's shop banner: a member's listing names none (market-banner-cache.test.ts)
         tags: '',
         free_tags: '',
+        shown_from: null, // a member's copy on the global community says where it is from (below)
     };
     const directNeed = (extra: Record<string, unknown> = {}) => offer({
         id: 'post-d', type: 'need', title: 'Lift to the station', audienceScope: 'direct', targetPubkey: ME, assignedTo: ME, ...extra,
@@ -301,6 +302,14 @@ describe('every column the node sends survives the write, on a sync and on a pus
     it('a delta sync writes the whole row: the 💸 marker, the audience and the group', async () => {
         await applyDelta({ posts: [groupOffer()] });
         expect(row('post-g')).toEqual(GROUP_ROW);
+    });
+
+    it('a member\'s copy keeps where it is from, as the node last said, and with no line it is still a copy', async () => {
+        const from = { host: 'mullum.example.org', postId: 'p1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' };
+        await applyDelta({ posts: [groupOffer({ shownCopy: true, shownFrom: from })] });
+        expect(row('post-g')).toEqual({ ...GROUP_ROW, shown_from: JSON.stringify(from) });
+        await applyDelta({ posts: [groupOffer({ shownCopy: true, updatedAt: LATER })] });
+        expect(row('post-g')).toEqual({ ...GROUP_ROW, shown_from: '{}', updated_at: LATER });
     });
 
     it('a later delta sync of an edit changes the edit and nothing else', async () => {

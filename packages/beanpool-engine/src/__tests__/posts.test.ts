@@ -226,6 +226,8 @@ const POSTS_FIXTURE_DDL = `
         event_state TEXT,
         event_conversation_id TEXT,
         hidden_by_reports_at TEXT,
+        shown_from_host TEXT,
+        shown_from_post_id TEXT,
         removed_by_moderator_at TEXT
     );
 `;

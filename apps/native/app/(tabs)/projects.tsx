@@ -28,7 +28,7 @@ import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sam
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
 import { StartSomethingSheet } from '../../components/StartSomethingSheet';
 import { startRows, startTarget, type StartRowKey } from '../../utils/start-something';
-import { formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
+import { formatNumber, groupNameShown, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import { memberShelves, phoneTools } from '../../tools/index';
 import { ToolRow } from '../../tools/ui';
 
@@ -414,7 +414,7 @@ export default function ProjectsScreen() {
                     {/* The group's picture, else its category's emblem, as its Talk row, its chat and the web's card draw it (Pictures S4). */}
                     <MemberAvatar avatarUrl={chatPicture('group', item.avatarUrl, item.category)} pubkey={item.id} callsign={item.name} updatedAt={item.updatedAt} size={44} />
                     <View style={styles.cardTitleCol}>
-                        <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
+                        <Text style={styles.cardTitle} numberOfLines={2}>{groupNameShown(item)}</Text>
                         {isInvited ? (
                             <View style={styles.badgeRow}>
                                 <View style={[styles.badge, { backgroundColor: colors.brand.fill }]}>

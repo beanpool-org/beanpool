@@ -68,7 +68,7 @@ const realLoad = (Module as any)._load;
 afterAll(() => { (Module as any)._load = realLoad; });
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { livePostChange, postTagsOf } from '@beanpool/core';
+import { listingFreeTags, livePostChange, postTagsOf } from '@beanpool/core';
 import { applyDelta, closeDB, createPost, getDb, getMemberPosts, getMyPosts, getPost, getPosts, updateEvent, updatePost } from '../db';
 import { syncCursorKeysOf } from '../../services/pillar-sync';
 import { eventEditValues } from '../events';
@@ -251,5 +251,119 @@ describe("the phone's own writes", () => {
         await updateEvent('E1', { tags: [] });
         expect(edits[0].tags).toEqual([]);
         expect(stored('E1')).toBe('');
+    });
+});
+
+// The tags a member typed, in the same copy (DESIGN-tags-free-entry-fable.md §2, slice F2): the node's JSON list as it stores
+// it, down the same ways in, with the same cursor reset and the same rule on an edit.
+describe('the tags a member typed', () => {
+    const free = (id: string) => (sql.prepare('SELECT free_tags FROM posts WHERE id = ?').get(id) as { free_tags: string } | undefined)?.free_tags;
+    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, price_type: 'fixed', repeatable: false, photos: null };
+    const event = { type: 'event', freeTags: ['live music'], eventStartAt: '2026-11-01T01:00:00.000Z' };
+
+    it('the sync stores the list as the node does, and every read hands it back', async () => {
+        await applyDelta({ posts: [
+            listing('offer-1', { freeTags: ['2nd hand', 'limón'] }),
+            listing('event-1', event),
+            listing('ent-1', { authorPublicKey: ENTERPRISE, freeTags: ['used'] }),
+        ] });
+        expect(free('offer-1')).toBe('["2nd hand","limón"]');
+        expect(listingFreeTags(await getPost('offer-1'))).toEqual(['2nd hand', 'limón']);
+        expect(eventEditValues(await getPost('event-1')).freeTags).toEqual(['live music']);
+        expect(listingFreeTags((await getPosts()).find((p: any) => p.id === 'ent-1'))).toEqual(['used']);
+    });
+
+    it("a copy with none is the node's word: the node names them only where there are some", async () => {
+        await applyDelta({ posts: [listing('L1', { freeTags: ['used'] })] });
+        await applyDelta({ posts: [listing('L1', { updatedAt: DAY2 })] });
+        expect(free('L1')).toBe('');
+    });
+
+    it('a push over /ws carries them, and a later one that took them off clears them', async () => {
+        const push = (post: unknown) => livePostChange({ type: 'post_updated', post });
+        await applyDelta({ liveChanges: [push(listing('L1', { freeTags: ['used'] }))] });
+        expect(free('L1')).toBe('["used"]');
+        await applyDelta({ liveChanges: [push(listing('L1', { updatedAt: DAY2 }))] });
+        expect(free('L1')).toBe('');
+    });
+
+    it('opening a listing whose typed tags alone changed stores them and tells the screen; opening it again tells nothing', async () => {
+        await applyDelta({ posts: [listing('L1')] });
+        emitted.length = 0;
+        fetchMock.mockResolvedValue(answer([listing('L1', { freeTags: ['used'] })]));
+        await getPost('L1');
+        await vi.waitFor(() => expect(free('L1')).toBe('["used"]'));
+        await vi.waitFor(() => expect(emitted).toContain('sync_data_updated'));
+        emitted.length = 0;
+        fetchMock.mockClear();
+        await getPost('L1');
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+        await new Promise((r) => setTimeout(r, 0));
+        expect(emitted).not.toContain('sync_data_updated');
+    });
+
+    it('a copy from before the column gains it with its rows kept, forgets every cursor and reads whole now, once', async () => {
+        await applyDelta({ posts: [listing('L1')] });
+        await closeDB();
+        sql.exec('ALTER TABLE posts DROP COLUMN free_tags');
+        vi.mocked(AsyncStorage.multiRemove).mockClear();
+        await getDb();
+        expect(free('L1')).toBe('');
+        expect((await getPost('L1')).title).toBe('Listing L1');
+        expect(vi.mocked(AsyncStorage.multiRemove)).toHaveBeenCalledWith(syncCursorKeysOf('beanpool_valley.example.org.db'));
+        expect(syncsAsked).toEqual(['sync']);
+        await applyDelta({ posts: [listing('L1', { freeTags: ['used'] })] });
+        expect(free('L1')).toBe('["used"]');
+    });
+
+    it('a copy from before both columns gains both, and reads whole once', async () => {
+        await closeDB();
+        sql.exec('ALTER TABLE posts DROP COLUMN free_tags');
+        sql.exec('ALTER TABLE posts DROP COLUMN tags');
+        await getDb();
+        const columns = (sql.prepare('PRAGMA table_info(posts)').all() as Array<{ name: string }>).map((c) => c.name);
+        expect(columns).toEqual(expect.arrayContaining(['tags', 'free_tags']));
+        expect(syncsAsked).toEqual(['sync']);
+    });
+
+    it('a create sends them and keeps them; without any it sends none', async () => {
+        const bodies: Array<Record<string, unknown>> = [];
+        fetchMock.mockImplementation(async (_url: string, init?: { body?: string }) => {
+            if (init?.body) bodies.push(JSON.parse(init.body));
+            return answer({ success: true, post: { id: 'new' } });
+        });
+        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1, freeTags: ['2nd hand'] });
+        expect(free('new-1')).toBe('["2nd hand"]');
+        expect(bodies.find((b) => b.id === 'new-1')?.freeTags).toEqual(['2nd hand']);
+        await createPost({ id: 'new-2', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1 });
+        expect(free('new-2')).toBe('');
+        expect(bodies.find((b) => b.id === 'new-2')).not.toHaveProperty('freeTags');
+    });
+
+    it('an edit that names none sends none, and the copy keeps them', async () => {
+        await applyDelta({ posts: [listing('L1', { freeTags: ['used'] })] });
+        await updatePost('L1', edit);
+        expect(edits[0]).not.toHaveProperty('freeTags');
+        expect(free('L1')).toBe('["used"]');
+    });
+
+    it('an edit that names them sends them and the copy follows; the empty list clears them', async () => {
+        await applyDelta({ posts: [listing('L1', { freeTags: ['used', 'vintage'] })] });
+        await updatePost('L1', { ...edit, freeTags: ['vintage'] });
+        expect(edits[0].freeTags).toEqual(['vintage']);
+        expect(free('L1')).toBe('["vintage"]');
+        await updatePost('L1', { ...edit, freeTags: [] });
+        expect(edits[1].freeTags).toEqual([]);
+        expect(free('L1')).toBe('');
+    });
+
+    it("an event's edit that left them alone sends none and keeps them; one that cleared them sends the empty list", async () => {
+        await applyDelta({ posts: [listing('E1', event)] });
+        await updateEvent('E1', { title: 'New name' });
+        expect(edits[0]).not.toHaveProperty('freeTags');
+        expect(free('E1')).toBe('["live music"]');
+        await updateEvent('E1', { freeTags: [] });
+        expect(edits[1].freeTags).toEqual([]);
+        expect(free('E1')).toBe('');
     });
 });

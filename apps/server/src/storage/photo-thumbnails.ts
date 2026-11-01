@@ -1,16 +1,18 @@
 /**
- * A listing photo's small copy, for the lists: ~200 px on its longest side, ~10 KB (Marty, board, 9 Oct).
+ * A listing photo's small copy, for the lists: shortest side 320 px (up to 640 px), ~6-18 KB (Marty, 1 Nov).
  *
  * ## Why
  *
  * A Market page of 20 rows downloaded 20 full photos (up to 800 px, 60-120 KB each) to draw 20 squares of 56-120 dp.
+ * The grid card draws it about 300 × 300 with object-cover, so a 200 px copy looked soft. Shortest side 320 px at
+ * quality 70 is sharp at card size and costs 6 to 18 KB, against 15 to 144 KB for the full photo.
  * The communities this is for are on old Android phones and prepaid data. The detail screen keeps the 800 px photo,
  * and there is no bigger copy anywhere (photos stay 800 px).
  *
  * ## Where it lives
  *
  * In the image store beside its photo, never in state.db: `posts/<id>/<n>-<sha8>.jpg` has its small copy at
- * `posts/<id>/<n>-<sha8>-t.jpg` ({@link thumbnailKeyOf}). The key is the photo's own, so it is content-addressed as
+ * `posts/<id>/<n>-<sha8>-s.jpg` ({@link thumbnailKeyOf}). The key is the photo's own, so it is content-addressed as
  * the photo is: a photo replaced is a new key and a new small copy, and the old pair answers to no row. The orphan
  * sweep (engine/storage-health.ts) keeps a small copy exactly while some row names its photo, and the delete paths
  * that remove a photo's object remove its small copy with it (image-columns.ts deleteStoredObjects). No row, backup
@@ -49,8 +51,11 @@ import type { Readable } from 'node:stream';
 import type sharp from 'sharp';
 import { deleteObjectUnless, headObject, openObject, readObject, writeObject, type ImageStore } from './image-store.js';
 
-/** The longest side of a small copy, in pixels. Lists draw photos at 56-120 dp; 200 px is sharp at 1.5-2× density. */
-export const THUMB_MAX_SIDE = 200;
+/** The target shortest side of a small copy (320 px, fit 'outside', never enlarged). */
+export const THUMB_MIN_SIDE = 320;
+
+/** The cap on the longest side of a small copy (640 px), so a panorama cannot balloon. */
+export const THUMB_MAX_SIDE = 640;
 
 /**
  * The decoder's ceiling, a side and the pixels it allows: photos are stored at most 800 px on a side (Marty, photos stay
@@ -102,7 +107,24 @@ const MIME_OF_EXT: Record<string, string> = { jpg: 'image/jpeg', png: 'image/png
 export function thumbnailKeyOf(photoKey: string | null | undefined): string | null {
     if (typeof photoKey !== 'string') return null;
     const m = PHOTO_KEY.exec(photoKey);
+    return m ? `${m[1]}-s.${m[2]}` : null;
+}
+
+/** Legacy small copy key (`-t`), used before the 320 px update (Marty, 1 Nov). */
+export function legacyThumbnailKeyOf(photoKey: string | null | undefined): string | null {
+    if (typeof photoKey !== 'string') return null;
+    const m = PHOTO_KEY.exec(photoKey);
     return m ? `${m[1]}-t.${m[2]}` : null;
+}
+
+/** All small copy keys for a photo key (current `-s` and legacy `-t`), for delete paths. */
+export function allThumbnailKeysOf(photoKey: string | null | undefined): string[] {
+    const cur = thumbnailKeyOf(photoKey);
+    const leg = legacyThumbnailKeyOf(photoKey);
+    const out: string[] = [];
+    if (cur) out.push(cur);
+    if (leg) out.push(leg);
+    return out;
 }
 
 function mimeOfKey(key: string): string {
@@ -114,26 +136,42 @@ function mimeOfKey(key: string): string {
  * already no bigger than a small copy would be; null when it can't be read.
  */
 export async function makeThumbnail(photo: Buffer, thumbKey: string): Promise<Buffer | null> {
-    const ext = thumbKey.slice(thumbKey.lastIndexOf('.') + 1);
-    let image: sharp.Sharp;
-    const lib = await loadSharp();
-    if (!lib) return null;
-    reads++;
+    activeResizes++;
+    if (activeResizes > peakResizes) peakResizes = activeResizes;
     try {
-        // The header alone first: a side the decoder would need gigabytes for is refused before any pixel is read.
-        const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
-        if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
-        image = lib(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
-            .rotate()
-            .resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
-        if (ext === 'jpg') image = image.jpeg({ quality: 70, mozjpeg: true });
-        else if (ext === 'webp') image = image.webp({ quality: 70, effort: 4 });
-        else if (ext === 'png') image = image.png({ palette: true, colours: 128, quality: 70, compressionLevel: 9, effort: 10 });
-        else return null;
-        const out = await image.toBuffer();
-        return out.length < photo.length ? out : photo;
-    } catch {
-        return null;
+        const ext = thumbKey.slice(thumbKey.lastIndexOf('.') + 1);
+        let image: sharp.Sharp;
+        const lib = await loadSharp();
+        if (!lib) return null;
+        reads++;
+        try {
+            // The header alone first: a side the decoder would need gigabytes for is refused before any pixel is read.
+            const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+            if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
+
+            const isRotated = !!(head.orientation && head.orientation >= 5 && head.orientation <= 8);
+            const visualW = isRotated ? head.height : head.width;
+            const visualH = isRotated ? head.width : head.height;
+            const isPanorama = Math.max(visualW, visualH) > 2 * Math.min(visualW, visualH);
+
+            image = lib(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' }).rotate();
+            if (isPanorama) {
+                image = image.resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
+            } else {
+                image = image.resize({ width: THUMB_MIN_SIDE, height: THUMB_MIN_SIDE, fit: 'outside', withoutEnlargement: true });
+            }
+
+            if (ext === 'jpg') image = image.jpeg({ quality: 70, mozjpeg: true });
+            else if (ext === 'webp') image = image.webp({ quality: 70, effort: 4 });
+            else if (ext === 'png') image = image.png({ palette: true, colours: 128, quality: 70, compressionLevel: 9, effort: 10 });
+            else return null;
+            const out = await image.toBuffer();
+            return out.length < photo.length ? out : photo;
+        } catch {
+            return null;
+        }
+    } finally {
+        activeResizes--;
     }
 }
 
@@ -142,10 +180,23 @@ let queue: Promise<unknown> = Promise.resolve();
 /** The small copy being made for each key now, so a second request for it waits on the first. */
 const inFlight = new Map<string, Promise<Buffer | null>>();
 
+let activeResizes = 0;
+let peakResizes = 0;
+
 function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
-    const run = queue.then(work, work);
+    const run = queue.then(work);
     queue = run.catch(() => undefined);
     return run;
+}
+
+/** For the suites: peak concurrent resizes executed (must be <= 1). */
+export function peakConcurrentResizes(): number {
+    return peakResizes;
+}
+
+/** For the suites: reset the peak counter to current active resizes. */
+export function resetPeakConcurrentResizes(): void {
+    peakResizes = activeResizes;
 }
 
 /** The longest side of a stored listing photo (photos stay 800 px): what the apps resize to before they send one. */
@@ -162,6 +213,8 @@ export async function resizeToStoredPhoto(photo: Buffer, format: 'jpeg' | 'webp'
     const lib = await loadSharp();
     if (!lib) return null;
     return oneAtATime(async () => {
+        activeResizes++;
+        if (activeResizes > peakResizes) peakResizes = activeResizes;
         try {
             const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
             if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
@@ -172,6 +225,8 @@ export async function resizeToStoredPhoto(photo: Buffer, format: 'jpeg' | 'webp'
             return await (format === 'jpeg' ? image.jpeg({ quality: 70, mozjpeg: true }) : image.webp({ quality: 70, effort: 4 })).toBuffer();
         } catch {
             return null;
+        } finally {
+            activeResizes--;
         }
     });
 }
@@ -246,16 +301,16 @@ const removing = new Set<Promise<unknown>>();
 /**
  * Remove the small copy of the photo whose object is `photoKey`, with its photo (image-columns.ts deleteStoredObjects).
  * Off the event loop: on a bucket the store's own delete blocks for a HEAD and a DELETE, and a listing's delete held the
- * loop half as long again for them (review opus-1742 #3). Never throws and is never waited on; one it fails to remove
- * is an orphan the storage-health sweep collects.
+ * loop half as long again for them (review opus-1742 #3). Removes both current (`-s`) and legacy (`-t`) small copies.
+ * Never throws and is never waited on; one it fails to remove is an orphan the storage-health sweep collects.
  */
 export function removeThumbnailOf(store: ImageStore, photoKey: string): void {
-    const thumbKey = thumbnailKeyOf(photoKey);
-    if (!thumbKey) return;
-    const done: Promise<unknown> = deleteObjectUnless(store, thumbKey, () => false)
-        .catch(e => console.warn(`[ImageStore] Could not delete ${thumbKey}:`, e))
-        .finally(() => removing.delete(done));
-    removing.add(done);
+    for (const thumbKey of allThumbnailKeysOf(photoKey)) {
+        const done: Promise<unknown> = deleteObjectUnless(store, thumbKey, () => false)
+            .catch(e => console.warn(`[ImageStore] Could not delete ${thumbKey}:`, e))
+            .finally(() => removing.delete(done));
+        removing.add(done);
+    }
 }
 
 /** For the suites: resolves once every small copy queued so far is made and kept, and every one being removed is gone. */

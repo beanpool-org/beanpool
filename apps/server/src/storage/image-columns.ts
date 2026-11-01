@@ -357,8 +357,8 @@ export function deleteStoredObjects(handle: ReadableDb, keys: Iterable<string>, 
         } catch (e) {
             console.warn(`[ImageStore] Could not delete ${key}:`, e);
         }
-        // A listing photo's small copy (storage/photo-thumbnails.ts) goes with it, off the event loop; one never made is
-        // already gone.
+        // A listing photo's small copies (storage/photo-thumbnails.ts, current and legacy -t) go with it, off the event loop;
+        // ones never made are already gone.
         removeThumbnailOf(s, key);
     }
     return removed;

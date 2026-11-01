@@ -631,11 +631,13 @@ async function main(): Promise<void> {
             assert(r.status[host('envname')] === 421, `envname.beanpool.org → 421 though BEANPOOL_ADDRESSES lists it (${r.status[host('envname')]}; main: 200)`);
             assert(r.status['p2.test'] === 200, `p2.test is still accepted (${r.status['p2.test']})`);
 
+            const listed = ((await P.send('inspect')).ownerAddresses ?? []) as string[];
             const confirm = await call(pBase, 'POST', '/api/local/admin/app-addresses/confirm', pAdmin, { address: host('epage') });
             assert(confirm.status === 409 && confirm.body?.code === 'lost_address' && /another community/i.test(confirm.body?.error ?? ''),
                 `Settings' confirm refuses the lost epage.beanpool.org (${show(confirm)}; main: 200)`);
             const s = await P.send('inspect');
-            assert(!(s.ownerAddresses ?? []).includes(host('epage')), `and adds nothing (${JSON.stringify(s.ownerAddresses)})`);
+            // Compared with the list before: the claims above put each name they replaced on it (rename S1).
+            assert(JSON.stringify(s.ownerAddresses ?? []) === JSON.stringify(listed), `and adds nothing (${JSON.stringify(s.ownerAddresses)})`);
 
             // Anna's app was refused at epage in section 7. A stranger's app is refused too, and not counted.
             const stranger = await bound(P, [host('epage')], strangerSeedHex);

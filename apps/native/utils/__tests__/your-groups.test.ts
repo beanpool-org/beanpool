@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bundledGroupEmblem } from '@beanpool/core';
+import { PLACE_CIRCLE_WORDS, bundledGroupEmblem, t } from '@beanpool/core';
 import {
     ENTERPRISE_CHAT_NOTICE,
     ownerHeader, previewLine, rowTime, unreadLabel, isMuted, groupsYouCouldJoin, inviteLandingAction, chatHref,
@@ -318,5 +318,11 @@ describe('rowSpokenName spoken row label (S3)', () => {
     it('the group row spoken name contains "convenor" for a convenor', () => {
         expect(rowSpokenName({ kind: 'group', role: 'convenor', name: 'Garden Crew' })).toBe('Garden Crew, group, convenor');
         expect(rowSpokenName({ kind: 'group', role: 'member', name: 'Garden Crew' })).toBe('Garden Crew, group');
+    });
+
+    it("says a place circle by the name the row draws, not the stored English (PR #2687 review)", () => {
+        const shown = t(PLACE_CIRCLE_WORDS.name);
+        expect(rowSpokenName({ kind: 'group', role: 'member', name: 'Anything stored', groupKind: 'circle' })).toBe(`${shown}, group`);
+        expect(rowSpokenName({ kind: 'group', role: 'convenor', name: 'Anything stored', groupKind: 'circle' })).toBe(`${shown}, group, convenor`);
     });
 });

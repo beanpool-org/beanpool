@@ -126,6 +126,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     };
     const [description, setDescription] = useState('');
     const [tags, setTags] = useState<string[]>([]);
+    const [freeTags, setFreeTags] = useState<string[]>([]);
     const [photo, setPhoto] = useState<string | null>(null);
     const [note, setNote] = useState('');
     // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): ticked where anyone can
@@ -244,7 +245,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const reset = () => {
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false); exactPin.current = null;
-        setDescription(''); setTags([]); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
+        setDescription(''); setTags([]); setFreeTags([]); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
         setCopiedHost(null); setIsCopy(false);
         setOnline(false); setLink(''); setZone(NO_ZONE); setZonePicker({ open: false, query: '', error: null });
         zoneTicket.current++;
@@ -264,6 +265,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setTitle(prefill.title);
         setDescription(prefill.description);
         setTags([]);
+        setFreeTags([]);
         setPlaceName(prefill.placeName);
         setNote(prefill.privateNote);
         setStart(null); setEnd(null); setPicker(null); setPhoto(null);
@@ -302,6 +304,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setDescription(v.description);
         const editTags = (v as any)?.tags;
         setTags(Array.isArray(editTags) ? editTags : (typeof editTags === 'string' ? editTags.split(' ').filter(Boolean) : []));
+        setFreeTags(v.freeTags ?? []);
         setStart(v.start);
         setEnd(v.end);
         setRepeat(v.repeat ?? 'never');
@@ -473,7 +476,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     };
 
     const editValues = (): EventEditValues => ({
-        title, description, tags, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
+        title, description, tags, freeTags, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
         online, link, tz: zone.tz, tzOffsetMinutes: zoneOffset,
         hostLetsIn, repeat, repeatUntil,
     });
@@ -559,6 +562,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                 photos: photo ? JSON.stringify([photo]) : null,
                 created_at: new Date().toISOString(),
                 ...(tags.length > 0 ? { tags } : {}),
+                ...(freeTags.length > 0 ? { freeTags } : {}),
             });
             const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, tz);
             const done = t('Your event is in the Market feed.');
@@ -890,6 +894,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <TagPicker
                                 value={tags}
                                 onChange={setTags}
+                                freeTags={freeTags}
+                                onFreeTagsChange={setFreeTags}
                                 category="general"
                                 title={title}
                                 description={description}

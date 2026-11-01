@@ -21,12 +21,14 @@ import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isE
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
+import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
-    editedTagsOver, postTagsOf, searchTagsFor, storedPostTags, tagIndex, normalizeCategory,
+    editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
+    tagIndex,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -322,9 +324,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [foundingOnlyPicked, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
+    // A `#tag` tapped: the Market with exactly that typed tag (DESIGN-tags-free-entry-fable.md §4). One filter by tag at a time.
+    const [selectedFree, setSelectedFree] = useState<string | null>(null);
     const [editTags, setEditTags] = useState<string[]>([]);
     // The tags the form opened with, moved on by a reload's: what the save compares with, as on the phone (app/post/[id].tsx).
     const editTagsFrom = useRef<string[]>([]);
+    const [editFreeTags, setEditFreeTags] = useState<string[]>([]);
+    const editFreeTagsFrom = useRef<string[]>([]);
     const [searchResults, setSearchResults] = useState<MarketplacePost[] | null>(null);
     // The words that answer was for: under new words it stands only as rows the words match, until their read lands.
     const [searchResultsWords, setSearchResultsWords] = useState('');
@@ -562,6 +568,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // A tag chip on a listing or an event: the Market filtered by it, the page left as Back leaves it (§4.4).
     const openTag = (id: string) => {
         setSelectedTag(id);
+        setSelectedFree(null);
+        setSelectedPost(null);
+        setSelectedTxId(null);
+    };
+    const openFree = (tag: string) => {
+        setSelectedFree(tag);
+        setSelectedTag(null);
         setSelectedPost(null);
         setSelectedTxId(null);
     };
@@ -596,12 +609,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const resolvedTags = q ? searchTagsFor(q) : [];
         const searchTagIds = [...new Set([...(selectedTag ? [selectedTag] : []), ...resolvedTags])].slice(0, 20);
         // Words that leave nothing to ask (quote marks alone) are no read: without `q` it would be every listing.
-        if (!terms && searchTagIds.length === 0) {
+        if (!terms && searchTagIds.length === 0 && !selectedFree) {
             setSearchResults(null);
             return;
         }
         const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
-        const fits = (p: MarketplacePost) => postFitsList(p, filter) && fitsNear(p) && matchesExpandedSearch(q, p.title, p.description, p.tags);
+        const fits = (p: MarketplacePost) => postFitsList(p, filter) && fitsNear(p) && matchesExpandedSearch(q, p.title, p.description, p.tags, p.freeTags);
         const offView = onLivePostChange(change => setSearchResults(prev => prev && applyLivePostChange(prev, change, fits)));
         let out = false;
         const read = async () => {
@@ -615,6 +628,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     ...nearParams(near),
                     ...(terms ? { q: terms } : {}),
                     ...(searchTagIds.length > 0 ? { tags: searchTagIds } : {}),
+                    ...(selectedFree ? { free: [selectedFree] } : {}),
                     limit: 50,
                     ...page,
                 }));
@@ -639,7 +653,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             offView();
             if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         };
-    }, [searchQuery, selectedTag, typeFilter, categoryFilter, beansOnly, groupFilter, near, fitsNear]);
+    }, [searchQuery, selectedTag, selectedFree, typeFilter, categoryFilter, beansOnly, groupFilter, near, fitsNear]);
     useEffect(() => { searchAgainRef.current?.(); }, [listReads]);
 
     // Handle deep-link from Map pins or routes
@@ -739,6 +753,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         editTagsFrom.current = now;
         setEditTags((edited) => editedTagsOver(from, edited, now));
     }, [selectedPostTags, editMode]);
+    // The same for the tags its author typed: an edit that never touched them keeps them.
+    const selectedPostFreeTags = storedFreeTags(freeTagsOf(selectedPost?.freeTags));
+    useEffect(() => {
+        if (!editMode) return;
+        const from = editFreeTagsFrom.current;
+        if (selectedPostFreeTags === storedFreeTags(from)) return;
+        const now = freeTagsOf(selectedPostFreeTags);
+        editFreeTagsFrom.current = now;
+        setEditFreeTags((edited) => editedTagsOver(from, edited, now, FREE_TAGS_MAX));
+    }, [selectedPostFreeTags, editMode]);
     const [editType, setEditType] = useState<'offer' | 'need'>('offer');
     const [editCategory, setEditCategory] = useState('other');
     const [editTitle, setEditTitle] = useState('');
@@ -1284,8 +1308,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (p.type === 'poll' && typeFilter !== 'poll') return false;
                 // The node's answer stands for the words, unless a tag filter is on: it asks for the words OR the tags, so there
                 // the words still narrow the tag's listings.
-                if (searchResults !== null && !selectedTag && searchResultsWords === searchQuery.trim()) return true;
-                return matchesExpandedSearch(searchQuery, p.title, p.description, p.tags);
+                if (searchResults !== null && !selectedTag && !selectedFree && searchResultsWords === searchQuery.trim()) return true;
+                return matchesExpandedSearch(searchQuery, p.title, p.description, p.tags, p.freeTags);
             });
         }
 
@@ -1296,6 +1320,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 return pTags.some(t => t === selectedTag || t.startsWith(selectedTag + '.'));
             });
         }
+        if (selectedFree) filtered = filtered.filter(p => freeTagsOf(p.freeTags).includes(selectedFree));
 
         // Blocked user filtering
         const blocked = getBlockedUsers();
@@ -1512,6 +1537,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onEdit={(p) => onNavigate?.('map-edit-event', p.id)}
                         onOpenProfile={onOpenProfile}
                         onOpenTag={openTag}
+                        onOpenFreeTag={openFree}
                         onChange={(p) => { setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                         onCancelled={(p) => { if (p) setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                     />
@@ -1892,7 +1918,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </p>
                         )}
 
-                        <PostTagChips tags={selectedPost.tags} onPick={openTag} className="mb-5" />
+                        <PostTagChips tags={selectedPost.tags} freeTags={selectedPost.freeTags} onPick={openTag} onPickFree={openFree} className="mb-5" />
 
                         {/* Photos */}
                         {selectedPost.photos && selectedPost.photos.length > 0 && (
@@ -2996,6 +3022,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPhotos(selectedPost.photos || []);
                                         editTagsFrom.current = postTagsOf(selectedPost.tags);
                                         setEditTags(editTagsFrom.current);
+                                        editFreeTagsFrom.current = freeTagsOf(selectedPost.freeTags);
+                                        setEditFreeTags(editFreeTagsFrom.current);
                                         setEditShop({ kind: 'hidden' });
                                         setEditInShop(false);
                                         const post = selectedPost;
@@ -3092,6 +3120,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <TagPicker
                                         tags={editTags}
                                         onChange={setEditTags}
+                                        freeTags={editFreeTags}
+                                        onFreeTagsChange={setEditFreeTags}
                                         category={editCategory}
                                         title={editTitle}
                                         description={editDescription}
@@ -3253,6 +3283,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
                                                 const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
+                                                const freeTagsChanged = storedFreeTags(editFreeTags) !== storedFreeTags(editFreeTagsFrom.current);
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
                                                     type: editType,
                                                     category: editCategory,
@@ -3263,6 +3294,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,
                                                     ...(tagsChanged ? { tags: editTags } : {}),
+                                                    ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
                                                     ...(shopId !== undefined ? { shopId } : {}),
                                                 });
                                                 setSelectedPost(result.post);
@@ -3344,7 +3376,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // "Save this search to Home": a member's search, Offers and Needs only (not under Events or Polls).
     const toSave = onSaveSearch && !isVisitor && isMember !== false
-        ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery, selectedTag || undefined) : null;
+        ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery.trim() ? searchQuery : selectedFree ?? '', selectedTag || undefined) : null;
     // The category the Category chip names while one is picked.
     const filterCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
 
@@ -3419,8 +3451,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </button>
                     </>)}
                 </div>
-                {selectedTag && (() => {
-                    const label = tagIndex().label(selectedTag);
+                {(selectedTag || selectedFree) && (() => {
+                    const label = selectedFree ?? tagIndex().label(selectedTag ?? '');
                     if (!label) return null;
                     return (
                         <div className="flex items-center gap-1.5 mt-2">
@@ -3428,7 +3460,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 #{label}
                                 <button
                                     type="button"
-                                    onClick={() => setSelectedTag(null)}
+                                    onClick={() => { setSelectedTag(null); setSelectedFree(null); }}
                                     className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:text-emerald-950 dark:hover:text-white font-bold ml-1 cursor-pointer"
                                     aria-label={t('Clear tag filter')}
                                 >
@@ -3763,7 +3795,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </p>
                 ) : null;
 
-                const narrowed = !!searchQuery.trim() || !!selectedTag || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
+                const narrowed = !!searchQuery.trim() || !!selectedTag || !!selectedFree || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
                     || groupFilter !== 'all' || beansOnly || foundingOnly;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: fillPending ? FILL_BELOW : filtered.length + fillRows.length })
                     ? <ExampleListings />
@@ -4167,6 +4199,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <p data-testid="market-near-empty" className="m-0 mb-2 px-1 text-sm font-bold text-nature-700 dark:text-nature-300">
                                     {t('Nothing within 250 km yet.')}
                                 </p>
+                                {!isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                 {fillPending ? (
                                     <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
                                 ) : fillSection}
@@ -4191,6 +4224,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-sm font-bold text-nature-700 dark:text-nature-300 mb-3">
                                             {nearbyListings ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                         </p>
+                                        {nearbyListings && !isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                         {nearbyListings && (
                                             <div className="mb-4">
                                                 <button

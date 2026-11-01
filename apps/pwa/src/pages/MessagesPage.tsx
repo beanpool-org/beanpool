@@ -55,7 +55,7 @@ import { EventChat } from '../components/EventChat';
 import { FoldedChatText } from '../components/FoldedChatText';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 
@@ -1178,7 +1178,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         const plan = await groupChatSendPlan(ring, chat, chatErr);
         if (plan.kind === 'refuse') { setChatRefusal(plan.sentence); return null; }
-        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? t(GROUP_CHAT_WORDS.closed) : t(GROUP_CHAT_WORDS.readOnly)); return null; }
+        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? groupClosedShown({ kind: conv.groupKind }, t(GROUP_CHAT_WORDS.closed)) : t(GROUP_CHAT_WORDS.readOnly)); return null; }
         return { plan: plan.kind, chat, chatErr };
     }
 
@@ -1552,7 +1552,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     function getConversationTitle(conv: Conversation): string {
         // An event chat is named after its event, which is why the conversation row carries `name`.
         if (conv.type === 'event_thread') return conv.name || t('Event chat');
-        if (conv.type === 'group_thread') return conv.name || t('Group');
+        // A place circle's stored name is English: it reads in the member's language, here as on the phone's rows.
+        if (conv.type === 'group_thread') return groupNameShown({ name: conv.name ?? '', kind: conv.groupKind }) || t('Group');
         // An enterprise's thread is named after the enterprise (engine/enterprise-thread.ts), as the phone's header is: never
         // after whichever member's key comes first, which made its header button read "Ben, enterprise page".
         if ((conv.type as string) === 'enterprise_thread') return conv.name || t('Enterprise chat');

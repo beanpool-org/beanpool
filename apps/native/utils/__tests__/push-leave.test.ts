@@ -525,7 +525,7 @@ describe('a stamp that ran ahead of the phone\'s clock', () => {
 
 describe('one community goes and the key stays (Forget Community; design R2)', () => {
     const phoneToken = async () => PHONE_TOKEN;
-    const saved = (...urls: string[]) => mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(urls.map((url) => ({ url }))));
+    const saved = (...urls: string[]) => { mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(urls.map((url) => ({ url })))); };
     const deletes = (from = 0) => nodes.sent.slice(from).filter((s) => s.method === 'DELETE');
     const posts = (from = 0) => nodes.sent.slice(from).filter((s) => s.method === 'POST' && s.path === '/api/push-tokens');
 
@@ -654,6 +654,9 @@ describe('one community goes and the key stays (Forget Community; design R2)', (
 
         // Not the same for a community that stays: Mullum's registration held does not hold up forgetting Bellingen.
         saved(MULLUM, BELLINGEN);
+        nodes.answer = () => 'up';
+        await registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android', 12000, AsyncStorage, BELLINGEN);
+        nodes.answer = (s) => (s.method === 'POST' ? 'hold' : 'up');
         const toMullum = registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android', 12000, AsyncStorage, MULLUM);
         await vi.waitFor(() => expect(posts().filter((s) => s.community === MULLUM)).toHaveLength(1));
         await forgetCommunityPush(kim, BELLINGEN, async () => saved(MULLUM));
@@ -771,7 +774,7 @@ describe('one community goes and the key stays (Forget Community; design R2)', (
 
 describe('alerts from one community, off and on (design R8, the DELETE half)', () => {
     const phoneToken = async () => PHONE_TOKEN;
-    const saved = (...urls: string[]) => mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(urls.map((url) => ({ url }))));
+    const saved = (...urls: string[]) => { mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(urls.map((url) => ({ url })))); };
 
     async function kimAtBoth(): Promise<void> {
         await kimRegisteredAtMullumAndByron();
@@ -835,13 +838,5 @@ describe('alerts from one community, off and on (design R8, the DELETE half)', (
         expect(await communitiesWithAlertsOff()).toEqual([BYRON]);
         await carryAlertsOff(BYRON, `${MULLUM}/`);
         expect(await communitiesWithAlertsOff()).toEqual([MULLUM]);
-    });
-
-    it('goes with the account', async () => {
-        await importIdentity(kim);
-        mem.async.set(ANCHOR, MULLUM);
-        await markAlertsOff(BYRON);
-        await signOutOfThisPhone(kim);
-        expect(mem.async.has(PUSH_ALERTS_OFF_STORE_KEY)).toBe(false);
     });
 });

@@ -821,6 +821,8 @@ describe('the token goes to every community the phone keeps, each on its own (de
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM }, { url: 'https://evil.example\\@mullum.beanpool.org' }]));
         await kimSignsIn();
         expect(new Set(nodes.sent.map((s) => s.community))).toEqual(new Set([MULLUM]));
+        // Nor does it go on the record, where a Sign Out would be asked to reach it.
+        expect(recorded()).toEqual([MULLUM]);
     });
 
     it('a saved list that can\'t be read is none, and the community the phone is set to still gets it', async () => {

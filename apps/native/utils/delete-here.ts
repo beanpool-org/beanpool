@@ -296,7 +296,7 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
     assertPlainNodeAddress(next);
     await dropFromRecord([here], storage);
     const leftBehind = communityAddress(here);
-    if (leftBehind) await markAlertsOn(leftBehind).catch((e) => console.warn('[Push] Could not clear the alerts choice for the community left', e));
+    if (leftBehind) await markAlertsOn(leftBehind, storage).catch((e) => console.warn('[Push] Could not clear the alerts choice for the community left', e));
     try {
         const { removeCommunityCaches } = await import('./community-cache');
         await removeCommunityCaches([here]);

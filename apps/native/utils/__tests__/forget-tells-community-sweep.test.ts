@@ -65,6 +65,14 @@ describe('a community taken off the phone is told first', () => {
         for (const file of Object.keys(EXCEPTIONS)) expect(removers.map((r) => r.file)).toContain(file);
     });
 
+    it('a switch retries only what is due: a phone set to a community it never registered with may be only looking', () => {
+        const service = code(fs.readFileSync(path.join(NATIVE, 'services/push-notifications.ts'), 'utf8'));
+        expect(service).toMatch(/onCommunitySwitched\(\(\) => \{ void retryDueRegistrations\(/);
+        expect(service).toMatch(/stopRetrying\(\);/);
+        // A return, a join and a restore catch up with the communities never asked.
+        expect(service).toMatch(/retryPushRegistrations\(\): Promise<void> \{\s*return registerWhereMissing\(/);
+    });
+
     it('an address move sends no DELETE and keeps the alerts choice', () => {
         const follow = removers.find((r) => r.file === 'utils/address-follow.ts')!.src;
         expect(follow).toMatch(/\bcarryAlertsOff\s*\(/);

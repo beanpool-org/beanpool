@@ -14,7 +14,8 @@
  *   8. the unlisted host, and the row that goes
  *   9. probation, retention and Delete account count the copy
  *  10. a node that keeps no directory makes a plain post, as an older global would
- *  11. no way to pay with Beans on, where the guard alone stands: a node with a directory and Beans has copies too
+ *  11. no way to pay with Beans on, where the guard alone stands: a node with a directory and Beans has copies too. Each door
+ *      says why, an enterprise's too, and the money limits never read a copy's author
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-offer-copy)
  */

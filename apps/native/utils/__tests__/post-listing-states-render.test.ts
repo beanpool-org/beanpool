@@ -569,3 +569,68 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
         expect(host.textContent).not.toContain('✅ Deal Completed');
     });
 });
+
+/**
+ * A member's copy of a listing on the global community, on the page itself (slice G1′): `eventCopyOf`'s return in post/[id].tsx,
+ * and which listings are offered the tick. The components have their tests (show-on-global-render); this is the wiring.
+ */
+describe("a member's copy on the global community, on the listing's page (slice G1′)", () => {
+    const LINE = "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.";
+    const fromHome = JSON.stringify({ host: 'mullum.example', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask', price: '20 fixed' });
+    const copy = (over: Record<string, unknown> = {}) => listing({ credits: 0, repeatable: 0, author_pubkey: 'hidden', author_callsign: 'another member', shown_from: fromHome, ...over });
+    const onGlobal = () => store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'global', features: { beans: false, escrow: false }, checkedAt: new Date().toISOString() } }));
+    const offered = () => host.querySelector('[data-testid="show-on-global-host"]') !== null;
+    const mine = (over: Record<string, unknown> = {}) => listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign, repeatable: 0, lat: -28.68731, lng: 153.52219, ...over });
+
+    it('a member reads its own screen: the line and the door, nothing of a deal or a person', async () => {
+        onGlobal();
+        await open(copy());
+        expect(host.querySelector('[data-testid="listing-copy"]')).not.toBeNull();
+        expect(host.textContent).toContain(LINE);
+        expect(host.textContent).toContain('Ask to join Mullumbimby');
+        expect(host.querySelector('[data-testid="listing-copy-report"]')).not.toBeNull();
+        for (const never of ['🤝 Accept Offer', 'Message', 'another member', 'hidden']) expect(host.textContent).not.toContain(never);
+    });
+
+    it('with Beans on too, where the page would draw a price and Accept: the same screen, and no 0', async () => {
+        await open(copy());
+        expect(host.querySelector('[data-testid="listing-copy"]')).not.toBeNull();
+        expect(host.textContent).not.toContain('🤝 Accept Offer');
+        expect(host.textContent).not.toMatch(/\b0 Beans\b/);
+    });
+
+    it('its author is told it is theirs, with Stop showing, and no door to their own community', async () => {
+        onGlobal();
+        await open(copy({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
+        expect(host.querySelector('[data-testid="listing-copy-own"]')).not.toBeNull();
+        expect(host.querySelector('[data-testid="listing-copy-remove"]')).not.toBeNull();
+        expect(host.textContent).not.toContain('Ask to join Mullumbimby');
+        await press(host, 'Stop showing');
+        expect(net.calls).toContain('db.deletePost');
+    });
+
+    it('the offer: on the member\'s own public listing with a place, on a local community', async () => {
+        await open(mine());
+        await settle();
+        expect(offered()).toBe(true);
+    });
+
+    for (const [why, row, prep] of [
+        ['group-only', () => mine({ audience_scope: 'group' }), () => {}],
+        ['for one person', () => mine({ audience_scope: 'direct' }), () => {}],
+        ['with no place', () => mine({ lat: null, lng: null }), () => {}],
+        ['someone else\'s', () => listing({ repeatable: 0, lat: -28.68731, lng: 153.52219 }), () => {}],
+        ['an enterprise\'s, to its keeper', () => listing({ repeatable: 0, author_pubkey: ENT, author_callsign: 'Farm Co', lat: -28.68731, lng: 153.52219 }), () => { node.keeperOf = [ENT]; }],
+        ['from a linked community', () => mine({ origin_node: 'https://other.example' }), () => {}],
+        ['already finished', () => mine({ status: 'completed' }), () => {}],
+        ['on the global community itself', () => mine(), onGlobal],
+    ] as const) {
+        it(`no offer on a listing ${why}`, async () => {
+            prep();
+            await open(row());
+            await settle();
+            expect(host.textContent).toContain('Pottery course');
+            expect(offered()).toBe(false);
+        });
+    }
+});

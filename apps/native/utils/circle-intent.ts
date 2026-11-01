@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PLACE_CIRCLE_WORDS, circleKnockReady, circleKnockTrouble, t, type CircleCard, type CircleKnockTrouble } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { communityOrigin } from './community-directory';
-import { cancelledKnocks, rememberKnock, rememberedKnocks, sendKnock } from './knock';
+import { KNOCK_CALLSIGN_CHARS, cancelledKnocks, rememberKnock, rememberedKnocks, sendKnock } from './knock';
 
 const storeKey = (pubkey: string) => `circle-join-intents:${pubkey}`;
 /** The circles whose community refused the knock: the wish is over, and the card goes on saying so. */
@@ -78,7 +78,7 @@ export async function knockForCircle(identity: BeanPoolIdentity, circle: CircleC
     const pubkey = identity.publicKey;
     try {
         const { url, name, key } = circle.community;
-        const sent = await sendKnock(url, identity, { message: t(PLACE_CIRCLE_WORDS.knockMessage), callsign: identity.callsign });
+        const sent = await sendKnock(url, identity, { message: t(PLACE_CIRCLE_WORDS.knockMessage), callsign: Array.from(identity.callsign ?? '').slice(0, KNOCK_CALLSIGN_CHARS).join('') });
         const trouble = circleKnockTrouble(sent);
         if (trouble === 'later') return { sent: false, trouble, said: null };
         await setCircleIntent(pubkey, circle.id, false);

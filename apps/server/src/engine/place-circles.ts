@@ -27,7 +27,10 @@
  *      is below the floor however high the floor is. Each person is in exactly one DEMAND_TILE_DEG tile and each tile has
  *      one number, so no two reads can be subtracted to single anyone out.
  *   3. **Members' cells stay here.** `groups.place_cell` is in no response or push. A circle is `invite_only`, so an
- *      outsider's read of it is the same 404 as no group at all: the only thing an outsider learns is rule 2's number.
+ *      outsider's read of it is the same 404 as no group at all. An outsider learns rule 2's number, and one thing more: a
+ *      published row retires a circle within 25 km, and `helping` drops when it does, so a stranger who publishes rows can
+ *      find a circle's 0.1° cell in under a day. No name, key or IP comes with it, and it ends the circle it finds. Accepted
+ *      (director, #2687 review at 3c0c06eb, told Marty): it is a place for a group of three, tied to no person.
  *
  * ## An open registry
  *

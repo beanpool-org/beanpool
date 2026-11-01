@@ -26,7 +26,7 @@ const sendKnock = vi.fn();
 const rememberKnock = vi.fn(async () => {});
 vi.mock('../knock', () => ({
     sendKnock: (...a: unknown[]) => sendKnock(...a), rememberKnock: (...a: unknown[]) => (rememberKnock as any)(...a),
-    rememberedKnocks: async () => [], cancelledKnocks: async () => ({}),
+    rememberedKnocks: async () => [], cancelledKnocks: async () => ({}), KNOCK_CALLSIGN_CHARS: 20,
 }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
 vi.mock('../node-post', () => ({ signedPost: async () => new Response('{}'), signedDelete: async () => new Response('{}') }));
@@ -101,6 +101,13 @@ describe('Ask to join, the send', () => {
     const retired = { id: 'c1', people: 3, starting: null, doneAt: '2026-11-01T00:00:00.000Z', community: { key: 'k', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks: true } };
     const nothing = { sent: false, trouble: null, said: null };
     beforeEach(() => { store.clear(); sendKnock.mockReset(); rememberKnock.mockClear(); });
+
+    it('a name longer than a knock takes is cut, as every other knock cuts it, so a long name is no refusal', async () => {
+        await setCircleIntent(me.publicKey, retired.id, true);
+        sendKnock.mockResolvedValue({ kind: 'waiting', message: '' });
+        await knockForCircle({ ...(me as object), callsign: 'Ü'.repeat(32) } as never, retired);
+        expect(sendKnock.mock.calls[0][2].callsign).toBe('Ü'.repeat(20));
+    });
     afterEach(() => { store.clear(); });
 
     it('sends one knock, to the community, and two taps at once send one', async () => {

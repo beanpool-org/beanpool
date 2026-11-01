@@ -9,7 +9,7 @@
  * banner offers a plain link to the new address, which the member opens and signs in at.
  */
 
-import { audienceOf } from '@beanpool/core';
+import { audienceOf, isPrivateHost } from '@beanpool/core';
 import { getNodeApiUrl, type CommunityInfo } from './api';
 
 export interface FormerAddressNotice {
@@ -17,6 +17,30 @@ export interface FormerAddressNotice {
     primaryAddress: string;
     /** `https://<primaryAddress>/`, nothing more: no path, no query, nothing of this address's. */
     href: string;
+}
+
+export type MainAddressNotice = FormerAddressNotice;
+
+const DISMISSED_MAIN_ADDRESS_PREFIX = 'bp_main_addr_dismissed_';
+
+/** Whether the notice for `primaryAddress` has been dismissed on this browser. */
+export function isMainAddressDismissed(primaryAddress: string): boolean {
+    if (!primaryAddress) return false;
+    try {
+        return typeof window !== 'undefined' && window.localStorage.getItem(`${DISMISSED_MAIN_ADDRESS_PREFIX}${primaryAddress}`) === '1';
+    } catch {
+        return false;
+    }
+}
+
+/** Dismiss the notice for `primaryAddress` on this browser: held per primary address, so a later move shows again. */
+export function dismissMainAddress(primaryAddress: string): void {
+    if (!primaryAddress) return;
+    try {
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(`${DISMISSED_MAIN_ADDRESS_PREFIX}${primaryAddress}`, '1');
+        }
+    } catch { /* storage disabled or private window */ }
 }
 
 /** A bare host in the form a signature carries it (audienceOf): no scheme, port, path or user, lower case. */
@@ -35,6 +59,26 @@ export function formerAddressNotice(
     const primary = info.primaryAddress;
     if (!isBareHost(primary) || primary === host) return null;
     if (!Array.isArray(info.formerAddresses) || !info.formerAddresses.includes(host)) return null;
+    return { primaryAddress: primary, href: `https://${primary}/` };
+}
+
+/**
+ * When `host` is one of this community's own published addresses, but NOT its primary address, the web app shows
+ * where its main address is now (Fable design §5).
+ *
+ * Never at the primary address, a loopback or LAN host, or when primaryAddress is missing (or itself a LAN host).
+ * Never when `host` is a former address (formerAddressNotice handles that; don't show two banners).
+ */
+export function nonPrimaryAddressNotice(
+    info: Pick<CommunityInfo, 'primaryAddress' | 'addresses' | 'formerAddresses'> | null | undefined,
+    host: string | null,
+): MainAddressNotice | null {
+    if (!info || !host) return null;
+    const primary = info.primaryAddress;
+    if (!isBareHost(primary) || primary === host) return null;
+    if (isPrivateHost(primary) || isPrivateHost(host)) return null;
+    if (!Array.isArray(info.addresses) || !info.addresses.includes(host)) return null;
+    if (Array.isArray(info.formerAddresses) && info.formerAddresses.includes(host)) return null;
     return { primaryAddress: primary, href: `https://${primary}/` };
 }
 

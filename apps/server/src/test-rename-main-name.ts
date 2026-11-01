@@ -21,6 +21,9 @@
  *     while it waits, and never twice; no address in what is pushed. A live tunnel name replaced keeps the critical words:
  *     this node runs one connector, so that name goes dark until slice S2.
  *  6. The public-address agent's own claim copies and tells as Settings' does.
+ *  7. A name on this server's tunnel has no route until that tunnel connects, whatever the registrar says: nobody is told
+ *     before it does, on any of the ways a notice goes out, and a tunnel that cannot start tells nobody and loses nothing
+ *     (the fake cloudflared, /ready as each case needs).
  *
  * Run: SERVER_SUITES_ONLY=test-rename-main-name TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -154,6 +157,8 @@ async function main(): Promise<void> {
     const { setSecurityAlertHandler } = await import('./services/security-signal.js');
     const { audienceStanding, forgetOwnAddresses, primaryAddress, publishedAddresses, formerAddresses, ownerConfirmedAddresses } = await import('./engine/own-addresses.js');
     const { reconcile } = await import('./services/public-address-agent.js');
+    const { getTunnelStatus, resetTunnelConnectorForTests, setTunnelConnectorForTests, syncTunnel, tunnelConnectorForTests } = await import('./services/tunnel-connector.js');
+    const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
     const { initTls } = await import('./services/tls.js');
     const { startP2P } = await import('./p2p.js');
     const https = await import('./https-server.js');
@@ -496,6 +501,100 @@ async function main(): Promise<void> {
         assert(stored().publicAddress?.name === 'byron' && ownerConfirmedAddresses().includes(MULLUM), `the agent's claim copies the old name too (${show(stored().ownerAddresses)})`);
         assert(told.length === 1 && told[0].body === SOFT_BODY, `and tells the members once (${show(told)})`);
     }
+
+    // ── 7 ──
+    console.log('\n— 7. told once the tunnel carries the new name —');
+    const fake = await useFakeCloudflared(path.join(dataDir, 'fake-cloudflared'), { pollStartingMs: 20, pollConnectedMs: 20 });
+    const until = async (cond: () => boolean, ms = 5_000): Promise<boolean> => {
+        const end = Date.now() + ms;
+        while (!cond() && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+        return cond();
+    };
+    /** Past a few of the connector's polls: long enough for a notice that was going to go out. */
+    const polls = () => new Promise((r) => setTimeout(r, 150));
+    const withToken = (name: string) => ({ ...liveAnswer(name), tunnelToken: `T-${name}` });
+    /** `scene`, with no tunnel running and cloudflared's /ready saying it has not connected. */
+    const tunnelScene = async (s: Parameters<typeof scene>[0]) => {
+        scene(s);
+        fake.ready(503);
+        await resetTunnelConnectorForTests();
+    };
+    const due = () => getLocalConfig().addressNoticeDue ?? null;
+    {
+        await tunnelScene({ cf: MULLUM });
+        held.set('byron', withToken('byron'));
+        const n0 = notices().length;
+        const r = await claim('byron');
+        assert(r.status === 200 && r.json?.status === 'live' && (await until(() => tunnelConnectorForTests().runningToken === 'T-byron')),
+            `the claim answers live and the tunnel starts on its token (${r.status} ${show(r.json)})`);
+        await polls();
+        assert(notices().length === n0 && due() === BYRON, `while the tunnel connects nobody is told, and the notice stays due (${show(notices().slice(n0))}, ${due()})`);
+        await statusRead();
+        await reconcile();
+        await polls();
+        assert(notices().length === n0 && due() === BYRON, `nor does a status read or a tick tell before it connects (${show(notices().slice(n0))}, ${due()})`);
+        fake.ready(200);
+        assert(await until(() => notices().length > n0), `the tunnel connects: the members are told without any tick or read (${getTunnelStatus().state})`);
+        assert(notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY && due() === null, `once, in the soft words, and nothing stays due (${show(notices().slice(n0))}, ${due()})`);
+        await polls();
+        await statusRead();
+        await reconcile();
+        assert(notices().length === n0 + 1, `and no later poll, read or tick tells again (${notices().length - n0})`);
+    }
+    {
+        await tunnelScene({ cf: MULLUM });
+        gated.add('byron');
+        const n0 = notices().length;
+        await claim('byron');
+        held.set('byron', withToken('byron'));
+        await reconcile();
+        await polls();
+        assert(stored().publicAddress?.status === 'live' && notices().length === n0 && due() === BYRON,
+            `approved, the tick stores it live and still waits for the tunnel (${stored().publicAddress?.status}, ${show(notices().slice(n0))}, ${due()})`);
+        fake.ready(200);
+        assert(await until(() => notices().length > n0) && notices()[n0].body === SOFT_BODY, `and it connects: told (${show(notices().slice(n0))})`);
+    }
+    {
+        await tunnelScene({ cf: MULLUM });
+        gated.add('byron');
+        const n0 = notices().length;
+        await claim('byron');
+        held.set('byron', withToken('byron'));
+        await statusRead();
+        await polls();
+        assert(stored().publicAddress?.status === 'live' && notices().length === n0 && due() === BYRON,
+            `approved, Settings' read stores it live and still waits for the tunnel (${stored().publicAddress?.status}, ${show(notices().slice(n0))}, ${due()})`);
+        fake.ready(200);
+        assert(await until(() => notices().length > n0) && notices()[n0].body === SOFT_BODY, `and it connects: told (${show(notices().slice(n0))})`);
+    }
+    {
+        // The notice is kept in local config: a restart before the tunnel connects loses nothing.
+        await tunnelScene({ cf: MULLUM });
+        held.set('byron', withToken('byron'));
+        const n0 = notices().length;
+        await claim('byron');
+        await resetTunnelConnectorForTests();
+        assert(notices().length === n0 && due() === BYRON, `a restart before it connects: nobody told, still due (${due()})`);
+        await syncTunnel();
+        fake.ready(200);
+        assert(await until(() => notices().length > n0), 'and the tunnel of the next start tells when it connects');
+    }
+    {
+        // cloudflared can't start: syncTunnel answers, nothing is reachable, and the members are not sent there.
+        await tunnelScene({ cf: MULLUM });
+        setTunnelConnectorForTests({ command: path.join(dataDir, 'no-such-dir', 'cloudflared') });
+        held.set('byron', withToken('byron'));
+        const n0 = notices().length;
+        await claim('byron');
+        await polls();
+        assert(getTunnelStatus().state === 'missing' && notices().length === n0 && due() === BYRON,
+            `a tunnel that cannot start tells nobody, and the notice stays due (${getTunnelStatus().state}, ${show(notices().slice(n0))}, ${due()})`);
+        setTunnelConnectorForTests({ command: process.execPath });
+        fake.ready(200);
+        await syncTunnel();
+        assert(await until(() => notices().length > n0) && notices()[n0].body === SOFT_BODY, `fixed, it connects and the notice goes out (${show(notices().slice(n0))})`);
+    }
+    await resetTunnelConnectorForTests();
 
     await new Promise<void>((r) => registrar.close(() => r()));
     console.log(`\n${testsPassed}/${testsRun} passed`);

@@ -3,11 +3,12 @@
  * scratch/fable-design/DESIGN-rename-primary-name-fable.md §2, §4).
  *
  * A claim that replaces where the community lived keeps the old address (engine/own-addresses.ts keepReplacedAddress), and
- * leaves the members' notice due. They are told once, when the new name is where the community lives (primaryAddress): at
- * the claim when it answers live, or when a gated claim is approved, whichever of the public-address agent's tick and
- * Settings' status read finds that first. Until then nothing is true to say: the name has no route yet. The due name is
- * kept in this server's local config, so a restart between the claim and the approval does not lose it; a standby takes
- * none over and tells nobody.
+ * leaves the members' notice due. They are told once, when the new name is where the community lives (primaryAddress) and
+ * they can reach it: at the claim when it answers live, or when a gated claim is approved, whichever of the public-address
+ * agent's tick and Settings' status read finds that first, and for a name on this server's tunnel not before that tunnel
+ * connects (tunnel-connector.ts tellMembersWhenReachable). Until then nothing is true to say: the name has no route yet.
+ * The due name is kept in this server's local config, so a restart before then does not lose it; a standby takes none
+ * over and tells nobody.
  *
  * The notice is an announcement like any other: the push is the fixed line for `community.notice`, in the phone's language
  * (@beanpool/core push-notice.ts), with no address in it. These words, with the name in them, are the notice's details,

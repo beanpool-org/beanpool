@@ -416,6 +416,7 @@ async function poll(): Promise<void> {
         unauthorizedSince = null;
         setStatus('connected', null, n);
         maybeMoveOrigin();
+        tellMembersWhenReachable();
     } else if (status.state === 'connected') {
         setRetrying(lastError || (n === null ? 'cloudflared does not answer its health check' : 'lost its connection to Cloudflare'));
         say('warn', `no longer connected to Cloudflare (${status.reason})`);
@@ -433,7 +434,7 @@ async function poll(): Promise<void> {
  * Save a registrar answer as the node's address and run what it says. The record of names (engine/registrar-names.ts) is
  * written first, so a name stored until now is kept as a former one when the answer names another. `claim`: the node's
  * own claim answered, so the address it replaces stays this community's (services/address-notice.ts). A name that goes
- * live here is told to the members if a claim left that due.
+ * live here is told to the members if a claim left that due, once they can reach it (tellMembersWhenReachable).
  */
 export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Promise<TunnelStatus> {
     const claimed = use === 'claim' ? registrarHostOf(pa) : null;
@@ -441,8 +442,20 @@ export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Pro
     recordRegistrarAnswer(pa, use);
     const prev = (getNodeConfig() as any).publicAddress;
     updateNodeConfig({ publicAddress: withKeptOrigin(withKeptTunnelToken(pa, prev), prev) } as any);
+    return syncTunnel().then((st) => { tellMembersWhenReachable(); return st; });
+}
+
+/**
+ * Tells the members of a new name, if a notice is due and they can reach it (services/address-notice.ts). A name on this
+ * server's tunnel has no route until that tunnel connects, whatever the registrar says, and syncTunnel only starts it, so
+ * poll() tells then. Runs after syncTunnel, never before: a notice for a tunnel that can't start stays due, and the next
+ * start's tunnel tells. A standby tells nobody.
+ */
+export function tellMembersWhenReachable(): void {
+    if (getNodeRole() !== 'primary') return;
+    const want = wantedToken();
+    if (want && !(running?.token === want && status.state === 'connected')) return;
     tellMembersOfNewAddress();
-    return syncTunnel();
 }
 
 /**

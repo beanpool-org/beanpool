@@ -25,11 +25,11 @@ import Router from '@koa/router';
 import http from 'node:http';
 import { wordsFor } from '@beanpool/core';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex, askNameHolder, isPublicIpv4 } from '../services/registrar-client.js';
-import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
+import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, tellMembersWhenReachable, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration, adminBroadcastAnnouncement, isOwnPublicAddress } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarHostOf, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
 import { dropAddressRequest, nameAskedFor, replacesLiveOwnAddress, storeOwnAddress } from '../services/public-address-agent.js';
-import { claimReplacesAddress, forgetAddressNotice, tellMembersOfNewAddress } from '../services/address-notice.js';
+import { claimReplacesAddress, forgetAddressNotice } from '../services/address-notice.js';
 import { isPublicIpv4Host, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
 import { dropReleasedAddress, primaryAddress, publishedAddresses, publishedBesides } from '../engine/own-addresses.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
@@ -402,9 +402,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             } } as any);
             dropAddressRequest(`the owner claimed "${name}" in Settings`);   // the owner's choice ends what `beanpool claim` asked for at install
             settleUnansweredClaims(name);   // and replaces any claim of another name that got no answer here
-            tellMembersOfNewAddress();
             if (result.tunnelToken) addProbeLog('2/4', `⚡ Starting the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
+            tellMembersWhenReachable();
             if (result.tunnelToken) {
                 const ok = tunnel.state === 'starting' || tunnel.state === 'connected';
                 addProbeLog('3/4', `${ok ? '✅' : '❌'} Tunnel ${describeTunnel(tunnel)}`, ok ? 'success' : 'error');
@@ -414,8 +414,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 });
             }
             // Where the community lives changed: the owners are told. Every member's app is told to follow it when the live
-            // address goes dark, or nothing was kept of it (§7); otherwise they hear of the new name once it is live
-            // (services/address-notice.ts).
+            // address goes dark, or nothing was kept of it (§7); otherwise they hear of the new name once it is live and
+            // they can reach it (services/address-notice.ts).
             if (movesOffLive || (otherName && replaced)) addressChangedByOwner(ctx, 'changed', tunnelGoesDark || !replaced);
             ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
@@ -662,8 +662,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 const origin = prev.origin && (!result.name || !prev.name || result.name === prev.name) ? { origin: prev.origin } : {};
                 const { origin: _dropped, ...kept } = prev;
                 updateNodeConfig({ publicAddress: { ...kept, ...origin, ...result } } as any);
-                tellMembersOfNewAddress();
                 await syncTunnel();
+                tellMembersWhenReachable();
                 ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result), ...serverSide() };
                 return;
             }

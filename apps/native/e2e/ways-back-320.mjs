@@ -24,7 +24,7 @@
  * Account Protection's row (components/CommunityAdminsRow.tsx) offered, turned on just now, on since a date, and kept at a
  * community that no longer offers it.
  *
- * And the shared placement (vault rethink VR4, §4.3): the row offered, on, and "Not finished"; the list with half a copy
+ * And the shared placement (vault rethink VR4, §4.3): the row offered, on, "Not finished", and a Remove that stopped halfway; the list with half a copy
  * at the vault, half a pair, a half no community on this phone owns, one it can't place yet, and halves with no pair at the
  * community they are for; and Restore your account's four rows (components/welcome/RestoreMenu.tsx), in the screen's colours.
  *
@@ -122,7 +122,7 @@ const STUBS = {
 };
 // The shared placement's side of the row (VR4): how the vault's half stands (the page's query), and nothing sealed or sent.
 STUBS['community-recovery'] = `
-    export const COMMUNITY_RECOVERY_TEXT = {};
+    export const COMMUNITY_RECOVERY_TEXT = { offHalfway: "BeanPool's key vault no longer keeps its half, so your admins can't bring you back now. Your community hasn't confirmed it deleted its half: tap Remove to try again." };
     export const sharedCopySide = async () => globalThis.__side ?? null;
     export const sharedCopyState = (status, side) => {
         if (!status) return null;
@@ -130,7 +130,12 @@ STUBS['community-recovery'] = `
         return !status.kept && !status.unopenable && side === 'differs' ? 'unfinished' : null;
     };
     export const turnOnSharedCopy = async () => ({ since: '2026-10-29T04:05:06.000Z' });
-    export const removeSharedCopy = async () => {};
+    // copy=shared-stops: the vault deletes its half, and the community's side stops.
+    export const removeSharedCopy = async () => {
+        if (!globalThis.__removeStops) return;
+        globalThis.__side = 'none';
+        throw new Error(COMMUNITY_RECOVERY_TEXT.offHalfway);
+    };
 `;
 const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet', 'LocalAuth', 'copies-rule', 'community-copy', 'community-recovery']);
 const stubFor = (spec) => {
@@ -144,7 +149,7 @@ const entry = path.join(work, 'entry.tsx');
 fs.writeFileSync(entry, `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { View, Text } from 'react-native';
+import { Alert, View, Text } from 'react-native';
 import { t } from '@beanpool/core';
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { RestoreMenu } from ${JSON.stringify(path.join(NATIVE, 'components/welcome/RestoreMenu'))};
@@ -176,11 +181,14 @@ const hasWords = q.get('words') !== 'none';
 globalThis.__offered = q.get('offered') !== 'no';
 // A copy it keeps but can't open (#2626): its key gone (copy=cantopen-key), or another key in its place (copy=cantopen-other).
 const CANT_OPEN = { 'cantopen-key': 'recovery_seal_key_missing', 'cantopen-other': 'recovery_seal_unopenable' }[q.get('copy') || ''];
-// The shared placement (VR4): offered here, on with both halves, and half a pair ("Not finished").
+// The shared placement (VR4): offered here, on with both halves, half a pair ("Not finished"), and on with a Remove that will stop halfway.
 const SHARED = { offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), since: null, kept: false, placement: null, copy: null };
 const HALF_HERE = { ...SHARED, kept: true, since: '2026-10-29T04:05:06.000Z', placement: 'shared', copy: 'digest' };
-const shared = { 'shared-off': [SHARED, 'none'], 'shared-on': [HALF_HERE, 'matches'], 'shared-half': [HALF_HERE, 'none'] }[q.get('copy') || ''];
+const shared = { 'shared-off': [SHARED, 'none'], 'shared-on': [HALF_HERE, 'matches'], 'shared-half': [HALF_HERE, 'none'], 'shared-stops': [HALF_HERE, 'matches'] }[q.get('copy') || ''];
 if (shared) globalThis.__side = shared[1];
+globalThis.__removeStops = q.get('copy') === 'shared-stops';
+// react-native-web's Alert draws nothing: here the member says yes.
+Alert.alert = (_title, _body, buttons) => { buttons?.find((b) => b.style === 'destructive')?.onPress?.(); };
 globalThis.__copy = shared ? shared[0] : q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
     : CANT_OPEN ? { kept: false, since: null, offered: globalThis.__offered, unopenable: { since: '2026-10-29T04:05:06.000Z', reason: CANT_OPEN } }
     : { kept: false, since: null, offered: globalThis.__offered };
@@ -570,6 +578,12 @@ try {
         await page.getByRole('button', { name: 'Turn on' }).click();
         await page.getByText(/If you lose this phone, go and see one of your admins/).waitFor();
         await measure(`${scheme} · Account Protection, your community's admins, turned on just now`);
+        // A Remove that stopped halfway (#2683 deciding pass): the longest line this row says, under "Not finished".
+        await open(`place=admins&copy=shared-stops&offered=no&scheme=${scheme}`);
+        await page.getByRole('button', { name: 'Remove' }).click();
+        await page.getByText(/no longer keeps its half/).waitFor();
+        await page.getByText(/Not finished: tap to try again/).waitFor();
+        await measure(`${scheme} · Account Protection, your community's admins, half and half, a Remove that stopped halfway`);
 
         // Restore your account's four rows (VR4).
         await open(`place=restore&scheme=${scheme}`);

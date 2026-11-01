@@ -257,7 +257,7 @@ for (const dark of [false, true]) {
             expect(byId('shopfront-about')?.textContent).toContain(ABOUT);
             const tiles = Array.from(byId('shopfront-featured')!.querySelectorAll('[data-testid^="shopfront-featured-"]')).map((e) => e.getAttribute('data-testid'));
             expect(tiles).toEqual(['shopfront-featured-p2', 'shopfront-featured-p1']);
-            expect(byId('shopfront-featured-p1')?.querySelector('img')?.getAttribute('src')).toBe(`${NODE}/api/marketplace/posts/p1/photos/0?size=thumb`);
+            expect(byId('shopfront-featured-p1')?.querySelector('img')?.getAttribute('src')).toBe(`${NODE}/api/marketplace/posts/p1/photos/0?size=thumb2`);
             expect(styleOf(byId('shopfront-featured-p1')).width).toBe(136);
             expect(byId('shopfront-together')?.textContent).toContain('What we do together');
             expect(byId('shopfront-section-toBuy')?.textContent).toContain('To buy (2)');

@@ -21,6 +21,9 @@
  *   4. an own address as the node stores it (`beanpool claim --ip` / `--address`, services/public-address-agent.ts
  *      storeOwnAddress): an IP in publicAddress is this node's own address and the directory's publicUrl; a domain given
  *      later takes over as the publicUrl, and the IP stays this community's
+ *   5. CF_RECORD_NAME stays a published own name whenever set (rename S1, design
+ *      scratch/fable-design/DESIGN-rename-primary-name-fable.md §2): beside every stored address, in every spelling, and
+ *      the outputs in 1 stay as they were. Blank adds nothing; marked lost, it is refused
  *
  * Other code that reads the address for another purpose, and is NOT this resolver's caller (left as it was):
  *   - routes/messaging.ts (a relayed message's `senderNodeUrl`): CF_RECORD_NAME, else the community's name squashed
@@ -38,7 +41,7 @@ import {
     initStateEngine, getNodeConfig, updateNodeConfig, getDirectoryInfo, lostRegistrarHosts, resolvePublicNodeUrl,
     PUBLIC_URL_RULES, type NodeConfig,
 } from './state-engine.js';
-import { audienceStanding, configuredAddresses, forgetOwnAddresses, knowsItsNames } from './engine/own-addresses.js';
+import { audienceStanding, configuredAddresses, forgetOwnAddresses, knowsItsNames, primaryAddress, publishedAddresses } from './engine/own-addresses.js';
 import { ownPublicEpochUrl, IDENTITY_EPOCH_PATH } from './services/identity-epoch.js';
 import { storeOwnAddress } from './services/public-address-agent.js';
 
@@ -286,6 +289,36 @@ async function main(): Promise<void> {
     const domain = storeOwnAddress('beans.example.org', 'this suite');
     assert(domain.ok && getDirectoryInfo().publicUrl === 'https://beans.example.org' && audienceStanding('203.0.113.5') === 'own',
         `a domain given later is the directory's publicUrl, and the IP stays this community's (${show(getDirectoryInfo().publicUrl)})`);
+
+    console.log('\n--- 5. CF_RECORD_NAME stays a published own name whenever set (rename S1) ---');
+    const STORED: [string, unknown][] = [
+        ['a registrar name by tunnel', tunnel], ['a registrar name, direct', direct], ['a claim still pending', pending],
+        ['an own IP', { mode: 'ip', hostname: '203.0.113.5', status: 'live' }], ['an own domain', { mode: 'own', hostname: 'beans.example.org', status: 'live' }],
+        ['nothing', null],
+    ];
+    const SPELLED = [FLEET, 'mullum', `https://${FLEET}/`, `http://${FLEET}`, `  ${FLEET}  `];
+    for (const [what, publicAddress] of STORED) {
+        for (const cf of SPELLED) {
+            apply({ name: what, publicAddress, env: { CF_RECORD_NAME: cf }, want: all(null) });
+            updateNodeConfig({ ownerAddresses: [] } as any);
+            forgetOwnAddresses();
+            const entry = configuredAddresses().find((a) => a.address === FLEET);
+            assert(entry?.source === 'public-address' && !entry.former && !entry.lost, `beside ${what}, CF_RECORD_NAME ${show(cf)} is item 1 (${show(entry)})`);
+            assert(publishedAddresses().includes(FLEET), `beside ${what}, it is published (${show(publishedAddresses())})`);
+            assert(audienceStanding(FLEET) === 'own', `beside ${what}, a signature for it is this community's (got ${audienceStanding(FLEET)})`);
+        }
+    }
+    for (const [what, publicAddress] of STORED) {
+        apply({ name: what, publicAddress, env: { CF_RECORD_NAME: '   ' }, want: all(null) });
+        assert(!configuredAddresses().some((a) => a.address === FLEET), `CF_RECORD_NAME blank beside ${what}: nothing added`);
+        apply({ name: what, publicAddress, lost: [FLEET], env: { CF_RECORD_NAME: FLEET }, want: all(null) });
+        assert(!publishedAddresses().includes(FLEET) && audienceStanding(FLEET) === 'foreign', `the name marked lost beside ${what}: never published, refused (got ${audienceStanding(FLEET)})`);
+    }
+    apply({ name: 'both', publicAddress: tunnel, env: { CF_RECORD_NAME: FLEET }, want: all(null) });
+    assert(primaryAddress() === REG, `the live registrar name is still the main one (${primaryAddress()})`);
+    assert(getDirectoryInfo().publicUrl === `https://${REG}`, `and the directory's publicUrl is unchanged (${getDirectoryInfo().publicUrl})`);
+    assert(configuredAddresses().filter((a) => a.source === 'public-address').map((a) => a.address).join() === `${REG},${FLEET}`,
+        `each once, the stored name first (${show(configuredAddresses())})`);
 
     console.log('\nThe table (for the PR):');
     console.log(table.join('\n'));

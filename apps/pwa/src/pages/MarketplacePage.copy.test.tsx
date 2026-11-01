@@ -6,7 +6,7 @@
  * The cards, sheets and modals the page draws are stubbed, as in MarketplacePage.deal-open.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
@@ -95,6 +95,14 @@ describe("a member's copy, opened by a member of the global community", () => {
         expect(document.body.textContent).not.toContain('another member');
         expect(document.body.textContent).not.toContain('hidden');
         expect(document.body.textContent).not.toMatch(/\bMessage\b/);
+    });
+
+    it('Report opens the report on this post', async () => {
+        stubNode([copy]);
+        await open('copy-1');
+        expect(screen.queryByRole('button', { name: /Submit Report/i })).toBeNull();
+        fireEvent.click(screen.getByTestId('listing-copy-report'));
+        expect(await screen.findByRole('button', { name: /Submit Report/i })).toBeInTheDocument();
     });
 
     it("its author is told it is theirs, and offered neither the door nor a report on themselves", async () => {

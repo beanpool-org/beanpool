@@ -51,6 +51,7 @@ import {
     emergencySuspendMember,
     haltDecision,
     takeDownDecisionReply,
+    ownerDecideRemoval,
     liftMemberSuspension,
     acknowledgeShutdownStatus,
     fetchDiskHealth,
@@ -69,7 +70,12 @@ import {
     setOwnAddress,
     forgetStandby,
     passwordNeeds2faError,
+    getReplicationTokenStatus,
+    generateReplicationToken,
+    setReplicationTokenMode,
+    clearReplicationToken,
 } from './node-client';
+import { FreshProofRequiredError } from './fresh-proof';
 
 /** An Offer's photo as the Manager sends it: the node refuses a new Offer with none. */
 const PHOTO = 'data:image/jpeg;base64,cmVzaXplZA==';
@@ -203,6 +209,157 @@ describe('resolveNodeApiUrl', () => {
         const url = resolveNodeApiUrl('https://node.beanpool.org', '/api/local/admin/onboarding-funnel', { days: '30' });
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
 
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('replication token helpers', () => {
+    it('getReplicationTokenStatus posts to /api/local/admin/replication-token/status with auth headers and body password', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ hasToken: true, tokenOnly: false, createdAt: '2026-10-31T00:00:00.000Z' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const status = await getReplicationTokenStatus('https://node.example.com', 'admin-pass', 'tfa-sess-123');
+        expect(status).toEqual({ hasToken: true, tokenOnly: false, createdAt: '2026-10-31T00:00:00.000Z' });
+        expect(fetchMock).toHaveBeenCalledWith(
+            resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/status'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-pass',
+                    'X-Admin-2FA-Session': 'tfa-sess-123',
+                }),
+                body: JSON.stringify({ password: 'admin-pass' }),
+            })
+        );
+
+        vi.unstubAllGlobals();
+    });
+
+    it('getReplicationTokenStatus throws when HTTP status is not ok', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 500,
+            statusText: 'Internal Server Error',
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(getReplicationTokenStatus('https://node.example.com')).rejects.toThrow('HTTP 500: Internal Server Error');
+        vi.unstubAllGlobals();
+    });
+
+    it('generateReplicationToken posts to /api/local/admin/replication-token/generate and returns token', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ success: true, token: 'rep_tok_abc123' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await generateReplicationToken('https://node.example.com', 'admin-pass', 'tfa-sess-123');
+        expect(res).toEqual({ success: true, token: 'rep_tok_abc123' });
+        expect(fetchMock).toHaveBeenCalledWith(
+            resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/generate'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-pass',
+                    'X-Admin-2FA-Session': 'tfa-sess-123',
+                }),
+                body: JSON.stringify({ password: 'admin-pass' }),
+            })
+        );
+
+        vi.unstubAllGlobals();
+    });
+
+    it('generateReplicationToken throws custom error body message on non-ok status', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 403,
+            statusText: 'Forbidden',
+            json: async () => ({ error: 'Only owners can generate replication tokens' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(generateReplicationToken('https://node.example.com')).rejects.toThrow('Only owners can generate replication tokens');
+        vi.unstubAllGlobals();
+    });
+
+    it('setReplicationTokenMode posts tokenOnly mode and returns updated status', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ success: true, tokenOnly: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await setReplicationTokenMode('https://node.example.com', true, 'admin-pass', 'tfa-sess-123');
+        expect(res).toEqual({ success: true, tokenOnly: true });
+        expect(fetchMock).toHaveBeenCalledWith(
+            resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/mode'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-pass',
+                    'X-Admin-2FA-Session': 'tfa-sess-123',
+                }),
+                body: JSON.stringify({ tokenOnly: true, password: 'admin-pass' }),
+            })
+        );
+
+        vi.unstubAllGlobals();
+    });
+
+    it('setReplicationTokenMode throws fallback HTTP status error when response body is empty', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 502,
+            statusText: 'Bad Gateway',
+            json: async () => {
+                throw new Error('invalid json');
+            },
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(setReplicationTokenMode('https://node.example.com', false)).rejects.toThrow('HTTP 502: Bad Gateway');
+        vi.unstubAllGlobals();
+    });
+
+    it('clearReplicationToken posts to /api/local/admin/replication-token/clear and returns success', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await clearReplicationToken('https://node.example.com', 'admin-pass', 'tfa-sess-123');
+        expect(res).toEqual({ success: true });
+        expect(fetchMock).toHaveBeenCalledWith(
+            resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/clear'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-pass',
+                    'X-Admin-2FA-Session': 'tfa-sess-123',
+                }),
+                body: JSON.stringify({ password: 'admin-pass' }),
+            })
+        );
+
+        vi.unstubAllGlobals();
+    });
+
+    it('clearReplicationToken throws custom error body message on non-ok status', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            json: async () => ({ error: 'No replication token set' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(clearReplicationToken('https://node.example.com')).rejects.toThrow('No replication token set');
         vi.unstubAllGlobals();
     });
 });
@@ -654,6 +811,18 @@ describe('node admin decisions and suspensions', () => {
         expect(init.method).toBe('POST');
         expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
         expect(JSON.parse(init.body)).toEqual({ reason: "It gave a member's address", password: 'adminpw' });
+    });
+
+    it('ownerDecideRemoval sends POST with the reason and the code, and turns a refusal asking the phone into the fresh proof error', async () => {
+        await ownerDecideRemoval('https://node.test', 'dec-790', 'Only two could vote and both saw it', 'adminpw', 'tfa-1', '123456');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/decisions/dec-790/owner-decision');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Only two could vote and both saw it', code: '123456', password: 'adminpw' });
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({ error: 'Do this from your phone', code: 'phone_required', phoneRequired: true }) });
+        await expect(ownerDecideRemoval('https://node.test', 'dec-790', 'Only two could vote and both saw it')).rejects.toBeInstanceOf(FreshProofRequiredError);
     });
 
     it('liftMemberSuspension sends POST to reactivate member', async () => {

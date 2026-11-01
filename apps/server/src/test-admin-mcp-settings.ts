@@ -360,6 +360,7 @@ async function main(): Promise<void> {
 
         const reads = AGENT_TOOLS.filter(t => !t.write);
         const argsFor = (name: string): Record<string, unknown> => name === 'report_get' ? { report_id: r1!.id }
+            : name === 'tags_search' ? { q: 'lemon' }
             : name === 'reports_list' ? { include_text: true, status: 'all' } : name === 'knocks_list' ? { include_text: true } : {};
         // Answers that move between two calls on their own: the clock, the process's memory, the disk (a CI runner's moved
         // 42 → 41 % between the two reads and failed #2508 and #2511).

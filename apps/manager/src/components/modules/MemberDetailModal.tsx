@@ -148,7 +148,8 @@ export function MemberDetailModal({
     // Until the node has said which, neither is offered: the node refuses them anyway.
     // `pausedRole`: the owner or admin role a pause holds aside. The members list gives a paused member no role (nodeRole null),
     // but the server still counts it, and the pause's own vote carries it (params.serverRole).
-    const [doors, setDoors] = useState<{ votesOn: boolean; settlesRemoval: boolean; pausedRole: MemberNodeRole | null } | null>(null);
+    // `decidedByOwner`: too few could vote, so an owner decided the removal Offboard settles: no vote passed it (S6).
+    const [doors, setDoors] = useState<{ votesOn: boolean; settlesRemoval: boolean; decidedByOwner: boolean; pausedRole: MemberNodeRole | null } | null>(null);
     useEffect(() => {
         if (!nodeUrl || !pubkey) {
             setDoors(null);
@@ -160,10 +161,10 @@ export function MemberDetailModal({
             fetchAdminDecisions(nodeUrl, adminPassword, tfaToken).catch(() => []),
         ]).then(([votesOn, decisions]) => {
             if (!live) return;
-            const settlesRemoval = decisions.some((d) => d.effect === 'remove_member' && d.status === 'execution_pending_grace' && d.subject === pubkey);
+            const inGrace = decisions.find((d) => d.effect === 'remove_member' && d.status === 'execution_pending_grace' && d.subject === pubkey);
             const heldRoles = decisions.map((d) => (d.effect === 'remove_member' && d.subject === pubkey ? d.params?.serverRole : null));
             const pausedRole = heldRoles.find((r): r is 'owner' | 'admin' => r === 'owner' || r === 'admin') ?? null;
-            setDoors({ votesOn, settlesRemoval, pausedRole });
+            setDoors({ votesOn, settlesRemoval: !!inGrace, decidedByOwner: !!inGrace?.ownerDecisionCarriedAt, pausedRole });
         });
         return () => { live = false; };
     }, [nodeUrl, pubkey, adminPassword, tfaToken]);
@@ -211,7 +212,7 @@ export function MemberDetailModal({
                 : res.decision?.params?.serverRole
                     ? `Suspended until ${closes}. Members vote on removing them, but no vote removes an owner or admin: the suspension lifts when the vote closes, whatever it decides.`
                 : res.decision?.effect === 'remove_member'
-                    ? `Suspended. Members now vote until ${closes} on removing them; if the vote doesn't pass, the suspension lifts by itself.`
+                    ? `Suspended. Members now vote until ${closes} on removing them; if the vote doesn't pass, the suspension lifts by itself, unless too few members can vote and an owner decides it.`
                     : `Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
             onSuspensionChanged?.();
         } catch (e: unknown) {
@@ -288,7 +289,9 @@ export function MemberDetailModal({
     //  - An owner or admin, live or held aside by a pause: no vote removes one; an owner takes the role away first.
     //  - Anyone else, a moderator included: the suspension opens the vote.
     const removalNote = doors?.settlesRemoval
-        ? t("Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now.")
+        ? doors.decidedByOwner
+            ? t("Removing a member is the community's vote here, but too few could vote on this one, so an owner decided it: Offboard settles their Beans and completes the removal now.")
+            : t("Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now.")
         : memberStatus === 'suspended'
             ? t("Removing a member is the community's vote here. They are suspended with no vote open, usually because a re-key code holds their key. End that first: cancel the code on Re-Key (if it has run out, make a new code and cancel that), and use Lift suspension if they are still suspended or no code holds their key. After that, suspending them opens the vote. No vote removes an owner or admin, and the community's only owner cannot be suspended until another owner is added.")
             : effectiveIsSoleOwner
@@ -712,7 +715,8 @@ export function MemberDetailModal({
                                     ) : (
                                         <p className="m-0 text-nature-300">
                                             Suspends <strong>{displayName}</strong> now. Members then vote for 7 days on removing them; if the
-                                            vote doesn't pass, the suspension lifts by itself.
+                                            vote doesn't pass, the suspension lifts by itself, unless too few members can vote and an owner
+                                            decides it.
                                         </p>
                                     )}
                                     <label htmlFor="suspend-reason" className="block font-bold text-nature-300">
@@ -722,15 +726,17 @@ export function MemberDetailModal({
                                         id="suspend-reason"
                                         value={suspendReason}
                                         onChange={(e) => setSuspendReason(e.target.value)}
+                                        // The code box re-sends the words of the press that opened it: they hold still while it shows.
+                                        disabled={!!suspendProof.refusal}
                                         rows={3}
-                                        className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2"
+                                        className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2 disabled:opacity-60"
                                     />
                                     <p className={`m-0 text-[11px] ${suspendReasonTrimmed.length >= MIN_SUSPEND_REASON ? 'text-nature-500' : 'text-amber-400'}`}>
                                         At least {MIN_SUSPEND_REASON} characters ({suspendReasonTrimmed.length} so far)
                                     </p>
                                     <div className="flex flex-wrap justify-end gap-2">
                                         <button
-                                            onClick={() => { setShowSuspend(false); setSuspendReason(''); setSuspendError(null); }}
+                                            onClick={() => { setShowSuspend(false); setSuspendReason(''); setSuspendError(null); suspendProof.close(); }}
                                             disabled={suspendBusy}
                                             className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-semibold text-[11px]"
                                         >
@@ -864,7 +870,9 @@ export function MemberDetailModal({
                                     onClick={() => setShowOffboardWizard(true)}
                                     className="px-3 py-2 rounded-xl font-bold transition-all border bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border-red-800 text-[11px]"
                                     title={doors?.settlesRemoval
-                                        ? 'Settle their Beans, and complete the removal the community voted for now'
+                                        ? doors.decidedByOwner
+                                            ? 'Settle their Beans, and complete the removal an owner decided now'
+                                            : 'Settle their Beans, and complete the removal the community voted for now'
                                         : 'Offboard member: donate/gift surplus or formally write off debt before pruning'}
                                 >
                                     <span>🚪 Offboard</span>

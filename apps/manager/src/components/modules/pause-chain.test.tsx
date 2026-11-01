@@ -78,6 +78,27 @@ describe('Suspend: the chain rules refuse in the node\'s words (removal S4)', ()
         await waitFor(() => expect(sent.map((s) => s.body.code)).toEqual([undefined, '123456']));
         expect(sent.every((s) => s.body.reason === 'A wave of spam from new accounts')).toBe(true);
     });
+
+    it('the code re-sends the words it was asked for, so they hold still while its box shows; cancelling frees them', async () => {
+        mockNode([[401, TRIP_CODE_ASK]]);
+        pressSuspend('A wave of spam from new accounts', 'pw');
+        await screen.findByTestId('suspend-proof-code');
+        const reason = screen.getByLabelText('Reason (members will see this)');
+        expect(reason).toBeDisabled();
+        fireEvent.click(screen.getByTestId('suspend-proof-cancel'));
+        expect(reason).toBeEnabled();
+    });
+
+    it('Cancel on the form takes the code box with it: the words it cancelled can\'t be sent, and the next ones aren\'t locked', async () => {
+        mockNode([[401, TRIP_CODE_ASK]]);
+        pressSuspend('A wave of spam from new accounts', 'pw');
+        await screen.findByTestId('suspend-proof-code');
+        const [, formCancel] = screen.getAllByRole('button', { name: 'Cancel' });
+        fireEvent.click(formCancel);
+        expect(screen.queryByTestId('suspend-proof-code')).toBeNull();
+        fireEvent.click(screen.getByText('⏸️ Suspend'));
+        expect(screen.getByLabelText('Reason (members will see this)')).toBeEnabled();
+    });
 });
 
 describe('Alerts: the owners\' line about pauses (removal S4)', () => {

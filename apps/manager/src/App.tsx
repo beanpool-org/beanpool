@@ -1708,6 +1708,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         activeNode={activeNode}
                                         nodeData={nodeData}
                                         tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                        rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                         initialSubTab={(navSubTab as any) || 'enterprises'}
                                         onSubTabChange={setNavSubTab}
                                         onRefresh={() => {

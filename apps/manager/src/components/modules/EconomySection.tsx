@@ -27,11 +27,14 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { OfferPhotoPicker } from '../common/OfferPhotoPicker';
 import { nodeCredential } from '../../lib/profiles';
 import { useInPageConfirm } from '../common/InPageConfirm';
+import type { RolesViewer } from './NodeRolesPanel';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
     nodeData?: NodeDataPayload | null;
     tfaToken?: string;
+    /** Who is looking at /settings (the Decisions list offers owners an owner's decision). */
+    rolesViewer?: RolesViewer;
     onRefresh: () => void;
     initialSubTab?: 'enterprises' | 'decisions' | 'pool' | 'disputes';
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
@@ -74,6 +77,7 @@ export function EconomySection({
     activeNode,
     nodeData,
     tfaToken,
+    rolesViewer = { kind: 'password' },
     onRefresh,
     initialSubTab = 'enterprises',
     onSubTabChange,
@@ -716,7 +720,7 @@ export function EconomySection({
             {/* Subtab: Commons proposals */}
             {subTab === 'decisions' && (
                 <div className="space-y-6">
-                    <DecisionsAdminPanel activeNode={activeNode} tfaToken={effectiveTfaToken} />
+                    <DecisionsAdminPanel activeNode={activeNode} tfaToken={effectiveTfaToken} viewer={rolesViewer} />
 
                     {/* Proposed Projects */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">

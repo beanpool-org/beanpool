@@ -95,6 +95,7 @@ A community can move to a new address: for example, from its server's number (su
 - Tap **Not now**, and the card asks again in 7 days. Your phone never moves by itself.
 - If the new address answers as a different community, the app says **This phone stays where it is**, and keeps the address it has. If the check can't be made, it says **Nothing has changed. Try again in a little while.**
 - If the old address stopped answering before your phone heard of the new one, nothing can tell your phone where the community went. Ask its owners for the new address, then tap the bean, then **Add a community**, and type it there.
+- In the web app, at an address the community still answers to, a quiet line at the top tells you where its main address is now: **This community's main address is now ‹address›. This address keeps working.** You can open it there, or link your browser from your phone.
 
 ## Forgetting a community on this phone
 

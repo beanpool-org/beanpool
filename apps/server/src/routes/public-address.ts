@@ -390,7 +390,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
             // Before the stored address changes: where the community lives until now stays one of its addresses. A live
-            // tunnel name goes dark, as this server runs one connector until slice S2, so it gets its own words below.
+            // tunnel name keeps its own tunnel beside the new one; one with no tunnel to keep gets its own words below.
             const tunnelGoesDark = claimTakesTunnelDark(claimed);
             const replaced = claimReplacesAddress(claimed);
             // Recorded before the stored address changes: a name held until now is kept, as former.
@@ -562,6 +562,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 return;
             }
             dropReleasedAddress(host);
+            // Written on the name, so its tunnel stops: the registrar has just deleted it.
+            recordRegistrarAnswer(result, 'status');
+            await syncTunnel();
             console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result.status})`);
             noteSecurityEvent({ key: 'sec.address', detail: OWNER_ALERT_WORDS.nameReleased, ...actingAs(ctx.state) });
             ctx.body = { success: true, name, status: result.status, addressUnchanged: publicAddressGeneration() === since };
@@ -795,6 +798,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // answer gives it (held_until), and none when it gives none: then the registrar freed the name at once.
             // Recorded before the stored address goes.
             recordRegistrarAnswer(result, 'released');
+            // A registrar that does not read the name released another one: what the owner took offline stops here all the
+            // same, and its tunnel with it, as the name is no longer one this community keeps up (tunnel-connector.ts).
+            const answered = registrarHostOf(result);
+            if (answered && answered !== registrarHostOf(prevConfig)) recordRegistrarAnswer({ name: prevConfig?.name, hostname: hostname, status: 'released' }, 'status');
             updateNodeConfig({ publicAddress: null } as any);
             dropReleasedAddress(registrarHostOf(prevConfig));
             forgetAddressNotice();

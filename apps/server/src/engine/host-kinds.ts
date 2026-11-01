@@ -79,6 +79,15 @@ export function isCertifiableHost(host: string): boolean {
     return !/^\d+$/.test(tld) && !NON_PUBLIC_TLDS.has(tld);
 }
 
+/**
+ * The first of `hosts` to send newcomers to: a name before an IP address (a name survives a change of server, a number does
+ * not), and only a host the Internet can reach before one on the home network. Null for none.
+ */
+export function preferredAddress(hosts: readonly string[]): string | null {
+    const reachableFromInternet = (a: string) => isBeanPoolName(a) || isCertifiableHost(a);
+    return hosts.find((a) => !isIpLiteral(a) && reachableFromInternet(a)) ?? hosts.find(reachableFromInternet) ?? hosts[0] ?? null;
+}
+
 /** A public IPv4 address as `beanpool claim --ip` and Settings take it: dotted, certifiable (above). */
 export function isPublicIpv4Host(host: string): boolean {
     return /^[\d.]+$/.test(host) && isCertifiableHost(host);

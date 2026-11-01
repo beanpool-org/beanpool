@@ -14,8 +14,8 @@
  * (@beanpool/core push-notice.ts), with no address in it. These words, with the name in them, are the notice's details,
  * in English as every notice a node writes is.
  *
- * Not sent when the old address does not keep working: a live tunnel name replaced goes dark, as the server runs one
- * connector, until one connector per name (slice S2). routes/public-address.ts says the critical words for that one.
+ * Not sent when the old address does not keep working: a live tunnel name with no token saved has no tunnel to keep
+ * (claimTakesTunnelDark). routes/public-address.ts says the critical words for that one.
  */
 
 import { word, wordsFor } from '@beanpool/core';
@@ -37,13 +37,13 @@ function setDue(host: string | null): void {
 }
 
 /**
- * Whether a claim of `claimed`, once stored, takes this server's live tunnel name dark: it runs one connector, so another
- * name stored stops that name's tunnel, until slice S2. A direct name's record stays at the address service. Asked before
- * the stored address changes.
+ * Whether a claim of `claimed`, once stored, leaves this server's live tunnel name dark. A name with a token keeps its own
+ * child beside the new one (tunnel-connector.ts, rename S2); one with no token saved (the registrar answered live with
+ * none) has no child to keep. A direct name's record stays at the address service. Asked before the stored address changes.
  */
 export function claimTakesTunnelDark(claimed: string): boolean {
     const pa = (getNodeConfig() as any).publicAddress;
-    return !!pa?.name && pa.status === 'live' && pa.mode !== 'direct' && registrarHostOf(pa) !== claimed;
+    return !!pa?.name && pa.status === 'live' && pa.mode !== 'direct' && registrarHostOf(pa) !== claimed && !pa.tunnelToken;
 }
 
 /**

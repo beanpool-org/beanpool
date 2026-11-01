@@ -10,10 +10,11 @@
  *   3. the app icon: a push's badge is `unread`, so the number on the icon and the number here are one
  *   4. a hidden event chat: not counted while it is hidden from them, counted again once it is not
  *   5. who is answered: the signer and nobody else. Unsigned 401; another member's signature on a key 403; a key with no
- *      row, a visitor's row, a closed account and a replaced key 403; a suspended member reads their own; a key named in the
- *      query changes nothing; a replayed request and one signed for another community are refused. The checks hold with
- *      read auth on and opted out (the `readauth-off` run), as the memory read-auth-conversation-hole asks: with it opted
- *      out the route's own checks are all there is
+ *      row, a visitor's row, a closed account and a replaced key 403 (a visitor's own list stays its to read, which the web
+ *      app's badge falls back on); a paused member reads their own; a key named in the query changes nothing; a replayed
+ *      request and one signed for another community are refused. The checks hold with read auth on and opted out (the
+ *      `readauth-off` run, on a local node: a global node won't start with it off), as the memory
+ *      read-auth-conversation-hole asks: with it opted out the route's own checks are all there is
  *   6. the nonce share (member-signature.ts): 60 reads at once, with the throttle and the nonce store as they ship, are
  *      all answered for an established member and for a newcomer, one nonce each. A phone asks at most 12 an hour
  *   7. requests off (the `local` run): `requests` is 0, the list has none, and a request ignored while they were on stays
@@ -24,6 +25,8 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.EXPO_ACCESS_TOKEN;
+const HOST = 'mullum.test';
+process.env.BEANPOOL_ADDRESSES = HOST;
 const LOCAL_RUN = process.env.UNREAD_LOCAL_NODE === '1';
 if (LOCAL_RUN) delete process.env.NODE_PROFILE; else process.env.NODE_PROFILE = 'global';
 
@@ -38,7 +41,6 @@ function assert(cond: boolean, msg: string): void {
 }
 const DAY = 86_400_000;
 const ROUTE = '/api/me/unread';
-const HOST = 'localhost';
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 const iso = (ms: number) => new Date(ms).toISOString();
 const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); await new Promise(r => setTimeout(r, 50)); };
@@ -174,7 +176,7 @@ async function main(): Promise<void> {
     const asOf = Date.parse(answer.body?.asOf);
     assert(JSON.stringify(Object.keys(answer.body ?? {}).sort()) === JSON.stringify(['asOf', 'requests', 'unread']),
         `three fields and no others (${show(answer)})`);
-    assert(new Date(asOf).toISOString() === answer.body?.asOf && asOf >= before - 1 && asOf <= after + 1,
+    assert(Number.isFinite(asOf) && new Date(asOf).toISOString() === answer.body?.asOf && asOf >= before - 1 && asOf <= after + 1,
         `asOf is the moment of the count, in ISO 8601 (${answer.body?.asOf})`);
     assert(answer.headers.get('cache-control') === 'private, no-store', `private and never stored (${answer.headers.get('cache-control')})`);
     assert(answer.headers.get('etag') === null, `no tag to keep it by (${answer.headers.get('etag')})`);
@@ -245,7 +247,7 @@ async function main(): Promise<void> {
     } as any)!;
     ensureEventThread(eventPost.id);
     db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(eventPost.id, ann.pk);
-    se.sendMessage(eventPost.id, cy.pk, 'See you there', '');
+    se.postEventThreadMessage(eventPost.id, cy.pk, 'See you there');
     await counted(ann, 'a line in the chat of an event she is going to', { unread: 1, requests: 0 });
     db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(iso(Date.now()), eventPost.id);
     await counted(ann, 'hidden by reports: the chat and its line are gone from her list and her count', { unread: 0, requests: 0 });
@@ -283,6 +285,10 @@ async function main(): Promise<void> {
     const visitor = await unreadOf(vee);
     assert(veeRow?.is_visitor === 1 && visitor.status === 403 && visitor.body?.code === 'not_a_member' && !leaked(visitor),
         `a visitor's row: 403 not_a_member, a line waiting for it or not (row ${JSON.stringify(veeRow)}, ${show(visitor)})`);
+    // What the web app's badge falls back on for a visitor's row (lib/api.ts getMyUnread): its own list stays its to read.
+    const veeList = await call('GET', vee, `/api/messages/conversations/${vee.pk}`);
+    assert(veeList.status === 200 && (veeList.body?.totalUnread ?? 0) + (veeList.body?.requests?.count ?? 0) === 1,
+        `and its own list still tells it a line is waiting (${show(veeList)})`);
 
     const gus = member('Gus');
     await addFriend(gus, cy);
@@ -295,7 +301,7 @@ async function main(): Promise<void> {
     db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(gus.pk);
 
     const hal = member('Hal');
-    se.adminPruneUser(hal.pk, 'owner:password');
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(hal.pk);
     const closed = await unreadOf(hal);
     assert(closed.status === 403 && closed.body?.code === 'account_closed' && !leaked(closed), `a closed account: 403 account_closed (${show(closed)})`);
 
@@ -331,6 +337,31 @@ async function main(): Promise<void> {
         const still = await raw('GET', `/api/messages/conversations/${who.pk}`, signed(who, 'GET', `/api/messages/conversations/${who.pk}`));
         assert(still.status === 200, `${label}: their own reads still go through after them (${still.status})`);
     }
+
+    // ── The cost ──────────────────────────────────────────────────────────────────────────────────────────────────────
+    // The design's "cheap" was never measured. A member with 200 chats, one line waiting in each: the bytes are held to it,
+    // and the time is printed, a number to weigh and not a line a slow machine can fail.
+    console.log('\n── the cost, 200 chats ──');
+    const bea = member('Bea');
+    for (let i = 0; i < 200; i++) {
+        const peer = member(`Peer${i}`);
+        const conv = se.createConversation('dm', [bea.pk, peer.pk], bea.pk);
+        const { ciphertext, nonce } = lockedDm();
+        se.sendMessage(conv!.id, peer.pk, ciphertext, nonce);
+    }
+    const timed = async (route: string) => {
+        beforeCall();
+        const started = performance.now();
+        let last: Res | undefined;
+        for (let i = 0; i < 20; i++) last = await raw('GET', route, signed(bea, 'GET', route));
+        return { ms: (performance.now() - started) / 20, res: last };
+    };
+    const countCost = await timed(ROUTE);
+    const listCost = await timed(`/api/messages/conversations/${bea.pk}`);
+    assert(countCost.res?.body?.unread === 200 && listCost.res?.body?.totalUnread === 200, 'both say 200 lines');
+    assert(countCost.res!.text.length * 100 < listCost.res!.text.length,
+        `the count is ${countCost.res!.text.length} bytes, the list ${listCost.res!.text.length}`);
+    console.log(`  one read: the count ${countCost.ms.toFixed(1)} ms, the list ${listCost.ms.toFixed(1)} ms`);
 
     if (LOCAL_RUN) {
         // ── 7. Requests off ───────────────────────────────────────────────────────────────────────────────────────────

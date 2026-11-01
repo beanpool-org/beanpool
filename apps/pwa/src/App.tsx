@@ -730,7 +730,7 @@ export function App() {
                     // The badge asks for its number and no more: the counts route, never the whole list. `requests` stays
                     // out of it: a message request makes no badge until it is accepted.
                     const [unreadResult, txResult] = await Promise.allSettled([
-                        getMyUnread(),
+                        getMyUnread(identity.publicKey),
                         readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : null)),
                     ]);
                     if (cancelled) return;

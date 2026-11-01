@@ -96,10 +96,10 @@ describe('a request to the node that served the page is signed for its host', ()
         expect(signedFor(headers, PUB, HERE, 'GET', '/api/messages/conversations', '')).toBe(true);
     });
 
-    it('the Chat badge\'s read asks for the signer\'s counts, naming no key but the signature\'s', async () => {
+    it('the Chat badge\'s read asks for the signer\'s counts, with no key in its address', async () => {
         fetchMock.mockResolvedValue(reply(200, { unread: 3, requests: 1, asOf: '2026-11-01T00:00:00.000Z' }));
 
-        await expect(getMyUnread()).resolves.toEqual({ unread: 3, requests: 1, asOf: '2026-11-01T00:00:00.000Z' });
+        await expect(getMyUnread(PUB)).resolves.toEqual({ unread: 3, requests: 1, asOf: '2026-11-01T00:00:00.000Z' });
 
         const { url, headers } = sent();
         expect(url).toBe('/api/me/unread');

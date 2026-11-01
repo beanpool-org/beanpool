@@ -1161,9 +1161,19 @@ export async function getConversations(publicKey: string): Promise<Conversations
     return request('GET', `/api/messages/conversations/${encodeURIComponent(publicKey)}`);
 }
 
-/** What waits for the signer in this community, in counts alone (GET /api/me/unread): the Chat badge's number, never the list. */
-export async function getMyUnread(): Promise<UnreadAnswer> {
-    return request('GET', '/api/me/unread');
+/**
+ * What waits for the signer in this community, in counts alone (GET /api/me/unread): the Chat badge's number, without the
+ * whole list. A visitor's row never joined, so the counts route refuses it, yet what is sent to it still waits, in the one
+ * list it may read; an older node at a pasted address has no such route. Both read their number from the list.
+ */
+export async function getMyUnread(publicKey: string): Promise<UnreadAnswer> {
+    try {
+        return await request('GET', '/api/me/unread');
+    } catch (e) {
+        if (!isRouteMissing(e) && (e as { code?: unknown } | null)?.code !== 'not_a_member') throw e;
+        const list = await getConversations(publicKey);
+        return { unread: list.totalUnread, requests: list.requests?.count ?? 0, asOf: new Date().toISOString() };
+    }
 }
 
 /**

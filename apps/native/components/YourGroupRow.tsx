@@ -12,7 +12,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { chatEmoji, chatPicture, ownerKindName, previewLine, rowRoleWord, rowSpokenName, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
 import { MemberAvatar } from './MemberAvatar';
-import { t, tn } from '@beanpool/core';
+import { t, tn, groupNameShown } from '@beanpool/core';
 
 /** The whole spoken label: the row's name phrase, then its unread count and muting, then the last line, as sentences. */
 function rowSpoken(head: string, unread: number, muted: boolean, preview: string): string {
@@ -101,7 +101,7 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
             )}
             <View style={styles.body}>
                 <View style={styles.top}>
-                    <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>{item.name}</Text>
+                    <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>{groupNameShown({ name: item.name, kind: item.groupKind })}</Text>
                     {muted && <MaterialCommunityIcons name="bell-off-outline" size={14} color={colors.text.muted} />}
                     {!!time && <Text style={[styles.time, unread > 0 && styles.timeUnread]} numberOfLines={1}>{time}</Text>}
                 </View>

@@ -121,6 +121,8 @@ export interface ShapeSettings {
     openDoor: ShapeSetting<boolean>;
     /** The 12-words door beside the sign-in one: only where the open door is set on (it means nothing elsewhere). */
     wordsDoor?: ShapeSetting<boolean>;
+    /** The person check at the 12-words door on a busy day (services/door-check.ts): only where the open door is set on. */
+    doorCheck?: ShapeSetting<boolean>;
     knocks: ShapeSetting<boolean>;
     preview: ShapeSetting<boolean>;
     /** `includes`: what holds Beans, each off with them (lockToLedger), never a switch of its own on the page (design Q9). */
@@ -191,6 +193,7 @@ export const KIND_ONLY_SWITCHES = [
 export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', keyof ShapeSettings | 'kindOnly'>> = {
     openJoin: 'openDoor',
     ssoRequiredForJoin: 'wordsDoor',
+    doorCheck: 'doorCheck',
     invites: 'join',
     knocks: 'knocks',
     beans: 'beans',
@@ -415,6 +418,7 @@ export function readShape(): Shape {
         source: sourceOf('ssoRequiredForJoin'),
         lock: !cfg.ssoRequiredForJoin && !features.wordsDoor ? doorLock : null,
     } : undefined;
+    const doorCheck: ShapeSetting<boolean> | undefined = cfg.openJoin ? plain('doorCheck') : undefined;
 
     const knocks: ShapeSetting<boolean> = {
         ...plain('knocks'),
@@ -462,6 +466,7 @@ export function readShape(): Shape {
         join,
         openDoor,
         ...(wordsDoor ? { wordsDoor } : {}),
+        ...(doorCheck ? { doorCheck } : {}),
         knocks,
         preview: { value: preview, configured: preview, source: 'server', lock: lock('server_env', LOCK_WORDS.onTheServer(PRIVATE_PREVIEW_ENV)) },
         beans: {

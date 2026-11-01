@@ -3548,5 +3548,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "一位所有者在能投票的成员太少时作出了决定，但现在能投票的成员已足够，因此由本次投票决定。理由：{reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "一位所有者在能投票的成员太少时作出了决定，但现在能投票的成员已足够，因此由本次投票决定。",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "能投票的成员太少，因此除非有更多成员投票，否则本次投票结束时 {name} 将恢复身份。",
-  "Not executed: a reinstatement vote cancelled it": "未执行：已被恢复成员身份的投票取消"
+  "Not executed: a reinstatement vote cancelled it": "未执行：已被恢复成员身份的投票取消",
+  "Not sure what to charge? View the Community Pricing Guide": "不确定该收多少？查看社区定价指南"
 }

@@ -3677,5 +3677,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "وقتی اعضای خیلی کمی می‌توانستند رأی بدهند، یکی از مالکان تصمیم گرفت، اما اکنون تعداد کافی می‌توانند رأی بدهند، پس این رأی‌گیری تصمیم می‌گیرد. دلیل: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "وقتی اعضای خیلی کمی می‌توانستند رأی بدهند، یکی از مالکان تصمیم گرفت، اما اکنون تعداد کافی می‌توانند رأی بدهند، پس این رأی‌گیری تصمیم می‌گیرد.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "اعضای خیلی کمی می‌توانند رأی بدهند، پس اگر اعضای بیشتری رأی ندهند، {name} با بسته شدن این رأی‌گیری بازمی‌گردد.",
-  "Not executed: a reinstatement vote cancelled it": "اجرا نشد: یک رأی‌گیری بازگرداندن عضو آن را لغو کرد"
+  "Not executed: a reinstatement vote cancelled it": "اجرا نشد: یک رأی‌گیری بازگرداندن عضو آن را لغو کرد",
+  "Not sure what to charge? View the Community Pricing Guide": "مطمئن نیستید چه قیمتی تعیین کنید؟ راهنمای قیمت‌گذاری جامعه را ببینید"
 }

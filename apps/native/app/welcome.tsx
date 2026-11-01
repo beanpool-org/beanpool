@@ -31,7 +31,8 @@ import {
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
-import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
+import { DOOR_WORK_MESSAGES, passDoorCheck, workPastCheck } from '../utils/door-work';
+import { useDoorCheck } from '../components/DoorCheckSheet';
 import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } from '../components/WordsDoor';
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
 import { type LinkAnswer } from '../utils/join-link';
@@ -435,6 +436,7 @@ export default function WelcomeScreen() {
     const [globalDoorCopies, setGlobalDoorCopies] = useState<SignInCopies>(() => signInCopiesAt());
     const [doorWay, setDoorWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
+    const doorCheck = useDoorCheck(colors, dark);
     /**
      * The door was opened by the global community's link or the install referrer's `global=1` (utils/global-link.ts), not
      * by a tap here: its 12-words work, signed and sent to the global community, waits for the member's first tap at it.
@@ -1961,7 +1963,7 @@ export default function WelcomeScreen() {
             setCallsignSuggestions([]);
             setWorkWaiting(run.state().phase !== 'ready');
             // Stops waiting the moment the member leaves the step ("Choose another way", Back): PR #1452 review, finding 2.
-            const ready = await solutionUnlessLeft(run, leave.signal);
+            const ready = await workPastCheck(run, leave.signal, doorCheck.ask);
             // Left while it finished: the way out they took has already drawn its screen.
             if (leave.signal.aborted || ready.kind === 'cancelled') return;
             setWorkWaiting(false);
@@ -1973,7 +1975,7 @@ export default function WelcomeScreen() {
             joinSendingRef.current = true;
             setGlobalPhase('joining');
             const identity = await commitJoinKey(key, name);
-            const answer = await submitWordsJoin(GLOBAL_NODE_URL, identity, name, run);
+            const answer = await submitWordsJoin(GLOBAL_NODE_URL, identity, name, run, (check) => passDoorCheck(run, check, leave.signal, doorCheck.ask));
             await afterDoorAnswer(answer, key, identity, 'join', 'words');
         } catch (err) {
             setError(err instanceof StoredKeyUnreadableError
@@ -3281,7 +3283,7 @@ export default function WelcomeScreen() {
                                         onWords={chooseWordsAtDoor}
                                         onSignIn={(provider) => { setDoorWay('sign-in'); handleGlobalSignIn(provider); }}
                                         disabled={loading}
-                                        busy={doorWork.busy}
+                                        busy={doorWork.busy ? welcomeLineWords(doorWork.busy) : null}
                                         wordsProblem={wordsState?.phase === 'failed' ? welcomeLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                         signInNote={signInNote}
                                         keepsNoCopies={globalDoorCopies === 'none'}
@@ -3421,6 +3423,7 @@ export default function WelcomeScreen() {
                         </View>
                     </ScrollView>
                 </KeyboardAvoidingView>
+                {doorCheck.sheet}
             </SafeAreaView>
         );
     }

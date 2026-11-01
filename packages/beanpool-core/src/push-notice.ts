@@ -97,6 +97,9 @@ export const PUSH_NOTICE_KINDS = {
     'event.update': { body: word("There is news about an event you're going to."), tab: 'market' },
     'community.notice': { body: word('Your community has a notice for you.'), tab: 'home' },
     'community.near': { body: word('A community has started near you.'), tab: 'home' },
+    // To the people a place circle holds, as it forms or takes them in, and when one of them says they're starting one
+    // (server engine/place-circles.ts). No place, name or count: Home's Find card opens the circle.
+    'community.circle': { body: word('People near you want to start a community.'), tab: 'home' },
     // To a community's owners and admins, and members who asked for it, when someone asks to join (server engine/knocks.ts
     // notifyKnockReceived). People, whose Invites list holds the request. The asker's "answered" notice is no push: their
     // phone posts it from its own background check (apps/native utils/sync-notices.ts), since no community has their token.

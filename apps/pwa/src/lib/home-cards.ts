@@ -17,6 +17,7 @@
  * browser (lib/home-cache.ts); the last write wins by `updatedAt`.
  */
 
+import type { CircleCard, CircleDemand } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
@@ -125,10 +126,14 @@ export interface HomeFind {
     /** Every community listed (the node always sends it; an odd value reads as unknown, never 0: knownCommunityCount). */
     communityCount: number | null;
     nearbyPosts: { radiusKm: number; count: number; more: boolean } | null;
-    watches: unknown[] | null;
+    watches: (Record<string, unknown> & { wouldHelp?: boolean })[] | null;
     knock: null;
     /** When the node last fetched the directory; null: never, so nothing may be said to be missing (@beanpool/core find-community.ts). */
     directoryFetchedAt: string | null;
+    /** How many are waiting around here (place circle): each null below 3. Absent from an older node. */
+    demand?: CircleDemand | null;
+    /** The reader's own place circle. */
+    circle?: (CircleCard & { id: string }) | null;
 }
 
 export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null }
@@ -328,8 +333,11 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
             // Worked out in this browser; drawn only where a place is known (CARD-FRAME §4).
             case 'sky':
                 return skyOf(answer, { settings }, now) !== null;
+            // A Your tools card (home-tools-card) or a tool's card: worked out on this device (asks: 'none').
+            case 'tools':
+                return me.standing === 'member';
             default:
-                return !!answer.cards[type as keyof HomeCards];
+                return type.startsWith('tool-') ? !!answer.me : !!answer.cards[type as keyof HomeCards];
         }
     };
     const base = shownLayout(answer, layout, opts);

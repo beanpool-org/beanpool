@@ -63,7 +63,9 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 lead_pubkey TEXT REFERENCES members(public_key),
                 join_policy TEXT NOT NULL DEFAULT 'open' CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
                 created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                kind TEXT CHECK (kind IS NULL OR kind = 'circle'),
+                place_cell TEXT
             );
             CREATE TABLE group_pictures (group_id TEXT PRIMARY KEY, picture TEXT NOT NULL);
             CREATE TRIGGER groups_touch_updated_at AFTER UPDATE ON groups FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at

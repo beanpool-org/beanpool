@@ -26,6 +26,7 @@ async function main() {
     const mockSwitchesOff = {
         openJoin: true,
         ssoRequiredForJoin: true,
+        doorCheck: false,
         beans: false,
         escrow: false,
         enterprises: false,

@@ -3548,5 +3548,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "투표할 수 있는 회원이 너무 적을 때 소유자가 결정했지만, 이제 충분한 회원이 투표할 수 있으므로 이 투표로 결정됩니다. 사유: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "투표할 수 있는 회원이 너무 적을 때 소유자가 결정했지만, 이제 충분한 회원이 투표할 수 있으므로 이 투표로 결정됩니다.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "투표할 수 있는 회원이 너무 적어, 더 많은 회원이 투표하지 않으면 이 투표가 끝날 때 {name} 님이 복귀합니다.",
-  "Not executed: a reinstatement vote cancelled it": "미집행: 복권 투표로 취소됨"
+  "Not executed: a reinstatement vote cancelled it": "미집행: 복권 투표로 취소됨",
+  "Not sure what to charge? View the Community Pricing Guide": "가격을 어떻게 정해야 할지 모르겠다면? 커뮤니티 가격 가이드를 확인하세요"
 }

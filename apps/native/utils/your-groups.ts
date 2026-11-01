@@ -8,7 +8,7 @@
  * The helpers below are pure so the row wording and the one-header-for-every-chat label are unit tested.
  */
 
-import { bundledGroupEmblem, formatDate, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, formatDate, groupNameShown, t, tn, word, type WordKey } from '@beanpool/core';
 import type { GroupCategory, GroupItem } from './db';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
@@ -42,6 +42,8 @@ export interface YourChat {
     role: string;
     category?: string;
     joinPolicy?: string;
+    /** 'circle' on a place circle: its name is shown in the member's language. */
+    groupKind?: string;
     eventStartAt?: string | null;
     eventEndAt?: string | null;
     readOnly: boolean;
@@ -298,10 +300,11 @@ export function rowRoleWord(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle'>)
 
 /**
  * The start of what a screen reader says for a row: its name, its kind and the member's part, one phrase per variant
- * ("Garden Crew, group", "Bakery, enterprise, lead keeper"). The row adds its unread count, muting and preview.
+ * ("Garden Crew, group", "Bakery, enterprise, lead keeper"). The row adds its unread count, muting and preview. The name
+ * is the one the row draws: a place circle's stored name is English, and a screen reader says it in the member's language.
  */
-export function rowSpokenName(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle' | 'name'>): string {
-    const name = item.name;
+export function rowSpokenName(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle' | 'name' | 'groupKind'>): string {
+    const name = groupNameShown({ name: item.name, kind: item.groupKind });
     if (item.kind === 'event') return t('{name}, event', { name });
     if (item.kind !== 'enterprise') {
         return item.role === 'convenor'

@@ -3676,5 +3676,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "Ένας ιδιοκτήτης αποφάσισε όταν πολύ λίγα μέλη μπορούσαν να ψηφίσουν, αλλά τώρα μπορούν αρκετά, οπότε αποφασίζει αυτή η ψηφοφορία. Αιτιολογία: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "Ένας ιδιοκτήτης αποφάσισε όταν πολύ λίγα μέλη μπορούσαν να ψηφίσουν, αλλά τώρα μπορούν αρκετά, οπότε αποφασίζει αυτή η ψηφοφορία.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "Πολύ λίγα μέλη μπορούν να ψηφίσουν, οπότε αν δεν ψηφίσουν περισσότερα, το μέλος {name} επιστρέφει όταν κλείσει αυτή η ψηφοφορία.",
-  "Not executed: a reinstatement vote cancelled it": "Δεν εκτελέστηκε: την ακύρωσε ψηφοφορία επαναφοράς"
+  "Not executed: a reinstatement vote cancelled it": "Δεν εκτελέστηκε: την ακύρωσε ψηφοφορία επαναφοράς",
+  "Not sure what to charge? View the Community Pricing Guide": "Δεν είσαι σίγουρος για την τιμή; Δες τον Οδηγό τιμών κοινότητας"
 }

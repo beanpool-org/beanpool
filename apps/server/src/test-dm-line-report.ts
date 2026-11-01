@@ -278,14 +278,17 @@ async function main(): Promise<void> {
     const unsignedEdit = await report(ann, oldEdit);
     v = await viewOf(unsignedEdit.body?.report?.id);
     assert(v.body?.message?.signature === 'unsigned', `so it reports as unsigned, not as a failed signature (${v.body?.message?.signature})`);
-    // The signature is all this one's metadata holds, so nothing else keeps the row's metadata in being (the deciding review of #2705).
-    const plain = sealed(bo, ann, conv, 'not a reply');
+    // The signature is all this one's metadata holds, so nothing else keeps the row's metadata in being (the deciding review of
+    // #2705). Fay's own chat, as Ann is at her hourly limit on reports by now.
+    const fay = member('Fay');
+    const fayConv = await open(bo, fay);
+    const plain = sealed(bo, fay, fayConv, 'not a reply');
     await send(bo, plain);
-    const plainEdit = sealed(bo, ann, conv, 'edited by an older app, and not a reply', { id: plain.id, signed: false });
+    const plainEdit = sealed(bo, fay, fayConv, 'edited by an older app, and not a reply', { id: plain.id, signed: false });
     const pe = await call('POST', bo, '/api/messages/edit', { messageId: plain.id, ciphertext: plainEdit.ciphertext, nonce: plainEdit.nonce });
     const plainRow = db.prepare('SELECT metadata FROM messages WHERE id = ?').get(plain.id) as { metadata: string | null };
     assert(pe.status === 200 && plainRow.metadata === null, `an edit from an older app of a line that is not a reply leaves no signature either (${plainRow.metadata})`);
-    const plainReport = await report(ann, plainEdit);
+    const plainReport = await report(fay, plainEdit);
     v = await viewOf(plainReport.body?.report?.id);
     assert(v.body?.message?.signature === 'unsigned', `and it too reports as unsigned, not as a failed signature (${show(v)})`);
 

@@ -31,6 +31,10 @@ export interface FakeTunnel {
     say: (...entries: unknown[]) => void;
     /** While on, every start exits at once with code 1. */
     crash: (on: boolean) => void;
+    /** `ready`, `say` and `crash` for the children on `token` alone: the others go on as they were. */
+    readyFor: (token: string, status: 200 | 503, readyConnections?: number) => void;
+    sayTo: (token: string, ...entries: unknown[]) => void;
+    crashFor: (token: string, on: boolean) => void;
     /** Until `n` runs are recorded (or `ms` pass): the runs. */
     waitForRuns: (n: number, ms?: number) => Promise<FakeRun[]>;
 }
@@ -38,6 +42,9 @@ export interface FakeTunnel {
 const lines = (file: string): any[] => {
     try { return fs.readFileSync(file, 'utf-8').split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; }
 };
+
+/** The fake's per-token files (fake-cloudflared.mjs tokenFileId: keep the same). */
+const tokenFileId = (token: string) => token.replace(/[^A-Za-z0-9_-]/g, '_');
 
 /**
  * A free port for the fake's metrics, from 20000-32767: below the ports any OS hands out on its own (Linux 32768-60999,
@@ -78,6 +85,13 @@ export async function useFakeCloudflared(dir: string, timings: Parameters<typeof
             fs.writeFileSync(path.join(dir, 'ready.json'), JSON.stringify({ status, readyConnections })),
         say: (...entries) => fs.appendFileSync(path.join(dir, 'say.jsonl'), entries.map((e) => (typeof e === 'string' ? e : JSON.stringify(e)) + '\n').join('')),
         crash: (on) => (on ? fs.writeFileSync(path.join(dir, 'crash'), '1') : fs.rmSync(path.join(dir, 'crash'), { force: true })),
+        readyFor: (token, status, readyConnections = status === 200 ? 4 : 0) =>
+            fs.writeFileSync(path.join(dir, `ready.${tokenFileId(token)}.json`), JSON.stringify({ status, readyConnections })),
+        sayTo: (token, ...entries) => fs.appendFileSync(path.join(dir, `say.${tokenFileId(token)}.jsonl`), entries.map((e) => (typeof e === 'string' ? e : JSON.stringify(e)) + '\n').join('')),
+        crashFor: (token, on) => {
+            const f = path.join(dir, `crash.${tokenFileId(token)}`);
+            if (on) fs.writeFileSync(f, '1'); else fs.rmSync(f, { force: true });
+        },
         waitForRuns: async (n, ms = 5_000) => {
             const until = Date.now() + ms;
             while (runs().length < n && Date.now() < until) await new Promise((r) => setTimeout(r, 20));

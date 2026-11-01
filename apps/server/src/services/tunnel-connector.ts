@@ -24,6 +24,14 @@
 // - A tunnel whose ingress still names the old compose service (http://beanpool-node:8080) is moved to this server's
 //   loopback once, by the same heal, when it first connects. docker-compose.yml pins beanpool-node to 127.0.0.1 so the old
 //   origin reaches this server meanwhile, never another community's on beanpool-shared.
+// - One child per live name this key holds (rename S2, design scratch/fable-design/DESIGN-rename-primary-name-fable.md §1):
+//   the stored address's, and each name the community moved off that the record of names still calls live (otherHosts), so
+//   an old name keeps answering after a claim of a new one, and while a gated one waits. Each has its own metrics port,
+//   crash back-off and token; one name's crash or new token touches no other. A moved-off name's token is the one its child
+//   already runs, then what /status?name= answers on the agent's tick (askAboutOtherNames). It is only ever held in memory:
+//   a start asks again, so a take-over needs nothing new and no second secret is at rest. A server with one name asks
+//   nothing more of the registrar and runs as it always did. Settings' claim, rotate, status and origin stay the stored
+//   name's; a moved-off name is only kept up, and let go by Release.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -31,7 +39,7 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
-import { recordRegistrarAnswer, registrarNames, registrarHostOf } from '../engine/registrar-names.js';
+import { recordRegistrarAnswer, registrarNames, registrarHostOf, REGISTRAR_ZONE } from '../engine/registrar-names.js';
 import { claimReplacesAddress, tellMembersOfNewAddress } from './address-notice.js';
 import { settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
@@ -62,6 +70,16 @@ export interface TunnelStatus {
     reason: string | null;
     /** cloudflared's version, as it printed it at start. */
     version: string | null;
+    /** The tunnels of the other names this key holds; left out on a server with one name. The fields above are the stored name's. */
+    others?: OtherTunnelStatus[];
+}
+
+export interface OtherTunnelStatus {
+    host: string;
+    state: TunnelState;
+    since: string;
+    connections: number;
+    reason: string | null;
 }
 
 interface Options {
@@ -82,6 +100,8 @@ interface Options {
     containerMarkers: string[];
     /** How long an unanswered claim's ask-again waits before its one retry (reclaimUnanswered). */
     reclaimRetryMs: number;
+    /** The most children this server runs: a bound on what a long record of names can cost (each cloudflared is its own process). */
+    maxTunnels: number;
 }
 
 const DEFAULTS: Options = {
@@ -101,6 +121,8 @@ const DEFAULTS: Options = {
     containerMarkers: ['/.dockerenv', '/run/.containerenv'],
     // The registrar keeps working on a claim up to 30 s after its node stops waiting (waitUntil): past that, it is done.
     reclaimRetryMs: 35_000,
+    // The registrar's claim_limit_per_key (apps/registrar settings.js): a key holds no more than this.
+    maxTunnels: 3,
 };
 
 let opts: Options = { ...DEFAULTS };
@@ -118,33 +140,61 @@ interface Running {
     exited: Promise<void>;
 }
 
-let running: Running | null = null;
-let status: TunnelStatus = { state: 'off', since: new Date().toISOString(), connections: 0, reason: null, version: null };
+/** One name's cloudflared: its child and all that is known of it. Nothing here is shared with another name's. */
+interface Tunnel {
+    host: string;
+    metricsPort: number;
+    running: Running | null;
+    status: Omit<TunnelStatus, 'version' | 'others'>;
+    pollTimer: ReturnType<typeof setTimeout> | null;
+    respawnTimer: ReturnType<typeof setTimeout> | null;
+    crashes: number;
+    /** The token the last child was started with: a crashed child's respawn waits for its backoff only on the same token. */
+    lastToken: string | null;
+    lastError: string | null;
+    unauthorizedSince: number | null;
+    lastHealAt: number;
+}
+
+/** Every name's tunnel, by host. A name is here while a tunnel is wanted for it, child or none (crashed, binary missing). */
+const tunnels = new Map<string, Tunnel>();
+/** The tokens /status gave for the other names (askAboutOtherNames). In memory only: a start asks again. */
+const otherTokens = new Map<string, string>();
+/** When the stored name last had no tunnel. */
+let offSince = new Date().toISOString();
+/** cloudflared's version, as a child printed it: one binary, whichever name. */
+let version: string | null = null;
 let chain: Promise<unknown> = Promise.resolve();
-let pollTimer: ReturnType<typeof setTimeout> | null = null;
-let respawnTimer: ReturnType<typeof setTimeout> | null = null;
-let crashes = 0;
-/** The token the last child was started with: a crashed child's respawn waits for its backoff only on the same token. */
-let lastToken: string | null = null;
-let lastError: string | null = null;
-let unauthorizedSince: number | null = null;
 let registrarBusy = false;
-let lastHealAt = 0;
+let askingAboutOthers = false;
 let lastOriginAttemptAt = 0;
 let missingLogged = false;
 /** Set by the take-over's own tunnel step: from then on its journal no longer holds the tunnel back in this process. */
 let takeoverReleased = false;
 let exitHookInstalled = false;
 
-function setStatus(state: TunnelState, reason: string | null = null, connections = 0): void {
-    if (status.state !== state || status.reason !== reason || status.connections !== connections) {
-        const since = status.state === state ? status.since : new Date().toISOString();
-        status = { ...status, state, since, reason, connections };
+function setStatus(t: Tunnel, state: TunnelState, reason: string | null = null, connections = 0): void {
+    const s = t.status;
+    if (s.state !== state || s.reason !== reason || s.connections !== connections) {
+        t.status = { ...s, state, since: s.state === state ? s.since : new Date().toISOString(), reason, connections };
     }
 }
 
+/** The stored name's tunnel, which Settings, a claim and the members' notice go by; null when it has none. */
+function mainTunnel(): Tunnel | null {
+    const pa = savedTunnelAddress();
+    return pa ? tunnels.get(tunnelHost(pa)) ?? null : null;
+}
+
+/** The stored name's tunnel, as Settings reads it, and any other name's beside it. */
 export function getTunnelStatus(): TunnelStatus {
-    return { ...status };
+    const main = mainTunnel();
+    const others = [...tunnels.values()].filter((t) => t !== main).map((t) => ({ host: t.host, ...t.status }));
+    return {
+        ...(main ? main.status : { state: 'off' as const, since: offSince, connections: 0, reason: null }),
+        version,
+        ...(others.length ? { others } : {}),
+    };
 }
 
 /** node_config's address when it is a live tunnel with a token: the only thing a tunnel is run from. */
@@ -154,11 +204,46 @@ function savedTunnelAddress(): any | null {
     return typeof pa.tunnelToken === 'string' && pa.tunnelToken.trim() ? pa : null;
 }
 
-/** The token a tunnel should run with now, or null for none. */
+/** Whether this server runs tunnels now: the main server, not while a take-over is still waiting on its tunnel step. */
+const tunnelsMayRun = (): boolean => getNodeRole() === 'primary' && (takeoverReleased || !takeoverHoldsTunnel());
+
+/** The token the stored name's tunnel should run with now, or null for none. */
 function wantedToken(): string | null {
-    if (getNodeRole() !== 'primary') return null;
-    if (!takeoverReleased && takeoverHoldsTunnel()) return null;
-    return savedTunnelAddress()?.tunnelToken.trim() ?? null;
+    return tunnelsMayRun() ? savedTunnelAddress()?.tunnelToken.trim() ?? null : null;
+}
+
+/** The key a stored address's tunnel goes by: the host the record of names knows it by, or what it says of itself. */
+const tunnelHost = (pa: any): string => registrarHostOf(pa) ?? String(pa.hostname || pa.name || 'stored address').toLowerCase();
+
+const WANTED_STATES: ReadonlySet<string> = new Set(['live']);
+const ASKED_STATES: ReadonlySet<string> = new Set(['live', 'paused']);
+
+/**
+ * The names this community moved off that its key may still hold, whose last word from the registrar is one of `states`,
+ * newest first, no more than this server can run: former in the record of names, and neither lost nor let go by Take offline
+ * or Release. Never a name the community never went by: a claim that only waited, or a late one, is not `live` here.
+ */
+function otherHosts(states: ReadonlySet<string>): string[] {
+    return registrarNames().filter((e) => e.role === 'former' && !e.lost && !e.releasedByUsAt && states.has(e.status))
+        .sort((a, b) => (b.formerSince ?? '').localeCompare(a.formerSince ?? '')).slice(0, opts.maxTunnels).map((e) => e.address);
+}
+
+/**
+ * The tunnels wanted now, host → token: the stored name's first, then each other live name whose token is known. That is
+ * what its child already runs from the moment a claim moves the community off it, or what /status answered. Never two
+ * children on one token: a token is a tunnel.
+ */
+function wantedTunnels(): Map<string, string> {
+    const want = new Map<string, string>();
+    if (!tunnelsMayRun()) return want;
+    const saved = savedTunnelAddress();
+    if (saved) want.set(tunnelHost(saved), saved.tunnelToken.trim());
+    for (const host of otherHosts(WANTED_STATES)) {
+        if (want.size >= opts.maxTunnels) break;
+        const token = otherTokens.get(host) ?? tunnels.get(host)?.lastToken;
+        if (token && !want.has(host) && ![...want.values()].includes(token)) want.set(host, token);
+    }
+    return want;
 }
 
 // ── Logs ─────────────────────────────────────────────────────────────────────────────────────
@@ -168,13 +253,16 @@ const recent = new Map<string, { level: 'warn' | 'error'; firstAt: number; more:
 /** What cloudflared said, for a log line and the status Settings shows: a request's address in it may be a photo link's. */
 function scrub(text: string): string {
     let out = redactPhotoLinks(text);
-    for (const t of [running?.token, savedTunnelAddress()?.tunnelToken]) {
+    for (const t of [...[...tunnels.values()].map((x) => x.running?.token), ...otherTokens.values(), savedTunnelAddress()?.tunnelToken]) {
         if (typeof t === 'string' && t.length >= 8) out = out.split(t).join('[tunnel token]');
     }
     return out.length > 400 ? `${out.slice(0, 400)}…` : out;
 }
 
 const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+
+/** A log line about `t`: which name, once there is more than one to tell apart. */
+const about = (t: Tunnel, text: string): string => (t === mainTunnel() ? text : `${t.host}: ${text}`);
 
 function say(level: 'info' | 'warn' | 'error', text: string): void {
     const line = `[Tunnel] ${text}`;
@@ -203,7 +291,7 @@ function forward(level: 'warn' | 'error', text: string): void {
     say(level, text);
 }
 
-function onLine(raw: string): void {
+function onLine(t: Tunnel, raw: string): void {
     const line = raw.trim();
     if (!line) return;
     let entry: any = null;
@@ -216,25 +304,25 @@ function onLine(raw: string): void {
     const error = entry && entry.error !== undefined ? String(entry.error) : '';
     if (level === 'info') {
         const v = /^Version (\S+)/.exec(message);
-        if (v && status.version !== v[1]) {
-            status = { ...status, version: v[1] };
+        if (v && version !== v[1]) {
+            version = v[1];
             say('info', `cloudflared ${v[1]}`);
         }
-        if (/Registered tunnel connection/i.test(message)) schedulePoll(0);
+        if (/Registered tunnel connection/i.test(message)) schedulePoll(t, 0);
         return;
     }
     const reason = scrub(error || message || line);
-    forward(level === 'warn' ? 'warn' : 'error', scrub(error && message ? `${message}: ${error}` : reason));
-    lastError = reason;
-    if (/unauthorized/i.test(reason) && unauthorizedSince === null) unauthorizedSince = Date.now();
-    if (status.state !== 'connected' && running) setRetrying(reason);
-    maybeHeal();
+    forward(level === 'warn' ? 'warn' : 'error', about(t, scrub(error && message ? `${message}: ${error}` : reason)));
+    t.lastError = reason;
+    if (/unauthorized/i.test(reason) && t.unauthorizedSince === null) t.unauthorizedSince = Date.now();
+    if (t.status.state !== 'connected' && t.running) setRetrying(t, reason);
+    maybeHeal(t);
 }
 
 /** Not connected, and why. A child started after crashes says so too: its newest line alone would hide that it keeps stopping. */
-function setRetrying(reason: string): void {
-    const streak = !!running && crashes > 0 && Date.now() - running.startedAt < opts.backoffResetMs;
-    setStatus('retrying', streak ? `${reason} (cloudflared has stopped ${crashes} time${crashes === 1 ? '' : 's'} in a row)` : reason);
+function setRetrying(t: Tunnel, reason: string): void {
+    const streak = !!t.running && t.crashes > 0 && Date.now() - t.running.startedAt < opts.backoffResetMs;
+    setStatus(t, 'retrying', streak ? `${reason} (cloudflared has stopped ${t.crashes} time${t.crashes === 1 ? '' : 's'} in a row)` : reason);
 }
 
 // ── The child ────────────────────────────────────────────────────────────────────────────────
@@ -248,26 +336,26 @@ function installExitHook(): void {
     exitHookInstalled = true;
     // In a container the kernel ends the child with the node (it is PID 1). Run any other way, a node that exits would
     // leave its tunnel running on its own, and the next start's would fail to bind its metrics port.
-    process.on('exit', () => { try { running?.child.kill('SIGTERM'); } catch { /* already gone */ } });
+    process.on('exit', () => { for (const t of tunnels.values()) { try { t.running?.child.kill('SIGTERM'); } catch { /* already gone */ } } });
 }
 
-async function spawnChild(token: string): Promise<void> {
+async function spawnChild(t: Tunnel, token: string): Promise<void> {
     if (!fs.existsSync(opts.command)) {
-        setStatus('missing', `cloudflared is not in this server's image (${opts.command}), so the tunnel can't run. Update the image.`);
-        if (!missingLogged) { missingLogged = true; say('error', status.reason!); }
+        setStatus(t, 'missing', `cloudflared is not in this server's image (${opts.command}), so the tunnel can't run. Update the image.`);
+        if (!missingLogged) { missingLogged = true; say('error', t.status.reason!); }
         return;
     }
     missingLogged = false;
     installExitHook();
     let child: ChildProcess;
     try {
-        child = spawn(opts.command, [...opts.prefixArgs, ...cloudflaredArgs(opts.metricsPort)], {
+        child = spawn(opts.command, [...opts.prefixArgs, ...cloudflaredArgs(t.metricsPort)], {
             env: childEnv(token),
             stdio: ['ignore', 'pipe', 'pipe'],
         });
     } catch (e: any) {
-        setStatus('missing', `cloudflared could not be started: ${e?.message || e}`);
-        say('error', status.reason!);
+        setStatus(t, 'missing', `cloudflared could not be started: ${e?.message || e}`);
+        say('error', about(t, t.status.reason!));
         return;
     }
     const started = await new Promise<Error | null>((resolve) => {
@@ -276,8 +364,8 @@ async function spawnChild(token: string): Promise<void> {
     });
     if (started) {
         const code = (started as NodeJS.ErrnoException).code;
-        setStatus(code === 'ENOENT' || code === 'EACCES' ? 'missing' : 'retrying', `cloudflared could not be started: ${started.message}`);
-        say('error', status.reason!);
+        setStatus(t, code === 'ENOENT' || code === 'EACCES' ? 'missing' : 'retrying', `cloudflared could not be started: ${started.message}`);
+        say('error', about(t, t.status.reason!));
         return;
     }
     let exitedResolve: () => void;
@@ -285,35 +373,35 @@ async function spawnChild(token: string): Promise<void> {
         child, token, pid: child.pid!, startedAt: Date.now(), stopping: false,
         exited: new Promise<void>((res) => { exitedResolve = res; }),
     };
-    running = r;
-    lastError = null;
-    unauthorizedSince = null;
-    setStatus('starting');
-    for (const stream of [child.stdout!, child.stderr!]) readline.createInterface({ input: stream }).on('line', onLine);
+    t.running = r;
+    t.lastError = null;
+    t.unauthorizedSince = null;
+    setStatus(t, 'starting');
+    for (const stream of [child.stdout!, child.stderr!]) readline.createInterface({ input: stream }).on('line', (line) => onLine(t, line));
     child.on('error', () => { /* reported by exit */ });
     child.on('exit', (code, signal) => {
         exitedResolve();
-        if (running !== r) return;
-        running = null;
-        stopPoll();
+        if (t.running !== r) return;
+        t.running = null;
+        stopPoll(t);
         if (r.stopping) return;
         const ran = Date.now() - r.startedAt;
-        if (ran >= opts.backoffResetMs) crashes = 0;
-        crashes++;
-        const delay = Math.min(opts.backoffBaseMs * 2 ** (crashes - 1), opts.backoffMaxMs);
+        if (ran >= opts.backoffResetMs) t.crashes = 0;
+        t.crashes++;
+        const delay = Math.min(opts.backoffBaseMs * 2 ** (t.crashes - 1), opts.backoffMaxMs);
         const how = signal ? `was stopped by ${signal}` : `stopped (exit code ${code})`;
         const wait = delay < 1_000 ? `${delay} ms` : `${Math.round(delay / 1000)} s`;
-        setStatus('retrying', `cloudflared ${how}${lastError ? `: ${lastError}` : ''}; starting it again in ${wait}`);
-        say('warn', status.reason!);
-        if (respawnTimer) clearTimeout(respawnTimer);
-        respawnTimer = setTimeout(() => { respawnTimer = null; void syncTunnel(); }, delay);
-        respawnTimer.unref?.();
+        setStatus(t, 'retrying', `cloudflared ${how}${t.lastError ? `: ${t.lastError}` : ''}; starting it again in ${wait}`);
+        say('warn', about(t, t.status.reason!));
+        if (t.respawnTimer) clearTimeout(t.respawnTimer);
+        t.respawnTimer = setTimeout(() => { t.respawnTimer = null; void syncTunnel(); }, delay);
+        t.respawnTimer.unref?.();
     });
-    schedulePoll(opts.pollStartingMs);
+    schedulePoll(t, opts.pollStartingMs);
 }
 
-async function stopChild(): Promise<void> {
-    const r = running;
+async function stopChild(t: Tunnel): Promise<void> {
+    const r = t.running;
     if (!r) return;
     r.stopping = true;
     try { r.child.kill('SIGTERM'); } catch { /* gone */ }
@@ -322,31 +410,56 @@ async function stopChild(): Promise<void> {
         try { r.child.kill('SIGKILL'); } catch { /* gone */ }
         await r.exited;
     }
-    if (running === r) running = null;
-    stopPoll();
+    if (t.running === r) t.running = null;
+    stopPoll(t);
 }
 
-function clearRespawn(): void {
-    if (respawnTimer) { clearTimeout(respawnTimer); respawnTimer = null; }
+function clearRespawn(t: Tunnel): void {
+    if (t.respawnTimer) { clearTimeout(t.respawnTimer); t.respawnTimer = null; }
+}
+
+/** `host`'s tunnel, made when there is none: on the first metrics port no other tunnel holds, so a lone name keeps the usual one. */
+function tunnelFor(host: string): Tunnel {
+    const had = tunnels.get(host);
+    if (had) return had;
+    const taken = new Set([...tunnels.values()].map((x) => x.metricsPort));
+    let metricsPort = opts.metricsPort;
+    while (taken.has(metricsPort)) metricsPort++;
+    const t: Tunnel = {
+        host, metricsPort, running: null, status: { state: 'off', since: new Date().toISOString(), connections: 0, reason: null },
+        pollTimer: null, respawnTimer: null, crashes: 0, lastToken: null, lastError: null, unauthorizedSince: null, lastHealAt: 0,
+    };
+    tunnels.set(host, t);
+    return t;
+}
+
+/** No tunnel is wanted for this name any more: its child is stopped, and all that was known of it goes. */
+async function retire(t: Tunnel): Promise<void> {
+    clearRespawn(t);
+    if (t.running) await stopChild(t);
+    stopPoll(t);
+    tunnels.delete(t.host);
+    offSince = new Date().toISOString();
+}
+
+/** One name's child onto `want`: a token it already runs changes nothing. */
+async function syncOne(t: Tunnel, want: string): Promise<void> {
+    if (t.running && t.running.token === want) return;
+    // A crashed child is started again by its own timer, after its backoff; a new token starts at once.
+    if (!t.running && t.respawnTimer && t.lastToken === want) return;
+    if (t.lastToken !== want) { clearRespawn(t); t.crashes = 0; }
+    if (t.running) await stopChild(t);
+    t.lastToken = want;
+    await spawnChild(t, want);
 }
 
 async function doSync(): Promise<void> {
-    const want = wantedToken();
-    if (!want) {
-        clearRespawn();
-        crashes = 0;
-        if (running) await stopChild();
-        setStatus('off');
-        flushRepeats(true);
-        return;
-    }
-    if (running && running.token === want) return;
-    // A crashed child is started again by its own timer, after its backoff; a new token starts at once.
-    if (!running && respawnTimer && lastToken === want) return;
-    if (lastToken !== want) { clearRespawn(); crashes = 0; }
-    if (running) await stopChild();
-    lastToken = want;
-    await spawnChild(want);
+    const want = wantedTunnels();
+    const saved = savedTunnelAddress();
+    for (const host of otherTokens.keys()) if (!want.has(host) || (saved && host === tunnelHost(saved))) otherTokens.delete(host);
+    for (const t of [...tunnels.values()]) if (!want.has(t.host)) await retire(t);
+    for (const [host, token] of want) await syncOne(tunnelFor(host), token);
+    if (!want.size) flushRepeats(true);
 }
 
 function serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -355,46 +468,52 @@ function serial<T>(fn: () => Promise<T>): Promise<T> {
     return next;
 }
 
-/** Start, stop or restart the child so it runs node_config's token, or nothing. Serialised: never two children. */
+/** Start, stop or restart the children so each name runs its token, or nothing. Serialised: never two children on a name. */
 export function syncTunnel(): Promise<TunnelStatus> {
     return serial(async () => { await doSync(); return getTunnelStatus(); });
 }
 
-/** Settings' "Restart tunnel": a fresh child on the same token. Returns null when this server runs no tunnel. */
+/** Settings' "Restart tunnel": a fresh child on the same token, for each name. Returns null when this server runs no tunnel. */
 export function restartTunnel(): Promise<TunnelStatus | null> {
     return serial(async () => {
-        const want = wantedToken();
-        if (!want) { await doSync(); return null; }
-        clearRespawn();
-        crashes = 0;
-        if (running) await stopChild();
-        lastToken = want;
-        await spawnChild(want);
-        return getTunnelStatus();
+        const want = wantedTunnels();
+        if (!want.size) { await doSync(); return null; }
+        for (const t of [...tunnels.values()]) if (!want.has(t.host)) await retire(t);
+        for (const [host, token] of want) {
+            const t = tunnelFor(host);
+            clearRespawn(t);
+            t.crashes = 0;
+            if (t.running) await stopChild(t);
+            t.lastToken = token;
+            await spawnChild(t, token);
+        }
+        const st = getTunnelStatus();
+        // Only other names run (the stored one waits for approval): what Settings reads of the restart is theirs.
+        return mainTunnel() ? st : { ...st, ...[...tunnels.values()][0].status };
     });
 }
 
 /** The take-over's tunnel step (takeover.ts): the journal no longer holds the tunnel back. */
 export function startTunnelForTakeover(): Promise<TunnelStatus> {
     takeoverReleased = true;
-    return syncTunnel();
+    return syncTunnel().then((st) => { void askAboutOtherNames(); return st; });
 }
 
 // ── Health ───────────────────────────────────────────────────────────────────────────────────
 
-function stopPoll(): void {
-    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+function stopPoll(t: Tunnel): void {
+    if (t.pollTimer) { clearTimeout(t.pollTimer); t.pollTimer = null; }
 }
 
-function schedulePoll(ms: number): void {
-    stopPoll();
-    pollTimer = setTimeout(() => { pollTimer = null; void poll(); }, ms);
-    pollTimer.unref?.();
+function schedulePoll(t: Tunnel, ms: number): void {
+    stopPoll(t);
+    t.pollTimer = setTimeout(() => { t.pollTimer = null; void poll(t); }, ms);
+    t.pollTimer.unref?.();
 }
 
-async function readyConnections(): Promise<number | null> {
+async function readyConnections(port: number): Promise<number | null> {
     try {
-        const res = await fetch(`http://127.0.0.1:${opts.metricsPort}/ready`, { signal: AbortSignal.timeout(3_000) });
+        const res = await fetch(`http://127.0.0.1:${port}/ready`, { signal: AbortSignal.timeout(3_000) });
         const body: any = await res.json().catch(() => ({}));
         return res.status === 200 ? Math.max(1, Number(body?.readyConnections) || 1) : 0;
     } catch {
@@ -402,30 +521,30 @@ async function readyConnections(): Promise<number | null> {
     }
 }
 
-async function poll(): Promise<void> {
-    const r = running;
+async function poll(t: Tunnel): Promise<void> {
+    const r = t.running;
     if (!r) return;
-    const n = await readyConnections();
-    if (running !== r) return;
+    const n = await readyConnections(t.metricsPort);
+    if (t.running !== r) return;
     if (n && n > 0) {
-        if (status.state !== 'connected') {
-            say('info', `connected to Cloudflare (${n} connection${n === 1 ? '' : 's'})`);
+        if (t.status.state !== 'connected') {
+            say('info', about(t, `connected to Cloudflare (${n} connection${n === 1 ? '' : 's'})`));
             flushRepeats(true);
         }
-        lastError = null;
-        unauthorizedSince = null;
-        setStatus('connected', null, n);
-        maybeMoveOrigin();
+        t.lastError = null;
+        t.unauthorizedSince = null;
+        setStatus(t, 'connected', null, n);
+        if (t === mainTunnel()) maybeMoveOrigin();
         tellMembersWhenReachable();
-    } else if (status.state === 'connected') {
-        setRetrying(lastError || (n === null ? 'cloudflared does not answer its health check' : 'lost its connection to Cloudflare'));
-        say('warn', `no longer connected to Cloudflare (${status.reason})`);
-    } else if (lastError) {
-        setRetrying(lastError);
+    } else if (t.status.state === 'connected') {
+        setRetrying(t, t.lastError || (n === null ? 'cloudflared does not answer its health check' : 'lost its connection to Cloudflare'));
+        say('warn', about(t, `no longer connected to Cloudflare (${t.status.reason})`));
+    } else if (t.lastError) {
+        setRetrying(t, t.lastError);
     }
     flushRepeats();
-    maybeHeal();
-    schedulePoll(status.state === 'connected' ? opts.pollConnectedMs : opts.pollStartingMs);
+    maybeHeal(t);
+    schedulePoll(t, t.status.state === 'connected' ? opts.pollConnectedMs : opts.pollStartingMs);
 }
 
 // ── The registrar: a dead tunnel, and the move to loopback ──────────────────────────────────
@@ -457,7 +576,8 @@ export function tellMembersWhenReachable(): void {
     const pa = (getNodeConfig() as any).publicAddress;
     const want = wantedToken();
     const onTunnel = !!pa?.name && pa.mode !== 'direct';
-    if (onTunnel && !(want && running?.token === want && status.state === 'connected')) return;
+    const main = mainTunnel();
+    if (onTunnel && !(want && main?.running?.token === want && main.status.state === 'connected')) return;
     tellMembersOfNewAddress();
 }
 
@@ -621,11 +741,11 @@ function withKeptOrigin(next: any, prev: any): any {
     return sameName ? { ...next, origin: prev.origin } : next;
 }
 
-function maybeHeal(): void {
-    if (unauthorizedSince === null || registrarBusy || !running) return;
+function maybeHeal(t: Tunnel): void {
+    if (t.unauthorizedSince === null || registrarBusy || !t.running) return;
     const now = Date.now();
-    if (now - unauthorizedSince < opts.deadAfterMs || now - lastHealAt < opts.healDebounceMs) return;
-    void healDeadTunnel();
+    if (now - t.unauthorizedSince < opts.deadAfterMs || now - t.lastHealAt < opts.healDebounceMs) return;
+    void (t === mainTunnel() ? healDeadTunnel(t) : healDeadOtherName(t));
 }
 
 /** The saved name, claimed again: the registrar's heal (its own name) re-asserts the tunnel, ingress and DNS. */
@@ -644,9 +764,9 @@ async function reclaimSaved(pa: any, why: string, since: number): Promise<boolea
     return false;
 }
 
-async function healDeadTunnel(): Promise<void> {
+async function healDeadTunnel(t: Tunnel): Promise<void> {
     registrarBusy = true;
-    lastHealAt = Date.now();
+    t.lastHealAt = Date.now();
     try {
         const pa = savedTunnelAddress();
         const since = publicAddressGeneration();
@@ -655,7 +775,7 @@ async function healDeadTunnel(): Promise<void> {
         if (answersAboutAnotherName(st, pa)) return;
         if (st?.status === 'live') {
             const token = typeof st.tunnelToken === 'string' ? st.tunnelToken.trim() : '';
-            if (token && token !== running?.token) {
+            if (token && token !== t.running?.token) {
                 const stored = persistAddressIfUnchanged(st, 'stored', since);
                 if (!stored) { addressChangedMeanwhile(pa); return; }
                 say('info', `Cloudflare refuses the tunnel; the address service has a new token for ${st.hostname || st.name}: running it`);
@@ -766,6 +886,112 @@ async function moveOriginToLoopback(): Promise<void> {
     }
 }
 
+// ── The other names this key holds ──────────────────────────────────────────────────────────
+
+const labelOf = (host: string): string => host.slice(0, -(REGISTRAR_ZONE.length + 1));
+
+/**
+ * Is `host` still a name this community moved off and holds? A claim, a Release or Take offline may have changed that while
+ * the registrar was asked. The test otherHosts goes by: a Release leaves the row former, its status `released`, and no
+ * `releasedByUsAt`.
+ */
+const stillOther = (host: string): boolean =>
+    registrarNames().some((e) => e.address === host && e.role === 'former' && !e.lost && !e.releasedByUsAt && e.status !== 'released');
+
+const tokenIn = (answer: any): string | null =>
+    (typeof answer?.tunnelToken === 'string' && answer.tunnelToken.trim() ? answer.tunnelToken.trim() : null);
+
+/**
+ * A heal of `host`, one of the other names: never a claim, which could take back a release. The registrar routes it again
+ * only once this server proves its key. Its answer is written on the name, and a new token run by the sync that follows.
+ * False when none was sent, because another registrar job holds the way: the caller's next check is what tries again.
+ */
+async function healOtherName(host: string): Promise<boolean> {
+    if (registrarBusy) return false;
+    registrarBusy = true;
+    try {
+        say('info', `${host}: asking the address service to bring it back, which proves this server's key`);
+        const res = await healAddress(labelOf(host), LOOPBACK_ORIGIN);
+        const { changed: _changed, attest: _attest, ...healed } = res ?? {};
+        const answer = await withLiveToken(healed, labelOf(host));
+        if (!stillOther(host) || typeof answer?.status !== 'string') return true;
+        recordRegistrarAnswer({ ...answer, name: labelOf(host), hostname: host }, 'status');
+        const token = tokenIn(answer);
+        if (token) otherTokens.set(host, token);
+    } catch (e: any) {
+        say('warn', `${host}: asking for it back failed: ${e?.message || e}; this server asks again in a few minutes`);
+    } finally {
+        registrarBusy = false;
+    }
+    return true;
+}
+
+/**
+ * Asks the registrar about `host`, one of the other names, and acts on it. `refused`: Cloudflare refuses its tunnel.
+ *  - Live: a new token is run by the sync that follows; a refused tunnel on the same token is healed.
+ *  - Paused by the sweep: healed, as the stored name is (healable).
+ *  - Any other word about this name (the admin's pause, released, revoked, blocked): written on the name, which stops its
+ *    tunnel. The record keeps the name; the admin's pause is asked about again, and the rest come back by a claim.
+ *  - No word about it: `none` (a registrar that lost its data says that to every key), an answer about another name (a
+ *    registrar that does not read `name`, or a key that holds this one no more), or `pending` (the registrar re-making it).
+ *    What runs keeps running. A refused tunnel is stopped: nothing can bring it back until the registrar speaks of the
+ *    name, and the next tick asks.
+ * False when the answer called for a heal that was not sent (healOtherName). Throws when nothing answered.
+ */
+async function askAbout(host: string, refused = false): Promise<boolean> {
+    const st = await addressStatus(labelOf(host));
+    if (!stillOther(host)) return true;
+    if (registrarHostOf(st) !== host || typeof st?.status !== 'string' || st.status === 'pending') {
+        if (!refused) return true;
+        say('warn', `${host}: Cloudflare refuses its tunnel, and the address service says nothing of it: stopping that tunnel`);
+        otherTokens.delete(host);
+        const t = tunnels.get(host);
+        if (t) t.lastToken = null;
+        return true;
+    }
+    if (st.status === 'live') {
+        recordRegistrarAnswer(st, 'status');
+        const token = tokenIn(st);
+        const same = !token || token === (otherTokens.get(host) ?? tunnels.get(host)?.lastToken);
+        if (token) otherTokens.set(host, token);
+        return refused && same ? healOtherName(host) : true;
+    }
+    if (healable(st, { name: labelOf(host) })) return healOtherName(host);
+    recordRegistrarAnswer(st, 'status');
+    return true;
+}
+
+/**
+ * Cloudflare has refused this name's tunnel past the threshold: what the registrar says of it decides. Stamped before the
+ * ask, so no second check starts during it. The ask holds no registrar flag (healOtherName takes it), so another job can
+ * take the way meanwhile and the heal is not sent: then the stamp goes, and the next poll tries again, not 30 min later. The
+ * agent's tick is no help here: it never heals a live name on an unchanged token.
+ */
+async function healDeadOtherName(t: Tunnel): Promise<void> {
+    t.lastHealAt = Date.now();
+    try { if (!await askAbout(t.host, true)) t.lastHealAt = 0; }
+    catch (e: any) { say('warn', `${t.host}: could not ask the address service about the refused tunnel: ${e?.message || e}`); }
+    await syncTunnel();
+}
+
+/**
+ * The public-address agent's tick, and a take-over's tunnel step: asks the registrar about each other name (nothing, on a
+ * server with one name) and runs what it says. A name it does not answer about keeps what it runs. Never throws.
+ */
+export async function askAboutOtherNames(): Promise<void> {
+    if (askingAboutOthers || !tunnelsMayRun()) return;
+    askingAboutOthers = true;
+    try {
+        for (const host of otherHosts(ASKED_STATES)) {
+            try { await askAbout(host); }
+            catch (e: any) { say('warn', `${host}: could not ask the address service about it: ${e?.message || e}`); }
+        }
+        await syncTunnel();
+    } finally {
+        askingAboutOthers = false;
+    }
+}
+
 // ── Start ────────────────────────────────────────────────────────────────────────────────────
 
 /** Docker's control socket inside this container: this server never uses it, and whatever can use it owns the machine. */
@@ -809,27 +1035,28 @@ export function setTunnelConnectorForTests(o: Partial<Options> | undefined): voi
     opts = o ? { ...opts, ...o } : { ...DEFAULTS };
 }
 
-/** Tests only: what the connector wants and runs. */
-export function tunnelConnectorForTests(): { wantedToken: string | null; runningToken: string | null; pid: number | null; crashes: number; status: TunnelStatus } {
-    return { wantedToken: wantedToken(), runningToken: running?.token ?? null, pid: running?.pid ?? null, crashes, status: getTunnelStatus() };
+/** Tests only: what the connector wants and runs. All but `tunnels` is the stored name's. */
+export function tunnelConnectorForTests(): {
+    wantedToken: string | null; runningToken: string | null; pid: number | null; crashes: number; status: TunnelStatus;
+    tunnels: { host: string; token: string | null; pid: number | null; crashes: number; port: number; state: TunnelState }[];
+} {
+    const t = mainTunnel();
+    return {
+        wantedToken: wantedToken(), runningToken: t?.running?.token ?? null, pid: t?.running?.pid ?? null, crashes: t?.crashes ?? 0, status: getTunnelStatus(),
+        tunnels: [...tunnels.values()].map((x) => ({ host: x.host, token: x.running?.token ?? null, pid: x.running?.pid ?? null, crashes: x.crashes, port: x.metricsPort, state: x.status.state })),
+    };
 }
 
 /** Tests only: stop any child and forget everything, as a fresh process. */
 export async function resetTunnelConnectorForTests(): Promise<void> {
-    await serial(async () => {
-        clearRespawn();
-        if (running) await stopChild();
-    });
-    stopPoll();
+    await serial(async () => { for (const t of [...tunnels.values()]) await retire(t); });
+    otherTokens.clear();
     recent.clear();
-    crashes = 0;
-    lastError = null;
-    lastToken = null;
-    unauthorizedSince = null;
     registrarBusy = false;
-    lastHealAt = 0;
+    askingAboutOthers = false;
     lastOriginAttemptAt = 0;
     missingLogged = false;
     takeoverReleased = false;
-    status = { state: 'off', since: new Date().toISOString(), connections: 0, reason: null, version: null };
+    version = null;
+    offSince = new Date().toISOString();
 }

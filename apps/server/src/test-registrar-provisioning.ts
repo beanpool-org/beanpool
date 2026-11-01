@@ -271,7 +271,8 @@ async function main(): Promise<void> {
 
         await section('5. the quiet tick: live and nothing pending asks every 15 min, anything else every 5', async () => {
             assert(TICK_MS === 5 * 60_000 && QUIET_TICK_MS === 15 * 60_000, `ticks 5 and 15 min (${TICK_MS}, ${QUIET_TICK_MS})`);
-            updateNodeConfig({ publicAddress: { ...live('quiet', 'T-quiet'), origin: 'http://127.0.0.1:8080' } } as any);
+            // A server with this one name: a tick also asks about any other name it holds (tunnel-connector.ts askAboutOtherNames).
+            updateNodeConfig({ publicAddress: { ...live('quiet', 'T-quiet'), origin: 'http://127.0.0.1:8080' }, registrarNames: [] } as any);
             reg.status = (name) => live(name || 'quiet', 'T-quiet');
             const asks = () => callsTo('status').length;
             const t0 = Date.now();

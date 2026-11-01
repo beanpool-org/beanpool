@@ -290,6 +290,19 @@ async function main(): Promise<void> {
     assert(domain.ok && getDirectoryInfo().publicUrl === 'https://beans.example.org' && audienceStanding('203.0.113.5') === 'own',
         `a domain given later is the directory's publicUrl, and the IP stays this community's (${show(getDirectoryInfo().publicUrl)})`);
 
+    console.log('\n--- 4b. while a name waits, only an address the Internet can reach stands in for it ---');
+    for (const home of ['192.168.1.20', 'beans.local']) {
+        apply({ name: 'a claim still pending', publicAddress: pending, want: all(null) });
+        updateNodeConfig({ ownerAddresses: [home] } as any);
+        forgetOwnAddresses();
+        assert(resolvePublicNodeUrl(PUBLIC_URL_RULES.community) === `https://${REG}`, `a home address ${home} is not where the directory and the card are sent (got ${show(resolvePublicNodeUrl(PUBLIC_URL_RULES.community))})`);
+    }
+    updateNodeConfig({ ownerAddresses: ['203.0.113.5'] } as any);
+    forgetOwnAddresses();
+    assert(resolvePublicNodeUrl(PUBLIC_URL_RULES.community) === 'https://203.0.113.5', `a public address kept from before the claim still stands in (got ${show(resolvePublicNodeUrl(PUBLIC_URL_RULES.community))})`);
+    updateNodeConfig({ ownerAddresses: [] } as any);
+    forgetOwnAddresses();
+
     console.log('\n--- 5. CF_RECORD_NAME stays a published own name whenever set (rename S1) ---');
     const STORED: [string, unknown][] = [
         ['a registrar name by tunnel', tunnel], ['a registrar name, direct', direct], ['a claim still pending', pending],

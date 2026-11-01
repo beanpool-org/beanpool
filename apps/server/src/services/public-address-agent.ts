@@ -47,7 +47,7 @@ import { runAcmeTickSoon } from './acme/schedule.js';
 import { getGlobalCommunityUrl } from '../config/global-community.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { logger } from '../logger.js';
-import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken, withLiveToken } from './tunnel-connector.js';
+import { askAboutOtherNames, persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken, withLiveToken } from './tunnel-connector.js';
 import { addressVerified } from './directory-publisher.js';
 
 // Where it always lived; the take-over suites import it from here.
@@ -445,6 +445,8 @@ export async function tick(now = Date.now()): Promise<void> {
     if (!tickDue(now)) return;
     lastAskedAt = now;
     await reconcile();
+    // Outside reconcile: a name the community moved off keeps its tunnel while nothing is stored, or a claim waits.
+    await askAboutOtherNames();
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

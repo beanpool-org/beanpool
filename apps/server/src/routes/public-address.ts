@@ -91,7 +91,7 @@ async function verifyEdgeStatus(hostname: string, target: 'live' | 'offline', ma
                 addProbeLog('4/4', `Probe ${i + 1}/${maxAttempts} (${elapsed}s): HTTP ${status === 530 ? '530 — waiting for tunnel…' : status}`, 'info');
             } else if (target === 'offline') {
                 if (status === 530 || status === 502 || status === 520 || status === 522 || status === 523 || status === 404 || status === 0) {
-                    addProbeLog('4/4', `🔴 Probe ${i + 1}/${maxAttempts}: HTTP ${status} — Confirmed OFFLINE!`, 'warning');
+                    addProbeLog('4/4', `🔴 Probe ${i + 1}/${maxAttempts}: HTTP ${status} — ${hostname} confirmed OFFLINE!`, 'warning');
                     return true;
                 }
                 addProbeLog('4/4', `Probe ${i + 1}/${maxAttempts}: HTTP ${status} (waiting for teardown…)`, 'info');
@@ -160,8 +160,10 @@ const foldName = (n: unknown): string => String(n ?? '').trim().replace(/\.$/, '
 /**
  * Why `name` (folded) is not one to release by name, or null: it is the stored address, the name the record of names calls
  * current (the status read stores it, even with the stored address cleared: #1583 review r4176138202), the name the
- * public-address agent asks for, or the owner's pending Settings pick (a claim that got no answer here, still their latest
- * choice, which the connector or Settings' status read may store at any moment: #1583 review r4176051848).
+ * public-address agent asks for, the owner's pending Settings pick (a claim that got no answer here, still their latest
+ * choice, which the connector or Settings' status read may store at any moment: #1583 review r4176051848), or the name the
+ * community lives at now (primaryAddress), which a former name is while the stored one waits for approval or after Take
+ * offline: Release would end the only way in with no word to anyone, where Take offline tells the members.
  */
 function notReleasable(name: string): string | null {
     const host = `${name}.${REGISTRAR_ZONE}`;
@@ -172,13 +174,14 @@ function notReleasable(name: string): string | null {
     if (turnedAwayList().some((e) => e.why === 'unanswered' && foldName(e.name) === name)) {
         return `${host} is the name you chose last; another pick or Take offline replaces it.`;
     }
+    if (primaryAddress() === host) return `${host} is where members reach this community now. It can be released once another name is live.`;
     return null;
 }
 
 /**
  * Names this server's key may hold besides its stored address (#1576 review r4175512149): the install's late claim and
  * every name on the turned-away list or kept as former in the record of names, never the stored name, the one the
- * public-address agent asks for, nor the owner's pending pick. Newest first.
+ * public-address agent asks for, the owner's pending pick, nor the name the community lives at now. Newest first.
  */
 function extraNameCandidates(): string[] {
     const suffix = `.${REGISTRAR_ZONE}`;
@@ -390,7 +393,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
             // Before the stored address changes: where the community lives until now stays one of its addresses. A live
-            // tunnel name goes dark, as this server runs one connector until slice S2, so it gets its own words below.
+            // tunnel name keeps its own tunnel beside the new one; one with no tunnel to keep gets its own words below.
             const tunnelGoesDark = claimTakesTunnelDark(claimed);
             const replaced = claimReplacesAddress(claimed);
             // Recorded before the stored address changes: a name held until now is kept, as former.
@@ -489,12 +492,15 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const list = turnedAwayList();
         const late = new Set(list.filter((e) => e.why === 'late-claim').map((e) => foldName(e.name)));
         const install = new Set(list.filter((e) => e.why === 'late-claim' || e.why === 'install-request-ended' || e.why === 'request-replaced').map((e) => foldName(e.name)));
+        // `fromInstall` tells Settings a name was never used, so never a name the community moved off that still answers:
+        // a Settings claim of the name the install asked for lists it too (dropAddressRequest), and phones may be on it.
+        const wentBy = new Set(registrarNames().filter((e) => e.role === 'former' && e.status === 'live').map((e) => e.address));
         const candidates = extraNameCandidates();
         // Asked all at once, each with a short wait, and reused for a minute: Settings never waits on the registrar.
         const answers = await Promise.all(candidates.map((name) => heldForSettings(name)));
         for (const [i, name] of candidates.entries()) {
             const h = answers[i];
-            const fromInstall = install.has(name);
+            const fromInstall = install.has(name) && !wentBy.has(`${name}.${REGISTRAR_ZONE}`);
             if (h.held) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: h.state, releasable: true, fromInstall });
             // An older registrar can't say who holds it: the agent's late claim was given to this key, so it is shown,
             // with nothing to release it by.
@@ -562,7 +568,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 return;
             }
             dropReleasedAddress(host);
-            console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result.status})`);
+            // Written on the name, so its tunnel stops: the registrar has just deleted it.
+            recordRegistrarAnswer(result, 'status');
+            await syncTunnel();
+            console.log(`[PublicAddr] the owner released "${name}", a name this community held (${result.status})`);
             noteSecurityEvent({ key: 'sec.address', detail: OWNER_ALERT_WORDS.nameReleased, ...actingAs(ctx.state) });
             ctx.body = { success: true, name, status: result.status, addressUnchanged: publicAddressGeneration() === since };
         } catch (e: any) {
@@ -645,7 +654,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // offline, the install's late claim): Settings shows it offline. Any other answer is only written on
             // the name it concerns, below.
             if (result.status === 'live' && answersAboutAnotherName(result, stored, nameAskedFor())) {
-                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored), ...serverSide() };
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored ?? { status: 'none' }), ...serverSide() };
                 return;
             }
             if (result.status === 'live' && publicAddressGeneration() !== since) {
@@ -795,6 +804,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // answer gives it (held_until), and none when it gives none: then the registrar freed the name at once.
             // Recorded before the stored address goes.
             recordRegistrarAnswer(result, 'released');
+            // A registrar that does not read the name released another one: what the owner took offline stops here all the
+            // same, and its tunnel with it, as the name is no longer one this community keeps up (tunnel-connector.ts).
+            const answered = registrarHostOf(result);
+            if (answered && answered !== registrarHostOf(prevConfig)) recordRegistrarAnswer({ name: prevConfig?.name, hostname: hostname, status: 'released' }, 'status');
             updateNodeConfig({ publicAddress: null } as any);
             dropReleasedAddress(registrarHostOf(prevConfig));
             forgetAddressNotice();
@@ -803,14 +816,19 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             noteTurnedAway(prevConfig?.name, 'taken-offline');
             addProbeLog('2/4', `⏳ Stopping the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
-            addProbeLog('3/4', tunnel.state === 'off' ? `✅ Tunnel stopped` : `❌ Tunnel still ${describeTunnel(tunnel)}`, tunnel.state === 'off' ? 'success' : 'error');
+            // A name the community moved off keeps its own tunnel, so this server can stay public there: the owner is told so,
+            // never that it is offline. The way to end one is to claim it back and Take offline (tunnel-connector.ts otherHosts).
+            const stillAnswering = (tunnel.others ?? []).map((o) => o.host);
+            if (tunnel.state !== 'off') addProbeLog('3/4', `❌ Tunnel still ${describeTunnel(tunnel)}`, 'error');
+            else if (stillAnswering.length) addProbeLog('3/4', tr("⚠️ The released name's tunnel stopped. This server still answers at {addresses}.", { addresses: stillAnswering.join(', ') }), 'warning');
+            else addProbeLog('3/4', `✅ Tunnel stopped`, 'success');
             if (hostname) {
                 verifyEdgeStatus(hostname, 'offline', 10).catch(err => {
                     console.warn('[PublicAddr] Edge offline probe error:', err?.message || err);
                 });
             }
             if (prevConfig?.name) addressChangedByOwner(ctx, 'offline', prevConfig.status === 'live');
-            ctx.body = { success: true, ...addressFields(ctx, result), status: 'none' };
+            ctx.body = { success: true, ...addressFields(ctx, result), status: 'none', stillAnswering };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Offline failed: ${e.message}`, 'error');
             ctx.status = 400;

@@ -73,7 +73,7 @@ vi.mock('../tour-store', () => ({
 
 const dbMock = vi.hoisted(() => ({
     unreadCount: 5,
-    runAsync: vi.fn(async () => ({ changes: 1 })),
+    runAsync: vi.fn(async (_query?: string, _params?: any[]) => ({ changes: 1 })),
 }));
 
 vi.mock('../db', () => ({

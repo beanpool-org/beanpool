@@ -19,7 +19,7 @@ const dbAdapter = {
     }),
     execAsync: vi.fn(async () => {}),
     getAllAsync: vi.fn(async () => []),
-    getFirstAsync: vi.fn(async () => null),
+    getFirstAsync: vi.fn(async () => null as any),
     closeAsync: vi.fn(async () => {}),
     withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
 };

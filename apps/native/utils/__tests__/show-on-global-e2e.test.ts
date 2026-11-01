@@ -1386,18 +1386,24 @@ describe('a copy global\'s reports hold: a rest at home waits, so nothing comes 
         expect((await copyRow(id)).status).toBe('active');
     }, START_MS);
 
-    it('a moderator\'s takedown of a held copy doesn\'t keep the rest waiting', async () => {
+    it('a moderator\'s takedown of a held copy doesn\'t keep a rest\'s retry waiting: the stamp is on a cancelled row', async () => {
         const me = await memberOfBoth('Holly Taken');
         const home = await listingAtHome(me, 'Mulberries');
         await showOnGlobal(home, local.url, me, deps());
         const id = await copyIdOf(home.id, me);
-        await holdByReports(id);
-        await globalSql("UPDATE posts SET status = 'cancelled' WHERE id = ?", [id]);
         const [, off] = homeRests[0];
         await off(me, home);
+        const noPosts: CopyDeps = { ...deps(), post: (async (url: string, ...rest: any[]) => {
+            if (String(url).startsWith(global_.url)) throw new Error('timed out');
+            return (signedPost as any)(url, ...rest);
+        }) as any };
+        await tendCopies(me, noPosts);
+        expect((await pairOf(home.id, me.publicKey))?.leaving).toBe(true);
+
+        await holdByReports(id);
+        await globalSql("UPDATE posts SET status = 'cancelled' WHERE id = ?", [id]);
         await tendCopies(me, deps());
-        expect(await liveCopies(me)).toEqual([]);
-        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        expect((await pairOf(home.id, me.publicKey))?.leaving).toBeFalsy();
     }, START_MS);
 
     it('a moderator\'s restore while the listing is off the board: the rest goes ahead and the copy comes back', async () => {

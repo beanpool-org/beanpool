@@ -21,7 +21,8 @@ const s = JSON.parse(fs.readFileSync(file, 'utf8'));
 const a = process.argv.slice(2);
 fs.appendFileSync(file + '.calls', a.join(' ') + '\n');
 const save = () => fs.writeFileSync(file, JSON.stringify(s));
-const out = (t) => { if (t !== undefined) console.log(t); save(); process.exit(0); };
+// writeSync: console.log then exit can lose the end of a long answer to a pipe.
+const out = (t) => { save(); if (t !== undefined) fs.writeSync(1, t + '\n'); process.exit(0); };
 const die = (t) => { save(); console.error(t || 'refused'); process.exit(1); };
 const has = (x) => a.includes(x);
 const val = (name) => a.find((v) => v.startsWith(name + '='))?.slice(name.length + 1);
@@ -44,7 +45,8 @@ if (a[0] === 'pr') {
         if (f === 'headRefOid') out(p.head);
         out([p.id, p.state, p.isDraft, p.base, p.head, p.mergeable].join(' '));
     }
-    if (a[1] === 'diff') { if (p.diffUnreadable) die(); out(has('--name-only') ? p.files.join('\n') : p.patch); }
+    // As GitHub answered on #2295: PullRequest.diff too_large, HTTP 406, for --name-only as well.
+    if (a[1] === 'diff') { if (p.diffUnreadable || p.files.length > 300) die('HTTP 406: Sorry, the diff exceeded the maximum number of files (300).'); out(has('--name-only') ? p.files.join('\n') : p.patch); }
     if (a[1] === 'merge') {
         if (has('--disable-auto')) out();
         if (has('--admin') && s.adminMerges) { p.state = 'MERGED'; out(); }
@@ -92,7 +94,11 @@ if (a[0] === 'api') {
     if (path.includes('/rulesets/')) out(s.ruleset);
     if (path.includes('/git/ref/heads/main')) out('mainsha');
     const files = /pulls\/(\d+)\/files/.exec(path);
-    if (files) out(s.prs[files[1]].files.join('\n'));
+    if (files) {
+        const p = s.prs[files[1]];
+        if (p.diffUnreadable) die();
+        out(after('--jq').includes('patch') ? p.patch : p.files.join('\n'));
+    }
     if (path.includes('/contents/') && !has('-X')) out('blobsha');
     out();
 }
@@ -181,7 +187,18 @@ test('a changed line that writes a balance counts as money, in any file; a line 
     w.pr(1, { patch: '--- a/x.ts\n+++ b/x.ts\n+  db.prepare("UPDATE accounts SET balance = ?").run(1);\n' });
     w.pr(2, { patch: '-  conservingTransaction(db, () => {});\n' });
     w.pr(3, { patch: '+  const balance = 1;\n+  // AND balance = 0\n' });
-    assert.equal(plan(w, 1, 2, 3).out.trim(), ['queue 1 first (money line)', 'queue 2 first (money line)', 'queue 3'].join('\n'));
+    w.pr(4, { patch: '+  db.exec("update accounts set balance = 0");\n' });
+    assert.equal(plan(w, 1, 2, 3, 4).out.trim(), ['queue 1 first (money line)', 'queue 2 first (money line)', 'queue 3', 'queue 4 first (money line)'].join('\n'), 'SQL in any case: the train reads these with git diff -i');
+}));
+
+test('a PR of over 300 files is boarded and read in full: GitHub refuses its diff, and 9 of the last 17 guide publishes are that size', () => world((w) => {
+    const files = Array.from({ length: 1528 }, (_, i) => `apps/website/guide/page-${i}.html`);
+    w.pr(1, { files });
+    w.pr(2, { files: ['apps/server/src/engine/escrow.ts', ...files] });
+    w.pr(3, { files, patch: `${'+  a line of a page\n'.repeat(20_000)}+  conservingTransaction(db, () => {});\n${'+  a line of a page\n'.repeat(20_000)}` });
+    const r = plan(w, 1, 2, 3);
+    assert.equal(r.status, 0, r.out);
+    assert.equal(r.out.trim(), ['queue 1', 'queue 2 first (money path)', 'queue 3 first (money line)'].join('\n'));
 }));
 
 test('each reason to leave a PR out names it, and the others still go', () => world((w) => {

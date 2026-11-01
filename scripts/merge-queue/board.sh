@@ -36,14 +36,18 @@ say_fate() { FATE[$1]="$2"; echo "#${NUM[$1]} $2"; [ -n "$PLAN" ] || journal "${
 leave() { say_fate "$1" "left out: $2"; }
 
 # why_alone <i> <labels>: prints why the PR goes ahead of the rest, or nothing. Returns 1 when its changes cannot be read.
+# The files API, not `gh pr diff`: GitHub refuses a diff of over 300 files (HTTP 406), and 9 of the last 17 guide publishes were,
+# so they could never board. Here-strings, not a pipe into grep -q: under pipefail a match ends grep before a long list is
+# written, and the SIGPIPE reads as no match. -i as the train's rule has it (test-all-train.sh): SQL is written in any case.
 why_alone() {
   local p=${NUM[$1]} patch names
   case ",$(printf '%s' "$2" | tr 'A-Z\n' 'a-z,')," in *",tier-a,"*|*",tier a,"*|*",tier:a,"*) echo "tier-A"; return 0 ;; esac
-  names=$(gh pr diff "$p" -R "$REPO" --name-only 2>/dev/null) || return 1
+  names=$(gh api --paginate "repos/$REPO/pulls/$p/files" --jq '.[].filename' 2>/dev/null) || return 1
   [ -n "$names" ] || return 1
-  if printf '%s\n' "$names" | grep -qE "$MONEY_PATHS"; then echo "money path"; return 0; fi
-  patch=$(gh pr diff "$p" -R "$REPO" 2>/dev/null) || return 1
-  if printf '%s\n' "$patch" | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) ' | sed 's/^[-+]//' | grep -qE "$MONEY_LINE"; then echo "money line"; fi
+  if grep -qE "$MONEY_PATHS" <<<"$names"; then echo "money path"; return 0; fi
+  patch=$(gh api --paginate "repos/$REPO/pulls/$p/files" --jq '.[] | .patch // empty' 2>/dev/null) || return 1
+  patch=$(sed -n 's/^[-+]//p' <<<"$patch")
+  if grep -qiE "$MONEY_LINE" <<<"$patch"; then echo "money line"; fi
   return 0
 }
 

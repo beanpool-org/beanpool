@@ -30,7 +30,7 @@ Object.assign(process.env, {
     GIT_CONFIG_KEY_2: 'core.fsmonitor', GIT_CONFIG_VALUE_2: 'false',
 });
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const node = (cwd, script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
+const node = (cwd, script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: undefined } });
 const build = (cwd, ...args) => node(cwd, `${PKG}/scripts/build.mjs`, ...args);
 /** The check as a GitHub Actions run of `event` (pull_request, push, workflow_dispatch) runs it. */
 const ciCheck = (cwd, event) => spawnSync(process.execPath, [`${PKG}/scripts/build.mjs`, '--check'],
@@ -273,6 +273,19 @@ function handPublish(cwd, change) {
     for (const [name, text] of Object.entries(renderWebsite(guide))) write(cwd, `${WEBSITE}/${name}`, text);
 }
 const changeText = g => { g.guides[0].blocks[0] = { type: 'p', text: 'Words that no page says.' }; };
+
+// This suite runs inside GitHub's own runs, and in the merge queue its event would send an author's build in a throwaway repo to
+// the commit before HEAD: red on every queue entry, and on no pull request.
+test('the run this suite is in does not reach the throwaway repos: only ciCheck names an event', () => {
+    const before = process.env.GITHUB_EVENT_NAME;
+    process.env.GITHUB_EVENT_NAME = 'merge_group';
+    try {
+        assert.equal(node(process.cwd(), '-p', 'String(process.env.GITHUB_EVENT_NAME)').stdout.trim(), 'undefined');
+    } finally {
+        if (before === undefined) delete process.env.GITHUB_EVENT_NAME;
+        else process.env.GITHUB_EVENT_NAME = before;
+    }
+});
 
 test('a published copy over 1 MiB on main is still found: a PR that leaves it alone passes the check', () => {
     const repo = makeRepo();

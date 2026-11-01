@@ -51,6 +51,8 @@ Run it in the background: it stays until each PR has landed or been taken out. T
 
 It checks what the Mac queue checked: tier-A labels and the money list (`MONEY_PATHS` and `MONEY_LINE` in `scripts/test-all-train.sh`, read from main) set the order; the head is the one cleared and is queued by its sha, so a push since is refused; GitHub is green on it; each landing is verified by `--stat`, and that the commit is on main and carries the PR's files. It calls GitHub's `enqueuePullRequest`, not `gh pr merge`: that goes through auto-merge, which is off here, and an armed auto-merge outlives a later push. There is no quiet hour: the 03:15-03:40 pause was the Mac's `/tmp`, and GitHub has no such thing.
 
+It reads a PR's changes from GitHub's files API, because `gh pr diff` is refused over 300 files, and most guide publishes are. Every PR rides alone either way, so the money list only sets the order.
+
 A conflict with main leaves the PR out with a line. `scripts/words-merge-3way.mjs` still merges word catalogs by key, by hand, on the branch: the queue cannot.
 
 A queue entry's guide and words checks compare with its first parent, what it lands on, not with main under every entry. A guide publish behind a page edit is stale, so the queue takes it out: run `pnpm guide:publish --merge` again.
@@ -76,6 +78,8 @@ The queue takes the PR out. Nothing puts it back by itself, and the board refuse
 `RERUN`, `REQUEUED`, `RED` and `OUT` lines go in the journal, and the rerun's reasons on the PR too. A test that goes red in the queue twice in a week gets a lane to fix it, not a third look.
 
 `GREEN-BY-RERUN` is gone: the Mac's recheck counted a failure as green when the failing piece passed alone (10 times since 31 Oct). The queue has no such rule.
+
+**A queue entry can go red where its PR went green.** Its tree has the PRs ahead in it, and `GITHUB_EVENT_NAME` is `merge_group`, which turbo passes to every task and the guide and words checks read. A test that runs those checks in a throwaway repo has to name its own event. To see what a queue run sees, on any checkout: `CI=true GITHUB_ACTIONS=true GITHUB_EVENT_NAME=merge_group pnpm turbo run test --filter=@beanpool/guide --force`.
 
 ## Break-glass
 

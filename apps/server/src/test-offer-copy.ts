@@ -53,11 +53,11 @@ function signedHeaders(method: string, p: string, body: string, id: Id): Record<
     };
 }
 type Answer = { status: number; body: any; text: string };
-async function call(method: 'GET' | 'POST', p: string, id: Id | null, payload?: unknown): Promise<Answer> {
+async function call(method: 'GET' | 'POST', p: string, id: Id | null, payload?: unknown, headers: Record<string, string> = {}): Promise<Answer> {
     const body = payload === undefined ? '' : JSON.stringify(payload);
     const res = await localFetch(`${BASE}${p}`, {
         method,
-        headers: { ...(id ? signedHeaders(method, p, body, id) : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        headers: { ...(id ? signedHeaders(method, p, body, id) : {}), ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
         ...(body ? { body } : {}),
     });
     const text = await res.text();
@@ -244,6 +244,14 @@ async function main() {
     leaks(report.text, 'the reporter, the answer');
     assert((db.prepare('SELECT target_pubkey FROM abuse_reports WHERE target_post_id = ?').get(copyId) as any)?.target_pubkey === robin.pubKeyHex, 'the moderators\' queue has the real author');
     db.prepare('DELETE FROM abuse_reports WHERE target_post_id = ?').run(copyId);
+    // Hidden by reports: a sync read gives a removal, and a copy's names nobody (hiddenAsRemoved; found on #2711).
+    db.prepare(`UPDATE posts SET hidden_by_reports_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(copyId);
+    const hiddenSync = await call('GET', '/api/marketplace/posts?sync=true&types=offer,need', sam);
+    const hiddenRow = (hiddenSync.body as any[]).find((p) => p.id === copyId);
+    assert(hiddenRow?.authorPublicKey === 'hidden' && hiddenRow?.title === '' && hiddenRow?.status === 'cancelled', `hidden by reports, a member's sync reads a removal that names nobody (${JSON.stringify(hiddenRow)?.slice(0, 120)})`);
+    leaks(hiddenSync.text, 'a member, a sync with it hidden');
+    assert(!(hiddenRow && 'shownPrice' in hiddenRow), 'and no price');
+    db.prepare('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ?').run(copyId);
     const mine = await call('GET', `/api/marketplace/posts?author=${robin.pubKeyHex}`, sam);
     assert(!mine.text.includes(copyId), 'one member\'s list, read by another, leaves it out');
     const own = await byId(copyId, robin);
@@ -382,6 +390,8 @@ async function main() {
         assert(on.status === 409 && on.body?.code === LISTING_COPY_CODE, `Beans on: ${what} is refused with the copy's words (${on.status} ${on.text.slice(0, 120)})`);
         leaks(on.text, `Beans on, ${what}`);
     }
+    const inSpanish = await call('POST', '/api/marketplace/posts/accept', sam, { postId: copyId, buyerPublicKey: sam.pubKeyHex }, { 'X-Language': 'es' });
+    assert(inSpanish.status === 409 && /otra comunidad/.test(inSpanish.body?.error ?? ''), `the refusal is in the member's language (${inSpanish.text.slice(0, 120)})`);
     // A request row put there by hand, as an older server might have left one: still no approval.
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
                 VALUES ('hand-made', ?, ?, ?, 20, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(copyId, sam.pubKeyHex, robin.pubKeyHex);

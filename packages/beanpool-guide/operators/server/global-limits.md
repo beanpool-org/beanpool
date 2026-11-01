@@ -53,13 +53,15 @@ A deleted photo's row goes at once, so no one can open it again. The file goes w
 
 A standby archives nothing of its own: it copies the result from the main server, photo deletions included.
 
-## A member's copy of an event
+## A member's copy of an event, an Offer or a Need
 
-A member of a local community can tick **Also show this on the global community** on an event at a place. Their phone posts a copy here, by their own key, as their own post: probation, the day's limits, reports, auto-hide and the archive count it as any post. Your server calls no community for it, and their community's server is never told.
+A member of a local community can tick **Also show this on the global community** on an event at a place, or on their own Offer or Need. Their phone posts a copy here, by their own key, as their own post: probation, the day's limits, reports, auto-hide and the archive count it as any post. Your server calls no community for it, and their community's server is never told.
 
 A copy shows nobody: no name, no key and nothing to message, to members as to visitors. Only moderators, from a report, see who posted it. It has the times, the words, the photos and a point rounded to about 10 km; no place name and no note are kept, whatever a phone sends. It takes no RSVP and has no chat.
 
-A copy mostly stays put when something happens to a member's account here, because a copy that came and went with an account would say whose it is. A block, a holiday, a new name and a new key leave it as it is, on every read and on the socket. A holiday at the member's home community is theirs to act on: their phone takes the copy down and puts it back. A pause here leaves it too: a paused member's other listings leave the Market, and their copy stays up until a report or a moderator takes it down, or its date passes.
+An Offer or a Need has its words, its photos, the same rounded point, and its price at home as words: "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you." The price is only ever words. It is kept apart from a listing's Beans, which stay at 0 on a copy, and nothing adds it up, compares it or pays it. Nothing can be bought, taken up, asked for or reviewed on a copy, by any app, and that holds on a server with Beans on too.
+
+A copy mostly stays put when something happens to a member's account here, because a copy that came and went with an account would say whose it is. A block, a holiday, a new name and a new key leave it as it is, on every read and on the socket. A holiday at the member's home community is theirs to act on: their phone takes the copy down and puts it back. A pause here leaves it too: a paused member's other listings leave the Market, and their copy stays up until a report or a moderator takes it down, or its date passes, or for an Offer or a Need the archive takes it.
 
 A copy has to come down when its author does. A removal, a burst hide or a deleted account takes it down with the member's other posts, and a member watching the listings can tell.
 

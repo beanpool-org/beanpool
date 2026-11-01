@@ -826,5 +826,9 @@
   "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir.",
   "from {community}": "de {community}",
   "{from} · {door}": "{from} · {door}",
-  "To go, ask someone in {community}. It takes new members by invite.": "Para ir, pregunta a alguien de {community}. Acepta miembros nuevos por invitación."
+  "To go, ask someone in {community}. It takes new members by invite.": "Para ir, pregunta a alguien de {community}. Acepta miembros nuevos por invitación.",
+  "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} en {community} · No puedes comprar ni tomar esto hasta que {community} te dé la bienvenida.",
+  "{price} in another community · You can't buy or take this here.": "{price} en otra comunidad · Aquí no puedes comprar ni tomar esto.",
+  "You can't buy or take this until {community} welcomes you.": "No puedes comprar ni tomar esto hasta que {community} te dé la bienvenida.",
+  "This is from another community, so you can't buy or take it here.": "Esto es de otra comunidad, así que aquí no puedes comprarlo ni tomarlo."
 }

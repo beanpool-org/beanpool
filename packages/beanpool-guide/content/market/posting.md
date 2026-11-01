@@ -44,6 +44,16 @@ There are no Beans on the global community, so a post there has no price. The fo
 
 Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos. Members of the global community see your spot to about a kilometre.
 
+## Showing it on the global community
+
+On your own Offer or Need, for everyone, with a place, you can tick **Also show this on the global community**. It is off until you tick it, and your phone can also do it later from the listing's own page. A lendable Offer counts as an Offer. An enterprise's listing, and one for a group or one person, can't be shown.
+
+Your phone posts a copy there with your own key. Your community's server does nothing and learns nothing. The copy has the listing's words, its photos, its place rounded to about 10 km, and its price in words, with this line: *20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.* It shows no name, and nobody can message you from it.
+
+Nobody can buy it, take it up or start a deal on it there, and the global community has no Beans. Someone who wants it asks to join your community, and it is yours to deal with once they are welcomed. If your community isn't in the directory, the copy shows with no community's name and no way to ask.
+
+Edit the listing here and the copy follows. Pause it, or have it in a deal, out on loan or hidden by reports, and the copy comes down, then goes back up as a new copy when it is back on the board. Remove it, or finish its deal, and the copy goes for good. **Stop showing** on the listing's page takes it down at any time. All of this runs on your phone: it catches up when the app next opens, and a change made in the web app reaches the copy then too. Copies count as posts on the global community, with its daily limits for a new account.
+
 ## Not sure what to charge?
 
 On the phone, tap **Not sure what to charge?** under the price. In the web app the form has no such line: open **💡 Pricing Guide** on the Market instead. A rough guide: 40 beans is about an hour of someone's time. The **Community Pricing Guide** has estimates for many everyday things. On the phone, tapping one fills in an Offer for you. In the web app, tapping one opens the New Post form on the Map without filling anything in.

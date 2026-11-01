@@ -99,6 +99,7 @@ interface EventRow {
     active: number;
     status: string;
     event_state: string | null;
+    event_start_at: string | null;
     event_end_at: string | null;
     author_pubkey: string;
     created_by: string | null;
@@ -113,7 +114,7 @@ interface EventRow {
     event_start_local?: string | null;
 }
 
-const EVENT_COLUMNS = `id, title, active, status, event_state, event_end_at, author_pubkey, created_by,
+const EVENT_COLUMNS = `id, title, active, status, event_state, event_start_at, event_end_at, author_pubkey, created_by,
                        audience_scope, target_group_id, event_private_note, event_host_lets_in, hidden_by_reports_at, type,
                        event_repeat, event_repeat_until, event_start_local`;
 

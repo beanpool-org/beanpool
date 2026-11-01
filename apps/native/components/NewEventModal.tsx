@@ -39,6 +39,7 @@ import { createPost, fetchEventZone, fetchEventZones, fetchGroups, getBalance, g
 import { useNodeProfile } from '../utils/use-node-profile';
 import { askForPostPhoto } from '../utils/post-photo';
 import { HAS_MAPS_KEY } from '../utils/maps';
+import { darkMapStyle, mapSchemeKey } from '../utils/map-scheme';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
     buildEventDraft, buildEventEditPatch, approximatePin, freshEventPin, defaultEventEnd, formatPickerValue,
@@ -101,7 +102,7 @@ interface NewEventModalProps {
 }
 
 export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin, editOf, onSaved }: NewEventModalProps) {
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
     // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
@@ -820,8 +821,11 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <View style={styles.mapBox}>
                                 {HAS_MAPS_KEY ? (
                                     <MapView
+                                        key={mapSchemeKey(Platform.OS, theme === 'dark')}
                                         style={StyleSheet.absoluteFill}
                                         provider={PROVIDER_DEFAULT}
+                                        userInterfaceStyle={theme}
+                                        customMapStyle={theme === 'dark' ? darkMapStyle : undefined}
                                         ref={mapRef}
                                         initialRegion={DEFAULT_REGION}
                                         onMapReady={() => { if (pin) centreMap(pin.lat, pin.lng); }}

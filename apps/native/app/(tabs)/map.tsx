@@ -29,6 +29,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans } from '../../utils/market-global';
 import { MapStackList } from '../../components/MapStackList';
 import { planBubbleTap, stackPosts } from '../../utils/map-stack';
+import { darkMapStyle, hidePoisStyle, mapIsDark, mapSchemeKey, type MapSchemePick } from '../../utils/map-scheme';
 
 // The window as the clustering library read it: once, when the app loaded (its helpers.js). A bubble's zoom is worked out in its units.
 const CLUSTER_WINDOW = Dimensions.get('window');
@@ -36,33 +37,6 @@ const CLUSTER_WINDOW = Dimensions.get('window');
 const CATEGORIES = POST_CATEGORIES;
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
 const CATEGORIES_BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
-
-// Hide Google Maps POI markers
-const hidePoisStyle = [
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.park", elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-];
-
-const darkMapStyle = [
-  ...hidePoisStyle,
-  { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
-  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
-];
 
 const ClusterMarker = ({ cluster, clustersReady }: any) => {
     const { geometry, onPress, properties } = cluster;
@@ -219,12 +193,11 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
 
 export default function MapScreen() {
     const currencyStr = useCurrencyString();
-    const { theme, colors } = useTheme();
-    const [isDarkMap, setIsDarkMap] = useState(theme === 'dark');
-
-    useEffect(() => {
-        setIsDarkMap(theme === 'dark');
-    }, [theme]);
+    const { theme, themeLoading, colors } = useTheme();
+    const [pillPick, setPillPick] = useState<MapSchemePick | null>(null);
+    // A change of theme ends the pill's pick for good: back on the old theme, the pick does not return.
+    if (pillPick && pillPick.theme !== theme) setPillPick(null);
+    const isDarkMap = mapIsDark(theme, pillPick);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -535,8 +508,11 @@ export default function MapScreen() {
                     }}
                 />
             )}
-            {HAS_MAPS_KEY ? (
+            {/* Android fixes the map's base when it is created (utils/map-scheme.ts): the first one waits for the stored
+                theme, and a new scheme is a new map, which opens where the tracked region left the last one. */}
+            {themeLoading ? null : HAS_MAPS_KEY ? (
                 <MapView
+                    key={mapSchemeKey(Platform.OS, isDarkMap)}
                     ref={mapRef}
                     style={styles.map}
                     provider={PROVIDER_DEFAULT}
@@ -674,7 +650,7 @@ export default function MapScreen() {
             {/* Map Action FABs - Left Pill */}
             {!selectedPostPreview && !stackOpen && !categoryPanel.open && (
                 <View style={[styles.fabPill, { bottom: fabPillBottom, left: 16 }]} pointerEvents="box-none" onLayout={e => setFabPillH(e.nativeEvent.layout.height)}>
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Toggle dark mode')} style={styles.pillBtn} onPress={() => setIsDarkMap(!isDarkMap)}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Toggle dark mode')} style={styles.pillBtn} onPress={() => setPillPick({ theme, dark: !isDarkMap })}>
                         <Text style={styles.pillBtnEmoji}>{isDarkMap ? '☀️' : '🌙'}</Text>
                     </TouchableOpacity>
                     <View style={styles.pillDivider} />

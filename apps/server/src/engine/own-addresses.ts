@@ -63,7 +63,7 @@
 import { domainToASCII } from 'node:url';
 import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES } from '../state-engine.js';
 import { registrarNames, registrarNamesVersion } from './registrar-names.js';
-import { isBeanPoolName, isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
+import { isCertifiableHost, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress } from './host-kinds.js';
 import { logger } from '../logger.js';
 
 // The shapes of a host live in host-kinds.ts (pure, so `beanpool claim` reads them too); here as they always were.
@@ -225,9 +225,6 @@ export function isLostAddress(host: string): boolean {
     return configuredAddresses().some((a) => a.address === host && a.lost);
 }
 
-/** A beanpool.org name, or a public IP or name a public CA can certify (so one in the Internet's DNS): never a home-network host. */
-const reachableFromInternet = (a: string) => isBeanPoolName(a) || isCertifiableHost(a);
-
 /**
  * Where this community lives now, for `/api/community/info` and Settings (lost-name L4, design
  * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the registrar says it is
@@ -244,8 +241,7 @@ export function primaryAddress(): string | null {
     const live = registrarNames().find((r) => r.role === 'current' && r.status === 'live' && published.includes(r.address));
     if (live) return live.address;
     // The next of its names, else none, so the web app says nothing rather than point at a name with no route yet.
-    const usable = reachableAddresses();
-    return usable.find((a) => !isIpLiteral(a) && reachableFromInternet(a)) ?? usable.find(reachableFromInternet) ?? usable[0] ?? null;
+    return preferredAddress(reachableAddresses());
 }
 
 /**

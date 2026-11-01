@@ -805,6 +805,41 @@ describe('PublicAddressPanel Component', () => {
             expect(screen.queryByRole('button', { name: 'Release' })).not.toBeInTheDocument();
         });
 
+        describe.each(['dark', 'light'])('a live name the community moved off, in %s', (theme) => {
+            const moved = { name: 'oldvale', hostname: 'oldvale.beanpool.org', state: 'live', releasable: true, fromInstall: false };
+            beforeEach(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); });
+            afterEach(() => { document.documentElement.classList.remove('dark'); });
+
+            it('says phones still using it lose the community, and never that it is not used', async () => {
+                const calls = mockNames(() => [moved]);
+                render(<PublicAddressPanel activeNode={mockActiveNode} />);
+                const line = await screen.findByTestId('extra-name');
+                expect(line).toHaveTextContent('This community also holds oldvale.beanpool.org. It still works: phones still using this address lose the community if you release it.');
+                expect(line).not.toHaveTextContent('not used');
+                expect(line).not.toHaveTextContent('from the install');
+                fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+                const dialog = await screen.findByRole('dialog');
+                expect(dialog).toHaveTextContent('Release an address that still works');
+                expect(dialog).toHaveTextContent("Release oldvale.beanpool.org? Phones still using this address lose the community. Your community's address stays owner-pick.beanpool.org.");
+                expect(dialog).not.toHaveTextContent('does not use');
+                expect(calls.some((c) => c.url.includes('/public-address/release-name'))).toBe(false);
+                fireEvent.click(screen.getByRole('button', { name: 'Release it' }));
+                await waitFor(() => expect(calls.filter((c) => c.url.includes('/public-address/release-name')).map((c) => c.body?.name)).toEqual(['oldvale']));
+            });
+        });
+
+        it('a name that only waited, never live here, stays not used', async () => {
+            mockNames(() => [{ name: 'waited', hostname: 'waited.beanpool.org', state: 'pending', releasable: true, fromInstall: false }]);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line).toHaveTextContent('This community also holds waited.beanpool.org; it is not used. Release it?');
+            expect(line).not.toHaveTextContent('phones');
+            fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+            const dialog = await screen.findByRole('dialog');
+            expect(dialog).toHaveTextContent('Release a name this community does not use');
+            expect(dialog).not.toHaveTextContent('phones');
+        });
+
         it('an admin (refused the list) is shown nothing', async () => {
             const calls = mockNames(() => [], 403);
             render(<PublicAddressPanel activeNode={mockActiveNode} />);

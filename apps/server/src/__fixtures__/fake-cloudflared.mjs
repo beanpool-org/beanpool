@@ -10,6 +10,8 @@
 //   - exits at once with code 1 while <folder>/crash exists (a crash);
 //   - serves GET /ready on the --metrics address: <folder>/ready.json's { status, readyConnections }, else 503;
 //   - prints each line of <folder>/say.jsonl to stderr, as cloudflared prints its log, then deletes the file;
+//   - the three again per name: crash.<id>, ready.<id>.json and say.<id>.jsonl speak only to the child whose TUNNEL_TOKEN
+//     gives that <id> (tokenFileId), so a suite can crash or refuse one name's tunnel and leave another's alone;
 //   - on SIGTERM appends { pid, signal } to <folder>/exits.jsonl and exits 0;
 //   - exits when the server that started it is gone, so a killed test node never leaves one behind.
 
@@ -24,6 +26,9 @@ const [dir, ...argv] = process.argv.slice(2);
 const at = (f) => path.join(dir, f);
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(at(f), 'utf-8')); } catch { return null; } };
 const parent = process.ppid;
+/** Keep the same in tunnel-test-fake.ts. */
+const tokenFileId = (token) => String(token ?? '').replace(/[^A-Za-z0-9_-]/g, '_');
+const id = tokenFileId(process.env.TUNNEL_TOKEN);
 
 // First, so a SIGTERM that arrives while it starts is recorded too.
 process.on('SIGTERM', () => {
@@ -37,7 +42,7 @@ const startDelayMs = Number(readJson('start-delay-ms')) || 0;
 if (startDelayMs > 0) await new Promise((r) => setTimeout(r, startDelayMs));
 fs.appendFileSync(at('runs.jsonl'), JSON.stringify({ pid: process.pid, argv, env: { ...process.env }, at: Date.now(), started: Math.round(performance.timeOrigin) }) + '\n');
 
-if (fs.existsSync(at('crash'))) {
+if (fs.existsSync(at('crash')) || fs.existsSync(at(`crash.${id}`))) {
     process.stderr.write(JSON.stringify({ level: 'error', message: 'fake cloudflared crashed on purpose' }) + '\n');
     process.exit(1);
 }
@@ -46,7 +51,7 @@ const metrics = argv[argv.indexOf('--metrics') + 1] || '127.0.0.1:0';
 const [host, port] = metrics.split(':');
 const server = http.createServer((req, res) => {
     if (req.url !== '/ready') { res.writeHead(404); res.end(); return; }
-    const r = readJson('ready.json') ?? { status: 503, readyConnections: 0 };
+    const r = readJson(`ready.${id}.json`) ?? readJson('ready.json') ?? { status: 503, readyConnections: 0 };
     res.writeHead(r.status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: r.status, readyConnections: r.readyConnections ?? 0 }));
 });
@@ -58,8 +63,10 @@ server.listen(Number(port), host);
 
 setInterval(() => {
     try { process.kill(parent, 0); } catch { process.exit(0); }
-    const taken = at(`say.${process.pid}.taken`);
-    try { fs.renameSync(at('say.jsonl'), taken); } catch { return; }
-    for (const line of fs.readFileSync(taken, 'utf-8').split('\n')) if (line.trim()) process.stderr.write(line + '\n');
-    fs.rmSync(taken, { force: true });
+    for (const said of ['say.jsonl', `say.${id}.jsonl`]) {
+        const taken = at(`said.${process.pid}.taken`);
+        try { fs.renameSync(at(said), taken); } catch { continue; }
+        for (const line of fs.readFileSync(taken, 'utf-8').split('\n')) if (line.trim()) process.stderr.write(line + '\n');
+        fs.rmSync(taken, { force: true });
+    }
 }, 25);

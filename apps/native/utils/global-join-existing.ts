@@ -125,19 +125,21 @@ export function accountDoorMessage(answer: Exclude<DoorAnswer, { kind: 'joined' 
 }
 
 /** The data layer an entry into the global community uses (join-another-community.ts's, without the redeem). */
-export type EnterDeps = Pick<JoinDeps, 'closeDB' | 'initDB' | 'addSavedNode' | 'clearGuestNode' | 'requestSync'>;
+export type EnterDeps = Pick<JoinDeps, 'closeDB' | 'initDB' | 'addSavedNode' | 'clearGuestNode' | 'requestSync' | 'noteBringOffer'>;
 
 async function defaultEnterDeps(): Promise<EnterDeps> {
     // Loaded when used, as join-another-community.ts does: db.ts and pillar-sync pull in the whole data layer.
     const db = await import('./db');
     const nodes = await import('./nodes');
     const sync = await import('../services/pillar-sync');
+    const bring = await import('./bring-listings');
     return {
         closeDB: db.closeDB,
         initDB: db.initDB,
         addSavedNode: nodes.addSavedNode,
         clearGuestNode: nodes.clearGuestNode,
         requestSync: sync.requestSync,
+        noteBringOffer: bring.noteBringOffer,
     };
 }
 
@@ -193,8 +195,15 @@ export async function finishJoinFromAccount(
     const url = options.at?.url ?? GLOBAL_NODE_URL;
     const kept = await joinedUnderNodeName(url, answer, { ...key.identity, callsign: typed.trim() || key.identity.callsign });
     if (options.stillWanted && !options.stillWanted()) return null;
-    if (options.at) await enterOpenDoorCommunity(options.at.url, options.at.name, options.deps);
-    else await enterGlobalCommunity(options.deps);
+    if (options.at) {
+        const from = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        const deps = options.deps ?? await defaultEnterDeps();
+        await enterOpenDoorCommunity(options.at.url, options.at.name, deps);
+        // A community's own door is a first local join too: its listings can follow, as after an invite (utils/bring-listings.ts).
+        await deps.noteBringOffer?.({
+            publicKey: key.identity.publicKey, from, to: options.at.url, name: options.at.name ?? options.at.url.replace(/^https?:\/\//, ''), alreadyMember: false,
+        }).catch(() => {});
+    } else await enterGlobalCommunity(options.deps);
     return { name: kept.callsign, ...joinedGlobalNotice(answer.enrolment) };
 }
 

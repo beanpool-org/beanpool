@@ -73,6 +73,7 @@ vi.mock('expo-router', async () => {
             back: () => { nav.backs++; }, canGoBack: () => nav.canGoBack, setParams: (p: Record<string, string | undefined>) => { nav.setTop?.(p); },
         },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
+        useNavigation: () => ({ getState: () => ({ routes: [], index: 0 }) }),
         useLocalSearchParams: () => {
             const [p, set] = state<Record<string, string | undefined>>(() => ({ ...nav.params }));
             nav.setTop = (next) => set((was) => ({ ...was, ...next }));
@@ -1385,7 +1386,7 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
 
     it('a tap on one opens the tool at its screen; anything from outside opens nothing', () => {
         reg.extra = [{ manifest: KIT, app: kitApp }];
-        expect(toolReminderRoute({ remote: false, data: { bpLocal: 1, bpTool: 'fixture-kit', screen: 'item' } })).toBe('/tool/fixture-kit?screen=item');
+        expect(toolReminderRoute({ remote: false, data: { bpLocal: 1, bpTool: 'fixture-kit', screen: 'item' } })).toBe('/tool/fixture-kit?toolScreen=item');
         expect(toolReminderRoute({ remote: false, data: { bpLocal: 1, bpTool: 'fixture-kit', screen: 'nope' } })).toBe('/tool/fixture-kit');
         expect(toolReminderRoute({ remote: true, data: { bpTool: 'fixture-kit' } })).toBeNull();
         expect(toolReminderRoute({ remote: false, data: { bpTool: 'not-here' } })).toBeNull();
@@ -1562,7 +1563,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and is the 
         expect(host.textContent).toContain('A general guide for your climate. Your neighbours know your patch better.');
         expect(loc.asked).toBe(0);
         await click(byTestId('garden-change'), 'Change');
-        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'zone' } }]);
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', toolScreen: 'zone' } }]);
     }, 30_000);
 
     it("the guide is the first open from every door, and nothing of the template's empty state sits above it (review of #2618)", async () => {
@@ -1757,7 +1758,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and is the 
         await settle();
         expect(host.textContent).toContain('What to sow this month, for your climate.');
         await click(host.querySelector('button'), 'the card');
-        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'main' } }]);
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', toolScreen: 'main' } }]);
 
         // And in a month with nothing to sow outdoors (December in northern warm temperate)
         await writeToolDoc(ME.publicKey, garden!.manifest, { v: 1, settings: { zone: 'warm', hemisphere: 'north' } }, NOW);

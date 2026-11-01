@@ -12,6 +12,8 @@
  * The key and the 12 words: everything, automatically. The name: carried, made unique there if it's taken. The
  * photo: re-sent by the profile step that follows. Beans, trust, posts, chats: no, they belong to each community.
  * Sign-in recovery: kept by each community, so the member is asked to protect this one too (`joinedNudge`).
+ * Their listings on the global community can follow, if they say so: Home offers it after the profile step
+ * (utils/bring-listings.ts). The join only notes the offer, and never waits on it.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,6 +29,8 @@ export interface JoinDeps {
     addSavedNode(url: string, alias?: string, currencyType?: 'text' | 'image', currencyValue?: string): Promise<void>;
     clearGuestNode(url: string): Promise<void>;
     requestSync(): Promise<unknown>;
+    /** Optional in a test's deps; the app's always has it. */
+    noteBringOffer?(o: { publicKey: string; from: string | null; to: string; name: string; alreadyMember: boolean }): Promise<boolean>;
 }
 
 async function defaultDeps(): Promise<JoinDeps> {
@@ -34,6 +38,7 @@ async function defaultDeps(): Promise<JoinDeps> {
     const db = await import('./db');
     const nodes = await import('./nodes');
     const sync = await import('../services/pillar-sync');
+    const bring = await import('./bring-listings');
     return {
         closeDB: db.closeDB,
         initDB: db.initDB,
@@ -41,6 +46,7 @@ async function defaultDeps(): Promise<JoinDeps> {
         addSavedNode: nodes.addSavedNode,
         clearGuestNode: nodes.clearGuestNode,
         requestSync: sync.requestSync,
+        noteBringOffer: bring.noteBringOffer,
     };
 }
 
@@ -110,6 +116,7 @@ export async function joinAnotherCommunity(
     } catch {
         // The phone is on the community either way; the saved list catches up from the header's picker.
     }
+    await deps.noteBringOffer?.({ publicKey: opts.identity.publicKey, from: opts.returnUrl, to: targetUrl, name, alreadyMember }).catch(() => {});
     return { url: targetUrl, name, alreadyMember };
 }
 

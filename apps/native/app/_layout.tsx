@@ -498,11 +498,13 @@ function RootLayoutNav() {
                                             const redeemRes: any = await redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity);
 
                                             // Fetch and save new node details
+                                            let joinedName = targetOrigin;
                                             try {
                                                 const healthRes = await fetch(`${targetOrigin}/api/community/health`, { method: 'GET' });
                                                 if (healthRes.ok) {
                                                     const healthData = await healthRes.json();
                                                     const remoteName = healthData.nodeName || healthData.name || targetOrigin;
+                                                    joinedName = remoteName;
                                                     const cType = healthData.currency?.type || 'image';
                                                     const cVal = healthData.currency?.value || 'bean';
                                                     const { addSavedNode } = await import('../utils/nodes');
@@ -511,6 +513,11 @@ function RootLayoutNav() {
                                             } catch (e) {
                                                 console.warn('Failed to fetch node details for saving in deep link', e);
                                             }
+
+                                            // A first local join by a tapped link: their listings can follow, as after any join (utils/bring-listings.ts).
+                                            await import('../utils/bring-listings')
+                                                .then((bring) => bring.noteBringOffer({ publicKey: identity.publicKey, from: current, to: targetOrigin, name: joinedName, alreadyMember: !!redeemRes?.alreadyMember }))
+                                                .catch(() => {});
 
                                             if (redeemRes?.alreadyMember) {
                                                 Alert.alert(t("You're already in! 🫘"), t('Switched active node to {address}. You are already a registered member!', { address: targetOrigin }));

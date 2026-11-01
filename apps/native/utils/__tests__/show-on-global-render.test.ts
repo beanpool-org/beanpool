@@ -21,11 +21,13 @@ const WIDTH = 320;
 vi.mock('react-native', () => {
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, testID, style, accessibilityState } = props;
+        const { children, onPress, testID, style, accessibilityState, accessibilityHint, disabled } = props;
         const attrs: Record<string, unknown> = { 'data-style': JSON.stringify(flat(style)) };
         if (testID) attrs['data-testid'] = testID;
-        if (onPress) attrs.onClick = () => onPress();
+        if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityState?.checked !== undefined) attrs['aria-checked'] = String(accessibilityState.checked);
+        if (accessibilityState?.busy !== undefined) attrs['aria-busy'] = String(accessibilityState.busy);
+        if (accessibilityHint) attrs['data-a11y-hint'] = accessibilityHint;
         return createElement(tag, attrs, children);
     };
     return {
@@ -53,7 +55,7 @@ vi.mock('../global-entry', () => ({ readGlobalStanding: async () => world.kept, 
 vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: vi.fn() }));
 
 import { EventCopyDoor } from '../../components/EventCopyDoor';
-import { ShowOnGlobalTick } from '../../components/ShowOnGlobalRow';
+import { ShowOnGlobalTick, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
 
 const LONG_NAME = 'Mullumbimby and the Brunswick Valley Community Exchange';
@@ -149,6 +151,54 @@ describe('the tick', () => {
         await draw(createElement(ShowOnGlobalTick, { enabled: false, online: true, checked: false, onChange: () => {} }));
         expect(byId('show-on-global-tick')).toBeNull();
         expect(byId('show-on-global-online')?.textContent).toBe("Online events can't be shown on the global community yet.");
+    });
+
+    /** The tap's question, held until the test answers it: a signed call of up to 6 s, the first time slower than the form. */
+    const heldAnswer = () => {
+        let answer!: (standing: string) => void;
+        const held = new Promise<{ standing: string; closed: boolean; answered: boolean }>((resolve) => {
+            answer = (standing) => resolve({ standing, closed: false, answered: true });
+        });
+        calls.ask.mockImplementation(() => held);
+        return answer;
+    };
+
+    it('while the tap is asking the row says so and takes no second tap, and the answer frees it', async () => {
+        const answer = heldAnswer();
+        const changes: boolean[] = [];
+        await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: (v: boolean) => changes.push(v) }));
+        expect(byId('show-on-global-tick')!.getAttribute('aria-busy')).toBe('false');
+        await press('show-on-global-tick');
+        expect(byId('show-on-global-tick')!.getAttribute('aria-busy')).toBe('true');
+        expect(JSON.parse(byId('show-on-global-tick')!.getAttribute('data-style')!).opacity).toBeLessThan(1);
+        await press('show-on-global-tick');
+        expect(calls.ask).toHaveBeenCalledTimes(1);
+        expect(changes).toEqual([]);
+
+        await act(async () => { answer('member'); });
+        await settle();
+        expect(changes).toEqual([true]);
+        expect(byId('show-on-global-tick')!.getAttribute('aria-busy')).toBe('false');
+    });
+
+    it.each([['member', 'ticks'], ['unknown', 'raises an alert']])('an answer of "%s" landing after the form has closed %s nothing: the next event opens off', async (standing) => {
+        const answer = heldAnswer();
+        const changes: boolean[] = [];
+        await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: (v: boolean) => changes.push(v) }));
+        await press('show-on-global-tick');
+        // The sheet closed: the row has gone, and the form behind it, which outlives the sheet, still holds its setter.
+        await act(async () => { root?.unmount(); });
+        root = null;
+
+        await act(async () => { answer(standing); });
+        await settle();
+        expect(changes).toEqual([]);
+        expect((globalThis as any).__alerts).toHaveLength(0);
+    });
+
+    it('a screen reader hears what the tick makes public: the label replaces the row\'s words, so the consent line is the hint', async () => {
+        await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: () => {} }));
+        expect(byId('show-on-global-tick')!.getAttribute('data-a11y-hint')).toBe(showOnGlobalHint());
     });
 });
 

@@ -10,7 +10,7 @@
  *
  * The event screens open for everyone and this is for the few: what it runs on is loaded at the tap, or when the row shows.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
@@ -67,6 +67,13 @@ const unreachable = () => Alert.alert(showOnGlobalLabel(), t("The global communi
 export function ShowOnGlobalTick({ enabled, online = false, checked, onChange }: { enabled: boolean; online?: boolean; checked: boolean; onChange: (next: boolean) => void }) {
     const styles = useStyles(makeStyles);
     const { offer, ask } = useOffer(enabled);
+    const [busy, setBusy] = useState(false);
+    // The form outlives its sheet: an answer landing once this row has gone would tick the next event, against "off, every time".
+    const here = useRef(true);
+    useEffect(() => {
+        here.current = true;
+        return () => { here.current = false; };
+    }, []);
     useEffect(() => {
         if (!enabled && checked) onChange(false);
     }, [enabled, checked, onChange]);
@@ -90,12 +97,27 @@ export function ShowOnGlobalTick({ enabled, online = false, checked, onChange }:
     if (offer !== 'tick') return null;
     const tap = async () => {
         if (checked) return onChange(false);
-        const standing = await ask();
-        if (standing === 'member') onChange(true);
-        else if (standing === 'unknown') unreachable();
+        setBusy(true);
+        try {
+            const standing = await ask();
+            if (!here.current) return;
+            if (standing === 'member') onChange(true);
+            else if (standing === 'unknown') unreachable();
+        } finally {
+            setBusy(false);
+        }
     };
     return (
-        <Pressable onPress={tap} style={styles.row} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={showOnGlobalLabel()} testID="show-on-global-tick">
+        <Pressable
+            onPress={tap}
+            disabled={busy}
+            style={[styles.row, busy && styles.asking]}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked, busy }}
+            accessibilityLabel={showOnGlobalLabel()}
+            accessibilityHint={showOnGlobalHint()}
+            testID="show-on-global-tick"
+        >
             <Text style={styles.box}>{checked ? '☑' : '☐'}</Text>
             <View style={styles.col}>
                 <Text style={styles.title}>{showOnGlobalLabel()}</Text>
@@ -153,6 +175,7 @@ export function ShowOnGlobalHostRow({ event, enabled }: { event: HomeEvent; enab
 
 const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     row: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, minHeight: 44, paddingVertical: 4 },
+    asking: { opacity: 0.6 },
     box: { fontSize: 22, color: colors.text.body, marginRight: 8, lineHeight: 26 },
     col: { flex: 1, minWidth: 0 },
     title: { fontSize: 14, fontWeight: '700', color: colors.text.body, lineHeight: 19 },

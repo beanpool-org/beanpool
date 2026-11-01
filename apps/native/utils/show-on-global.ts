@@ -13,7 +13,8 @@
  *   one that can't falls off by itself. The pairs live here alone: a new phone tends nothing, and the copy stays the
  *   member's to take down from My posts on global.
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
- *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting.
+ *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
+ *   pair goes only once global says the copy isn't up ({@link forgetIfGone}): it is the phone's only way to that copy.
  *
  * Phone only, for now (slice G3 is the web's tick). Sign Out wipes the pairs (utils/identity.ts wipeIdentityScopedStorage).
  */
@@ -178,12 +179,26 @@ async function answerOf(res: Response): Promise<{ done: any } | 'later' | { refu
     return typeof answer?.error === 'string' && answer.error ? { refused: answer.error } : 'later';
 }
 
-/** Is the copy on global? `later` when global didn't say. */
+/**
+ * Is the copy up on global? `later` when global didn't say. A copy taken down there still reads by id for its host, as
+ * cancelled, for 30 days: that one isn't up, and an edit can't bring it back.
+ */
 async function copyIsThere(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean | 'later'> {
     const res = await withTimeout((signal) => deps.get(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, signal));
     if (!res.ok) return 'later';
     const rows: unknown = await res.json().catch(() => null);
-    return Array.isArray(rows) ? rows.length > 0 : 'later';
+    return Array.isArray(rows) ? rows.some((row) => row?.status !== 'cancelled') : 'later';
+}
+
+/**
+ * After a refusal, which doesn't say the copy has gone (a mute, a date that has ended, a tag one library lacks, a second
+ * send of the same id). The pair goes only if global says the copy isn't up. Otherwise it stays as it was, so a cancel at
+ * home can still take the copy down, and the next tend sees what wasn't sent and tries again.
+ */
+async function forgetIfGone(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean | 'later'> {
+    const there = await copyIsThere(pair, identity, deps);
+    if (there === false) await dropPair(pair);
+    return there;
 }
 
 async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIdentity, deps: CopyDeps): Promise<CopyResult> {
@@ -196,8 +211,9 @@ async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
     const answer = await answerOf(await withTimeout((signal) => deps.post(deps.global, POSTS_PATH, body, identity, signal)));
     if (answer === 'later') return 'later';
     if ('refused' in answer) {
-        await dropPair(pair);
-        return answer;
+        // Up all the same: this was a second send of the id (an edit made during the upload), and the first one landed.
+        const there = await forgetIfGone(pair, identity, deps);
+        return there === false ? answer : there === 'later' ? 'later' : 'shown';
     }
     // A global that predates copies made a plain event of it, with the member's name on: it comes down at once.
     if (answer.done.post?.shownCopy !== true) {
@@ -217,7 +233,7 @@ async function updateCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
     const answer = await answerOf(await withTimeout((signal) => deps.post(deps.global, `${POSTS_PATH}/update`, body, identity, signal)));
     if (answer === 'later') return 'later';
     if ('refused' in answer) {
-        await dropPair(pair);
+        await forgetIfGone(pair, identity, deps);
         return answer;
     }
     await savePair({ ...pair, sent: JSON.stringify(fields), sentAt: Date.now(), photo: fetched?.photos.length ? firstPhoto(home) : pair.photo });
@@ -302,12 +318,24 @@ async function readHome(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDe
     return Array.isArray(rows) ? (rows[0] as HomeEvent | undefined) ?? null : 'later';
 }
 
-const isUp = (home: HomeEvent) => home.status === 'active' && home.active !== false && home.eventState !== 'cancelled' && !home.hiddenByReportsAt && !isEventEnded(home);
+/** Nothing at home has stopped it. Whether its date has passed is another question ({@link rollsOn}). */
+const isOn = (home: HomeEvent) => home.status === 'active' && home.active !== false && home.eventState !== 'cancelled' && !home.hiddenByReportsAt;
+
+/**
+ * A date of a series is over and the series isn't: its row keeps that date until the community's minute tick moves it on, and
+ * a read doesn't move it. The same test as that tick's (apps/server engine/event-series-roll.ts rollDueSeries): a row it
+ * would never touch doesn't get waited for. A series that turns out to have no date left has its `until` set by the tick.
+ */
+function rollsOn(home: HomeEvent): boolean {
+    const { rule, until } = eventRepeatOf(home);
+    const date = home.eventStartLocal?.slice(0, 10);
+    return !!rule && !!date && !!home.eventTz && (!until || until > date);
+}
 
 /**
  * Each of this key's pairs brought into step from its community's own word: an event gone, cancelled, ended, hidden or moved
- * online there takes its copy down; one waiting goes; one changed follows, and one long unchanged is sent again. A community that gives
- * no answer changes nothing.
+ * online there takes its copy down; a series between dates waits for the next round; one waiting goes; one changed follows,
+ * and one long unchanged is sent again. A community that gives no answer changes nothing.
  */
 export async function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = liveDeps, now: number = Date.now()): Promise<void> {
     for (const pair of (await readPairs()).filter((p) => p.publicKey === identity.publicKey)) {
@@ -318,8 +346,12 @@ export async function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = li
             }
             const home = await readHome(pair, identity, deps);
             if (home === 'later') continue;
-            if (!home || !isUp(home) || !mayShowOnGlobal(home, identity.publicKey)) {
+            if (!home || !isOn(home) || !mayShowOnGlobal(home, identity.publicKey)) {
                 await takeDown(pair, identity, deps);
+                continue;
+            }
+            if (isEventEnded(home)) {
+                if (!rollsOn(home)) await takeDown(pair, identity, deps);
                 continue;
             }
             if (pair.sent !== JSON.stringify(copyFields(home, identity.publicKey)) || firstPhoto(home) !== pair.photo || now - pair.sentAt >= COPY_KEEP_ALIVE_MS) {

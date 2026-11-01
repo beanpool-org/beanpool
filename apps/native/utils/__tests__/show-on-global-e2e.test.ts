@@ -6,7 +6,8 @@
  *   The copy lands on global by the same key, its point the rounded home point, with no typed place and no note, and its photo
  *   as home holds it. Global's from-line is the directory's; an unlisted host is dropped and the member told. An edit, a
  *   time change, a cancelled date and a cancel repeat. Global down, it all waits, and a phone back comes into step, a cancel
- *   included. A lost answer posts nothing twice. A global that predates copies keeps nothing with the member's name on.
+ *   included. A lost answer posts nothing twice. A refusal forgets a copy only once it has gone from global, and a series
+ *   between dates isn't over. A global that predates copies keeps nothing with the member's name on.
  *
  *   The home harness's request log holds nothing but the phone: no call to global, and home is asked nothing it isn't always
  *   asked. The community's own fetch refuses every host but this machine. The phone's fetch is held to these two addresses.
@@ -229,6 +230,10 @@ const copyRow = async (id: string) => (await global_.control<Array<Record<string
 const copyIdOf = async (homeId: string, me: BeanPoolIdentity) => (await pairOf(homeId, me.publicKey))!.copyId;
 const hashes = (node: TestNode, id: string) => node.control<Array<{ sha256: string }>>('sql', { sql: 'SELECT sha256 FROM post_photos WHERE post_id = ? ORDER BY order_num', params: [id], all: true });
 const copyCount = async (me: BeanPoolIdentity) => (await global_.control<Array<{ c: number }>>('sql', { sql: 'SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ?', params: [me.publicKey], all: true }))[0].c;
+/** A mute on global, as a moderator's third removal sets one: `/posts/update` refuses it with words (assertNotMuted). */
+const muteOnGlobal = (me: BeanPoolIdentity, muted: boolean) => global_.control('sql', {
+    sql: 'UPDATE members SET moderation_muted_until = ? WHERE public_key = ?', params: [muted ? new Date(Date.now() + 3_600_000).toISOString() : null, me.publicKey],
+});
 
 describe('an in-person event shown on the global community (the phone against two real nodes)', () => {
     it('the tick: a copy by the same key, the point rounded, no place and no note; home hears nothing of it and calls nobody', async () => {
@@ -403,6 +408,143 @@ describe('an in-person event shown on the global community (the phone against tw
         expect(await copyCount(me)).toBe(1);
         expect((await pairOf(home.id, me.publicKey))!.sent).not.toBe('');
     }, START_MS);
+
+    it('an edit refused with the copy still up keeps the pair: muted on global, the catch-up and a cancel at home both still reach it', async () => {
+        const me = await memberOfBoth('Bex');
+        const home = await eventAtHome(me, 'Refused edit');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const { sent } = (await pairOf(home.id, me.publicKey))!;
+
+        await muteOnGlobal(me, true);
+        await repeatOnCopy(await editAtHome(me, home.id, { title: 'Refused edit, first go' }), me, deps());
+        expect((await copyRow(id)).title).toBe('Refused edit');
+        expect(await pairOf(home.id, me.publicKey)).toMatchObject({ copyId: id, sent });
+
+        // The mute lifts: `sent` is as it was, so the next tend sees the difference and tries again.
+        await muteOnGlobal(me, false);
+        await tendCopies(me, deps());
+        expect((await copyRow(id)).title).toBe('Refused edit, first go');
+
+        // Refused again, and this time the event is cancelled at home.
+        await muteOnGlobal(me, true);
+        await repeatOnCopy(await editAtHome(me, home.id, { title: 'Refused edit, second go' }), me, deps());
+        expect(await stopShowing(home.id, me, deps())).toBe(true);
+        expect((await copyRow(id)).status).toBe('cancelled');
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('an edit refused because the copy has gone forgets the pair, so the row stops saying Shown and it can be shown again', async () => {
+        const me = await memberOfBoth('Dara');
+        const home = await eventAtHome(me, 'Taken down on global');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        // From My posts on global. Its host can still read a cancelled event by id, and that isn't a copy that is up.
+        expect((await signedPost(global_.url, '/api/marketplace/posts/remove', { id, authorPublicKey: me.publicKey }, me)).ok).toBe(true);
+        expect((await (await signedGet(global_.url, `/api/marketplace/posts?id=${id}`, me)).json() as unknown[]).length).toBe(1);
+
+        const edited = await editAtHome(me, home.id, { title: 'Taken down, then edited' });
+        await repeatOnCopy(edited, me, deps());
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+
+        expect(await showOnGlobal(edited, local.url, me, deps())).toBe('shown');
+        expect((await copyRow(await copyIdOf(home.id, me))).title).toBe('Taken down, then edited');
+    }, START_MS);
+
+    it('an edit during the first upload sends the same id twice: the refused second POST forgets nothing, and a cancel reaches the copy', async () => {
+        const me = await memberOfBoth('Cass');
+        const home = await eventAtHome(me, 'Sent twice');
+        let upload!: () => void;
+        const uploading = new Promise<void>((resolve) => { upload = resolve; });
+        let finishUpload!: () => void;
+        const held = new Promise<void>((resolve) => { finishUpload = resolve; });
+        const first = showOnGlobal(home, local.url, me, { ...deps(), fetchPhoto: async (url) => { upload(); await held; return fetchedPostPhoto(url); } });
+        await uploading;
+
+        // The edit finds the pair not yet sent and global without the copy, so it makes the copy itself.
+        await repeatOnCopy(home, me, deps());
+        const id = await copyIdOf(home.id, me);
+        expect((await copyRow(id)).status).toBe('active');
+
+        // The first send then POSTs the same id, and global's primary key refuses it. The copy is up: nothing to tell the member.
+        finishUpload();
+        expect(await first).toBe('shown');
+        expect(await copyCount(me)).toBe(1);
+        expect(await pairOf(home.id, me.publicKey)).toMatchObject({ copyId: id, sent: JSON.stringify(copyFields(home, me.publicKey)) });
+
+        expect(await stopShowing(home.id, me, deps())).toBe(true);
+        expect((await copyRow(id)).status).toBe('cancelled');
+    }, START_MS);
+
+    describe('a tend in the minute a date ends: the row keeps that date until home\'s minute roll moves it on', () => {
+        const clock = (d: Date) => d.toISOString().slice(0, 16);
+        const WEEK_MS = 7 * 24 * 3_600_000;
+
+        /** A weekly event a week off, shown on global; then its row as home holds it when a date has just ended and no roll has run. */
+        async function dateJustEnded(me: BeanPoolIdentity, title: string): Promise<{ home: HomeEvent; copyId: string; date: string }> {
+            const end = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+            const start = new Date(end.getTime() - 2 * 3_600_000);
+            const [nextStart, nextEnd] = [new Date(start.getTime() + WEEK_MS), new Date(end.getTime() + WEEK_MS)];
+            const home = await eventAtHome(me, title, {
+                eventStartAt: nextStart.toISOString(), eventEndAt: nextEnd.toISOString(),
+                eventStartLocal: clock(nextStart), eventEndLocal: clock(nextEnd), eventTz: 'UTC',
+                eventRepeat: repeatPatternFor('weekly', clock(nextStart).slice(0, 10)),
+            });
+            expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+            await local.control('sql', {
+                sql: 'UPDATE posts SET event_start_at = ?, event_end_at = ?, event_start_local = ?, event_end_local = ? WHERE id = ?',
+                params: [start.toISOString(), end.toISOString(), clock(start), clock(end), home.id],
+            });
+            return { home, copyId: await copyIdOf(home.id, me), date: clock(start).slice(0, 10) };
+        }
+
+        it('a series with dates to come keeps its copy and its pair, and the same tend sends nothing', async () => {
+            const me = await memberOfBoth('Ivo');
+            const { home, copyId } = await dateJustEnded(me, 'Weekly bee');
+            const stamp = (await copyRow(copyId)).updated_at;
+            await tendCopies(me, deps());
+            expect(await copyRow(copyId)).toMatchObject({ status: 'active', updated_at: stamp });
+            expect((await pairOf(home.id, me.publicKey))?.copyId).toBe(copyId);
+        }, START_MS);
+
+        it('the same, with an end date still ahead of it', async () => {
+            const me = await memberOfBoth('Una');
+            const { home, copyId } = await dateJustEnded(me, 'Weekly bee, for now');
+            await local.control('sql', { sql: 'UPDATE posts SET event_repeat_until = ? WHERE id = ?', params: [clock(new Date(Date.now() + 3 * WEEK_MS)).slice(0, 10), home.id] });
+            await tendCopies(me, deps());
+            expect((await copyRow(copyId)).status).toBe('active');
+            expect((await pairOf(home.id, me.publicKey))?.copyId).toBe(copyId);
+        }, START_MS);
+
+        it('the series\' last date is the end of it: the copy comes down', async () => {
+            const me = await memberOfBoth('Tove');
+            const { home, copyId, date } = await dateJustEnded(me, 'Last of the bees');
+            await local.control('sql', { sql: 'UPDATE posts SET event_repeat_until = ? WHERE id = ?', params: [date, home.id] });
+            await tendCopies(me, deps());
+            expect((await copyRow(copyId)).status).toBe('cancelled');
+            expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        }, START_MS);
+
+        it('a series cancelled at home comes down, whatever its date says', async () => {
+            const me = await memberOfBoth('Sol');
+            const { home, copyId } = await dateJustEnded(me, 'Called off');
+            await local.control('sql', { sql: "UPDATE posts SET status = 'cancelled', event_state = 'cancelled', active = 0 WHERE id = ?", params: [home.id] });
+            await tendCopies(me, deps());
+            expect((await copyRow(copyId)).status).toBe('cancelled');
+            expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        }, START_MS);
+
+        it('a one-off that has ended comes down', async () => {
+            const me = await memberOfBoth('Rae');
+            const home = await eventAtHome(me, 'One night only');
+            await showOnGlobal(home, local.url, me, deps());
+            const id = await copyIdOf(home.id, me);
+            await local.control('sql', { sql: 'UPDATE posts SET event_end_at = ? WHERE id = ?', params: [new Date(Date.now() - 20_000).toISOString(), home.id] });
+            await tendCopies(me, deps());
+            expect((await copyRow(id)).status).toBe('cancelled');
+            expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        }, START_MS);
+    });
 
     it('a copy nothing has changed is left alone, and sent again before retention would take it', async () => {
         const me = await memberOfBoth('Lee');

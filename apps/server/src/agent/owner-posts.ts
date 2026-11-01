@@ -1410,7 +1410,7 @@ function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: str
                 freeTags: fence(boundary, `post ${r.id}, free tags`, freeTagsOf(r.free_tags).join(', ')),
                 // Whole, not a list's preview: an edit replaces all of it.
                 description: fence(boundary, `post ${r.id}, description`, r.description, LISTING_DESCRIPTION_LIMIT.chars),
-                lat: r.lat, lng: r.lng, photos: r.photo_count,
+                lat: r.lat, lng: r.lng, photoCount: r.photo_count,
                 ...(r.type === 'event' ? eventFieldsOf(r, boundary) : listingFieldsOf(r, boundary)),
             })),
             _notice: MEMBER_TEXT_NOTICE,
@@ -1463,7 +1463,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
             + `place, tags and photos; on an Offer or a Need its category, price, repeat, cash note, shop and lending; on an event its times, zone, place name, online, `
             + `link, note, who it lets in and repeat. The post keeps its id, so move a pin here, never by removing it and making it again: an event keeps its RSVPs and `
             + `links, and everyone going is told when its time or place moves, as for a host's own edit. A moved pin leaves place_name as it is: send it too when the `
-            + `place itself changed. Only the fields sent change; a field its kind does not take is refused in words. At most ${AGENT_EDITS_PER_DAY} edits a day; any `
+            + `place itself changed. A pin moved into another time zone keeps the moment, so its clock changes: the answer says it, and start_at sets it. Only the fields sent change; a field its kind does not take is refused in words. At most ${AGENT_EDITS_PER_DAY} edits a day; any `
             + `other post is refused; ${TAGS_WORDS}; tags or free_tags sent is the whole new list of that kind, left out it stays; my_posts reads what it holds now`,
         never: "anything but the post's id, its link and the place and time it now holds, or another member's data; it never moves Beans",
         ownerOnly: true,

@@ -715,6 +715,7 @@ export function App() {
         // over the new one's — or set state on an unmounted tree.
         let cancelled = false;
         let lastPollTime = 0;
+        const POLL_FLOOR_MS = 2000;
         let pollPromise: Promise<void> | null = null;
 
         const pollUnread = async () => {
@@ -762,6 +763,22 @@ export function App() {
             return p;
         };
 
+        // The number while the tab is hidden, when the title is all a member reads of it. The poll has stopped but the socket
+        // stays open, so the activity that brings a line brings this read: the count alone, never the deals, and never inside
+        // the poll's floor. Activity inside the floor waits it out instead of being dropped, because a hidden tab has no poll
+        // to catch up later and the last line of a burst would never reach the number. Not held in `pollPromise`: a member's
+        // return must still read the deals, and from then on that read owns the number, so this one's answer is dropped.
+        // Throws as pollUnread does, so the coordinator does not advance the delta cursor past a read that failed.
+        const readCountHidden = async () => {
+            const floor = lastPollTime + POLL_FLOOR_MS - Date.now();
+            if (floor > 0) await new Promise((resolve) => setTimeout(resolve, floor));
+            if (cancelled || !document.hidden) return;
+            const { unread } = await getMyUnread(identity.publicKey);
+            if (cancelled || !document.hidden) return;
+            setTotalUnread(unread || 0);
+            lastPollTime = Date.now();
+        };
+
         const startPolling = () => {
             if (!interval) {
                 pollUnread().catch(() => {});
@@ -799,9 +816,9 @@ export function App() {
         // never arrived.
         // Coalesces with visibilitychange / reconnect sync if already in-flight or polled within 2000ms.
         const unsubscribe = onSyncActivity(() => {
-            if (document.hidden) return;
             if (pollPromise) return pollPromise;
-            if (Date.now() - lastPollTime < 2000) return;
+            if (document.hidden) return readCountHidden();
+            if (Date.now() - lastPollTime < POLL_FLOOR_MS) return;
             return pollUnread();
         });
 

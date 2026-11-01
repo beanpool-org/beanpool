@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { App } from './App';
 import { getConversations, getMyMarketplaceTransactions, getMyUnread } from './lib/api';
+import { onSyncActivity } from './lib/sync';
 
 if (typeof window !== 'undefined') {
     window.matchMedia = window.matchMedia || vi.fn().mockImplementation(() => ({
@@ -150,5 +151,138 @@ describe('the Chat badge and the tab read the counts route', () => {
         await waitFor(() => expect(getMyMarketplaceTransactions).toHaveBeenCalled());
         expect(row.textContent).toContain('5');
         expect(document.title).toBe('(5) BeanPool');
+    });
+});
+
+/**
+ * A tab in the background: the poll stops there, so the socket's activity is all that can move the number, and the tab's
+ * title is the one thing a member reads of it. The clock is fake and runs on by itself, so the 2 s floor can be stepped past.
+ */
+describe('a tab in the background', () => {
+    beforeEach(() => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        vi.clearAllMocks();
+        localStorage.clear();
+        document.title = 'BeanPool';
+    });
+    afterEach(() => {
+        Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+        vi.useRealTimers();
+    });
+
+    const unreadIs = (unread: number) => vi.mocked(getMyUnread).mockResolvedValue({ unread, requests: 0, asOf });
+
+    async function setHidden(hidden: boolean): Promise<void> {
+        await act(async () => {
+            Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+    }
+
+    const stepClock = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
+    /** What a doorbell does: every listener runs, and the coordinator waits on what they return. */
+    const ringDoorbell = () => Promise.allSettled(vi.mocked(onSyncActivity).mock.calls.map(([cb]) => cb()));
+
+    /** The app on screen with `unread` lines, the tab just hidden, the floor stepped past and the counts of reads cleared. */
+    async function inTheBackgroundWith(unread: number): Promise<HTMLElement> {
+        unreadIs(unread);
+        render(<App />);
+        const row = await chatRow();
+        await waitFor(() => expect(document.title).toBe(unread ? `(${unread}) BeanPool` : 'BeanPool'));
+        await setHidden(true);
+        await stepClock(2100);
+        vi.mocked(getMyUnread).mockClear();
+        vi.mocked(getMyMarketplaceTransactions).mockClear();
+        return row;
+    }
+
+    it('a line that comes in moves the number, in the tab and the badge', async () => {
+        const row = await inTheBackgroundWith(0);
+        unreadIs(4);
+        await act(async () => { await ringDoorbell(); });
+        expect(document.title).toBe('(4) BeanPool');
+        expect(row.textContent).toContain('4');
+    });
+
+    it('asks for the number and no more: no deals, no list', async () => {
+        await inTheBackgroundWith(1);
+        unreadIs(2);
+        await act(async () => { await ringDoorbell(); });
+        expect(getMyUnread).toHaveBeenCalledTimes(1);
+        expect(getMyMarketplaceTransactions).not.toHaveBeenCalled();
+        expect(getConversations).not.toHaveBeenCalled();
+    });
+
+    it('reads nothing on its own: ten quiet minutes are no reads', async () => {
+        await inTheBackgroundWith(1);
+        await stepClock(600_000);
+        expect(getMyUnread).not.toHaveBeenCalled();
+        expect(getMyMarketplaceTransactions).not.toHaveBeenCalled();
+    });
+
+    it('a second line inside the 2 s floor is read when the floor ends, not lost', async () => {
+        await inTheBackgroundWith(0);
+        unreadIs(1);
+        await act(async () => { await ringDoorbell(); });
+        expect(document.title).toBe('(1) BeanPool');
+
+        unreadIs(2);
+        let rang = false;
+        void ringDoorbell().then(() => { rang = true; });
+        await stepClock(1900);
+        expect(getMyUnread).toHaveBeenCalledTimes(1);
+        expect(rang).toBe(false);
+        await stepClock(200);
+        expect(getMyUnread).toHaveBeenCalledTimes(2);
+        expect(rang).toBe(true);
+        expect(document.title).toBe('(2) BeanPool');
+    });
+
+    it('a refused read fails the sync, keeps the number, and the next activity tries again at once', async () => {
+        await inTheBackgroundWith(3);
+        vi.mocked(getMyUnread).mockRejectedValueOnce(new Error('offline'));
+        let results: PromiseSettledResult<void>[] = [];
+        await act(async () => { results = await ringDoorbell(); });
+        expect(results.some(r => r.status === 'rejected')).toBe(true);
+        expect(document.title).toBe('(3) BeanPool');
+
+        unreadIs(5);
+        await act(async () => { await ringDoorbell(); });
+        expect(document.title).toBe('(5) BeanPool');
+    });
+
+    it('coming back with a read in flight still reads the deals, and the older answer changes nothing', async () => {
+        await inTheBackgroundWith(1);
+        let answer: (a: { unread: number; requests: number; asOf: string }) => void = () => {};
+        vi.mocked(getMyUnread).mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+        const rung = ringDoorbell();
+        await stepClock(0);
+
+        unreadIs(6);
+        await setHidden(false);
+        await waitFor(() => expect(document.title).toBe('(6) BeanPool'));
+        expect(getMyMarketplaceTransactions).toHaveBeenCalledTimes(1);
+
+        await act(async () => { answer({ unread: 4, requests: 0, asOf }); await rung; });
+        expect(document.title).toBe('(6) BeanPool');
+    });
+
+    it('a visible tab does what it did: the deals too, and nothing inside the floor', async () => {
+        await inTheBackgroundWith(1);
+        unreadIs(2);
+        await setHidden(false);
+        await waitFor(() => expect(document.title).toBe('(2) BeanPool'));
+        vi.mocked(getMyUnread).mockClear();
+        vi.mocked(getMyMarketplaceTransactions).mockClear();
+
+        await act(async () => { await ringDoorbell(); });
+        expect(getMyUnread).not.toHaveBeenCalled();
+
+        await stepClock(2100);
+        expect(getMyUnread).not.toHaveBeenCalled();
+        await act(async () => { await ringDoorbell(); });
+        expect(getMyUnread).toHaveBeenCalledTimes(1);
+        expect(getMyMarketplaceTransactions).toHaveBeenCalledTimes(1);
     });
 });

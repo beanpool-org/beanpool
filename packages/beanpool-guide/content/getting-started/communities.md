@@ -18,6 +18,14 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 
 Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Tap **Next**, then check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool keeps one copy for all your communities.
 
+### Bringing your listings with you
+
+The first time you join a local community from the global community, the phone app offers to bring your listings along. Back on **Home**, once you have checked your name and photo, it asks **Bring my listings to** your new community. Tap **Bring them** and your Offers and Needs on the global community are posted there too, by you, with their photos. They arrive with no price: open each one to set a price in Beans. Your listings on the global community stay as they are, and it isn't told where they went.
+
+A listing that is no longer up on the global community stays behind, and so does one you have paused. If a photo can't be fetched, the app says so. A listing with no photo left stays behind too, because every Offer and Need needs one, and the app names it. A community with Beans takes a Need only once you have listed an Offer there, so with no Offer to bring your Needs wait: list one, and the app asks again. With no connection the app keeps the offer, and after a yes it tries the rest again from **Home**.
+
+You don't have to answer: joining never waits for it. Tap **Not now** and the app asks once more the next day, then not again. You can always post a listing again yourself. This is in the phone app only for now; the web app doesn't offer it yet.
+
 ## Visiting a community's address
 
 A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member: its name, how many members it has and its town or area if the community shares them, and whether it **Takes requests to join** or **Takes new members by invite**. Nothing else: no members' names, no listings, no balances, never an exact place. The website's map links each community's card with **See** and its name.

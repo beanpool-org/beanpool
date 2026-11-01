@@ -573,6 +573,48 @@ expect 0 "train: a tier-A PR alone is a train of one" "train: #31 merged" -- bas
 branch 48 t-lower "" -- sh -c 'mkdir -p apps/server/src/routes && echo "db.prepare(\"update accounts set last_updated_at = ?, balance = ? where public_key = ?\")" > apps/server/src/routes/members.ts'
 branch 49 t-plain2 "" -- add j.txt j
 expect 1 "train: a balance write in lower case, another column first, rides alone too" "#48: RIDES ALONE: it changes a line that moves Beans" -- bash "$TRAIN" 48 49 --no-merge
+# The money list names the files that are about money, not every large file that holds a little of it (Fable and Argon, 1 Nov:
+# 5 of 9 PRs rode alone, a words-only one for touching decisions-engine.ts). The changed-line rule is what catches those.
+branch 71 t-wording "" -- sh -c 'mkdir -p apps/server/src && echo "const why = \"A poll needs a question\";" > apps/server/src/decisions-engine.ts'
+branch 72 t-conserve "" -- sh -c 'mkdir -p apps/server/src && echo "conservingTransaction(db, () => pay(from, to, amount));" > apps/server/src/state-engine.ts'
+branch 73 t-plain3 "" -- add m.txt m
+OUT=$(bash "$TRAIN" 71 72 73 --no-merge 2>&1)
+grep -qF "#71: WOULD MERGE" <<<"$OUT" && ok "train: a wording change in decisions-engine.ts may ride" || { bad "train: the wording PR did not ride"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+grep -qF "#72: RIDES ALONE: it changes a line that moves Beans: conservingTransaction or accounts SET balance (apps/server/src/state-engine.ts)" <<<"$OUT" && ok "train: a changed line calling conservingTransaction in state-engine.ts may not" || { bad "train: the conservingTransaction PR rode"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+branch 74 t-state "" -- sh -c 'mkdir -p apps/server/src && echo "const label = \"Beans\";" > apps/server/src/state-engine.ts'
+branch 75 t-sync "" -- sh -c 'mkdir -p apps/server/src/engine && echo "// sync" > apps/server/src/engine/sync.ts'
+branch 76 t-keymove "" -- sh -c 'mkdir -p apps/server/src/engine && echo "// key move" > apps/server/src/engine/key-move.ts'
+branch 77 t-audit "" -- sh -c 'mkdir -p apps/server/src/engine && echo "// audit" > apps/server/src/engine/audit.ts'
+OUT=$(bash "$TRAIN" 74 75 76 77 --no-merge 2>&1)
+[ "$(grep -c "WOULD MERGE" <<<"$OUT")" = 4 ] && ok "train: state-engine.ts, engine/sync.ts, key-move.ts and audit.ts are off the money list" || { bad "train: a file taken off the money list still rides alone"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+# The writes in those files are split over lines, so the line a PR changes often names neither accounts nor, in an upsert, SET.
+# One PR for each shape the code holds. Off the list, the changed-line rule is all that stops an edit to one sharing a train.
+branch 85 t-upsert "" -- sh -c 'mkdir -p apps/server/src/engine && echo "                balance = excluded.balance," > apps/server/src/engine/sync.ts'
+branch 86 t-split "" -- sh -c 'mkdir -p apps/server/src && echo "            SET balance = balance + ?," > apps/server/src/state-engine.ts'
+branch 87 t-conflict "" -- sh -c 'mkdir -p apps/server/src && echo "ON CONFLICT(public_key) DO UPDATE SET balance = 0, last_updated_at = excluded.last_updated_at" > apps/server/src/decisions-engine.ts'
+branch 88 t-replace "" -- sh -c 'mkdir -p apps/server/src/engine && echo "INSERT OR REPLACE INTO accounts (public_key, balance) VALUES (?, ?)" > apps/server/src/engine/audit.ts'
+branch 93 t-plain6 "" -- add p.txt p
+OUT=$(bash "$TRAIN" 85 86 87 93 --no-merge 2>&1)
+grep -qF "#85: RIDES ALONE: it changes a line that moves Beans" <<<"$OUT" && ok "train: an upsert's own balance line rides alone, in engine/sync.ts" || { bad "train: the upsert PR rode"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+grep -qF "#86: RIDES ALONE: it changes a line that moves Beans" <<<"$OUT" && ok "train: ...and a SET balance on the line after UPDATE accounts, in state-engine.ts" || bad "train: the split UPDATE PR rode"
+grep -qF "#87: RIDES ALONE: it changes a line that moves Beans" <<<"$OUT" && ok "train: ...and ON CONFLICT DO UPDATE SET balance, in decisions-engine.ts" || bad "train: the ON CONFLICT PR rode"
+# With company of its own: the last PR riding is a train of one, whatever it touches.
+expect 1 "train: ...and INSERT OR REPLACE INTO accounts, in engine/audit.ts" "#88: RIDES ALONE: it changes a line that moves Beans" -- bash "$TRAIN" 88 93 --no-merge
+# The other way: the list was narrowed so a PR that only reads a balance may ride. These lines must not bring that back.
+branch 89 t-reads "" -- sh -c 'mkdir -p apps/server/src && printf "%s\n" "const balance = roundedBalance(key);" "if (a.balance === b) return;" "  AND balance = 0" "// reset balance = 0 in the audit" > apps/server/src/state-engine.ts'
+expect 0 "train: a line that only reads a balance may ride" "#89: WOULD MERGE" -- bash "$TRAIN" 89 93 --no-merge
+branch 78 t-schema "" -- sh -c 'mkdir -p apps/server/src/db && echo "CREATE TABLE x (y TEXT);" > apps/server/src/db/schema.sql'
+branch 79 t-escrow2 "" -- sh -c 'mkdir -p apps/server/src/engine && echo "// escrow" > apps/server/src/engine/escrow.ts'
+branch 81 t-pledges "" -- sh -c 'mkdir -p apps/server/src/engine && echo "// pledges" > apps/server/src/engine/unfunded-pledges.ts'
+branch 82 t-plain4 "" -- add n.txt n
+OUT=$(bash "$TRAIN" 78 79 81 82 --no-merge 2>&1)
+grep -qF "#78: RIDES ALONE: it touches ledger or money paths (apps/server/src/db/schema.sql)" <<<"$OUT" && ok "train: schema.sql is on the money list" || { bad "train: the schema PR rode"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+grep -qF "#79: RIDES ALONE: it touches ledger or money paths (apps/server/src/engine/escrow.ts)" <<<"$OUT" && grep -qF "#81: RIDES ALONE: it touches ledger or money paths (apps/server/src/engine/unfunded-pledges.ts)" <<<"$OUT" && ok "train: ...and the engine's escrow and pledge files stay on it" || bad "train: an engine money file rode"
+branch 83 t-tier3 "tier-A" -- sh -c 'mkdir -p apps/server/src && echo "const why = \"tier A wording\";" > apps/server/src/decisions-engine.ts'
+branch 84 t-plain5 "" -- add o.txt o
+expect 1 "train: a tier-A label still rides alone, on a file off the money list" "#83: RIDES ALONE: it is labelled tier-A" -- bash "$TRAIN" 83 84 --no-merge
+# board.sh reads the list out of this file with sed, and an empty read sends every money PR down a train. That line must keep its shape.
+[ "$(sed -n "s/^MONEY_PATHS='\(.*\)'$/\1/p" "$TRAIN" | grep -c 'schema')" = 1 ] && ok "train: MONEY_PATHS stays one line, in the form board.sh reads" || bad "train: board.sh can no longer read MONEY_PATHS"
 # Given with a merged PR and one GitHub holds, the tier-A PR is the only one still riding: a train of one.
 branch 46 t-tier2 "tier-A" -- add k.txt k
 branch 47 t-cired2 "" -- add l.txt l

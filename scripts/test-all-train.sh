@@ -20,10 +20,11 @@
 #           as the recheck writes. A failure the train cannot run alone (lint, typecheck, a browser check, fail_summary)
 #           merges nothing, and says so.
 #
-# Who rides: at most 4. A PR labelled tier-A, or touching ledger or money paths ($MONEY_PATHS, or a changed line that calls
-# conservingTransaction or writes accounts SET balance, in any case), rides alone: in a train of two or more PRs still riding
-# (not dropped or held) it is left out with a line. A RED GitHub "Run BeanPool Test-All Pipeline" on a PR's head holds it,
-# before the run and again before merging; pending never holds.
+# Who rides: at most 4. A PR labelled tier-A, or touching a file that is about money ($MONEY_PATHS), or changing a line that
+# calls conservingTransaction or writes accounts SET balance, in any case and any file, rides alone: in a train of two or more
+# PRs still riding (not dropped or held) it is left out with a line. A large file that only holds some money (state-engine.ts,
+# decisions-engine.ts) is read by that changed-line rule, not listed: a wording change there may ride. A RED GitHub
+# "Run BeanPool Test-All Pipeline" on a PR's head holds it, before the run and again before merging; pending never holds.
 # If main or any PR head moves during the run, or a PR's CI goes red, nothing is merged: run the train again.
 #
 #   --no-merge   test, bisect and report, but merge and push nothing
@@ -53,10 +54,19 @@ CAP=4
 CHECK_NAME="Run BeanPool Test-All Pipeline"
 MERGER="$SCRIPT_DIR/words-merge-3way.mjs"
 CATALOG_RE='^(apps|packages)/[^/]+/words/[^/]+\.json$'
-# Ledger and money: the ledger itself, the files that move Beans (check-balance-writes.mjs's baseline and the engine's
-# escrow, pledge and debt paths), the treasury routes, and the two scripts that guard conservation. db.ts is too central to
-# list whole: a changed line there (or anywhere) that calls conservingTransaction or writes a balance counts instead.
-MONEY_PATHS='^(packages/beanpool-core/src/ledger|apps/server/src/(state-engine|decisions-engine|federation-settlement-exchange|srv20-ledger-reset)\.ts$|apps/server/src/engine/(escrow|money-requests|unfunded-pledges|stranded-pledges|names-debts|key-move|audit|sync)\.ts$|apps/server/src/routes/treasury|scripts/(check-balance-writes|audit-conservation)\.mjs$)'
+# Ledger and money: the ledger itself, the settlement exchange and the ledger reset, the engine's escrow, pledge and debt paths,
+# the schema, the treasury routes, and the two scripts that guard conservation. A file too central to list whole (db.ts,
+# state-engine.ts, decisions-engine.ts, engine/sync.ts, engine/key-move.ts, engine/audit.ts: 5 of 9 PRs rode alone on 1 Nov
+# 2026, a words-only one for touching decisions-engine.ts) counts by its changed lines instead: a line there, or anywhere, that
+# calls conservingTransaction or writes a balance. Keep this on one line, in this form: board.sh reads it with sed.
+MONEY_PATHS='^(packages/beanpool-core/src/ledger|apps/server/src/(federation-settlement-exchange|srv20-ledger-reset)\.ts$|apps/server/src/engine/(escrow|money-requests|unfunded-pledges|stranded-pledges|names-debts)\.ts$|apps/server/src/db/schema\.sql$|apps/server/src/routes/treasury|scripts/(check-balance-writes|audit-conservation)\.mjs$)'
+# The changed-line rule, for git diff -G, which reads one line at a time and so has to name each shape a write takes in this code:
+# a call to conservingTransaction; SET … balance =, wherever the UPDATE is (a line of its own, or ON CONFLICT … DO UPDATE); a line
+# that opens with balance =, as the upserts do; INSERT OR REPLACE INTO accounts, the pot's write in audit.ts, with no "balance =" to
+# find. "AND balance = 0" in a WHERE and "const balance =" are reads, and stay out. On 1 Nov 2026 this saw all 18 sites
+# check-balance-writes.mjs counted, against 8 for accounts SET alone, and cost one more PR riding alone over main's last 200, for a
+# test file. No \b: on the Mac's git it matches nothing, silently. A value worked out away from the SQL is not seen: that needs tier-A.
+MONEY_LINE='conservingTransaction|(^|[^[:alnum:]_])SET[[:space:]][^;]*balance[[:space:]]*=|^[[:space:]]*balance[[:space:]]*=([^=>]|$)|REPLACE[[:space:]]+INTO[[:space:]]+accounts'
 
 usage() { echo "usage: $0 <PR> [<PR>…] (at most $CAP) [--no-merge] [--keep] [--shadow]" >&2; exit 2; }
 PRS=(); MERGE=1; KEEP=0; SHADOW=0
@@ -130,9 +140,10 @@ rides_alone() {
   files=$(git diff --name-only "$mb" "$1" | grep -E "$MONEY_PATHS" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && { echo "touches ledger or money paths (${files% })"; return; }
   # -G takes an extended regex: a bare | (\| would be a literal bar, and match nothing). -i: SQL is written in any case,
-  # and other columns may come before balance. It reads one line at a time, so an UPDATE split over lines is not seen
-  # here; a new raw balance write must raise scripts/check-balance-writes.mjs's baseline, which is a money path above.
-  files=$(git diff --name-only -i -G 'conservingTransaction|accounts[[:space:]]+SET[[:space:]][^;]*balance[[:space:]]*=' "$mb" "$1" | head -3 | tr '\n' ' ')
+  # and other columns may come before balance. A new UPDATE or upsert in a shape MONEY_LINE does not name still has to
+  # raise scripts/check-balance-writes.mjs's baseline, which is a money path above. That script does not count a plain
+  # INSERT: one that sets a real balance is seen by neither rule, and needs tier-A.
+  files=$(git diff --name-only -i -G "$MONEY_LINE" "$mb" "$1" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && echo "changes a line that moves Beans: conservingTransaction or accounts SET balance (${files% })"
 }
 

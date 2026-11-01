@@ -22,6 +22,52 @@ export async function postPhotoOf(uri: string): Promise<string | null> {
     return out.base64 ? `data:image/jpeg;base64,${out.base64}` : null;
 }
 
+/** A photo a community already holds, as a new post sends it, or why it can't be had: `gone` for good, or `later`. */
+export type FetchedPhoto = { photo: string } | { failed: 'gone' | 'later' };
+
+/** How long a community has to give one photo. */
+const FETCH_PHOTO_TIMEOUT_MS = 20_000;
+/** A node stores no picture past 2 MB (core MAX_PICTURE_BYTES): as base64, about this many characters. */
+const MOST_PHOTO_CHARS = 2_800_000;
+
+/** The kinds of image a node stores, by the start of their base64 (engine/avatar.ts sniffRasterImageType). */
+function imageMimeOf(base64: string): string | null {
+    if (base64.startsWith('/9j/')) return 'image/jpeg';
+    if (base64.startsWith('iVBORw0KGgo')) return 'image/png';
+    if (base64.startsWith('R0lGOD')) return 'image/gif';
+    return base64.startsWith('UklGR') ? 'image/webp' : null;
+}
+
+function dataUrlOf(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('unreadable photo'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+/**
+ * A listing's photo fetched as any phone fetches it, unsigned, its bytes unchanged: sent 800 px wide when it was posted,
+ * and a second JPEG pass would only lose detail. A 200 that isn't an image (a captive portal's page) is no photo: the
+ * node would refuse the whole listing for it.
+ */
+export async function fetchedPostPhoto(url: string): Promise<FetchedPhoto> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_PHOTO_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) return { failed: res.status === 408 || res.status === 429 || res.status >= 500 ? 'later' : 'gone' };
+        const base64 = (await dataUrlOf(await res.blob())).replace(/^data:[^,]*,/, '');
+        const mime = imageMimeOf(base64);
+        return mime && base64.length <= MOST_PHOTO_CHARS ? { photo: `data:${mime};base64,${base64}` } : { failed: 'gone' };
+    } catch {
+        return { failed: 'later' };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 /** From the camera: its permission asked now, at the tap. */
 export async function postPhotoFromCamera(): Promise<string | null> {
     const ImagePicker = await import('expo-image-picker');

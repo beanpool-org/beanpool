@@ -32,7 +32,7 @@ ci_fix(){ # PR BRANCH SHA — one fix stage on the lane's build backend, with th
   stage "FIX-CI-$2-$CI_FIXES" "$LANE_BUILD_TIMEOUT" "STAGE FIX-CI — PR #$1 (branch $2; fetch and check it out in the lane worktree). GitHub's required check \"$LANE_CI_CHECK\" is RED on the head $3, so the deciding review has not run. The failing checks, each with the command that prints its log:
 $failing
 
-Read the logs, find the cause and fix it on the branch. Run the suites you touched, commit and push: the review runs once that push is green. Never delete or weaken a test assertion. If this PR did not cause the failure, change nothing and say so: the director decides." build; }
+Read the logs, find the cause and fix it on the branch, and run the suites you touched. $LANE_ONE_PUSH Then stop: the review runs once that push is green. Never delete or weaken a test assertion. If this PR did not cause the failure, change nothing and say so: the director decides." build; }
 
 ci_gate(){ # PR BRANCH — 0 once a deciding pass may run on the PR's head; sets CI_HEAD and CI_NOTE for the brief. (Marty, 31 Oct
   # 2026: 8 of the last 18 reviewed PRs failed their first deciding review, on what GitHub then found or had already shown.)

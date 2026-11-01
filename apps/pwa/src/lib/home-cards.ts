@@ -328,8 +328,11 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
             // Worked out in this browser; drawn only where a place is known (CARD-FRAME §4).
             case 'sky':
                 return skyOf(answer, { settings }, now) !== null;
+            // A Your tools card (home-tools-card) or a tool's card: worked out on this device (asks: 'none').
+            case 'tools':
+                return me.standing === 'member';
             default:
-                return !!answer.cards[type as keyof HomeCards];
+                return type.startsWith('tool-') ? !!answer.me : !!answer.cards[type as keyof HomeCards];
         }
     };
     const base = shownLayout(answer, layout, opts);

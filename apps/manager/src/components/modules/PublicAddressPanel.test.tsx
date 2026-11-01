@@ -903,7 +903,7 @@ describe('PublicAddressPanel Component', () => {
             expect(toast.closest('[role="status"]')?.className).toMatch(/bg-amber-950/);
             expect(screen.queryByText(/Node is offline/)).not.toBeInTheDocument();
             const line = await screen.findByTestId('public-address-still-answers');
-            expect(line).toHaveTextContent(`This server still answers at ${OLD}. To end that, claim ${OLD} back, then use Take offline.`);
+            expect(line).toHaveTextContent(`This server still answers at ${OLD}. To end that, claim the old name back, then use Take offline.`);
             expect(line.className).toMatch(/text-bp-chip-warn-ink/);
             expect(line.className).toMatch(/break-words/);
         });

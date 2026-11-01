@@ -820,7 +820,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // never that it is offline. The way to end one is to claim it back and Take offline (tunnel-connector.ts otherHosts).
             const stillAnswering = (tunnel.others ?? []).map((o) => o.host);
             if (tunnel.state !== 'off') addProbeLog('3/4', `❌ Tunnel still ${describeTunnel(tunnel)}`, 'error');
-            else if (stillAnswering.length) addProbeLog('3/4', `⚠️ ${tr("The released name's tunnel stopped. This server still answers at {addresses}.", { addresses: stillAnswering.join(', ') })}`, 'warning');
+            else if (stillAnswering.length) addProbeLog('3/4', tr("⚠️ The released name's tunnel stopped. This server still answers at {addresses}.", { addresses: stillAnswering.join(', ') }), 'warning');
             else addProbeLog('3/4', `✅ Tunnel stopped`, 'success');
             if (hostname) {
                 verifyEdgeStatus(hostname, 'offline', 10).catch(err => {

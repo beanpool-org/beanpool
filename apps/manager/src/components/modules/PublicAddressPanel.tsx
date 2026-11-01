@@ -953,7 +953,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                     {/* No stored address is not offline: a name the community moved off keeps its own tunnel after Take offline. */}
                     {leftUp && (
                         <p data-testid="public-address-still-answers" className="m-0 p-3 rounded-xl border border-amber-500/40 bg-bp-chip-warn-tint text-xs text-bp-chip-warn-ink break-words">
-                            {t('This server still answers at {addresses}. To end that, claim {addresses} back, then use Take offline.', { addresses: leftUp })}
+                            {t('This server still answers at {addresses}. To end that, claim the old name back, then use Take offline.', { addresses: leftUp })}
                         </p>
                     )}
 

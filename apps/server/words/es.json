@@ -10,5 +10,7 @@
   "Add a photo first": "Añade una foto primero",
   "Only a pending message request can be cancelled.": "Solo se puede cancelar una solicitud de mensaje pendiente.",
   "Only the person who sent a message request can cancel it.": "Solo la persona que envió una solicitud de mensaje puede cancelarla.",
-  "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envía conversationId, el chat, y decision, 'accept', 'ignore' o 'cancel'."
+  "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envía conversationId, el chat, y decision, 'accept', 'ignore' o 'cancel'.",
+  "This community has a new address": "Esta comunidad tiene una nueva dirección",
+  "This community is also at {address}. The old address keeps working.": "Esta comunidad también está en {address}. La dirección anterior sigue funcionando."
 }

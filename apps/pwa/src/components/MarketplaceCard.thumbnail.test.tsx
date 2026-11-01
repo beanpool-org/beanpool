@@ -1,5 +1,5 @@
 /**
- * A Market card draws its listing's small copy (`size=thumb`, @beanpool/core listPhotoUrl), never the 800 px photo: a
+ * A Market card draws its listing's small copy (`size=thumb2`, @beanpool/core listPhotoUrl), never the 800 px photo: a
  * page of 20 cards was 20 full photos on prepaid data (Marty, board, 9 Oct). Opening the photo (the lightbox, the
  * detail) still gets the photos' own URLs, keys and all.
  */
@@ -19,7 +19,7 @@ describe('MarketplaceCard photo', () => {
     it.each(['grid', 'list'] as const)('the %s card draws the small copy, its key kept', (viewMode) => {
         const { container } = render(<MarketplaceCard post={post} viewMode={viewMode} />);
         const img = container.querySelector(`img[alt="${post.title}"]`);
-        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
     });
 
     it.each(['grid', 'list'] as const)('opening the %s card\'s photo gets the photos\' own URLs', (viewMode) => {
@@ -80,7 +80,7 @@ describe('MarketplaceCard picture ladder: banner before tile', () => {
         } as unknown as MarketplacePost;
         const { container } = render(<MarketplaceCard post={postWithBoth} viewMode={viewMode} />);
         const img = container.querySelector(`img[alt="${post.title}"]`);
-        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
     });
 
     it.each(['grid', 'list'] as const)('the %s card does not render a zoom button or trigger onPhotoClick for enterprise banner fallback', (viewMode) => {
@@ -123,9 +123,9 @@ describe('MarketplaceCard picture ladder: a banner that fails gives way to the t
         const both = { ...post, authorBannerUrl: BANNER } as unknown as MarketplacePost;
         const { container, queryByTestId } = render(<MarketplaceCard post={both} viewMode={viewMode} />);
         const img = container.querySelector(`img[alt="${post.title}"]`);
-        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
         fireEvent.error(img!);
-        expect(container.querySelector(`img[alt="${post.title}"]`)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+        expect(container.querySelector(`img[alt="${post.title}"]`)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
         expect(queryByTestId('category-tile')).toBeNull();
     });
 });

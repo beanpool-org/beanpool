@@ -481,6 +481,8 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    Then `--file migrations/0007_content_swap.sql` (one column, `swap_fails`: the sweeps in a row in which something
    other than a name's own node answered at it, design D2). Before the Worker: every write that routes a name again
    resets it, so a Worker without the column fails those. A rerun stops at the ALTER.
+   Then `--file migrations/0014_reserve_byron.sql` (one `name_policy` row, `gated`: byron, kept for Mullumbimby's new
+   main name, so a stranger's claim waits for the admin). Needs no Worker change; a rerun changes nothing.
 3. Deploy the Worker.
 
 Or let the deploy workflow apply them (below), once the live database is bootstrapped.

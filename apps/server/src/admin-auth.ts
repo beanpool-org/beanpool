@@ -730,7 +730,7 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
 /**
  * An owner's fresh proof, every time, for the rare actions that can lose the community's data or address, or lock an owner
  * out (design case 18 §5 and amendment 1: replacing the recovery code, taking the address offline, releasing a name or
- * claiming over a live one, retiring the password, break-glass mode and codes, enrolling an owner key, granting or taking
+ * claiming one while the node publishes another address, retiring the password, break-glass mode and codes, enrolling an owner key, granting or taking
  * owner or admin, making an automation token, the gateway settings, and removing, re-pointing or shortening off-box
  * backups). Called after requireAdminRole(ctx, ['owner'], …). What it asks depends on the credential checkAdminAuth took:
  *   automation token     never: 403 token_not_allowed;

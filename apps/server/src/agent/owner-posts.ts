@@ -1050,7 +1050,7 @@ interface MadeRow {
     description: string; category: string; credits: number; price_type: string | null; repeatable: number | null; cash_also_needed: number | null;
     lat: number | null; lng: number | null; shop_id: string | null; photo_count: number;
     lendable: number; lend_max_days: number | null; lend_terms: string | null; replacement_value: string | null;
-    event_start_local: string | null; event_end_local: string | null; event_tz: string | null; event_place_name: string | null;
+    event_start_at: string | null; event_end_at: string | null; event_start_local: string | null; event_end_local: string | null; event_tz: string | null; event_place_name: string | null;
     event_private_note: string | null; event_online: number | null; event_link: string | null; event_host_lets_in: number | null;
     event_repeat: string | null; event_repeat_until: string | null;
 }
@@ -1060,7 +1060,7 @@ const MADE_COLUMNS = `id, type, status, active, title, author_pubkey, created_by
     description, category, credits, price_type, repeatable, cash_also_needed, lat, lng, shop_id,
     (SELECT COUNT(*) FROM post_photos WHERE post_id = posts.id) AS photo_count,
     lendable, lend_max_days, lend_terms, replacement_value,
-    event_start_local, event_end_local, event_tz, event_place_name, event_private_note, event_online, event_link, event_host_lets_in,
+    event_start_at, event_end_at, event_start_local, event_end_local, event_tz, event_place_name, event_private_note, event_online, event_link, event_host_lets_in,
     event_repeat, event_repeat_until`;
 
 /** The words for a post that is not this assistant's to change (design §2.3). */
@@ -1127,6 +1127,8 @@ type Updates = Record<string, unknown>;
 function put(updates: Updates, fields: Updates): void {
     for (const [k, v] of Object.entries(fields)) if (v !== undefined) updates[k] = v;
 }
+
+const isBlank = (v: unknown): boolean => typeof v === 'string' && !v.trim();
 
 /** The first of `fields` sent that is not true or false, in words: the engine reads any text as true. */
 function notAFlag(args: Record<string, unknown>, fields: readonly string[]): string | null {
@@ -1201,9 +1203,9 @@ function eventEdit(row: MadeRow, args: Record<string, unknown>, updates: Updates
         // As in both apps: in person it has a pin and a named place, so an online event coming to one names both.
         const missing = wasOnline ? missingField(args, REQUIRED.eventInPerson) : null;
         if (missing) return missing;
-        if (args.place_name !== undefined && !isText(args.place_name)) return 'place_name is empty: an event in person has a named place. Send the new name, or leave it out to keep it.';
+        if (isBlank(args.place_name)) return 'place_name is empty: an event in person has a named place. Send the new name, or leave it out to keep it.';
     }
-    const blank = ['start_at', 'end_at', 'timezone'].find((k) => args[k] !== undefined && !isText(args[k]));
+    const blank = ['start_at', 'end_at', 'timezone'].find((k) => isBlank(args[k]));
     if (blank) return `${blank} is empty: send the new value, or leave it out to keep it.`;
     const unzoned = unzonedTime(args);
     if (unzoned) return unzoned;
@@ -1377,10 +1379,10 @@ function listingFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> 
     };
 }
 
-/** What update_post can change on an event: its clock as its members see it, in its zone; the instants follow from those. */
+/** What update_post can change on an event: the instants it takes, and the clock its members see, in its zone. */
 function eventFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
     return {
-        startsLocal: r.event_start_local, endsLocal: r.event_end_local, timezone: r.event_tz, online: r.event_online === 1,
+        startAt: r.event_start_at, endAt: r.event_end_at, startsLocal: r.event_start_local, endsLocal: r.event_end_local, timezone: r.event_tz, online: r.event_online === 1,
         placeName: fence(boundary, `post ${r.id}, place name`, r.event_place_name), joinLink: fence(boundary, `post ${r.id}, join link`, r.event_link),
         privateNote: fence(boundary, `post ${r.id}, note for people going`, r.event_private_note, EVENT_PRIVATE_NOTE_MAX),
         hostLetsIn: r.event_host_lets_in === 1, repeat: readRepeatRule(r.event_repeat), repeatUntil: r.event_repeat_until,
@@ -1432,7 +1434,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         title: 'Posts this assistant made',
         reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
             + "its link, its library tags, its pin and how many photos, and fenced its title, description and its own tags; a listing's category, price, shop and "
-            + "lending terms; an event's clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule: what "
+            + "lending terms; an event's start and end, its clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule: what "
             + 'update_post can change, to read before it edits. The live ones (the default), the removed ones, or all',
         never: "a post made in the app or by another assistant, who is going to an event, another member's data, or a key",
         memberText: true,
@@ -1460,8 +1462,8 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         name: 'update_post',
         title: 'Edit a post this assistant made',
         reads: `nothing: it changes a live post THIS assistant made, whatever the app's edit changes, under the same rules: on any post its title, description, `
-            + `place, tags and photos; on an Offer or a Need its category, price, repeat, cash note, shop and lending; on an event its times, zone, place name, online, `
-            + `link, note, who it lets in and repeat. The post keeps its id, so move a pin here, never by removing it and making it again: an event keeps its RSVPs and `
+            + `place, tags and photos; on an Offer or a Need its category, price, repeat and cash note; on an Offer its shop and lending; on an event its times, zone, `
+            + `place name, online, link, note, who it lets in and repeat. The post keeps its id, so move a pin here, never by removing it and making it again: an event keeps its RSVPs and `
             + `links, and everyone going is told when its time or place moves, as for a host's own edit. A moved pin leaves place_name as it is: send it too when the `
             + `place itself changed. A pin moved into another time zone keeps the moment, so its clock changes: the answer says it, and start_at sets it. Only the fields sent change; a field its kind does not take is refused in words. At most ${AGENT_EDITS_PER_DAY} edits a day; any `
             + `other post is refused; ${TAGS_WORDS}; tags or free_tags sent is the whole new list of that kind, left out it stays; my_posts reads what it holds now`,

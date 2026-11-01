@@ -170,6 +170,7 @@ async function main(): Promise<void> {
         assert(/keeps its id/.test(updateWords) && /never by removing it/.test(updateWords) && /RSVPs/.test(updateWords) && /refused in words/.test(updateWords) && /never moves Beans/.test(updateWords),
             `update_post's words tell an assistant to move a pin here, and what it keeps (${updateWords.slice(0, 120)}…)`);
         assert(/what update_post can change/.test(tools.find((t) => t.name === 'my_posts')?.description ?? ''), 'my_posts says it reads what update_post can change');
+        assert(/on an Offer its shop and lending/.test(updateWords) && !/Need its [^;]*shop/.test(updateWords), 'its words give a shop and lending to an Offer, never a Need');
 
         // ── 2. A listing moves ───────────────────────────────────────────────────────────────────────
         section('── 2. A listing moves ──');
@@ -276,6 +277,8 @@ async function main(): Promise<void> {
             ['an end with no offset', { end_at: '2027-01-02T12:00:00' }, /must carry its offset/],
             ['a blank start', { start_at: '' }, /start_at is empty/],
             ['a blank end', { end_at: '' }, /end_at is empty/],
+            ['a time that is a number', { start_at: 1893456000 }, /must carry its offset/],
+            ['a place name that is a number', { place_name: 7 }, /Place name must be text/],
             ['a start already past', { start_at: '2020-01-02T10:00:00Z' }, /An event must start in the future/],
             ['an end before the start', { end_at: '2020-01-02T10:00:00Z' }, /must end after it starts/],
             ['a zone not on the list', { timezone: 'Mars/Olympus' }, /Pick a time zone from the list/],
@@ -406,7 +409,7 @@ async function main(): Promise<void> {
         assert(readOffer?.lat === row(offerId)?.lat && readOffer?.lng === row(offerId)?.lng && readOffer?.category === 'tools' && readOffer?.beans === 7 && readOffer?.priceType === 'daily'
             && readOffer?.repeatable === true && readOffer?.cashAlsoNeeded === false && readOffer?.lendable === true && readOffer?.lendMaxDays === null && /\$120/.test(fenced(readOffer?.replacementValue)) && readOffer?.photoCount === 1,
             `a listing's place, terms and lending (${JSON.stringify({ lat: readOffer?.lat, cat: readOffer?.category, price: readOffer?.priceType })})`);
-        assert(readEvent?.lat === -28.644 && /The new hall/.test(fenced(readEvent?.placeName)) && readEvent?.startsLocal === row(eventId)?.event_start_local && !!readEvent?.endsLocal && readEvent?.timezone === 'Australia/Brisbane'
+        assert(readEvent?.lat === -28.644 && /The new hall/.test(fenced(readEvent?.placeName)) && readEvent?.startAt === row(eventId)?.event_start_at && readEvent?.endAt === row(eventId)?.event_end_at && readEvent?.startsLocal === row(eventId)?.event_start_local && !!readEvent?.endsLocal && readEvent?.timezone === 'Australia/Brisbane'
             && readEvent?.online === false && /Gate code 1234/.test(fenced(readEvent?.privateNote)) && readEvent?.hostLetsIn === true && readEvent?.repeat === null,
             `an event's place, clock, note and who it lets in (${JSON.stringify({ lat: readEvent?.lat, at: readEvent?.startsLocal })})`);
         await edit({ post_id: onlineId, online: true, link: 'https://example.org/again' });

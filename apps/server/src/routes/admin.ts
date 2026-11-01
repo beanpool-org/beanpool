@@ -7,7 +7,7 @@ import Router from '@koa/router';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { getVersion } from '../version.js';
+import { getVersion, shownVersion } from '../version.js';
 import {
     getAllMembers, getAllProfiles, getMember,
     getPosts, getCommunityHealth,
@@ -1324,7 +1324,7 @@ const getDiagnosticsHandler = async (ctx: any) => {
         ctx.body = {
             success: true,
             status: 'online',
-            version: getVersion(),
+            version: shownVersion(getVersion()),
             uptimeSeconds: Math.round(process.uptime()),
             cpuLoadPercent: cpuLoad,
             memoryUsageMb: nodeRssMb,

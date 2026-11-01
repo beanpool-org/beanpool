@@ -31,7 +31,8 @@
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12), but
  *      not while the person blocks him: it stays as she left it until she lifts the block, and his next line is the request
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
- *  10. pushes: one per request, "wants to message you", folded to one an hour per person (R14)
+ *  10. pushes: none until it is accepted, however many requests wait; then a line pushes as any line (Marty, 1 Nov 2026,
+ *      replacing R14's one push an hour)
  *  11. a removed sender's request goes; a deleted sender's line is blanked and their request goes (R15); neither becomes a
  *      chat or counts as unread; one waiting for a removed member goes from the node
  *  12. Ignore all
@@ -257,7 +258,6 @@ async function main(): Promise<void> {
     BASE = `https://localhost:${await startHttpsServer(0)}`;
     owner = newId('Olive');
     seedGenesisMember(owner.pk, 'Olive');
-    requestsEngine?.resetRequestPushes?.();
     if (LOCAL_RUN) await localRun(); else await globalRun();
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
@@ -315,8 +315,8 @@ async function globalRun(): Promise<void> {
     assert(annRead.status === 200 && annRead.body?.messages?.length === 1 && annRead.body?.conversation?.request?.state === 'pending',
         'she can read his line before she decides');
     const toAnn = pushesTo(ann).slice(pushedBefore);
-    assert(toAnn.length === 1 && toAnn[0].badge === 0 && noticesTo(ann).at(-1) === 'Bo wants to message you',
-        `one push to Ann, "${noticesTo(ann).at(-1)}", and her badge 0 (${toAnn.length} pushes, badge ${toAnn[0]?.badge})`);
+    assert(toAnn.length === 0 && !noticesTo(ann).some(n => n.includes('Bo')),
+        `no alert to Ann until she accepts it: no push, and nothing kept to show for one (${toAnn.length} pushes, ${JSON.stringify(noticesTo(ann))})`);
     const b2 = await send(boConv, bo);
     assert(b2.status === 403 && b2.body?.code === 'dm_request_pending' && b2.body?.error === 'Your first message is waiting for Ann. You can write more once they accept it.'
         && linesBy(boConv, bo) === 1, `his second line is refused, in words, and nothing is stored (${show(b2)})`);
@@ -348,8 +348,8 @@ async function globalRun(): Promise<void> {
     await sleep(150);
     const solList = await listOf(sol);
     assert(r1.status === 200 && inRequests(solList, raeConv) && solList?.requests?.count === 1 && rowOf(raeConv)?.state === 'pending'
-        && JSON.stringify(noticesTo(sol).slice(solPushed)) === JSON.stringify(['Rae wants to message you']),
-        `her first line is the request Sol sees, and is pushed as one (${show(r1)}; ${JSON.stringify(noticesTo(sol).slice(solPushed))})`);
+        && noticesTo(sol).length === solPushed,
+        `her first line is the request Sol sees, and it alerts nobody (${show(r1)}; ${JSON.stringify(noticesTo(sol).slice(solPushed))})`);
     assert(Date.parse(rowOf(raeConv)?.requested_at) > Date.now() - HOUR && entryOf(solList, raeConv)?.request?.at === rowOf(raeConv)?.requested_at,
         `opened 29 days ago, it is made by her line, so its 30 days run from then (${rowOf(raeConv)?.requested_at})`);
 
@@ -969,28 +969,30 @@ async function globalRun(): Promise<void> {
         && opens[3].body?.code === 'probation_limit', `a 12-words newcomer opens 3 requests, the 4th is refused as today (${opens.map(r => r.status).join(', ')})`);
 
     // ── 10. pushes ──────────────────────────────────────────────────────────────────────────────
-    console.log('── 10. one push per request, folded to one an hour ──');
+    console.log('── 10. no alert until it is accepted ──');
     const pat = member('Pat');
     const [ivy, jay, kai] = [member('Ivy'), member('Jay'), member('Kai')];
     const patBefore = noticesTo(pat).length;
+    const patPushes = pushesTo(pat).length;
+    const patConvs: string[] = [];
     for (const s of [ivy, jay, kai]) {
         const c: string = (await open(s, pat)).body?.conversation?.id;
+        patConvs.push(c);
         await send(c, s);
         await send(c, s);   // refused: no push for it
     }
     await sleep(250);
-    assert(JSON.stringify(noticesTo(pat).slice(patBefore)) === JSON.stringify(['Ivy wants to message you']),
-        `three requests in an hour: one push, for the first (${JSON.stringify(noticesTo(pat).slice(patBefore))})`);
-    attempt(() => requestsEngine.tickRequestPushFolds(dispatchPushNotification, Date.now() + 30 * 60_000));
-    await sleep(100);
-    assert(noticesTo(pat).length === patBefore + 1, 'half an hour on, still one');
-    attempt(() => requestsEngine.tickRequestPushFolds(dispatchPushNotification, Date.now() + HOUR + 60_000));
-    await sleep(100);
-    assert(JSON.stringify(noticesTo(pat).slice(patBefore)) === JSON.stringify(['Ivy wants to message you', 'Someone new wants to message you']),
-        `an hour on, one more for the two that waited, naming nobody (${JSON.stringify(noticesTo(pat).slice(patBefore))})`);
-    attempt(() => requestsEngine.tickRequestPushFolds(dispatchPushNotification, Date.now() + 3 * HOUR));
-    await sleep(100);
-    assert(noticesTo(pat).length === patBefore + 2, 'and nothing more after that, with nothing new');
+    assert(noticesTo(pat).length === patBefore && pushesTo(pat).length === patPushes,
+        `three requests: no push and no notice, for any of them (${JSON.stringify(noticesTo(pat).slice(patBefore))})`);
+    const patList = await listOf(pat);
+    assert(patList?.requests?.count === 3 && patList?.totalUnread === 0,
+        `all three wait under Requests, and his count stays 0 (${patList?.requests?.count} waiting, unread ${patList?.totalUnread})`);
+    const patAccepts = await decide(pat, patConvs[0], 'accept');
+    await send(patConvs[0], ivy);
+    await sleep(250);
+    assert(patAccepts.status === 200 && JSON.stringify(noticesTo(pat).slice(patBefore)) === JSON.stringify(['Ivy sent you a message'])
+        && pushesTo(pat).length === patPushes + 1,
+        `once he accepts Ivy's, her next line pushes as any line (${show(patAccepts)}; ${JSON.stringify(noticesTo(pat).slice(patBefore))})`);
 
     // ── 11. a removed or deleted sender ─────────────────────────────────────────────────────────
     console.log('── 11. a removed or deleted sender\'s request goes ──');

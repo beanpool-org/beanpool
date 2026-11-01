@@ -110,7 +110,7 @@ Where your community's owners have turned on message requests, a first message f
 
 If your community turns message requests off, every message arrives straight away, and any request still waiting becomes an ordinary chat. See "How this community works".
 
-- **On your phone**: in **Talk** under **Messages**, tap the **Requests** pill at the top. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Ignore** to dismiss it without letting them know. You can also tap **Block** to block them. If you have several requests waiting, you can tap **Ignore all**. A push notification that says someone wants to message you opens this Requests section directly when tapped.
+- **On your phone**: in **Talk** under **Messages**, tap the **Requests** pill at the top. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Ignore** to dismiss it without letting them know. You can also tap **Block** to block them. If you have several requests waiting, you can tap **Ignore all**. A request sends no alert and adds nothing to your badge until you accept it, so check here now and then.
 - **In the web app**: the same **Requests** pill appears above your list of chats.
 - **When you send a request**: your first message is sent as a request. While you wait for them to accept, you cannot send further messages or photos, and you see **Sent as a request. {name} will see it under Requests. You can write more once they accept.**
 - **Cancel request**: beside the waiting line on both the phone and the web, you can tap **Cancel request**. This withdraws your request and removes your first message for both of you. You can then write a fresh message if you wish.

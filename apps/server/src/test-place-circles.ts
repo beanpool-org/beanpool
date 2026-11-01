@@ -14,9 +14,11 @@
  *      member isn't seated, and a place with a listed community gets no circle
  *   6. retire and close: the first community near retires it once and tells its members with no name, a second changes
  *      nothing, a flood retires nothing, its flags go so no run forms it again, and its chat stays open 30 days; then the
- *      group closes, read-only, its row kept; a run stopped between retiring and clearing the flags did neither
+ *      group closes, read-only, its row kept, and an "I'd help" said since it retired stays; a run stopped between retiring
+ *      and clearing the flags did neither
  *   7. "I'm starting one here": members only, one at a time, only its maker takes it back, the others told once in a day;
  *      someone removed, deleted or suspended holds it for nobody, and someone suspended can't say it (they can take it back)
+ *   7d. a circle nobody is in takes no helpers: they go on waiting, and can form a circle of their own
  *   8. a standby holds the flag and the circle; the 10,000-watch run and read each fit in 50 ms
  *
  * Run: SERVER_SUITES_ONLY=test-place-circles TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
@@ -319,11 +321,17 @@ async function main(): Promise<void> {
     rows = [...rows, ...Array.from({ length: 26 }, (_, i) => community(`flood${i}`, 19.1 + i * 0.001, 72.9))];
     await mirror();
     assert(!(db.prepare('SELECT circle_done_at FROM groups WHERE id = ?').get(mumbai?.id) as any)?.circle_done_at, 'a flood of rows retires no circle');
+    // Said again after it retired, by one of its members; the other keeps a watch and did not say it.
+    assert((await help(ana, 10.52, 76.21)).status === 200, 'a member of a retired circle can say "I\'d help" again');
+    await watchOnly(eve, 10.52, 76.21);
+    const helpFlags = (id: Id) => (db.prepare('SELECT COUNT(*) AS n FROM place_watches WHERE pubkey = ? AND would_help = 1').get(id.pk) as any).n;
     // Day 31.
     db.prepare('UPDATE groups SET circle_done_at = ? WHERE id = ?').run(new Date(Date.now() - 31 * 86_400_000).toISOString(), circle.id);
     await mirror();
     const closed = db.prepare('SELECT * FROM group_closures WHERE group_id = ?').get(circle.id) as any;
     assert(!!closed, 'thirty days on, the group closes');
+    assert(helpFlags(ana) === 1, `the close keeps an "I'd help" said since it retired (got ${helpFlags(ana)})`);
+    assert(helpFlags(eve) === 0, 'and gives none to a member who did not say it again');
     assert(!!db.prepare('SELECT 1 FROM groups WHERE id = ?').get(circle.id), 'its row stays');
     const shut = await call('GET', ana, `/api/groups/${circle.id}`);
     assert(shut.body?.readOnly === true && !!shut.body?.closedAt, 'and reads as closed');
@@ -448,6 +456,43 @@ async function main(): Promise<void> {
     await mirror();
     const lima = circleRows().find(c => c.place_cell === '-12,-77');
     assert(!!lima && sameSet(seated(lima.id), [vera.pk, bea.pk, cyd.pk]), 'someone from a circle closed by a vote can sit in another');
+
+    console.log('── 7d. a circle nobody is in ──');
+    const [ali, bob, col, dan, ema, fia, gil] = ['Ali', 'Bob', 'Col', 'Dan', 'Ema', 'Fia', 'Gil'].map(phoned);
+    for (const id of [ali, bob, col]) await help(id, 48.8, 2.3);
+    await mirror();
+    const paris = circleRows().find(c => c.place_cell === '48.8,2.3') as any;
+    assert(!!paris && seated(paris.id).length === 3, 'three helpers in Paris are a circle');
+    const leaves = (id: Id) => call('DELETE', id, `/api/groups/${paris.id}/members/${id.pk}`);
+    await leaves(bob); await leaves(col);
+    await help(dan, 48.8, 2.3);
+    await mirror();
+    assert(sameSet(seated(paris.id), [ali.pk, dan.pk]), 'the control: a circle with one person still in it takes a late helper');
+    await leaves(dan); await leaves(ali);
+    assert(seated(paris.id).length === 0, 'then everyone leaves it');
+    await help(ema, 48.8, 2.3);
+    pushed.length = 0;
+    await mirror();
+    assert(seated(paris.id).length === 0, 'a lone helper is not seated in a circle nobody is in');
+    assert(pushed.filter(p => p.kind === 'community.circle').length === 0, 'and is not told that people near them want to start one');
+    assert(helpFlags(ema) === 1, 'they are still waiting: their flag stays');
+    assert(!(await call('GET', ema, '/api/global/home?lat=48.8&lng=2.3')).body?.circle, 'and no circle is on their card');
+    await help(fia, 48.8, 2.3); await help(gil, 48.8, 2.3);
+    pushed.length = 0;
+    await mirror();
+    const parisAgain = circleRows().filter(c => c.id !== paris.id && c.place_cell === '48.8,2.3');
+    assert(parisAgain.length === 1 && sameSet(seated(parisAgain[0]?.id), [ema.pk, fia.pk, gil.pk]), 'and they count: with two more, they are a new circle');
+    assert(sameSet(pushed.filter(p => p.kind === 'community.circle').map(p => p.to), [ema, fia, gil].map(pushToken)), 'each of the three is told once');
+    // Nobody who can answer is nobody: a suspension leaves the seat as it was (standingStarter's case).
+    const [hui, ivo, jan, kit] = ['Hui', 'Ivo', 'Jan', 'Kit'].map(phoned);
+    for (const id of [hui, ivo, jan]) await help(id, 38.7, -9.1);
+    await mirror();
+    const lisbon = circleRows().find(c => c.place_cell === '38.7,-9.1') as any;
+    assert(!!lisbon && seated(lisbon.id).length === 3, 'three helpers in Lisbon are a circle');
+    for (const id of [hui, ivo, jan]) db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(id.pk);
+    await help(kit, 38.7, -9.1);
+    await mirror();
+    assert(!seated(lisbon.id).includes(kit.pk), 'a circle whose people are all suspended takes no helper either');
 
     console.log('── 8. a standby, and the cost ──');
     const wid = crypto.randomUUID();

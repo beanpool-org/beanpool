@@ -1,7 +1,7 @@
 /**
  * A place circle on the phone (Lounge L2, §3.3): the card's rows at 320 dp with the text at 1.3×, in both themes; its words
  * fit by the same model as home-layout-320.test.ts (nothing draws a frame); a count below 3 is never said; a node's answer
- * reads to the floor; and "Join when it starts" sends exactly one knock, from this phone, to the community.
+ * reads to the floor; and Ask to join sends exactly one knock, from this phone, to the community.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -24,14 +24,17 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: 'Icon' }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 const sendKnock = vi.fn();
 const rememberKnock = vi.fn(async () => {});
-vi.mock('../knock', () => ({ sendKnock: (...a: unknown[]) => sendKnock(...a), rememberKnock: (...a: unknown[]) => (rememberKnock as any)(...a) }));
+vi.mock('../knock', () => ({
+    sendKnock: (...a: unknown[]) => sendKnock(...a), rememberKnock: (...a: unknown[]) => (rememberKnock as any)(...a),
+    rememberedKnocks: async () => [], cancelledKnocks: async () => ({}),
+}));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
 vi.mock('../node-post', () => ({ signedPost: async () => new Response('{}'), signedDelete: async () => new Response('{}') }));
 
 import { lightColors, darkColors } from '../../constants/colors';
 import { homeStyles } from '../../components/home/HomeParts';
 import { PLACE_CIRCLE_WORDS, circleDemandLine, circlePeopleLine, circleStartedLine, circleWaitingLine, groupDescriptionShown, groupNameShown, t } from '@beanpool/core';
-import { circleIntents, knockForCircle, setCircleIntent } from '../circle-intent';
+import { circleIntents, knockForCircle, readCircleAsk, setCircleIntent } from '../circle-intent';
 import { readCircleCard, readGlobalHome } from '../community-directory';
 
 const SCREEN = 320;
@@ -46,6 +49,7 @@ describe.each([['light', lightColors], ['dark', darkColors]])('the card in the %
     it('no word of a row is wider than the card, so every line wraps', () => {
         const rows = [
             t(PLACE_CIRCLE_WORDS.knockLater), t(PLACE_CIRCLE_WORDS.knockRefused), t(PLACE_CIRCLE_WORDS.closed),
+            t(PLACE_CIRCLE_WORDS.askToJoin), t(PLACE_CIRCLE_WORDS.reminded), t(PLACE_CIRCLE_WORDS.asked),
             t(PLACE_CIRCLE_WORDS.help), t(PLACE_CIRCLE_WORDS.starting), t(PLACE_CIRCLE_WORDS.notStarting), t(PLACE_CIRCLE_WORDS.joinWhenStarts), t(PLACE_CIRCLE_WORDS.joinWhenStartsOn),
             t(PLACE_CIRCLE_WORDS.someoneStarting), t(PLACE_CIRCLE_WORDS.done), t(PLACE_CIRCLE_WORDS.helpDone), circleDemandLine({ waiting: 12, helping: 12 })!, circleWaitingLine({ waiting: 12, helping: null })!, circlePeopleLine(12)!,
         ];
@@ -92,54 +96,66 @@ describe('what may be said', () => {
     });
 });
 
-describe('the knock when a community starts', () => {
+describe('Ask to join, the send', () => {
     const me = { publicKey: 'a'.repeat(64), privateKey: '00', callsign: 'Ana' } as never;
     const retired = { id: 'c1', people: 3, starting: null, doneAt: '2026-11-01T00:00:00.000Z', community: { key: 'k', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks: true } };
+    const nothing = { sent: false, trouble: null, said: null };
     beforeEach(() => { store.clear(); sendKnock.mockReset(); rememberKnock.mockClear(); });
     afterEach(() => { store.clear(); });
 
-    it('goes once, however often Home is read, and two reads at once send one', async () => {
+    it('sends one knock, to the community, and two taps at once send one', async () => {
         sendKnock.mockResolvedValue({ kind: 'waiting', message: '' });
         await setCircleIntent('a'.repeat(64), 'c1', true);
         const both = await Promise.all([knockForCircle(me, retired), knockForCircle(me, retired)]);
         expect(both.filter(r => r.sent).length).toBe(1);
-        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: null });
         expect(sendKnock).toHaveBeenCalledTimes(1);
         expect(sendKnock.mock.calls[0][0]).toBe('https://thrissur.beanpool.org');
         expect(rememberKnock).toHaveBeenCalledTimes(1);
+        expect(await circleIntents('a'.repeat(64))).toEqual([]);
     });
 
-    it('goes for nobody who did not ask, nor to a community that takes no requests', async () => {
-        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: null });
+    it('goes to no community that takes no requests', async () => {
         await setCircleIntent('a'.repeat(64), 'c1', true);
-        expect(await knockForCircle(me, { ...retired, community: { ...retired.community, acceptingKnocks: false } })).toEqual({ sent: false, trouble: null });
+        expect(await knockForCircle(me, { ...retired, community: { ...retired.community, acceptingKnocks: false } })).toEqual(nothing);
         expect(sendKnock).not.toHaveBeenCalled();
         expect(await circleIntents('a'.repeat(64))).toEqual(['c1']);
     });
 
-    it('is kept for the next read when the community could not be reached', async () => {
+    it('keeps the wish when the community could not be reached', async () => {
         sendKnock.mockResolvedValue({ kind: 'unreachable', message: '' });
         await setCircleIntent('a'.repeat(64), 'c1', true);
-        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'later' });
+        expect(await knockForCircle(me, retired)).toEqual({ ...nothing, trouble: 'later' });
         expect(await circleIntents('a'.repeat(64))).toEqual(['c1']);
     });
 
-    it.each([502, 503, 429])('a %i says nothing about this person: the wish is kept, and the next read sends it', async status => {
+    it.each([502, 503, 429])('a %i says nothing about this person: the wish is kept, and the next tap sends it', async status => {
         sendKnock.mockResolvedValueOnce({ kind: 'refused', status, code: null, message: '' }).mockResolvedValue({ kind: 'waiting', message: '' });
         await setCircleIntent('a'.repeat(64), 'c1', true);
-        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'later' });
+        expect(await knockForCircle(me, retired)).toEqual({ ...nothing, trouble: 'later' });
         expect(await circleIntents('a'.repeat(64))).toEqual(['c1']);
-        expect(await knockForCircle(me, retired)).toEqual({ sent: true, trouble: null });
+        expect(await knockForCircle(me, retired)).toEqual({ ...nothing, sent: true });
         expect(await circleIntents('a'.repeat(64))).toEqual([]);
     });
 
-    it('a refusal ends the wish, sends nothing more, and every later read still says so', async () => {
+    it('a refusal ends the wish, and each later read of this phone says so', async () => {
         sendKnock.mockResolvedValue({ kind: 'refused', status: 403, code: 'account_closed', message: '' });
         await setCircleIntent('a'.repeat(64), 'c1', true);
-        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'refused' });
+        expect(await knockForCircle(me, retired)).toEqual({ ...nothing, trouble: 'refused' });
         expect(await circleIntents('a'.repeat(64))).toEqual([]);
-        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'refused' });
+        expect((await readCircleAsk('a'.repeat(64), 'c1', retired.community.url)).refused).toBe(true);
         expect(sendKnock).toHaveBeenCalledTimes(1);
+    });
+
+    it('a community that already said yes is remembered, so Home can show the invite', async () => {
+        sendKnock.mockResolvedValue({ kind: 'invited' });
+        expect(await knockForCircle(me, retired)).toEqual({ ...nothing, sent: true });
+        expect(rememberKnock).toHaveBeenCalledTimes(1);
+    });
+
+    it('someone already a member there is told so, and it is remembered as no request', async () => {
+        sendKnock.mockResolvedValue({ kind: 'member', message: 'You are already a member of this community.' });
+        expect(await knockForCircle(me, retired)).toEqual({ ...nothing, said: 'You are already a member of this community.' });
+        expect(rememberKnock).not.toHaveBeenCalled();
     });
 });
 
@@ -156,5 +172,17 @@ describe('where the card is drawn', () => {
 
     it('the group sheet closes before Start a community opens: a Modal stays above any screen pushed under it', () => {
         expect(read('components/GroupDetailModal.tsx')).toMatch(/<PlaceCircleCard[^>]*onLeave=\{onClose\}/);
+    });
+
+    it('nothing calls knockForCircle but the card: no read of Home, no return to the app, no background task, no notice', () => {
+        const root = path.resolve(__dirname, '../..');
+        const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+            const full = path.join(dir, e.name);
+            if (e.isDirectory()) return e.name === '__tests__' ? [] : walk(full);
+            return /\.tsx?$/.test(e.name) ? [full] : [];
+        });
+        const callers = ['app', 'components', 'services', 'utils'].flatMap(d => walk(path.join(root, d)))
+            .filter(f => /knockForCircle\(/.test(fs.readFileSync(f, 'utf-8'))).map(f => path.relative(root, f)).sort();
+        expect(callers).toEqual(['components/PlaceCircleCard.tsx', 'utils/circle-intent.ts']);
     });
 });

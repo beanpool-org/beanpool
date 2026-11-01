@@ -2,13 +2,15 @@
  * The place circle (Lounge L2 with doors S8, scratch/fable-design/DESIGN-global-lounge-fable.md §3.3): people waiting for a
  * community in the same place are put in one group once three of them said they'd help start one. It introduces them
  * and nothing more: an ordinary group on the global node, with no money, no routing and no word from this node about
- * anyone. Each member's own app sends its own knock when a community starts (knocks go phone → the new node).
+ * anyone. When a community starts, a member's own app sends their knock only if they tap Ask to join (knocks go phone → the
+ * new node).
  *
  *   - **"I'd help start one here"** is one flag on a place watch (`place_watches.would_help`, engine/place-watches.ts): the
  *     same 0.1° cell, the same limit of 3, nothing else stored.
  *   - **Forming** (runPlaceCircles, each directory mirror run): a helper within about CIRCLE_RADIUS_KM of a circle still
- *     open joins it; three or more helpers around one cell with no circle and no listed community that near get one
- *     group. Nobody is in two: a helper with flags in two cells is in the first circle that takes them (clusterHelpers).
+ *     open, with someone in it, joins it; three or more helpers around one cell with no such circle and no listed community
+ *     that near get one group. Nobody is in two: a helper with flags in two cells is in the first circle that takes them
+ *     (clusterHelpers).
  *   - **Ending**: a listed community first seen within CIRCLE_RADIUS_KM of an open circle retires it, once. Its members
  *     are told, its flags go (or the next run would form it again), and CIRCLE_CHAT_KEEP_MS later the group closes as a
  *     group closed by a vote does (group_closures), read-only, its row kept.
@@ -31,8 +33,10 @@
  *
  * Anyone with a node key can publish a row (engine/place-watches.ts header), so a row near a circle can retire it. That
  * costs the circle a line on its card and a clock: its chat stands for 30 days and its members can say "I'd help" again.
- * It also gets a signed knock, with no further tap, from each member who set "Join when it starts": their key and name in
- * the request, their IP address from the connection, and their later status reads.
+ * A retiring row gets no knock unless the member taps. Nothing goes from a member's device to the row's address, no knock
+ * and no status read, until they tap Ask to join on the retired card, and "Remind me to join when it starts" is a wish on
+ * that device that sends nothing. The tap sends one signed knock, and the row then has what any knock gives a community:
+ * their key and name in the request, and their IP address from the connection.
  * Retiring takes only what the notices take (firstSightings: listed, placed, not a flood), and a push never carries the
  * row's name or place: the name is on the card of someone already in the circle, as it is on the Find card.
  *
@@ -198,8 +202,10 @@ function formCircles(cb: CircleCallbacks): Pick<CircleRun, 'formed' | 'joined'> 
     const seated = new Set((db.prepare(`SELECT DISTINCT gm.member_pubkey AS pk FROM group_members gm JOIN groups g ON g.id = gm.group_id
         WHERE g.kind = ? AND g.circle_done_at IS NULL AND ${NOT_CLOSED} AND gm.status != 'removed'`).all(GROUP_KIND_CIRCLE) as { pk: string }[]).map(r => r.pk));
 
-    // Someone new near a circle that already exists joins it: there is one to join.
-    const index = new SightingIndex(open.map(o => ({ c: o.cell, extraKm: 0, circle: o })));
+    // Someone new near a circle that already exists joins it: there is one to join. A circle nobody is in is not one: they
+    // would be seated alone, with no convenor, and told people want to meet them. They go on waiting, for the forming below.
+    const peopled = open.filter(o => activeMembers(o.id).some(pk => cb.maySit(pk)));
+    const index = new SightingIndex(peopled.map(o => ({ c: o.cell, extraKm: 0, circle: o })));
     const removedFrom = db.prepare(`SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'removed'`);
     for (const h of helpers) {
         if (seated.has(h.pubkey) || !cb.maySit(h.pubkey)) continue;
@@ -328,11 +334,13 @@ export function afterLeavingCircle(groupId: string, pubkey: string): void {
 /**
  * A circle was closed (state-engine closeGroupByVote, inside its transaction). A vote closes one with its flags still up, and
  * the next run would form the same people into a new one: they closed it, so the flags go, as they go when one retires.
+ * A retired circle gave up its flags when it retired, so any flag now was said again since, and it stays: the timed close
+ * comes this way too, and it is no answer to someone who said "I'd help" after their circle ended.
  */
 export function afterClosingCircle(groupId: string): void {
-    const row = db.prepare('SELECT kind, place_cell FROM groups WHERE id = ?').get(groupId) as { kind: string | null; place_cell: string | null } | undefined;
+    const row = db.prepare('SELECT kind, place_cell, circle_done_at FROM groups WHERE id = ?').get(groupId) as { kind: string | null; place_cell: string | null; circle_done_at: string | null } | undefined;
     const cell = parseCell(row?.place_cell ?? null);
-    if (row?.kind === GROUP_KIND_CIRCLE && cell) clearHelpNear(activeMembers(groupId), cell, new Date().toISOString());
+    if (row?.kind === GROUP_KIND_CIRCLE && !row.circle_done_at && cell) clearHelpNear(activeMembers(groupId), cell, new Date().toISOString());
 }
 
 // ── what a member reads ──────────────────────────────────────────────────────────────────────────────────────────

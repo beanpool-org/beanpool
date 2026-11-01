@@ -1313,6 +1313,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 isOpen={!!selectedGroupForDetail}
                 onClose={() => setSelectedGroupForDetail(null)}
                 myPubkey={identity?.publicKey}
+                identity={identity}
                 onMembershipChanged={() => fetchGroups()}
                 onStartCommunity={() => { setSelectedGroupForDetail(null); setShowStartCommunity(true); }}
                 onPostToGroup={(group) => {

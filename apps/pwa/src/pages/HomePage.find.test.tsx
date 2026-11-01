@@ -89,13 +89,13 @@ async function memberAtLismore() {
     return screen.findByTestId('home-find-actions');
 }
 
-describe('the knock a retired circle owes', () => {
+describe('a retired circle on Home', () => {
     const retired = (acceptingKnocks: boolean) => ({
         id: 'c1', people: 4, starting: null, doneAt: '2026-11-01T00:00:00.000Z',
         community: { key: 'thrissur', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks },
     });
     const knocksSent = () => vi.mocked(api.signedFetchAt).mock.calls.filter(c => c[0] === 'POST');
-    /** A read of Home with this circle, then the town the member picks, and with it the next read. */
+    /** Home read with this circle, then the town the member picks and with it the next read, the reminder set. */
     async function twoReads(first: HomeFind['circle'], then: HomeFind['circle']) {
         vi.mocked(api.signedFetchAt).mockClear();
         setCircleIntent(ME.publicKey, 'c1', true);
@@ -103,22 +103,51 @@ describe('the knock a retired circle owes', () => {
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         fireEvent.click(await screen.findByTestId('home-type-town'));
         await act(async () => { await Promise.resolve(); });
-        const sentAtFirst = knocksSent().length;
-        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response('{}', { status: 201 }));
         fireEvent.click(screen.getByTestId('town-search'));
-        await waitFor(() => expect(knocksSent().length).toBe(sentAtFirst + 1));
-        return sentAtFirst;
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
     }
 
-    it('waits for a community that takes no requests yet, and goes on the read that says it does', async () => {
-        expect(await twoReads(retired(false), retired(true))).toBe(0);
-        await waitFor(() => expect(circleIntents(ME.publicKey)).toEqual([]));
-        await waitFor(async () => expect((await knockModule.rememberedKnocks(ME.publicKey)).map(k => k.url)).toEqual(['https://thrissur.beanpool.org']));
+    it('sends nothing on any read: no knock, no status read, nothing, though the member set the reminder', async () => {
+        await twoReads(retired(true), retired(true));
+        expect(await screen.findByTestId('circle-ask-join')).toBeInTheDocument();
+        expect(vi.mocked(api.signedFetchAt).mock.calls).toEqual([]);
+        expect(circleIntents(ME.publicKey)).toEqual(['c1']);
+        expect(await knockModule.rememberedKnocks(ME.publicKey)).toEqual([]);
     });
 
-    it('tries a community it could not reach again on the next read', async () => {
-        expect(await twoReads(retired(true), retired(true))).toBe(1);
-        await waitFor(() => expect(circleIntents(ME.publicKey)).toEqual([]));
+    it('a community that takes no requests yet has no button, and has one on the read that says it does: still nothing is sent', async () => {
+        await twoReads(retired(false), retired(true));
+        expect(await screen.findByTestId('circle-ask-join')).toBeInTheDocument();
+        expect(vi.mocked(api.signedFetchAt).mock.calls).toEqual([]);
+    });
+
+    it('the tap sends one knock, and Home\'s waiting card takes it from there', async () => {
+        await twoReads(retired(true), retired(true));
+        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response('{}', { status: 201 }));
+        fireEvent.click(await screen.findByTestId('circle-ask-join'));
+        expect(await screen.findByTestId('home-waiting-card-https://thrissur.beanpool.org')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByTestId('circle-ask-join')).toBeNull());
+        expect(knocksSent().map(c => c[1])).toEqual(['https://thrissur.beanpool.org']);
+        expect(screen.queryByTestId('circle-asked')).toBeNull();
+        expect(circleIntents(ME.publicKey)).toEqual([]);
+    });
+
+    it('a community that answers 503 keeps the button, and the next read sends nothing: only another tap does', async () => {
+        vi.mocked(api.signedFetchAt).mockClear();
+        setCircleIntent(ME.publicKey, 'c1', true);
+        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response('busy', { status: 503 }));
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: retired(true) }, true))).mockResolvedValue(fresh(globalAnswer({ circle: retired(true) }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('circle-ask-join'));
+        expect(await screen.findByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockLater));
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(knocksSent().length).toBe(1);
+        expect(screen.getByTestId('circle-ask-join')).toBeInTheDocument();
+        expect(circleIntents(ME.publicKey)).toEqual(['c1']);
     });
 
     it('a community that refuses is said on the card, and stays said on the next read', async () => {
@@ -127,11 +156,13 @@ describe('the knock a retired circle owes', () => {
         vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response(JSON.stringify({ error: 'No.', code: 'account_closed' }), { status: 403 }));
         vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: retired(true) }, true))).mockResolvedValue(fresh(globalAnswer({ circle: retired(true) }, true)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('circle-ask-join'));
         expect(await screen.findByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockRefused));
         fireEvent.click(await screen.findByTestId('home-type-town'));
         fireEvent.click(screen.getByTestId('town-search'));
         await act(async () => { await new Promise(r => setTimeout(r, 30)); });
         expect(screen.getByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockRefused));
+        expect(screen.queryByTestId('circle-ask-join')).toBeNull();
         expect(knocksSent().length).toBe(1);
     });
 });

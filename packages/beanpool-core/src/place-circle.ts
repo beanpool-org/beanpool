@@ -57,8 +57,9 @@ export const PLACE_CIRCLE_WORDS = {
     notStarting: word("I'm not starting one after all"),
     someoneStarting: word('Someone is starting a community near you.'),
     youAreStarting: word("You said you're starting one here."),
-    joinWhenStarts: word('Join when it starts'),
-    joinWhenStartsOn: word('Your app will ask to join when it starts. Tap to stop.'),
+    /** A wish kept on the device: it promises a reminder and no more, because nothing is sent until {@link PLACE_CIRCLE_WORDS.askToJoin}. */
+    joinWhenStarts: word('Remind me to join when it starts'),
+    joinWhenStartsOn: word("You'll be reminded on this card when it starts. Nothing is sent until you tap Ask to join. Tap to stop."),
     meetThem: word('Meet them ›'),
     /** How a circle ends. */
     startedNear: word('A community has started near you: {name}.'),
@@ -66,10 +67,16 @@ export const PLACE_CIRCLE_WORDS = {
     done: word('This circle did its job. Its chat stays for 30 days.'),
     /** A finished circle's group, read-only for good: no vote closed it, so it must not say one did. */
     closed: word('This circle has finished. Its chat stays to read.'),
-    /** What a phone's own knock says when a community it was waiting for starts. */
+    /** The retired card's one button, and the only thing that sends anything to the community. */
+    askToJoin: word('Ask to join'),
+    /** Above it, for someone who set the reminder. */
+    reminded: word('You asked to be reminded. Nothing is sent until you tap Ask to join.'),
+    /** Where the card has no waiting card beside it to say how a request fares: the group's sheet. */
+    asked: word("You asked to join. Home says how it's going."),
+    /** What the knock says, the one a tap on {@link PLACE_CIRCLE_WORDS.askToJoin} sends. */
     knockMessage: word('I asked to be told when a community started here.'),
-    /** "Join when it starts" when the knock didn't go: {@link circleKnockLine}. */
-    knockLater: word("Your app couldn't ask to join yet. It will try again."),
+    /** Ask to join when the knock didn't go: {@link circleKnockLine}. */
+    knockLater: word("Your app couldn't ask to join yet. Tap Ask to join to try again."),
     knockRefused: word("Your app couldn't ask to join for you. You can ask them yourself."),
 } as const;
 
@@ -120,19 +127,19 @@ export function circleStartedLine(community: Pick<CircleCommunity, 'name'> | nul
     return community?.name ? t(PLACE_CIRCLE_WORDS.startedNear, { name: community.name }) : t(PLACE_CIRCLE_WORDS.startedNearNoName);
 }
 
-/** Whether a phone or browser holding "Join when it starts" should send its knock now: a live, reachable community that takes them. */
+/** Whether the retired card can offer Ask to join: a community still listed, with an address, that takes requests. */
 export function circleKnockReady(card: Pick<CircleCard, 'community'> | null | undefined): card is { community: CircleCommunity & { url: string } } {
     return !!card?.community?.url && card.community.acceptingKnocks !== false;
 }
 
-/** Why "Join when it starts" didn't go: `later` is kept for the next read, `refused` is the community's answer and final. */
+/** Why Ask to join didn't go: `later` keeps the button for another tap, `refused` is the community's answer and final. */
 export type CircleKnockTrouble = 'later' | 'refused';
 
 /**
- * What a knock's answer means for the wish, or null when nothing went wrong (it went, or the person is already known there).
+ * What a knock's answer means for the button, or null when nothing went wrong (it went, or the person is already known there).
  * A 429 or a 5xx says nothing about this person: a proxy's 502, a 503 while a new server boots, a day's limit. A community
- * that has only just started is the one most likely to answer that way, so those stay for the next read. An address
- * that can't be used may be mended in the directory, and a retry of it costs nothing.
+ * that has only just started is the one most likely to answer that way, so those keep the wish and the button. An address
+ * that can't be used may be mended in the directory. A try again is the member's own tap: nothing retries by itself.
  */
 export function circleKnockTrouble(sent: { kind: string; status?: number }): CircleKnockTrouble | null {
     if (sent.kind === 'unreachable' || sent.kind === 'no_address') return 'later';

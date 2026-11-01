@@ -6,9 +6,8 @@ import type { BeanPoolIdentity } from '../../utils/identity';
 import {
     communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
-import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleKnockLine, circleWaitingLine, communityAnswersLine, findCommunityState, formatDate, t, type CircleKnockTrouble } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
-import { knockForCircle } from '../../utils/circle-intent';
 import { PlaceCircleCard } from '../PlaceCircleCard';
 import { findLineWords } from '../find-community-lines';
 import { openLookDoor } from '../../utils/look-door';
@@ -60,8 +59,6 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     const [helped, setHelped] = useState(false);
     /** The circle as this visit last heard it: "I'm starting one here" answers with the card. */
     const [circle, setCircle] = useState(home.circle ?? null);
-    /** Why "Join when it starts" hasn't gone, as the last look found it. */
-    const [knockTrouble, setKnockTrouble] = useState<CircleKnockTrouble | null>(null);
     const [activeKnocks, setActiveKnocks] = useState<readonly RememberedKnock[]>(knocks);
     /** The list as it is now, for a cancel that finishes after another one did (a press handler's closure is older). */
     const latestKnocks = useRef<readonly RememberedKnock[]>(knocks);
@@ -81,17 +78,9 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
         showKnocks(knocks);
     }, [knocks]);
 
+    // A read says what the circle is now, and sends nothing to a community that retired it, whatever the member wished: only
+    // Ask to join on the card does (Marty, 1 Nov).
     useEffect(() => setCircle(home.circle ?? null), [home.circle]);
-
-    // A community retired this phone's circle, and the member asked to join when one started: this phone asks, once. Each
-    // read looks again: one that takes no requests yet, or couldn't take it now, gets it on a later read (knockForCircle).
-    useEffect(() => {
-        if (!identity || !home.circle) return;
-        void knockForCircle(identity, home.circle).then(async ({ sent, trouble }) => {
-            setKnockTrouble(trouble);
-            if (sent) onKnocksChange?.(await rememberedKnocks(identity.publicKey));
-        });
-    }, [identity?.publicKey, home.circle]);
 
     // Only the communities this phone asked, once per request it remembers (a new request to the same community is read anew).
     const knockKey = activeKnocks.map(requestKey).join(' ');
@@ -197,6 +186,10 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
         setWatchNote(r.ok ? t(PLACE_CIRCLE_WORDS.helpDone) : r.message);
     };
     const helping = helped || !!home.watches?.some(w => w.wouldHelp);
+    /** Ask to join on the circle's card left a request: the waiting card below says how it fares, as any request's does. */
+    const onCircleAsked = () => {
+        if (identity) void rememberedKnocks(identity.publicKey).then(list => onKnocksChange?.(list));
+    };
     // Said where nothing is near, and only until the person is in a circle: from then on the circle's own count says it.
     const demandLine = startFirst && !circle ? circleDemandLine(home.demand) : null;
 
@@ -214,7 +207,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             ))}
             {!!nearby && <Text style={[s.rowSub, { marginTop: 4 }]} testID="home-find-nearby">{nearby}</Text>}
             {!!demandLine && <Text style={[s.rowLine, { marginTop: 4 }]} testID="home-find-demand">{demandLine}</Text>}
-            {!!circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} nodeUrl={nodeUrl} colors={colors} knockLine={circleKnockLine(knockTrouble)} onChange={card => setCircle({ ...card, id: circle.id })} />}
+            {!!circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} nodeUrl={nodeUrl} colors={colors} onAsked={onCircleAsked} onChange={card => setCircle({ ...card, id: circle.id })} />}
             {activeKnocks.map(k => {
                 const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
                 const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');

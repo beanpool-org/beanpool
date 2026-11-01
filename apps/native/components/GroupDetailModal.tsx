@@ -780,7 +780,7 @@ export function GroupDetailModal({
 
                         {/* What its members wrote: shown as written. */}
                         {!!groupData.circle && (
-                            <PlaceCircleCard id={groupData.id} circle={groupData.circle} identity={identity} colors={colors} onLeave={onClose}
+                            <PlaceCircleCard id={groupData.id} circle={groupData.circle} identity={identity} colors={colors} closed={closed} onLeave={onClose}
                                 onChange={circle => setGroupData(g => (g ? { ...g, circle } : g))} />
                         )}
                         {groupDescriptionShown(groupData) ? (

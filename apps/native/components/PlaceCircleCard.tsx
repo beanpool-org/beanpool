@@ -4,25 +4,27 @@ import { router } from 'expo-router';
 import type { AppColors } from '../constants/colors';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { setCircleStarting } from '../utils/community-directory';
-import { circleIntents, currentNodeUrl, setCircleIntent } from '../utils/circle-intent';
-import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, circlePeopleLine, circleStartedLine, t, type CircleCard } from '@beanpool/core';
+import { circleIntents, currentNodeUrl, knockForCircle, readCircleAsk, setCircleIntent, type CircleAsk } from '../utils/circle-intent';
+import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, circleKnockLine, circleKnockReady, circlePeopleLine, circleStartedLine, t, type CircleCard, type CircleKnockTrouble } from '@beanpool/core';
 import { HOME_CARD_PADDING_DP, HomeButton } from './home/HomeParts';
 
 /**
  * A place circle's own rows (Lounge L2, §3.3): how many are here, Start a community, and "I'm starting one here", entry S8's
- * row, which lives here and not loose on the Find card. Drawn on Home's Find card and in the group's sheet. "Join when it
- * starts" is this phone's own wish (utils/circle-intent.ts). Once a community has retired the circle: what started, and
- * how long the chat stays.
+ * row, which lives here and not loose on the Find card. Drawn on Home's Find card and in the group's sheet. "Remind me to
+ * join when it starts" is this phone's own wish (utils/circle-intent.ts). Once a community has retired the circle: what
+ * started, how long the chat stays, and Ask to join, the one tap that sends anything to it.
  */
-export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, knockLine, onLeave, onChange }: {
+export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, closed, onAsked, onLeave, onChange }: {
     id: string;
     circle: CircleCard;
     identity: BeanPoolIdentity | null;
     /** The community the group is on; left out: the one this phone is on. */
     nodeUrl?: string | null;
     colors: AppColors;
-    /** Why "Join when it starts" hasn't gone (core's circleKnockLine), from whoever sends it: Home. */
-    knockLine?: string | null;
+    /** The group has closed: its sheet says so, and "Its chat stays for 30 days" would no longer be true. */
+    closed?: boolean;
+    /** A tap on Ask to join left a request. Whoever passes this draws how it fares (Home's waiting card); left out, the card says where to look. */
+    onAsked?: () => void;
     /** Before Start a community opens: a sheet closes itself, or a Modal stays above the screen it opens. */
     onLeave?: () => void;
     onChange?: (card: CircleCard) => void;
@@ -31,6 +33,10 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, knockLi
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [joinAsked, setJoinAsked] = useState(false);
+    /** What this phone holds about asking the community that retired it: null until read, so no button stands on a guess. */
+    const [ask, setAsk] = useState<CircleAsk | null>(null);
+    const [trouble, setTrouble] = useState<CircleKnockTrouble | null>(null);
+    const [said, setSaid] = useState<string | null>(null);
 
     useEffect(() => {
         if (!identity) return;
@@ -39,12 +45,47 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, knockLi
         return () => { alive = false; };
     }, [id, identity?.publicKey]);
 
+    useEffect(() => {
+        setTrouble(null);
+        setSaid(null);
+    }, [id]);
+
+    // This phone's own memory, on each read of the card. Nothing here goes to the community.
+    useEffect(() => {
+        if (!circle.doneAt || !identity) { setAsk(null); return; }
+        let alive = true;
+        void readCircleAsk(identity.publicKey, id, circle.community?.url).then(held => { if (alive) setAsk(held); });
+        return () => { alive = false; };
+    }, [id, identity?.publicKey, circle]);
+
+    const onAskToJoin = async () => {
+        if (!identity || busy) return;
+        setBusy(true);
+        setTrouble(null);
+        const r = await knockForCircle(identity, { ...circle, id });
+        setTrouble(r.trouble);
+        setSaid(r.said);
+        setAsk(await readCircleAsk(identity.publicKey, id, circle.community?.url));
+        setBusy(false);
+        if (r.sent) onAsked?.();
+    };
+
     if (circle.doneAt) {
+        const canAsk = !!identity && !!ask && circleKnockReady(circle) && !ask.asked && !ask.cancelled && !ask.refused && !said;
+        const knockLine = circleKnockLine(trouble ?? (ask?.refused ? 'refused' : null));
         return (
             <View style={s.card} testID="circle-card-done">
                 <Text style={[s.line, s.strong]} testID="circle-started-line">{circleStartedLine(circle.community)}</Text>
-                <Text style={s.sub}>{t(PLACE_CIRCLE_WORDS.done)}</Text>
+                {canAsk && ask.wished && <Text style={s.sub} testID="circle-reminded">{t(PLACE_CIRCLE_WORDS.reminded)}</Text>}
+                {canAsk && (
+                    <View style={s.buttons}>
+                        <HomeButton colors={colors} primary busy={busy} text={t(PLACE_CIRCLE_WORDS.askToJoin)} onPress={() => void onAskToJoin()} testID="circle-ask-join" />
+                    </View>
+                )}
                 {!!knockLine && <Text style={s.sub} accessibilityLiveRegion="polite" testID="circle-knock-line">{knockLine}</Text>}
+                {!!said && <Text style={s.sub} accessibilityLiveRegion="polite" testID="circle-knock-said">{said}</Text>}
+                {!!ask?.asked && !onAsked && <Text style={s.sub} accessibilityLiveRegion="polite" testID="circle-asked">{t(PLACE_CIRCLE_WORDS.asked)}</Text>}
+                {!closed && <Text style={s.sub} testID="circle-chat-stays">{t(PLACE_CIRCLE_WORDS.done)}</Text>}
             </View>
         );
     }

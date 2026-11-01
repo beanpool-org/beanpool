@@ -16,6 +16,7 @@ import {
 } from '../lib/api';
 import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, groupClosedShown, groupDescriptionShown, groupNameShown, type GroupPerson } from '@beanpool/core';
 import { PlaceCircleCard } from './PlaceCircleCard';
+import type { BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
@@ -57,6 +58,8 @@ interface Props {
     isOpen: boolean;
     onClose: () => void;
     myPubkey?: string;
+    /** Signs a place circle's Ask to join, the one thing here that goes to another community. */
+    identity?: BeanPoolIdentity | null;
     onMembershipChanged?: () => void;
     onPostToGroup?: (group: Group) => void;
     /** "Start a community" on a place circle's card. */
@@ -68,6 +71,7 @@ export function GroupDetailModal({
     isOpen,
     onClose,
     myPubkey,
+    identity,
     onMembershipChanged,
     onPostToGroup,
     onStartCommunity,
@@ -446,7 +450,7 @@ export function GroupDetailModal({
                     )}
 
                     {groupData.circle && (
-                        <PlaceCircleCard id={groupData.id} circle={groupData.circle} myPubkey={myPubkey} onStart={onStartCommunity}
+                        <PlaceCircleCard id={groupData.id} circle={groupData.circle} identity={identity} closed={closed} onStart={onStartCommunity}
                             onChange={circle => setGroupData(g => (g ? { ...g, circle } : g))} />
                     )}
                     {groupDescriptionShown(groupData) && (

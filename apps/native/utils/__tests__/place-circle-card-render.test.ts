@@ -2,7 +2,8 @@
 /**
  * The place circle on the phone, rendered for real as home-find-not-answering-render.test.ts does (react-dom in jsdom, React
  * Native's host components as plain tags), in both themes: Home's Find card with its count and "I'd help start one here",
- * the circle's three rows, and the empty Market's line. The 320 dp × 1.3 widths are place-circle-render.test.ts's.
+ * the circle's three rows, the empty Market's line, and a retired circle: nothing goes to the community until Ask to join is
+ * tapped, and the tap sends one knock. The 320 dp × 1.3 widths are place-circle-render.test.ts's.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -36,7 +37,15 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async (key: string) => kept.get(key) ?? null), setItem: vi.fn(async (key: string, value: string) => { kept.set(key, value); }), removeItem: vi.fn() },
 }));
 const sendKnock = vi.hoisted(() => vi.fn());
-vi.mock('../knock', () => ({ readKnockStatus: vi.fn(async () => null), cardKnockLines: () => [], sendKnock, rememberKnock: vi.fn(), rememberedKnocks: vi.fn(async () => []) }));
+const readKnockStatus = vi.hoisted(() => vi.fn(async () => null));
+/** What this phone remembers of its requests. */
+const knocksHeld = vi.hoisted(() => ({ open: [] as { url: string; name: string | null; key: string | null; sentAt: string }[], cancelled: {} as Record<string, number> }));
+vi.mock('../knock', () => ({
+    readKnockStatus, cardKnockLines: () => [], sendKnock,
+    rememberKnock: vi.fn(async (_pk: string, c: { url: string; name: string | null; key: string | null }) => { knocksHeld.open.push({ ...c, sentAt: '2026-11-01T00:00:00.000Z' }); }),
+    rememberedKnocks: vi.fn(async () => [...knocksHeld.open]),
+    cancelledKnocks: vi.fn(async () => knocksHeld.cancelled),
+}));
 const posted = vi.hoisted(() => [] as { path: string; body: any }[]);
 vi.mock('../node-post', () => ({
     signedPost: vi.fn(async (_base: string, path: string, body: unknown) => {
@@ -71,7 +80,7 @@ async function mount(element: unknown): Promise<HTMLElement> {
 const find = (home: GlobalHome, colors = lightColors) => mount(createElement(FindCommunityBody, { home, knocks: [], identity, nodeUrl: null, point: { lat: 10.52, lng: 76.21 }, colors }));
 const by = (host: HTMLElement, id: string) => host.querySelector(`[data-testid="${id}"]`);
 
-beforeEach(() => { document.body.innerHTML = ''; posted.length = 0; push.mockClear(); fetchHome.mockReset(); kept.clear(); sendKnock.mockReset(); });
+beforeEach(() => { document.body.innerHTML = ''; posted.length = 0; push.mockClear(); fetchHome.mockReset(); kept.clear(); sendKnock.mockReset(); readKnockStatus.mockClear(); knocksHeld.open = []; knocksHeld.cancelled = {}; });
 afterEach(() => { document.body.innerHTML = ''; });
 
 describe.each([['light', lightColors], ['dark', darkColors]])('in the %s theme', (_name, colors) => {
@@ -86,16 +95,18 @@ describe.each([['light', lightColors], ['dark', darkColors]])('in the %s theme',
         expect(by(host, 'circle-people')?.textContent).toBe('4 people here');
         expect(by(host, 'circle-start')?.textContent).toContain('Start a community');
         expect(by(host, 'circle-starting')?.textContent).toContain("I'm starting one here");
-        expect(by(host, 'circle-join-when')?.textContent).toContain('Join when it starts');
+        expect(by(host, 'circle-join-when')?.textContent).toContain('Remind me to join when it starts');
         expect(by(host, 'home-find-demand')).toBeNull();
         expect(by(host, 'home-find-help')).toBeNull();
     });
 
-    it('a retired circle says what started and how long its chat stays', async () => {
+    it('a retired circle says what started and how long its chat stays, with one Ask to join', async () => {
         const circle = { ...openCircle, doneAt: '2026-11-01T00:00:00.000Z', community: { key: 'k', name: 'Thrissur Commons', url: 'https://t.beanpool.org', acceptingKnocks: true } };
         const host = await find(noneNear({ circle }), colors as typeof lightColors);
         expect(by(host, 'circle-started-line')?.textContent).toBe('A community has started near you: Thrissur Commons.');
         expect(host.textContent).toContain('This circle did its job. Its chat stays for 30 days.');
+        expect(by(host, 'circle-ask-join')?.textContent).toContain('Ask to join');
+        expect(by(host, 'circle-card-done')?.querySelectorAll('button')).toHaveLength(1);
         expect(by(host, 'circle-starting')).toBeNull();
     });
 
@@ -108,13 +119,14 @@ describe.each([['light', lightColors], ['dark', darkColors]])('in the %s theme',
     });
 });
 
-describe('the knock a retired circle owes', () => {
+describe('a retired circle', () => {
     const me = 'a'.repeat(64);
     const retired = (acceptingKnocks: boolean) => ({
         ...openCircle, doneAt: '2026-11-01T00:00:00.000Z', community: { key: 'k', name: 'Thrissur Commons', url: 'https://t.beanpool.org', acceptingKnocks },
     });
-    /** Home's Find card, read twice. */
-    async function twoReads(first: GlobalHome['circle'], then: GlobalHome['circle']) {
+    const tapAsk = async (host: HTMLElement) => { await act(async () => { (by(host, 'circle-ask-join') as HTMLElement).click(); }); };
+    /** Home's Find card, ready to be read again. */
+    async function home(first: GlobalHome['circle']) {
         const onKnocksChange = vi.fn();
         const body = (circle: GlobalHome['circle']) => createElement(FindCommunityBody, {
             home: noneNear({ circle }), knocks: [], identity, nodeUrl: null, point: { lat: 10.52, lng: 76.21 }, colors: lightColors, onKnocksChange,
@@ -123,56 +135,144 @@ describe('the knock a retired circle owes', () => {
         document.body.appendChild(host);
         const root = createRoot(host);
         await act(async () => { root.render(body(first)); });
-        const sentAtFirst = sendKnock.mock.calls.length;
-        await act(async () => { root.render(body(then)); });
-        return { sentAtFirst, onKnocksChange };
+        return { host, onKnocksChange, read: (circle: GlobalHome['circle']) => act(async () => { root.render(body(circle)); }) };
     }
 
-    it('waits for a community that takes no requests yet, and goes on the read that says it does', async () => {
+    it('sends nothing on any read: no knock, no status read, though the member set the reminder', async () => {
+        await setCircleIntent(me, 'c1', true);
+        const { host, read } = await home(retired(true));
+        await read({ ...retired(true) });
+        expect(by(host, 'circle-ask-join')).not.toBeNull();
+        expect(sendKnock).not.toHaveBeenCalled();
+        expect(readKnockStatus).not.toHaveBeenCalled();
+        expect(await circleIntents(me)).toEqual(['c1']);
+    });
+
+    it('a community that takes no requests yet has no button, and has one on the read that says it does: still nothing is sent', async () => {
+        await setCircleIntent(me, 'c1', true);
+        const { host, read } = await home(retired(false));
+        expect(by(host, 'circle-ask-join')).toBeNull();
+        expect(by(host, 'circle-reminded')).toBeNull();
+        await read(retired(true));
+        expect(by(host, 'circle-ask-join')).not.toBeNull();
+        expect(sendKnock).not.toHaveBeenCalled();
+    });
+
+    it('one tap sends one knock, to that community, and Home hears of the request', async () => {
         await setCircleIntent(me, 'c1', true);
         sendKnock.mockResolvedValue({ kind: 'waiting', message: '' });
-        const { sentAtFirst, onKnocksChange } = await twoReads(retired(false), retired(true));
-        expect(sentAtFirst).toBe(0);
+        const { host, onKnocksChange } = await home(retired(true));
+        await tapAsk(host);
         expect(sendKnock).toHaveBeenCalledTimes(1);
+        expect(sendKnock.mock.calls[0][0]).toBe('https://t.beanpool.org');
         expect(await circleIntents(me)).toEqual([]);
         expect(onKnocksChange).toHaveBeenCalledTimes(1);
+        expect(by(host, 'circle-ask-join')).toBeNull();
     });
 
-    it('tries a community it could not reach again on the next read', async () => {
+    it('the reminder line is for someone who set it', async () => {
+        const without = await home(retired(true));
+        expect(by(without.host, 'circle-reminded')).toBeNull();
         await setCircleIntent(me, 'c1', true);
-        sendKnock.mockResolvedValueOnce({ kind: 'unreachable', message: '' }).mockResolvedValue({ kind: 'waiting', message: '' });
-        await twoReads(retired(true), retired(true));
-        expect(sendKnock).toHaveBeenCalledTimes(2);
-        expect(await circleIntents(me)).toEqual([]);
+        const withIt = await home(retired(true));
+        expect(by(withIt.host, 'circle-reminded')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.reminded));
     });
 
-    it('a community that answers 503 is asked again on the next read, and the card says so until it goes', async () => {
+    it('a member who never set the reminder asks with the same tap', async () => {
+        sendKnock.mockResolvedValue({ kind: 'waiting', message: '' });
+        const { host } = await home(retired(true));
+        await tapAsk(host);
+        expect(sendKnock).toHaveBeenCalledTimes(1);
+    });
+
+    it('a community that answers 503 keeps the button, the card says so, and the next read sends nothing: only another tap does', async () => {
         await setCircleIntent(me, 'c1', true);
         sendKnock.mockResolvedValueOnce({ kind: 'refused', status: 503, code: null, message: '' }).mockResolvedValue({ kind: 'waiting', message: '' });
-        const host = await find(noneNear({ circle: retired(true) }));
-        expect(host.querySelector('[data-testid="circle-knock-line"]')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockLater));
+        const { host, read } = await home(retired(true));
+        await tapAsk(host);
+        expect(by(host, 'circle-knock-line')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockLater));
         expect(await circleIntents(me)).toEqual(['c1']);
-        await twoReads(retired(true), retired(true));
+        await read({ ...retired(true) });
+        expect(sendKnock).toHaveBeenCalledTimes(1);
+        await tapAsk(host);
         expect(sendKnock).toHaveBeenCalledTimes(2);
         expect(await circleIntents(me)).toEqual([]);
+        expect(by(host, 'circle-knock-line')).toBeNull();
     });
 
-    it('a community that refuses is said on the card', async () => {
+    it('a community that could not be reached is the same', async () => {
+        sendKnock.mockResolvedValue({ kind: 'unreachable', message: '' });
+        const { host } = await home(retired(true));
+        await tapAsk(host);
+        expect(by(host, 'circle-knock-line')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockLater));
+        expect(by(host, 'circle-ask-join')).not.toBeNull();
+    });
+
+    it('a community that refuses is said on the card, with no button, and stays said on a later visit', async () => {
         await setCircleIntent(me, 'c1', true);
         sendKnock.mockResolvedValue({ kind: 'refused', status: 403, code: 'account_closed', message: '' });
-        const host = await find(noneNear({ circle: retired(true) }));
-        expect(host.querySelector('[data-testid="circle-knock-line"]')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockRefused));
+        const { host } = await home(retired(true));
+        await tapAsk(host);
+        expect(by(host, 'circle-knock-line')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockRefused));
+        expect(by(host, 'circle-ask-join')).toBeNull();
         expect(await circleIntents(me)).toEqual([]);
+        const later = await home(retired(true));
+        expect(by(later.host, 'circle-knock-line')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockRefused));
+        expect(by(later.host, 'circle-ask-join')).toBeNull();
+        expect(sendKnock).toHaveBeenCalledTimes(1);
+    });
+
+    it('someone already a member there hears so, and has nothing left to tap', async () => {
+        sendKnock.mockResolvedValue({ kind: 'member', message: 'You are already a member of this community.' });
+        const { host } = await home(retired(true));
+        await tapAsk(host);
+        expect(by(host, 'circle-knock-said')?.textContent).toBe('You are already a member of this community.');
+        expect(by(host, 'circle-ask-join')).toBeNull();
     });
 
     it('still lists the request when a read lands while the knock is out', async () => {
         await setCircleIntent(me, 'c1', true);
         let answer: (r: unknown) => void = () => {};
         sendKnock.mockReturnValue(new Promise(resolve => { answer = resolve; }));
-        const { onKnocksChange } = await twoReads(retired(true), retired(true));
+        const { host, read, onKnocksChange } = await home(retired(true));
+        await tapAsk(host);
+        await read({ ...retired(true) });
         expect(sendKnock).toHaveBeenCalledTimes(1);
         await act(async () => { answer({ kind: 'waiting', message: '' }); });
         expect(onKnocksChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('no button for a request already open, or one cancelled within the day', async () => {
+        knocksHeld.open = [{ url: 'https://t.beanpool.org', name: 'Thrissur Commons', key: 'k', sentAt: '2026-11-01T00:00:00.000Z' }];
+        const open = await home(retired(true));
+        expect(by(open.host, 'circle-ask-join')).toBeNull();
+        knocksHeld.open = [];
+        knocksHeld.cancelled = { 'https://t.beanpool.org': Date.now() };
+        const cancelled = await home(retired(true));
+        expect(by(cancelled.host, 'circle-ask-join')).toBeNull();
+    });
+
+    it('no button for a community gone from the directory', async () => {
+        const { host } = await home({ ...retired(true), community: null });
+        expect(by(host, 'circle-started-line')?.textContent).toBe('A community has started near you.');
+        expect(by(host, 'circle-ask-join')).toBeNull();
+    });
+
+    it('where Home draws the request the card adds no line; on the sheet it says where to look', async () => {
+        knocksHeld.open = [{ url: 'https://t.beanpool.org', name: 'Thrissur Commons', key: 'k', sentAt: '2026-11-01T00:00:00.000Z' }];
+        const sheet = await mount(createElement(PlaceCircleCard, { id: 'c1', circle: retired(true), identity, colors: lightColors }));
+        expect(by(sheet, 'circle-asked')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.asked));
+        const { host } = await home(retired(true));
+        expect(by(host, 'circle-asked')).toBeNull();
+    });
+
+    it("says nothing about 30 days once its group has closed: the sheet's closed note is the one true thing", async () => {
+        const open = await mount(createElement(PlaceCircleCard, { id: 'c1', circle: retired(true), identity, colors: lightColors }));
+        expect(by(open, 'circle-chat-stays')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.done));
+        const closed = await mount(createElement(PlaceCircleCard, { id: 'c1', circle: retired(true), identity, colors: lightColors, closed: true }));
+        expect(by(closed, 'circle-chat-stays')).toBeNull();
+        expect(closed.textContent).not.toContain(t(PLACE_CIRCLE_WORDS.done));
+        expect(by(closed, 'circle-ask-join')).not.toBeNull();
     });
 });
 

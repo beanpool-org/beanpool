@@ -63,6 +63,17 @@ describe("a closed group's info (#1794 N9, MP6)", () => {
         expect(note).toHaveTextContent(t(PLACE_CIRCLE_WORDS.closed));
         expect(note.textContent).not.toMatch(/vote/i);
     });
+    it('a finished circle says one true thing on day 31: the closed note, and nothing about 30 days above it', async () => {
+        const closedAt = new Date().toISOString();
+        const circle = { people: 3, starting: null, doneAt: new Date(Date.now() - 31 * 86_400_000).toISOString(), community: { key: 'k', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks: true } };
+        answers.group = { ...base, kind: 'circle', closedAt, circle, viewerStatus: 'active', viewerRole: 'member' };
+        answers.members = roster(me);
+        answers.decisions = { decisions: [], canPropose: false, rollSize: 4, onRoll: true, watching: false, nameable: [], closedAt };
+        render(<GroupDetailModal group={{ ...base, kind: 'circle', closedAt } as any} isOpen onClose={() => {}} myPubkey={ME} />);
+        expect(await screen.findByTestId('circle-card-done')).toHaveTextContent('Thrissur Commons');
+        expect(screen.getByTestId('group-closed-note')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.closed));
+        expect(document.body.textContent).not.toContain(t(PLACE_CIRCLE_WORDS.done));
+    });
 
     it('closed: no quiet-lead panel, so no succession read', async () => {
         const closedAt = new Date().toISOString();

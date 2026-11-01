@@ -503,6 +503,17 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         expect(byLabel(xx("Closed by its members' vote"))).toBeNull();
     });
 
+    it('a finished circle says one true thing on day 31: the closed note, and nothing about 30 days above it', async () => {
+        me.identity = { publicKey: IVO, callsign: 'Ivo' };
+        const circle = { people: 3, starting: null, doneAt: iso(now - 31 * DAY), community: { key: 'k', name: 'Thrissur Commons', url: 'https://t.beanpool.org', acceptingKnocks: true } };
+        const group = { ...GROUP, viewerRole: 'member', viewerStatus: 'active', kind: 'circle', closedAt: iso(now - DAY), circle };
+        net.answer = groupNode({ fetchGroupDetails: { group, members: [], rosterRefused: true }, getGroupDecisions: null });
+        await again('xx', sheet({ group, myPubkey: IVO }));
+        expect(host.textContent).toContain('Thrissur Commons');
+        expect(host.textContent).toContain(xx(PLACE_CIRCLE_WORDS.closed));
+        expect(host.textContent).not.toContain(xx(PLACE_CIRCLE_WORDS.done));
+    });
+
     it('in English nothing is bracketed, and the words are as they were', async () => {
         await renderIn('en');
         await openMoney();

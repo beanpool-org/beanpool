@@ -106,7 +106,9 @@ The card has three rows:
 - **Start a community:** what it takes, and how to begin.
 - **I'm starting one here:** tell the others you are doing it. Everyone else then sees **Someone is starting a community near you.** Tap **I'm not starting one after all** if plans change. After 90 days with no community it goes by itself.
 
-Tap **Join when it starts** and your app remembers it, on your device only. When a community starts near the circle, your app sends your own request to join it. If the new community can't take it yet, your app tries again the next time you open Home, and the circle's card says so. If the community refuses it, the card says that too, and you can ask them yourself.
+Tap **Remind me to join when it starts** and your app remembers it, on your device only. It sends nothing by itself.
+
+When a community starts near the circle, the card says so, with an **Ask to join** button. Nothing goes to that community until you tap it: no request, and no check on it. One tap sends your own request, from your device to the new community. If the new community can't take it yet, the card says so, and you can tap **Ask to join** again later. If the community refuses it, the card says that too, and you can ask them yourself.
 
 When a listed community starts within about 25 km, everyone in the circle is told, and the card says **This circle did its job. Its chat stays for 30 days.** After that the circle closes: you can still read it, but nobody can write in it.
 

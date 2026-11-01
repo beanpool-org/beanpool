@@ -17,7 +17,7 @@ vi.hoisted(() => {
 });
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { ScopedDecisionCard, ScopedDecisionList } from '@beanpool/core';
+import { PLACE_CIRCLE_WORDS, t, type ScopedDecisionCard, type ScopedDecisionList } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -117,7 +117,7 @@ function card(over: Partial<ScopedDecisionCard> = {}): ScopedDecisionCard {
 }
 
 /** What the stubbed node answers: the chat (a status, or a dropped connection) and the votes. */
-const node = vi.hoisted(() => ({ chat: 403 as number | 'offline', decisions: null as unknown }));
+const node = vi.hoisted(() => ({ chat: 403 as number | 'offline', decisions: null as unknown, group: null as unknown }));
 
 function reply(status: number, body: unknown) {
     return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) };
@@ -125,6 +125,7 @@ function reply(status: number, body: unknown) {
 
 beforeEach(() => {
     node.chat = 403;
+    node.group = null;
     node.decisions = { decisions: [card({ canVote: true })], canPropose: false, rollSize: 4, onRoll: true, watching: false, nameable: [], closedAt: null } satisfies ScopedDecisionList;
     (globalThis as any).fetch = vi.fn(async (url: string) => {
         const path = new URL(url).pathname;
@@ -133,6 +134,7 @@ beforeEach(() => {
             return reply(node.chat, { error: node.chat === 500 ? 'Something went wrong.' : REFUSED });
         }
         if (path === `/api/groups/${G}/decisions`) return reply(node.decisions ? 200 : 404, node.decisions ?? { error: 'Not found' });
+        if (path === `/api/groups/${G}` && node.group) return reply(200, node.group);
         // The group itself: refused to someone not in it, so the info sheet never opens over the landing.
         return reply(403, { error: REFUSED });
     });
@@ -212,5 +214,22 @@ describe('the votes show only on a vote\'s landing', () => {
         expect(text()).toContain(REFUSED);
         expect(text()).toContain('Try again');
         expect(host.querySelector('[aria-label="Decisions"]')).toBeNull();
+    });
+});
+
+describe("the chat's header names the group", () => {
+    const STORED = 'The stored English name';
+
+    it("a place circle reads in the member's language, not by the name stored on its row", async () => {
+        node.group = { id: G, name: STORED, kind: 'circle', category: 'working_group', joinPolicy: 'invite_only', viewerStatus: 'active', viewerRole: 'member' };
+        await render({ openInfo: false });
+        expect(text()).toContain(t(PLACE_CIRCLE_WORDS.name));
+        expect(text()).not.toContain(STORED);
+    });
+
+    it('any other group keeps the name its members wrote', async () => {
+        node.group = { id: G, name: STORED, category: 'working_group', joinPolicy: 'open', viewerStatus: 'active', viewerRole: 'member' };
+        await render({ openInfo: false });
+        expect(text()).toContain(STORED);
     });
 });

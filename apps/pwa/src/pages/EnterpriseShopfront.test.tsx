@@ -253,7 +253,7 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(within(featured).getByRole('heading', { name: 'Featured' })).toBeInTheDocument();
         expect(byId('shopfront-featured-p1')?.textContent).toContain('Sourdough loaf');
         expect(byId('shopfront-featured-p1')?.textContent).toContain('4 🫘');
-        expect(byId('shopfront-featured-p1')?.querySelector('img')?.getAttribute('src')).toBe('/api/marketplace/posts/p1/photos/0?size=thumb');
+        expect(byId('shopfront-featured-p1')?.querySelector('img')?.getAttribute('src')).toBe('/api/marketplace/posts/p1/photos/0?size=thumb2');
         expect(byId('shopfront-featured-p3')).toBeNull();
         expect(byId('shopfront-together')?.textContent).toContain('🛠️ Tools');
         expect(byId('shopfront-section-toBuy')?.textContent).toContain('To buy (3)');

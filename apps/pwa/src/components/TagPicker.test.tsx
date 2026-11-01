@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import React from 'react';
+import React, { useState } from 'react';
 import { TagPicker } from './TagPicker';
 import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf, buildTagIndex, wordsFor, setLanguage } from '@beanpool/core';
 import coreEs from '@beanpool/core/words/es.json';
@@ -208,5 +208,213 @@ describe('TagPicker Web Component', () => {
         } finally {
             setLanguage('en');
         }
+    });
+});
+
+describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)', () => {
+    const held = { tags: [] as string[], freeTags: [] as string[] };
+    function Composer({ tags = [], freeTags = [], title = '' }: { tags?: string[]; freeTags?: string[]; title?: string }) {
+        const [nowTags, setTags] = useState(tags);
+        const [nowFree, setFree] = useState(freeTags);
+        held.tags = nowTags;
+        held.freeTags = nowFree;
+        return <TagPicker tags={nowTags} onChange={setTags} freeTags={nowFree} onFreeTagsChange={setFree} category="food" title={title} />;
+    }
+    const open = (tags?: string[], freeTags?: string[], title?: string) => {
+        render(<Composer tags={tags} freeTags={freeTags} title={title} />);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+    };
+    const field = () => screen.getByPlaceholderText('Search tags...') as HTMLInputElement;
+    const type = (value: string) => fireEvent.change(field(), { target: { value } });
+    const enter = () => fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
+    const addRow = () => screen.queryByTestId('tag-picker-add-typed');
+
+    it('Enter makes the typed words a tag, the # shown and not stored, and the sheet stays for the next', () => {
+        open();
+        type('#2nd  Hand');
+        expect(enter()).toBe(false);
+        expect(held.freeTags).toEqual(['2nd hand']);
+        expect(held.tags).toEqual([]);
+        expect(field().value).toBe('');
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Remove #2nd hand' })[0].textContent).toContain('#2nd hand');
+    });
+
+    it('Enter on a library label picks the library tag, never a free twin', () => {
+        open();
+        type('Lemons');
+        enter();
+        expect(held.tags).toEqual(['food.fruit.lemon']);
+        expect(held.freeTags).toEqual([]);
+    });
+
+    it('a comma commits what is before it and leaves what follows', () => {
+        open();
+        type('vintage, re');
+        expect(held.freeTags).toEqual(['vintage']);
+        expect(field().value).toBe(' re');
+    });
+
+    it('Done commits what is in the field and shuts the sheet', () => {
+        open();
+        type('vintage');
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(held.freeTags).toEqual(['vintage']);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('a refused tag shows its words before anything is sent, and Done keeps the sheet open on them', () => {
+        open();
+        type('me@example.org');
+        expect(screen.getByRole('alert').textContent).toBe('A tag is a word to find your listing by, not a contact');
+        expect(addRow()).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(held.freeTags).toEqual([]);
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(field().value).toBe('me@example.org');
+    });
+
+    it('a word still being typed is not called too short until it is committed', () => {
+        open();
+        type('a');
+        expect(screen.queryByRole('alert')).toBeNull();
+        enter();
+        expect(screen.getByRole('alert').textContent).toBe('A tag needs at least two letters or numbers');
+        type('ab');
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('the cap, in words, on the kind that is full', () => {
+        open([], ['aa', 'bb', 'cc', 'dd', 'ee']);
+        type('ff');
+        expect(screen.getByRole('alert').textContent).toBe('Five tags at most');
+        enter();
+        expect(held.freeTags).toHaveLength(5);
+    });
+
+    it('a tag taken off ends the words that stopped the last one: the sheet never says "at most" beside an Add row', () => {
+        open([], ['aa', 'bb', 'cc', 'dd', 'ee']);
+        type('ff');
+        enter();
+        expect(screen.getByRole('alert').textContent).toBe('Five tags at most');
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove #aa' })[0]);
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(addRow()?.textContent).toContain('#ff');
+    });
+
+    const fiveFromTheLibrary = ['food.fruit.lemon', 'food.fruit.apple', 'food.fruit.orange', 'food.produce.herbs', 'food.preserve.jam'];
+
+    it('a library tag taken off ends them too', () => {
+        open(fiveFromTheLibrary, [], 'Fresh limes');
+        fireEvent.click(screen.getByRole('button', { name: 'Lime' }));
+        expect(screen.getByRole('alert').textContent).toBe('Five tags at most');
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove Lemon' })[0]);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('backspace on an empty field ends them too', () => {
+        open(fiveFromTheLibrary, [], 'Fresh limes');
+        fireEvent.click(screen.getByRole('button', { name: 'Lime' }));
+        expect(screen.getByRole('alert').textContent).toBe('Five tags at most');
+        fireEvent.keyDown(field(), { key: 'Backspace' });
+        expect(held.tags).toHaveLength(4);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('five of a kind leave the + Add for the other kind; ten leave none', () => {
+        const library = ['food.fruit.apple', 'food.fruit.orange', 'food.produce.herbs', 'food.preserve.jam', 'food.bakery.bread'];
+        const { unmount } = render(<Composer tags={library} />);
+        expect(screen.getByRole('button', { name: /\+ Add/i })).toBeInTheDocument();
+        unmount();
+        render(<Composer tags={library} freeTags={['aa', 'bb', 'cc', 'dd', 'ee']} />);
+        expect(screen.queryByRole('button', { name: /\+ Add/i })).toBeNull();
+    });
+
+    it('the last row adds what is typed; a word the library has, or nothing typed, has no such row', () => {
+        open();
+        expect(addRow()).toBeNull();
+        type('2nd hand');
+        expect(addRow()?.textContent).toBe('Add “#2nd hand”');
+        fireEvent.click(addRow()!);
+        expect(held.freeTags).toEqual(['2nd hand']);
+        type('lemon');
+        expect(addRow()).toBeNull();
+    });
+
+    it("a plural has its label's row, and a tap on a result ends what was typed: Done does not put back one just taken off", () => {
+        open();
+        type('lemons');
+        fireEvent.click(screen.getByRole('button', { name: 'Lemon' }));
+        expect(held.tags).toEqual(['food.fruit.lemon']);
+        expect(field().value).toBe('');
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove Lemon' })[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(held.tags).toEqual([]);
+    });
+
+    it('backspace on an empty field takes the last chip off, the typed ones first; with words in the field, or held down, it does not', () => {
+        open(['food.fruit.lemon'], ['aa']);
+        type('b');
+        fireEvent.keyDown(field(), { key: 'Backspace' });
+        expect(held.freeTags).toEqual(['aa']);
+        type('');
+        fireEvent.keyDown(field(), { key: 'Backspace', repeat: true });
+        expect(held.freeTags).toEqual(['aa']);
+        fireEvent.keyDown(field(), { key: 'Backspace' });
+        expect(held.freeTags).toEqual([]);
+        fireEvent.keyDown(field(), { key: 'Backspace' });
+        expect(held.tags).toEqual([]);
+    });
+
+    it('Enter and a comma leave a word an input method is still building alone: it commits when the composition ends', () => {
+        open();
+        fireEvent.compositionStart(field());
+        fireEvent.input(field(), { target: { value: '二手，' }, isComposing: true });
+        fireEvent.keyDown(field(), { key: 'Enter', isComposing: true });
+        expect(held.freeTags).toEqual([]);
+        fireEvent.compositionEnd(field());
+        expect(held.freeTags).toEqual(['二手']);
+    });
+
+    it("Safari ends the composition before its Enter: that Enter, key code 229, only confirms the word", () => {
+        open();
+        fireEvent.compositionStart(field());
+        fireEvent.input(field(), { target: { value: '二手' }, isComposing: true });
+        fireEvent.compositionEnd(field());
+        fireEvent.keyDown(field(), { key: 'Enter', keyCode: 229, isComposing: false });
+        expect(held.freeTags).toEqual([]);
+        expect(field().value).toBe('二手');
+        enter();
+        expect(held.freeTags).toEqual(['二手']);
+    });
+
+    it('its chip takes it off', () => {
+        open([], ['aa', 'bb']);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove #aa' })[0]);
+        expect(held.freeTags).toEqual(['bb']);
+    });
+
+    it('the two hints are under the field', () => {
+        open();
+        expect(screen.getByText('Tags are public with your listing')).toBeInTheDocument();
+        expect(screen.getByText('A tag you type is in your own words. Pick a library tag to be found in every language.')).toBeInTheDocument();
+    });
+
+    it('no key in the field submits an outer form, and every button in the sheet is type="button"', () => {
+        const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+        render(<form onSubmit={onSubmit}><Composer freeTags={['aa']} /></form>);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        type('vintage');
+        expect(enter()).toBe(false);
+        type('retro');
+        for (const b of screen.getByRole('dialog').querySelectorAll('button')) expect(b.getAttribute('type')).toBe('button');
+        expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('every target in the row and the sheet asks for 44 px', () => {
+        open(['food.fruit.lemon'], ['2nd hand']);
+        type('vintage');
+        const targets = [...screen.getByRole('dialog').querySelectorAll('button')].filter(b => !b.className.includes('min-h-[44px]'));
+        expect(targets.map(b => b.textContent)).toEqual([]);
     });
 });

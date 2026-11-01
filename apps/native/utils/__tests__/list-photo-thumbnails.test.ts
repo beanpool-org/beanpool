@@ -1,5 +1,5 @@
 /**
- * The phone's lists draw a listing photo's small copy (`size=thumb`, @beanpool/core listPhotoUrl); its detail screens
+ * The phone's lists draw a listing photo's small copy (`size=thumb2`, @beanpool/core listPhotoUrl); its detail screens
  * draw the 800 px photo (Marty, board, 9 Oct: "~200 px / ~10 KB copy for lists"). Screens don't load outside a device
  * (vitest.config.ts), so this reads their source: every list row's listing photo goes through listPhotoUrl, and no
  * detail screen calls it. The URL itself is checked as the phone builds it, on its node's address.
@@ -49,7 +49,7 @@ describe("the phone's lists draw the small copy", () => {
 
     it("asks the phone's node for the small copy, the photo's key kept", () => {
         const url = 'https://mullum.example.org/api/marketplace/posts/9f1c/photos/0?v=1791608803169&k=Yqpu8qmgAGQ';
-        expect(listPhotoUrl(url)).toBe(`${url}&size=thumb`);
+        expect(listPhotoUrl(url)).toBe(`${url}&size=thumb2`);
         expect(listPhotoUrl('file:///data/user/0/photo.jpg')).toBe('file:///data/user/0/photo.jpg');
         expect(listPhotoUrl(null)).toBe(null);
     });

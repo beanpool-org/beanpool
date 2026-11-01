@@ -58,6 +58,25 @@ try {
         check((await counts()) === '0 0', `${theme}: Enter in the search submits nothing (submits, page Escapes: ${await counts()})`);
         check(await sheet.isVisible(), `${theme}: Enter leaves the sheet open`);
 
+        // A typed tag (DESIGN-tags-free-entry-fable.md, F2): the Add row, Enter, the longest tag there is, a refusal's words.
+        await search.fill('excellent condition');
+        await page.getByTestId('tag-picker-add-typed').waitFor();
+        await search.press('Enter');
+        await sheet.getByRole('button', { name: 'Remove #excellent condition' }).waitFor();
+        await search.fill('w'.repeat(30));
+        await search.press('Enter');
+        await sheet.getByRole('button', { name: `Remove #${'w'.repeat(30)}` }).waitFor();
+        await search.fill('me@example.org');
+        await sheet.getByText('A tag is a word to find your listing by, not a contact').waitFor();
+        if (process.env.TAG_PANEL_SHOTS) await page.screenshot({ path: path.join(process.env.TAG_PANEL_SHOTS, `tag-sheet-typed-${theme}-320.png`) });
+        const past = await sheet.evaluate((el) => [...el.querySelectorAll('*')]
+            .filter((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && (r.right > 320.5 || r.left < -0.5); })
+            .map((n) => (n.textContent || n.tagName).slice(0, 40)));
+        check(past.length === 0, `${theme}: nothing in the sheet runs past 320 px (${past.join(' | ')})`);
+        const short = await sheet.evaluate((el) => [...el.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().height < 44).map((b) => b.textContent));
+        check(short.length === 0, `${theme}: every button in the sheet is at least 44 px tall (${short.join(' | ')})`);
+        await search.fill('');
+
         await search.press('Escape');
         await sheet.waitFor({ state: 'hidden' });
         check((await counts()) === '0 0', `${theme}: Escape shuts the sheet and reaches no page handler (${await counts()})`);

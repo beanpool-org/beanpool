@@ -71,6 +71,27 @@ describe('joining another community with an invite', () => {
         expect(d.addSavedNode).not.toHaveBeenCalled();
     });
 
+    it('notes the offer to bring the member’s listings, with where they came from, and only after they are in', async () => {
+        const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
+        d.noteBringOffer = vi.fn(async () => true);
+        await joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL, knownName: 'Mullum' }, d);
+        expect(d.noteBringOffer).toHaveBeenCalledWith({ publicKey: me.publicKey, from: GLOBAL, to: LOCAL, name: 'Mullumbimby', alreadyMember: false });
+    });
+
+    it('a refused invite notes no offer', async () => {
+        const d = deps(async () => { throw new Error('This invite is for a different key.'); });
+        d.noteBringOffer = vi.fn(async () => true);
+        await expect(joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, d)).rejects.toThrow();
+        expect(d.noteBringOffer).not.toHaveBeenCalled();
+    });
+
+    it('joining never waits on the offer: one that can\'t be noted changes nothing', async () => {
+        const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
+        d.noteBringOffer = vi.fn(async () => { throw new Error('storage full'); });
+        await expect(joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, d))
+            .resolves.toEqual({ url: LOCAL, name: 'Mullumbimby', alreadyMember: false });
+    });
+
     it('with no answer from the new community’s health, keeps the name it was given', async () => {
         (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
         const d = deps(async () => ({ success: true, alreadyMember: true, nodeHasPhoto: true }));

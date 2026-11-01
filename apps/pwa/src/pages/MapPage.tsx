@@ -290,7 +290,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const pollPlacelessNote = placelessListingNote(nearbyLimits !== null, pollAuthorArea);
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTags, setNewPostTags] = useState<string[]>([]);
+    const [newPostFreeTags, setNewPostFreeTags] = useState<string[]>([]);
     const [eventTags, setEventTags] = useState<string[]>([]);
+    const [eventFreeTags, setEventFreeTags] = useState<string[]>([]);
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
     const [newPostCredits, setNewPostCredits] = useState('');
@@ -525,6 +527,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setNewPostDescription(openDraft.description);
         setNewPostCategory(openDraft.category ?? 'general');
         setNewPostTags([]);
+        setNewPostFreeTags([]);
         setNewPostCredits(openDraft.credits === null ? '' : String(openDraft.credits));
         setNewPostPriceType(openDraft.priceType ?? 'fixed');
         setNewPostRepeatable(openDraft.repeatable);
@@ -1010,6 +1013,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setEventIsCopy(false);
         setEventEdit(null);
         setEventTags([]);
+        setEventFreeTags([]);
         setEventOnline(false);
         setEventJoinLink('');
         setEventZone(null);
@@ -1030,7 +1034,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     /** The event form as it stands, in the shape the edit diff compares. */
     function currentEventForm(): EventEditForm {
         return {
-            title: newPostTitle, description: newPostDescription, tags: eventTags, start: eventStart, end: eventEnd,
+            title: newPostTitle, description: newPostDescription, tags: eventTags, freeTags: eventFreeTags, start: eventStart, end: eventEnd,
             placeName: eventPlaceName, lat: eventOnline ? null : postLat, lng: eventOnline ? null : postLng, privateNote: eventNote,
             photos: newPostPhotos, online: eventOnline, link: eventJoinLink, tz: eventFormZone()?.tz ?? null,
             hostLetsIn: eventHostLetsIn, repeat: eventRepeat, repeatUntil: eventRepeatUntil,
@@ -1150,6 +1154,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(eventOnline && eventJoinLink.trim() ? { eventLink: eventJoinLink.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
                 ...(eventTags.length > 0 ? { tags: eventTags } : {}),
+                ...(eventFreeTags.length > 0 ? { freeTags: eventFreeTags } : {}),
                 // Always the host's choice, never left to the node's default.
                 eventHostLetsIn,
             };
@@ -1307,11 +1312,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 photos: newPostPhotos,
                 audienceScope,
                 ...(newPostTags.length > 0 ? { tags: newPostTags } : {}),
+                ...(newPostFreeTags.length > 0 ? { freeTags: newPostFreeTags } : {}),
                 ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
             setNewPostTitle('');
             setNewPostDescription('');
             setNewPostTags([]);
+            setNewPostFreeTags([]);
             setNewPostCredits('');
             setNewPostPriceType('fixed');
             setNewPostRepeatable(false);
@@ -1774,6 +1781,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setNewPostDescription(moved ? withMovedFromLine(seriesMovedFromLine(source.eventRepeat), copy.description) : copy.description);
             setNewPostPhotos([]);
             setEventTags([]);
+            setEventFreeTags([]);
             setEventStart('');
             setEventEnd('');
             // A copy is a one-off until its host says otherwise.
@@ -1858,6 +1866,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setPinDropMode(false);
             setValidationErrors(new Set());
             setEventTags(form.tags || []);
+            setEventFreeTags(form.freeTags || []);
             setEventEdit({ id, before: form });
             setEventOnline(form.online === true);
             setEventJoinLink(form.link ?? '');
@@ -2761,6 +2770,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <TagPicker
                                 tags={eventTags}
                                 onChange={setEventTags}
+                                freeTags={eventFreeTags}
+                                onFreeTagsChange={setEventFreeTags}
                                 category="general"
                                 title={newPostTitle}
                                 description={newPostDescription}
@@ -2968,6 +2979,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <TagPicker
                                 tags={newPostTags}
                                 onChange={setNewPostTags}
+                                freeTags={newPostFreeTags}
+                                onFreeTagsChange={setNewPostFreeTags}
                                 category={newPostCategory}
                                 title={newPostTitle}
                                 description={newPostDescription}

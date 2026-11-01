@@ -1,13 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    POST_TAGS_MAX, suggestTags, tagChildren, tagIndex, t,
+    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS,
+    enterTypedTags, exactLibraryTag, lastTagOff, suggestTags, tagChildren, tagIndex, t, typedTag, type RefusedTag,
 } from '@beanpool/core';
 
 export interface TagPickerProps {
     value?: string[];
     tags?: string[];
     onChange: (tags: string[]) => void;
+    /** The tags the member typed, as stored, and what takes them. Without it the picker holds the library's tags only. */
+    freeTags?: string[];
+    onFreeTagsChange?: (freeTags: string[]) => void;
     category?: string;
     title?: string;
     description?: string;
@@ -18,6 +22,8 @@ export function TagPicker({
     value,
     tags,
     onChange,
+    freeTags = [],
+    onFreeTagsChange,
     category,
     title = '',
     description = '',
@@ -27,6 +33,8 @@ export function TagPicker({
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+    // Why the last commit stayed in the field, in words, until the field changes.
+    const [refused, setRefused] = useState<RefusedTag | null>(null);
 
     // Keyboard accessibility: Escape closes modal
     useEffect(() => {
@@ -46,11 +54,62 @@ export function TagPicker({
 
     const toggleTag = (id: string) => {
         if (selectedTags.includes(id)) {
+            setRefused(null);
             onChange(selectedTags.filter((t) => t !== id));
         } else {
-            if (selectedTags.length >= POST_TAGS_MAX) return;
+            if (selectedTags.length >= POST_TAGS_MAX) {
+                setRefused(TOO_MANY_TAGS);
+                return;
+            }
+            setRefused(null);
             onChange([...selectedTags, id]);
         }
+    };
+
+    // A tag off makes room: what stopped the last one no longer stands.
+    const takeOffFree = (tag: string) => {
+        setRefused(null);
+        onFreeTagsChange?.(freeTags.filter((other) => other !== tag));
+    };
+
+    const canType = !!onFreeTagsChange;
+    const held = { tags: selectedTags, freeTags };
+
+    // The typed word has found its tag. Left in the field, Done would put back one just taken off.
+    const pickFound = (id: string) => {
+        toggleTag(id);
+        if (canType && (selectedTags.includes(id) || selectedTags.length < POST_TAGS_MAX)) setSearchQuery('');
+    };
+
+    /** Commits what is typed (core typed-tags.ts); false when a piece was refused and stays in the field with its words. */
+    const enter = (text: string, done: boolean): boolean => {
+        const entry = enterTypedTags(text, held, done, index);
+        if (entry.tags.length !== selectedTags.length) onChange(entry.tags);
+        if (entry.freeTags.length !== freeTags.length) onFreeTagsChange?.(entry.freeTags);
+        setSearchQuery(entry.rest);
+        setRefused(entry.refused);
+        return !entry.refused;
+    };
+
+    const typeInField = (text: string, composing: boolean) => {
+        setRefused(null);
+        // A word an input method is still building is not the member's yet: it commits when the composition ends.
+        if (canType && !composing && TAG_COMMA.test(text)) enter(text, false);
+        else setSearchQuery(text);
+    };
+
+    // Backspace on an empty field takes the last chip off.
+    const backspaceOnEmpty = () => {
+        if (!canType || searchQuery.length > 0) return;
+        const off = lastTagOff(held);
+        setRefused(null);
+        if (off.freeTags.length !== freeTags.length) onFreeTagsChange?.(off.freeTags);
+        else if (off.tags.length !== selectedTags.length) onChange(off.tags);
+    };
+
+    // Done commits what is in the field: a refused piece keeps the sheet open, with its words.
+    const finish = () => {
+        if (!canType || enter(searchQuery, true)) setIsOpen(false);
     };
 
     const toggleGroup = (groupId: string) => {
@@ -69,13 +128,54 @@ export function TagPicker({
     const searchResults = useMemo(() => {
         const q = searchQuery.trim();
         if (q.length < 2) return [];
-        return index.search(q, 12);
-    }, [searchQuery, index]);
+        const found = index.search(q, 12);
+        // A plural ("lemons") is no prefix of its label, and Enter picks that label: it has a row like any other.
+        const exact = canType ? exactLibraryTag(q, index) : null;
+        return exact && !found.includes(exact) ? [exact, ...found] : found;
+    }, [searchQuery, index, canType]);
+
+    // What Enter would do with the field now. A word still being typed is not yet too short.
+    const typed = canType ? typedTag(searchQuery, held, index) : null;
+    const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
+    const shownRefusal = refused ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed : null);
 
     const groups = useMemo(() => {
         if (!category) return [];
         return tagChildren(category);
     }, [category]);
+
+    const chosenChips = (
+        <>
+            {selectedTags.map((id) => {
+                const label = index.label(id);
+                if (!label) return null;
+                return (
+                    <button
+                        key={id}
+                        type="button"
+                        onClick={() => toggleTag(id)}
+                        className="min-h-[44px] max-w-full break-words px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover"
+                        aria-label={t('Remove {name}', { name: label })}
+                    >
+                        <span>{label}</span>
+                        <span className="text-xs font-bold opacity-80" aria-hidden="true">✕</span>
+                    </button>
+                );
+            })}
+            {freeTags.map((tag) => (
+                <button
+                    key={`#${tag}`}
+                    type="button"
+                    onClick={() => takeOffFree(tag)}
+                    className="min-h-[44px] max-w-full break-words px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover"
+                    aria-label={t('Remove {name}', { name: `#${tag}` })}
+                >
+                    <span className="min-w-0">#{tag}</span>
+                    <span className="text-xs font-bold opacity-80" aria-hidden="true">✕</span>
+                </button>
+            ))}
+        </>
+    );
 
     return (
         <div className="my-2" data-testid={testID}>
@@ -87,24 +187,9 @@ export function TagPicker({
 
             {/* Chips row */}
             <div className="flex flex-wrap gap-2 items-center">
-                {selectedTags.map((id) => {
-                    const label = index.label(id);
-                    if (!label) return null;
-                    return (
-                        <button
-                            key={id}
-                            type="button"
-                            onClick={() => toggleTag(id)}
-                            className="min-h-[44px] px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover"
-                            aria-label={t('Remove {name}', { name: label })}
-                        >
-                            <span>{label}</span>
-                            <span className="text-xs font-bold opacity-80" aria-hidden="true">✕</span>
-                        </button>
-                    );
-                })}
+                {chosenChips}
 
-                {selectedTags.length < POST_TAGS_MAX && (
+                {(selectedTags.length < POST_TAGS_MAX || (canType && freeTags.length < FREE_TAGS_MAX)) && (
                     <button
                         type="button"
                         onClick={() => setIsOpen(true)}
@@ -139,7 +224,7 @@ export function TagPicker({
                             </h3>
                             <button
                                 type="button"
-                                onClick={() => setIsOpen(false)}
+                                onClick={finish}
                                 className="min-h-[44px] min-w-[44px] flex items-center justify-center text-terra-600 dark:text-terra-400 font-bold text-sm hover:underline"
                             >
                                 {t('Done')}
@@ -155,10 +240,16 @@ export function TagPicker({
                                 <input
                                     type="text"
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) => typeInField(e.target.value, (e.nativeEvent as InputEvent).isComposing === true)}
+                                    onCompositionEnd={(e) => typeInField(e.currentTarget.value, false)}
                                     onKeyDown={(e) => {
+                                        // Safari ends the composition before the Enter that confirms it: that key says 229.
+                                        const composing = e.nativeEvent.isComposing || e.keyCode === 229;
                                         if (e.key === 'Enter') {
                                             e.preventDefault();
+                                            if (canType && !composing) enter(searchQuery, true);
+                                        } else if (e.key === 'Backspace' && !e.repeat && !composing) {
+                                            backspaceOnEmpty();
                                         }
                                     }}
                                     placeholder={t('Search tags...')}
@@ -168,7 +259,7 @@ export function TagPicker({
                                 {searchQuery.length > 0 && (
                                     <button
                                         type="button"
-                                        onClick={() => setSearchQuery('')}
+                                        onClick={() => { setSearchQuery(''); setRefused(null); }}
                                         className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-nature-400 hover:text-nature-600 dark:hover:text-nature-200"
                                         aria-label={t('Clear search')}
                                     >
@@ -176,19 +267,29 @@ export function TagPicker({
                                     </button>
                                 )}
                             </div>
+                            {shownRefusal && (
+                                <p role="alert" className="m-0 mt-1.5 text-xs font-semibold text-red-600 dark:text-red-300">{t(shownRefusal.why)}</p>
+                            )}
                         </div>
 
                         {/* Scrollable content */}
                         <div className="overflow-y-auto flex-1 pr-1 space-y-4 max-h-[60vh]">
+                            {canType && selectedTags.length + freeTags.length > 0 && (
+                                <div className="flex flex-wrap gap-2 items-center" data-testid="tag-picker-chosen">{chosenChips}</div>
+                            )}
                             {searchQuery.trim().length >= 2 ? (
                                 <div>
-                                    <div className="text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-2">
-                                        {t('Search results')}
-                                    </div>
+                                    {(searchResults.length > 0 || !canType) && (
+                                        <div className="text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-2">
+                                            {t('Search results')}
+                                        </div>
+                                    )}
                                     {searchResults.length === 0 ? (
-                                        <p className="text-sm text-nature-400 py-4 text-center">
-                                            {t('No tags found')}
-                                        </p>
+                                        !canType && (
+                                            <p className="text-sm text-nature-400 py-4 text-center">
+                                                {t('No tags found')}
+                                            </p>
+                                        )
                                     ) : (
                                         <div className="flex flex-wrap gap-2">
                                             {searchResults.map((id) => {
@@ -198,7 +299,7 @@ export function TagPicker({
                                                     <button
                                                         key={id}
                                                         type="button"
-                                                        onClick={() => toggleTag(id)}
+                                                        onClick={() => pickFound(id)}
                                                         className={`min-h-[44px] px-3.5 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
                                                             selected
                                                                 ? 'bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover'
@@ -216,6 +317,12 @@ export function TagPicker({
                                 </div>
                             ) : (
                                 <>
+                                    {canType && (
+                                        <div className="text-xs text-nature-600 dark:text-nature-300 space-y-1">
+                                            <p className="m-0">{t(TYPED_TAG_WORDS.arePublic)}</p>
+                                            <p className="m-0">{t(TYPED_TAG_WORDS.yourWords)}</p>
+                                        </div>
+                                    )}
                                     {/* Suggestions */}
                                     {suggestions.length > 0 && (
                                         <div>
@@ -324,6 +431,18 @@ export function TagPicker({
                                 </>
                             )}
                         </div>
+
+                        {/* The last row, and held below the list: twelve results would push it off a short screen. */}
+                        {addable && (
+                            <button
+                                type="button"
+                                onClick={() => enter(searchQuery, true)}
+                                data-testid="tag-picker-add-typed"
+                                className="w-full min-h-[44px] mt-2 flex items-center text-left break-words text-sm font-bold text-nature-900 dark:text-white hover:underline border-t border-nature-100 dark:border-nature-800"
+                            >
+                                {t(TYPED_TAG_WORDS.add, { tag: `#${addable}` })}
+                            </button>
+                        )}
                     </div>
                 </div>,
                 document.body,

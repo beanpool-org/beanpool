@@ -14,7 +14,9 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, type GroupPerson } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, groupClosedShown, groupDescriptionShown, groupNameShown, type GroupPerson } from '@beanpool/core';
+import { PlaceCircleCard } from './PlaceCircleCard';
+import type { BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
@@ -56,8 +58,12 @@ interface Props {
     isOpen: boolean;
     onClose: () => void;
     myPubkey?: string;
+    /** Signs a place circle's Ask to join, the one thing here that goes to another community. */
+    identity?: BeanPoolIdentity | null;
     onMembershipChanged?: () => void;
     onPostToGroup?: (group: Group) => void;
+    /** "Start a community" on a place circle's card. */
+    onStartCommunity?: () => void;
 }
 
 export function GroupDetailModal({
@@ -65,8 +71,10 @@ export function GroupDetailModal({
     isOpen,
     onClose,
     myPubkey,
+    identity,
     onMembershipChanged,
-    onPostToGroup
+    onPostToGroup,
+    onStartCommunity,
 }: Props) {
     const [groupData, setGroupData] = useState<Group | null>(group);
     const [members, setMembers] = useState<GroupMember[]>([]);
@@ -352,7 +360,7 @@ export function GroupDetailModal({
                             className="w-10 h-10 rounded-full object-cover border border-nature-300 dark:border-nature-700 shrink-0"
                         />
                         <h2 id="group-detail-title" className="text-lg font-black text-nature-950 dark:text-white truncate">
-                            {groupData.name}
+                            {groupNameShown(groupData)}
                         </h2>
                     </div>
                     <button
@@ -441,15 +449,19 @@ export function GroupDetailModal({
                         </div>
                     )}
 
-                    {groupData.description && (
+                    {groupData.circle && (
+                        <PlaceCircleCard id={groupData.id} circle={groupData.circle} identity={identity} closed={closed} onStart={onStartCommunity}
+                            onChange={circle => setGroupData(g => (g ? { ...g, circle } : g))} />
+                    )}
+                    {groupDescriptionShown(groupData) && (
                         <p className="text-sm text-nature-700 dark:text-nature-300 whitespace-pre-wrap leading-relaxed">
-                            {groupData.description}
+                            {groupDescriptionShown(groupData)}
                         </p>
                     )}
 
                     {closed && (
                         <p className="m-0 p-3 rounded-xl border border-nature-300 dark:border-nature-700 text-sm text-nature-800 dark:text-nature-200 break-words" data-testid="group-closed-note">
-                            <span aria-hidden="true">🔒 </span>{t(LINES.closed)}
+                            <span aria-hidden="true">🔒 </span>{groupClosedShown(groupData, t(LINES.closed))}
                         </p>
                     )}
 

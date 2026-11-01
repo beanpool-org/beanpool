@@ -24,6 +24,8 @@ On the phone, the search and filters slide away as you scroll down, so you see m
 
 Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: "fruit" finds "lemon". It finds words in Chinese, Japanese and Thai too, and leaves out posts by people you have blocked. Without a connection, it searches what is already on your phone.
 
+The search also finds the words of tags people typed on their posts. A tag on a post, under its description, is a button: tap one and the Market shows the posts with that tag. A tag someone typed shows as **#** and their words, and finds exactly those words, in the language they were typed in. Tap **✕** on it to go back.
+
 While there are words in the search, a button **Save this search to Home** appears. It opens Home with a saved search ready to add: your words, **Offers** or **Needs** if you were looking at only one, the category and the distance. There is no button under **Events** or **Polls**. See "Home".
 
 ## Filters

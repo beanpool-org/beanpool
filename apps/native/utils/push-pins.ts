@@ -28,6 +28,7 @@
  * the registration machinery.
  */
 import { pushCommunityTag, PUSH_KEY_PATTERN } from '@beanpool/core';
+import { plainOriginOf } from './node-url';
 import { PUSH_PINS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
@@ -43,10 +44,16 @@ export function communityAddress(raw: unknown): string | null {
     return raw.trim().replace(/\/+$/, '');
 }
 
-/** Whether two addresses are one community, however each is spelled ({@link communityAddress}). Not when either is no address. */
+/** An address in one spelling: by its origin (node-url.ts), and as {@link communityAddress} keeps it when it isn't plain. */
+const oneSpelling = (u: unknown) => plainOriginOf(u) ?? communityAddress(u);
+
+/**
+ * Whether two addresses are one community, however each is spelled: a trailing slash, capitals, a default port. A typed
+ * or pasted address keeps all three (node-url.ts `normalizeNodeUrl`). Not when either is no address.
+ */
 export function sameCommunity(a: unknown, b: unknown): boolean {
-    const address = communityAddress(a);
-    return address !== null && address === communityAddress(b);
+    const address = oneSpelling(a);
+    return address !== null && address === oneSpelling(b);
 }
 
 /** The `pushKey` a registration answer carries: a raw Ed25519 public key in lower-case hex, or null for anything else. */

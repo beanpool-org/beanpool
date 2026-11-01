@@ -1444,7 +1444,9 @@ export default function SettingsScreen() {
                     {
                         text: t("Forget & Switch"),
                         style: "destructive",
-                        onPress: () => forgetCommunityPush(identity, targetUrl, async () => {
+                        // By the address the phone is set to: that is the spelling it registered under, and a row
+                        // spelled another way may be on no record, so that community would never hear.
+                        onPress: () => forgetCommunityPush(identity, anchorUrl, async () => {
                             for (const url of everySpelling) await removeSavedNode(url);
                             setSavedNodes(remainingNodes);
                             try {

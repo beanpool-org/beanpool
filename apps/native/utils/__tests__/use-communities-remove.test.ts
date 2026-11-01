@@ -8,7 +8,9 @@
  * compared the address as spelled while Forget goes by the community, and two spellings of one community can be on the
  * list: a pasted `https://x.org/` stays as typed, and a later invite join strips the slash, which `getDb` saves as a second
  * row. The duplicate is exactly the row a member would remove, and removing it told the community in use to drop the
- * token: no alerts from it, recovery alerts included, until the next return (#2701, deciding review 4434518917).
+ * token: no alerts from it, recovery alerts included, until the next return (#2701, deciding review 4434518917). Capitals
+ * and a default port stay as typed too, and those weren't repaired until the next cold start: the plain spelling was
+ * still on the record, so a return found nothing missing (deciding review 4434633343).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -119,6 +121,23 @@ describe('Remove on the sheet', () => {
 
         expect(deletes()).toEqual([]);
         expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+    });
+
+    it.each([
+        ['a capital letter', 'https://Mullum.beanpool.org'],
+        ['a default port', `${MULLUM}:443`],
+    ])('a second spelling with %s, registered under both: the row goes, nothing is sent, and the alerts stay', async (_how, spelled) => {
+        mem.async.set(ANCHOR, spelled);
+        expect(await registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).toBe(true);
+        mem.async.set(ANCHOR, MULLUM);
+        nodes.sent.length = 0;
+        saved(MULLUM, spelled, BYRON);
+
+        await removeRow(spelled);
+
+        expect(deletes()).toEqual([]);
+        expect(nodes.has(MULLUM, kim.publicKey)).toBe(true);
+        expect(savedNow()).toEqual([MULLUM, BYRON]);
     });
 
     it('another community is told, as ever', async () => {

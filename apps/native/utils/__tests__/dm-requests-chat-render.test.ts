@@ -313,6 +313,18 @@ describe('a request waiting for this member, on the phone', () => {
         expect(callsOf('toggleMessageReactionApi')).toBe(1);
     });
 
+    it('Accept, Decline, Report in place of the box, and a line has no Report of its own: the one on the bar blocks', async () => {
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+            getMessages: [{ id: 'r1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'Buy my crypto', rawTimestamp: '2026-10-27T00:00:00.000Z', timestamp: '10:00' }],
+            syncSingleConversation: true,
+        });
+        await open();
+        for (const name of ['Accept', 'Decline', 'Report']) expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent === name)).toBe(true);
+        await tapLine('Buy my crypto');
+        expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent?.includes('Report message'))).toBe(false);
+    });
+
     describe('Accept or Ignore refused (review 4395541944)', () => {
         const refusal = (message: string, extra: Record<string, unknown>) => Object.assign(new Error(message), extra);
         const GONE = () => refusal('There is no message request for you in this chat.', { status: 404, code: 'request_not_found', nodeAnswered: true });

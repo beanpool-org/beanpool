@@ -330,6 +330,18 @@ describe('MessageRequestsPane on phone', () => {
         expect(onChanged).not.toHaveBeenCalled();
     });
 
+    it('a report over the hourly limit still blocks, and says the report did not go: the limit never costs a member their block', async () => {
+        dbMocks.reportDmLine.mockRejectedValueOnce(Object.assign(new Error('You have sent a lot of reports recently. Please try again in an hour.'), { status: 429 }));
+        const onChanged = vi.fn();
+        await reportFrom(onChanged);
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said[0].title).toBe('You have sent a lot of reports recently, so this one did not go. They are blocked.');
+        alerts.said[0].buttons?.[0].onPress();
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
+
     it("a block that didn't happen: says the report went and the block did not, and the card stays", async () => {
         blockMocks.blockUser.mockResolvedValueOnce(false);
         blockMocks.isUserBlocked.mockResolvedValueOnce(false);

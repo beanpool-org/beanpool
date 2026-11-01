@@ -1134,10 +1134,11 @@ function ChatScreen({ id }: { id: string }) {
         if (!reportingLine) return;
         const { item, blocks } = reportingLine;
         try {
-            if (blocks) await reportRequestAndBlock(String(id), item, item.senderId, reason);
+            let reported = true;
+            if (blocks) reported = await reportRequestAndBlock(String(id), item, item.senderId, reason);
             else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason);
             hapticSuccess();
-            Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => {
+            Alert.alert(reported ? t('Reported') : t('You have sent a lot of reports recently, so this one did not go. They are blocked.'), reported ? reportedAlertBody(undefined, reason) : undefined, [{ text: t('OK'), onPress: () => {
                 setReportingLine(null);
                 if (blocks) router.navigate('/(tabs)/chats');
             } }]);

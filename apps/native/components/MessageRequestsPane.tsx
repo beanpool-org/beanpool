@@ -76,8 +76,12 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
     const submitReport = async (reason: string) => {
         try {
             if (!preview.line) throw new Error('No line');
-            await reportRequestAndBlock(entry.id, preview.line, peer, reason);
-            Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => { setReporting(false); onChanged(); } }]);
+            const reported = await reportRequestAndBlock(entry.id, preview.line, peer, reason);
+            Alert.alert(
+                reported ? t('Reported') : t('You have sent a lot of reports recently, so this one did not go. They are blocked.'),
+                reported ? reportedAlertBody(undefined, reason) : undefined,
+                [{ text: t('OK'), onPress: () => { setReporting(false); onChanged(); } }],
+            );
         } catch (e: any) {
             Alert.alert(e instanceof ReportedNotBlockedError ? t('Reported, but not blocked. Please try again.') : chatActionErrorMessage({ status: e?.status ?? null, message: e?.message, nodeAnswered: !!e?.nodeAnswered }));
             throw e; // the box keeps the choice and the words

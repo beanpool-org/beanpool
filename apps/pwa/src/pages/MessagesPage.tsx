@@ -1128,8 +1128,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 title={t('Report this message')}
                 note={t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")}
                 onSubmitReason={async (reason) => {
-                    await reportRequestAndBlock(reportingRequest, identity, reason);
+                    const reported = await reportRequestAndBlock(reportingRequest, identity, reason);
                     requestReported.current = true;
+                    if (!reported) throw new Error(t("You have sent a lot of reports recently, so this one did not go. They are blocked."));
                 }}
             />
         );

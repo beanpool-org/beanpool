@@ -102,6 +102,10 @@ function line(from: typeof ann, text: string, at = LINE_AT, extra: Partial<ApiMe
         type: 'text', systemType: null, metadata: null, timestamp: at, editedAt: null, updatedAt: at, ...extra,
     } as unknown as ApiMessage;
 }
+/** The line as the node serves it: its sender's signature in its metadata (MessagesPage's lineMetadata). */
+function signed(l: ApiMessage): ApiMessage {
+    return { ...l, metadata: JSON.stringify({ lineSig: (l as unknown as { lineSig: unknown }).lineSig }) } as ApiMessage;
+}
 /** A photo with its caption, sealed as MessagesPage's handleSendImage seals one. */
 function photo(from: typeof ann, caption: string): ApiMessage {
     const id = crypto.randomUUID();
@@ -311,7 +315,7 @@ describe('a request card', () => {
     });
 
     it('Report reports the line, as sealed and signed, with its words, then blocks its sender, and files no second report', async () => {
-        const hello = line(bo, 'Hello');
+        const hello = signed(line(bo, 'Hello'));
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [hello]);
         render(<MessagesPage identity={idOf(ann)} />);
@@ -325,6 +329,7 @@ describe('a request card', () => {
         expect(messageId).toBe(hello.id);
         expect(reason).toContain('Spam or scam');
         expect(disclosure).toMatchObject({ v: 1, ciphertext: hello.ciphertext, nonce: hello.nonce, conversationId: CONV, words: 'Hello' });
+        expect(disclosure.lineSig).toEqual(JSON.parse(hello.metadata as string).lineSig);
         expect(Object.keys(disclosure).sort()).toEqual(['ciphertext', 'conversationId', 'lineSig', 'nonce', 'v', 'words']);
         expect(decideMessageRequest).not.toHaveBeenCalled();
     });
@@ -340,6 +345,19 @@ describe('a request card', () => {
         await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
         expect(await within(card).findByText(/The node refused it/)).toBeInTheDocument();
         expect(blockUser).not.toHaveBeenCalled();
+    });
+
+    it('a report over the hourly limit still blocks, and says the report did not go: the limit never costs a member their block', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        vi.mocked(reportDmLineApi).mockRejectedValueOnce(Object.assign(new Error('You have sent a lot of reports recently. Please try again in an hour.'), { status: 429 }));
+        render(<MessagesPage identity={idOf(ann)} />);
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
+        const card = await screen.findByRole('dialog');
+        fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
+        expect(await within(card).findByText('You have sent a lot of reports recently, so this one did not go. They are blocked.')).toBeInTheDocument();
     });
 
     it('a block that does not go through says the report went and the block did not', async () => {
@@ -439,6 +457,31 @@ describe('a request card', () => {
         const card = within(await openRequests()).getByTestId('request-card');
         fireEvent.click(within(card).getByRole('button', { name: 'Decline' }));
         expect(await within(card).findByText(STANDBY_WORDS)).toBeInTheDocument();
+    });
+});
+
+describe('a line of an ordinary direct message (R0)', () => {
+    it('Report under someone else\'s line sends that line, as sealed and signed, with its words, and blocks nobody', async () => {
+        const hello = signed(line(bo, 'Hello'));
+        const mine = line(ann, 'Mine', '2026-10-27T01:00:00.000Z');
+        const { addedYou: _, ...entry } = requestEntry(bo, CONV, { request: null });
+        node.list = { conversations: [entry], totalUnread: 0, deletedAccounts: [], requests: { count: 0, conversations: [] } };
+        node.reads[CONV] = readOf(null, [hello, mine]);
+        render(<MessagesPage identity={idOf(ann)} />);
+        fireEvent.click(await screen.findByText('Bo'));
+        await screen.findByText('Hello');
+        const reports = await screen.findAllByRole('button', { name: 'Report message' });
+        expect(reports).toHaveLength(1);
+        await act(async () => { fireEvent.click(reports[0]); });
+        const card = screen.getByRole('dialog');
+        expect(within(card).getByTestId('report-note')).not.toHaveTextContent('blocks');
+        fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        const [messageId, , disclosure] = vi.mocked(reportDmLineApi).mock.calls[0];
+        expect(messageId).toBe(hello.id);
+        expect(disclosure).toMatchObject({ ciphertext: hello.ciphertext, nonce: hello.nonce, conversationId: CONV, words: 'Hello' });
+        expect(disclosure.lineSig).toEqual(JSON.parse(hello.metadata as string).lineSig);
+        expect(blockUser).not.toHaveBeenCalled();
     });
 });
 

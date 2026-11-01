@@ -18,6 +18,7 @@
  *      the sheet while the preview loads (PR #2540 review 4399651606)
  *  10. MessageRequestsPane: Report always blocks: a line its sender deleted, or a refusal by the node, costs the report and
  *      never the block; Report is dim whenever it is off (the deciding review of #2705)
+ *  11. MessageRequestsPane: a request whose time moved reads its line again, and Report is off until it has (same review)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -424,6 +425,36 @@ describe('MessageRequestsPane on phone', () => {
         finish([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', metadata: {} }]);
         await screen.findByText('Buy my crypto');
         expect(opacityOf(screen.getByTestId('request-report'))).toBeUndefined();
+    });
+
+    // The deciding review of #2705: Cancel request then a new line keeps the chat's id and moves the request's `at`, and a card
+    // is keyed by the id, so it stays mounted. It read once, so Report handed over the withdrawn line.
+    it('a request whose time moved reads its line again: Report is off meanwhile, then hands over the new line', async () => {
+        const props = { count: 1, identity: { publicKey: 'me-pubkey' }, onOpen: () => {}, onBack: () => {}, onAccepted: () => {}, onChanged: () => {} };
+        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', rawTimestamp: entry.request.at, metadata: {} }]);
+        const { rerender } = render(createElement(MessageRequestsPane, { ...props, entries: [entry] }));
+        await screen.findByText('Buy my crypto');
+
+        // A new list with the same time is no reason to go to the node again.
+        rerender(createElement(MessageRequestsPane, { ...props, entries: [{ ...entry, request: { ...entry.request } }] }));
+        expect(dbMocks.syncSingleConversation).toHaveBeenCalledTimes(1);
+
+        const at = '2026-10-27T02:00:00Z';
+        let finish: (lines: any[]) => void = () => {};
+        dbMocks.getMessages.mockReturnValueOnce(new Promise((r) => { finish = r; }));
+        rerender(createElement(MessageRequestsPane, { ...props, entries: [{ ...entry, request: { ...entry.request, at } }] }));
+        await waitFor(() => expect(dbMocks.syncSingleConversation).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(opacityOf(screen.getByTestId('request-report'))).toBe(0.7));
+        fireEvent.click(screen.getByTestId('request-report'));
+        expect(screen.queryByTestId('report-sheet-submit')).toBeNull();
+
+        finish([{ id: 'line-2', senderId: 'bob-pubkey', text: 'Hello again', rawTimestamp: at, metadata: {} }]);
+        await screen.findByText('Hello again');
+        expect(screen.queryByText('Buy my crypto')).toBeNull();
+        fireEvent.click(screen.getByTestId('request-report'));
+        fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-req-1', 'line-2', 'Hello again', 'Harassment');
     });
 
     it('no line here and no word from the node: Report stays dim and off, for it can\'t yet tell deleted from not here yet', async () => {

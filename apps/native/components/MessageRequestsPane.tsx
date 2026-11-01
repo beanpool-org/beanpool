@@ -32,6 +32,9 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
 
     useEffect(() => {
         let alive = true;
+        // Cancel request then a new line keeps the chat and moves `at`: the line read before is the withdrawn one, so Report
+        // goes dim until this read is back, on a slow node too (the deciding review of #2705; the web keys its previews the same).
+        setPreview({ loading: true });
         const loadPreview = async () => {
             try {
                 // The node's word first, then the copy here: a line its opener withdrew (Cancel request) never shows from
@@ -56,7 +59,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         };
         loadPreview();
         return () => { alive = false; };
-    }, [entry.id, myPubkey]);
+    }, [entry.id, entry.request?.at, myPubkey]);
 
     const handleDecide = async (decision: 'accept' | 'ignore') => {
         if (busy) return;

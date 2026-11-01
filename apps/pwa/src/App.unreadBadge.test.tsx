@@ -170,7 +170,9 @@ describe('web-unread-badge: the Chat badge clears when a chat is read', () => {
 
         // Initially on Home: the sidebar shows Chat with badge 5
         const chatTab = within(sidebar()).getByRole('button', { name: /Chat/ });
-        expect(within(chatTab).getByText('5')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(within(chatTab).getByText('5')).toBeInTheDocument();
+        });
 
         // Navigate to Chat
         fireEvent.click(chatTab);
@@ -210,7 +212,9 @@ describe('web-unread-badge: the Chat badge clears when a chat is read', () => {
         await screen.findByTestId('home-page');
 
         const chatTab = within(sidebar()).getByRole('button', { name: /Chat/ });
-        expect(within(chatTab).getByText('3')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(within(chatTab).getByText('3')).toBeInTheDocument();
+        });
 
         fireEvent.click(chatTab);
 
@@ -280,7 +284,9 @@ describe('web-unread-badge: the Chat badge clears when a chat is read', () => {
         await screen.findByTestId('home-page');
 
         const chatTab = within(sidebar()).getByRole('button', { name: /Chat/ });
-        expect(within(chatTab).getByText('4')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(within(chatTab).getByText('4')).toBeInTheDocument();
+        });
 
         fireEvent.click(chatTab);
 

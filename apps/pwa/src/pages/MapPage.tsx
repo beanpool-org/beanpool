@@ -51,6 +51,8 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
 } from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { MapStackList } from '../components/MapStackList';
+import { planBubbleTap, stackPins, type StackPin } from '../lib/map-stack';
 import { EventCard } from '../components/EventCard';
 import { Sentence } from '../components/Sentence';
 import { approximateLocation, listPhotoUrl, tierForCredit, type AddressResult } from '@beanpool/core';
@@ -67,7 +69,7 @@ import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventRepeatCreate, parseCopyEventContext, withMovedFromLine,
-    eventInWindow, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
+    eventInWindow, formatEventWhen, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
     hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
 
@@ -162,9 +164,12 @@ export const EVENT_PIN_ICON_SVG = `<svg data-event-pin-icon width="20" height="2
 // it, so without this every return re-centred the map and threw away where they had panned to. Set only once the
 // map has been centred, so a member who leaves before the node answers still gets centred next time.
 let savedView: { center: [number, number]; zoom: number } | null = null;
+// The list a row was opened from, so coming back from the post finds it open, as on the phone.
+let savedStackKeys: string[] | null = null;
 /** Forget the remembered view. For tests, which mount MapPage many times in one module. */
 export function resetSavedMapView() {
     savedView = null;
+    savedStackKeys = null;
 }
 
 interface Props {
@@ -359,6 +364,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // neutral view. After that the map is the member's: nothing re-centres it (except their own taps).
     const centredRef = useRef(false);
     const [previewPost, setPreviewPost] = useState<MarketplacePost | null>(null);
+    // The bubble a tap opened as a list: its pins' keys, read against the pins on the map now (lib/map-stack.ts).
+    const [stackKeys, setStackKeys] = useState<string[] | null>(() => { const kept = savedStackKeys; savedStackKeys = null; return kept; });
+    const [pinsOnMap, setPinsOnMap] = useState<ReadonlyMap<string, StackPin>>(new Map());
+    const pinKeysRef = useRef(new Map<L.Layer, string>());
+    const stack = useMemo(() => (stackKeys ? stackPins(stackKeys, pinsOnMap) : []), [stackKeys, pinsOnMap]);
+    const stackOpen = stack.length > 0;
+    const stackKeysRef = useRef(stackKeys);
+    stackKeysRef.current = stackKeys;
     const [lightboxState, setLightboxState] = useState<{
         isOpen: boolean;
         photos: string[];
@@ -372,18 +385,24 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
     // Keyboard accessibility: Escape closes preview card (defers to lightbox if open)
     useEffect(() => {
-        if (!previewPost || covered) return;
+        if ((!previewPost && !stackOpen) || covered) return;
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if (e.key === 'Escape') {
                 if (lightboxState?.isOpen) return;
                 e.preventDefault();
                 e.stopPropagation();
                 setPreviewPost(null);
+                setStackKeys(null);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [previewPost, lightboxState?.isOpen, covered]);
+    }, [previewPost, stackOpen, lightboxState?.isOpen, covered]);
+
+    // A pin's card takes the list's place.
+    useEffect(() => {
+        if (previewPost) setStackKeys(null);
+    }, [previewPost]);
 
     useEffect(() => {
         return onBlocklistUpdated(() => {
@@ -604,12 +623,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         // Map click to dismiss preview
         map.on('click', () => {
             setPreviewPost(null);
+            setStackKeys(null);
         });
 
         // Markers layer
-        markersRef.current = L.markerClusterGroup({
+        const clusterGroup = L.markerClusterGroup({
             showCoverageOnHover: false,
             maxClusterRadius: 40,
+            // A tap on a bubble is ours: its zoom stops at a cap, and a bubble the cap cannot part opens as a list (Marty,
+            // 2 Nov). The library's zoom has no cap and its spiral is what the list replaces.
+            zoomToBoundsOnClick: false,
+            spiderfyOnMaxZoom: false,
             iconCreateFunction: (cluster) => {
                 return L.divIcon({
                     html: `<div style="background-color: #1f2937; color: white; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 18px; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${cluster.getChildCount()}</div>`,
@@ -617,7 +641,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     iconSize: [36, 36],
                 });
             }
-        }).addTo(map);
+        });
+        clusterGroup.on('clusterclick clusterkeypress', (e: any) => {
+            if (e.type === 'clusterkeypress' && e.originalEvent?.keyCode !== 13) return;
+            setPreviewPost(null);
+            const plan = planBubbleTap<L.LatLng, L.LatLngBounds>(e.layer, (bounds) => map.getBoundsZoom(bounds, false, L.point(50, 50)));
+            if (plan.kind === 'zoom') map.setView(plan.center, plan.zoom);
+            else setStackKeys(e.layer.getAllChildMarkers().flatMap((m: L.Layer) => pinKeysRef.current.get(m) ?? []));
+        });
+        markersRef.current = clusterGroup.addTo(map);
 
         mapRef.current = map;
 
@@ -1508,6 +1540,28 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     useEffect(() => {
         if (!markersRef.current || !mapRef.current) return;
         markersRef.current.clearLayers();
+        // What each marker is, for a bubble's list.
+        const pinKeys = new Map<L.Layer, string>();
+        const pinRows = new Map<string, StackPin>();
+        const addPin = (marker: L.Layer, pin: Omit<StackPin, 'open'>, open: () => void) => {
+            pinKeys.set(marker, pin.key);
+            pinRows.set(pin.key, { ...pin, open });
+        };
+        const postRow = (post: MarketplacePost) => ({
+            key: `post:${post.id}`,
+            title: post.title,
+            type: post.type === 'event' ? t('Event') : post.type === 'offer' ? t('Offer') : t('Need'),
+            when: post.type === 'event' ? formatEventWhen(post) || null : null,
+            photo: post.photos?.[0] ? listPhotoUrl(post.photos[0]) : null,
+            emoji: MARKETPLACE_CATEGORIES_BY_ID.get(post.category)?.emoji || '📌',
+            eventStartMs: post.type === 'event' ? Date.parse(post.eventStartAt ?? '') : null,
+            createdMs: Date.parse(post.createdAt ?? ''),
+        });
+        // A row keeps its list for the way back, as the phone does; the map keeps its view by itself.
+        const openPost = (post: MarketplacePost) => () => {
+            savedStackKeys = stackKeysRef.current;
+            if (onNavigate) onNavigate('marketplace', post.id);
+        };
 
         posts
             .filter(post => post.type !== 'poll' && post.type !== 'event' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
@@ -1599,6 +1653,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 }
             });
             marker.addTo(markersRef.current!);
+            addPin(marker, postRow(post), openPost(post));
         });
 
         // Event pins (docs/events-on-the-map.md §3): violet with a drawn calendar, filtered by the chips, in the same
@@ -1638,6 +1693,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     }
                 });
                 marker.addTo(markersRef.current!);
+                addPin(marker, postRow(post), openPost(post));
             });
 
         // Render enterprise pins (docs/the-commons.md §2.2, Slice 6)
@@ -1715,15 +1771,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     title: markerLabel,
                     alt: markerLabel,
                 });
-                marker.on('click', () => {
+                const openEnterprise = () => {
                     if (onOpenTreasury) {
                         onOpenTreasury(ent.publicKey);
                     } else if (onNavigate) {
                         onNavigate('enterprise', ent.publicKey);
                     }
-                });
+                };
+                marker.on('click', openEnterprise);
                 marker.addTo(markersRef.current!);
+                const picture = ent.avatar && (ent.avatar.startsWith('/') || ent.avatar.startsWith('data:image/')) ? ent.avatar : null;
+                addPin(marker, {
+                    key: `enterprise:${ent.publicKey}`, title: ent.name || '', type: t('Enterprise'), when: null, photo: picture,
+                    emoji: ent.avatar && ent.avatar.length <= 4 ? ent.avatar : '🌾', eventStartMs: null, createdMs: 0,
+                }, openEnterprise);
             });
+        pinKeysRef.current = pinKeys;
+        setPinsOnMap(pinRows);
     }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius, visitor]);
 
     // No location from the node: centre once on this community's own pins, which are its real centre. Posts from
@@ -2132,8 +2196,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 </div>
             )}
 
-            {/* FAB Pill - Bottom Left (avoids header overlap) */}
-            <div className="absolute bottom-[6.5rem] left-3 flex flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden">
+            {/* FAB Pill - Bottom Left (avoids header overlap). It gives way to the list, which would cut it in half. */}
+            <div className={`${stackOpen ? 'hidden' : 'flex'} absolute bottom-[6.5rem] left-3 flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden`}>
                 <button
                     onClick={handleLocate}
                     aria-label={t('My location')}
@@ -2196,6 +2260,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 />
             )}
         </div>
+
+        {stackOpen && <MapStackList key={stackKeys?.join()} pins={stack} covered={covered} onClose={() => setStackKeys(null)} />}
 
         {/* Map Preview Card — an event shows its own card (§3) */}
         {previewPost && previewPost.type === 'event' && (

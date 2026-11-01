@@ -19,12 +19,14 @@ vi.mock('leaflet', () => {
         clearLayers: vi.fn(),
         addLayer: vi.fn(),
         addTo: vi.fn().mockReturnThis(),
+        on: vi.fn(),
     };
 
     return {
         default: {
             map: vi.fn((_el: unknown, opts: any) => ({
                 setView: vi.fn(),
+                getBoundsZoom: vi.fn(() => 18),
                 panBy: vi.fn(),
                 fitBounds: vi.fn(),
                 on: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock('leaflet', () => {
                 })),
             },
             divIcon: vi.fn((opts) => opts),
+            point: (x: number, y: number) => ({ x, y }),
             marker: vi.fn((coords: [number, number], opts: any) => {
                 const listeners: Record<string, (...args: any[]) => any> = {};
                 const m = {
@@ -493,6 +496,170 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    describe('a tap on a bubble (Marty, 2 Nov)', () => {
+        const eggsPin = () => mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        const pinOf = (title: string) => eventPins().find(m => m.opts.title === `Event: ${title}`)!;
+        const clusterGroup = () => (L as any).markerClusterGroup.mock.results[0].value;
+        const mapMock = () => (L as any).map.mock.results[0].value;
+        /** A bubble of these pins, as the library hands it to the click, parting at `splitsAt`. */
+        const bubble = (pins: unknown[], splitsAt: number) => ({
+            _zoom: splitsAt - 1, _markers: pins, _childClusters: [],
+            getAllChildMarkers: () => pins,
+            getBounds: () => ({ getCenter: () => ({ lat: -28.55, lng: 153.5 }) }),
+        });
+        const tap = async (layer: unknown, event: Record<string, unknown> = { type: 'clusterclick' }) => {
+            const [names, handler] = clusterGroup().on.mock.calls.at(-1);
+            expect(names).toBe('clusterclick clusterkeypress');
+            await act(async () => { handler({ ...event, layer }); });
+        };
+        const rowTitles = (list: HTMLElement) => within(list).getAllByRole('listitem').map((li) => li.querySelector('.line-clamp-2')!.textContent);
+        const drawMap = async (onNavigate?: (...args: any[]) => void) => {
+            await act(async () => { render(<MapPage identity={mockIdentity} onNavigate={onNavigate as any} />); });
+            await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
+        };
+
+        it('takes the tap from the library: no zoom of its own, no spiral', async () => {
+            await drawMap();
+            expect((L as any).markerClusterGroup).toHaveBeenCalledWith(expect.objectContaining({ zoomToBoundsOnClick: false, spiderfyOnMaxZoom: false }));
+        });
+
+        it('opens a list in one tap for a bubble that cannot part, soonest event first, and the map does not move', async () => {
+            await drawMap();
+            mapMock().setView.mockClear();
+            await tap(bubble([eggsPin(), pinOf('Spring working bee'), pinOf('Repair café')], 20));
+            const list = screen.getByTestId('map-stack-list');
+            expect(within(list).getByRole('heading').textContent).toBe('3 at this spot');
+            expect(rowTitles(list)).toEqual(['Repair café', 'Spring working bee', 'A dozen eggs']);
+            expect(mapMock().setView).not.toHaveBeenCalled();
+            expect(document.activeElement).toBe(within(list).getByRole('heading'));
+        });
+
+        it('zooms a bubble that can part, and stops at the cap', async () => {
+            await drawMap();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 15));
+            expect(screen.queryByTestId('map-stack-list')).toBeNull();
+            expect(mapMock().setView).toHaveBeenLastCalledWith({ lat: -28.55, lng: 153.5 }, 17);
+        });
+
+        it('opens the list for a bubble that parts only past the cap', async () => {
+            await drawMap();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 18));
+            expect(within(screen.getByTestId('map-stack-list')).getByRole('heading').textContent).toBe('2 at this spot');
+        });
+
+        it('answers Enter on a bubble as a tap, and no other key', async () => {
+            await drawMap();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20), { type: 'clusterkeypress', originalEvent: { keyCode: 32 } });
+            expect(screen.queryByTestId('map-stack-list')).toBeNull();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20), { type: 'clusterkeypress', originalEvent: { keyCode: 13 } });
+            expect(screen.getByTestId('map-stack-list')).toBeTruthy();
+        });
+
+        it('shows what a row is and an event\'s date, with the Close button a 44 px target', async () => {
+            await drawMap();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20));
+            const list = screen.getByTestId('map-stack-list');
+            const [event, listing] = within(list).getAllByRole('listitem');
+            expect(event.textContent).toContain('Repair café');
+            expect(event.textContent).toContain('Event');
+            expect(event.textContent).toMatch(/\d:\d\d/);
+            expect(listing.textContent).toContain('Offer');
+            const close = within(list).getByRole('button', { name: 'Close' });
+            expect(close.className).toContain('min-h-[44px]');
+            expect(close.className).toContain('min-w-[44px]');
+        });
+
+        it('opens the post from its row, and the map does not move', async () => {
+            const onNavigate = vi.fn();
+            await drawMap(onNavigate);
+            mapMock().setView.mockClear();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20));
+            const list = screen.getByTestId('map-stack-list');
+            fireEvent.click(within(list).getByRole('button', { name: /Repair café/ }));
+            expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-soon');
+            expect(mapMock().setView).not.toHaveBeenCalled();
+        });
+
+        it('keeps the list for the way back from a post', async () => {
+            const onNavigate = vi.fn();
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} onNavigate={onNavigate as any} />); });
+            await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20));
+            fireEvent.click(within(screen.getByTestId('map-stack-list')).getByRole('button', { name: /Repair café/ }));
+            await act(async () => { view!.unmount(); });
+            await act(async () => { render(<MapPage identity={mockIdentity} onNavigate={onNavigate as any} />); });
+            await waitFor(() => expect(screen.getByTestId('map-stack-list')).toBeTruthy());
+            expect(rowTitles(screen.getByTestId('map-stack-list'))).toEqual(['Repair café', 'A dozen eggs']);
+        });
+
+        it('closes on ✕, on Escape and on a tap on the map', async () => {
+            await drawMap();
+            const pins = [eggsPin(), pinOf('Repair café')];
+            await tap(bubble(pins, 20));
+            fireEvent.click(within(screen.getByTestId('map-stack-list')).getByRole('button', { name: 'Close' }));
+            expect(screen.queryByTestId('map-stack-list')).toBeNull();
+            await tap(bubble(pins, 20));
+            fireEvent.keyDown(window, { key: 'Escape' });
+            await waitFor(() => expect(screen.queryByTestId('map-stack-list')).toBeNull());
+            await tap(bubble(pins, 20));
+            const onMapClick = mapMock().on.mock.calls.find((c: any[]) => c[0] === 'click')[1];
+            await act(async () => { onMapClick(); });
+            expect(screen.queryByTestId('map-stack-list')).toBeNull();
+        });
+
+        it('gives way to a pin\'s card', async () => {
+            await drawMap();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20));
+            await act(async () => { pinOf('Repair café').listeners.click(); });
+            expect(screen.queryByTestId('map-stack-list')).toBeNull();
+            expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+        });
+
+        it('drops a row the date chips hid, and closes when none are left', async () => {
+            await drawMap();
+            await tap(bubble([pinOf('Repair café'), pinOf('Spring working bee')], 20));
+            const list = screen.getByTestId('map-stack-list');
+            expect(rowTitles(list)).toEqual(['Repair café', 'Spring working bee']);
+            fireEvent.click(within(screen.getByTestId('event-window-chips')).getByRole('button', { name: 'Next 7 days' }));
+            await waitFor(() => expect(rowTitles(screen.getByTestId('map-stack-list'))).toEqual(['Repair café']));
+            expect(within(screen.getByTestId('map-stack-list')).getByRole('heading').textContent).toBe('1 at this spot');
+            fireEvent.click(within(screen.getByTestId('event-window-chips')).getByRole('button', { name: 'This weekend' }));
+            await waitFor(() => {
+                const open = screen.queryByTestId('map-stack-list');
+                if (open) expect(rowTitles(open)).toEqual(['Repair café']);
+            });
+        });
+
+        it('never lists an ended or a cancelled event: they have no pin, so no bubble holds them', async () => {
+            await drawMap();
+            const titles = eventPins().map(m => m.opts.title);
+            expect(titles).not.toContain('Event: Called off');
+            expect(titles).not.toContain('Event: Already over');
+            await tap(bubble([...eventPins(), eggsPin()], 20));
+            expect(rowTitles(screen.getByTestId('map-stack-list'))).toEqual(['Repair café', 'Spring working bee', 'A dozen eggs']);
+        });
+
+        it('lists an enterprise in the bubble too, last, and its row opens it', async () => {
+            vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [{ publicKey: 'ent-pk', name: 'The Co-op', callsign: 'coop', avatar: null, lat: -28.55, lng: 153.5, paused: false, status: 'active' }] } as any);
+            const onNavigate = vi.fn();
+            await drawMap(onNavigate);
+            const enterprisePin = await waitFor(() => {
+                const m = mockCreatedMarkers.find(x => x.opts?.className?.includes('custom-enterprise-pin'));
+                expect(m).toBeTruthy();
+                return m!;
+            });
+            await waitFor(() => expect(mockCreatedMarkers.filter(x => x.opts?.className?.includes('custom-enterprise-pin')).length).toBeGreaterThan(0));
+            const latest = [...mockCreatedMarkers].reverse().find(x => x.opts?.className?.includes('custom-enterprise-pin'))!;
+            await tap(bubble([latest, [...eventPins()].reverse().find(m => m.opts.title === 'Event: Repair café')!], 20));
+            const list = screen.getByTestId('map-stack-list');
+            expect(rowTitles(list)).toEqual(['Repair café', 'The Co-op']);
+            fireEvent.click(within(list).getByRole('button', { name: /The Co-op/ }));
+            expect(onNavigate).toHaveBeenCalledWith('enterprise', 'ent-pk');
+            expect(enterprisePin).toBeTruthy();
+        });
     });
 
     it('asks the node for events with types=, as old store apps do not', async () => {

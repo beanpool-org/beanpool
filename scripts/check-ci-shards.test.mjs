@@ -202,7 +202,7 @@ export function trainBranchProblems(ciText, otherWorkflowTexts = []) {
         const name = /^name: (.*)$/m.exec(text)?.[1] ?? 'a workflow';
         const on = triggersOf(text);
         for (const event of Object.keys(on)) {
-            if (!['workflow_dispatch', 'push', 'pull_request'].includes(event)) problems.push(`${name} starts on ${event}, which a push of a train/* branch may fire: check it and add it here`);
+            if (!['workflow_dispatch', 'push', 'pull_request', 'merge_group'].includes(event)) problems.push(`${name} starts on ${event}, which a push of a train/* branch may fire: check it and add it here`);
         }
         if (on.push) {
             const branches = on.push.find((l) => /^ {4}branches:/.test(l));
@@ -210,6 +210,57 @@ export function trainBranchProblems(ciText, otherWorkflowTexts = []) {
             if (branches ? !/^ {4}branches: \[main\]\s*$/.test(branches) : !tags) problems.push(`${name}: push is not limited to main, so a train/* branch would start it`);
         }
     }
+    return problems;
+}
+
+/** What the merge gate rests on in ci.yml: the queue starts the same whole matrix, and every PR gets the required check. */
+export function mergeQueueTriggerProblems(ciText) {
+    const problems = [];
+    const on = triggersOf(ciText);
+    const group = on.merge_group;
+    if (!group) problems.push('ci.yml has no merge_group trigger: the required check never reports for a queue entry, so nothing can merge');
+    else if (!group.some((l) => /^ {4}types: \[checks_requested\]\s*$/.test(l))) problems.push('merge_group is not limited to types: [checks_requested]');
+    if (group?.some((l) => /paths/.test(l))) problems.push('merge_group has a paths filter: a queue entry could go without the check');
+    if (!on.pull_request) problems.push('ci.yml has no pull_request trigger: a PR would have no check to enter the queue with');
+    else if (on.pull_request.some((l) => /paths|branches/.test(l))) problems.push('pull_request is filtered: a PR left without a run can never get the required check, and there is no --admin to merge it with');
+    if (!/^ {2}cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}\s*$/m.test(ciText)) problems.push('cancel-in-progress is not for pull requests alone: a queue entry\'s run must never be cancelled by another');
+    for (const job of ['shard', 'test-all']) {
+        if (/^ {4}if: (?!always\(\)\s*$)/m.test(jobText(ciText, job))) problems.push(`jobs.${job} has an \`if:\`: the whole matrix must run for a queue entry`);
+    }
+    if (/^ {8}if: .*event_name == 'pull_request'/m.test(ciText)) problems.push('a step runs only on a pull request: a queue entry would go without it');
+    if (!/^ {8}if: matrix\.compare_main && github\.event_name != 'push'\s*$/m.test(ciText)) problems.push('the step "Fetch origin/main" does not run on every event but a push: a queue entry would compare with nothing');
+    return problems;
+}
+
+/** Every way .github/rulesets/protect-main.json would not be the gate docs/merge-gate.md says it is. */
+export function rulesetProblems(ruleset) {
+    const problems = [];
+    const rule = (type) => ruleset.rules?.find((r) => r.type === type);
+    if (ruleset.enforcement !== 'active') problems.push(`enforcement is ${ruleset.enforcement}, not active`);
+    if (ruleset.bypass_actors?.length !== 0) problems.push('bypass_actors is not empty: --admin would skip the queue, and the required check with it');
+    if (!ruleset.conditions?.ref_name?.include?.includes('~DEFAULT_BRANCH')) problems.push('the ruleset does not target the default branch');
+    for (const type of ['deletion', 'non_fast_forward']) if (!rule(type)) problems.push(`no ${type} rule`);
+    const checks = rule('required_status_checks')?.parameters;
+    const check = checks?.required_status_checks?.find((c) => c.context === REQUIRED_CHECK);
+    if (!check) problems.push(`"${REQUIRED_CHECK}" is not required`);
+    else if (check.integration_id !== 15368) problems.push('the required check is not bound to GitHub Actions (integration 15368): anyone could post it as a commit status');
+    if (checks?.strict_required_status_checks_policy !== false) problems.push('strict status checks are on: each PR would have to be up to date with main before queuing, which is what the queue does for it');
+    // Every PR here is authored by the one code owner, who cannot approve their own: with no bypass, any approval required stops every merge.
+    const pr = rule('pull_request')?.parameters;
+    if (!pr) problems.push('no pull_request rule: main could be pushed to');
+    else {
+        if (pr.required_approving_review_count !== 0 || pr.require_code_owner_review !== false) problems.push('a review is required: every PR here is authored by the only code owner, so with no bypass nothing could merge');
+        if (pr.allowed_merge_methods?.join() !== 'squash') problems.push('merge methods other than squash are allowed');
+    }
+    const queue = rule('merge_queue')?.parameters;
+    if (!queue) return [...problems, 'no merge_queue rule'];
+    if (queue.merge_method !== 'SQUASH') problems.push(`the queue merges by ${queue.merge_method}, not SQUASH`);
+    if (queue.grouping_strategy !== 'ALLGREEN') problems.push(`the queue groups by ${queue.grouping_strategy}: under HEADGREEN a PR whose own commit failed can merge on a later PR's green`);
+    // One PR to a group is what makes tier-A and money PRs ride alone (scripts/merge-queue/board.sh) and a red take out only its own PR.
+    if (queue.max_entries_to_merge !== 1 || queue.min_entries_to_merge !== 1) problems.push('groups are not one PR each: a tier-A or money PR could share one');
+    if (!(queue.max_entries_to_build >= 5)) problems.push(`max_entries_to_build ${queue.max_entries_to_build}: under the 5 PRs a run Marty set`);
+    // A run's step limit is 55 min (ci.yml); under-timing it would take out a PR that was only waiting for a runner.
+    if (!(queue.check_response_timeout_minutes >= 90)) problems.push(`the queue waits ${queue.check_response_timeout_minutes} min for a run: shorter than a slow run behind a job queue`);
     return problems;
 }
 
@@ -303,6 +354,48 @@ test('a dispatch of a train branch runs the whole matrix and reaches no deploy, 
     assert.deepEqual(trainBranchProblems(CI, [other("  push:\n    tags: ['v[0-9]*']")]), [], 'tags alone: no branch starts it');
 });
 
+test('the queue starts the whole matrix, every PR gets the required check, and each edit that undoes that fails', () => {
+    assert.deepEqual(mergeQueueTriggerProblems(CI), []);
+    assert.deepEqual(trainBranchProblems(CI, otherWorkflows()), [], 'merge_group is fired by the queue alone, never by a push of a train/* branch');
+    const says = (text, want) => assert.match(mergeQueueTriggerProblems(text).join('\n'), want);
+    const GROUP = '  merge_group:\n    types: [checks_requested]\n';
+    says(CI.replace(GROUP, ''), /no merge_group trigger/);
+    says(CI.replace(GROUP, '  merge_group:\n'), /not limited to types/);
+    says(CI.replace(GROUP, `${GROUP}    paths: ['**']\n`), /merge_group has a paths filter/);
+    says(CI.replace('  pull_request:\n', "  pull_request:\n    paths:\n      - '!**/*.md'\n"), /pull_request is filtered/);
+    says(CI.replace("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", 'cancel-in-progress: true'), /cancel-in-progress is not for pull requests alone/);
+    says(CI.replace('    name: Test-All shard ${{ matrix.name }}\n', "    name: Test-All shard ${{ matrix.name }}\n    if: github.event_name == 'pull_request'\n"), /jobs\.shard has an `if:`/);
+    says(CI.replace("if: matrix.compare_main && github.event_name != 'push'", "if: matrix.compare_main && github.event_name == 'pull_request'"), /a step runs only on a pull request/);
+    assert.match(requiredCheckProblems(CI.replace('    if: always()\n', "    if: github.event_name == 'pull_request'\n")).join('\n'), /no `if: always\(\)`/);
+});
+
+test('the ruleset in the repository is the gate, and each edit that would undo the gate fails', () => {
+    const file = join(ROOT, '.github/rulesets/protect-main.json');
+    const ruleset = JSON.parse(readFileSync(file, 'utf8'));
+    assert.deepEqual(rulesetProblems(ruleset), []);
+    const edited = (fn) => { const r = structuredClone(ruleset); fn(r, (type) => r.rules.find((x) => x.type === type).parameters); return rulesetProblems(r).join('\n'); };
+    assert.match(edited((r) => { r.bypass_actors = [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }]; }), /bypass_actors is not empty/);
+    assert.match(edited((r) => { r.enforcement = 'evaluate'; }), /enforcement is evaluate/);
+    assert.match(edited((r, p) => { p('required_status_checks').required_status_checks = []; }), /is not required/);
+    assert.match(edited((r, p) => { delete p('required_status_checks').required_status_checks[0].integration_id; }), /not bound to GitHub Actions/);
+    assert.match(edited((r, p) => { p('required_status_checks').strict_required_status_checks_policy = true; }), /strict status checks are on/);
+    assert.match(edited((r, p) => { p('pull_request').required_approving_review_count = 1; }), /only code owner/);
+    assert.match(edited((r, p) => { p('pull_request').require_code_owner_review = true; }), /only code owner/);
+    assert.match(edited((r, p) => { p('pull_request').allowed_merge_methods = ['squash', 'merge']; }), /other than squash/);
+    assert.match(edited((r) => { r.rules = r.rules.filter((x) => x.type !== 'pull_request'); }), /no pull_request rule/);
+    assert.match(edited((r) => { r.rules = r.rules.filter((x) => x.type !== 'merge_queue'); }), /no merge_queue rule/);
+    assert.match(edited((r, p) => { p('merge_queue').merge_method = 'MERGE'; }), /not SQUASH/);
+    assert.match(edited((r, p) => { p('merge_queue').grouping_strategy = 'HEADGREEN'; }), /HEADGREEN/);
+    assert.match(edited((r, p) => { p('merge_queue').max_entries_to_merge = 2; }), /not one PR each/);
+    assert.match(edited((r, p) => { p('merge_queue').max_entries_to_build = 4; }), /under the 5 PRs a run/);
+    assert.match(edited((r, p) => { p('merge_queue').check_response_timeout_minutes = 60; }), /shorter than a slow run/);
+    // The file to go back to must stay the ruleset as it stood: the way back after a bad apply, and break-glass.
+    const before = JSON.parse(readFileSync(join(ROOT, '.github/rulesets/protect-main.before-merge-queue.json'), 'utf8'));
+    assert.equal(before.name, ruleset.name, 'the same ruleset');
+    assert.deepEqual(before.bypass_actors, [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }]);
+    assert.equal(before.rules.some((r) => r.type === 'merge_queue'), false);
+});
+
 test('the fetch step, run on a pull request\'s merge commit and on a train branch, gives the checks a merge base', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ci-fetch-'));
     const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t.invalid' };
@@ -375,6 +468,20 @@ test('the fetch step, run on a pull request\'s merge commit and on a train branc
         assert.equal(baselineBase({ cwd: onTrain, env: DISPATCH }).ref, mainAtMerge, 'the words baseline, on a train: main under the first merge');
         assert.equal(baselineBase({ cwd: checkout('no-fetch', train, 'refs/remotes/origin/train/bad'), env: DISPATCH }).ref, null, 'with no fetch it compares nothing');
         proves('clean', cleanTrain, 'refs/remotes/origin/train/clean', { status: 0, says: /✓ no shipped migration step changed/ });
+
+        // A merge queue entry: squash commits on main, one for the PR ahead and one for this PR, so no merge commit at all.
+        const queued = (name, ...branches) => {
+            git(src, 'checkout', '-q', '-b', name, mainAtMerge);
+            for (const b of branches) { git(src, 'merge', '-q', '--squash', b); git(src, 'commit', '-q', '--allow-empty', '-m', `squash ${b}`); }
+            const tip = git(src, 'rev-parse', 'HEAD');
+            git(src, 'checkout', '-q', 'main');
+            return tip;
+        };
+        const QUEUE_REF = (n) => `refs/remotes/origin/gh-readonly-queue/main/pr-${n}-abc`;
+        const onQueue = proves('queue', queued('gh-readonly-queue/main/pr-8-abc', 'adds-2', 'edits'), QUEUE_REF(8), FAILS);
+        assert.equal(baselineBase({ cwd: onQueue, env: { GITHUB_EVENT_NAME: 'merge_group' } }).ref, git(onQueue, 'rev-parse', 'HEAD^1'), 'the words baseline, on a queue entry: what it lands on, the entries ahead included');
+        assert.notEqual(git(onQueue, 'rev-parse', 'HEAD^1'), mainAtMerge);
+        proves('queue-clean', queued('gh-readonly-queue/main/pr-9-abc', 'adds-2', 'adds-3'), QUEUE_REF(9), { status: 0, says: /✓ no shipped migration step changed/ });
 
         // A re-run days later: main has moved past the depth, so the step goes on to the whole history.
         for (let i = 0; i < 60; i++) commit(`main ${i}`);

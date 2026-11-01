@@ -564,8 +564,7 @@ land(){ # PR [hold] — sync if needed, re-review the sync, wait for CI, merge o
   for n in $(seq 1 "$LANE_CI_TRIES"); do s=$(ci_state "$pr"); case "$s" in SUCCESS|FAILURE|ERROR|CANCELLED) break;; esac; sleep "$LANE_CI_SECS"; done
   [ "$s" = SUCCESS ] || { log "PR #$pr CI=${s:-none} — left open"; return; }
   if [ "$hold" = hold ] || [ "$LANE_MERGE" != 1 ]; then log "PR #$pr is green and clean — HELD for the maintainer"; return; fi
-  t=$(gh_try gh pr view "$pr" -R "$LANE_GH_REPO" --json title --jq .title)
-  gh pr merge "$pr" -R "$LANE_GH_REPO" --squash --admin --subject "$t (#$pr)" >/dev/null 2>&1
+  MERGE_QUEUE_REPO="$LANE_GH_REPO" bash "$LANE_REPO/scripts/merge-queue/board.sh" "$pr" >/dev/null 2>&1   # the merge queue; it waits for the landing (docs/merge-gate.md)
   # Verify the merge LANDED on the base branch, not the MERGED label.
   git -C "$LANE_REPO" fetch -q origin "$LANE_BASE"
   if [ -n "$(git -C "$LANE_REPO" log "origin/$LANE_BASE" -50 --format=%H --grep="(#$pr)" --fixed-strings | head -1)" ]; then

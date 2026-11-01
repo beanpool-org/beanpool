@@ -839,4 +839,13 @@ describe('alerts from one community, off and on (design R8, the DELETE half)', (
         await carryAlertsOff(BYRON, `${MULLUM}/`);
         expect(await communitiesWithAlertsOff()).toEqual([MULLUM]);
     });
+
+    it('a follow names the old address in one spelling, however the phone saved it: the choice still moves, and the token never goes to the new address', async () => {
+        // A typed address keeps its capitals (node-url.ts normalizeNodeUrl); address-follow.ts offers plainOriginOf's lower case.
+        const typed = 'https://Byron.example:443';
+        await markAlertsOff(typed);
+        await carryAlertsOff('https://byron.example', MULLUM);
+        expect(await communitiesWithAlertsOff()).toEqual([MULLUM]);
+        expect(await registerPushTokenWithCommunity(kim, 'ExponentPushToken[kim]', 'android', 1000, AsyncStorage, MULLUM)).toBe(false);
+    });
 });

@@ -13,6 +13,7 @@
  * registration machinery. Writes are ordered against each other here; nothing else writes that key.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { plainOriginOf } from './node-url';
 import { communityAddress } from './push-pins';
 import { PUSH_ALERTS_OFF_STORE_KEY } from './storage-keys';
 
@@ -78,12 +79,15 @@ export function markAlertsOn(community: string, storage: Storage = AsyncStorage)
 
 /**
  * A community the phone followed to its new address (address-follow.ts) is the same community: alerts the member turned
- * off there stay off. Never throws.
+ * off there stay off. Compared by origin: the list keeps an address as the phone saved it, capitals and a default port
+ * included (node-url.ts `normalizeNodeUrl`), and a follow names it in one spelling (`plainOriginOf`). Never throws.
  */
 export async function carryAlertsOff(from: string, to: string, storage: Storage = AsyncStorage): Promise<void> {
     const moved = communityAddress(to);
+    const origin = plainOriginOf(from);
+    const isFrom = (c: string) => origin !== null && plainOriginOf(c) === origin;
     try {
-        await change(storage, (off) => (moved && off.includes(from) ? [...new Set(off.map((c) => (c === from ? moved : c)))] : off));
+        await change(storage, (off) => (moved && off.some(isFrom) ? [...new Set(off.map((c) => (isFrom(c) ? moved : c)))] : off));
     } catch (e) {
         console.warn('[Push] Could not carry the alerts-off choice to the community\'s new address', e);
     }

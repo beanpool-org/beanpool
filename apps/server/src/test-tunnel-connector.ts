@@ -1206,7 +1206,8 @@ async function main(): Promise<void> {
             assert(await until(() => /stopped|exit code|has stopped/.test(getTunnelStatus().others?.[0]?.reason || ''), 3_000), `Settings sees why, on that name (${JSON.stringify(getTunnelStatus().others)})`);
             assert(tunnelLogs().some((l) => /crash-old\.beanpool\.org: cloudflared stopped/.test(l.message)), 'and the log names it');
             fake.crashFor(oldT, false);
-            assert(await until(() => !!fakeOn(oldT), 5_000), 'fixed: it comes back after its wait');
+            // Connected, not merely started: a child started before the fix records itself, then exits on the crash file.
+            assert(await until(() => getTunnelStatus().others?.[0]?.state === 'connected', 10_000), `fixed: it comes back after its wait (${JSON.stringify(getTunnelStatus().others)})`);
             // And the other way round: the stored name crashes alone.
             const oldNow = fakeOn(oldT)!.pid;
             fake.crashFor(newT, true);

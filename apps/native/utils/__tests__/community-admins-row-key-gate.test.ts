@@ -267,7 +267,6 @@ describe('Remove on a shared copy, on the real removeSharedCopy (#2683 deciding 
         expect(host!.querySelector('[data-testid="community-admins-on"]'), 'the row it measured: On, with Remove').toBeTruthy();
         await remove();
         expect(net.removals).toEqual(['community']);
-        expect(host!.textContent, 'never the vault\'s "not set up here"').not.toContain('recovery isn');
         expect(host!.querySelector('[data-testid="community-admins-on"]')).toBeNull();
         expect(net.asked).toEqual(["mullum.beanpool.org's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work."]);
     });

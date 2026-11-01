@@ -25,8 +25,8 @@
  * community that no longer offers it.
  *
  * And the shared placement (vault rethink VR4, §4.3): the row offered, on, and "Not finished"; the list with half a copy
- * at the vault, half a pair, a half no community on this phone owns, and one it can't place yet; and Restore your account's four rows
- * (components/welcome/RestoreMenu.tsx), in the screen's colours.
+ * at the vault, half a pair, a half no community on this phone owns, one it can't place yet, and halves with no pair at the
+ * community they are for; and Restore your account's four rows (components/welcome/RestoreMenu.tsx), in the screen's colours.
  *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
  * 44dp tall (the panel's own floor); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
@@ -252,6 +252,18 @@ const WAYS = {
         communities: [
             { url: 'https://bellingen.beanpool.org', name: 'Bellingen', status: null },
             { url: GLOBAL, name: 'Global community', vaultRef: 'label-1', status: { providers: [], generation: 0 } },
+        ],
+        pending: [],
+    },
+    // Halves the vault keeps for a community with no pair there: one that keeps none, and one that keeps a copy it can't open.
+    halfalone: {
+        vault: { kind: 'listed', copies: [], communityCopies: [
+            { ref: 'label-1', copy: 'digest-1', since: '2026-10-05', lastReleasedAt: null },
+            { ref: 'label-2', copy: 'digest-2', since: '2026-10-06', lastReleasedAt: null },
+        ] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', vaultRef: 'label-1', status: { providers: [], generation: 0 } },
+            { url: 'https://bellingen.beanpool.org', name: 'Bellingen', vaultRef: 'label-2', status: { providers: [], generation: 0, adminsCopyUnopenable: { since: '2026-10-06T04:05:06.000Z', reason: 'recovery_seal_key_missing' } } },
         ],
         pending: [],
     },
@@ -502,6 +514,7 @@ try {
             ['state=cantopen', "Ways back, a copy for your community's admins its server can't open"],
             ['state=shared', 'Ways back, half at the key vault and half at the community, half a pair, and a stray half'],
             ['state=notplaced', "Ways back, a half this phone can't place yet"],
+            ['state=halfalone', "Ways back, vault halves with no pair: one community keeps none, one can't open what it keeps"],
         ];
         for (const [query, label] of WAYS_CASES) {
             await open(`place=ways&${query}&scheme=${scheme}`);

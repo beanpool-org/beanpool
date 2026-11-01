@@ -221,7 +221,7 @@ skip_check() {
 }
 
 # A check that needs another to finish first waits here; a run without that other check (a CI shard) does not wait.
-# On CI, browser shards already install Chromium in an earlier step, so the browser checks don't need to wait for website_contrast.
+# On CI, browser shards already install Chromium in an earlier step, so the browser checks don't need to wait for contrast.
 wait_for_check() {
   [ -z "${CI:-}" ] || return 0
   selected "$1" || return 0
@@ -452,13 +452,15 @@ run_website_colours() {
   node --test scripts/website-colours.test.mjs
 }
 run_check "website_colours" run_website_colours
-run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs'
+run_check "website_contrast_light" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs --theme=light'
+run_check "website_contrast_dark"  bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs --theme=dark'
 # beanpool.org/status, the public status line of our servers (mothership slice A8): drawn from a stubbed status.json at
 # 320 px, light and dark, each state in words and its token colour, nothing wider than the screen; a late, missing or
-# unknown status said in words; nothing from the status drawn as markup. Its Chromium is the one website_contrast
-# installs, so it starts once that has finished. Seconds.
+# unknown status said in words; nothing from the status drawn as markup. Off CI its Chromium is the one
+# website_contrast_light installs, so it starts once that has finished (on CI Chromium is installed upfront and it does
+# not wait). Seconds.
 run_website_status() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_light
   node --test scripts/website-status.test.mjs
 }
 run_check "website_status" run_website_status
@@ -467,19 +469,21 @@ run_check "website_status" run_website_status
 run_check "website_global_link" node --test scripts/website-global-link.test.mjs
 # beanpool.org/android, the direct APK download (front doors S5): one release from apps/website-src/android-apk.json on
 # every language's page, the signing key the site already names for App Links, no translation made stale by a release,
-# the home page's and /global's lines to it; drawn at 320 px with text at 130 %, light and dark. Its Chromium is the one
-# website_contrast installs, so it starts once that has finished. Seconds.
+# the home page's and /global's lines to it; drawn at 320 px with text at 130 %, light and dark. Off CI its Chromium is
+# the one website_contrast_light installs, so it starts once that has finished (on CI Chromium is installed upfront and
+# it does not wait). Seconds.
 run_website_android() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_light
   node --test scripts/website-android.test.mjs
 }
 run_check "website_android" run_website_android
 # beanpool.org/start, "Start a community" on its own page (Marty, 29 Oct 2026): in all 25 languages, the sections in order,
 # the home page a teaser with a button and no install code (and still id="run-a-node" for the released apps' and
 # socialism.org's link), no page linking the old anchor, the apps' address a page in the tree; drawn at 320 px with text at
-# 130 %, light and dark. Its Chromium is the one website_contrast installs, so it starts once that has finished. Seconds.
+# 130 %, light and dark. Off CI its Chromium is the one website_contrast_light installs, so it starts once that has
+# finished (on CI Chromium is installed upfront and it does not wait). Seconds.
 run_website_start() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_light
   node --test scripts/website-start.test.mjs
 }
 run_check "website_start" run_website_start
@@ -489,7 +493,7 @@ run_check "website_links" node --test scripts/website-links.test.mjs scripts/web
 
 # website-s6: every page in the 24 languages, hreflang, footer row, read in banner, RTL, check
 run_website_lang() {
-  wait_for_check website_contrast
+  wait_for_check website_contrast_dark
   node --test scripts/website-lang.test.mjs
 }
 run_check "website_lang" run_website_lang

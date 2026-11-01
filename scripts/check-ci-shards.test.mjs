@@ -114,7 +114,7 @@ export function shardProblems(ciText, testAllText) {
         const want = Array.from({ length: k || 0 }, (_, i) => `${i + 1}/${k}`).sort().join(' ');
         if (!k || got !== want) problems.push(`the server shards are ${got}, not 1/K to K/K (K = the number of server shards in the matrix)`);
     }
-    // A check that waits for another (website_status for website_contrast's Chromium) is in the same shard as it.
+    // A check that waits for another (website_status for website_contrast_light's Chromium) is in the same shard as it.
     for (const [name, dep] of Object.entries(waits(testAllText))) {
         const a = shards.find((s) => s.checks.includes(name))?.name;
         const b = shards.find((s) => s.checks.includes(dep))?.name;
@@ -423,7 +423,7 @@ test('each edit the check exists to catch fails it', () => {
     // A waiting check moved away from the check it waits for.
     const moved = CI.replace(' website_status ', ' ').replace(/(name: checks, checks: ")/, '$1website_status ');
     assert.notEqual(moved, CI);
-    assert.match(shardProblems(moved, TEST_ALL).join('\n'), /website_status waits for website_contrast/);
+    assert.match(shardProblems(moved, TEST_ALL).join('\n'), /website_status waits for website_contrast_light/);
     // The aggregate renamed, a second job given the name, or the aggregate no longer always()/gating.
     assert.match(requiredCheckProblems(CI.replace(`    name: ${REQUIRED_CHECK}\n`, '    name: Test-All\n')).join('\n'), /jobs.test-all is not named/);
     assert.match(requiredCheckProblems(CI.replace('Test-All shard ${{ matrix.name }}', REQUIRED_CHECK)).join('\n'), /2 jobs or steps are named/);

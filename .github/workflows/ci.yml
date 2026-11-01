@@ -63,7 +63,8 @@ jobs:
           - { name: vitest-pwa-2, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=2/2" }
           - { name: vitest-rest, checks: test, test_slice: "--filter=!beanpool-pillar --filter=!@beanpool/pwa", expect: true, compare_main: true }
           - { name: web-pwa, checks: "pwa_dark_classes pwa_wide_pages native_phone_width", browser: true }
-          - { name: web-pages, checks: "website_colours website_contrast website_status website_android website_start website_lang", browser: true }
+          - { name: web-pages-1, checks: "website_colours website_contrast_light website_status website_android website_start", browser: true }
+          - { name: web-pages-2, checks: "website_contrast_dark website_lang", browser: true }
           - { name: checks, checks: "build lint typecheck native_dark_contrast suite_registration tool_budgets deploy_preserve deploy_no_fleet_secrets deploy_health deploy_package fail_summary merge_gate undeclared_imports balance_writes migration_steps directory_register workflows no_google_fonts website_global_link website_links setup_backup token_scripts reddit_inbox words secrets_guard", compare_main: true }
 
     steps:

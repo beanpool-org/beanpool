@@ -12,7 +12,7 @@
 // Not judged: anything aria-hidden (decoration), and Leaflet's own popup close button.
 // No network: the CDN scripts come from node_modules or a stub, map tiles are blank. About a minute.
 //
-//   node scripts/website-contrast.mjs        (WEBSITE_ROOT=<dir> judges another copy of the site; needs: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium)
+//   node scripts/website-contrast.mjs [--theme=light|dark]  (WEBSITE_ROOT=<dir> judges another copy of the site; needs: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium)
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -26,6 +26,19 @@ const SITE = path.resolve(process.env.WEBSITE_ROOT ?? path.join(ROOT, 'apps/webs
 const require = createRequire(path.join(ROOT, 'apps/pwa/package.json'));
 const { chromium } = require('playwright');
 const LEAFLET = path.dirname(require.resolve('leaflet/dist/leaflet.js'));
+
+let themes = ['light', 'dark'];
+const themeArg = process.argv.find((a) => a.startsWith('--theme='))?.split('=')[1]
+    ?? (process.argv.indexOf('--theme') !== -1 ? process.argv[process.argv.indexOf('--theme') + 1] : null)
+    ?? process.env.CONTRAST_THEME
+    ?? process.env.THEME;
+if (themeArg) {
+    if (!['light', 'dark'].includes(themeArg)) {
+        console.error(`Unknown theme: ${themeArg}. Must be 'light' or 'dark'.`);
+        process.exit(1);
+    }
+    themes = [themeArg];
+}
 
 const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.webp': 'image/webp', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg' };
 function serve(root) {
@@ -175,7 +188,7 @@ try {
     await first.goto(`${base}/index.html`);
     const strokes = await doodleStrokes(first);
     await first.close();
-    for (const theme of ['light', 'dark']) {
+    for (const theme of themes) {
         let canaryCaught = false;
         for (const pg of pages()) for (const width of [320, 1280]) {
             const ctx = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: theme, reducedMotion: 'reduce' });
@@ -214,7 +227,7 @@ try {
     await browser.close();
     server.close();
 }
-console.log(`website contrast: ${pages().length} pages x 2 widths x 2 themes, ${judged} elements with words judged`);
+console.log(`website contrast: ${pages().length} pages x 2 widths x ${themes.length} theme${themes.length > 1 ? 's' : ''}, ${judged} elements with words judged`);
 if (failures.length) {
     // One line per colour pair, with how often and where it was first seen.
     const pairs = new Map();
@@ -223,4 +236,4 @@ if (failures.length) {
     for (const [k, v] of pairs) console.log(`  ${k}  x${v.n}  e.g. ${v.first}`);
     process.exit(1);
 }
-console.log('PASS: every word on the website reads at 4.5:1 or better (3:1 large), in light and in dark');
+console.log(`PASS: every word on the website reads at 4.5:1 or better (3:1 large), in ${themes.join(' and ')}`);

@@ -747,7 +747,7 @@ function ChatScreen({ id }: { id: string }) {
 
     // A request holds every send until it is decided, or the node has answered; the opener's, once their line is in, until
     // the other accepts. Not an edit of that line, which the node and the web allow (PR #2540 review 4394827275).
-    const requestLine = requestMode === 'to-me' ? requestLineIn(messages, identity?.publicKey) : null;
+    const requestLine = requestMode === 'to-me' ? requestLineIn(messages, identity?.publicKey, heldRequest?.at) : null;
     // With no line here, only the node's word says none is left: this phone may just not have it yet.
     const canReportRequest = !!requestLine || nodeAnswered;
     const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);

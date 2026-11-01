@@ -3,16 +3,26 @@
  * is re-derived here from the primitives, and one signature is frozen: a change that stops it verifying has broken every
  * line already signed, and a report of any of them. Fix the change, never the vector.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
-    DM_LINE_SIG_TAG, DM_REPORT_WORDS_MAX, dmLineDisclosureFor, dmLineDisclosureOf, dmLineSigDigest, dmLineSigInMetadata, dmLineSigVerifies,
+    DM_LINE_SIG_IDS_MAX, DM_LINE_SIG_TAG, DM_REPORT_WORDS_MAX, dmLineDisclosureFor, dmLineDisclosureOf, dmLineSigDigest, dmLineSigInMetadata, dmLineSigVerifies,
     dmLineSignedBy, signDmLine, type DmLineSigBinding,
 } from '../dm-line-report.js';
 import { requestReportNotSentWords, requestReportRefused } from '../dm-requests.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
+
+// ed25519 is frozen, so the verifies are counted here: every other use of it passes through unchanged.
+const verifies = vi.hoisted(() => ({ n: 0 }));
+vi.mock('@noble/curves/ed25519.js', async (actual) => {
+    const real = await actual<typeof import('@noble/curves/ed25519.js')>();
+    return {
+        ...real,
+        ed25519: { ...real.ed25519, verify: (...args: Parameters<typeof real.ed25519.verify>) => { verifies.n++; return real.ed25519.verify(...args); } },
+    };
+});
 
 const seed = (name: string) => sha256(utf8ToBytes(`beanpool dm-line vector: ${name}`));
 const pub = (s: Uint8Array) => bytesToHex(ed25519.getPublicKey(s));
@@ -88,6 +98,33 @@ describe('who signed it', () => {
     it('takes an older conversation id the line\'s metadata names, as sealing does', () => {
         const moved = { ...to, conversationId: 'the-one-it-moved-to', metadata: JSON.stringify({ originalConversationId: binding.conversationId }) };
         expect(dmLineSignedBy(line, s, moved, [ana.pub])).toEqual({ conversationId: binding.conversationId, signer: ana.pub });
+    });
+
+    // The deciding review of #2705: the sender writes this list, and each id is a verify on the node's main thread.
+    describe('a line that names too many conversation ids', () => {
+        const listing = (...ids: string[]) => JSON.stringify({ originalConversationIds: ids });
+        const many = Array.from({ length: 11_000 }, (_, i) => `id-${i}`);
+        beforeEach(() => { verifies.n = 0; });
+
+        it('costs the cap\'s verifies however many it lists, for each signer and recipient', () => {
+            const nowhere = { ...to, conversationId: 'stored-here', metadata: listing(...many) };
+            expect(dmLineSignedBy(line, s, nowhere, [ana.pub])).toBeNull();
+            expect(verifies.n).toBe(DM_LINE_SIG_IDS_MAX);
+            verifies.n = 0;
+            expect(dmLineSignedBy(line, s, { ...nowhere, recipients: [ben.pub, cat.pub] }, [ana.pub, cat.pub])).toBeNull();
+            expect(verifies.n).toBe(DM_LINE_SIG_IDS_MAX * 2 * 2);
+        });
+
+        it('still verifies under the line\'s own id, the repair\'s list beside it: one verify', () => {
+            expect(dmLineSignedBy(line, s, { ...to, metadata: listing(...many) }, [ana.pub])?.signer).toBe(ana.pub);
+            expect(verifies.n).toBe(1);
+        });
+
+        it('takes the one id a fold names, and an id only past the cap reads as not verified', () => {
+            const atThe = (ids: string[]) => dmLineSignedBy(line, s, { ...to, conversationId: 'stored-here', metadata: listing(...ids) }, [ana.pub]);
+            expect(atThe([binding.conversationId, 'x'])?.conversationId).toBe(binding.conversationId);
+            expect(atThe(['x', binding.conversationId])).toBeNull();
+        });
     });
 });
 

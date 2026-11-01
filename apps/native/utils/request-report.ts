@@ -23,12 +23,16 @@ export class ReportedNotBlockedError extends Error {
 }
 
 /**
- * The request's line in a chat's messages: the other person's newest, or null when none is left to hand over (a tombstone is
- * no line: the node takes no report of it). By `rawTimestamp`, the node's time: a row's `timestamp` is the clock face the
- * bubble shows, which doesn't sort.
+ * The request's line in a chat's messages: the other person's newest since `requestAt` (the request's `at`), or null when
+ * none is left to hand over (a tombstone is no line: the node takes no report of it). Never one from before: a request lapses
+ * after 30 days and their next line is a new one, so the chat can hold a line of the last, which isn't what the member is
+ * reporting. The web's requestPreviewLines stops at the same place, and a line with no time, or no `at`, counts on neither.
+ * By `rawTimestamp`, the node's time: a row's `timestamp` is the clock face the bubble shows, which doesn't sort.
  */
-export function requestLineIn<T extends { senderId?: string; type?: string; rawTimestamp?: string; metadata?: any }>(messages: readonly T[], myPubkey: string | null | undefined): T | null {
-    const theirs = messages.filter((m) => !!m.senderId && m.senderId !== myPubkey && m.senderId !== 'SYSTEM' && m.type !== 'system' && !isTombstone(m));
+export function requestLineIn<T extends { senderId?: string; type?: string; rawTimestamp?: string; metadata?: any }>(messages: readonly T[], myPubkey: string | null | undefined, requestAt: string | null | undefined): T | null {
+    const since = typeof requestAt === 'string' ? Date.parse(requestAt) : NaN;
+    const theirs = messages.filter((m) => !!m.senderId && m.senderId !== myPubkey && m.senderId !== 'SYSTEM' && m.type !== 'system' && !isTombstone(m)
+        && Date.parse(String(m.rawTimestamp ?? '')) >= since);
     return theirs.reduce<T | null>((newest, m) => (!newest || String(m.rawTimestamp ?? '') >= String(newest.rawTimestamp ?? '') ? m : newest), null);
 }
 

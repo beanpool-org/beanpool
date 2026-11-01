@@ -21,6 +21,8 @@
  *   8. a standby copy carries the row exactly, and a server that took over verifies it the same
  *   9. a request whose line its sender deleted: it still waits, the node takes no report of the tombstone an app is left with,
  *      and the block Report sends in its place clears the request
+ *  10. a line that lists too many conversation ids: a report and a moderator's read cost a fixed few verifies, counted, however
+ *      long its sender's list; its own id and a fold's one id still verify, and an id past the cap doesn't
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-dm-line-report node scripts/run-server-suites.mjs
  */
@@ -125,6 +127,24 @@ async function send(from: Id, line: Line): Promise<Res> {
 const disclosureOf = (l: Line, words = l.text) => dmLineDisclosureFor({ ciphertext: l.ciphertext, nonce: l.nonce, conversationId: l.conversationId, metadata: l.metadata }, words);
 const report = (who: Id | null, l: Line, extra: Record<string, unknown> = {}) =>
     call('POST', who, '/api/messages/report', { messageId: l.id, reason: 'Harassment', disclosure: disclosureOf(l), ...extra });
+/**
+ * What `run` returned, and how many signature checks it made on `sig`. ed25519 is frozen, so its verify can't be wrapped, but
+ * dmLineSigVerifies decodes the signature once for each try, in this process. The counts asserted are exact, so a change to
+ * that decoding fails here rather than counting nothing.
+ */
+async function verifiesDuring<T>(sig: string, run: () => Promise<T>): Promise<{ result: T; verifies: number }> {
+    const realFrom = Buffer.from;
+    let verifies = 0;
+    (Buffer as any).from = function (...args: any[]) {
+        if (args[0] === sig && args[1] === 'base64') verifies++;
+        return (realFrom as any).apply(Buffer, args);
+    };
+    try {
+        return { result: await run(), verifies };
+    } finally {
+        Buffer.from = realFrom;
+    }
+}
 const reportRows = (reporter: string, messageId: string) =>
     (db.prepare('SELECT COUNT(*) AS c FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(reporter, messageId) as { c: number }).c;
 const allReports = () => (db.prepare('SELECT COUNT(*) AS c FROM abuse_reports').get() as { c: number }).c;
@@ -349,6 +369,51 @@ async function main(): Promise<void> {
     const blocked = await call('POST', ann, '/api/blocks', { targetPubkey: dee.pk });
     const afterBlock = await waiting();
     assert(blocked.status === 200 && afterBlock === 0, `the block Report sends in its place clears the request (${afterDelete} to ${afterBlock})`);
+
+    // The deciding review of #2705: 11,000 ids held a node for 20.6 s, past the duplicate and hourly limits. Gus's own chat, as
+    // the limits on reports by now are Ann's and Fay's.
+    console.log('── 10. a line that lists too many conversation ids ──');
+    const off = await call('POST', null, '/api/local/admin/community-shape', { changes: { dmRequests: false } }, ownerSessionHeaders(owner.pk));
+    assert(off.status === 200, `requests off again, as a request holds its sender's second line (${show(off)})`);
+    const gus = member('Gus');
+    const gusConv = await open(bo, gus);
+    const manyIds = Array.from({ length: 300 }, (_, i) => `listed-${i}`);
+    const withIds = (l: Line, ids: Record<string, unknown>): Line => ({ ...l, metadata: JSON.stringify({ ...JSON.parse(l.metadata!), ...ids }) });
+    // A real signature made for another message id, so nothing verifies and the whole list would be walked, as the review's was.
+    const walker = withIds(sealed(bo, gus, gusConv, 'a list to walk', { signedId: newDmMessageId() }), { originalConversationIds: manyIds });
+    await send(bo, walker);
+    const stored = (db.prepare('SELECT metadata FROM messages WHERE id = ?').get(walker.id) as { metadata: string }).metadata;
+    assert(JSON.parse(stored).originalConversationIds?.length === manyIds.length, 'the sender\'s list is stored as sent, the case the cap is for');
+    const sig = JSON.parse(walker.metadata!).lineSig.sig as string;
+    // The handed copy's check, then the stored copy's, at two ids each; a moderator's read checks once.
+    const filed = await verifiesDuring(sig, () => report(gus, walker));
+    assert(filed.result.status === 200 && filed.verifies === 4, `a report of it costs 4 verifies, not one for each id listed (${filed.verifies}, ${show(filed.result)})`);
+    const again10 = await verifiesDuring(sig, () => report(gus, walker));
+    assert(again10.result.body?.duplicate === true && again10.verifies === 4, `and the same again as a repeat (${again10.verifies})`);
+    const walked = await verifiesDuring(sig, () => viewOf(filed.result.body?.report?.id));
+    assert(walked.result.body?.message?.signature === 'unverified' && walked.verifies === 2, `a moderator opening it costs 2, through the same cap (${walked.verifies}, ${walked.result.body?.message?.signature})`);
+
+    const ownId = withIds(sealed(bo, gus, gusConv, 'signed here, with a list beside it'), { originalConversationIds: manyIds });
+    await send(bo, ownId);
+    const ownIdSig = JSON.parse(ownId.metadata!).lineSig.sig as string;
+    const ownFiled = await verifiesDuring(ownIdSig, () => report(gus, ownId));
+    const ownView = await verifiesDuring(ownIdSig, () => viewOf(ownFiled.result.body?.report?.id));
+    assert(ownFiled.verifies === 1 && ownView.result.body?.message?.signature === 'verified' && ownView.verifies === 1,
+        `a line signed under its own id verifies at the first try, whatever is listed beside it (${ownFiled.verifies}, ${ownView.verifies}, ${ownView.result.body?.message?.signature})`);
+
+    const oldThread = crypto.randomUUID();
+    const signedInOld = (text: string) => ({ ...sealed(bo, gus, oldThread, text), conversationId: gusConv });
+    const folded = withIds(signedInOld('signed in the thread it was folded from'), { originalConversationId: oldThread });
+    await send(bo, folded);
+    const foldedRep = await report(gus, folded);
+    v = await viewOf(foldedRep.body?.report?.id);
+    assert(v.body?.message?.signature === 'verified', `the one id a fold names is within the cap (${show(v)})`);
+
+    const pastCap = withIds(signedInOld('signed under an id past the cap'), { originalConversationIds: ['listed-first', oldThread] });
+    await send(bo, pastCap);
+    const pastRep = await report(gus, pastCap);
+    v = await viewOf(pastRep.body?.report?.id);
+    assert(pastRep.status === 200 && v.body?.message?.signature === 'unverified', `a signature only an id past the cap would verify reads as not verified (${show(v)})`);
 
     console.log(`\n${passed}/${run} passed`);
     try { await p2p.stop(); } catch { /* stopping only */ }

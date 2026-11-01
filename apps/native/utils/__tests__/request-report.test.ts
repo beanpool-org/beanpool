@@ -10,21 +10,23 @@ import { ReportedNotBlockedError, reportRequestAndBlock, requestLineIn, wordsOfL
 
 const ME = 'me-key';
 const line = (id: string, senderId: string, rawTimestamp: string, o: object = {}) => ({ id, senderId, rawTimestamp, timestamp: 'shown', ...o });
+/** The request's `at`: the lines below are at or after it, unless a case says otherwise. */
+const AT = '2026-11-01T09:00:00.000Z';
 
 describe('requestLineIn', () => {
     it('is the other person\'s newest line by the node\'s time, in any order, whatever the bubble\'s clock face says', () => {
         const older = { ...line('a', 'bo', '2026-11-01T09:00:00.000Z'), timestamp: '9:00 pm' };
         const newer = { ...line('b', 'bo', '2026-11-01T14:00:00.000Z'), timestamp: '2:00 pm' };
-        expect(requestLineIn([older, newer], ME)?.id).toBe('b');
-        expect(requestLineIn([newer, older], ME)?.id).toBe('b');
+        expect(requestLineIn([older, newer], ME, AT)?.id).toBe('b');
+        expect(requestLineIn([newer, older], ME, AT)?.id).toBe('b');
     });
 
     it('is never my own line or the node\'s notice, and null with no line of theirs', () => {
         const mine = line('m', ME, '2026-11-01T15:00:00.000Z');
         const notice = line('n', 'SYSTEM', '2026-11-01T16:00:00.000Z');
         const system = line('s', 'bo', '2026-11-01T17:00:00.000Z', { type: 'system' });
-        expect(requestLineIn([line('b', 'bo', '2026-11-01T14:00:00.000Z'), mine, notice, system], ME)?.id).toBe('b');
-        expect(requestLineIn([mine, notice], ME)).toBeNull();
+        expect(requestLineIn([line('b', 'bo', '2026-11-01T14:00:00.000Z'), mine, notice, system], ME, AT)?.id).toBe('b');
+        expect(requestLineIn([mine, notice], ME, AT)).toBeNull();
     });
 
     // The deciding review of #2705: a delete leaves the request waiting, and the node refuses a tombstone (400 disclosure_form).
@@ -32,8 +34,25 @@ describe('requestLineIn', () => {
         const older = line('a', 'bo', '2026-11-01T09:00:00.000Z');
         const deleted = line('b', 'bo', '2026-11-01T14:00:00.000Z', { type: 'removed' });
         const removed = line('c', 'bo', '2026-11-01T15:00:00.000Z', { metadata: { removed: true } });
-        expect(requestLineIn([older, deleted, removed], ME)?.id).toBe('a');
-        expect(requestLineIn([deleted], ME)).toBeNull();
+        expect(requestLineIn([older, deleted, removed], ME, AT)?.id).toBe('a');
+        expect(requestLineIn([deleted], ME, AT)).toBeNull();
+    });
+
+    // The deciding review of #2705: a request lapses after 30 days, and the opener's next line is a new request. If they delete
+    // that, the line of the lapsed one is no line of this request: the web says no report went, and so does the phone.
+    it('stops at the request\'s `at`: a line from before it is never handed over, as on the web', () => {
+        const lapsed = line('old', 'bo', '2026-10-01T09:00:00.000Z');
+        const deleted = line('new', 'bo', AT, { type: 'removed' });
+        expect(requestLineIn([lapsed, deleted], ME, AT)).toBeNull();
+        expect(requestLineIn([lapsed, line('next', 'bo', AT)], ME, AT)?.id).toBe('next');
+    });
+
+    it('counts a line at the request\'s `at`, and none with no `at` or no time, as the web and core do', () => {
+        const atIt = line('a', 'bo', AT);
+        expect(requestLineIn([atIt], ME, AT)?.id).toBe('a');
+        expect(requestLineIn([atIt], ME, null)).toBeNull();
+        expect(requestLineIn([atIt], ME, undefined)).toBeNull();
+        expect(requestLineIn([{ id: 'x', senderId: 'bo' }], ME, AT)).toBeNull();
     });
 });
 

@@ -297,7 +297,7 @@ describe('MessageRequestsPane on phone', () => {
     // Review 4399651364: blockUser answers false rather than throwing (no account on the phone, the list not written, the
     // sender already on it), and a card that ignores the answer shows a block that didn't happen as one that did.
     const reportFrom = async (onChanged: () => void) => {
-        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', metadata: {} }]);
+        dbMocks.getMessages.mockResolvedValueOnce([{ id: 'line-1', senderId: 'bob-pubkey', text: 'Buy my crypto', rawTimestamp: '2026-10-27T00:00:00Z', metadata: {} }]);
         renderCard({ onChanged });
         await screen.findByText('Buy my crypto');
         fireEvent.click(screen.getByTestId('request-report'));

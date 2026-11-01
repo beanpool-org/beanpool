@@ -263,8 +263,23 @@ export function decryptDmFormat2(ciphertext: string, nonce: string, ctx: DmKeyCo
 }
 
 /**
+ * The most conversation ids a line is tried under, the one it is stored in among them. Its sender writes its metadata and
+ * only the length is limited (64 KB, about 11,000 short ids), and each id costs the reader's device a key derivation and a
+ * decrypt per format, on its one thread: 0.7 ms an id on a Mac (measured), so one such line held a chat for 7.5 s, and for
+ * far longer on an old phone.
+ *
+ * 64, from what the node writes. Each fold names one id, `originalConversationId`. The one list, `originalConversationIds`,
+ * is repairConsolidatedMessagesMetadata's: one id for each per-post thread a pair had, and those ended before the first
+ * public release (1 July 2026), so no pair's list grows. Nothing in the code limits how long one is, so this is a judgement:
+ * far past what two people had, at 51 ms for a line that names too many. A line sealed under an id past the cap reads as any
+ * line that doesn't open.
+ */
+export const DM_CONVERSATION_IDS_MAX = 64;
+
+/**
  * The conversation ids a line may have been written under: the one it is stored in, then any older one its metadata
- * names (a line the node moved when two threads were folded into one, or out of a conversation kept while blocked).
+ * names (a line the node moved when two threads were folded into one, or out of a conversation kept while blocked), at
+ * most DM_CONVERSATION_IDS_MAX.
  */
 export function dmConversationIdsToTry(conversationId: string, metadata: unknown): string[] {
     const ids = [conversationId];
@@ -275,7 +290,7 @@ export function dmConversationIdsToTry(conversationId: string, metadata: unknown
             for (const id of meta.originalConversationIds) if (typeof id === 'string' && id) ids.push(id);
         }
     }
-    return [...new Set(ids)];
+    return [...new Set(ids)].slice(0, DM_CONVERSATION_IDS_MAX);
 }
 
 /** One line to open: where the node shows it, and what it says the line is. */

@@ -42,7 +42,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                 const last = msgs[msgs.length - 1];
                 // The newest row may be no line of theirs (a tombstone, a failed line of mine). With none here, only the
                 // node's word says none is left: this phone may just not have it yet, and Report would say it was deleted.
-                const line = requestLineIn(msgs, myPubkey);
+                const line = requestLineIn(msgs, myPubkey, entry.request?.at);
                 const canReport = !!line || answered !== false;
                 if (last) {
                     const hasPhoto = last.type === 'image' || !!last.metadata?.attachment;

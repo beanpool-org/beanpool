@@ -112,9 +112,27 @@ export function dmLineSigInMetadata(metadata: unknown): DmLineSig | null {
 }
 
 /**
+ * The most conversation ids a signature is checked under: the line's own, and one older id. Its sender writes a line's
+ * metadata and only the length is limited, each id is an Ed25519 verify on the node's main thread, and a report checks the
+ * signature before its duplicate and hourly limits. With no cap one report held a node for 20.6 s, and a moderator opening it
+ * for 10.3 s (measured, the deciding review of #2705).
+ *
+ * Two, because a fold adds one id to a signed line. A send to a folded id, and a withheld conversation made real, each
+ * name the id it was sealed under in `originalConversationId` (engine/messaging.ts sendMessage), and so did the per-post fold.
+ * `originalConversationIds` holds more, but only repairConsolidatedMessagesMetadata writes it: one id for each per-post thread
+ * a pair had, on lines that name no id of their own. Those threads ended before the first public release and signatures
+ * began after it, so no signature was made under one, and such a line's own id, tried first, is the one it verifies under.
+ *
+ * So a line that names too many still verifies under its own id. A signature that only an id past the cap would verify reads
+ * as not verified, as any that fails does, and no sender gains by that: they can always send a signature that fails. The
+ * two people's former keys multiply this, up to (KEY_SUCCESSION_MAX + 1) each, but only an admin completes a re-key.
+ */
+export const DM_LINE_SIG_IDS_MAX = 2;
+
+/**
  * Which of the line's conversation ids and signers its signature verifies under, or null. A line may have been signed under
- * an older id its metadata names, as it may have been sealed (dmConversationIdsToTry); and by or to a key someone had before
- * a re-key, which the caller lists in `signers` and `recipients`.
+ * an older id its metadata names, as it may have been sealed (dmConversationIdsToTry, at most DM_LINE_SIG_IDS_MAX here); and
+ * by or to a key someone had before a re-key, which the caller lists in `signers` and `recipients`.
  */
 export function dmLineSignedBy(
     line: DmPayload,
@@ -123,7 +141,7 @@ export function dmLineSignedBy(
     signers: readonly string[],
 ): { conversationId: string; signer: string } | null {
     if (!lineSig) return null;
-    for (const conversationId of dmConversationIdsToTry(to.conversationId, to.metadata)) {
+    for (const conversationId of dmConversationIdsToTry(to.conversationId, to.metadata).slice(0, DM_LINE_SIG_IDS_MAX)) {
         for (const senderPubHex of signers) {
             for (const recipientPubHex of to.recipients) {
                 if (dmLineSigVerifies(line, lineSig, { conversationId, senderPubHex, recipientPubHex, messageId: to.messageId })) {

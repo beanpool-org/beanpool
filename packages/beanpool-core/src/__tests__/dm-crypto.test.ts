@@ -8,7 +8,7 @@ import * as dm from '../dm-crypto.js';
 import {
     checkDmThread, dmAfterReference, dmConversationIdsToTry, dmLineMarkText, encryptDmFormat2, newDmMessageId, openDmLine, sealDmLine,
     dmLineKind, dmLineShownText, dmLineIsUnattributed, dmThreadInShownOrder, dmReplyToOf, dmQuoteFrom, dmQuoteLabel,
-    DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT, DM_FROM_ADMINS_KEY, type DmThreadLine,
+    DM_CONVERSATION_IDS_MAX, DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT, DM_FROM_ADMINS_KEY, type DmThreadLine,
 } from '../dm-crypto.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
 import { checkDmLineVectors, DM_LINE_VECTORS, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '../dm-line-vectors.js';
@@ -322,6 +322,28 @@ describe('the rest of the thread', () => {
         expect(dmConversationIdsToTry('c', '{"originalConversationId":"a","originalConversationIds":["a","b",7]}')).toEqual(['c', 'a', 'b']);
         expect(dmConversationIdsToTry('c', { originalConversationIds: ['c'] })).toEqual(['c']);
         expect(dmConversationIdsToTry('c', 'not json')).toEqual(['c']);
+    });
+
+    // The deciding review of #2705: a sender writes this list, and each id costs the reader a key derivation.
+    it('tries a line under at most the cap, its own id and the fold\'s first, however many its sender lists', () => {
+        const listed = Array.from({ length: 11_000 }, (_, i) => `id-${i}`);
+        const ids = dmConversationIdsToTry('c', { originalConversationId: 'a', originalConversationIds: listed });
+        expect(ids).toHaveLength(DM_CONVERSATION_IDS_MAX);
+        expect(ids.slice(0, 3)).toEqual(['c', 'a', 'id-0']);
+    });
+
+    it('opens a line sealed under the last id the cap reaches, and reads one past it as a line that didn\'t open', () => {
+        const fill = Array.from({ length: DM_CONVERSATION_IDS_MAX }, (_, i) => `filler-${i}`);
+        const folded = (position: number) => {
+            const ids = [...fill];
+            ids[position] = 'the-thread-it-was-sealed-in';
+            return { id: newDmMessageId(), authorPubkey: ana.publicKey, metadata: JSON.stringify({ originalConversationIds: ids }), ...encryptDmFormat2('about the bike', ctxOf(ana, ben, 'the-thread-it-was-sealed-in')) };
+        };
+        // The line's own id takes the first place, so a list's last within the cap is at MAX - 2.
+        const within = folded(DM_CONVERSATION_IDS_MAX - 2);
+        const past = folded(DM_CONVERSATION_IDS_MAX - 1);
+        expect(benReads([within]).get(within.id)).toMatchObject({ text: 'about the bike', format: 2 });
+        expect(benReads([past]).get(past.id)).toMatchObject({ text: null, mark: 'not-verified' });
     });
 });
 

@@ -147,17 +147,19 @@ describe('home-store', () => {
 
     // Away from Home the header takes Home's answer only while it is younger than its own 15 s between reads.
     it('a shorter max age: Home\'s answer stands in only while younger than it', async () => {
-        const ans = makeAnswer();
-        recordHomeAnswer(ans, 'pk_alice');
-        const recordedAt = Date.now();
-
-        expect(freshHomeForHeader('pk_alice', recordedAt + 14_999, 15_000)).toBe(ans);
-        expect(freshHomeForHeader('pk_alice', recordedAt + 15_000, 15_000)).toBeNull();
-        // The two minutes still hold where no age is given (Home's own rule).
-        expect(freshHomeForHeader('pk_alice', recordedAt + 15_000)).toBe(ans);
-
-        vi.useFakeTimers({ now: recordedAt + 20_000 });
+        // A stopped clock: read after the record, a real one could be a millisecond on, and 14,999 would be 15,000.
+        vi.useFakeTimers();
         try {
+            const ans = makeAnswer();
+            recordHomeAnswer(ans, 'pk_alice');
+            const recordedAt = Date.now();
+
+            expect(freshHomeForHeader('pk_alice', recordedAt + 14_999, 15_000)).toBe(ans);
+            expect(freshHomeForHeader('pk_alice', recordedAt + 15_000, 15_000)).toBeNull();
+            // The two minutes still hold where no age is given (Home's own rule).
+            expect(freshHomeForHeader('pk_alice', recordedAt + 15_000)).toBe(ans);
+
+            vi.setSystemTime(recordedAt + 20_000);
             expect(await homeForHeader('pk_alice', 0, 15_000)).toBeNull();
             expect(await homeForHeader('pk_alice', 0)).toBe(ans);
         } finally {

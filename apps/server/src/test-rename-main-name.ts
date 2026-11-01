@@ -109,6 +109,8 @@ async function main(): Promise<void> {
     let claimsAsked = 0;
     /** Set: what /status answers whatever it is asked, as a registrar older than the one that reads `name` (the key's first name). */
     let statusAnswer: any = null;
+    /** Set: the mode the service answers whatever is asked. A direct name is reachable once live, so its notice goes at once. */
+    let answerMode: string | null = null;
     const liveAnswer =(name: string, mode = 'tunnel') => ({ status: 'live', name, hostname: `${name}.beanpool.org`, mode });
     const approve = (name: string) => held.set(name, liveAnswer(name, held.get(name)?.mode));
     const registrar = http.createServer((req, res) => {
@@ -121,9 +123,10 @@ async function main(): Promise<void> {
             res.setHeader('Content-Type', 'application/json');
             if (url.pathname === '/api/registrar/claim') {
                 claimsAsked++;
+                const mode = answerMode ?? body.mode;
                 const answer = gated.has(body.name) && !held.has(body.name)
-                    ? { status: 'pending', name: body.name, mode: body.mode, reason: 'awaiting-approval' }
-                    : (held.get(body.name) ?? liveAnswer(body.name, body.mode));
+                    ? { status: 'pending', name: body.name, mode, reason: 'awaiting-approval' }
+                    : (held.get(body.name) ?? liveAnswer(body.name, mode));
                 held.set(body.name, answer);
                 return res.end(JSON.stringify(answer));
             }
@@ -209,7 +212,9 @@ async function main(): Promise<void> {
         return { status: res.status, json };
     };
     const CLAIM = '/api/local/admin/public-address/claim';
-    const claim = (name: string, headers: Record<string, string> = phone(), extra: Record<string, unknown> = {}) => post(CLAIM, headers, { name, mode: 'tunnel', ...extra });
+    /** Set: what every claim asks for besides. A direct name is reachable once live, so its notice goes at once. */
+    let claimAsks: Record<string, unknown> = {};
+    const claim = (name: string, headers: Record<string, string> = phone(), extra: Record<string, unknown> = {}) => post(CLAIM, headers, { name, mode: 'tunnel', ...claimAsks, ...extra });
     const statusRead = async () => {
         https.resetAdminRateLimit();
         const res = await localFetch(`${base}/api/local/admin/public-address/status`, { headers: computer() });
@@ -389,6 +394,8 @@ async function main(): Promise<void> {
 
     // ── 5 ──
     console.log('\n— 5. the members\' notice —');
+    answerMode = 'direct'; // Section 7 has the tunnels.
+    claimAsks = { mode: 'direct', publicIp: '8.8.8.8' };
     const addressIn = (msg: unknown) => /beanpool\.org|byron|mullum/i.test(JSON.stringify(msg));
     {
         scene({ cf: MULLUM });
@@ -481,6 +488,20 @@ async function main(): Promise<void> {
         assert(notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY, `claimed again, it joins the old name, and the members are told (${show(notices().slice(n0))})`);
     }
     {
+        // The stored name, paused in the record, with another address beside it: primaryAddress is that other address, and
+        // a claim of the stored name replaces nothing. Nobody is told of the name they were already on.
+        scene({ config: { publicAddress: liveDirect('mullum'), ownerAddresses: ['oldvale.beanpool.org'] }, names: ['mullum'] });
+        statusAnswer = { status: 'paused', name: 'mullum', hostname: MULLUM, mode: 'direct' };
+        await statusRead();
+        statusAnswer = null;
+        updateNodeConfig({ publicAddress: liveDirect('mullum') } as any);
+        forgetOwnAddresses();
+        const n0 = notices().length;
+        assert(primaryAddress() === 'oldvale.beanpool.org', `the record's pause leaves the other address main (${primaryAddress()})`);
+        await claim('mullum');
+        assert(notices().length === n0 && !getLocalConfig().addressNoticeDue, `a claim of the name already stored tells nobody and leaves nothing due (${show(notices().slice(n0))}, ${getLocalConfig().addressNoticeDue})`);
+    }
+    {
         // A notice left due for a name that is replaced by a claim beside no other address ends with that claim.
         scene({ cf: MULLUM });
         gated.add('byron');
@@ -508,6 +529,8 @@ async function main(): Promise<void> {
 
     // ── 7 ──
     console.log('\n— 7. told once the tunnel carries the new name —');
+    answerMode = null;
+    claimAsks = {};
     const fake = await useFakeCloudflared(path.join(dataDir, 'fake-cloudflared'), { pollStartingMs: 20, pollConnectedMs: 20 });
     const until = async (cond: () => boolean, ms = 5_000): Promise<boolean> => {
         const end = Date.now() + ms;
@@ -570,6 +593,43 @@ async function main(): Promise<void> {
             `approved, Settings' read stores it live and still waits for the tunnel (${stored().publicAddress?.status}, ${show(notices().slice(n0))}, ${due()})`);
         fake.ready(200);
         assert(await until(() => notices().length > n0) && notices()[n0].body === SOFT_BODY, `and it connects: told (${show(notices().slice(n0))})`);
+    }
+    {
+        // The registrar answers live with no token when its Cloudflare call fails: no route yet, however live it says.
+        await tunnelScene({ cf: MULLUM });
+        const n0 = notices().length;
+        const r = await claim('byron');
+        await polls();
+        assert(r.json?.status === 'live' && tunnelConnectorForTests().wantedToken === null && notices().length === n0 && due() === BYRON,
+            `live with no token: nobody told, and the notice stays due (${r.json?.status}, ${show(notices().slice(n0))}, ${due()})`);
+        held.set('byron', withToken('byron'));
+        await reconcile();
+        fake.ready(200);
+        assert(await until(() => notices().length > n0) && notices()[n0].body === SOFT_BODY, `a later tick brings the token, it connects: told (${show(notices().slice(n0))})`);
+    }
+    {
+        await tunnelScene({ cf: MULLUM });
+        gated.add('byron');
+        const n0 = notices().length;
+        await claim('byron');
+        approve('byron');
+        await reconcile();
+        await polls();
+        assert(stored().publicAddress?.status === 'live' && notices().length === n0 && due() === BYRON,
+            `approved with no token, the tick stores it live and tells nobody (${stored().publicAddress?.status}, ${show(notices().slice(n0))}, ${due()})`);
+    }
+    {
+        // The form stays on screen while a tunnel retries: pressing Claim on the same name keeps the notice.
+        await tunnelScene({ cf: MULLUM });
+        held.set('byron', withToken('byron'));
+        const n0 = notices().length;
+        await claim('byron');
+        await claim('byron');
+        await polls();
+        assert(notices().length === n0 && due() === BYRON, `claimed again while it connects, the notice stays due (${show(notices().slice(n0))}, ${due()})`);
+        fake.ready(200);
+        assert(await until(() => notices().length > n0) && notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY && due() === null,
+            `and it connects: told, once (${show(notices().slice(n0))}, ${due()})`);
     }
     {
         // The notice is kept in local config: a restart before the tunnel connects loses nothing.

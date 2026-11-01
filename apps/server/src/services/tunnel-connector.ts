@@ -448,13 +448,16 @@ export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Pro
 /**
  * Tells the members of a new name, if a notice is due and they can reach it (services/address-notice.ts). A name on this
  * server's tunnel has no route until that tunnel connects, whatever the registrar says, and syncTunnel only starts it, so
- * poll() tells then. Runs after syncTunnel, never before: a notice for a tunnel that can't start stays due, and the next
- * start's tunnel tells. A standby tells nobody.
+ * poll() tells then. Goes by the stored address, not the token: the registrar answers live with no token when its
+ * Cloudflare call fails (withLiveToken). Runs after syncTunnel, never before: a notice for a tunnel that can't start stays
+ * due, and the next start's tunnel tells. A standby tells nobody.
  */
 export function tellMembersWhenReachable(): void {
     if (getNodeRole() !== 'primary') return;
+    const pa = (getNodeConfig() as any).publicAddress;
     const want = wantedToken();
-    if (want && !(running?.token === want && status.state === 'connected')) return;
+    const onTunnel = !!pa?.name && pa.mode !== 'direct';
+    if (onTunnel && !(want && running?.token === want && status.state === 'connected')) return;
     tellMembersOfNewAddress();
 }
 

@@ -49,10 +49,12 @@ export function claimTakesTunnelDark(claimed: string): boolean {
 /**
  * A claim of `claimed` answered, by Settings or the public-address agent, before it is recorded and stored: keeps the
  * address it replaces, and leaves the members' notice due unless that address goes dark. Returns the address replaced, or
- * null when the claim replaces none. Replacing none ends a notice left due by an earlier claim: its name is not on its way
- * any more.
+ * null when the claim replaces none. A claim of the name already stored replaces nothing and leaves the notice alone: the
+ * form stays on screen while a tunnel retries, and that name may yet be told. Any other claim that replaces none ends a
+ * notice left due by an earlier claim: its name is not on its way any more.
  */
 export function claimReplacesAddress(claimed: string): string | null {
+    if (registrarHostOf((getNodeConfig() as any).publicAddress) === claimed) return null;
     const replaced = keepReplacedAddress(claimed);
     setDue(replaced && !claimTakesTunnelDark(claimed) ? claimed : null);
     return replaced;

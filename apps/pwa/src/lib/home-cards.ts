@@ -17,7 +17,8 @@
  * browser (lib/home-cache.ts); the last write wins by `updatedAt`.
  */
 
-import type { CircleCard, CircleDemand } from '@beanpool/core';
+import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
+import { copyFromLine, eventCopyOf } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
@@ -26,6 +27,7 @@ import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } f
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 import { formatRelativeTime } from './pulse';
 import { tierWords } from './trust-tier';
+import { VISITOR_WORDS } from './visitor-lobby';
 import type { ShopHomeCard } from './shop';
 export { tierWords };
 export type { HomeLayoutV2 };
@@ -145,6 +147,8 @@ export interface HomeEventItem {
     startLocal?: string; tz?: string; online?: boolean;
     /** A repeating event's pattern and last date, for the ↻ caption (DESIGN-event-times §8); absent on a one-off. */
     repeat?: RepeatPattern; repeatUntil?: string;
+    /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from stands for its place. */
+    shownCopy?: boolean; shownFrom?: ShownFromLine;
 }
 
 export interface DealItem {
@@ -479,6 +483,13 @@ const kmText = (km: number) => (km < 10 ? formatNumber(km, 1) : formatCount(Math
  * it is not the reader's own ("FRI 17 OCT · 20:50 · Lagos time"); an online event in the reader's own time, "FRI 16 OCT ·
  * 10:50 your time". A node that sends no clock gives the reader's own, as the cards do.
  */
+export function homeEventWhere(item: Pick<HomeEventItem, 'place' | 'online' | 'shownCopy' | 'shownFrom'>, visitor: boolean): string | null {
+    if (item.online) return t('Online');
+    const copy = eventCopyOf(item);
+    if (copy) return copy.from ? copyFromLine(copy.from) : null;
+    return item.place ?? (visitor ? t(VISITOR_WORDS.placeAfterJoin) : null);
+}
+
 export function homeEventWhen(item: Pick<HomeEventItem, 'startsAt' | 'startLocal' | 'tz' | 'online'>): string {
     const start = new Date(item.startsAt);
     if (!Number.isFinite(start.getTime())) return '';

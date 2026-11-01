@@ -12,7 +12,7 @@ import { formatEventWhen } from '../lib/events';
 import { VISITOR_WORDS, visitorDistanceText, visitorKmText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
 import { CategoryTile } from './CategoryTile';
-import { copyCardLine, copyFromLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
+import { copyFromLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
 import { EventCopyDoor } from './EventCopyDoor';
 import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
@@ -25,11 +25,7 @@ function typeLabel(post: MarketplacePost): string {
 export function joinToSeeLabel(post: MarketplacePost): string {
     switch (post.type) {
         case 'need': return t("Join to see who's asking");
-        case 'event': {
-            // A member's copy names no host, whoever joins: where it is from stands in their place.
-            const copy = eventCopyOf(post);
-            return copy ? (copy.from ? copyCardLine(copy.from) : '') : t("Join to see who's hosting");
-        }
+        case 'event': return t("Join to see who's hosting");
         case 'poll': return t('Join to vote');
         default: return t("Join to see who's offering");
     }

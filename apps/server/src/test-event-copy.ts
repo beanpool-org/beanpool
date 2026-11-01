@@ -192,6 +192,10 @@ async function main() {
     leaks(JSON.stringify(home.body), 'a member, the landing card');
     const hom2 = await call('GET', '/api/home', sam);
     leaks(JSON.stringify(hom2.body), 'a member, Home');
+    for (const [who, id] of [['a visitor', null], ['a member', sam]] as const) {
+        const onHome = (await call('GET', '/api/home', id)).body?.cards?.events?.items?.find((i: any) => i.id === copyId);
+        assert(onHome?.shownCopy === true && onHome?.shownFrom?.name === 'Mullumbimby Commons' && onHome?.place === null, `${who}, Home: says it is a copy and where from, so no app promises a place (${JSON.stringify(onHome)?.slice(0, 160)})`);
+    }
     const invite = await postCopy(robin, 'Valley picnic', { shownFrom: { host: 'byinvite.example.org', postId: HOME_ID } });
     assert((await byId(invite.body?.post?.id, sam))?.shownFrom?.door === 'invite', 'a community that takes no requests: the door says by invite');
 
@@ -230,6 +234,8 @@ async function main() {
         const r = await call('POST', `/api/marketplace/posts/${copyId}/rsvp`, sam, { status });
         assert(r.status === 409 && r.body?.error === DOOR_WORDS && r.body?.code === EVENT_COPY_CODE, `RSVP ${status}: 409 with the door's words (${r.status} ${r.body?.error})`);
     }
+    const enEspanol = await call('POST', `/api/marketplace/posts/${copyId}/rsvp`, sam, { status: 'going' }, { 'X-Language': 'es' });
+    assert(enEspanol.status === 409 && enEspanol.body?.error === 'Para ir, pide unirte a Mullumbimby Commons', `in Spanish, with the community's own name (${enEspanol.body?.error})`);
     const byHost = await call('POST', `/api/marketplace/posts/${copyId}/rsvp`, robin, { status: 'going' });
     assert(byHost.status === 409, 'its author takes no RSVP on it either');
     assert(!db.prepare('SELECT 1 FROM event_rsvps WHERE post_id = ?').get(copyId), 'no RSVP row');

@@ -614,7 +614,20 @@ export function listedCommunityCount(): number {
 }
 
 // The listed communities by their address's host, built from the rows `listed()` holds and again when they change.
-let byHost: { rows: ReturnType<typeof listed>; map: Map<string, { key: string; name: string | null }> } | null = null;
+let byHost: { rows: ReturnType<typeof listed>; map: Map<string, DirectoryRow> } | null = null;
+
+function listedRowAt(host: string): DirectoryRow | null {
+    const rows = listed();
+    if (!byHost || byHost.rows !== rows) {
+        const map = new Map<string, DirectoryRow>();
+        for (const { row } of rows) {
+            const at = row.url ? audienceOf(row.url) : null;
+            if (at && !map.has(at)) map.set(at, row);
+        }
+        byHost = { rows, map };
+    }
+    return byHost.map.get(host) ?? null;
+}
 
 /**
  * The listed community whose address is `host`, in the form a member's app signs a host (audienceOf: lower case, no
@@ -622,16 +635,8 @@ let byHost: { rows: ReturnType<typeof listed>; map: Map<string, { key: string; n
  * list any address, so a match is a reason to warn, never proof whose address it is.
  */
 export function listedCommunityAt(host: string): { key: string; name: string | null } | null {
-    const rows = listed();
-    if (!byHost || byHost.rows !== rows) {
-        const map = new Map<string, { key: string; name: string | null }>();
-        for (const { row } of rows) {
-            const at = row.url ? audienceOf(row.url) : null;
-            if (at && !map.has(at)) map.set(at, { key: row.key, name: row.name });
-        }
-        byHost = { rows, map };
-    }
-    return byHost.map.get(host) ?? null;
+    const row = listedRowAt(host);
+    return row ? { key: row.key, name: row.name } : null;
 }
 
 /** How long after its last push a row is shown (supabase directory_listed: front doors S13), should the mirror have stopped. */
@@ -642,7 +647,7 @@ const SHOWN_FOR_MS = 7 * DAY_MS;
  * 7 days. Else null. What a copy's from-line and door are drawn from (engine/event-copy.ts), and nothing the phone said.
  */
 export function shownCommunityAt(host: string, now: number = Date.now()): DirectoryRow | null {
-    const found = listed().find(({ row }) => row.url !== null && audienceOf(row.url) === host)?.row;
+    const found = listedRowAt(host);
     if (!found?.name || !found.url || !found.registryUpdatedAt) return null;
     return now - Date.parse(found.registryUpdatedAt) <= SHOWN_FOR_MS ? found : null;
 }

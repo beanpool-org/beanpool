@@ -122,6 +122,12 @@ describe('the cache, the caption and Home', () => {
             startLocal: '2026-10-16T20:50', tz: 'Australia/Sydney', repeat: { freq: 'weekly', interval: 1, byDay: 'FR' } });
         expect(line).toContain(' · ↻ Every Friday · Friday dinner, The hall');
     });
+    it('Home: a member\'s copy says where it is from; with no row, nothing stands for a place', () => {
+        const item = { id: 'e', title: 'Street party', startsAt: '2026-10-16T09:50:00.000Z', endsAt: null, place: null, rsvp: null, shownCopy: true };
+        const from = { host: 'mullum.example.org', postId: 'p', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' as const };
+        expect(eventLine({ ...item, shownFrom: from })).toContain('Street party, from Mullumbimby');
+        expect(eventLine(item).endsWith('Street party')).toBe(true);
+    });
     it('the map popup (map.tsx is protected): the caption after the time on its one line; a one-off has none', () => {
         const ev = { type: 'event', title: 'Friday dinner', eventStartAt: '2026-10-16T09:50:00.000Z', eventEndAt: '2026-10-16T11:50:00.000Z',
             event_repeat: '{"freq":"weekly","interval":1,"byDay":"FR"}' };

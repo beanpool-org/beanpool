@@ -52,7 +52,7 @@ export const OWNER_ALERT_WORDS = {
     otherCommunityRefusedMore: { one: 'One more backup from another community was refused in the hour after the first ones were pushed.', many: '{n} more backups from another community were refused in the hour after the first ones were pushed.' },
     addressOffline: "This community's address was taken offline, by an owner.",
     addressChanged: "This community's address was changed, by an owner.",
-    nameReleased: 'A name this community held unused was released, by an owner.',
+    nameReleased: 'A name this community held was released, by an owner.',
     /** The members' critical announcement when the address changes or goes (§7): the app follows it. */
     membersAddressChanged: { title: "This community's address changed", body: "This community's address changed. Open the app to follow it." },
     /** Taken offline there is no new address to follow: the members ask their owners (a director's call on #2033 N4). */

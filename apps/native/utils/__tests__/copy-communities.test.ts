@@ -185,6 +185,15 @@ describe('a restore from a copy with the list', () => {
         ]);
     });
 
+    it('registers this phone\'s token once the list is back, only when one came back, and a registration that fails fails nothing', async () => {
+        const registerPush = vi.fn(async () => {});
+        await saveCommunitiesFromCopy([{ name: 'Castlemaine', url: 'https://castlemaine.beanpool.org' }], registerPush);
+        expect(registerPush).toHaveBeenCalledTimes(1);
+        await saveCommunitiesFromCopy([{ name: 'Castlemaine', url: 'https://castlemaine.beanpool.org' }], registerPush);
+        expect(registerPush).toHaveBeenCalledTimes(1);
+        await expect(saveCommunitiesFromCopy([{ name: 'Byron', url: 'https://byron.beanpool.org' }], async () => { throw new Error('no connection'); })).resolves.toBe(1);
+    });
+
     it('a copy without a list saves nothing and never throws', async () => {
         for (const none of [null, undefined, []]) expect(await saveCommunitiesFromCopy(none)).toBe(0);
         expect(await getSavedNodes()).toEqual([]);

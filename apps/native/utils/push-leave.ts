@@ -15,6 +15,12 @@
  * new ones. Their communities go back on the push record (push-registrations.ts `putBackOnRecord`), where K's
  * registration from before may still be, so that next leave reaches them too ({@link takeBack}; #1258 review 4116631769).
  *
+ * One kind is not taken back: a statement made as one community goes while K stays on the phone (Forget Community, alerts
+ * off: `keyStays`, account-leaves-phone.ts `unregisterPushTokenAt`). K is on the phone the whole time, so "K is back" says
+ * nothing about it, and taken back it would never be presented: a phone with no connection as the member forgot a
+ * community would go on getting its alerts for good. It is presented with K on the phone until its community confirms. If
+ * K rejoins meanwhile, its new registration carries a later stamp, which the statement can't reach.
+ *
  * A statement only ever does what K asked. Whoever presents it, the community removes K's registration of T there, and
  * only one the phone made no later than the statement, so K signing back in on this phone (a later stamp) is never undone
  * by one already on its way (apps/server state-engine.ts `applyPushLeave`). It goes unsigned so that the account on the
@@ -46,6 +52,8 @@ export interface LeaveStatement {
     /** Base64, over the format-2 bytes for `signedFor`. */
     signature: string;
     signedFor: string;
+    /** One community went and the key stayed on the phone: never taken back (see the header). */
+    keyStays?: true;
 }
 
 interface Storage {
@@ -63,7 +71,8 @@ function isStatement(s: unknown): s is LeaveStatement {
     const o = s as Record<string, unknown>;
     return communityAddress(o.community) === o.community && typeof o.publicKey === 'string' && HEX_KEY.test(o.publicKey)
         && typeof o.token === 'string' && !!o.token && typeof o.leftAt === 'number' && Number.isSafeInteger(o.leftAt)
-        && typeof o.signature === 'string' && !!o.signature && typeof o.signedFor === 'string' && !!o.signedFor;
+        && typeof o.signature === 'string' && !!o.signature && typeof o.signedFor === 'string' && !!o.signedFor
+        && (o.keyStays === undefined || o.keyStays === true);
 }
 
 const sameLeave = (a: LeaveStatement, b: LeaveStatement) => a.community === b.community && a.publicKey === b.publicKey && a.token === b.token;
@@ -116,8 +125,8 @@ export async function leaveStatementsSettled(): Promise<void> {
 }
 
 /**
- * `publicKey` is on this phone again, on purpose: its statements not yet confirmed are discarded, never presented, and
- * each of their communities goes back on the push record first, where its registration from before may still be, so
+ * `publicKey` is on this phone again, on purpose: its statements not yet confirmed are discarded, never presented
+ * (all but those made with the key staying: see the header), and each of their communities goes back on the push record first, where its registration from before may still be, so
  * its next leave reaches it. Presented, an old statement removed the account's only registration at a community whenever
  * its registration on signing back in hadn't landed there (offline, or its 12 s up), and nothing registered it again
  * until the app was next started (#1258 review 4116631769). Never throws: a statement that can't be taken back is kept,
@@ -127,10 +136,10 @@ function takeBack(publicKey: string, storage: Storage = AsyncStorage): Promise<v
     const key = publicKey.toLowerCase();
     return queued(async () => {
         const pending = await readPending(storage);
-        const own = pending.filter((s) => s.publicKey === key);
+        const own = pending.filter((s) => s.publicKey === key && !s.keyStays);
         if (own.length === 0) return;
         await putBackOnRecord(own.map((s) => s.community), storage);
-        await writePending(storage, pending.filter((s) => s.publicKey !== key));
+        await writePending(storage, pending.filter((s) => !own.includes(s)));
         console.log(`[Push] This account is on the phone again: ${own.length} leave statement(s) of its own taken back`);
     }).catch((e) => {
         console.warn('[Push] Could not take back this account\'s leave statements; they wait while it is on the phone', e);
@@ -153,10 +162,11 @@ async function keyOnPhone(): Promise<string | null> {
  * write them down before anything is sent. A newer statement replaces an older one for the same key, token and
  * community (it removes all the older one did). Returns them: the caller sends the leave now, and confirms each one that
  * lands ({@link confirmLeave}). A community whose address can't be signed for gets none, and is logged. Never throws:
- * statements that can't be written down are still returned, for the leave sent now.
+ * statements that can't be written down are still returned, for the leave sent now. `keyStays`: only these communities
+ * go, and the key stays on the phone (see the header).
  */
 export async function recordLeave(
-    account: LeavingAccount, token: string, communities: readonly string[], storage: Storage = AsyncStorage,
+    account: LeavingAccount, token: string, communities: readonly string[], storage: Storage = AsyncStorage, keyStays = false,
 ): Promise<LeaveStatement[]> {
     if (communities.length === 0) return [];
     const publicKey = account.publicKey.toLowerCase();
@@ -167,7 +177,7 @@ export async function recordLeave(
         if (!community) continue;
         try {
             const signed = await signPushLeaveStatement(community, publicKey, token, leftAt, account.privateKey);
-            statements.push({ community, publicKey, token, leftAt, ...signed });
+            statements.push({ community, publicKey, token, leftAt, ...signed, ...(keyStays ? { keyStays } : {}) });
         } catch (e) {
             console.warn(`[Push] Could not sign a leave statement for ${community}`, e instanceof Error ? e.message : e);
         }
@@ -229,9 +239,9 @@ let presenting: Promise<void> | null = null;
 
 /**
  * Present every statement not yet confirmed, each to its own community, all together, and cross off each one confirmed
- * or refused for good. Never one of the account on the phone now, unless it is leaving: those it takes back
- * ({@link takeBack}), as the phone does when that account is written to it, which no one announced for the key the app
- * started with. One run at a time: a call while one runs waits for it. Never throws.
+ * or refused for good. Never one of the account on the phone now, unless it is leaving or the statement was made with
+ * the key staying: the others it takes back ({@link takeBack}), as the phone does when that account is written to it,
+ * which no one announced for the key the app started with. One run at a time: a call while one runs waits for it. Never throws.
  */
 export function presentLeaveStatements(
     storage: Storage = AsyncStorage,
@@ -244,7 +254,7 @@ export function presentLeaveStatements(
             const key = await onPhone();
             const keeps = key !== null && leaveState(key) === 'none' ? key : null;
             if (keeps) await takeBack(keeps, storage);
-            const pending = (await pendingLeaveStatements(storage)).filter((s) => s.publicKey !== keeps);
+            const pending = (await pendingLeaveStatements(storage)).filter((s) => s.publicKey !== keeps || s.keyStays);
             await Promise.all(pending.map(async (s) => {
                 if (await presentOne(s, timeoutMs) !== 'kept') await confirmLeave(s, storage);
             }));

@@ -204,6 +204,14 @@ export const PUSH_REGISTERED_AT_STORE_KEY = 'beanpool_push_registered_at';
 export const PUSH_REGISTRATIONS_DUE_STORE_KEY = 'beanpool_push_registrations_due';
 
 /**
+ * The communities the member turned alerts off for, one switch per community, default on (utils/push-registrations.ts):
+ * this phone's token is not registered with these. A community leaves the list as it leaves the phone, and a followed
+ * one keeps its place on it at its new address. Sign Out wipes it with the account (utils/identity.ts
+ * wipeIdentityScopedStorage).
+ */
+export const PUSH_ALERTS_OFF_STORE_KEY = 'beanpool_push_alerts_off';
+
+/**
  * This phone's last push stamp (utils/push-registrations.ts `nextPushStamp`): each registration and each leave statement
  * takes a later one, whatever the clock does. Phone-wide, not the account's: Sign Out keeps it, so a statement the old
  * account made can never outrank the registration of an account that signs in after it. Kept under this name twice, in

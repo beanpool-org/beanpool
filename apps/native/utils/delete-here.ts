@@ -32,6 +32,7 @@ import { fetchMembership } from './membership-probe';
 import type { BeanPoolIdentity } from './identity';
 import { PURGE_TIMEOUT_MS, anchorUrl, purgeAccountOnNode } from './node-post';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
+import { markAlertsOn } from './push-alerts-off';
 import { communityAddress, dropFromRecord } from './push-registrations';
 import { clearPendingProfileChange } from './pending-profile-sync';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
@@ -279,7 +280,7 @@ export function deleteFailedLine(reason: string, hasWords: boolean): string {
 /**
  * The phone's half of a delete that leaves the key ({@link DeletePlan} 'this-one'), once `here` has deleted the account:
  * - `here` comes off the push record. Its node dropped the key's push tokens with the account, so the phone never
- *   asks it again (push-registrations.ts `dropFromRecord`).
+ *   asks it again (push-registrations.ts `dropFromRecord`). Its alerts choice goes too, so a rejoin starts from the default.
  * - Its cached copy goes (community-cache.ts, which closes the open copy first).
  * - The phone is set to `next`, then `here` leaves the saved list and the guest markers. In that order: the saved list,
  *   read through nodes.ts `getSavedNodes`, puts the community the phone is set to back into it.
@@ -294,6 +295,8 @@ export function deleteFailedLine(reason: string, hasWords: boolean): string {
 export async function leaveThisCommunity(here: string, next: string, storage: Storage = AsyncStorage): Promise<void> {
     assertPlainNodeAddress(next);
     await dropFromRecord([here], storage);
+    const leftBehind = communityAddress(here);
+    if (leftBehind) await markAlertsOn(leftBehind).catch((e) => console.warn('[Push] Could not clear the alerts choice for the community left', e));
     try {
         const { removeCommunityCaches } = await import('./community-cache');
         await removeCommunityCaches([here]);

@@ -18,6 +18,7 @@ import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsSheet';
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
+import { ListingCopyLine } from '../../components/ListingCopy';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { ActivityWaterfall } from '../../components/ActivityWaterfall';
@@ -60,7 +61,7 @@ import { exampleListingsOn, showExampleListings } from '../../utils/example-list
 import { MarketCircleLine } from '../../components/MarketCircleLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, type WordKey } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, type WordKey } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
@@ -1621,6 +1622,8 @@ export default function MarketScreen() {
         const groupScopeBadgeText = isGroupScope ? t('🔒 Only {group} can see this', { group: groupName }) : null;
 
         const priceLabel = priceUnit(item.price_type);
+        // A member's copy on the global community: where it is from and its price there, in words, where its author would be.
+        const copy = eventCopyOf(item);
 
         const catEmoji = categoryEmoji(item.category);
         const catLabel = categoryLabel(item.category);
@@ -1710,7 +1713,7 @@ export default function MarketScreen() {
                         <Text style={styles.gridCardTitle} numberOfLines={2}>
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
-                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />
+                        {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />}
                         {!!item.repeatable && !isOwn && item.status !== 'pending' && (
                             <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
                                 <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('↻ RECURRING')}</Text>
@@ -1752,8 +1755,8 @@ export default function MarketScreen() {
                             <Text style={styles.compactTitle} numberOfLines={1}>
                                 {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                             </Text>
-                            <Text style={styles.compactAuthor} numberOfLines={1}>
-                                {byLine(cardAuthor, elderCard, isOwn)}
+                            <Text style={styles.compactAuthor} numberOfLines={copy ? 3 : 1}>
+                                {copy ? copyPriceLine(copy) : byLine(cardAuthor, elderCard, isOwn)}
                             </Text>
                             {groupScopeBadgeText && (
                                 <View style={{ marginTop: 2, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
@@ -1884,7 +1887,7 @@ export default function MarketScreen() {
                             {item.title}
                         </Text>
 
-                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />
+                        {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />}
                     </View>
                 </View>
             </Pressable>

@@ -138,7 +138,11 @@ export interface HomeFind {
     circle?: (CircleCard & { id: string }) | null;
 }
 
-export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null }
+export interface HomeMarketItem {
+    id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
+    shownCopy?: boolean; shownFrom?: ShownFromLine; shownPrice?: string;
+}
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
 export interface HomeEventItem {

@@ -55,7 +55,7 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
     type ListFilter,
 } from '../lib/live-posts';
-import { TRANSACTION_FEE_RATE } from '@beanpool/core';
+import { TRANSACTION_FEE_RATE, copyPriceLine, eventCopyOf } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     getMemberProfile, createConversationApi, sendTransfer,
@@ -80,6 +80,8 @@ import { SAVE_SEARCH_BUTTON, saveSearchLabel, type HomeSearchSettings } from '@b
 import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
+import { EventCopyDoor } from '../components/EventCopyDoor';
+import { ReportModal } from '../components/ReportModal';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
@@ -1480,6 +1482,46 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onBack={() => setSelectedPost(null)}
                 onJoin={visitor.onJoin}
                 pollsInformal={informalPolls}
+            />
+        );
+    }
+    // A member's copy of an Offer or a Need reads as a visitor reads it, for a member too: nothing of a deal or a person is
+    // drawn on it (@beanpool/core eventCopyOf), and the node refuses them all the same. Its door, and Report.
+    const listingCopy = selectedPost && selectedPost.type !== 'event' ? eventCopyOf(selectedPost) : null;
+    if (selectedPost && listingCopy) {
+        return (
+            <VisitorPostDetail
+                post={selectedPost}
+                beans={false}
+                distanceKm={distanceOf(selectedPost)}
+                onBack={() => setSelectedPost(null)}
+                onJoin={() => undefined}
+                footer={selectedPost.authorPublicKey === identity?.publicKey
+                    ? <p data-testid="listing-copy-own" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{t('This is your copy. Change it in your own community and it follows.')}</p>
+                    : (
+                        <>
+                            <EventCopyDoor copy={listingCopy} line={copyPriceLine(listingCopy)} />
+                            {identity && (
+                                <button
+                                    data-testid="listing-copy-report"
+                                    onClick={() => setShowReportForm(true)}
+                                    className="w-full min-h-[48px] mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm cursor-pointer break-words"
+                                >
+                                    {t('🚩 Report')}
+                                </button>
+                            )}
+                            {identity && (
+                                <ReportModal
+                                    isOpen={showReportForm}
+                                    onClose={() => setShowReportForm(false)}
+                                    reporterPubkey={identity.publicKey}
+                                    targetPubkey={selectedPost.authorPublicKey}
+                                    targetName={selectedPost.title}
+                                    targetPostId={selectedPost.id}
+                                />
+                            )}
+                        </>
+                    )}
             />
         );
     }

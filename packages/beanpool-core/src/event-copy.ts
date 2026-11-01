@@ -52,14 +52,20 @@ function fromLineOf(raw: unknown): ShownFromLine | null {
 
 /** What a post row says of being a copy: the node's own read (`shownCopy`, `shownFrom`, `shownPrice`), or the phone's cached column. */
 export function eventCopyOf(post: { shownCopy?: unknown; shownFrom?: unknown; shownPrice?: unknown; shown_from?: unknown } | null | undefined): EventCopy | null {
-    if (post?.shownCopy === true) return { from: fromLineOf(post.shownFrom), price: copyPriceOf(post.shownPrice) };
+    if (post?.shownCopy === true) return copyOf(post.shownFrom, post.shownPrice);
     if (typeof post?.shown_from !== 'string' || !post.shown_from) return null;
     try {
         const kept = JSON.parse(post.shown_from);
-        return { from: fromLineOf(kept), price: copyPriceOf(kept?.price) };
+        return copyOf(kept, kept?.price);
     } catch {
-        return { from: null, price: null };
+        return { from: null };
     }
+}
+
+/** A copy from what a row holds. An event has no price, so an event's reads as it always did. */
+function copyOf(line: unknown, rawPrice: unknown): EventCopy {
+    const price = copyPriceOf(rawPrice);
+    return { from: fromLineOf(line), ...(price ? { price } : {}) };
 }
 
 /** A phone's cached column for a post from the node: the line and the price, `{}` for a copy with neither, null for any other post. */

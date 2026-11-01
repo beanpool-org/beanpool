@@ -128,7 +128,11 @@ export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, prof
 
 export interface HomeNeedsItem extends NeedsYouEntry { closesAt?: string }
 
-export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null }
+export interface HomeMarketItem {
+    id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
+    shownCopy?: boolean | null; shownFrom?: ShownFromLine | null; shownPrice?: string | null;
+}
 export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
     /** The host's clock, its zone and online (DESIGN-event-times §4), when the node's Home answer carries them. */

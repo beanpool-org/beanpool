@@ -3639,6 +3639,7 @@ export async function updatePost(id: string, updates: any) {
         // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
         ...(updates.shopId !== undefined ? { shopId: updates.shopId } : {}),
     });
+    repeatOnGlobalCopy((copy) => copy.tendCopies(identity));
 
     // 2. Erase from local SQLite Cache (or gracefully update it)
     const database = await getDb();
@@ -3664,6 +3665,7 @@ export async function pausePost(id: string) {
     const identity = await loadIdentity();
     if (!identity) throw new Error('Not logged in. Identity required.');
     await _signedRequest('/api/marketplace/posts/pause', { postId: id, authorPublicKey: identity.publicKey });
+    repeatOnGlobalCopy((copy) => copy.tendCopies(identity));
     const database = await getDb();
     await database.runAsync(`UPDATE posts SET status = 'paused' WHERE id = ?`, [id]);
     refreshBalanceFromServer(identity.publicKey).catch(() => null);
@@ -3674,6 +3676,7 @@ export async function resumePost(id: string) {
     const identity = await loadIdentity();
     if (!identity) throw new Error('Not logged in. Identity required.');
     await _signedRequest('/api/marketplace/posts/resume', { postId: id, authorPublicKey: identity.publicKey });
+    repeatOnGlobalCopy((copy) => copy.tendCopies(identity));
     const database = await getDb();
     await database.runAsync(`UPDATE posts SET status = 'active' WHERE id = ?`, [id]);
     refreshBalanceFromServer(identity.publicKey).catch(() => null);

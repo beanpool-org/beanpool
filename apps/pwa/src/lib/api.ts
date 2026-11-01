@@ -1347,9 +1347,11 @@ export async function getTransactions(publicKey?: string, limit = 50): Promise<T
 export type EventRsvpStatus = 'going' | 'interested';
 
 export interface MarketplacePost {
-    /** A member's copy of an event on the global community (@beanpool/core eventCopyOf): no author, no RSVP. */
+    /** A member's copy on the global community (@beanpool/core eventCopyOf): no author, no RSVP, no deal. */
     shownCopy?: boolean;
     shownFrom?: ShownFromLine;
+    /** Its price at home, for its words alone (core copyPriceLine). */
+    shownPrice?: string;
     id: string;
     type: 'offer' | 'need' | 'poll' | 'event';
     category: string;

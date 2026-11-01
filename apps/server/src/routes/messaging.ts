@@ -9,8 +9,8 @@ import {
     createConversation, sendMessage, editMessage, deleteOwnMessage,
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
-    markConversationRead, getListedUnreadCounts, getUnreadCounts,
-    getMember, isNodeMember, isLiveVisitor, getNodeRole,
+    markConversationRead, getListedUnreadCounts, getUnreadCounts, getUnreadAnswer,
+    getMember, isNodeMember, isLiveVisitor, getNodeRole, passesReadGate,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -380,6 +380,28 @@ router.post('/api/messages/delete', async (ctx) => {
     } catch (e: any) {
         respondToMessagingError(ctx, e, 'delete the message');
     }
+});
+
+// How much waits for the signer here, in counts alone (never a key, a name, an id or a list): a phone asks each community it
+// keeps but isn't using, every few minutes (scratch/fable-design/DESIGN-cross-community-chat-fable.md §1.2 R3), and the web
+// app reads it for its own badge. It takes no key, so it can answer for the signer and nobody else. The read gate refuses
+// the rest; the checks here hold where the gate lets a request through (read auth opted out), as /api/notices does: a
+// visitor's row has no chats to come back to here, and a suspended member reads their own. No cached copy: a phone's
+// answer is the only thing telling it a message is waiting.
+router.get('/api/me/unread', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    if (!passesReadGate(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: word('Read access requires a member identity'), code: NOT_A_MEMBER_CODE };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = getUnreadAnswer(actor);
 });
 
 router.get('/api/messages/conversations/:publicKey', async (ctx) => {

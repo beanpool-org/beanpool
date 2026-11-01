@@ -280,3 +280,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-23 - Batch pre-fetch own decision votes in group and enterprise decision routes
 **Learning:** In `apps/server/src/routes/group-decisions.ts` and `apps/server/src/routes/enterprise-decisions.ts`, rendering decision cards ran `getOwnDecisionVotes(actor, [d.id])` individually inside `.map()` loops over decision items, triggering N+1 separate SQLite query executions per list request.
 **Action:** Batch pre-fetched all own decision votes for the listed decisions in a single call (`getOwnDecisionVotes(actor, decisions.map(d => d.id))`) prior to mapping cards, passing the resulting lookup Map into `card(...)` for O(1) vote retrievals.
+
+## 2026-11-01 - Eliminate N+1 event_start_at Query in listYourChats
+**Learning:** In `apps/server/src/engine/your-groups.ts`, `listYourChats()` called `loadEventForThread(id)` to retrieve event row attributes from the `posts` table, and then immediately performed an extra `SELECT event_start_at FROM posts WHERE id = ?` query for each event thread. This created an N+1 query pattern on the `posts` table when assembling chat lists for members with event RSVPs or host roles.
+**Action:** Added `event_start_at` directly to `EventRow` and `EVENT_COLUMNS` in `apps/server/src/engine/event-thread.ts`, and updated `listYourChats` in `apps/server/src/engine/your-groups.ts` to read `row.event_start_at` directly, eliminating the redundant per-event database read.

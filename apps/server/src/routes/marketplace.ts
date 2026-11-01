@@ -1395,6 +1395,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
+        if (respondCopyNoDeal(ctx, err)) return;
         respondSettlementAware(ctx, err, 'Failed to approve request');
     }
 });

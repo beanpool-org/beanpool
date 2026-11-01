@@ -338,7 +338,7 @@ export const LISTING_COPY_CODE = 'listing_copy';
  * and the Beans switch alone wouldn't stop a deal there.
  */
 function assertNoDealOnCopy(shownFromHost: string | null | undefined): void {
-    if (shownFromHost != null) throw Object.assign(new Error(word("This is shown from another community, so it can't be bought or taken here.")), { code: LISTING_COPY_CODE });
+    if (shownFromHost != null) throw Object.assign(new Error(word("This is shown from another community, so it can't be bought or taken here.")), { code: LISTING_COPY_CODE, status: 409 });
 }
 
 export function requestPost(

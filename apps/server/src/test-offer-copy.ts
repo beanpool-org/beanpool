@@ -87,6 +87,7 @@ async function main() {
     const { writeDirectoryRows, normaliseRegistryRow } = await import('./engine/directory-cache.js');
     const { LISTING_COPY_CODE } = await import('./engine/escrow.js');
     const { OWNER_READ_TOOLS } = await import('./agent/owner-reads.js');
+    const { MONEY_LIMITS } = await import('./config/writer-limits.js');
 
     await initTls();
     se.initStateEngine();
@@ -283,9 +284,16 @@ async function main() {
         assert(off.status >= 400, `Beans off: ${what} is refused (${off.status} ${off.text.slice(0, 100)})`);
         leaks(off.text, `Beans off, ${what}`);
     }
-    const asApprove = await call('POST', '/api/marketplace/transactions/approve', robin, { transactionId: 'none', authorPublicKey: robin.pubKeyHex });
-    assert(asApprove.status >= 400, `Beans off: no request can be approved (${asApprove.status})`);
-    const rate = await call('POST', '/api/ratings', sam, { raterPubkey: sam.pubKeyHex, targetPubkey: robin.pubKeyHex, stars: 5, comment: 'Lovely', transactionId: copyId });
+    // A request row put there by hand, as an older server might have left one. A made-up id would be refused by anything.
+    const handMadeRequest = (id: string, seller: string, postId = copyId) => db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                VALUES (?, ?, ?, ?, 20, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id, postId, sam.pubKeyHex, seller);
+    const requestState = (id: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(id) as { status: string }).status;
+    const dropRequest = (id: string) => db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(id);
+    handMadeRequest('hand-made-off', robin.pubKeyHex);
+    const asApprove = await call('POST', '/api/marketplace/transactions/approve', robin, { transactionId: 'hand-made-off', authorPublicKey: robin.pubKeyHex });
+    assert(asApprove.status >= 400 && requestState('hand-made-off') === 'requested', `Beans off: no request can be approved (${asApprove.status} ${asApprove.text.slice(0, 100)})`);
+    dropRequest('hand-made-off');
+    const rate =await call('POST', '/api/ratings', sam, { raterPubkey: sam.pubKeyHex, targetPubkey: robin.pubKeyHex, stars: 5, comment: 'Lovely', transactionId: copyId });
     assert(rate.status >= 400, `no review: a rating needs a finished deal, and a copy's id is none (${rate.status})`);
     // An older app's Message button on a copy: it knows only the neutral key, and no route takes a post in place of a person.
     const talk = await call('POST', '/api/messages/conversation', sam, { type: 'dm', participants: ['hidden', sam.pubKeyHex], createdBy: sam.pubKeyHex, postId: copyId });
@@ -399,14 +407,33 @@ async function main() {
     }
     const inSpanish = await call('POST', '/api/marketplace/posts/accept', sam, { postId: copyId, buyerPublicKey: sam.pubKeyHex }, { 'X-Language': 'es' });
     assert(inSpanish.status === 409 && /otra comunidad/.test(inSpanish.body?.error ?? ''), `the refusal is in the member's language (${inSpanish.text.slice(0, 120)})`);
-    // A request row put there by hand, as an older server might have left one: still no approval.
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
-                VALUES ('hand-made', ?, ?, ?, 20, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(copyId, sam.pubKeyHex, robin.pubKeyHex);
+    // A request row put there by hand: still no approval, and it says why, not merely that something went wrong.
+    handMadeRequest('hand-made', robin.pubKeyHex);
     const approved = await call('POST', '/api/marketplace/transactions/approve', robin, { transactionId: 'hand-made', authorPublicKey: robin.pubKeyHex });
-    assert(approved.status >= 400, `Beans on: a request on a copy is never approved (${approved.status} ${approved.text.slice(0, 120)})`);
+    assert(approved.status === 409 && approved.body?.code === LISTING_COPY_CODE && requestState('hand-made') === 'requested', `Beans on: a request on a copy is never approved (${approved.status} ${approved.text.slice(0, 120)})`);
+    dropRequest('hand-made');
+    // The enterprise's own door to the same approval (routes/treasury.ts), on a copy put under its name by hand.
+    const enterprise = member('CopyBakeryCo');
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(enterprise.pubKeyHex);
+    db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(enterprise.pubKeyHex, robin.pubKeyHex);
+    handMadeRequest('hand-made-enterprise', enterprise.pubKeyHex);
+    const byEnterprise = await call('POST', `/api/treasury/${enterprise.pubKeyHex}/approve`, robin, { transactionId: 'hand-made-enterprise' });
+    assert(byEnterprise.status === 409 && byEnterprise.body?.code === LISTING_COPY_CODE && requestState('hand-made-enterprise') === 'requested', `Beans on: nor by an enterprise's own door (${byEnterprise.status} ${byEnterprise.text.slice(0, 120)})`);
+    leaks(byEnterprise.text, 'Beans on, an enterprise approving');
+    dropRequest('hand-made-enterprise');
     assert(balance() === beforeBalance, 'no Bean moved');
-    db.prepare(`DELETE FROM marketplace_transactions WHERE id = 'hand-made'`).run();
-    const editPrice = await call('POST', '/api/marketplace/posts/update', robin, { id: copyId, authorPublicKey: robin.pubKeyHex, credits: 20 });
+    // The money limits count a listing's author as a new person to pay. A copy's is never read: at the day's limit of new
+    // people, a 429 for a stranger and a 409 for someone already paid would tell a member whether they had paid its author.
+    const addPayment = db.prepare(`INSERT INTO money_acts (account, kind, recipient, new_recipient, made_at) VALUES (?, 'payment', ?, 1, ?)`);
+    for (let i = 0; i < MONEY_LIMITS.newRecipientsPerDay; i++) addPayment.run(sam.pubKeyHex, keypair().pubKeyHex, new Date().toISOString());
+    const plainAtLimit = await call('POST', '/api/marketplace/posts/accept', sam, { postId: plain.body?.post?.id, buyerPublicKey: sam.pubKeyHex });
+    assert(plainAtLimit.status === 429 && plainAtLimit.body?.code === 'money_new_recipients_day', `at the day's limit of new people, a plain listing's author counts (the control: ${plainAtLimit.status} ${plainAtLimit.text.slice(0, 100)})`);
+    for (const [what, path, body] of doors) {
+        const atLimit = await call('POST', path, sam, body);
+        assert(atLimit.status === 409 && atLimit.body?.code === LISTING_COPY_CODE, `at that limit, ${what} on a copy reads no author: the same answer, paid before or not (${atLimit.status} ${atLimit.text.slice(0, 100)})`);
+    }
+    db.prepare('DELETE FROM money_acts WHERE account = ?').run(sam.pubKeyHex);
+    const editPrice =await call('POST', '/api/marketplace/posts/update', robin, { id: copyId, authorPublicKey: robin.pubKeyHex, credits: 20 });
     assert(stored(copyId)?.credits === 0, `Beans on: an edit can't give a copy a price in \`credits\` (${editPrice.status})`);
     const samsOffer = await call('POST', '/api/marketplace/posts', sam, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Sam lists first', description: 'x', authorPublicKey: sam.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS });
     assert(samsOffer.status === 200, `setup: Sam lists an Offer, as a community with Beans asks (${samsOffer.status})`);

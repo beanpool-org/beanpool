@@ -55,7 +55,7 @@ vi.mock('expo-router', async () => {
         // The real functions (createRealRouter); only the instance is the test's own.
         router: {
             push: (...a: unknown[]) => nav.real.router.push(...a), navigate: (...a: unknown[]) => nav.real.router.navigate(...a), replace: (...a: unknown[]) => nav.real.router.replace(...a),
-            back: () => nav.real.router.back(), canGoBack: () => nav.real.router.canGoBack(), setParams: (p: object) => nav.real.router.setParams(p),
+            back: () => nav.real.router.back(), dismiss: (n?: number) => nav.real.router.dismiss(n), canGoBack: () => nav.real.router.canGoBack(), setParams: (p: object) => nav.real.router.setParams(p),
         },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useLocalSearchParams: () => useContext(RouteCtx)?.params ?? {},
@@ -120,6 +120,7 @@ import { guideView, setLanguage } from '@beanpool/core';
 import { TOOL_DOCS_TABLE } from '../schema';
 import { openTool } from '../frame';
 import { toolReminderRoute } from '../reminders';
+import { toolHref, toolParams, toolPath, toolScreenOf } from '../route-params';
 import { RouteCtx, createRealRouter, type RealRoute } from './real-router';
 import ToolRoute from '../../app/tool/[id]';
 
@@ -162,7 +163,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); v
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 /** What the member sees: the top route's, never one covered by it. */
 const onTop = (id: string) => host.querySelector(`[data-top="true"] [data-testid="${id}"]`);
-const allOnTop = (prefix: string) => [...host.querySelectorAll(`[data-top="true"] [data-testid^="${prefix}"]`)];
+const allOnTop = (prefix: string) => Array.from(host.querySelectorAll(`[data-top="true"] [data-testid^="${prefix}"]`));
 async function tap(id: string) {
     const el = onTop(id);
     expect(el, `${id} on the screen the member sees`).not.toBeNull();
@@ -230,7 +231,7 @@ describe('Your garden on the phone: each tap opens what it says (Damo, 1 Nov)', 
         expect(onTop('garden-zone')).not.toBeNull();
     });
 
-    it('Remove my data on a later screen goes back to the first screen in place', async () => {
+    it('Remove my data on a later screen goes back to the first screen, with no second copy of it to back through', async () => {
         await chooseClimate();
         await tap('garden-change');
         await tap('tool-menu');
@@ -238,6 +239,20 @@ describe('Your garden on the phone: each tap opens what it says (Damo, 1 Nov)', 
         await settle();
         expect(onTop('garden-zone')).toBeNull();
         expect(onTop('garden-no-zone')).not.toBeNull();
+        expect(nav.real.routes().map((r: RealRoute) => r.name)).toEqual(['tools', 'tool/[id]']);
+    });
+
+    it('Remove my data on a screen a link opened straight: that screen becomes the first, whichever name the link used', async () => {
+        for (const param of ['screen', 'toolScreen']) {
+            await go(() => nav.real.openLink(`/tool/garden?${param}=crop&key=tomato`));
+            expect(onTop('garden-crop-name'), param).not.toBeNull();
+            await tap('tool-menu');
+            await tap('tool-menu-remove');
+            await settle();
+            expect(onTop('garden-no-zone'), param).not.toBeNull();
+            expect(depth(), param).toBe(1);
+            expect(nav.real.top().params.key, param).toBeUndefined();
+        }
     });
 });
 
@@ -260,7 +275,7 @@ describe('every tool, not only the garden: a screen named by a push is the scree
 });
 
 describe('a link from outside', () => {
-    it('beanpool://tool/<id>?screen=… still opens that screen, with the tool seeing none of the route\'s own params', async () => {
+    it('beanpool://tool/<id>?screen=… still opens that screen', async () => {
         await go(() => nav.real.openLink('/tool/garden?screen=zone'));
         expect(onTop('garden-zone')).not.toBeNull();
     });
@@ -269,5 +284,28 @@ describe('a link from outside', () => {
         await go(() => nav.real.openLink('/tool/garden?screen=crop&key=tomato'));
         expect(onTop('garden-crop-name')).not.toBeNull();
         expect(onTop('garden-crop-missing')).toBeNull();
+    });
+});
+
+describe("the route's own params", () => {
+    it('a push never carries the word expo-router removes, and the host decides the tool and the screen', () => {
+        expect(toolHref('garden', 'crop', { key: 'tomato' }).params).toEqual({ key: 'tomato', id: 'garden', toolScreen: 'crop' });
+        expect(toolHref('garden').params).toEqual({ id: 'garden' });
+        // A tool's own params can't point the route somewhere else.
+        expect(toolHref('garden', 'crop', { id: 'things', toolScreen: 'zone' }).params).toEqual({ id: 'garden', toolScreen: 'crop' });
+        expect(toolPath('garden', 'zone')).toBe('/tool/garden?toolScreen=zone');
+        expect(toolPath('a b')).toBe('/tool/a%20b');
+    });
+
+    it("either name opens a screen, the app's own first; none means the first screen", () => {
+        expect(toolScreenOf({ toolScreen: 'zone', screen: 'crop' })).toBe('zone');
+        expect(toolScreenOf({ screen: 'crop' })).toBe('crop');
+        expect(toolScreenOf({ id: 'garden' })).toBe('');
+        expect(toolScreenOf({ toolScreen: ['zone', 'crop'] })).toBe('');
+    });
+
+    it("the tool sees only its own params, never the route's", () => {
+        expect(toolParams({ id: 'garden', screen: 'crop', toolScreen: 'crop', key: 'tomato' })).toEqual({ key: 'tomato' });
+        expect(toolParams({ id: 'garden', key: ['a', 'b'] })).toEqual({});
     });
 });

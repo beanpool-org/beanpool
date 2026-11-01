@@ -6,8 +6,8 @@
  * named its screen that way pushed the tool again with no screen, so its first screen came up over itself and the tap
  * seemed to do nothing (Damo, 1 Nov; tools/__tests__/tool-taps-real-router.test.ts runs the real push).
  *
- * A link from outside (`beanpool://tool/<id>?screen=…&key=…`, the shape docs and old notes give) reaches the route whole,
- * with no push, so {@link toolScreenOf} still reads `screen`.
+ * A link from outside (`beanpool://tool/<id>?screen=…&key=…`, the route's own documented shape) reaches the route whole,
+ * cold or with the app running, so {@link toolScreenOf} still reads `screen`.
  */
 export const TOOL_SCREEN_PARAM = 'toolScreen';
 

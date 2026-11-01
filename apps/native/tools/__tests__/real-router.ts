@@ -1,5 +1,5 @@
 /**
- * expo-router's own routing, run under vitest: its real push, navigate, replace, back and setParams (global-state/routing.js),
+ * expo-router's own routing, run under vitest: its real push, navigate, replace, back, dismiss and setParams (global-state/routing.js),
  * its real path parser (fork/getStateFromPath.js), and its real route table built from the files in app/, over React
  * Navigation's real StackRouter. Only what needs a device is stubbed (react-native, expo-linking, the DOM-component bridge),
  * and the store is a small one that holds the stack as the app's root Stack does, under its `__root` route.
@@ -105,10 +105,10 @@ export function createRealRouter(start: { name: string; params?: Record<string, 
     return {
         /** What the app imports as `router` from expo-router. */
         router: {
-            push: routing.push, navigate: routing.navigate, replace: routing.replace, back: routing.goBack,
+            push: routing.push, navigate: routing.navigate, replace: routing.replace, back: routing.goBack, dismiss: routing.dismiss,
             canGoBack: routing.canGoBack, setParams: routing.setParams,
         },
-        /** A link from outside, as the app opens one: the path's whole state taken as it stands, nothing through a push. */
+        /** A link at a cold start: the path's whole state taken as it stands, with no push. (Running: checked on the emulator.) */
         openLink(href: string) {
             const parsed = store.linking.getStateFromPath(href, config);
             const route = parsed.routes[0].state.routes.at(-1);

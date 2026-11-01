@@ -303,8 +303,12 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                         setSettingsOpen(false);
                         tellOpenScreens(shareKey, hear, { doc: empty, stored: false, settings: left, copyNote: null });
                         // On a later screen (a record), back to the first, where the doors are: what it showed has gone.
+                        // The tool's own screens come off the stack, so no second copy of the first is left to back through;
+                        // opened straight at this one (a link, a reminder), there are none under it and it becomes the first.
                         if (screenName !== manifest.screens[0]) {
-                            router.setParams({ [TOOL_SCREEN_PARAM]: manifest.screens[0], screen: undefined, ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
+                            const over = (openScreens.get(shareKey)?.size ?? 1) - 1;
+                            if (over > 0) router.dismiss(over);
+                            else router.setParams({ [TOOL_SCREEN_PARAM]: manifest.screens[0], screen: undefined, ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
                         }
                     })().catch((e) => console.warn('[Tools] Could not remove the tool\'s data', e instanceof Error ? e.message : e));
                 },

@@ -236,8 +236,9 @@ async function main() {
     assert(!onSocket.includes('Sourdough loaves'), 'the socket carries the id, and no copy of the listing');
     samSocket.ws.close();
     const tool = (OWNER_READ_TOOLS as any[]).find((x) => x.name === 'listings_search');
-    const search = tool.run({ id: 'g', name: 'g', member: sam.pubKeyHex, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: false }, { q: 'sourdough', include_text: true }, 'B');
-    assert(!search.ok || search.result.listings.every((l: any) => l.by === 'another member'), `MCP listings_search names nobody (${JSON.stringify(search).slice(0, 140)})`);
+    const search = tool.run({ id: 'g', name: 'g', member: sam.pubKeyHex, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: true }, { q: 'sourdough', include_text: true }, 'B');
+    const inSearch = search.ok ? search.result.listings.find((l: any) => l.postId === copyId) : null;
+    assert(inSearch?.by === 'another member', `MCP listings_search finds it, and names nobody (${JSON.stringify(inSearch ?? search).slice(0, 140)})`);
     leaks(JSON.stringify(search), 'MCP listings_search');
     const report = await call('POST', '/api/reports', sam, { reporterPubkey: sam.pubKeyHex, targetPubkey: 'hidden', targetPostId: copyId, reason: 'spam', details: 'test' });
     assert(report.status === 200 || report.status === 201, `a member can report it (${report.status} ${report.text.slice(0, 120)})`);

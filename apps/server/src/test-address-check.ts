@@ -93,10 +93,10 @@ async function child(): Promise<void> {
             }
             return true;
         },
-        registrarNames: async (a: { set: unknown }) => {
+        registrarNames: async (a: { set: unknown; publicAddress?: unknown }) => {
             const { updateNodeConfig } = await import('./state-engine.js');
             const { forgetOwnAddresses } = await import('./engine/own-addresses.js');
-            updateNodeConfig({ registrarNames: a.set } as any);
+            updateNodeConfig({ registrarNames: a.set, publicAddress: a.publicAddress ?? null } as any);
             forgetOwnAddresses();
             return true;
         },
@@ -364,6 +364,10 @@ async function main(): Promise<void> {
             await P.send('registrarNames', { set: entry('pending') });
             const pending = (await P.send('reaches', {}))['gone.beanpool.org'];
             assert(pending?.step === 'no-dns-beanpool', `a name still waiting for its record is no new name (${pending?.step})`);
+            // An old node: the name stored as its address, not yet on the record, which stamps such a name as made now.
+            await P.send('registrarNames', { set: [], publicAddress: { name: 'gone', hostname: 'gone.beanpool.org', status: 'live' } });
+            const stored = (await P.send('reaches', {}))['gone.beanpool.org'];
+            assert(stored?.step === 'no-dns-beanpool', `a name stored before the record never reads as made just now (${stored?.step})`);
             await P.send('registrarNames', { set: [] });
         });
 

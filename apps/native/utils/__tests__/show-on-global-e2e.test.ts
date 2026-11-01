@@ -472,7 +472,9 @@ describe('an in-person event shown on the global community (the phone against tw
             await tendCopies(me, deps());
             globalDown = false;
             expect((await copyRow(id)).status).toBe('active');
-            expect(await pairOf(home.id, me.publicKey)).toMatchObject({ copyId: id, leaving: true, resting: true });
+            // Global didn't say whether reports hold it, so the rest hasn't started: nothing is marked until it can read.
+            expect(await pairOf(home.id, me.publicKey)).toMatchObject({ copyId: id });
+            expect((await pairOf(home.id, me.publicKey))?.leaving).toBeFalsy();
 
             await tendCopies(me, deps());
             expect((await copyRow(id)).status).toBe('cancelled');
@@ -1328,6 +1330,38 @@ describe('a copy global\'s reports hold: a rest at home waits, so nothing comes 
         await tendCopies(me, deps());
         expect(await copyCount(me)).toBe(1);
         expect(await copyIdOf(home.id, me)).toBe(id);
+    }, START_MS);
+
+    it('the row\'s own tick on a paused listing goes the same way: the held copy stays', async () => {
+        const me = await memberOfBoth('Holly Ticks');
+        const home = await listingAtHome(me, 'Medlars');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await holdByReports(id);
+        const [, off] = homeRests[0];
+        await off(me, home);
+        expect(await showOnGlobal({ ...home, status: 'paused' }, local.url, me, deps())).toBe('later');
+        expect(await copyCount(me)).toBe(1);
+        expect(await copyIdOf(home.id, me)).toBe(id);
+    }, START_MS);
+
+    it('global doesn\'t answer the read, though it would take the remove: the rest waits, then goes ahead', async () => {
+        const me = await memberOfBoth('Holly Unread');
+        const home = await listingAtHome(me, 'Sloes');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const [, off] = homeRests[0];
+        await off(me, home);
+        const noReads: CopyDeps = { ...deps(), get: (async (url: string, ...rest: any[]) => {
+            if (String(url).startsWith(global_.url)) throw new Error('timed out');
+            return (signedGet as any)(url, ...rest);
+        }) as any };
+        await tendCopies(me, noReads);
+        expect(await copyIdOf(home.id, me)).toBe(id);
+        expect(await liveCopies(me)).toHaveLength(1);
+
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
     }, START_MS);
 
     it('a moderator\'s restore while the listing is off the board: the rest goes ahead and the copy comes back', async () => {

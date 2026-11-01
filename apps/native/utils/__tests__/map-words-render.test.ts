@@ -320,6 +320,8 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(host.querySelector('[data-testid="map-preview-copy-line"]')?.textContent).toBe(copyPriceLine(eventCopyOf(COPY as any)!));
         expect(host.textContent).not.toContain('hidden');
         expect(host.textContent).not.toContain(xx('Unknown'));
+        const preview = host.querySelector('[data-testid="map-preview-copy-line"]')?.parentElement?.textContent ?? '';
+        expect(preview.replace(copyPriceLine(eventCopyOf(COPY as any)!), '')).not.toMatch(/\d/);
     });
 
     it('an event\'s preview: its date, UPDATED, how many are going, View event', async () => {

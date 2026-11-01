@@ -259,12 +259,13 @@ async function copyIsThere(pair: CopyPair, identity: BeanPoolIdentity, deps: Cop
 }
 
 /**
- * Global's auto-hide leaves the row in place for its author, so `copyIsThere` reads a held copy as up. A rest would cancel
- * it and the listing's return post the same words clean, with no reports on them and nobody having chosen that.
+ * Whether a rest has to wait: global's auto-hide leaves the row in place for its author, so `copyIsThere` reads a held copy
+ * as up, and a rest would cancel it and the listing's return post the same words clean, with nobody having chosen that.
+ * An unread answer waits too: a rest is the step that can't be taken back, and the next tend asks again.
  */
-async function heldByReports(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
-    const rows = await readJson(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, deps);
-    return Array.isArray(rows) && rows.some((row) => !!row?.hiddenByReportsAt);
+async function restMustWait(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
+    const rows = await readJson(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, deps).catch(() => null);
+    return !Array.isArray(rows) || rows.some((row) => !!row?.hiddenByReportsAt);
 }
 
 /**
@@ -383,7 +384,9 @@ export async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: B
         }
         if (!mayHaveCopy(atHome, identity.publicKey)) return refused;
         if (restsAtHome(atHome)) {
-            // A pair held has a copy up to bring down. A new one has nothing up, which is what `resting` without `leaving` says.
+            // A pair held has a copy up to bring down, unless reports hold it. A new one has nothing up, which is what `resting`
+            // without `leaving` says.
+            if (kept?.sent && !kept.resting && await restMustWait(kept, identity, deps)) return 'later';
             await (kept ? restCopy(kept, identity, deps) : savePair({ ...pair, resting: true }));
             return 'later';
         }
@@ -534,8 +537,8 @@ async function tendPairs(identity: BeanPoolIdentity, deps: CopyDeps, now: number
             // About to rest a copy that has landed: taken down behind this phone (another phone, a moderator), it stays down. A
             // rest can't tell, since global answers a second remove as it does the first, and its return would post a new one.
             if (away && pair.sent && !pair.resting && (await forgetIfGone(pair, identity, deps).catch(() => null)) === false) continue;
-            // Held by global's reports: the copy stays as it is and the rest waits, or the rest would undo global's moderation.
-            if (away && pair.sent && !pair.resting && await heldByReports(pair, identity, deps).catch(() => false)) continue;
+            // Held by global's reports, or global didn't say: the copy stays as it is and the rest waits.
+            if (away && pair.sent && !pair.resting && await restMustWait(pair, identity, deps)) continue;
             // Home may have taken a minute to say: only what is still stored, and not on its way out, goes on from here.
             const still = await storedPair(copyId);
             if (!still || still.leaving) continue;

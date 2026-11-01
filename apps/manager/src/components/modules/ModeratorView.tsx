@@ -61,6 +61,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
     const [burstsHere, setBurstsHere] = useState(false);
     const [burstAnchor, setBurstAnchor] = useState<string | null>(null);
     const [burstReload, setBurstReload] = useState(0);
+    const [limitsReload, setLimitsReload] = useState(0);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -121,7 +122,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                     </h1>
                     <button
                         type="button"
-                        onClick={() => void load()}
+                        onClick={() => { void load(); setLimitsReload((n) => n + 1); }}
                         className="min-h-[48px] px-4 rounded-xl bg-nature-800 hover:bg-nature-700 text-sm text-white font-bold"
                     >
                         Refresh
@@ -133,7 +134,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                     A message from a locked group chat shows here only when its reporter shared its key, and only that one message.
                 </p>
 
-                <RequestLimitsCard nodeUrl={nodeUrl} />
+                <RequestLimitsCard nodeUrl={nodeUrl} reloadKey={limitsReload} />
                 <BurstDigestCard nodeUrl={nodeUrl} onOpen={setBurstAnchor} reloadKey={burstReload} onAvailability={setBurstsHere} />
                 {burstAnchor && (
                     <BurstPanel

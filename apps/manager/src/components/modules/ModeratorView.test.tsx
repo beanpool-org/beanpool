@@ -123,7 +123,8 @@ describe('moderator Settings (App)', () => {
         await act(async () => { await new Promise(r => setTimeout(r, 50)); });
         const asked = calls.slice(signedInAt).map(c => new URL(c.url, 'http://x').pathname);
         expect(asked).toContain('/api/local/admin/reports');
-        const outside = asked.filter(p => !['/api/local/admin/auth/exchange', '/api/local/community-info', '/api/local/admin/reports', '/api/local/admin/bursts'].includes(p));
+        expect(asked, 'Refresh reads the request limits too').toContain('/api/local/admin/members/request-limits');
+        const outside = asked.filter(p => !['/api/local/admin/members/request-limits', '/api/local/admin/auth/exchange', '/api/local/community-info', '/api/local/admin/reports', '/api/local/admin/bursts'].includes(p));
         expect(outside).toEqual([]);
     });
 

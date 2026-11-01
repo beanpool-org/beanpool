@@ -18,6 +18,7 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBr
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 import { nodeCredential } from '../../lib/profiles';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
+import { ReportedDirectMessage } from './ReportedDirectMessage';
 import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
 
@@ -555,7 +556,16 @@ export function PeopleSafetySection({
                                                 <p className="text-xs text-white m-0">
                                                     {report.reason || report.description || 'No reason provided'}
                                                 </p>
-                                                {report.targetMessageId && report.id && (
+                                                {report.directMessage && report.id && (
+                                                    // One direct message line: its signature checked, its words the reporter's (server: engine/dm-line-report.ts).
+                                                    <ReportedDirectMessage
+                                                        nodeUrl={activeNode.url}
+                                                        reportId={String(report.id)}
+                                                        adminPassword={nodeCredential(activeNode)}
+                                                        tfaToken={getTfaSessionToken(activeNode.id)}
+                                                    />
+                                                )}
+                                                {report.targetMessageId && !report.directMessage && report.id && (
                                                     // A locked group chat's message, reported with its key (server: engine/group-chat-report.ts).
                                                     <ReportedGroupMessage
                                                         nodeUrl={activeNode.url}

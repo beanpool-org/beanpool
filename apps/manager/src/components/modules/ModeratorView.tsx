@@ -5,6 +5,7 @@ import type { BackLink } from '../../lib/came-from';
 import { MODERATOR_MANUAL_PAGES } from '../../lib/manual';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
+import { ReportedDirectMessage } from './ReportedDirectMessage';
 import {
     REMOVAL_REASONS,
     actionNodeReport,
@@ -248,7 +249,10 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                 </span>
             </div>
 
-            {report.targetMessageId ? (
+            {report.directMessage ? (
+                // One direct message line: its sender's signature checked, its words the reporter's.
+                <ReportedDirectMessage nodeUrl={nodeUrl} reportId={report.id} />
+            ) : report.targetMessageId ? (
                 // A locked group chat's message, reported with its key: opened here, verified, and nothing else of the chat.
                 <ReportedGroupMessage nodeUrl={nodeUrl} reportId={report.id} groupName={report.groupMessage?.groupName} />
             ) : hasPost ? (

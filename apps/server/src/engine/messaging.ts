@@ -25,6 +25,7 @@ import {
     GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
     assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate, groupLineForReader, groupLineHearers,
 } from './group-thread.js';
+import { metadataAfterDmEdit } from './dm-line-report.js';
 import { GroupKeyError, fromEpochOf } from './group-keys.js';
 import { writeMessageTombstone, tombstoneFields } from './message-tombstone.js';
 import { eventChatUnknownTo } from './event-thread.js';
@@ -39,7 +40,7 @@ import {
 } from './withheld-lines.js';
 import {
     openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, nodeLineInRequest, reactionRefusal,
-    requestPushDue, requestPushBody, DM_REQUEST_PENDING_CODE,
+    DM_REQUEST_PENDING_CODE,
 } from './dm-requests.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
@@ -598,8 +599,8 @@ export function sendMessage(
                     unmutedRecipients(withheldConvId, participantKeys),
                     authorPubkey,
                     '💬 New Message',
-                    requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
-                    requestLine ? { screen: 'requests', conversationId: withheldConvId } : { screen: 'chat', conversationId: withheldConvId },
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: withheldConvId },
                     'chat',
                     'chat.message'
                 );
@@ -672,18 +673,15 @@ export function sendMessage(
                 const senderMember = getMember(db, authorPubkey) as any;
                 // A push names people in words, never a slice of their key.
                 const senderName = senderMember?.callsign || 'A member';
-                // A message request's line says so, at most once an hour per person (engine/dm-requests.ts). One folded into
-                // the hour's single push does the push's work all the same and drops it, as a withheld line does above, and so
-                // does one in a request its recipient ignored, which the line leaves ignored.
-                const send = through?.kind === 'request' && (through.ignored || !requestPushDue(through.to, pushConvId))
-                    ? cb.rehearsePushNotification
-                    : cb.dispatchPushNotification;
+                // A message request alerts nobody until it is accepted (Marty, 1 Nov 2026): its line does the push's work all
+                // the same and drops it, as a withheld line does above, so the work after the answer tells its sender nothing.
+                const send = requestLine ? cb.rehearsePushNotification : cb.dispatchPushNotification;
                 send?.(
                     unmutedRecipients(pushConvId, recipients),
                     authorPubkey,
                     '💬 New Message',
-                    requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
-                    requestLine ? { screen: 'requests', conversationId: pushConvId } : { screen: 'chat', conversationId: pushConvId },
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: pushConvId },
                     'chat',
                     'chat.message'
                 );
@@ -986,6 +984,9 @@ export function editMessage(
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
         }
+    } else {
+        // New sealed bytes, so a new signature, or none (engine/dm-line-report.ts).
+        storedMetadata = metadataAfterDmEdit(row.metadata ?? null, metadata);
     }
 
     const sentAtMs = new Date(row.timestamp).getTime();
@@ -1003,11 +1004,7 @@ export function editMessage(
     if (withheld) {
         setOverlayEdit(messageId, authorPubkey, storedCiphertext, storedNonce, editedAt);
     } else {
-        if (isGroupChat) {
-            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
-        } else {
-            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
-        }
+        db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
         // An edit from while they were blocked, still over their own read, gives way to this one.
         if (!isGroupChat) clearOverlayEdit(messageId, authorPubkey);
     }

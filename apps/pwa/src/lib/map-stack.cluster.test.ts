@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { MAP_TAP_CAP_ZOOM } from '@beanpool/core';
-import { clusterSplitZoom, planBubbleTap, stackPins, type StackPin } from './map-stack';
+import { bubblesOnMap, clusterSplitZoom, planBubbleTap, stackPins, type StackPin } from './map-stack';
 
 const AT: [number, number] = [-28.69, 153.56];
 const north = (m: number): [number, number] => [AT[0] + m / 111_000, AT[1]];
@@ -38,6 +38,26 @@ function bubbleOf(marker: L.Marker, zoom: number): any {
     while (c && c._zoom > zoom) c = c.__parent;
     return c;
 }
+
+describe('the bubbles on the map when it stops, on the real library', () => {
+    const read = (zoom: number, spots: Array<[number, number]>) => {
+        const { map, group, markers } = mapWith(spots, zoom);
+        const keys = new Map(markers.map((m, i) => [m, `pin-${i}`]));
+        return bubblesOnMap(keys, (pin) => group.getVisibleParent(pin), (at: L.LatLng) => map.latLngToContainerPoint(at));
+    };
+
+    it('finds a stack that cannot part, with its pins, at its point on the view', () => {
+        const [stack, ...others] = read(MAP_TAP_CAP_ZOOM, [AT, AT, AT]);
+        expect(others).toEqual([]);
+        expect(stack.keys).toEqual(['pin-0', 'pin-1', 'pin-2']);
+        expect(stack.x).toBeCloseTo(160, 0);
+        expect(stack.y).toBeCloseTo(320, 0);
+    });
+
+    it('reads a pin that shows as no bubble', () => {
+        expect(read(MAP_TAP_CAP_ZOOM, [AT, north(120)])).toEqual([]);
+    });
+});
 
 describe('clusterSplitZoom on the real library', () => {
     it('reads pins on one spot as never parting: one past the deepest zoom, past the cap', () => {

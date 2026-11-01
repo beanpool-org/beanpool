@@ -36,6 +36,8 @@ const maps = vi.hoisted(() => ({
     /** The regions a tap asked the map to move to. */
     moves: [] as Array<Record<string, number>>,
     regionChanged: (_region: Record<string, number>) => {},
+    /** The map moving under a finger, before it stops. */
+    moving: () => {},
     /** A tap on the bare map, past any marker. */
     bareTap: (() => {}) as () => void,
 }));
@@ -84,6 +86,7 @@ vi.mock('../../components/Map', async () => {
     const NativeMap = forwardRef((props: Record<string, any>, ref) => {
         useImperativeHandle(ref, () => ({ animateToRegion(region: Record<string, number>) { maps.moves.push(region); }, fitToCoordinates(coords: typeof maps.fits[number]) { maps.fits.push(coords); } }));
         maps.regionChanged = props.onRegionChangeComplete;
+        maps.moving = props.onRegionChange;
         maps.bareTap = props.onPress;
         return createElement('div', { 'data-testid': 'map' }, props.children);
     });
@@ -162,8 +165,11 @@ vi.mock('../../components/FilterChipRow', () => ({
         createElement('div', null, props.chips.map((c) => createElement('button', { key: c.id, 'data-chip': c.id, onClick: () => props.onSelect(c.id) }))),
 }));
 vi.mock('../../components/FilterChipPicker', () => ({
-    FilterChipPicker: (props: { chips: Array<{ id: string }>; onSelect: (id: string) => void }) =>
-        createElement('div', null, props.chips.map((c) => createElement('button', { key: c.id, 'data-chip': c.id, onClick: () => props.onSelect(c.id) }))),
+    FilterChipPicker: (props: { chips: Array<{ id: string }>; onSelect: (id: string) => void; onToggle: () => void }) =>
+        createElement('div', null, [
+            createElement('button', { key: 'toggle', 'data-category-toggle': true, onClick: props.onToggle }),
+            ...props.chips.map((c) => createElement('button', { key: c.id, 'data-chip': c.id, onClick: () => props.onSelect(c.id) })),
+        ]),
 }));
 vi.mock('../maps', () => ({ HAS_MAPS_KEY: true }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => null }));
@@ -173,8 +179,9 @@ vi.mock('../db', () => ({ getPosts: async () => posts.now }));
 import MapScreen from '../../app/(tabs)/map';
 import { buildVariantList, EVENT_PIN, PIN_ANCHOR, pinCacheKey } from '../../components/UnifiedMapPin';
 import { POST_CATEGORIES, categoryEmoji } from '../../constants/categories';
-import { MAP_TAP_CAP_ZOOM } from '@beanpool/core';
-import { CLUSTER_CAP_ZOOM, LANDING_MARGIN_ZOOM, clusterZoomOf, planBubbleTap, type MapRegion } from '../map-stack';
+import { MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS } from '@beanpool/core';
+import { CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
+import { CLUSTER_CAP_ZOOM, LANDING_MARGIN_ZOOM, MARKER_Z, clusterZoomAt, clusterZoomOf, planBubbleTap, type MapRegion } from '../map-stack';
 import { eventPinCard } from '../events';
 
 const NATIVE = join(__dirname, '..', '..');
@@ -509,7 +516,13 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
         expect(bubbles().map((b) => b.count)).toEqual([3]);
         await openBubble();
         expect(heading()).toBe('3 at this spot');
-        expect(maps.moves).toHaveLength(1);
+        // The stack is low on this view, where the list comes up, so the map lifts it clear at the same zoom (Marty, 2 Nov:
+        // the stack stays in view above the list). It was `toHaveLength(1)` while the list could cover its own bubble.
+        expect(maps.moves).toHaveLength(2);
+        expect(maps.moves[1].latitudeDelta).toBe(maps.moves[0].latitudeDelta);
+        expect(maps.moves[1].longitudeDelta).toBe(maps.moves[0].longitudeDelta);
+        const y = ((maps.moves[1].latitude - AT.lat) / maps.moves[1].latitudeDelta + 0.5) * 640;
+        expect(y).toBeLessThan(640 * (1 - STACK_LIST_SHARE));
     });
 
     it('has no spiral: a stack stays a bubble however deep the map goes, and a tap there still lists it', async () => {
@@ -643,6 +656,290 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
         await settle(2);
         expect(heading()).toBeNull();
         expect(host.textContent).toContain('View event');
+    });
+
+    it('a tap on another bubble that zooms closes the list: it does not sit over the new place', async () => {
+        posts.now = [eventIn('a', 2), eventIn('b', 3), ev('far-1', AT.lat + 0.02, AT.lng), ev('far-2', AT.lat + 0.02 + 400 / 111_000, AT.lng)];
+        await drawMap();
+        expect(bubbles().map((b) => b.count)).toEqual([2, 2]);
+        const latOf = (b: { el: HTMLElement }) => Number(b.el.getAttribute('data-marker')!.split(',')[0]);
+        const stackBubble = bubbles().find((b) => Math.abs(latOf(b) - AT.lat) < 0.001)!;
+        await act(async () => { stackBubble.el.click(); });
+        await settle(2);
+        expect(heading()).toBe('2 at this spot');
+        const other = bubbles().find((b) => Math.abs(latOf(b) - AT.lat) > 0.001)!;
+        await act(async () => { other.el.click(); });
+        await settle(2);
+        expect(maps.moves).toHaveLength(1);
+        expect(heading()).toBeNull();
+    });
+
+    describe('a tap that lands on a hidden pin (Android: a marker at opacity 0 still takes taps)', () => {
+        const hall = () => [eventIn('a', 2), eventIn('b', 3), eventIn('c', 4)];
+        /** The first marker at this spot: a pin, since the library draws the leaves before the bubbles. */
+        const hiddenPin = (p: { lat: number; lng: number }) => {
+            const el = markerAt(p)!;
+            expect(el.getAttribute('data-opacity')).toBe('0');
+            return el;
+        };
+
+        it.each(['android', 'ios'] as const)('%s: opens the stack\'s list at once, and never a pin\'s card', async (platform) => {
+            os.now = platform;
+            posts.now = hall();
+            await drawMap();
+            expect(bubbles().map((b) => b.count)).toEqual([3]);
+            await act(async () => { hiddenPin(AT).click(); });
+            await settle(2);
+            expect(heading()).toBe('3 at this spot');
+            expect(rows()).toHaveLength(3);
+            expect(host.textContent).not.toContain('View event');
+            expect(maps.moves).toEqual([]);
+        });
+
+        it('tapping it again and again keeps the same list: Google cycles through the pins under a finger', async () => {
+            os.now = 'android';
+            posts.now = hall();
+            await drawMap();
+            const pins = Array.from(host.querySelectorAll<HTMLElement>(`[data-marker="${AT.lat},${AT.lng}"]`)).filter((el) => el.getAttribute('data-opacity') === '0');
+            expect(pins).toHaveLength(3);
+            for (const pin of pins) {
+                await act(async () => { pin.click(); });
+                await settle(2);
+                expect(heading()).toBe('3 at this spot');
+                expect(host.textContent).not.toContain('View event');
+            }
+        });
+
+        it('zooms a bubble that can part, exactly as a tap on the bubble does', async () => {
+            os.now = 'android';
+            const spread = () => [ev('south', AT.lat, AT.lng), ev('north', metresNorth(400), AT.lng)];
+            posts.now = spread();
+            await drawMap();
+            await act(async () => { hiddenPin(AT).click(); });
+            await settle(2);
+            expect(heading()).toBeNull();
+            expect(host.textContent).not.toContain('View event');
+            expect(maps.moves).toHaveLength(1);
+            const viaPin = maps.moves[0];
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+            maps.moves = [];
+            await drawMap();
+            await openBubble();
+            expect(maps.moves[0]).toEqual(viaPin);
+        });
+
+        it('opens the card of a pin that shows, beside a bubble', async () => {
+            os.now = 'android';
+            posts.now = [...hall(), BEE];
+            await drawMap();
+            expect(opacityAt(BEE)).toBe('1');
+            await act(async () => { markerAt(BEE)!.click(); });
+            await settle(2);
+            expect(host.textContent).toContain('View event');
+            expect(heading()).toBeNull();
+        });
+
+        it.each(['android', 'ios'] as const)('%s: stacks a bubble over the pins, and a pin that shows over a hidden one, so each takes its own tap', async (platform) => {
+            os.now = platform;
+            maps.markers = [];
+            posts.now = [...hall(), BEE];
+            await drawMap();
+            // Every drawing of every bubble, including the fallback before the images are captured.
+            const drawnBubbles = maps.markers.filter((m) => m.anchor === CLUSTER_ANCHOR);
+            expect(drawnBubbles.length).toBeGreaterThan(0);
+            for (const m of drawnBubbles) expect(m.zIndex).toBe(MARKER_Z.bubble);
+            const pins = maps.markers.filter((m) => m.anchor === PIN_ANCHOR);
+            for (const m of pins) expect(m.zIndex).toBe(m.opacity === 0 ? MARKER_Z.hiddenPin : MARKER_Z.pin);
+            expect(MARKER_Z.bubble).toBeGreaterThan(MARKER_Z.pin);
+            expect(MARKER_Z.pin).toBeGreaterThan(MARKER_Z.hiddenPin);
+        });
+
+        it('lifts a bubble tapped low on the map clear of where the list comes up', async () => {
+            // The map's first region is centred just north of this, and the bubble sits low on the view.
+            const low = { lat: -28.5398 - 0.0922 * 0.4, lng: 153.4996 };
+            posts.now = [ev('a', low.lat, low.lng), ev('b', low.lat, low.lng), ev('c', low.lat, low.lng)];
+            await drawMap();
+            await openBubble();
+            expect(heading()).toBe('3 at this spot');
+            expect(maps.moves).toHaveLength(1);
+            const lifted = maps.moves[0];
+            const y = ((lifted.latitude - low.lat) / lifted.latitudeDelta + 0.5) * 640;
+            expect(y).toBeLessThan(640 * (1 - STACK_LIST_SHARE));
+            expect(lifted.latitudeDelta).toBe(0.0922);
+        });
+    });
+
+    describe('the list opening by itself', () => {
+        /** A view at zoom 17 on a 320 dp phone, centred on the stack: where a tap on a bubble would stop. */
+        const CAP = { latitude: AT.lat, longitude: AT.lng, latitudeDelta: 0.00515, longitudeDelta: 0.0033 };
+        const wait = async () => { await act(async () => { await new Promise((r) => setTimeout(r, STACK_REST_MS + 30)); }); await settle(2); };
+        const stopAt = async (region: Record<string, number>) => { await land(region); await wait(); };
+        const hall = () => [eventIn('a', 2), eventIn('b', 3), eventIn('c', 4)];
+        const panned = (share: number) => ({ ...CAP, latitude: AT.lat + CAP.latitudeDelta * share });
+        const zoomedOut = { ...CAP, latitudeDelta: CAP.latitudeDelta * 2, longitudeDelta: CAP.longitudeDelta * 2 };
+        /** The map nudges itself once after its first posts, the library's first clustering (map.tsx's loadPosts). */
+        const pastFirstNudge = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 520)); }); maps.moves = []; };
+
+        it('the region these tests stop at is the cap, and one zoom out is above it', () => {
+            expect(clusterZoomAt(CAP, window320)).toBe(CLUSTER_CAP_ZOOM);
+            expect(clusterZoomAt(zoomedOut, window320)).toBe(CLUSTER_CAP_ZOOM - 1);
+        });
+
+        it.each(['android', 'ios'] as const)('%s: opens with no tap, with the bubble still on the map and the map not moved', async (platform) => {
+            os.now = platform;
+            posts.now = hall();
+            await drawMap();
+            await pastFirstNudge();
+            await stopAt(CAP);
+            expect(heading()).toBe('3 at this spot');
+            expect(rows()).toHaveLength(3);
+            expect(bubbles().map((b) => b.count)).toEqual([3]);
+            expect(maps.moves).toEqual([]);
+        });
+
+        it('does not open at the first view: a stack there is one bubble among the town\'s', async () => {
+            posts.now = hall();
+            await drawMap();
+            await stopAt({ ...CAP, latitudeDelta: 0.0922, longitudeDelta: 0.0421 });
+            expect(bubbles().map((b) => b.count)).toEqual([3]);
+            expect(heading()).toBeNull();
+        });
+
+        it('does not open for a bubble that can still part', async () => {
+            posts.now = [ev('south', AT.lat, AT.lng), ev('north', metresNorth(400), AT.lng)];
+            await drawMap();
+            await stopAt({ ...CAP, latitudeDelta: CAP.latitudeDelta * 16, longitudeDelta: CAP.longitudeDelta * 16 });
+            expect(bubbles().map((b) => b.count)).toEqual([2]);
+            expect(heading()).toBeNull();
+        });
+
+        it('never opens mid-gesture: the map moving again before the wait ends cancels it', async () => {
+            posts.now = hall();
+            await drawMap();
+            await land(CAP);
+            await act(async () => { maps.moving(); });
+            await wait();
+            expect(heading()).toBeNull();
+        });
+
+        it('closes when the map zooms out, and when the stack is panned away', async () => {
+            posts.now = hall();
+            await drawMap();
+            await stopAt(CAP);
+            expect(heading()).toBe('3 at this spot');
+            await stopAt(zoomedOut);
+            expect(heading()).toBeNull();
+            await stopAt(CAP);
+            expect(heading()).toBe('3 at this spot');
+            await stopAt(panned(0.5));
+            expect(heading()).toBeNull();
+        });
+
+        it('stays closed after ✕ until the member has left the stack', async () => {
+            posts.now = hall();
+            await drawMap();
+            await stopAt(CAP);
+            await closeList();
+            expect(heading()).toBeNull();
+            await stopAt({ ...CAP, latitude: AT.lat + 0.0001 });
+            expect(heading(), 'a nudge is not leaving it').toBeNull();
+            await stopAt(zoomedOut);
+            await stopAt(CAP);
+            expect(heading()).toBe('3 at this spot');
+        });
+
+        it('treats a tap on the map as ✕', async () => {
+            posts.now = hall();
+            await drawMap();
+            await stopAt(CAP);
+            await act(async () => { maps.bareTap(); });
+            await settle(2);
+            await stopAt({ ...CAP, latitude: AT.lat + 0.0001 });
+            expect(heading()).toBeNull();
+        });
+
+        it('a tap on the bubble opens it after ✕, at any zoom', async () => {
+            posts.now = hall();
+            await drawMap();
+            await stopAt(CAP);
+            await closeList();
+            await openBubble();
+            expect(heading()).toBe('3 at this spot');
+        });
+
+        it('keeps a tapped list open at the first view when the map stops: Android centres a tapped marker', async () => {
+            posts.now = hall();
+            await drawMap();
+            await openBubble();
+            await stopAt({ latitude: AT.lat, longitude: AT.lng, latitudeDelta: 0.0922, longitudeDelta: 0.0421 });
+            expect(heading()).toBe('3 at this spot');
+        });
+
+        it('does not open over a pin\'s card', async () => {
+            posts.now = [...hall(), ev('next-door', metresNorth(120), AT.lng)];
+            await drawMap();
+            await stopAt(zoomedOut);
+            await act(async () => { markerAt({ lat: metresNorth(120), lng: AT.lng })!.click(); });
+            await settle(2);
+            expect(host.textContent).toContain('View event');
+            await stopAt(CAP);
+            expect(heading()).toBeNull();
+            expect(host.textContent).toContain('View event');
+        });
+
+        it('does not open over the category panel', async () => {
+            posts.now = hall();
+            await drawMap();
+            await act(async () => { host.querySelector<HTMLElement>('[data-category-toggle]')!.click(); });
+            await settle(2);
+            await stopAt(CAP);
+            expect(heading()).toBeNull();
+        });
+
+        it('does not open behind a post, and the way back finds things as they were', async () => {
+            posts.now = hall();
+            await drawMap();
+            await stopAt(zoomedOut);
+            await act(async () => { for (const f of focus.effects) f.cleanup?.(); });
+            await stopAt(CAP);
+            expect(heading()).toBeNull();
+            await act(async () => { for (const f of focus.effects) f.cleanup = f.cb(); });
+            await settle();
+            expect(heading()).toBeNull();
+        });
+
+        it('keeps an open list through a post and back, whatever the map reports meanwhile', async () => {
+            posts.now = hall();
+            await drawMap();
+            await stopAt(CAP);
+            await act(async () => { rows()[0].click(); });
+            await act(async () => { for (const f of focus.effects) f.cleanup?.(); });
+            await stopAt(panned(2));
+            await act(async () => { for (const f of focus.effects) f.cleanup = f.cb(); });
+            await settle();
+            expect(heading()).toBe('3 at this spot');
+        });
+
+        it('takes the stack nearest the middle when two qualify, and moves to the other with no gap as the map pans', async () => {
+            const near = (id: string) => ev(id, AT.lat, AT.lng);
+            const other = metresNorth(140);
+            posts.now = [near('a'), near('b'), ev('x', other, AT.lng), ev('y', other, AT.lng), ev('z', other, AT.lng)];
+            await drawMap();
+            await stopAt(CAP);
+            expect(heading()).toBe('2 at this spot');
+            // The other stack comes to the middle, and the first is off the part of the view above the list.
+            await stopAt({ ...CAP, latitude: other });
+            expect(heading()).toBe('3 at this spot');
+        });
+
+        it('lists only what the filters show', async () => {
+            posts.now = [...hall(), listing('eggs', 'offer', 1), listing('jam', 'offer', 2)];
+            await drawMap();
+            await tapPill('Offers');
+            await stopAt(CAP);
+            expect(titles()).toEqual(['Listing eggs', 'Listing jam']);
+        });
     });
 
     it('holds a hundred rows on one spot', async () => {

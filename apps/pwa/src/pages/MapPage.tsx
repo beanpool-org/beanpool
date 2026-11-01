@@ -52,7 +52,7 @@ import {
 } from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { MapStackList } from '../components/MapStackList';
-import { planBubbleTap, stackPins, type StackPin } from '../lib/map-stack';
+import { bubblesOnMap, planBubbleTap, stackPins, type StackPin } from '../lib/map-stack';
 import { EventCard } from '../components/EventCard';
 import { Sentence } from '../components/Sentence';
 import { approximateLocation, listPhotoUrl, tierForCredit, type AddressResult } from '@beanpool/core';
@@ -66,6 +66,7 @@ import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, STACK_LIST_CLOSED, settleStackList, stackDropped, stackHeading, stackLift, stackRestWatch, stackShut, stackTapped, type MapFrame, type StackListState } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventRepeatCreate, parseCopyEventContext, withMovedFromLine,
@@ -165,11 +166,22 @@ export const EVENT_PIN_ICON_SVG = `<svg data-event-pin-icon width="20" height="2
 // map has been centred, so a member who leaves before the node answers still gets centred next time.
 let savedView: { center: [number, number]; zoom: number } | null = null;
 // The list a row was opened from, so coming back from the post finds it open, as on the phone.
-let savedStackKeys: string[] | null = null;
+let savedStackList: StackListState | null = null;
 /** Forget the remembered view. For tests, which mount MapPage many times in one module. */
 export function resetSavedMapView() {
     savedView = null;
-    savedStackKeys = null;
+    savedStackList = null;
+}
+
+/** The map a member can see, which the list measures against: on a phone the nav bar sits over the last of it. */
+function visibleMapFrame(map: L.Map): MapFrame {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;height:var(--bottom-nav-offset,0px)';
+    map.getContainer().appendChild(probe);
+    const nav = probe.offsetHeight;
+    probe.remove();
+    const { x, y } = map.getSize();
+    return { width: x, height: y - nav };
 }
 
 interface Props {
@@ -364,18 +376,22 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // neutral view. After that the map is the member's: nothing re-centres it (except their own taps).
     const centredRef = useRef(false);
     const [previewPost, setPreviewPost] = useState<MarketplacePost | null>(null);
-    // The bubble a tap opened as a list: its pins' keys, read against the pins on the map now (lib/map-stack.ts).
-    const [stackKeys, setStackKeys] = useState<string[] | null>(() => { const kept = savedStackKeys; savedStackKeys = null; return kept; });
+    // The bubble open as a list, by a tap or by itself: its pins' keys, read against the pins on the map now (lib/map-stack.ts).
+    const [stackList, setStackList] = useState<StackListState>(() => { const kept = savedStackList; savedStackList = null; return kept ?? STACK_LIST_CLOSED; });
+    const stackKeys = stackList.open;
     const [pinsOnMap, setPinsOnMap] = useState<ReadonlyMap<string, StackPin>>(new Map());
+    // True once the pins on the map were built from the posts. An enterprise's pin can arrive first, and it would read as
+    // every row of the list being gone.
+    const [pinsFromPosts, setPinsFromPosts] = useState(false);
     const pinKeysRef = useRef(new Map<L.Layer, string>());
     const stack = useMemo(() => (stackKeys ? stackPins(stackKeys, pinsOnMap) : []), [stackKeys, pinsOnMap]);
     const stackOpen = stack.length > 0;
-    const stackKeysRef = useRef(stackKeys);
-    stackKeysRef.current = stackKeys;
+    const stackListRef = useRef(stackList);
+    stackListRef.current = stackList;
     // Every row gone is the list gone: it does not come back by itself when a date chip brings those pins back.
     useEffect(() => {
-        if (stackKeys && !stackOpen && pinsOnMap.size > 0) setStackKeys(null);
-    }, [stackKeys, stackOpen, pinsOnMap]);
+        if (stackKeys && !stackOpen && pinsFromPosts) setStackList(stackDropped);
+    }, [stackKeys, stackOpen, pinsFromPosts]);
     const [lightboxState, setLightboxState] = useState<{
         isOpen: boolean;
         photos: string[];
@@ -383,6 +399,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         title?: string;
         triggerElement?: HTMLElement | null;
     } | null>(null);
+    // A post over the map, a pin's card, the composer or a photo wins: the list neither opens nor closes under them.
+    const stackBlocked = useRef(false);
+    stackBlocked.current = covered || !!previewPost || showNewPost || pinDropMode || !!lightboxState?.isOpen;
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
     const [enterprises, setEnterprises] = useState<EnterpriseMapPin[]>([]);
@@ -396,7 +415,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 e.preventDefault();
                 e.stopPropagation();
                 setPreviewPost(null);
-                setStackKeys(null);
+                setStackList(stackShut);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -405,7 +424,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
     // A pin's card takes the list's place.
     useEffect(() => {
-        if (previewPost) setStackKeys(null);
+        if (previewPost) setStackList(stackDropped);
     }, [previewPost]);
 
     useEffect(() => {
@@ -627,7 +646,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         // Map click to dismiss preview
         map.on('click', () => {
             setPreviewPost(null);
-            setStackKeys(null);
+            setStackList(stackShut);
         });
 
         // Markers layer
@@ -650,10 +669,25 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             if (e.type === 'clusterkeypress' && e.originalEvent?.keyCode !== 13) return;
             setPreviewPost(null);
             const plan = planBubbleTap<L.LatLng, L.LatLngBounds>(e.layer, (bounds) => map.getBoundsZoom(bounds, false, L.point(50, 50)));
-            if (plan.kind === 'zoom') map.setView(plan.center, plan.zoom);
-            else setStackKeys(e.layer.getAllChildMarkers().flatMap((m: L.Layer) => pinKeysRef.current.get(m) ?? []));
+            if (plan.kind === 'zoom') {
+                setStackList(stackDropped);
+                map.setView(plan.center, plan.zoom);
+                return;
+            }
+            setStackList(stackTapped(e.layer.getAllChildMarkers().flatMap((m: L.Layer) => pinKeysRef.current.get(m) ?? [])));
+            const lift = stackLift(map.latLngToContainerPoint(e.layer.getLatLng()).y, visibleMapFrame(map));
+            if (lift > 0) map.panBy([0, lift]);
         });
         markersRef.current = clusterGroup.addTo(map);
+
+        // The list opens and closes by itself only when the map has stopped (core's settleStackList).
+        const stackRest = stackRestWatch(() => {
+            const bubbles = bubblesOnMap(pinKeysRef.current, (pin) => clusterGroup.getVisibleParent(pin as L.Marker), (at: L.LatLng) => map.latLngToContainerPoint(at));
+            const rest = { view: visibleMapFrame(map), bubbles, atCap: map.getZoom() >= MAP_TAP_CAP_ZOOM, blocked: stackBlocked.current };
+            setStackList((list) => settleStackList(list, rest));
+        });
+        map.on('movestart zoomstart', stackRest.moving);
+        map.on('moveend', stackRest.stopped);
 
         mapRef.current = map;
 
@@ -710,6 +744,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         }).catch(() => { setNodeLocation('unknown'); });
 
         return () => {
+            stackRest.moving();
             if (centredRef.current) {
                 try {
                     const c = map.getCenter();
@@ -1563,7 +1598,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         });
         // A row keeps its list for the way back, as the phone does; the map keeps its view by itself.
         const openPost = (post: MarketplacePost) => () => {
-            savedStackKeys = stackKeysRef.current;
+            savedStackList = stackListRef.current;
             if (onNavigate) onNavigate('marketplace', post.id);
         };
 
@@ -1792,7 +1827,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             });
         pinKeysRef.current = pinKeys;
         setPinsOnMap(pinRows);
-    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius, visitor]);
+        setPinsFromPosts(pinsLoaded);
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius, visitor, pinsLoaded]);
 
     // No location from the node: centre once on this community's own pins, which are its real centre. Posts from
     // partner communities are left out — they are somewhere else. Nothing to centre on leaves the neutral view and
@@ -2265,7 +2301,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             )}
         </div>
 
-        {stackOpen && <MapStackList key={stackKeys?.join()} pins={stack} covered={covered} onClose={() => setStackKeys(null)} />}
+        {stackOpen && <MapStackList key={stackKeys?.join()} pins={stack} covered={covered} takeFocus={stackList.byTap} onClose={() => setStackList(stackShut)} />}
+        <p role="status" className="sr-only">{stackOpen && !stackList.byTap && !covered ? stackHeading(stack.length) : ''}</p>
 
         {/* Map Preview Card — an event shows its own card (§3) */}
         {previewPost && previewPost.type === 'event' && (

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { AccessibilityInfo, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { stackHeading, t } from '@beanpool/core';
+import { STACK_LIST_SHARE, stackHeading, t } from '@beanpool/core';
 import { MarketCardPicture } from './MarketCardPicture';
 import { stackRow, type StackRow } from '../utils/map-stack';
 import { useStyles } from '../app/ThemeContext';
@@ -9,8 +9,8 @@ const PHOTO = 56;
 
 /**
  * The pins of a bubble that cannot split (Marty, 2 Nov: three events at one hall took four taps): a panel over the bottom
- * half of the map, every pin a compact row, whether 3 or 100. It scrolls on a FlatList, so 100 rows mount a screenful at a
- * time. A row opens that post; ✕ or a tap on the map closes the panel. The map under it does not move.
+ * third of the map, every pin a compact row, whether 3 or 100, so the bubble stays in view above it. It scrolls on a FlatList,
+ * so 100 rows mount a screenful at a time. A row opens that post; ✕ or a tap on the map closes the panel.
  */
 export function MapStackList({ posts, onOpen, onClose }: {
     posts: readonly any[];
@@ -19,7 +19,7 @@ export function MapStackList({ posts, onOpen, onClose }: {
 }) {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         panel: {
-            position: 'absolute', left: 0, right: 0, bottom: 0, height: '50%', zIndex: 150,
+            position: 'absolute', left: 0, right: 0, bottom: 0, height: `${STACK_LIST_SHARE * 100}%`, zIndex: 150,
             backgroundColor: colors.surface.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden',
             shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: theme === 'dark' ? 0.4 : 0.15, shadowRadius: 12, elevation: 20,
         },

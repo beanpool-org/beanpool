@@ -4,7 +4,7 @@
  * MapPage's maxClusterRadius, 40 px: at 17 that is 47.8 m at the equator, 42 m at Bangalow. A 40 px pin is that wide, so
  * pins closer than that sit on top of each other however they are tapped.
  */
-import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, orderStack } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, orderStack, type StackBubble } from '@beanpool/core';
 
 /**
  * The parts of a markercluster bubble this reads. The library has no public way to ask when a bubble parts, and its own
@@ -45,6 +45,24 @@ export function planBubbleTap<LatLng, Bounds extends { getCenter(): LatLng }>(
     if (bubbleTap(splitsAt, MAP_TAP_CAP_ZOOM) === 'list') return { kind: 'list' };
     const bounds = cluster.getBounds();
     return { kind: 'zoom', center: bounds.getCenter(), zoom: bubbleLandingZoom(fitZoom(bounds), splitsAt, MAP_TAP_CAP_ZOOM) };
+}
+
+/**
+ * The bubbles on the map now, for core's settleStackList. `visibleParent` is the library's getVisibleParent: the pin itself
+ * when it shows, the bubble it is folded into when not, null when it is off the map. `point` is the map's latLngToContainerPoint.
+ */
+export function bubblesOnMap<Pin, LatLng>(
+    pins: ReadonlyMap<Pin, string>,
+    visibleParent: (pin: Pin) => unknown,
+    point: (at: LatLng) => { x: number; y: number },
+): StackBubble[] {
+    const held = new Map<{ getLatLng(): LatLng }, string[]>();
+    for (const [pin, key] of pins) {
+        const parent = visibleParent(pin) as { getLatLng(): LatLng } | null;
+        if (!parent || (parent as unknown) === pin) continue;
+        held.set(parent, [...(held.get(parent) ?? []), key]);
+    }
+    return [...held].map(([bubble, keys]) => ({ keys, ...point(bubble.getLatLng()) }));
 }
 
 /** One row of the list: a pin on the map, an Offer, a Need, an event or an enterprise. */

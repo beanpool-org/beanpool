@@ -5,7 +5,8 @@ import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import L from 'leaflet';
-import { livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
+import { loadEnabledPeers } from '../lib/peer-prefs';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { getProfileStatus } from '../lib/profile-status';
@@ -20,6 +21,7 @@ vi.mock('leaflet', () => {
         addLayer: vi.fn(),
         addTo: vi.fn().mockReturnThis(),
         on: vi.fn(),
+        getVisibleParent: vi.fn(),
     };
 
     return {
@@ -35,7 +37,9 @@ vi.mock('leaflet', () => {
                 removeLayer: vi.fn(),
                 getZoom: vi.fn(() => opts?.zoom ?? 13),
                 getCenter: vi.fn(() => ({ lat: opts?.center?.[0] ?? 0, lng: opts?.center?.[1] ?? 0 })),
-                getContainer: vi.fn(() => ({ getBoundingClientRect: () => ({ top: 0, bottom: 640, left: 0, right: 320 }) })),
+                getContainer: vi.fn(() => ({ getBoundingClientRect: () => ({ top: 0, bottom: 640, left: 0, right: 320 }), appendChild: () => {} })),
+                getSize: vi.fn(() => ({ x: 320, y: 640 })),
+                latLngToContainerPoint: vi.fn(() => ({ x: 160, y: 300 })),
             })),
             tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
             control: {
@@ -508,6 +512,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             _zoom: splitsAt - 1, _markers: pins, _childClusters: [],
             getAllChildMarkers: () => pins,
             getBounds: () => ({ getCenter: () => ({ lat: -28.55, lng: 153.5 }) }),
+            getLatLng: () => ({ lat: -28.55, lng: 153.5 }),
         });
         const tap = async (layer: unknown, event: Record<string, unknown> = { type: 'clusterclick' }) => {
             const [names, handler] = clusterGroup().on.mock.calls.at(-1);
@@ -519,6 +524,15 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             await act(async () => { render(<MapPage identity={mockIdentity} onNavigate={onNavigate as any} />); });
             await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
         };
+
+        /** The map stops with these bubbles on it, the wait runs out. */
+        const stop = async (bubbles: Array<ReturnType<typeof bubble>>, zoom: number) => {
+            const on = (name: string) => mapMock().on.mock.calls.find((c: any[]) => c[0] === name)?.[1];
+            mapMock().getZoom.mockReturnValue(zoom);
+            clusterGroup().getVisibleParent.mockImplementation((pin: unknown) => bubbles.find((b) => b._markers.includes(pin)) ?? pin);
+            await act(async () => { on('moveend')(); await new Promise((r) => setTimeout(r, STACK_REST_MS + 30)); });
+        };
+        const listOpen = () => screen.queryByTestId('map-stack-list');
 
         it('takes the tap from the library: no zoom of its own, no spiral', async () => {
             await drawMap();
@@ -639,6 +653,130 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             await waitFor(() => expect(eventPins().length).toBeGreaterThan(3));
             await act(async () => {});
             expect(screen.queryByTestId('map-stack-list')).toBeNull();
+        });
+
+        it('a tap on a bubble that zooms closes the list: it does not sit over the new place', async () => {
+            await drawMap();
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20));
+            expect(listOpen()).toBeTruthy();
+            await tap(bubble([pinOf('Spring working bee'), eggsPin()], 15));
+            expect(listOpen()).toBeNull();
+        });
+
+        it('keeps the list for the way back when an enterprise pin arrives ahead of the posts', async () => {
+            vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [{ publicKey: 'ent-pk', name: 'The Co-op', callsign: 'coop', avatar: null, lat: -28.55, lng: 153.5, paused: false, status: 'active' }] } as any);
+            let view: ReturnType<typeof render> | undefined;
+            const onNavigate = vi.fn();
+            await act(async () => { view = render(<MapPage identity={mockIdentity} onNavigate={onNavigate as any} />); });
+            await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20));
+            fireEvent.click(within(listOpen()!).getByRole('button', { name: /Repair café/ }));
+            await act(async () => { view!.unmount(); });
+            // With a peer on, the posts wait for the peer's answer, so the enterprise's pin is on the map alone for a while.
+            vi.mocked(loadEnabledPeers).mockReturnValue(new Set(['https://peer.example']));
+            let answer: (info: unknown) => void = () => {};
+            vi.spyOn(api, 'getNodeInfo').mockReturnValue(new Promise((resolve) => { answer = resolve; }) as any);
+            await act(async () => { render(<MapPage identity={mockIdentity} onNavigate={onNavigate as any} />); });
+            await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-enterprise-pin'))).toBe(true));
+            await act(async () => { answer({ peerNodes: [] }); });
+            await waitFor(() => expect(listOpen()).toBeTruthy());
+            expect(rowTitles(listOpen()!)).toEqual(['Repair café', 'A dozen eggs']);
+            vi.mocked(loadEnabledPeers).mockReturnValue(new Set());
+        });
+
+        it('lifts a bubble tapped low on the map clear of where the list comes up', async () => {
+            await drawMap();
+            mapMock().latLngToContainerPoint.mockReturnValue({ x: 160, y: 600 });
+            await tap(bubble([eggsPin(), pinOf('Repair café')], 20));
+            expect(listOpen()).toBeTruthy();
+            expect(mapMock().panBy).toHaveBeenCalledTimes(1);
+            const [[, lift]] = mapMock().panBy.mock.calls[0];
+            expect(600 - lift).toBeLessThan(640 * (1 - STACK_LIST_SHARE));
+            mapMock().latLngToContainerPoint.mockReturnValue({ x: 160, y: 300 });
+        });
+
+        describe('the list opening by itself', () => {
+            const stackAt = () => bubble([eggsPin(), pinOf('Repair café')], 20);
+            // These leave the map at the cap, and the view a map is left at is kept for the next one.
+            afterEach(() => { cleanup(); resetSavedMapView(); });
+
+            it('opens with no tap when the map stops at the cap, and leaves focus on the map', async () => {
+                await drawMap();
+                mapMock().setView.mockClear();
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                expect(within(listOpen()!).getByRole('heading').textContent).toBe('2 at this spot');
+                expect(document.activeElement).not.toBe(within(listOpen()!).getByRole('heading'));
+                expect(screen.getByRole('status').textContent).toBe('2 at this spot');
+                expect(mapMock().setView).not.toHaveBeenCalled();
+            });
+
+            it('does not open above the cap', async () => {
+                await drawMap();
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM - 1);
+                expect(listOpen()).toBeNull();
+            });
+
+            it('never opens mid-gesture: the map moving again cancels the wait', async () => {
+                await drawMap();
+                const on = (name: string) => mapMock().on.mock.calls.find((c: any[]) => c[0] === name)?.[1];
+                mapMock().getZoom.mockReturnValue(MAP_TAP_CAP_ZOOM);
+                const b = stackAt();
+                clusterGroup().getVisibleParent.mockImplementation((pin: unknown) => (b._markers.includes(pin) ? b : pin));
+                await act(async () => {
+                    on('moveend')();
+                    on('movestart zoomstart')();
+                    await new Promise((r) => setTimeout(r, STACK_REST_MS + 30));
+                });
+                expect(listOpen()).toBeNull();
+            });
+
+            it('closes when the map zooms out above the cap', async () => {
+                await drawMap();
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                expect(listOpen()).toBeTruthy();
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM - 1);
+                expect(listOpen()).toBeNull();
+            });
+
+            it('closes when the stack is panned away', async () => {
+                await drawMap();
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                mapMock().latLngToContainerPoint.mockReturnValue({ x: 160, y: 900 });
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                expect(listOpen()).toBeNull();
+                mapMock().latLngToContainerPoint.mockReturnValue({ x: 160, y: 300 });
+            });
+
+            it('stays closed after ✕ until the member has left the stack', async () => {
+                await drawMap();
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                fireEvent.click(within(listOpen()!).getByRole('button', { name: 'Close' }));
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                expect(listOpen()).toBeNull();
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM - 1);
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                expect(listOpen()).toBeTruthy();
+            });
+
+            it('does not open over a pin\'s card', async () => {
+                await drawMap();
+                await act(async () => { pinOf('Repair café').listeners.click(); });
+                await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                expect(listOpen()).toBeNull();
+                expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+            });
+
+            it('takes the stack nearest the middle when two qualify', async () => {
+                await drawMap();
+                const far = bubble([pinOf('Spring working bee'), eggsPin()], 20);
+                const near = bubble([pinOf('Repair café')], 20);
+                (far as any).getLatLng = () => 'far';
+                (near as any).getLatLng = () => 'near';
+                mapMock().latLngToContainerPoint.mockImplementation((at: unknown) => (at === 'far' ? { x: 120, y: 220 } : { x: 165, y: 310 }));
+                await stop([far, near], MAP_TAP_CAP_ZOOM);
+                expect(rowTitles(listOpen()!)).toEqual(['Repair café']);
+                mapMock().latLngToContainerPoint.mockImplementation(() => ({ x: 160, y: 300 }));
+            });
         });
 
         it('never lists an ended or a cancelled event: they have no pin, so no bubble holds them', async () => {

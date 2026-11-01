@@ -1,25 +1,26 @@
 import { useEffect, useRef } from 'react';
-import { stackHeading, t } from '@beanpool/core';
+import { STACK_LIST_SHARE, stackHeading, t } from '@beanpool/core';
 import type { StackPin } from '../lib/map-stack';
 
 /**
  * The pins of a bubble that cannot split (Marty, 2 Nov; the phone's components/MapStackList.tsx is its twin): a panel over
- * the bottom half of the map, every pin a compact row, whether 3 or 100. A row opens that post; ✕, Escape or a tap on the
- * map closes the panel. The map under it does not move. Focus goes to the header, so a screen reader says the count and a
- * keyboard carries on into the rows.
+ * the bottom third of the map, every pin a compact row, whether 3 or 100, so the bubble stays in view above it. A row opens
+ * that post; ✕, Escape or a tap on the map closes the panel. A tap moves focus to the header, so a screen reader says the
+ * count and a keyboard carries on into the rows. A list that opened by itself leaves focus where it is, on a map the member
+ * may be moving with the arrow keys, and MapPage's status line says the count.
  */
-export function MapStackList({ pins, covered, onClose }: { pins: readonly StackPin[]; covered: boolean; onClose: () => void }) {
+export function MapStackList({ pins, covered, takeFocus, onClose }: { pins: readonly StackPin[]; covered: boolean; takeFocus: boolean; onClose: () => void }) {
     const headingRef = useRef<HTMLHeadingElement>(null);
-    useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, []);
+    useEffect(() => { if (takeFocus) headingRef.current?.focus({ preventScroll: true }); }, []);
 
     return (
         <section
             data-testid="map-stack-list"
             aria-labelledby="map-stack-heading"
             className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col overflow-hidden bg-white dark:bg-nature-900 rounded-t-[20px] border-t border-nature-200 dark:border-nature-800 shadow-[0_-8px_20px_rgba(0,0,0,0.15)]"
-            // The bottom half of the map a member can see: on a phone the nav bar sits over the last of it.
+            // The bottom third of the map a member can see: on a phone the nav bar sits over the last of it.
             style={{
-                height: 'calc((100% - var(--bottom-nav-offset, 0px)) / 2 + var(--bottom-nav-offset, 0px))',
+                height: `calc((100% - var(--bottom-nav-offset, 0px)) * ${STACK_LIST_SHARE} + var(--bottom-nav-offset, 0px))`,
                 paddingBottom: 'var(--bottom-nav-offset, 0px)',
                 ...(covered ? { display: 'none' } : {}),
             }}

@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, 
 import * as Location from 'expo-location';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { t, upperCase } from '@beanpool/core';
+import { STACK_LIST_CLOSED, settleStackList, stackDropped, stackRestWatch, stackShut, stackTapped, t, upperCase, type StackListState } from '@beanpool/core';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts } from '../../utils/db';
@@ -28,7 +28,7 @@ import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans } from '../../utils/market-global';
 import { MapStackList } from '../../components/MapStackList';
-import { planBubbleTap, stackPosts } from '../../utils/map-stack';
+import { MARKER_Z, bubbleHolding, mapRestOf, planBubbleTap, regionClearOfList, stackPosts } from '../../utils/map-stack';
 import { darkMapStyle, hidePoisStyle, mapIsDark, mapSchemeKey, type MapSchemePick } from '../../utils/map-scheme';
 
 // The window as the clustering library read it: once, when the app loaded (its helpers.js). A bubble's zoom is worked out in its units.
@@ -68,6 +68,7 @@ const ClusterMarker = ({ cluster, clustersReady }: any) => {
                     onPress={onPress}
                     tracksViewChanges={tracksViewChanges}
                     anchor={CLUSTER_ANCHOR}
+                    zIndex={MARKER_Z.bubble}
                 >
                     <View style={{ width: glow + 8, height: glow + 8, justifyContent: 'center', alignItems: 'center' }}>
                         <RNImage 
@@ -87,6 +88,7 @@ const ClusterMarker = ({ cluster, clustersReady }: any) => {
                 onPress={onPress}
                 tracksViewChanges={tracksViewChanges}
                 anchor={CLUSTER_ANCHOR}
+                zIndex={MARKER_Z.bubble}
                 image={{ uri: cachedImage }}
             />
         );
@@ -102,6 +104,7 @@ const ClusterMarker = ({ cluster, clustersReady }: any) => {
             tracksViewChanges={true}
             style={{ zIndex: points + 1 }}
             anchor={CLUSTER_ANCHOR}
+            zIndex={MARKER_Z.bubble}
         >
             <View collapsable={false} style={{ width: glow, height: glow, justifyContent: 'center', alignItems: 'center' }}>
                 <View collapsable={false} style={{ position: 'absolute', width: glow, height: glow, borderRadius: glow / 2, backgroundColor: 'rgba(59, 130, 246, 0.25)' }} />
@@ -124,6 +127,10 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
     const isElder = !isEvent && (post.author_energy_cycled || 0) >= 10000;
     const glyph = isEvent ? EVENT_PIN.glyph : undefined;
     const cachedImage = markersReady ? getCachedMarkerImage(markerEmoji, bgColor, isElder, glyph) : null;
+    // Opacity 0 is the library hiding this pin behind a bubble, and on Android such a pin still takes taps.
+    const hidden = opacity === 0;
+    const onMarkerPress = (e: any) => { e.stopPropagation(); onPress(post, hidden); };
+    const zIndex = hidden ? MARKER_Z.hiddenPin : MARKER_Z.pin;
 
     // Platform fix: We start tracksViewChanges=true on Android.
     // It will be set to false ONLY when the RNImage's onLoad fires.
@@ -143,7 +150,8 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
                     tracksViewChanges={tracksViewChanges}
                     opacity={opacity}
                     anchor={PIN_ANCHOR}
-                    onPress={(e) => { e.stopPropagation(); onPress(post); }}
+                    zIndex={zIndex}
+                    onPress={onMarkerPress}
                 >
                     <View style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, justifyContent: 'center', alignItems: 'center' }}>
                         <RNImage 
@@ -164,8 +172,9 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
                 tracksViewChanges={tracksViewChanges}
                 opacity={opacity}
                 anchor={PIN_ANCHOR}
+                zIndex={zIndex}
                 image={{ uri: cachedImage }}
-                onPress={(e) => { e.stopPropagation(); onPress(post); }}
+                onPress={onMarkerPress}
             />
         );
     }
@@ -177,7 +186,8 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
             tracksViewChanges={false}
             opacity={opacity}
             anchor={PIN_ANCHOR}
-            onPress={(e) => { e.stopPropagation(); onPress(post); }}
+            zIndex={zIndex}
+            onPress={onMarkerPress}
         >
             <View collapsable={false} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H }}>
                 <PinVisual
@@ -291,11 +301,14 @@ export default function MapScreen() {
 
     // Map UI State
     const [selectedPostPreview, setSelectedPostPreview] = useState<any>(null);
-    // The bubble a tap opened as a list (MapStackList): its pins' ids, read against what the map shows on every draw.
-    const [stackIds, setStackIds] = useState<string[] | null>(null);
+    // The bubble open as a list (MapStackList), by a tap or by itself: its pins' ids, read against what the map shows on every draw.
+    const [stackList, setStackList] = useState<StackListState>(STACK_LIST_CLOSED);
+    const stackIds = stackList.open;
     const clusterIndex = useRef<any>(null);
     // A row opened a post: coming back keeps the list open and the map where it was (the focus effect re-centres otherwise).
     const keepMapOnReturn = useRef(false);
+    // Leaving for a post: the map may still report a stop, and the list neither opens nor closes behind it.
+    const mapFocused = useRef(true);
     const [markersReady, setMarkersReady] = useState(false);
     const [clustersReady, setClustersReady] = useState(false);
 
@@ -348,12 +361,16 @@ export default function MapScreen() {
     };
     // The filter bar hides behind a pin preview; the panel does not come back with it.
     useEffect(() => {
-        if (selectedPostPreview) { closeCategoryPanel(); setStackIds(null); }
+        if (selectedPostPreview) { closeCategoryPanel(); setStackList(stackDropped); }
     }, [selectedPostPreview]);
     // Leaving the tab closes it too, so coming back to the Map shows the map, not the panel.
-    useFocusEffect(useCallback(() => () => {
-        dispatchCategoryPanel({ kind: 'dismiss' });
-        if (!keepMapOnReturn.current) setStackIds(null);
+    useFocusEffect(useCallback(() => {
+        mapFocused.current = true;
+        return () => {
+            mapFocused.current = false;
+            dispatchCategoryPanel({ kind: 'dismiss' });
+            if (!keepMapOnReturn.current) setStackList(stackDropped);
+        };
     }, []));
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
     const mapFilterState = { type: mapTypeFilter, category: mapCategoryFilter, eventWindow };
@@ -363,7 +380,7 @@ export default function MapScreen() {
     const stackOpen = stack.length > 0;
     // Every row gone is the list gone: it does not come back by itself if those pins do.
     useEffect(() => {
-        if (stackIds && !stackOpen) setStackIds(null);
+        if (stackIds && !stackOpen) setStackList(stackDropped);
     }, [stackIds, stackOpen]);
     /**
      * The zoom pill sits at bottom 120, which on a 320dp phone at 1.3x text runs up under the two filter
@@ -377,6 +394,18 @@ export default function MapScreen() {
         ? Math.max(36, Math.min(120, mapAreaH - filterBottom - 8 - fabPillH))
         : 120;
     const [nodeRadius, setNodeRadius] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
+
+    /** The map as the list last needs it: the wait below reads what is true when it ends, not when it began. */
+    const stackFrame = { width: CLUSTER_WINDOW.width, height: mapAreaH || CLUSTER_WINDOW.height };
+    const atRest = useRef({ region: currentRegion, frame: stackFrame, blocked: false });
+    atRest.current = { region: currentRegion, frame: stackFrame, blocked: !!selectedPostPreview || categoryPanel.open };
+    // The list opens and closes by itself only when the map has stopped (core's settleStackList).
+    const stackRest = useMemo(() => stackRestWatch(() => {
+        const { region, frame, blocked } = atRest.current;
+        if (!clusterIndex.current) return;
+        setStackList((list) => settleStackList(list, mapRestOf(clusterIndex.current, region, CLUSTER_WINDOW, frame, blocked || !mapFocused.current)));
+    }), []);
+    useEffect(() => stackRest.moving, [stackRest]);
 
     const fetchNodeLocation = async () => {
         try {
@@ -476,8 +505,21 @@ export default function MapScreen() {
         const splitsAt = clusterIndex.current?.getClusterExpansionZoom(cluster.id) ?? Infinity;
         const points = leaves.map(({ geometry }) => ({ latitude: geometry.coordinates[1], longitude: geometry.coordinates[0] }));
         const plan = planBubbleTap(splitsAt, points, currentRegion, CLUSTER_WINDOW);
-        if (plan.kind === 'zoom') mapRef.current?.animateToRegion(plan.region, 350);
-        else setStackIds(leaves.map((leaf) => leaf.properties.post.id));
+        if (plan.kind === 'zoom') {
+            setStackList(stackDropped);
+            mapRef.current?.animateToRegion(plan.region, 350);
+            return;
+        }
+        setStackList(stackTapped(leaves.map((leaf) => leaf.properties.post.id)));
+        const clear = regionClearOfList(currentRegion, stackFrame, cluster);
+        if (clear) mapRef.current?.animateToRegion(clear, 250);
+    };
+
+    /** A hidden pin that took a tap (MARKER_Z) is its bubble taking it: the same plan, and no card first. */
+    const onPinPress = (post: any, hidden: boolean) => {
+        if (!hidden) return setSelectedPostPreview(post);
+        const bubble = clusterIndex.current && bubbleHolding(clusterIndex.current, post.id, currentRegion, CLUSTER_WINDOW);
+        if (bubble) onClusterPress(bubble.cluster, bubble.leaves);
     };
 
     const renderCluster = (cluster: any) => {
@@ -521,12 +563,14 @@ export default function MapScreen() {
                     showsUserLocation={true}
                     // Google's own locate button (top right, Android) doubled the one in the left pill. The pill's is the only one.
                     showsMyLocationButton={false}
+                    onRegionChange={stackRest.moving}
                     onRegionChangeComplete={(r: any) => {
                         setCurrentRegion(r);
+                        stackRest.stopped();
                     }}
                     onPress={() => {
                         if (selectedPostPreview) setSelectedPostPreview(null);
-                        setStackIds(null);
+                        setStackList(stackShut);
                         // A tap on the map closes the category panel without changing the filter.
                         closeCategoryPanel();
                     }}
@@ -557,7 +601,7 @@ export default function MapScreen() {
                                 catObj={catObj}
 
                                 isSelected={isSelected}
-                                onPress={setSelectedPostPreview}
+                                onPress={onPinPress}
                                 markersReady={markersReady}
                             />
                         );
@@ -776,7 +820,7 @@ export default function MapScreen() {
                     key={stackIds?.join()}
                     posts={stack}
                     onOpen={(id) => { keepMapOnReturn.current = true; router.push(`/post/${id}`); }}
-                    onClose={() => setStackIds(null)}
+                    onClose={() => setStackList(stackShut)}
                 />
             )}
 

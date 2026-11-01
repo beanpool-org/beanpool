@@ -8,7 +8,7 @@
  * Bangalow, 23.5 m at 49° N, which on the screen is 30 dp at zoom 17.0. A pin's head is 36 dp across, inside a 56 dp
  * image, so two pins closer than that overlap and could not be told apart or tapped one at a time anyway.
  */
-import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, orderStack, t } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, orderStack, stackLift, t, type MapFrame, type MapRest, type StackBubble } from '@beanpool/core';
 import { eventPinCard } from './events';
 import { marketCardPicture } from './market-card-picture';
 
@@ -77,6 +77,75 @@ export function planBubbleTap(splitsAt: number, points: readonly MapPoint[], cur
             longitudeDelta: current.longitudeDelta * shrink,
         },
     };
+}
+
+/**
+ * Which marker takes a tap. Google Maps hands a tap to the highest marker under the finger, then the nearest, then cycles
+ * through the rest on repeat taps, and a marker at opacity 0 counts: the patch keeps every pin mounted, so without this a pin
+ * hidden under a bubble took the bubble's tap and opened its card, one card a tap (1.2.88, Marty: "one card at a time"). The
+ * bubble goes first; a visible pin goes before a hidden one, or a hidden pin beside it would take its tap.
+ */
+export const MARKER_Z = { hiddenPin: 0, pin: 1, bubble: 2 } as const;
+
+/** The parts of the library's supercluster read here. */
+export interface ClusterIndex {
+    getClusters(bbox: [number, number, number, number], zoom: number): ClusterFeature[];
+    getLeaves(clusterId: number, limit: number): LeafFeature[];
+}
+export interface ClusterFeature {
+    id?: number;
+    geometry: { coordinates: number[] };
+    properties: { cluster?: boolean; cluster_id?: number };
+}
+export interface LeafFeature {
+    geometry: { coordinates: number[] };
+    properties: { post: { id: string } };
+}
+export interface MapBubble { cluster: ClusterFeature; leaves: LeafFeature[] }
+
+/** The bubbles the library is drawing for this region, from its own index: the same box, at the same zoom. */
+function bubblesOf(index: ClusterIndex, region: MapRegion, win: WindowSize): MapBubble[] {
+    const lngSpan = region.longitudeDelta < 0 ? region.longitudeDelta + 360 : region.longitudeDelta;
+    const bbox: [number, number, number, number] = [
+        region.longitude - lngSpan * 2, region.latitude - region.latitudeDelta * 2,
+        region.longitude + lngSpan * 2, region.latitude + region.latitudeDelta * 2,
+    ];
+    return index.getClusters(bbox, clusterZoomAt(region, win))
+        .filter((feature) => feature.properties.cluster)
+        .map((cluster) => ({ cluster, leaves: index.getLeaves(cluster.properties.cluster_id!, Infinity) }));
+}
+
+/** The clustering zoom the library settles on for a region: its minZoom past 40° across, else clusterZoomOf, floored. */
+export function clusterZoomAt(region: MapRegion, win: WindowSize): number {
+    return region.longitudeDelta >= 40 ? 1 : Math.max(0, Math.min(20, Math.floor(clusterZoomOf(region, win))));
+}
+
+/** The bubble a hidden pin is folded into, so a tap that reached the pin can act on it. Null if none holds it. */
+export function bubbleHolding(index: ClusterIndex, postId: string, region: MapRegion, win: WindowSize): MapBubble | null {
+    return bubblesOf(index, region, win).find((b) => b.leaves.some((leaf) => leaf.properties.post.id === postId)) ?? null;
+}
+
+/** Where a point sits in a view showing this region, in px from its top left. */
+function pointIn(region: MapRegion, frame: MapFrame, longitude: number, latitude: number) {
+    return {
+        x: ((longitude - region.longitude) / region.longitudeDelta + 0.5) * frame.width,
+        y: ((region.latitude - latitude) / region.latitudeDelta + 0.5) * frame.height,
+    };
+}
+
+/** What core's settleStackList needs to know about a map that has stopped. */
+export function mapRestOf(index: ClusterIndex, region: MapRegion, win: WindowSize, frame: MapFrame, blocked: boolean): MapRest {
+    const bubbles = bubblesOf(index, region, win).map(({ cluster, leaves }): StackBubble => ({
+        keys: leaves.map((leaf) => leaf.properties.post.id),
+        ...pointIn(region, frame, cluster.geometry.coordinates[0], cluster.geometry.coordinates[1]),
+    }));
+    return { view: frame, bubbles, atCap: clusterZoomAt(region, win) >= CLUSTER_CAP_ZOOM, blocked };
+}
+
+/** The region that lifts a tapped bubble clear of the list; null when it is already in view above it. */
+export function regionClearOfList(region: MapRegion, frame: MapFrame, cluster: ClusterFeature): MapRegion | null {
+    const lift = stackLift(pointIn(region, frame, cluster.geometry.coordinates[0], cluster.geometry.coordinates[1]).y, frame);
+    return lift > 0 ? { ...region, latitude: region.latitude - (lift / frame.height) * region.latitudeDelta } : null;
 }
 
 /**

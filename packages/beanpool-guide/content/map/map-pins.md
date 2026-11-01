@@ -31,7 +31,9 @@ A tap on a circle zooms in until its pins part. The zoom stops with a few street
 
 If the pins are on one spot, or too close together for that zoom to part them, the tap opens a list instead, with how many are there at the top. On the phone that means within about 30 metres, and about 40 metres in the web app. Events come first, soonest at the top, then Offers and Needs, newest first. The list shows only what the filters show.
 
-Tap a row to open that post. Tap **✕** or the map to close the list. The map stays where it was.
+Tap a row to open that post. The list takes the bottom third of the map, with the circle still in view above it. Tap **✕** or the map to close it.
+
+You don't have to tap. If you zoom in as far as a tap would take you and a circle that can't part is near the middle of the map, its list opens by itself once the map stops moving. It closes by itself when you zoom out or move the circle away. If you closed it, it stays closed until you have moved away from that spot.
 
 ## Filters
 

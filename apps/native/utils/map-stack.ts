@@ -5,8 +5,8 @@
  * The library's clustering zoom is not the map's. Patched, it measures a box four times the region's span, which reads two
  * zooms shallower than the map, and floors the answer. So a map at zoom 17.x clusters at 15, and the cap is 15 here. At 15
  * the library's radius (map.tsx's 15, on a 512 extent) is 15 / (512 × 2^15) of the world: 35.8 m at the equator, 31.4 m at
- * Bangalow, 23.5 m at 49° N, which on the screen is 30 dp at zoom 17.0. That is about one pin's head, and the 56 dp pin
- * image is wider still, so two pins closer than that could not be told apart or tapped one at a time anyway.
+ * Bangalow, 23.5 m at 49° N, which on the screen is 30 dp at zoom 17.0. A pin's head is 36 dp across, inside a 56 dp
+ * image, so two pins closer than that overlap and could not be told apart or tapped one at a time anyway.
  */
 import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, orderStack, t } from '@beanpool/core';
 import { eventPinCard } from './events';

@@ -618,19 +618,27 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             expect(screen.getByTestId('map-preview-card')).toBeTruthy();
         });
 
-        it('drops a row the date chips hid, and closes when none are left', async () => {
+        it('drops a row the date chips hid', async () => {
             await drawMap();
             await tap(bubble([pinOf('Repair café'), pinOf('Spring working bee')], 20));
-            const list = screen.getByTestId('map-stack-list');
-            expect(rowTitles(list)).toEqual(['Repair café', 'Spring working bee']);
+            expect(rowTitles(screen.getByTestId('map-stack-list'))).toEqual(['Repair café', 'Spring working bee']);
             fireEvent.click(within(screen.getByTestId('event-window-chips')).getByRole('button', { name: 'Next 7 days' }));
             await waitFor(() => expect(rowTitles(screen.getByTestId('map-stack-list'))).toEqual(['Repair café']));
             expect(within(screen.getByTestId('map-stack-list')).getByRole('heading').textContent).toBe('1 at this spot');
-            fireEvent.click(within(screen.getByTestId('event-window-chips')).getByRole('button', { name: 'This weekend' }));
-            await waitFor(() => {
-                const open = screen.queryByTestId('map-stack-list');
-                if (open) expect(rowTitles(open)).toEqual(['Repair café']);
-            });
+        });
+
+        it('closes when the chips hide every row, and does not come back with them', async () => {
+            vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([offer, soon, later, ev('ev-later2', 'Harvest supper', 24 * 21)] as any);
+            await drawMap();
+            await waitFor(() => expect(pinOf('Harvest supper')).toBeTruthy());
+            await tap(bubble([pinOf('Spring working bee'), pinOf('Harvest supper')], 20));
+            const chips = () => within(screen.getByTestId('event-window-chips'));
+            fireEvent.click(chips().getByRole('button', { name: 'Next 7 days' }));
+            await waitFor(() => expect(screen.queryByTestId('map-stack-list')).toBeNull());
+            fireEvent.click(chips().getByRole('button', { name: 'All events' }));
+            await waitFor(() => expect(eventPins().length).toBeGreaterThan(3));
+            await act(async () => {});
+            expect(screen.queryByTestId('map-stack-list')).toBeNull();
         });
 
         it('never lists an ended or a cancelled event: they have no pin, so no bubble holds them', async () => {

@@ -372,6 +372,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const stackOpen = stack.length > 0;
     const stackKeysRef = useRef(stackKeys);
     stackKeysRef.current = stackKeys;
+    // Every row gone is the list gone: it does not come back by itself when a date chip brings those pins back.
+    useEffect(() => {
+        if (stackKeys && !stackOpen && pinsOnMap.size > 0) setStackKeys(null);
+    }, [stackKeys, stackOpen, pinsOnMap]);
     const [lightboxState, setLightboxState] = useState<{
         isOpen: boolean;
         photos: string[];

@@ -388,6 +388,10 @@ export default function MapScreen() {
     const visiblePins = [...visibleMarketPins(posts, mapFilterState), ...visibleEventPins(posts, mapFilterState)];
     const stack = stackIds ? stackPosts(stackIds, visiblePins) : [];
     const stackOpen = stack.length > 0;
+    // Every row gone is the list gone: it does not come back by itself if those pins do.
+    useEffect(() => {
+        if (stackIds && !stackOpen) setStackIds(null);
+    }, [stackIds, stackOpen]);
     /**
      * The zoom pill sits at bottom 120, which on a 320dp phone at 1.3x text runs up under the two filter
      * rows. Measure the screen, the rows and the pill, and drop the pill just far enough to clear them —
@@ -504,7 +508,9 @@ export default function MapScreen() {
     };
 
     const renderCluster = (cluster: any) => {
-        return <ClusterMarker key={`cluster-${cluster.id}-${clustersReady}`} cluster={cluster} clustersReady={clustersReady} />;
+        // On iOS a marker's press bubbles to the map's own onPress, as the pins' stopPropagation says, and that closes the list.
+        const onPress = (e: any) => { e?.stopPropagation?.(); cluster.onPress(); };
+        return <ClusterMarker key={`cluster-${cluster.id}-${clustersReady}`} cluster={{ ...cluster, onPress }} clustersReady={clustersReady} />;
     };
 
     return (

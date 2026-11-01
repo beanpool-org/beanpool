@@ -93,7 +93,13 @@ vi.mock('../../components/Map', async () => {
             'data-marker': `${props.coordinate.latitude},${props.coordinate.longitude}`,
             'data-image': props.image?.uri ?? '',
             'data-opacity': String(props.opacity ?? 1),
-            onClick: (e: { stopPropagation(): void }) => { e.stopPropagation(); props.onPress?.({ stopPropagation() {} }); },
+            // As on iOS: a marker's press bubbles to the map's onPress unless the marker stops it.
+            onClick: (e: { stopPropagation(): void }) => {
+                e.stopPropagation();
+                let stopped = false;
+                props.onPress?.({ stopPropagation() { stopped = true; } });
+                if (!stopped && os.now === 'ios') maps.bareTap();
+            },
         }, props.children);
     };
     const nodeRequire = createRequire(__filename);
@@ -588,6 +594,12 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
         await act(async () => { sync.fire(); });
         await settle();
         expect(heading()).toBeNull();
+        // The list has gone: those pins coming back draw a bubble, not the list again.
+        posts.now = [a, b];
+        await act(async () => { sync.fire(); });
+        await settle();
+        expect(heading()).toBeNull();
+        expect(bubbles().map((x) => x.count)).toEqual([2]);
     });
 
     it('opens a post from its row, and coming back finds the list open and the map where it was', async () => {

@@ -20,7 +20,10 @@
  *   ({@link copyEventBody}, {@link copyEventUpdates}), and the visitor's read drops them besides.
  *
  * Probation, the daily limits, reports, auto-hide and retention count it as any post of its author's: those act on the
- * post, and none of them is a read another member can follow.
+ * one post, and none of them is a read another member can follow. A re-key leaves its stamp where it was, so it doesn't
+ * move with their listings (engine/key-move.ts). But a copy has to come down when its author does: a removal
+ * (adminPruneUser), a burst hide (engine/burst-cleanup.ts) or a deleted account takes it down with the member's other
+ * posts, and a member watching the listings can tell.
  */
 import { guestPost, roundToArea, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { audienceOf, word, wordsFor } from '@beanpool/core';

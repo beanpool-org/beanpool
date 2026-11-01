@@ -4,15 +4,15 @@
  * punctuation, Chinese and full-width included ("鸡蛋，牛奶" finds 牛奶 mid-run, #1781).
  */
 
-import { foldApostrophes, HOME_SEARCH_MAX_CHARS, searchFromMarket, searchTermsFor, postTagsOf, searchTagsFor, type HomeSearchSettings } from '@beanpool/core';
+import { foldApostrophes, freeTagsOf, HOME_SEARCH_MAX_CHARS, searchFromMarket, searchTermsFor, postTagsOf, searchTagsFor, type HomeSearchSettings } from '@beanpool/core';
 
 /**
- * Whether a listing's title or description holds one of the search's terms; an empty search matches everything. The
- * apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
+ * Whether a listing's title, description or a tag its author typed holds one of the search's terms; an empty search matches
+ * everything. The apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
  */
-export function matchesExpandedSearch(searchQuery: string, title: string, description: string, tags?: unknown): boolean {
+export function matchesExpandedSearch(searchQuery: string, title: string, description: string, tags?: unknown, freeTags?: unknown): boolean {
     if (!searchQuery.trim()) return true;
-    const searchText = foldApostrophes(`${title} ${description}`.toLowerCase());
+    const searchText = foldApostrophes(`${title} ${description} ${freeTagsOf(freeTags).join(' ')}`.toLowerCase());
     if (searchTermsFor(searchQuery).some(term => searchText.includes(foldApostrophes(term)))) return true;
     const resolved = searchTagsFor(searchQuery);
     if (resolved.length > 0) {
@@ -36,9 +36,9 @@ export function marketSearchQuery(search: string): string {
  * finds at least what the filter over the feed found before the node was asked. A peer's copy can share an id with one of
  * this node's, and stays.
  */
-export function searchRows<T extends { id: string; title: string; description: string; tags?: unknown }>(answer: T[], feed: T[], search: string): T[] {
+export function searchRows<T extends { id: string; title: string; description: string; tags?: unknown; freeTags?: unknown }>(answer: T[], feed: T[], search: string): T[] {
     const answered = new Set(answer.map(p => p.id));
-    return [...answer, ...feed.filter(p => ((p as { _remoteNode?: string })._remoteNode || !answered.has(p.id)) && matchesExpandedSearch(search, p.title, p.description, p.tags))];
+    return [...answer, ...feed.filter(p => ((p as { _remoteNode?: string })._remoteNode || !answered.has(p.id)) && matchesExpandedSearch(search, p.title, p.description, p.tags, p.freeTags))];
 }
 
 /**

@@ -259,6 +259,7 @@ export default function NewListingScreen() {
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [postCategory, setPostCategory] = useState('');
     const [postTags, setPostTags] = useState<string[]>([]);
+    const [postFreeTags, setPostFreeTags] = useState<string[]>([]);
     const [postTitle, setPostTitle] = useState('');
     const [postDescription, setPostDescription] = useState('');
     const [postCredits, setPostCredits] = useState('');
@@ -366,7 +367,7 @@ export default function NewListingScreen() {
 
     // --- New Post Functions ---
     const resetNewPost = () => {
-        setPostType('offer'); setPostCategory(''); setPostTags([]); setPostTitle(''); setPostDescription('');
+        setPostType('offer'); setPostCategory(''); setPostTags([]); setPostFreeTags([]); setPostTitle(''); setPostDescription('');
         setPostCredits(''); setPostPriceType('fixed'); setPostRepeatable(false); setPostPhotos([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
@@ -380,19 +381,19 @@ export default function NewListingScreen() {
     const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
 
     const draftHasContent = () =>
-        !!(postTitle.trim() || postDescription.trim() || postCategory || postTags.length > 0 || postPhotos.length > 0 || postLat != null);
+        !!(postTitle.trim() || postDescription.trim() || postCategory || postTags.length > 0 || postFreeTags.length > 0 || postPhotos.length > 0 || postLat != null);
 
     const persistDraft = useCallback(async () => {
         try {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const draft = {
-                anchorUrl, postType, postCategory, postTags, postTitle, postDescription, postCredits,
+                anchorUrl, postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits,
                 postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
                 postReach, postReachPeers, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTags, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
+    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -400,6 +401,7 @@ export default function NewListingScreen() {
         setPostType(d.postType === 'need' ? 'need' : 'offer');
         setPostCategory(d.postCategory || '');
         setPostTags(Array.isArray(d.postTags) ? d.postTags : []);
+        setPostFreeTags(Array.isArray(d.postFreeTags) ? d.postFreeTags : []);
         setPostTitle(d.postTitle || '');
         setPostDescription(d.postDescription || '');
         setPostCredits(d.postCredits || '');
@@ -627,6 +629,7 @@ export default function NewListingScreen() {
                 reach: (postReach === 'peers' && postReachPeers.length === 0) ? 'local' : postReach,
                 ...(postReach === 'peers' && postReachPeers.length > 0 ? { reachPeers: postReachPeers } : {}),
                 ...(postTags.length > 0 ? { tags: postTags } : {}),
+                ...(postFreeTags.length > 0 ? { freeTags: postFreeTags } : {}),
             });
             clearDraft();
             setTimeout(() => {
@@ -836,6 +839,8 @@ export default function NewListingScreen() {
                             <TagPicker
                                 value={postTags}
                                 onChange={setPostTags}
+                                freeTags={postFreeTags}
+                                onFreeTagsChange={setPostFreeTags}
                                 category={postCategory}
                                 title={postTitle}
                                 description={postDescription}

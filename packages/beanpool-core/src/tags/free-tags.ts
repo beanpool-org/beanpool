@@ -115,8 +115,12 @@ export function freeTagRefusal(text: string): WordKey | null {
     return null;
 }
 
-/** The tags a stored `posts.free_tags` holds, in its order; [] for none, or for anything that is not such a list. */
+/**
+ * The tags a stored `posts.free_tags` holds, or a listing's `freeTags` as the node answers it, in its order; [] for none, or
+ * for anything that is not such a list.
+ */
 export function freeTagsOf(stored: unknown): string[] {
+    if (Array.isArray(stored)) return stored.filter((tag): tag is string => typeof tag === 'string');
     if (typeof stored !== 'string' || !stored) return [];
     try {
         const list: unknown = JSON.parse(stored);
@@ -124,6 +128,11 @@ export function freeTagsOf(stored: unknown): string[] {
     } catch {
         return [];
     }
+}
+
+/** A listing's typed tags, as the node's answer (`freeTags`) or a phone's cached row (`free_tags`) carries them. */
+export function listingFreeTags(p: { freeTags?: unknown; free_tags?: unknown } | null | undefined): string[] {
+    return freeTagsOf(p?.freeTags ?? p?.free_tags);
 }
 
 /** The column's value for these tags: a JSON list, '' for none, so an untagged listing is byte for byte as before. */

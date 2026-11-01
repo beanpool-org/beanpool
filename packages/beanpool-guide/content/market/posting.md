@@ -50,6 +50,17 @@ On the phone, tap **Not sure what to charge?** under the price. In the web app t
 
 Below the price you see what you will receive after the 1.5% market fee. Gifts have no fee.
 
+## Tags
+
+Tags help people find your post. They are optional, and they are public with your post.
+
+- Tap **+ Add** under **Tags**, on the phone and the web app. Start typing and the app offers tags from its library.
+- If none fits, type your own. Tap **Add “#…”**, press Enter, type a comma, or tap **Done**. A word that is already in the library picks that library tag.
+- A post can have five tags from the library and five of your own.
+- A tag you type is 2 to 30 characters and four words at most. It can't be an email, a phone number, a web address or an @name. The app says why before anything is sent.
+- A tag you type stays in your own words. Nobody translates it, so people find it by those words. A library tag is found in every language.
+- To take a tag off, tap it. With the box empty, backspace takes off the last one.
+
 ## Extra choices
 
 - **Repeatable:** the post stays up after each deal, and several people can take it at once. Good for a weekly lift or bread every Saturday.

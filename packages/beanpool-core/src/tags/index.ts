@@ -116,6 +116,8 @@ export interface TagIndex {
     /** The tags a label in this language names (an untranslated tag's is its English), as byName reads it: never by a
      *  translated tag's English label or an old synonym word. */
     byLabel(text: string): readonly string[];
+    /** The tags an English label names, on any device: what the typed-tag field holds beside byLabel (typed-tags.ts). */
+    byEnglish(text: string): readonly string[];
     /** The tags an English broader word is on: a tag's words (for it and everything under it) or its aliases. */
     byAlias(text: string): readonly string[];
     /** The tags named inside a word of a script written without spaces: "新鲜柠檬出售" (fresh lemons for sale) holds 柠檬. The
@@ -159,6 +161,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
     const translate = words ? words.t : t;
     const names = new Map<string, string[]>();
     const ownNames = new Map<string, string[]>();
+    const englishNames = new Map<string, string[]>();
     const aliases = new Map<string, string[]>();
     const labels = new Map<string, string>();
     const own: Array<[string, string]> = [];
@@ -172,6 +175,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
         add(names, label, tag.id);
         add(ownNames, label, tag.id);
         add(names, en, tag.id);
+        add(englishNames, en, tag.id);
         for (const key of tag.synonymKeys ?? []) add(names, key, tag.id);
         for (const w of tag.words ?? []) add(aliases, w, tag.id);
         for (const w of tag.aliases ?? []) add(aliases, w, tag.id);
@@ -199,6 +203,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
             return mine.length ? mine : find(names, text);
         },
         byLabel: (text) => find(ownNames, text),
+        byEnglish: (text) => find(englishNames, text),
         byAlias: (text) => find(aliases, text),
         inside(text) {
             let run = tagText(text);

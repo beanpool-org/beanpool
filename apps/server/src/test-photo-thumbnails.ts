@@ -1,8 +1,9 @@
 /**
  * Lists show a listing photo's small copy (shortest side 320 px, cap 640 px, ~6-18 KB; Marty, 1 Nov).
  *
- * A Market page of 20 rows downloaded 20 full photos. Now the photo route answers `size=thumb` with a sharp copy of
- * the photo, kept in the image store beside it (storage/photo-thumbnails.ts), behind exactly the gates the photo has.
+ * A Market page of 20 rows downloaded 20 full photos. Now the photo route answers `size=thumb2` (and legacy `size=thumb`)
+ * with a sharp copy of the photo, kept in the image store beside it (storage/photo-thumbnails.ts), behind exactly the gates
+ * the photo has.
  *
  * Every run is the real server over TLS through the real middleware, reads signed, in its own process on its own data
  * dir: `disk` (the default store) and `s3` (IMAGE_STORE=s3 against the in-process stand-in bucket, fake-s3-test-harness.ts:
@@ -10,8 +11,9 @@
  *
  *  1. Made at upload: a listing with a real JPEG, WebP, PNG and a PNG with transparency (src/__fixtures__/photos). Each
  *     photo's small copy is in the store beside it, shortest side 320 px (cap 640 px, never enlarged), the same format,
- *     the PNG's transparency kept, each ~6-18 KB; served at the URL the listing read hands out with `&size=thumb`, the
- *     same type and the same cache header as the photo, the photo itself unchanged at its own URL.
+ *     the PNG's transparency kept, each ~6-18 KB; served at the URL the listing read hands out with `&size=thumb2`, the
+ *     same type and the same cache header as the photo, the photo itself unchanged at its own URL. Legacy `&size=thumb`
+ *     still answers with the small copy too.
  *     Two hostile shapes the node's photo check accepts (review opus-1742 #1): a ~130 KB PNG of 16,777,216×1 px (16-bit
  *     RGBA), which a decoder would need over a gigabyte for, and the same with its image data stopping early (its chunks
  *     whole), which can never give a copy. No small copy, the photo itself served, the process alive with its peak
@@ -126,7 +128,8 @@ async function longRowPng(width: number, keep: number): Promise<Buffer> {
     ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 16; ihdr[9] = 6;
     return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', Buffer.concat(parts)), chunk('IEND', Buffer.alloc(0))]);
 }
-const thumbOf = (url: string): string => `${url}${url.includes('?') ? '&' : '?'}size=thumb`;
+const thumbOf = (url: string): string => `${url}${url.includes('?') ? '&' : '?'}size=thumb2`;
+const oldThumbOf = (url: string): string => `${url}${url.includes('?') ? '&' : '?'}size=thumb`;
 
 async function main(): Promise<void> {
     console.log(`\n=== Lists show a listing photo's small copy ${MODE} ===\n`);
@@ -211,7 +214,7 @@ async function main(): Promise<void> {
         const [url] = await urlsOf(id);
         for (const n of [1, 2]) {
             const r = await get(thumbOf(url), carol);
-            assert(r.status === 200 && r.bytes.equals(jpg) && r.type === 'image/jpeg', `&size=thumb serves the photo itself (ask ${n}: ${r.status} ${r.bytes.length} B)`);
+            assert(r.status === 200 && r.bytes.equals(jpg) && r.type === 'image/jpeg', `&size=thumb2 serves the photo itself (ask ${n}: ${r.status} ${r.bytes.length} B)`);
         }
         const logged = warned.filter(w => w.includes('sharp')).length;
         assert(logged === 1, `the load failure is logged once (${logged} times)`);
@@ -244,9 +247,14 @@ async function main(): Promise<void> {
         const full = await get(shelfUrls[i], carol);
         const small = await get(thumbOf(shelfUrls[i]), carol);
         assert(full.status === 200 && full.bytes.length > 0 && small.status === 200 && !!kept && small.bytes.equals(kept),
-            `${f.name}: &size=thumb serves the small copy (${full.status} ${full.bytes.length} B → ${small.status} ${small.bytes.length} B)`);
+            `${f.name}: &size=thumb2 serves the small copy (${full.status} ${full.bytes.length} B → ${small.status} ${small.bytes.length} B)`);
         assert(small.type === full.type && small.type === f.mime && small.cache === full.cache,
             `${f.name}: the same type and cache header as the photo (${small.type} "${small.cache}" vs ${full.type} "${full.cache}")`);
+        const legacy = await get(oldThumbOf(shelfUrls[i]), carol);
+        assert(legacy.status === 200 && !!kept && legacy.bytes.equals(kept),
+            `${f.name}: legacy &size=thumb still answers with the small copy (${legacy.status} ${legacy.bytes.length} B)`);
+        assert(legacy.type === small.type && legacy.cache === small.cache,
+            `${f.name}: legacy &size=thumb has the same type and cache header`);
         sizes.push(`${f.name} ${full.bytes.length} → ${small.bytes.length} B`);
     }
     {
@@ -282,7 +290,7 @@ async function main(): Promise<void> {
                 `${s.label}: resized to ${s.expW}x${s.expH} (got ${meta?.width}x${meta?.height})`);
             const small = await get(thumbOf(sizeUrls[i]), carol);
             assert(small.status === 200 && !!kept && small.bytes.equals(kept),
-                `${s.label}: served at &size=thumb (${small.status} ${small.bytes.length} B)`);
+                `${s.label}: served at &size=thumb2 (${small.status} ${small.bytes.length} B)`);
         }
     }
     {
@@ -307,7 +315,7 @@ async function main(): Promise<void> {
             for (const n of [1, 2]) {
                 const r = await get(thumbOf(urls[i]), carol);
                 assert(r.status === 200 && r.bytes.equals(bytes) && r.type === 'image/png' && !!r.cache?.endsWith(', max-age=300'),
-                    `${name}: &size=thumb serves the photo itself, cached 5 minutes (ask ${n}: ${r.status} ${r.bytes.length} B "${r.cache}")`);
+                    `${name}: &size=thumb2 serves the photo itself, cached 5 minutes (ask ${n}: ${r.status} ${r.bytes.length} B "${r.cache}")`);
             }
         }
         await settled();
@@ -355,11 +363,12 @@ async function main(): Promise<void> {
                 .run(key, sha256Hex(bytes), bytes.length, 'image/jpeg', old);
             page.push(thumbOf((await urlsOf(old))[0]));
         }
+        thumbs?.resetPeakConcurrentResizes?.();
         const answers = await Promise.all(page.map(u => get(u, carol)));
         assert(answers.every(r => r.status === 200 && r.bytes.length <= THUMB_MAX_BYTES),
             `a page of 6 uncached requests: all answered (${answers.length} answers)`);
         const peak = thumbs?.peakConcurrentResizes?.() ?? 0;
-        assert(peak <= 1, `a page of requests still resizes one at a time (peak concurrent: ${peak})`);
+        assert(peak === 1, `a page of requests still resizes one at a time (peak concurrent: ${peak})`);
         await settled();
     }
     if (fake) {

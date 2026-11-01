@@ -136,36 +136,42 @@ function mimeOfKey(key: string): string {
  * already no bigger than a small copy would be; null when it can't be read.
  */
 export async function makeThumbnail(photo: Buffer, thumbKey: string): Promise<Buffer | null> {
-    const ext = thumbKey.slice(thumbKey.lastIndexOf('.') + 1);
-    let image: sharp.Sharp;
-    const lib = await loadSharp();
-    if (!lib) return null;
-    reads++;
+    activeResizes++;
+    if (activeResizes > peakResizes) peakResizes = activeResizes;
     try {
-        // The header alone first: a side the decoder would need gigabytes for is refused before any pixel is read.
-        const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
-        if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
+        const ext = thumbKey.slice(thumbKey.lastIndexOf('.') + 1);
+        let image: sharp.Sharp;
+        const lib = await loadSharp();
+        if (!lib) return null;
+        reads++;
+        try {
+            // The header alone first: a side the decoder would need gigabytes for is refused before any pixel is read.
+            const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+            if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
 
-        const isRotated = !!(head.orientation && head.orientation >= 5 && head.orientation <= 8);
-        const visualW = isRotated ? head.height : head.width;
-        const visualH = isRotated ? head.width : head.height;
-        const isPanorama = Math.max(visualW, visualH) > 2 * Math.min(visualW, visualH);
+            const isRotated = !!(head.orientation && head.orientation >= 5 && head.orientation <= 8);
+            const visualW = isRotated ? head.height : head.width;
+            const visualH = isRotated ? head.width : head.height;
+            const isPanorama = Math.max(visualW, visualH) > 2 * Math.min(visualW, visualH);
 
-        image = lib(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' }).rotate();
-        if (isPanorama) {
-            image = image.resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
-        } else {
-            image = image.resize({ width: THUMB_MIN_SIDE, height: THUMB_MIN_SIDE, fit: 'outside', withoutEnlargement: true });
+            image = lib(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' }).rotate();
+            if (isPanorama) {
+                image = image.resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
+            } else {
+                image = image.resize({ width: THUMB_MIN_SIDE, height: THUMB_MIN_SIDE, fit: 'outside', withoutEnlargement: true });
+            }
+
+            if (ext === 'jpg') image = image.jpeg({ quality: 70, mozjpeg: true });
+            else if (ext === 'webp') image = image.webp({ quality: 70, effort: 4 });
+            else if (ext === 'png') image = image.png({ palette: true, colours: 128, quality: 70, compressionLevel: 9, effort: 10 });
+            else return null;
+            const out = await image.toBuffer();
+            return out.length < photo.length ? out : photo;
+        } catch {
+            return null;
         }
-
-        if (ext === 'jpg') image = image.jpeg({ quality: 70, mozjpeg: true });
-        else if (ext === 'webp') image = image.webp({ quality: 70, effort: 4 });
-        else if (ext === 'png') image = image.png({ palette: true, colours: 128, quality: 70, compressionLevel: 9, effort: 10 });
-        else return null;
-        const out = await image.toBuffer();
-        return out.length < photo.length ? out : photo;
-    } catch {
-        return null;
+    } finally {
+        activeResizes--;
     }
 }
 
@@ -178,23 +184,7 @@ let activeResizes = 0;
 let peakResizes = 0;
 
 function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
-    const run = queue.then(async () => {
-        activeResizes++;
-        if (activeResizes > peakResizes) peakResizes = activeResizes;
-        try {
-            return await work();
-        } finally {
-            activeResizes--;
-        }
-    }, async () => {
-        activeResizes++;
-        if (activeResizes > peakResizes) peakResizes = activeResizes;
-        try {
-            return await work();
-        } finally {
-            activeResizes--;
-        }
-    });
+    const run = queue.then(work);
     queue = run.catch(() => undefined);
     return run;
 }
@@ -202,6 +192,11 @@ function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
 /** For the suites: peak concurrent resizes executed (must be <= 1). */
 export function peakConcurrentResizes(): number {
     return peakResizes;
+}
+
+/** For the suites: reset the peak counter to current active resizes. */
+export function resetPeakConcurrentResizes(): void {
+    peakResizes = activeResizes;
 }
 
 /** The longest side of a stored listing photo (photos stay 800 px): what the apps resize to before they send one. */
@@ -218,6 +213,8 @@ export async function resizeToStoredPhoto(photo: Buffer, format: 'jpeg' | 'webp'
     const lib = await loadSharp();
     if (!lib) return null;
     return oneAtATime(async () => {
+        activeResizes++;
+        if (activeResizes > peakResizes) peakResizes = activeResizes;
         try {
             const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
             if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
@@ -228,6 +225,8 @@ export async function resizeToStoredPhoto(photo: Buffer, format: 'jpeg' | 'webp'
             return await (format === 'jpeg' ? image.jpeg({ quality: 70, mozjpeg: true }) : image.webp({ quality: 70, effort: 4 })).toBuffer();
         } catch {
             return null;
+        } finally {
+            activeResizes--;
         }
     });
 }

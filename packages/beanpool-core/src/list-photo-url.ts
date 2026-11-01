@@ -1,5 +1,5 @@
 /**
- * The URL a list draws a listing photo from: the node's small copy of it (shortest side 320 px, `size=thumb`, apps/server
+ * The URL a list draws a listing photo from: the node's small copy of it (shortest side 320 px, `size=thumb2`, apps/server
  * storage/photo-thumbnails.ts) instead of the 800 px photo. A Market page of 20 rows was 20 full photos on prepaid data
  * (Marty, board, 9 Oct). The detail screens keep the photo's own URL.
  *
@@ -14,5 +14,5 @@ export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
     const hash = url.indexOf('#');
     const base = hash < 0 ? url : url.slice(0, hash);
     const tail = hash < 0 ? '' : url.slice(hash);
-    return `${base}${base.includes('?') ? '&' : '?'}size=thumb${tail}` as T;
+    return `${base}${base.includes('?') ? '&' : '?'}size=thumb2${tail}` as T;
 }

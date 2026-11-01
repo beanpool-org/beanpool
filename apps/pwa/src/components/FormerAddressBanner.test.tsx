@@ -186,9 +186,13 @@ describe('FormerAddressBanner', () => {
 
         // Tapping "Link this browser from your phone" displays the help
         const linkBtn = screen.getByRole('button', { name: 'Link this browser from your phone' });
+        expect(linkBtn.getAttribute('aria-expanded')).toBe('false');
+        expect(linkBtn.getAttribute('aria-controls')).toBe('main-address-help');
         fireEvent.click(linkBtn);
 
         const help = await screen.findByTestId('main-address-help');
+        expect(help.id).toBe('main-address-help');
+        expect(linkBtn.getAttribute('aria-expanded')).toBe('true');
         expect(help.textContent).toBe(
             'To use byron.beanpool.org from this browser, the phone must be on byron.beanpool.org first, because a Link a device code is refused when the phone and browser are on different addresses.'
         );
@@ -196,6 +200,7 @@ describe('FormerAddressBanner', () => {
         // Tapping again hides the help
         fireEvent.click(linkBtn);
         expect(screen.queryByTestId('main-address-help')).toBeNull();
+        expect(linkBtn.getAttribute('aria-expanded')).toBe('false');
     });
 
     it('not shown at the primary address', async () => {

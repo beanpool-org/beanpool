@@ -4,15 +4,6 @@
  * address's storage, and nothing of it, nor anything signed or in this address's query, goes with the link. Nothing
  * at the community's current address, on a node that names no current one, or on one that can't be asked.
  *
- * At the top of the member's screen, the visitor lobby and the welcome page (App.tsx, GuestLobby.tsx), above the
- * mobile header: on the map that header floats over the page, so the banner sits over it rather than under it.
- */
-/**
- * "This community has moved to <address>. Open it there": the web app opened at a BeanPool name its community had
- * before (lib/former-address.ts, lost-name L4). A plain link, never a redirect: the member's key stays in this
- * address's storage, and nothing of it, nor anything signed or in this address's query, goes with the link. Nothing
- * at the community's current address, on a node that names no current one, or on one that can't be asked.
- *
  * At any own address that is not the community's primary address, the web app shows one quiet line: "This community's
  * main address is now <address>. This address keeps working." (Fable design §5).
  *
@@ -125,6 +116,7 @@ export function FormerAddressBanner({ signedIn = false, isGuest = null }: { sign
                             type="button"
                             onClick={() => setShowHelp((h) => !h)}
                             aria-expanded={showHelp}
+                            aria-controls="main-address-help"
                             className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-transparent border border-nature-300 dark:border-nature-700 text-nature-900 dark:text-nature-100 hover:bg-nature-200/50 dark:hover:bg-nature-800/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             {t('Link this browser from your phone')}
@@ -140,7 +132,7 @@ export function FormerAddressBanner({ signedIn = false, isGuest = null }: { sign
                     </div>
                 </div>
                 {showHelp && (
-                    <p data-testid="main-address-help" className="m-0 mt-2 text-xs sm:text-sm leading-snug text-nature-700 dark:text-nature-300">
+                    <p id="main-address-help" data-testid="main-address-help" className="m-0 mt-2 text-xs sm:text-sm leading-snug text-nature-700 dark:text-nature-300">
                         {t('To use {address} from this browser, the phone must be on {address} first, because a Link a device code is refused when the phone and browser are on different addresses.', { address: mainNotice.primaryAddress })}
                     </p>
                 )}

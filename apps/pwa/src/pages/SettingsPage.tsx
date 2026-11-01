@@ -1033,8 +1033,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     line above says what it keeps now. */}
                                 <WaysBackSection
                                     enrolled={signInRecovery}
-                                    adminsCopy={communityCopy?.kept ? { since: communityCopy.since } : null}
+                                    adminsCopy={communityCopy?.kept && !communityCopy.shared ? { since: communityCopy.since } : null}
                                     adminsCopyUnopenable={communityCopy?.unopenable ?? null}
+                                    adminsHalf={communityCopy?.shared ? { since: communityCopy.since } : null}
                                     hasWords={hasWords}
                                     onShowWords={() => setMode('seed')}
                                     onChanged={() => { getSignInRecovery().then(setSignInRecovery); void readCommunityCopy(); }}

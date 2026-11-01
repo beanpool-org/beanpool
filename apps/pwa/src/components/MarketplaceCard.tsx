@@ -2,7 +2,7 @@
  * MarketplaceCard — FB Marketplace-style image-dominant tile
  *
  * Designed for a 2-column CSS grid:
- *  - Square photo (1:1 aspect ratio) fills the top
+ *  - 4:3 photo (4:3 landscape aspect ratio) fills the top
  *  - Price + title below in compact text
  *  - Category emoji badge overlaid on the image
  *  - Remote node badge if from a peer
@@ -96,7 +96,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const showPrice = !isPulse && !beansMarked;
     const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
 
-    // On the photo: at most ONE status chip, by precedence PENDING > YOU > RECURRING.
+    // On the photo: at most ONE status chip, by precedence PENDING > YOU.
+    // RECURRING is placed under the photo in grid view so overlays fit at 320dp / 1.3x text (market-card-43).
     const statusChip = (() => {
         if (post.status === 'pending') {
             return {
@@ -108,12 +109,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             return {
                 text: t('👤 YOU'),
                 className: 'bg-blue-600 text-white',
-            };
-        }
-        if (post.repeatable) {
-            return {
-                text: t('↻ RECURRING'),
-                className: 'bg-bp-cta-fill text-bp-cta-on',
             };
         }
         return null;
@@ -367,15 +362,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
     // Grid View Return (Condensed tiles)
     // Rebuilt on the phone's layout (market.tsx grid card):
-    // Photo (or CategoryTile) square and edge-to-edge at card top, radius 14, no inner padding frame;
+    // Photo (or CategoryTile) 4:3 landscape and edge-to-edge at card top, radius 14, no inner padding frame;
     // Type pill top-leading, price pill bottom-trailing; title under the photo (clamped to two lines).
     // No description line and no VIEW button on non-Pulse cards.
     return (
         <div
             className={`bg-white dark:bg-nature-950 overflow-hidden cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md border border-nature-200 dark:border-nature-800 flex flex-col rounded-[14px] ${elderStyleGrid}`}
         >
-            {/* Square Media Box at Card Top (edge to edge, radius 14) */}
-            <div className="relative w-full aspect-square overflow-hidden">
+            {/* 4:3 Media Box at Card Top (edge to edge, radius 14) */}
+            <div className="relative w-full aspect-[4/3] overflow-hidden">
                 {photosToZoom.length > 0 ? (
                     <button
                         type="button"
@@ -397,10 +392,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                         }`}
                     >
-                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
+                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} />
                     </button>
                 ) : displayImage ? (
-                    <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
+                    <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} onError={onPictureError} />
                 ) : (
                     <CategoryTile
                         category={post.category}
@@ -431,7 +426,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                 {/* Foot of photo: status chip on left, price pill bottom-trailing on right */}
                 <div data-testid="grid-badge-row" className="absolute left-2 right-2 bottom-2 flex flex-wrap items-end justify-between gap-1 pointer-events-none">
-                    {/* Status chip: at most ONE by precedence PENDING > YOU > RECURRING */}
+                    {/* Status chip: at most ONE by precedence PENDING > YOU */}
                     {statusChip ? (
                         <div className={`font-bold rounded-lg shadow-sm text-[0.6rem] px-2 py-1 pointer-events-auto ${statusChip.className}`}>
                             {statusChip.text}
@@ -473,6 +468,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     isFounding={!beansMarked && !!post.authorFoundingNeeded}
                     onOpenProfile={onOpenProfile}
                 />
+
+                {/* Recurring pill under the photo (market-card-43) */}
+                {post.repeatable && !isOwnPost && post.status !== 'pending' && (
+                    <div className="mt-0.5">
+                        <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink inline-block">
+                            {t('↻ RECURRING')}
+                        </span>
+                    </div>
+                )}
 
                 {/* Group lock line stays under the author */}
                 {groupScopeBadge && (

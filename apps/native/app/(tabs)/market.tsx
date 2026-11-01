@@ -28,7 +28,7 @@ import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
-import { MarketCardPicture } from '../../components/MarketCardPicture';
+import { MARKET_GRID_CROP, MarketCardPicture } from '../../components/MarketCardPicture';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -295,7 +295,7 @@ export default function MarketScreen() {
         },
         gridRow: { gap: 16 },
         gridCard: { flex: 1, marginBottom: 16 },
-        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 1 },
+        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 4 / 3 },
         gridImage: { width: '100%', height: '100%' },
         gridFallback: { backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
         gridFallbackEmoji: { fontSize: 32, opacity: 0.3 },
@@ -1646,6 +1646,7 @@ export default function MarketScreen() {
                             category={item.category}
                             kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
                             size="grid"
+                            contentPosition={MARKET_GRID_CROP}
                             accessibilityLabel={item.title}
                             imageStyle={styles.gridImage}
                         />
@@ -1680,13 +1681,6 @@ export default function MarketScreen() {
                                     </View>
                                 );
                             }
-                            if (item.repeatable) {
-                                return (
-                                    <View style={styles.gridBadge}>
-                                        <Text style={styles.gridPriceText}>{t('↻ RECURRING')}</Text>
-                                    </View>
-                                );
-                            }
                             return null;
                         })()}
                         {dealChip && (
@@ -1717,6 +1711,11 @@ export default function MarketScreen() {
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
                         <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />
+                        {!!item.repeatable && !isOwn && item.status !== 'pending' && (
+                            <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('↻ RECURRING')}</Text>
+                            </View>
+                        )}
                         {groupScopeBadgeText && (
                             <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                                 <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>

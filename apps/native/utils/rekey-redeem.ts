@@ -129,9 +129,11 @@ export type RekeyAnswer =
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
     /**
      * A bring-back the admin confirmed with this phone's number: the member's community copy and its key, sealed to the key
-     * this phone asked with ({@link openBringBack}). Nothing was bound.
+     * this phone asked with ({@link openBringBack}). Nothing was bound. With `voucher`, the shared placement (vault rethink
+     * VR4): the release holds the community's half, and the voucher takes the phone to the key vault for the rest
+     * (utils/community-recovery.ts `takeSharedRelease`).
      */
-    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare }
+    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare; voucher?: string }
     | { state: 'declined' }
     | { state: 'gone' }
     /** The node refused the ask, in its own words (a dead code, a phone with an account here, too many tries). */
@@ -163,6 +165,8 @@ export const REKEY_TEXT = {
     wrongCommunity: 'That code is for another community. Check the community’s name or address and try again.',
     unreachable: 'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.',
     changedAccount: 'This phone’s account changed while you waited, so nothing was saved. Start again.',
+    /** The node's refusal of a bring-back's code for an account it has since removed (design §4.4), which arrives in English. */
+    accountGone: 'This community no longer has your account. Use your 12 words or another way back.',
 } as const;
 
 /**
@@ -236,7 +240,7 @@ export async function beginRekey(community: string, rawCode: string, deps: Rekey
 }
 
 /** The key the record asks with: the one it made, or the phone's own (null when the phone's account changed since). */
-async function keyOf(slot: RekeySlot, deps: RekeyDeps): Promise<BeanPoolIdentity | null> {
+export async function keyOf(slot: RekeySlot, deps: Pick<RekeyDeps, 'loadIdentity'>): Promise<BeanPoolIdentity | null> {
     if (slot.madeHere) return slot.draft && slot.draft.publicKey === slot.publicKey ? slot.draft : null;
     const stored = await deps.loadIdentity();
     return stored && stored.publicKey === slot.publicKey ? stored : null;
@@ -248,7 +252,10 @@ function readAnswer(status: number, body: any): RekeyAnswer {
         if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), linkSignInAgain: body.linkSignInAgain === true };
         if (body.state === 'released' && typeof body.memberKey === 'string' && /^[0-9a-f]{64}$/.test(body.memberKey)
             && body.release && typeof body.release === 'object') {
-            return { state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare };
+            return {
+                state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare,
+                ...(typeof body.voucher === 'string' ? { voucher: body.voucher } : {}),
+            };
         }
         if (body.state === 'declined') return { state: 'declined' };
         if (body.state === 'gone') return { state: 'gone' };

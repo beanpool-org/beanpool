@@ -13,7 +13,7 @@ import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, request, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
+import { getMyUnread, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, request, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
 import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
@@ -716,6 +716,7 @@ export function App() {
         // over the new one's — or set state on an unmounted tree.
         let cancelled = false;
         let lastPollTime = 0;
+        const POLL_FLOOR_MS = 2000;
         let pollPromise: Promise<void> | null = null;
 
         const pollUnread = async () => {
@@ -728,14 +729,16 @@ export function App() {
                     // from here, one unrelated endpoint erroring starved the whole marketplace view.
                     // The member's own deals only where deals are not in preview (lib/features readsOwn): on the
                     // global node Your deals is Example Valley's, and null here leaves the counts as they are.
-                    const [convResult, txResult] = await Promise.allSettled([
-                        getConversations(identity.publicKey),
+                    // The badge asks for its number and no more: the counts route, never the whole list. `requests` stays
+                    // out of it: a message request makes no badge until it is accepted.
+                    const [unreadResult, txResult] = await Promise.allSettled([
+                        getMyUnread(identity.publicKey),
                         readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : null)),
                     ]);
                     if (cancelled) return;
 
-                    if (convResult.status === 'fulfilled') {
-                        setTotalUnread(convResult.value.totalUnread || 0);
+                    if (unreadResult.status === 'fulfilled') {
+                        setTotalUnread(unreadResult.value.unread || 0);
                     }
 
                     if (txResult.status === 'fulfilled' && txResult.value) {
@@ -749,8 +752,8 @@ export function App() {
                     // must reject so the coordinator does not advance the delta cursor past data
                     // that never arrived. One of the two failing is tolerated on purpose — that
                     // is why they are settled independently rather than chained.
-                    if (convResult.status === 'rejected' && txResult.status === 'rejected') {
-                        throw convResult.reason;
+                    if (unreadResult.status === 'rejected' && txResult.status === 'rejected') {
+                        throw unreadResult.reason;
                     }
                     lastPollTime = Date.now();
                 } finally {
@@ -759,6 +762,22 @@ export function App() {
             })();
             pollPromise = p;
             return p;
+        };
+
+        // The number while the tab is hidden, when the title is all a member reads of it. The poll has stopped but the socket
+        // stays open, so the activity that brings a line brings this read: the count alone, never the deals, and never inside
+        // the poll's floor. Activity inside the floor waits it out instead of being dropped, because a hidden tab has no poll
+        // to catch up later and the last line of a burst would never reach the number. Not held in `pollPromise`: a member's
+        // return must still read the deals, and from then on that read owns the number, so this one's answer is dropped.
+        // Throws as pollUnread does, so the coordinator does not advance the delta cursor past a read that failed.
+        const readCountHidden = async (stampFloor = true) => {
+            const floor = lastPollTime + POLL_FLOOR_MS - Date.now();
+            if (floor > 0) await new Promise((resolve) => setTimeout(resolve, floor));
+            if (cancelled || !document.hidden) return;
+            const { unread } = await getMyUnread(identity.publicKey);
+            if (cancelled || !document.hidden) return;
+            setTotalUnread(unread || 0);
+            if (stampFloor) lastPollTime = Date.now();
         };
 
         const startPolling = () => {
@@ -780,6 +799,8 @@ export function App() {
         const handleVisibilityChange = () => {
             if (document.hidden) {
                 stopPolling();
+                // What the tab leaves with is what it keeps until the next doorbell, so it leaves with the right number.
+                readCountHidden(false).catch(() => {});
             } else {
                 startPolling();
             }
@@ -798,9 +819,9 @@ export function App() {
         // never arrived.
         // Coalesces with visibilitychange / reconnect sync if already in-flight or polled within 2000ms.
         const unsubscribe = onSyncActivity(() => {
-            if (document.hidden) return;
             if (pollPromise) return pollPromise;
-            if (Date.now() - lastPollTime < 2000) return;
+            if (document.hidden) return readCountHidden();
+            if (Date.now() - lastPollTime < POLL_FLOOR_MS) return;
             return pollUnread();
         });
 
@@ -843,6 +864,11 @@ export function App() {
             unsubRead();
         };
     }, [identity]);
+
+    // The browser tab shows the Chat badge's number, so a tab in the background still says a message is waiting.
+    useEffect(() => {
+        document.title = totalUnread > 0 ? `(${totalUnread > 99 ? '99+' : totalUnread}) BeanPool` : 'BeanPool';
+    }, [totalUnread]);
 
     // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
     // The tabs' names are the phone's tab words (word(…, 'tab')), so one translation serves both; "Chat" is the web's own.

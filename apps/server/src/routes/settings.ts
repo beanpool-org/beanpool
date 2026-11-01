@@ -3,7 +3,7 @@
  */
 
 import Router from '@koa/router';
-import { getVersion, getCommit } from '../version.js';
+import { getVersion, getCommit, shownVersion } from '../version.js';
 import { backgroundUpdateCheck, cachedNodeUpdateInfo, lookUpNewestNodeRelease, semverGreater } from '../node-release-check.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -612,7 +612,7 @@ router.post('/api/admin/check-update', async (ctx) => {
         if (release) {
             const currentVersion = getVersion();
             ctx.body = {
-                currentVersion,
+                currentVersion: shownVersion(currentVersion),
                 latestVersion: release.latestVersion,
                 updateAvailable: semverGreater(release.latestVersion, currentVersion),
                 releaseUrl: release.releaseUrl,
@@ -623,7 +623,7 @@ router.post('/api/admin/check-update', async (ctx) => {
             // Return Bad Gateway if upstream update source (GitHub API) is unreachable
             ctx.status = 502;
             ctx.body = {
-                currentVersion: getVersion(),
+                currentVersion: shownVersion(getVersion()),
                 latestVersion: '',
                 updateAvailable: false,
                 error: 'Could not reach GitHub',
@@ -633,7 +633,7 @@ router.post('/api/admin/check-update', async (ctx) => {
         // Return Internal Server Error on unhandled update check exceptions
         ctx.status = 500;
         ctx.body = {
-            currentVersion: getVersion(),
+            currentVersion: shownVersion(getVersion()),
             latestVersion: '',
             updateAvailable: false,
             error: e.message || 'Failed to check',

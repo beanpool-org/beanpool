@@ -7,6 +7,7 @@ import {
     isVaultAnswerKind,
     isVaultChallenge,
     isVaultClientCopy,
+    isVaultCommunityCopy,
     isVaultKeyHex,
     isVaultPushToken,
     newVaultTicket,
@@ -19,8 +20,10 @@ import {
     vaultCopyDigest,
     vaultUnb64,
     VAULT_ANSWER_HEAD,
+    VAULT_COMMUNITY_PROVIDER,
     type SealedShare,
     type VaultAnswerKind,
+    type VaultDepositContents,
     type VaultSealedBox,
     type VaultTicketPurpose,
 } from '@beanpool/core';
@@ -82,6 +85,12 @@ import { combineMnemonics, decodeShare, splitMasterSecret } from './slip39.js';
  *   wrap        a copy's envelope under K_wrap, from a deposit box it opens itself (`depositWrap`), or with its
  *               push tokens or release time changed (`updateMeta`); the API reads everything but the copy (`readMeta`)
  *   release     unwrap a copy and seal it to the restoring device's key: the only way a copy leaves
+ *
+ * A community copy (vault rethink VR4; core vault-wire.ts "A community copy") is one more kind of envelope. It holds a copy
+ * this vault can't open, with one half of the key that opens it, and sits in the row its keyed community index names:
+ * `sub_index = HMAC(K_index, "community" ‖ nodeKey ‖ memberKey)`. This process alone reads the node key, from the deposit
+ * box, and keeps only that HMAC. The API sees it only at a restore, in the voucher.
+ *
  *   ticket      sign a ticket, and the daily report
  *   answer      sign what the phone acts on (core vault-wire.ts "Signed answers"): a release and a deposit receipt only
  *               here, over what this process sealed or opened itself; the API's other answers through `signAnswer`
@@ -139,6 +148,8 @@ export interface CopyMeta {
     pushTokens: string[];
     lastReleasedAt: number | null;
     wrapVersion: number;
+    /** On a community copy: the member's label, and the copy's digest. Never its half: that stays in the envelope. */
+    community: { ref: string; copy: string } | null;
 }
 
 interface EnvelopeContents {
@@ -147,6 +158,8 @@ interface EnvelopeContents {
     clientCopy: SealedShare;
     pushTokens: string[];
     lastReleasedAt: number | null;
+    /** On a community copy: the vault's half of the copy's key, and the member's own label for that community. */
+    community?: { half: string; ref: string };
 }
 
 /** Push tokens kept per copy: a member's devices, newest first. */
@@ -738,8 +751,11 @@ export class Keyholder {
         return vaultB64(h.digest());
     }
 
-    /** `sub_index = HMAC(K_index, "sub" ‖ provider ‖ sub)` or `pk_index = HMAC(K_index, "pk" ‖ memberPubkey)`. */
-    index(args: { kind?: unknown; provider?: unknown; sub?: unknown; key?: unknown }): string {
+    /**
+     * `sub_index = HMAC(K_index, "sub" ‖ provider ‖ sub)`, `pk_index = HMAC(K_index, "pk" ‖ memberPubkey)`, or a community
+     * copy's `sub_index = HMAC(K_index, "community" ‖ nodeKey ‖ memberPubkey)`.
+     */
+    index(args: { kind?: unknown; provider?: unknown; sub?: unknown; key?: unknown; member?: unknown }): string {
         const keys = this.requireOpen();
         if (args.kind === 'sub') {
             if (!isVaultProvider(args.provider)) fail('bad_request', 'Not a provider this vault keeps copies for.');
@@ -750,7 +766,11 @@ export class Keyholder {
             if (!isVaultKeyHex(args.key)) fail('bad_request', 'Not a member key.');
             return this.hmacIndex(keys, ['pk', Buffer.from(args.key, 'hex')]);
         }
-        fail('bad_request', 'An index is of a sub or a key.');
+        if (args.kind === 'community') {
+            if (!isVaultKeyHex(args.key) || !isVaultKeyHex(args.member)) fail('bad_request', 'A community index names a node key and a member key.');
+            return this.hmacIndex(keys, ['community', Buffer.from(args.key, 'hex'), Buffer.from(args.member, 'hex')]);
+        }
+        fail('bad_request', 'An index is of a sub, a key or a community.');
     }
 
     private rowAad(row: RowRef): Buffer {
@@ -794,11 +814,33 @@ export class Keyholder {
         }
     }
 
+    /** The member's box (sealed to the deposit key for this member key and provider), opened here. */
+    private openDepositBox(keys: WorkingKeys, box: VaultSealedBox, memberKey: string, provider: string): VaultDepositContents {
+        const secret = keys.depositSecretFor(box?.kid);
+        if (!secret) fail('bad_box', 'The deposit box is sealed to a key this vault does not have.');
+        try {
+            return openVaultDepositBox(box, secret, memberKey, provider);
+        } catch {
+            fail('bad_box', 'The deposit box does not open for this key and provider.');
+        }
+    }
+
+    /**
+     * The row a community copy's deposit goes in: its `sub_index`, from the node key inside the box, so the API can find
+     * the member's earlier copy for that community without ever reading which community it is.
+     */
+    communityDepositIndex(args: { memberKey?: unknown; box?: unknown }): { subIndex: string } {
+        const keys = this.requireOpen();
+        if (!isVaultKeyHex(args.memberKey)) fail('bad_request', 'Not a member key.');
+        const contents = this.openDepositBox(keys, args.box as VaultSealedBox, args.memberKey, VAULT_COMMUNITY_PROVIDER);
+        return { subIndex: this.index({ kind: 'community', key: contents.community?.nodeKey, member: args.memberKey }) };
+    }
+
     /**
      * A deposit: open the member's box (sealed to the deposit key for this member key and provider) and wrap its copy
-     * into the row's envelope. The indexes are recomputed here from the sub and the key, so an envelope always sits in
-     * the row its own sub and key name. `carry` is the member's own earlier envelope for the same sign-in account:
-     * its push tokens and last release time move to the new one.
+     * into the row's envelope. The indexes are recomputed here from the sub (for a community copy, the node key in the
+     * box) and the key, so an envelope always sits in the row its own sub and key name. `carry` is the member's own
+     * earlier envelope for the same sign-in account (or community): its push tokens and last release time move to the new one.
      *
      * With the phone's `challenge`: a signed receipt too (kind `receipt`), over the member key, the provider, the
      * digest of the copy this process just opened and wrapped, the sign-in's ticket nonce (`signIn`) and whether it
@@ -810,28 +852,23 @@ export class Keyholder {
         challenge?: unknown; signIn?: unknown; replaced?: unknown;
     }) {
         const keys = this.requireOpen();
-        if (!isVaultProvider(args.provider)) fail('bad_request', 'Not a provider this vault keeps copies for.');
+        const forCommunity = args.provider === VAULT_COMMUNITY_PROVIDER;
+        if (!forCommunity && !isVaultProvider(args.provider)) fail('bad_request', 'Not a provider this vault keeps copies for.');
         if (!isVaultKeyHex(args.memberKey)) fail('bad_request', 'Not a member key.');
         if (args.challenge !== undefined && !isVaultChallenge(args.challenge)) fail('bad_request', 'Not a challenge.');
         if (args.challenge !== undefined && (!isVaultChallenge(args.signIn) || typeof args.replaced !== 'boolean')) {
             fail('bad_request', 'A receipt names the sign-in\'s ticket nonce and whether it replaced a copy.');
         }
-        const provider = args.provider;
+        const provider = args.provider as string;
         const memberKey = args.memberKey;
+        const contents = this.openDepositBox(keys, args.box as VaultSealedBox, memberKey, provider);
         const row: RowRef = {
             id: String(args.id),
-            subIndex: this.index({ kind: 'sub', provider, sub: args.sub }),
+            subIndex: forCommunity
+                ? this.index({ kind: 'community', key: contents.community?.nodeKey, member: memberKey })
+                : this.index({ kind: 'sub', provider, sub: args.sub }),
             pkIndex: this.index({ kind: 'pk', key: memberKey }),
         };
-        const box = args.box as VaultSealedBox;
-        const secret = keys.depositSecretFor(box?.kid);
-        if (!secret) fail('bad_box', 'The deposit box is sealed to a key this vault does not have.');
-        let contents;
-        try {
-            contents = openVaultDepositBox(box, secret, memberKey, provider);
-        } catch {
-            fail('bad_box', 'The deposit box does not open for this key and provider.');
-        }
         let pushTokens = contents.pushToken ? [contents.pushToken] : [];
         let lastReleasedAt: number | null = null;
         if (args.carry) {
@@ -841,7 +878,11 @@ export class Keyholder {
                 lastReleasedAt = old.lastReleasedAt;
             }
         }
-        const envelope = this.wrapEnvelope(keys, row, { provider, pubkey: memberKey, clientCopy: contents.clientCopy, pushTokens, lastReleasedAt });
+        const envelope = this.wrapEnvelope(keys, row, {
+            provider, pubkey: memberKey, clientCopy: contents.clientCopy, pushTokens, lastReleasedAt,
+            // The node key goes no further than the index above: never into the envelope, which the API reads the rest of.
+            ...(contents.community ? { community: { half: contents.community.half, ref: contents.community.ref } } : {}),
+        });
         const receipt = args.challenge === undefined ? undefined : signVaultAnswer(
             { kind: 'receipt', key: memberKey, challenge: args.challenge as string, at: this.clock() },
             { provider, copy: vaultCopyDigest(contents.clientCopy), signIn: args.signIn, replaced: args.replaced },
@@ -854,7 +895,10 @@ export class Keyholder {
     readMeta(args: { row?: RowRef }): CopyMeta {
         const keys = this.requireOpen();
         const { contents: c, version } = this.unwrapEnvelope(keys, args.row as RowRef);
-        return { provider: c.provider, pubkey: c.pubkey, pushTokens: [...c.pushTokens], lastReleasedAt: c.lastReleasedAt, wrapVersion: version };
+        return {
+            provider: c.provider, pubkey: c.pubkey, pushTokens: [...c.pushTokens], lastReleasedAt: c.lastReleasedAt, wrapVersion: version,
+            community: c.community ? { ref: c.community.ref, copy: vaultCopyDigest(c.clientCopy) } : null,
+        };
     }
 
     /**
@@ -890,17 +934,24 @@ export class Keyholder {
     }
 
     /**
-     * The only way a copy leaves: sealed to the restoring device's key, which the ticket named. With the phone's
-     * `challenge`, signed too (kind `release`): the restoring key, the provider, the account's key and the sealed box,
-     * all from the envelope this process just opened, so a release the phone accepts is one this keyholder made.
+     * The only way a copy leaves: sealed to the restoring device's key, which the ticket named, with the vault's half when
+     * it is a community copy. With the phone's `challenge`, signed too (kind `release`): the restoring key, the provider,
+     * the account's key and the sealed box, all from the envelope this process just opened, so a release the phone accepts
+     * is one this keyholder made.
      */
     release(args: { row?: RowRef; requesterKey?: unknown; challenge?: unknown }) {
         const keys = this.requireOpen();
         if (!isVaultKeyHex(args.requesterKey)) fail('bad_request', 'Not a restoring key.');
         if (args.challenge !== undefined && !isVaultChallenge(args.challenge)) fail('bad_request', 'Not a challenge.');
         const { contents } = this.unwrapEnvelope(keys, args.row as RowRef);
-        if (!isVaultClientCopy(contents.clientCopy)) fail('bad_envelope', 'The envelope holds no copy.');
-        const release = sealVaultRelease({ provider: contents.provider, pubkey: contents.pubkey, clientCopy: contents.clientCopy }, args.requesterKey);
+        const forCommunity = contents.provider === VAULT_COMMUNITY_PROVIDER;
+        if (forCommunity ? !isVaultCommunityCopy(contents.clientCopy) || !contents.community : !isVaultClientCopy(contents.clientCopy)) {
+            fail('bad_envelope', 'The envelope holds no copy.');
+        }
+        const release = sealVaultRelease({
+            provider: contents.provider, pubkey: contents.pubkey, clientCopy: contents.clientCopy,
+            ...(forCommunity ? { half: contents.community?.half } : {}),
+        }, args.requesterKey);
         const signed = args.challenge === undefined ? undefined : signVaultAnswer(
             { kind: 'release', key: args.requesterKey, challenge: args.challenge as string, at: this.clock() },
             { provider: contents.provider, pubkey: contents.pubkey, box: release },

@@ -17,7 +17,7 @@ type HomeTab = 'shape' | 'people' | 'economy' | 'bulletin' | 'appliance';
 interface HomeScreenProps {
     communityName: string;
     publicDomain: string;
-    version: string;
+    version?: string | null;
     diag: DiagnosticsResponse | null;
     nodeData: NodeDataPayload | null;
     /** The node's data (members, reports, trades) is on its way: its figures say so, never 0. */
@@ -301,8 +301,12 @@ export function HomeScreen({
                             <span className="text-nature-300 font-semibold">{driftText}</span>
                             <span>·</span>
                             <span className="text-nature-400">Backed up recently</span>
-                            <span>·</span>
-                            <span className="text-nature-400 font-mono">v{version || '1.4.2'}</span>
+                            {version ? (
+                                <>
+                                    <span>·</span>
+                                    <span className="text-nature-400 font-mono">{version.startsWith('v') ? version : `v${version}`}</span>
+                                </>
+                            ) : null}
                         </p>
                     </div>
 

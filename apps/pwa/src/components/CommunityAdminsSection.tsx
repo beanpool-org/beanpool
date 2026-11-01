@@ -1,18 +1,25 @@
 /**
  * Settings → "Your community's admins" (vault rethink VR3, community-held placement; DESIGN-vault-rethink-fable.md §4.3,
  * §4.5): the web app can turn it on, as the phone can. Shown where the server says it offers it (its status answer's
- * `offered`: its rule is "this server" and anyone can't walk in; the page's reading of the rule only until it answers,
- * or when it couldn't be asked), or wherever this server already keeps this member's copy (a rule moved since: the copy
- * is the member's until they remove it). On is said only on the server's own answer that it keeps the copy and can open
- * it; one it keeps but can't open (the key it locks copies with gone, or another in its place) is said as that, with what
- * can be done, never On. SettingsPage asks, and shares the answer with "Where your account can be brought back from" (it
- * lists and removes the copy too), so the two always say the same. The flow is lib/community-copy.ts.
+ * `offered`: its rule is "this server" and anyone can't walk in; the page's reading of the rule only when it couldn't be
+ * asked), or wherever this server already keeps this member's copy (a rule moved since: the copy is the member's until
+ * they remove it). On is said only on the server's own answer that it keeps the copy and can open it; one it keeps but
+ * can't open (the key it locks copies with gone, or another in its place) is said as that, with what can be done, never
+ * On. SettingsPage asks, and shares the answer with "Where your account can be brought back from" (it lists and removes
+ * the copy too), so the two always say the same. The flow is lib/community-copy.ts.
+ *
+ * Nothing leaves on a guess, as on the phone (apps/native components/CommunityAdminsRow.tsx): the copy and its whole key go
+ * only on the server's `offered`, asked at the tap. A server that refuses them has already been handed the key.
+ *
+ * The shared placement (vault rethink VR4) is the phone's: half at this community's server, half at BeanPool's key vault, which
+ * the web app can't reach yet (design VR6). So under the default rule the web offers nothing here, as before, and a copy a
+ * phone made is said as that, with no button: Remove here would leave the vault's half behind.
  */
 import { useState } from 'react';
 import { formatDate, t, word } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    webRemoveCommunityCopy, webTurnOnCommunityCopy, WEB_COMMUNITY_COPY_TEXT, type WebCommunityCopyStatus,
+    webCommunityCopyStatus, webRemoveCommunityCopy, webTurnOnCommunityCopy, WEB_COMMUNITY_COPY_TEXT, type WebCommunityCopyStatus,
 } from '../lib/community-copy';
 
 export const COMMUNITY_ADMINS_WEB = {
@@ -29,6 +36,8 @@ export const COMMUNITY_ADMINS_WEB = {
     cantOpenKeyMissing: word('The server is missing the key it locks these copies with. The people who run it can put that key back. Until then, your 12 words still work.'),
     cantOpenTurnOnAgain: word('It was locked with a key the server no longer has. Turn it on again to make a copy it can open.'),
     cantOpenNotOffered: word('It was locked with a key the server no longer has, and this community no longer makes new copies. You can remove it; your 12 words still work.'),
+    // A shared copy, made on a phone (VR4).
+    sharedOnPhone: word("On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app."),
     turnOnAgain: word('Turn on again'),
     removeCopyAsk: word("Remove this copy? This community's server deletes the copy it can't open. Your 12 words still work."),
 } as const;
@@ -45,7 +54,8 @@ interface Props {
     identity: BeanPoolIdentity | null;
     /**
      * The page's reading of the rule: the community keeps copies itself (`recoveryCopies: 'server'`) and is not the global
-     * community. Used only until the server answers, or when it couldn't be asked: its answer's `offered` decides.
+     * community. Used only when the server couldn't be asked, to leave Turn on there to try again: its answer's `offered`
+     * decides, and Turn on asks for it before anything leaves.
      */
     offeredHere: boolean;
     /** The server's answer about this member's copy (SettingsPage asks): undefined while asking, null when it couldn't be asked. */
@@ -63,20 +73,35 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
     const kept = status?.kept === true;
     const unopenable = kept ? null : status?.unopenable ?? null;
     // The server's own word on whether it offers this (a door anyone can walk through is refused there, whatever the rule).
-    const offered = status ? status.offered : offeredHere;
+    // Nothing is offered while it is being asked.
+    const offered = status ? status.offered : status === null && offeredHere;
     if (!offered && !kept && !unopenable) return null;
     // Turning it on again makes a copy the server can open, where it has its key and offers it; with its key gone, it
     // can't keep one (the server refuses), so only Remove is offered.
     const canTurnOn = offered && !kept && unopenable?.reason !== 'recovery_seal_key_missing';
+    const dayOf = (iso: string | null | undefined): string => {
+        const d = iso ? new Date(iso) : null;
+        return d && Number.isFinite(d.getTime()) ? formatDate(d, 'day-month-year') : '…';
+    };
+    if (status?.shared) {
+        return (
+            <div className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white border border-nature-200 dark:border-nature-800 shadow-sm space-y-2 break-words" data-testid="community-admins-section">
+                <div className="text-[15px] font-bold">{t(COMMUNITY_ADMINS_WEB.title)}</div>
+                <p className="text-sm m-0" data-testid="community-admins-shared">{t(COMMUNITY_ADMINS_WEB.sharedOnPhone, { date: dayOf(status.since) })}</p>
+            </div>
+        );
+    }
 
     const turnOn = async () => {
         setBusy(true);
         setError(null);
         setJustOn(false);
         try {
-            await webTurnOnCommunityCopy(identity);
+            const now = await webCommunityCopyStatus();
+            if (!now) throw new Error(WEB_COMMUNITY_COPY_TEXT.unreachable);
+            if (now.offered) await webTurnOnCommunityCopy(identity);
             await onChanged();
-            setJustOn(true);
+            setJustOn(now.offered);
         } catch (e) {
             setError(said(e instanceof Error ? e.message : String(e)));
         } finally {
@@ -99,10 +124,6 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
         }
     };
 
-    const dayOf = (iso: string | null | undefined): string => {
-        const d = iso ? new Date(iso) : null;
-        return d && Number.isFinite(d.getTime()) ? formatDate(d, 'day-month-year') : '…';
-    };
     return (
         // The card the Ways back section above draws in (WaysBackSection CARD): white under its words, as their 4.5:1 needs
         // (on the page's own cream, nature-600 is 4.27:1: e2e/signin-recovery-check.mjs measured it).

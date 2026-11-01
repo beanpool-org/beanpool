@@ -772,6 +772,15 @@ describe('one community goes and the key stays (Forget Community; design R2)', (
         expect(recorded()).toEqual([BYRON, MULLUM].sort());
     });
 
+    it('forgotten under another spelling than the one on the record: the community is told all the same (#2701)', async () => {
+        await kimAtBoth();
+        const from = nodes.sent.length;
+        await forget('https://Byron.beanpool.org');
+        expect(deletes(from).map((s) => s.community)).toEqual([BYRON]);
+        expect(nodes.has(BYRON, kim.publicKey)).toBe(false);
+        expect(recorded()).toEqual([MULLUM]);
+    });
+
     describe('a statement that can\'t be written down, and a DELETE that fails: nothing went (#2701, deciding review 4434518886)', () => {
         const setItem = vi.mocked(AsyncStorage.setItem);
         const write = async (key: string, value: string) => { mem.async.set(key, value); };

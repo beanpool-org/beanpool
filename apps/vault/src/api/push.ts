@@ -1,3 +1,4 @@
+import { VAULT_COMMUNITY_PROVIDER } from '@beanpool/core';
 import type { FetchLike } from '@beanpool/signin';
 
 /**
@@ -26,8 +27,26 @@ export interface PushMessage {
     data: { type: PushKind };
 }
 
-/** The words of each notice, for the provider as a member reads it ("Google"). */
+/**
+ * The words of each notice, for the provider as a member reads it ("Google"). A community copy's restore names no
+ * community and no admin (design §4.4): the vault says only that a community's admins are helping.
+ */
 export function noticeFor(kind: PushKind, providerLabel: string): { title: string; body: string } {
+    if (providerLabel === VAULT_COMMUNITY_PROVIDER) {
+        if (kind === 'vault-hold') {
+            return {
+                title: 'Someone is getting back into your BeanPool account',
+                body: 'Someone is getting your account back with help from a community\'s admins. If it was you, open BeanPool here '
+                    + 'and tap "Yes, it\'s me" to let it through now; otherwise it goes through in 24 hours. Not you? Open BeanPool now and tap Stop.',
+            };
+        }
+        if (kind === 'vault-released') {
+            return {
+                title: 'Your BeanPool account was restored',
+                body: 'Your BeanPool account was just restored on another device, with help from a community\'s admins. If that wasn\'t you, open BeanPool now.',
+            };
+        }
+    }
     switch (kind) {
         case 'vault-hold':
             return {

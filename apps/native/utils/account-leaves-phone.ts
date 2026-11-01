@@ -44,6 +44,7 @@ import { wipeIdentity, type BeanPoolIdentity } from './identity';
 import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfirmed, type NamesPinStore } from './names-list';
 import { confirmLeave, leaveStatementsSettled, leaveWrittenDown, recordLeave } from './push-leave';
 import { markAlertsOff, markAlertsOn } from './push-alerts-off';
+import { sameCommunity } from './push-pins';
 import {
     communitiesForAlerts, communityAddress, dropFromRecord, forgetPushRegistrations, leaveNoLongerOwed, leavesOwed, oweLeave,
     pushRegisteredCommunities, resumeRegisteringAt, stopRegistering, stopRegisteringAt,
@@ -216,11 +217,13 @@ export async function stopPushAlertsAt(
 export async function unregisterPushTokenAt(
     account: LeavingAccount, community: string, timeoutMs: number = UNREGISTER_TIMEOUT_MS,
 ): Promise<boolean> {
-    const base = communityAddress(community);
-    if (!base || !account.publicKey || !account.privateKey) return false;
-    await stopRegisteringAt(account.publicKey, base);
-    // After the wait: a registration on its way recorded its community before it went out.
-    if (!(await pushRegisteredCommunities()).includes(base)) return true;
+    const asked = communityAddress(community);
+    if (!asked || !account.publicKey || !account.privateKey) return false;
+    await stopRegisteringAt(account.publicKey, asked);
+    // After the wait: a registration on its way recorded its community before it went out. By community, not by
+    // spelling: the row at the community is under the address on the record, however this one was typed.
+    const base = (await pushRegisteredCommunities()).find((c) => sameCommunity(c, asked));
+    if (!base) return true;
     let token: string | null = null;
     try {
         token = await SecureStore.getItemAsync(PUSH_TOKEN_STORE_KEY);

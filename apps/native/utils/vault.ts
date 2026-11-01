@@ -59,6 +59,14 @@
  * hold on the phone (SecureStore, this device only) until it has saved the account, so it can collect after a
  * restart. Written before the restore goes out: a lost answer comes back to the same hold with the same key.
  *
+ * ## A community copy (vault rethink VR4)
+ *
+ * The vault also keeps `provider: 'community'` copies: half a key and a copy it can't open, for "Your community's admins"
+ * (utils/community-recovery.ts has that flow; core vault-wire.ts "A community copy"). They are deposited with a ticket and
+ * the member's key, and restored with a voucher in place of a sign-in. They are listed apart ({@link VaultStatus}
+ * `communityCopies`), named by the member's own label for the community, because every sign-in's code here reads
+ * `copies` as sign-ins. The holds are the same holds: Stop and "Yes, it's me" work on them as on any.
+ *
  * ## Off the everyday path
  *
  * Day-to-day use talks only to the member's community. The vault is reached to connect or disconnect a sign-in, to
@@ -74,6 +82,7 @@ import * as SecureStore from 'expo-secure-store';
 import {
     checkVaultAnswer,
     checkVaultTicket,
+    isVaultCommunityRef,
     isVaultKeyHex,
     isVaultPushToken,
     newVaultChallenge,
@@ -83,6 +92,7 @@ import {
     sealVaultDepositBox,
     vaultCopyDigest,
     vaultTicketNonce,
+    VAULT_COMMUNITY_PROVIDER,
     type CopyCommunity,
     type SealedShare,
     type VaultAnswer,
@@ -316,7 +326,7 @@ export interface VaultTicketGrant {
  * A ticket for `signer`'s key, checked before anything else happens: signed by one of the pinned ticket keys,
  * unexpired, naming this key and this purpose. Otherwise {@link VaultError} `bad_ticket`, and no provider sheet opens.
  */
-export async function vaultTicket(signer: VaultSigner, purpose: VaultTicketPurpose, provider: SsoProvider): Promise<VaultTicketGrant> {
+export async function vaultTicket(signer: VaultSigner, purpose: VaultTicketPurpose, provider: SsoProvider | typeof VAULT_COMMUNITY_PROVIDER): Promise<VaultTicketGrant> {
     const cfg = requireVault();
     // A ticket answers for itself: its own signature, checked here.
     const { parsed } = await vaultRequest('/v1/ticket', { purpose, provider }, signer);
@@ -385,11 +395,39 @@ export async function depositWithVault(input: {
     return { provider: input.provider, replaced: receipt.replaced, wordsSealed: input.wordsSealed };
 }
 
+/**
+ * Deposit a community copy: the copy, the vault's half and the community's node key, in a box sealed to the pinned deposit
+ * key for this member key (utils/community-recovery.ts `turnOnSharedCopy`). No sign-in: a deposit ticket and the member's key.
+ * It counts only on the vault's signed receipt for this copy and this ticket, as a sign-in's deposit does.
+ */
+export async function depositCommunityCopy(input: {
+    identity: VaultSigner;
+    nodeKey: string;
+    clientCopy: SealedShare;
+    half: string;
+    ref: string;
+}): Promise<void> {
+    const cfg = requireVault();
+    const pushToken = await storedPushToken();
+    const { ticket } = await vaultTicket(input.identity, 'deposit', VAULT_COMMUNITY_PROVIDER);
+    const { encryptedShare, shareIv, shareTag, kdfParams } = input.clientCopy;
+    const clientCopy = { encryptedShare, shareIv, shareTag, kdfParams };
+    const community = { nodeKey: input.nodeKey, half: input.half, ref: input.ref };
+    const box = sealVaultDepositBox({ clientCopy, community, ...(pushToken ? { pushToken } : {}) }, cfg.depositKeys[0], input.identity.publicKey, VAULT_COMMUNITY_PROVIDER);
+    const receipt = await vaultPost('/v1/copies', { ticket, provider: VAULT_COMMUNITY_PROVIDER, box }, input.identity, ['receipt']);
+    if (receipt.provider !== VAULT_COMMUNITY_PROVIDER || receipt.copy !== vaultCopyDigest(clientCopy) || receipt.signIn !== vaultTicketNonce(ticket)) {
+        throw unverified('/v1/copies', 'a receipt for another copy');
+    }
+    await noteVaultCopy(input.identity.publicKey, true);
+    if (pushToken) await AsyncStorage.setItem(vaultPushTokenStoreKey(input.identity.publicKey), pushToken).catch(() => {});
+}
+
 // ─── Status, disconnect, push token ───────────────────────────────────────────────────────
 
 export interface VaultHold {
     holdId: string;
-    provider: SsoProvider;
+    /** The sign-in that started it, or `community` for a community's voucher. */
+    provider: SsoProvider | typeof VAULT_COMMUNITY_PROVIDER;
     openedAt: number;
     /** When the restore goes through unless it is stopped. */
     releaseAt: number;
@@ -411,11 +449,23 @@ export interface VaultCopy {
     lastReleasedAt: number | null;
 }
 
+/** One community copy the vault keeps for this key: half a key and a copy it can't open (vault rethink VR4). */
+export interface VaultCommunityCopy {
+    /** The member's own label for the community (core `vaultCommunityRef`): only their phones can tell which it is. */
+    ref: string;
+    /** The copy's digest, which the community's half must name too. */
+    copy: string;
+    since: string | null;
+    lastReleasedAt: number | null;
+}
+
 export interface VaultStatus {
     /** The sign-ins the vault keeps a copy for, for this key. Only the ones this app offers. */
     providers: SsoProvider[];
     /** The same copies, one per sign-in account (never folded into one per sign-in), with since when each is kept. */
     copies: VaultCopy[];
+    /** The community copies it keeps, none of the sign-ins' above. Absent when it keeps none. */
+    communityCopies?: VaultCommunityCopy[];
     /** Restores of this account waiting at the vault. */
     holds: VaultHold[];
 }
@@ -432,26 +482,29 @@ export function readVaultStatus(body: unknown): VaultStatus {
     const b = (body ?? {}) as { copies?: unknown; holds?: unknown };
     const listed = Array.isArray(b.copies) ? b.copies : [];
     const copies: VaultCopy[] = [];
+    const communityCopies: VaultCommunityCopy[] = [];
     for (const c of listed) {
         const x = (c ?? {}) as Record<string, unknown>;
-        if (!isSsoProvider(x.provider)) continue;
         const released = x.lastReleasedAt;
-        copies.push({
-            provider: x.provider,
-            since: vaultDay(x.since) ?? vaultDay(x.updatedDay),
-            lastReleasedAt: typeof released === 'number' && Number.isSafeInteger(released) && released > 0 ? released : null,
-        });
+        const lastReleasedAt = typeof released === 'number' && Number.isSafeInteger(released) && released > 0 ? released : null;
+        const since = vaultDay(x.since) ?? vaultDay(x.updatedDay);
+        if (x.provider === VAULT_COMMUNITY_PROVIDER) {
+            if (isVaultCommunityRef(x.community) && typeof x.copy === 'string') communityCopies.push({ ref: x.community, copy: x.copy, since, lastReleasedAt });
+            continue;
+        }
+        if (!isSsoProvider(x.provider)) continue;
+        copies.push({ provider: x.provider, since, lastReleasedAt });
     }
     const providers = offeredProviders(listed.map(c => (c as { provider?: unknown } | null)?.provider));
     const holds: VaultHold[] = [];
     for (const h of Array.isArray(b.holds) ? b.holds : []) {
         const x = (h ?? {}) as Record<string, unknown>;
-        if (typeof x.holdId === 'string' && x.holdId && isSsoProvider(x.provider)
+        if (typeof x.holdId === 'string' && x.holdId && (isSsoProvider(x.provider) || x.provider === VAULT_COMMUNITY_PROVIDER)
             && typeof x.openedAt === 'number' && typeof x.releaseAt === 'number') {
             holds.push({ holdId: x.holdId, provider: x.provider, openedAt: x.openedAt, releaseAt: x.releaseAt });
         }
     }
-    return { providers: [...new Set(providers)], copies, holds };
+    return { providers: [...new Set(providers)], copies, ...(communityCopies.length ? { communityCopies } : {}), holds };
 }
 
 /**
@@ -463,7 +516,7 @@ export async function vaultStatus(identity: VaultSigner, timeoutMs = VAULT_TIMEO
     const answer = await vaultPost('/v1/copies/status', {}, identity, ['status'], timeoutMs);
     if (!Array.isArray(answer.copies) || !Array.isArray(answer.holds)) throw unverified('/v1/copies/status', 'a status without its lists');
     const status = readVaultStatus(answer);
-    await noteVaultCopy(identity.publicKey, status.providers.length > 0);
+    await noteVaultCopy(identity.publicKey, status.providers.length > 0 || !!status.communityCopies);
     return status;
 }
 
@@ -536,6 +589,13 @@ export async function disconnectFromVault(identity: VaultSigner, provider: SsoPr
     return body.deleted;
 }
 
+/** Remove the copy kept for one community, by the member's label for it: on the vault's signed answer alone. */
+export async function disconnectCommunityCopy(identity: VaultSigner, ref: string): Promise<number> {
+    const body = await vaultPost('/v1/copies/delete', { provider: VAULT_COMMUNITY_PROVIDER, community: ref }, identity, ['deleted']);
+    if (typeof body.deleted !== 'number') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    return body.deleted;
+}
+
 /**
  * Give the vault this phone's push token when it has changed since it last had it, so its notices (a restore waiting,
  * a release, a replaced copy) reach this phone. Only for an account the vault keeps a copy for. Never throws.
@@ -601,7 +661,7 @@ export async function vaultHoldsAtOpen(identity: VaultSigner): Promise<VaultHold
     if (!hasVault() || (await vaultCopyKnowledge(identity.publicKey)) === 'none') return [];
     try {
         const status = await vaultStatus(identity, 15_000);
-        if (status.providers.length) void keepVaultPushTokenCurrent(identity);
+        if (status.providers.length || status.communityCopies) void keepVaultPushTokenCurrent(identity);
         await forgetEndedApprovals(identity.publicKey, status.holds);
         // A hold this phone already let through is not asked about again.
         const approved = await approvedHolds(identity.publicKey);
@@ -899,6 +959,49 @@ export async function collectVaultRestore(pending: PendingVaultRestore): Promise
         await clearPendingVaultRestore();
         return { status: 'stopped' };
     }
+    throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+}
+
+/**
+ * A community copy's restore (utils/community-recovery.ts): the community's voucher, with a restore ticket for the key the
+ * voucher names, in place of a sign-in. Held, or `stopped` when that voucher's hold was stopped: one voucher is one hold.
+ */
+export async function restoreWithVoucher(signer: VaultSigner, voucher: string): Promise<{ status: 'held'; holdId: string; until: number } | { status: 'stopped' }> {
+    const { ticket } = await vaultTicket(signer, 'restore', VAULT_COMMUNITY_PROVIDER);
+    const body = await vaultPost('/v1/restore', { ticket, provider: VAULT_COMMUNITY_PROVIDER, voucher }, signer, ['restore']);
+    if (body.status === 'stopped') return { status: 'stopped' };
+    if (body.status !== 'held' || typeof body.holdId !== 'string' || !body.holdId || typeof body.until !== 'number') {
+        throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    }
+    return { status: 'held', holdId: body.holdId, until: body.until };
+}
+
+export type VaultCommunityCollect =
+    | { status: 'held'; until: number }
+    | { status: 'stopped' }
+    /** The copy, the vault's half, and the account they belong to: not opened here. */
+    | { status: 'released'; pubkey: string; clientCopy: SealedShare; half: string };
+
+/**
+ * Ask for a community copy's release. As {@link collectVaultRestore}, on the vault's signed answer alone; what the box holds
+ * must be what its signature names. Opening it takes the community's half too, which the vault never sees.
+ */
+export async function collectCommunityRelease(signer: VaultSigner, holdId: string): Promise<VaultCommunityCollect> {
+    const body = await vaultPost('/v1/restore/collect', { holdId }, signer, ['collect', 'release']);
+    if (body.kind === 'release') {
+        let contents: ReturnType<typeof openVaultRelease>;
+        try {
+            contents = openVaultRelease(body.box, hexToBytes(signer.privateKey));
+        } catch {
+            throw unverified('/v1/restore/collect', 'a release that did not open');
+        }
+        if (contents.provider !== VAULT_COMMUNITY_PROVIDER || contents.provider !== body.provider || contents.pubkey !== body.pubkey || !contents.half) {
+            throw unverified('/v1/restore/collect', 'a release whose box says other than its signature');
+        }
+        return { status: 'released', pubkey: contents.pubkey, clientCopy: contents.clientCopy, half: contents.half };
+    }
+    if (body.status === 'held' && typeof body.until === 'number') return { status: 'held', until: body.until };
+    if (body.status === 'stopped') return { status: 'stopped' };
     throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
 }
 

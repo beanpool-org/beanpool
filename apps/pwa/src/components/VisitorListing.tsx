@@ -12,7 +12,8 @@ import { formatEventWhen } from '../lib/events';
 import { VISITOR_WORDS, visitorDistanceText, visitorKmText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
 import { CategoryTile } from './CategoryTile';
-import { listPhotoUrl, t } from '@beanpool/core';
+import { copyCardLine, copyFromLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
+import { EventCopyDoor } from './EventCopyDoor';
 import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
 function typeLabel(post: MarketplacePost): string {
@@ -24,7 +25,11 @@ function typeLabel(post: MarketplacePost): string {
 export function joinToSeeLabel(post: MarketplacePost): string {
     switch (post.type) {
         case 'need': return t("Join to see who's asking");
-        case 'event': return t("Join to see who's hosting");
+        case 'event': {
+            // A member's copy names no host, whoever joins: where it is from stands in their place.
+            const copy = eventCopyOf(post);
+            return copy ? (copy.from ? copyCardLine(copy.from) : '') : t("Join to see who's hosting");
+        }
         case 'poll': return t('Join to vote');
         default: return t("Join to see who's offering");
     }
@@ -119,6 +124,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
     // Opened from a card far down the list, the sheet starts at its own top, not at the list's scroll.
     const top = useRef<HTMLDivElement>(null);
     useEffect(() => { top.current?.scrollIntoView?.({ block: 'start' }); }, [post.id]);
+    const copy = eventCopyOf(post);
     return (
         <div ref={top} data-testid="visitor-detail" className="p-4 max-w-lg mx-auto" style={{ paddingBottom: 'calc(var(--bottom-nav-offset, 0px) + 4rem)' }}>
             {onBack && (
@@ -172,7 +178,9 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                                 <p data-testid="visitor-detail-place" className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
                                     {post.eventOnline
                                         ? <><span aria-hidden="true">🌐 </span>{t('Online')}</>
-                                        : <><span aria-hidden="true">📍 </span>{t(VISITOR_WORDS.placeAfterJoin)}</>}
+                                        : copy
+                                            ? (copy.from ? copyFromLine(copy.from) : null)
+                                            : <><span aria-hidden="true">📍 </span>{t(VISITOR_WORDS.placeAfterJoin)}</>}
                                 </p>
                             </div>
                         )}
@@ -199,14 +207,16 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
 
             {footer ?? (
                 <>
-                    <button
-                        type="button"
-                        data-testid="visitor-join"
-                        onClick={onJoin}
-                        className="w-full min-h-[48px] py-3 px-4 rounded-xl border-0 bg-blue-600 hover:bg-blue-700 text-white font-bold text-base cursor-pointer break-words"
-                    >
-                        {joinToSeeLabel(post)}
-                    </button>
+                    {copy ? <EventCopyDoor copy={copy} /> : (
+                        <button
+                            type="button"
+                            data-testid="visitor-join"
+                            onClick={onJoin}
+                            className="w-full min-h-[48px] py-3 px-4 rounded-xl border-0 bg-blue-600 hover:bg-blue-700 text-white font-bold text-base cursor-pointer break-words"
+                        >
+                            {joinToSeeLabel(post)}
+                        </button>
+                    )}
                     {/* A visitor can't report from here (a report is a member's, signed): where they can (rehearsal 14 Oct N3). */}
                     <p data-testid="visitor-report" className="m-0 mt-3 text-sm text-nature-700 dark:text-nature-300 break-words">
                         <span>{t(REPORT_WORDS.visitorLine)}</span>{' '}

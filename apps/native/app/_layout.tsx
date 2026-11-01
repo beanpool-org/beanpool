@@ -17,6 +17,7 @@ import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../
 import { parseRekeyLink } from '../utils/rekey-redeem';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 import { retryPendingReports, syncBlocks } from '../utils/blocklist';
+import { loadIdentity } from '../utils/identity';
 import { presentLeaveStatements } from '../utils/push-leave';
 import { markNoticeShown } from '../utils/sync-notices';
 import { PushNoticeWarning } from '../components/PushNoticeWarning';
@@ -1136,6 +1137,7 @@ export default function RootLayout() {
                 void syncBlocks();
                 presentLeaveStatements();
                 retryPushRegistrations();
+                void loadIdentity().then(async (me) => (await import('../utils/show-on-global')).tendCopiesSoon(me)).catch(() => {});
                 // Clear app icon badge when user opens the app (only in custom client / standalone builds)
                 if (Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) {
                     try {

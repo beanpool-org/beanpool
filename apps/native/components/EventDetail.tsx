@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
+import { copyFromLine, eventCopyOf, t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
@@ -31,6 +31,8 @@ import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
+import { EventCopyDoor } from './EventCopyDoor';
+import { ShowOnGlobalHostRow } from './ShowOnGlobalRow';
 import { ReportReasonBox } from './ReportReasonBox';
 import { eventLineWords } from './event-lines';
 import { reportedAlertBody } from '../utils/reportReasons';
@@ -113,6 +115,8 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
     const hostView = isEventHostView(view);
     const isHost = hostView || (!view && isOwnEvent(p, identity?.publicKey));
     const editBlocked = eventEditBlockedReason(p);
+    // A member's copy, on the global community (@beanpool/core eventCopyOf): no author, no Going, no chat. The door instead.
+    const copy = eventCopyOf(p);
     // Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.3): before Going, waiting, or let in.
     const letInState = eventLetInState({ ...p, myRsvp: counts.mine }, isHost);
     const letInLine = eventLetInLine(letInState);
@@ -314,9 +318,11 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 )}
                 {ended && !cancelled && <Text style={styles.endedNote}>{t('This event has ended.')}</Text>}
 
-                <Text style={styles.counts} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
+                {!copy && <Text style={styles.counts} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
                 {isHost ? (
                     <Text style={styles.hostingLine} accessibilityRole="text">{t("You're hosting this event")}</Text>
+                ) : copy ? (
+                    !closed && <EventCopyDoor copy={copy} />
                 ) : (
                     <View style={styles.rsvpRow}>
                         {rsvpButton('going', t('Going'))}
@@ -331,7 +337,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}
                 <EventShareAndCalendar post={p} />
                 {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
-                {!isHost && (
+                {!isHost && !copy && (
                     <EventReminder post={p} myRsvp={counts.mine} viewerPublicKey={identity?.publicKey} />
                 )}
 
@@ -341,7 +347,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                         <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {eventChatWaitingText()}</Text>
                     </View>
                 )}
-                {canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (
+                {!copy && canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (
                     <Pressable
                         onPress={() => router.push({ pathname: `/chat/${post.id}`, params: { event: '1' } })}
                         style={styles.chatBtn}
@@ -385,7 +391,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                         )}
                     </View>
                 )}
-                {placeShownRoughly({ authorPublicKey: p.authorPublicKey ?? p.author_pubkey, type: 'event', lat: p.lat, lng: p.lng,
+                {!copy && placeShownRoughly({ authorPublicKey: p.authorPublicKey ?? p.author_pubkey, type: 'event', lat: p.lat, lng: p.lng,
                     eventRsvps: p.eventRsvps, myRsvp: p.myRsvp, myLetIn: p.myLetIn }, identity?.publicKey, openMembership) && (
                     <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: hostName })}</Text>
                 )}
@@ -400,11 +406,17 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 {!!p.description && <Text style={styles.description}>{p.description}</Text>}
                 <PostTagChips tags={p.tags} freeTags={p.freeTags ?? p.free_tags} />
 
-                <Text style={styles.hostLine} numberOfLines={2}>
-                    {isGroupOnly && groupName
-                        ? t('Hosted by {name} · 🔒 only {group} can see this', { name: hostName, group: groupName })
-                        : t('Hosted by {name}', { name: hostName })}
-                </Text>
+                {(!copy || !!copy.from) && (
+                    <Text style={styles.hostLine} numberOfLines={2}>
+                        {copy?.from ? copyFromLine(copy.from)
+                            : isGroupOnly && groupName
+                            ? t('Hosted by {name} · 🔒 only {group} can see this', { name: hostName, group: groupName })
+                            : t('Hosted by {name}', { name: hostName })}
+                    </Text>
+                )}
+                {isHost && !!view && (
+                    <ShowOnGlobalHostRow event={view} enabled={!copy && !closed && !online && !isGroupOnly && view.authorPublicKey === identity?.publicKey} />
+                )}
 
                 {isHost && (
                     <View style={styles.hostBox}>

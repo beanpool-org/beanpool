@@ -160,8 +160,10 @@ const foldName = (n: unknown): string => String(n ?? '').trim().replace(/\.$/, '
 /**
  * Why `name` (folded) is not one to release by name, or null: it is the stored address, the name the record of names calls
  * current (the status read stores it, even with the stored address cleared: #1583 review r4176138202), the name the
- * public-address agent asks for, or the owner's pending Settings pick (a claim that got no answer here, still their latest
- * choice, which the connector or Settings' status read may store at any moment: #1583 review r4176051848).
+ * public-address agent asks for, the owner's pending Settings pick (a claim that got no answer here, still their latest
+ * choice, which the connector or Settings' status read may store at any moment: #1583 review r4176051848), or the name the
+ * community lives at now (primaryAddress), which a former name is while the stored one waits for approval or after Take
+ * offline: Release would end the only way in with no word to anyone, where Take offline tells the members.
  */
 function notReleasable(name: string): string | null {
     const host = `${name}.${REGISTRAR_ZONE}`;
@@ -172,13 +174,14 @@ function notReleasable(name: string): string | null {
     if (turnedAwayList().some((e) => e.why === 'unanswered' && foldName(e.name) === name)) {
         return `${host} is the name you chose last; another pick or Take offline replaces it.`;
     }
+    if (primaryAddress() === host) return `${host} is where members reach this community now. It can be released once another name is live.`;
     return null;
 }
 
 /**
  * Names this server's key may hold besides its stored address (#1576 review r4175512149): the install's late claim and
  * every name on the turned-away list or kept as former in the record of names, never the stored name, the one the
- * public-address agent asks for, nor the owner's pending pick. Newest first.
+ * public-address agent asks for, the owner's pending pick, nor the name the community lives at now. Newest first.
  */
 function extraNameCandidates(): string[] {
     const suffix = `.${REGISTRAR_ZONE}`;
@@ -489,12 +492,15 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const list = turnedAwayList();
         const late = new Set(list.filter((e) => e.why === 'late-claim').map((e) => foldName(e.name)));
         const install = new Set(list.filter((e) => e.why === 'late-claim' || e.why === 'install-request-ended' || e.why === 'request-replaced').map((e) => foldName(e.name)));
+        // `fromInstall` tells Settings a name was never used, so never a name the community moved off that still answers:
+        // a Settings claim of the name the install asked for lists it too (dropAddressRequest), and phones may be on it.
+        const wentBy = new Set(registrarNames().filter((e) => e.role === 'former' && e.status === 'live').map((e) => e.address));
         const candidates = extraNameCandidates();
         // Asked all at once, each with a short wait, and reused for a minute: Settings never waits on the registrar.
         const answers = await Promise.all(candidates.map((name) => heldForSettings(name)));
         for (const [i, name] of candidates.entries()) {
             const h = answers[i];
-            const fromInstall = install.has(name);
+            const fromInstall = install.has(name) && !wentBy.has(`${name}.${REGISTRAR_ZONE}`);
             if (h.held) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: h.state, releasable: true, fromInstall });
             // An older registrar can't say who holds it: the agent's late claim was given to this key, so it is shown,
             // with nothing to release it by.
@@ -565,7 +571,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // Written on the name, so its tunnel stops: the registrar has just deleted it.
             recordRegistrarAnswer(result, 'status');
             await syncTunnel();
-            console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result.status})`);
+            console.log(`[PublicAddr] the owner released "${name}", a name this community held (${result.status})`);
             noteSecurityEvent({ key: 'sec.address', detail: OWNER_ALERT_WORDS.nameReleased, ...actingAs(ctx.state) });
             ctx.body = { success: true, name, status: result.status, addressUnchanged: publicAddressGeneration() === since };
         } catch (e: any) {

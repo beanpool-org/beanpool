@@ -223,6 +223,12 @@ async function main(): Promise<void> {
         const res = await localFetch(`${base}/api/local/admin/public-address/status`, { headers: computer() });
         return { status: res.status, json: await res.json().catch(() => null) as any };
     };
+    /** What Settings offers to release, as the owner's computer reads it. */
+    const extraNames = async () => {
+        https.resetAdminRateLimit();
+        const res = await localFetch(`${base}/api/local/admin/public-address/extra-names`, { headers: computer() });
+        return ((await res.json().catch(() => null)) as any)?.names as any[] ?? [];
+    };
     /** A private read, as a current app makes it: signed for `host`, through the real signature middleware. */
     const signedFor = async (host: string) => {
         resetGatewayRateLimit();
@@ -783,6 +789,83 @@ async function main(): Promise<void> {
         await reconcile();
         await tickOnce();
         assert(show(onTokens()) === show(['T-oldvale']) && onlyAt(OLD), `(b, refused) nothing moved (${show(onTokens())}, ${show(surfaces())})`);
+    }
+    const RELEASE = '/api/local/admin/public-address/release-name';
+    {
+        // (b) While a gated name waits, the old name is the only way in: Release is refused, by the real route, and only once
+        // the new name is live can it go. Before: no tunnel, no main name, and a directory URL with no route behind it.
+        const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
+        const OLD = 'oldvale.beanpool.org';
+        await tunnelScene({ config: { publicAddress: oldvale } });
+        fake.ready(200);
+        held.set('oldvale', withToken('oldvale'));
+        gated.add('byron');
+        await syncTunnel();
+        await until(() => getTunnelStatus().state === 'connected');
+        const pid = fake.runs().filter((x) => x.env.TUNNEL_TOKEN === 'T-oldvale').at(-1)!.pid;
+        await claim('byron');
+        await polls();
+        assert(primaryAddress() === OLD && !(await extraNames()).some((n) => n.name === 'oldvale'),
+            `(release) while byron waits Settings offers no Release of the main name (${primaryAddress()}, ${show(await extraNames())})`);
+        const refused = await post(RELEASE, phone(), { name: 'oldvale' });
+        assert(refused.status === 409 && /where members reach this community/.test(refused.json?.error ?? ''),
+            `(release) a Release of it is refused, in its own words (${refused.status} ${show(refused.json)})`);
+        assert(!/Take offline/.test(refused.json?.error ?? ''), `(release) words that fit a name no longer stored (${refused.json?.error})`);
+        await polls();
+        assert(held.has('oldvale') && show(onTokens()) === show(['T-oldvale']) && alive(pid), `(release) the address service was not asked, and its tunnel never stopped (${show(onTokens())})`);
+        assert(primaryAddress() === OLD && onlyAt(OLD) && ownerConfirmedAddresses().includes(OLD), `(release) every surface still says it (${show(surfaces())}, ${show(stored().ownerAddresses)})`);
+        held.set('byron', withToken('byron'));
+        await reconcile();
+        assert(await until(() => show(onTokens()) === show(['T-byron', 'T-oldvale'])) && primaryAddress() === BYRON, `(release) approved, both run and byron is main (${show(onTokens())}, ${primaryAddress()})`);
+        const row = (await extraNames()).find((n) => n.name === 'oldvale');
+        assert(row?.state === 'live' && row?.releasable === true && row?.fromInstall === false, `(release) now Settings offers it, as a live name the community moved off (${show(row)})`);
+        const gone = await post(RELEASE, phone(), { name: 'oldvale' });
+        assert(gone.status === 200 && await until(() => show(onTokens()) === show(['T-byron'])) && primaryAddress() === BYRON, `(release) and it can go (${gone.status} ${show(onTokens())})`);
+    }
+    {
+        // Take offline on the new name leaves the old one the only way in. Release would end it with no word to anyone, so it
+        // is refused here too; the way to end it is to claim it back and Take offline, which tells the members.
+        const oldvale = { ...liveTunnel('oldvale'), tunnelToken: 'T-oldvale' };
+        const OLD = 'oldvale.beanpool.org';
+        await tunnelScene({ config: { publicAddress: oldvale } });
+        fake.ready(200);
+        held.set('oldvale', withToken('oldvale'));
+        held.set('byron', withToken('byron'));
+        await syncTunnel();
+        await until(() => getTunnelStatus().state === 'connected');
+        await claim('byron');
+        await until(() => show(onTokens()) === show(['T-byron', 'T-oldvale']));
+        const off = await post('/api/local/admin/public-address/offline', phone(), {});
+        assert(off.status === 200 && await until(() => show(onTokens()) === show(['T-oldvale'])) && primaryAddress() === OLD, `(offline) the old name is all that is left (${off.status}, ${show(onTokens())}, ${primaryAddress()})`);
+        const refused = await post(RELEASE, phone(), { name: 'oldvale' });
+        assert(refused.status === 409 && held.has('oldvale') && show(onTokens()) === show(['T-oldvale']) && primaryAddress() === OLD,
+            `(offline) Release does not end it (${refused.status} ${show(refused.json)}, ${show(onTokens())}, ${primaryAddress()})`);
+        const n0 = notices().length;
+        const back = await claim('oldvale');
+        assert(back.status === 200 && back.json?.status === 'live', `(offline) it can be claimed back (${back.status} ${show(back.json)})`);
+        const end = await post('/api/local/admin/public-address/offline', phone(), {});
+        assert(end.status === 200 && !held.has('oldvale') && await until(() => onTokens().length === 0), `(offline) and then Take offline ends it (${end.status}, ${show(onTokens())})`);
+        assert(notices().length > n0, `(offline) telling the members (${show(notices().slice(n0))})`);
+    }
+    {
+        // The install's flag says "never used", so a name the community went by never carries it, however it was asked for:
+        // here the install asked for it, the owner claimed it in Settings, and the community lived there until the move.
+        await tunnelScene({});
+        fake.ready(200);
+        updateLocalConfig({ addressRequest: { name: 'oldvale', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } } as any);
+        held.set('oldvale', withToken('oldvale'));
+        held.set('byron', withToken('byron'));
+        await claim('oldvale');
+        assert(getLocalConfig().turnedAwayNames?.some((e: any) => e.name === 'oldvale' && e.why === 'install-request-ended'), `(install) the Settings claim ended the install's request, listing the name (${show(getLocalConfig().turnedAwayNames)})`);
+        await claim('byron');
+        await until(() => show(onTokens()) === show(['T-byron', 'T-oldvale']));
+        // A late claim is live at the address service too, and was never used.
+        held.set('lateone', withToken('lateone'));
+        updateLocalConfig({ turnedAwayNames: [...(getLocalConfig().turnedAwayNames ?? []), { name: 'lateone', at: Date.now(), why: 'late-claim' }] } as any);
+        const names = await extraNames();
+        const old = names.find((n) => n.name === 'oldvale'), late = names.find((n) => n.name === 'lateone');
+        assert(old?.state === 'live' && old?.fromInstall === false, `(install) the old main name is not "from the install", so phones on it are warned about (${show(old)})`);
+        assert(late?.state === 'live' && late?.fromInstall === true, `(install) the late claim is, and stays "not used" (${show(late)})`);
     }
     {
         // (c) A registrar name to a registrar name, both live.

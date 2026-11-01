@@ -232,10 +232,21 @@ async function main(): Promise<void> {
         await until(() => !!fakeOn(newT));
         return { oldT, newT, oldPid, newPid: fakeOn(newT)?.pid ?? 0 };
     };
-    /** Back to nothing stored and nothing running, for the next section. */
+    /**
+     * A name the community is left on, nothing stored, as an owner ends it: Release is refused (it would end the only way in
+     * with no word to anyone), so it is claimed back and taken offline. True once its child stopped.
+     */
+    const endLastName = async (name: string): Promise<boolean> => {
+        const refused = await settingsPost!('/api/local/admin/public-address/release-name', { name });
+        if (refused.status !== 409 || !/where members reach this community/.test(refused.body?.error || '')) return false;
+        const back = await settingsPost!('/api/local/admin/public-address/claim', { name, mode: 'tunnel' });
+        const off = await settingsPost!('/api/local/admin/public-address/offline');
+        return back.status === 200 && off.status === 200 && (await until(() => fakes().length === 0));
+    };
+    /** Back to nothing stored and nothing running, for the next section. Old names first, while the stored name is main. */
     const clearNames = async (...names: string[]) => {
-        await settingsPost!('/api/local/admin/public-address/offline');
         for (const n of names) await letGo(n);
+        await settingsPost!('/api/local/admin/public-address/offline');
         reg.status = () => ({ status: 'none' });
         reg.holder = (b) => ({ name: b?.name, held: 'free' });
     };
@@ -843,7 +854,8 @@ async function main(): Promise<void> {
             assert(off.status === 200 && sent?.body?.name === 'owner-next', `Take offline releases the stored name by name (${JSON.stringify(sent?.body)})`);
             // owner-pick, the name owner-next moved the community off, is still this key's: its child runs until it is released.
             assert(await upOn2('eyJ.token-owner-pick'), `owner-pick's tunnel still runs (${fakes().map((f) => f.env.TUNNEL_TOKEN).join(', ')})`);
-            assert(await letGo('owner-pick'), 'released, its tunnel stops');
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            assert(await endLastName('owner-pick'), 'all that is left, it is not released by name; claimed back and taken offline, its tunnel stops');
             // A claim that gets no answer here in time but completes at the registrar: said, so the owner sees the key holds it.
             let finish: () => void = () => {};
             reg.claim = (b) => new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow')); });
@@ -1341,7 +1353,8 @@ async function main(): Promise<void> {
             const pid = fakeOn(T_NEW)!.pid;
             const restart = await settingsPost!('/api/local/admin/public-address/restart-tunnel');
             assert(restart.status === 200 && await until(() => !!fakeOn(T_NEW) && fakeOn(T_NEW)!.pid !== pid), `Restart tunnel restarts what runs (${restart.status} ${JSON.stringify(restart.body)})`);
-            await clearNames('back-old');
+            assert(await endLastName('back-old'), 'all that is left, it is not released by name; claimed back and taken offline, its tunnel stops');
+            await clearNames();
             assert(await until(() => fakes().length === 0), `cleared (${onTokens().join(', ')})`);
         });
 

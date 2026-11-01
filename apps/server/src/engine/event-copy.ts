@@ -11,12 +11,16 @@
  *   (createPost), and of the sockets (state-engine.ts broadcast, as a post hidden by reports).
  * - **The from-line and the door are drawn at each read** from the row of the directory, and never from anything the
  *   phone said. So a row that is gone takes its line with it, whatever the copy holds.
+ * - **No read goes by who wrote it.** A reader's block list, the author's holiday, a paused account and a new name or face
+ *   move their listings and leave a copy where it is, in every list, count and tag (@beanpool/engine posts.ts IS_COPY_SQL):
+ *   a copy that came and went with its author's row would say whose it is.
  * - **Going is at home.** An RSVP is answered 409 with the door's words (rsvpEvent), and no chat is made or opened
  *   (createPost, event-thread.ts loadEventForThread).
  * - **It carries the times and the rounded pin only**: no place name, no note, no link, whatever a request sends
  *   ({@link copyEventBody}, {@link copyEventUpdates}), and the visitor's read drops them besides.
  *
- * Probation, the daily limits, reports, auto-hide and retention count it as any post of its author's.
+ * Probation, the daily limits, reports, auto-hide and retention count it as any post of its author's: those act on the
+ * post, and none of them is a read another member can follow.
  */
 import { guestPost, roundToArea, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { audienceOf, word, wordsFor } from '@beanpool/core';

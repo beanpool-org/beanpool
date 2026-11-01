@@ -47,15 +47,15 @@ const world = vi.hoisted(() => ({
     answer: 'member' as string,
     pushed: [] as string[],
 }));
-const calls = vi.hoisted(() => ({ ask: vi.fn(), show: vi.fn(), pair: vi.fn(async () => null) }));
+const calls = vi.hoisted(() => ({ ask: vi.fn(), show: vi.fn(), pair: vi.fn(async (): Promise<unknown> => null), stop: vi.fn() }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: world.identity }) }));
 vi.mock('expo-router', () => ({ router: { push: (r: string) => world.pushed.push(r) } }));
 vi.mock('../node-post', () => ({ anchorUrl: async () => 'https://mullum.example.org' }));
 vi.mock('../global-entry', () => ({ readGlobalStanding: async () => world.kept, askGlobalStanding: calls.ask }));
-vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: vi.fn() }));
+vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: calls.stop, stopLaterLine: () => 'It comes down later' }));
 
 import { EventCopyDoor } from '../../components/EventCopyDoor';
-import { ShowOnGlobalTick, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
+import { ShowOnGlobalHostRow, ShowOnGlobalTick, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
 
 const LONG_NAME = 'Mullumbimby and the Brunswick Valley Community Exchange';
@@ -94,6 +94,9 @@ beforeEach(() => {
     globalThis.fetch = fetched as unknown as typeof fetch;
     calls.ask.mockReset();
     calls.ask.mockImplementation(async () => ({ standing: world.answer, closed: false, answered: true }));
+    calls.pair.mockReset();
+    calls.pair.mockImplementation(async () => null);
+    calls.stop.mockReset();
 });
 
 afterEach(async () => {
@@ -225,6 +228,67 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('at 320 d
         expect(byId('event-copy-door')!.textContent).toContain(`To go, ask to join ${LONG_NAME}`);
         await press('event-copy-ask');
         expect(world.pushed).toEqual([`/community-card?node=${encodeURIComponent(FROM.url)}`]);
+    });
+});
+
+describe('Stop showing, on the host\'s page', () => {
+    const EVENT = { id: 'e1', title: 'Street party' };
+    const shownRow = () => draw(createElement(ShowOnGlobalHostRow, { event: EVENT, enabled: true }));
+
+    beforeEach(() => {
+        calls.pair.mockImplementation(async () => ({ copyId: 'c1' }));
+    });
+
+    it('a stop that reached global says nothing, and the row goes back to the offer', async () => {
+        calls.stop.mockImplementation(async () => { calls.pair.mockImplementation(async () => null); return true; });
+        await shownRow();
+        expect(host.textContent).toContain('Stop showing');
+        await press('show-on-global-act');
+        expect(calls.stop).toHaveBeenCalledTimes(1);
+        expect((globalThis as any).__alerts).toEqual([]);
+        expect(host.textContent).not.toContain('Stop showing');
+    });
+
+    it('a stop that didn\'t reach global is said once, in the words layer, though the row can\'t show it', async () => {
+        // takeDown marks the pair leaving, pairOf then skips it, and the row reads as if it had come down.
+        calls.stop.mockImplementation(async () => { calls.pair.mockImplementation(async () => null); return false; });
+        await shownRow();
+        await press('show-on-global-act');
+        expect((globalThis as any).__alerts).toEqual([['Also show this on the global community', 'It comes down later']]);
+        expect(host.textContent).not.toContain('Stop showing');
+    });
+
+    it('while it runs the row dims, says so and takes no second tap, and the answer frees it', async () => {
+        let finish!: (done: boolean) => void;
+        calls.stop.mockImplementation(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+        await shownRow();
+        const action = () => byId('show-on-global-act')!;
+        expect(action().getAttribute('aria-busy')).toBe('false');
+        expect(JSON.parse(action().getAttribute('data-style')!).opacity).toBeUndefined();
+        await press('show-on-global-act');
+        expect(action().getAttribute('aria-busy')).toBe('true');
+        expect(JSON.parse(action().getAttribute('data-style')!).opacity).toBeLessThan(1);
+        await press('show-on-global-act');
+        expect(calls.stop).toHaveBeenCalledTimes(1);
+
+        await act(async () => { finish(true); });
+        await settle();
+        expect(action().getAttribute('aria-busy')).toBe('false');
+        expect(JSON.parse(action().getAttribute('data-style')!).opacity).toBeUndefined();
+    });
+
+    it('showing from the page dims the same way', async () => {
+        calls.pair.mockImplementation(async () => null);
+        const answer = (() => {
+            let resolve!: (v: unknown) => void;
+            calls.ask.mockImplementation(() => new Promise((r) => { resolve = r; }));
+            return (standing: string) => resolve({ standing, closed: false, answered: true });
+        })();
+        await shownRow();
+        await press('show-on-global-act');
+        expect(JSON.parse(byId('show-on-global-act')!.getAttribute('data-style')!).opacity).toBeLessThan(1);
+        await act(async () => { answer('unknown'); });
+        await settle();
     });
 });
 

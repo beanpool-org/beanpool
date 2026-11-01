@@ -229,7 +229,10 @@ async function updateCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
     const fields = copyFields(home, identity.publicKey);
     const fetched = firstPhoto(home) !== pair.photo ? await photosOf({ photos: home.photos ?? [] }, pair.home, deps) : null;
     const { type: _type, category: _category, credits: _credits, priceType: _priceType, ...edit } = fields;
-    const body = { id: pair.copyId, ...edit, ...(fetched?.photos.length ? { photos: fetched.photos } : {}), ...(fields.eventRepeat ? {} : { eventRepeat: null }) };
+    // An edit leaves alone what it doesn't name, and copyFields names nothing there is none of: what was taken off at home is
+    // sent as taken off, or it stays public here while `sent` says the copy is in step.
+    const taken = { tags: fields.tags ?? [], freeTags: fields.freeTags ?? [], ...(!fields.eventRepeat ? { eventRepeat: null } : fields.eventRepeatUntil ? {} : { eventRepeatUntil: null }) };
+    const body = { id: pair.copyId, ...edit, ...taken, ...(fetched?.photos.length ? { photos: fetched.photos } : {}) };
     const answer = await answerOf(await withTimeout((signal) => deps.post(deps.global, `${POSTS_PATH}/update`, body, identity, signal)));
     if (answer === 'later') return 'later';
     if ('refused' in answer) {
@@ -309,6 +312,9 @@ export async function stopShowing(homeId: string, identity: BeanPoolIdentity, de
     const pair = await pairOf(homeId, identity.publicKey);
     return pair ? takeDown(pair, identity, deps) : true;
 }
+
+/** What a Stop showing owes the member when {@link stopShowing} answers false: the copy is still up, and the row can't say so. */
+export const stopLaterLine = () => t('It will come down from the global community as soon as it can.');
 
 /** The event from its community, null where it is gone, `later` where the community didn't say. */
 async function readHome(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<HomeEvent | null | 'later'> {

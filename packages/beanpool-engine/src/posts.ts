@@ -957,6 +957,20 @@ export const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (
  */
 const ENTERPRISE_ON_BOARD_BY_KEY_SQL = `p.author_pubkey NOT IN (SELECT public_key FROM members WHERE NOT (${ENTERPRISE_ON_BOARD_SQL.replace(/\bm\./g, '')}))`;
 
+/**
+ * A member's copy of an event (apps/server engine/event-copy.ts) shows no author, so no read of it goes by who wrote it: a
+ * list that changed with its author's row would say whose it is. A reader's own block list did: blocking half the suspects
+ * each round found a copy's author among 8 in 3 rounds (review of #2711). So every rule a listing takes from its author
+ * stops at a copy: a block, a holiday, a paused account, a new name or face. The board's rule costs a copy nothing: it
+ * is there because the author can't answer a request, and nobody answers on a copy. A report, a moderator's removal and
+ * the author's own hand still reach it, as a post. Used by each read below that follows the author.
+ */
+const IS_COPY_SQL = 'p.shown_from_host IS NOT NULL';
+/** The reader's block list as a condition on a listing, its one parameter the list as JSON: a copy stays (IS_COPY_SQL). */
+const NOT_BLOCKED_SQL = ` AND (${IS_COPY_SQL} OR p.author_pubkey NOT IN (SELECT value FROM json_each(?)))`;
+/** A row's author as a read may follow them: NULL for a copy (IS_COPY_SQL). */
+const NAMED_AUTHOR_SQL = `CASE WHEN ${IS_COPY_SQL} THEN NULL ELSE p.author_pubkey END`;
+
 /** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
 function authorsOffBoard(db: Db, authors: string[]): Set<string> {
     const off = new Set<string>();
@@ -1694,7 +1708,7 @@ export interface NearbySet {
  *   same rules, wherever they are. Neither holds a listing by an author the member blocked on the web (member_blocks,
  *   their own rows only): they asked not to see those. The phone keeps its own list on the device (apps/native
  *   utils/blocklist.ts never calls /api/blocks) and hides those itself, so for a phone-only member member_blocks is empty
- *   and this leaves out nothing (#1808 review, finding 6).
+ *   and this leaves out nothing (#1808 review, finding 6). A copy is never left out for its author (IS_COPY_SQL).
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
@@ -1725,14 +1739,14 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
     // other condition on the author's row; with none, SQLite leaves the join out. Each statement is compiled once
     // (prepared): compiling the near pass took about 60 µs, more than a quarter of a set with nothing near (2026-10-10).
-    let ranked: Array<{ id: string; updated_at: string | null; author_pubkey: string }> = [];
+    let ranked: Array<{ id: string; updated_at: string | null; author_pubkey: string | null }> = [];
     const rankNear: RowsNear = (d, near, listingWhere, listingParams) => {
         const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
-            + (blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '');
+            + (blocked.length > 0 ? NOT_BLOCKED_SQL : '');
         const whereParams = blocked.length > 0 ? [...listingParams, JSON.stringify(blocked)] : listingParams;
         if (!q.area) {
             ranked = prepared(d, `
-        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
+        SELECT p.id, p.updated_at, ${NAMED_AUTHOR_SQL} AS author_pubkey FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE 1=1${where} ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?`).all(...whereParams, q.newestWithoutArea) as typeof ranked;
             return [];
@@ -1751,8 +1765,8 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         const cap = q.measureAtMost && q.measureAtMost > 0 ? Math.floor(q.measureAtMost) : 0;
         const pass = (newestFirst: boolean) => prepared(d, `
         WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, ${km} AS distance_km FROM (
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey
+            SELECT q.id, q.updated_at, q.created_at, q.named_author, ${km} AS distance_km FROM (
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey, ${NAMED_AUTHOR_SQL} AS named_author
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})${where}${
@@ -1760,11 +1774,11 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
             ) q
         ),
         nearest AS (
-            SELECT p.id, p.updated_at, p.created_at, p.author_pubkey, p.distance_km FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?
+            SELECT p.id, p.updated_at, p.created_at, p.named_author, p.distance_km FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?
         )
-        SELECT c.n, p.id, p.updated_at, p.author_pubkey FROM (SELECT count(*) AS n FROM measured) c LEFT JOIN nearest p ON 1${NEAREST_ORDER}`)
+        SELECT c.n, p.id, p.updated_at, p.named_author AS author_pubkey FROM (SELECT count(*) AS n FROM measured) c LEFT JOIN nearest p ON 1${NEAREST_ORDER}`)
             .all(...kmParams, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams, ...(cap > 0 ? [newestFirst ? cap : cap + 1] : []), q.radiusKm, q.max) as
-            Array<{ n: number; id: string | null; updated_at: string | null; author_pubkey: string }>;
+            Array<{ n: number; id: string | null; updated_at: string | null; author_pubkey: string | null }>;
         let rows = pass(false);
         if (cap > 0 && rows[0].n > cap) rows = pass(true);
         ranked = rows.flatMap(r => r.id === null ? [] : [{ id: r.id, updated_at: r.updated_at, author_pubkey: r.author_pubkey }]);
@@ -1782,9 +1796,9 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     if (onlineMax > 0 && !q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
         const pickOnline: RowsNear = (d, _near, listingWhere, listingParams) => {
             const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
-                + (blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '');
+                + (blocked.length > 0 ? NOT_BLOCKED_SQL : '');
             online = prepared(d, `
-        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
+        SELECT p.id, p.updated_at, ${NAMED_AUTHOR_SQL} AS author_pubkey FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE 1=1${where} ORDER BY p.event_start_at, p.id LIMIT ?`)
                 .all(...listingParams, ...(blocked.length > 0 ? [JSON.stringify(blocked)] : []), onlineMax) as typeof online;
@@ -1803,11 +1817,11 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     // own and ties, kept to a sync read's rules for this reader.
     const inNear = new Set(near);
     const extra = [...new Set([...own, ...tied])].filter(id => !inNear.has(id));
-    let kept: Array<{ id: string; updated_at: string | null; author_pubkey: string }> = [];
+    let kept: Array<{ id: string; updated_at: string | null; author_pubkey: string | null }> = [];
     if (extra.length > 0) {
         const keep: RowsNear = (d, _near, where, whereParams) => {
             kept = prepared(d, `
-        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
+        SELECT p.id, p.updated_at, ${NAMED_AUTHOR_SQL} AS author_pubkey FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE 1=1${where} ORDER BY p.id`).all(...whereParams) as typeof kept;
             return [];
@@ -1820,7 +1834,8 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     if (ids.length > 0) {
         // The authors of S whose standing ever moved (idx_members_standing_by_key, schema.sql). One whose never has adds
         // nothing: a listing's author never changes, so the authors are fixed by `ids`, and a first change adds a line.
-        const authors = [...new Set([...ranked, ...kept].map(r => r.author_pubkey))];
+        // A copy's author is none of them (IS_COPY_SQL): a tag that moved with their row would say whose it is.
+        const authors = [...new Set([...ranked, ...kept].flatMap(r => r.author_pubkey ?? []))];
         const standing = prepared(db, `SELECT public_key, board_standing_changed_at AS at FROM members
             WHERE board_standing_changed_at IS NOT NULL AND public_key IN (SELECT value FROM json_each(?)) ORDER BY public_key`).all(JSON.stringify(authors)) as Array<{ public_key: string; at: string }>;
         stamp += `|${standing.map(r => `${r.public_key}@${r.at}`).join(',')}`;
@@ -1954,8 +1969,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            where += ` AND p.author_pubkey NOT IN (${ON_HOLIDAY_SQL})`;
-            where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
+            where += ` AND (${IS_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
         } else if (!selfView && !filter?.includeInactive) {
             where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         }
@@ -2074,10 +2088,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // A search leaves out the listings of the authors the reader blocked on the web (member_blocks), as their nearby
         // set does (#1781): the web and Home would show them otherwise. The phone keeps its own list on the device and
         // hides those itself; it never writes member_blocks, so for a phone-only member this leaves out nothing (#1808
-        // review, finding 6). A read for nobody in particular has no list.
+        // review, finding 6). A read for nobody in particular has no list. A copy stays (IS_COPY_SQL).
         const blocked = viewer && !filter?.includeAllScopes ? authorsBlockedBy(db, viewer) : [];
         if (blocked.length > 0) {
-            where += ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))';
+            where += NOT_BLOCKED_SQL;
             params.push(JSON.stringify(blocked));
         }
     }
@@ -2096,8 +2110,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
         // And, for a member, the listings a sync may no longer have the last word on (offBoardPostsToResend): the phone
         // wrote them from a read outside a sync, or its deal heal did. A search of the primary key, so the OR stays a
-        // MULTI-INDEX OR.
-        where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))";
+        // MULTI-INDEX OR. A copy is sent again for neither its author's standing nor their card (IS_COPY_SQL): it would
+        // arrive beside their listings, with no change of its own to explain it.
+        where += ` AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))`;
         params.push(filter.updatedAfter, filter.updatedAfter);
         // A member's set (`authorCardsChanged`): also each listing whose author changed their card since (a new name, a
         // new face), so a phone that keeps no card for its listings' authors gets the new name within a cycle
@@ -2105,10 +2120,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // member directory already gives every member: nothing a member could not read. On the members row the read already
         // LEFT JOINs (m), so the cost follows the set, not the members whose card changed since the cursor (#1847 review NB1).
         if (filter.authorCardsChanged) {
-            where += " OR m.profile_updated_at >= ?";
+            where += " OR (p.shown_from_host IS NULL AND m.profile_updated_at >= ?)";
             params.push(filter.updatedAfter);
         } else if (filter.localAuthorCardsChanged) {
-            where += " OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?))";
+            where += " OR (p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?))";
             params.push(filter.updatedAfter);
         }
         resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);
@@ -2307,8 +2322,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             if (readerView && !r.active && !host && !going) continue;
             // An off-board host's event, read for this reader as it is: their phone writes it into its cache as it is,
             // so their deltas send it again, as paused, for a while (noteEventReadOutsideSync). Only for a key with a
-            // member row here, so a key that merely signs can't fill what the node keeps.
-            if (readerView && viewer && r.author_pubkey !== viewer && onBoardByStatus(post)
+            // member row here, so a key that merely signs can't fill what the node keeps. A copy is never off the board.
+            if (readerView && viewer && r.author_pubkey !== viewer && r.shown_from_host == null && onBoardByStatus(post)
                 && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
                 && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
@@ -2398,7 +2413,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             }
         }
 
-        if (offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
+        if (r.shown_from_host == null && offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
             && !viewerDeals.has(r.id) && onBoardByStatus(post)) {
             post.status = 'paused';
         }

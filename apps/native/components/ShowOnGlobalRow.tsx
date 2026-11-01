@@ -151,11 +151,15 @@ export function ShowOnGlobalHostRow({ event, enabled }: { event: HomeEvent; enab
         if (standing === 'unknown') return unreachable();
         if (standing === 'member') await showEventOnGlobal(event, identity);
     };
+    // A stop that didn't reach global reads as done once the row flips back, so the member is told it is still up.
+    const stop = async () => {
+        const { stopLaterLine, stopShowing } = await import('../utils/show-on-global');
+        if (!(await stopShowing(event.id, identity))) Alert.alert(showOnGlobalLabel(), stopLaterLine());
+    };
     const act = async () => {
         setBusy(true);
         try {
-            if (shown) await (await import('../utils/show-on-global')).stopShowing(event.id, identity);
-            else await show();
+            await (shown ? stop() : show());
         } finally {
             read();
             setBusy(false);
@@ -165,7 +169,7 @@ export function ShowOnGlobalHostRow({ event, enabled }: { event: HomeEvent; enab
         <View style={styles.row} testID="show-on-global-host">
             <View style={styles.col}>
                 {shown ? <Text style={styles.title}>{t('Shown on the global community')}</Text> : <Text style={styles.hint}>{showOnGlobalHint()}</Text>}
-                <Pressable onPress={act} disabled={busy} style={styles.action} accessibilityRole="button" accessibilityState={{ busy }}>
+                <Pressable onPress={act} disabled={busy} style={[styles.action, busy && styles.asking]} accessibilityRole="button" accessibilityState={{ busy }} testID="show-on-global-act">
                     <Text style={styles.link}>{shown ? t('Stop showing') : showOnGlobalLabel()}</Text>
                 </Pressable>
             </View>

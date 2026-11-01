@@ -1247,7 +1247,8 @@ function communityCard(c: Ctx): HomeCards['community'] {
  * review of #2416); the events coming up in the next fortnight by the Events card's rule (PostFilter.upcomingUntil: running now
  * or starting by then, so a market week counts for its whole run; review of #2416), on idx_posts_event_start, counted
  * over the public board as the listings are, and with the board's author rules as the card reads it (getPosts with no
- * author): no host on holiday, no paused or winding-up enterprise (second review of #2416); and where Beans are on the
+ * author): no host on holiday, no paused or winding-up enterprise (second review of #2416), and a copy counted whoever
+ * wrote it (engine/event-copy.ts); and where Beans are on the
  * Commons pot, in whole Beans as the card says it ("Commons pot 310 Beans"), so the 1.5% a trade between any two members
  * pays in, or a circulation fee, moves nobody else's Home (its tag) until the pot moves by a Bean.
  */
@@ -1260,8 +1261,8 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
                                        AND active = 1 AND status = 'active'
                                        AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL
                                        AND COALESCE(event_state, '') != 'cancelled'
-                                       AND author_pubkey NOT IN (${ON_HOLIDAY_SQL})
-                                       AND author_pubkey NOT IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
+                                       AND (shown_from_host IS NOT NULL OR (author_pubkey NOT IN (${ON_HOLIDAY_SQL})
+                                            AND author_pubkey NOT IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))))`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
     return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot: Math.round(commonsBalance) } : {}) };
 }
 

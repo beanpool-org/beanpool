@@ -55,7 +55,7 @@ import { repeatPatternFor, roundToArea } from '@beanpool/core';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
 import { fetchedPostPhoto } from '../post-photo';
-import { COPY_KEEP_ALIVE_MS, copyFields, copyResultLine, homeHostOf, pairOf, repeatOnCopy, showOnGlobal, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
+import { COPY_KEEP_ALIVE_MS, copyFields, copyResultLine, homeHostOf, pairOf, repeatOnCopy, showOnGlobal, stopLaterLine, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
 const START_MS = 120_000;
@@ -287,6 +287,65 @@ describe('an in-person event shown on the global community (the phone against tw
         expect(await copyRow(id)).toMatchObject({ title: 'Working bee, later', event_start_at: start, event_end_at: end, lat: -28.9, lng: 153.1, event_place_name: null, event_private_note: null });
     }, START_MS);
 
+    it('the last tag taken off at home comes off the copy too, and a tend then finds nothing owed', async () => {
+        const me = await memberOfBoth('Tamsin');
+        const home = await eventAtHome(me, 'Seed swap', { tags: ['food.eggs'], freeTags: ['wombat'] });
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const tagged = await copyRow(id);
+        expect(tagged.tags).toContain('food.eggs');
+        expect(tagged.free_tags).toContain('wombat');
+
+        await repeatOnCopy(await editAtHome(me, home.id, { tags: [], freeTags: [] }), me, deps());
+        const bare = await copyRow(id);
+        expect(bare.tags ?? '').not.toContain('food.eggs');
+        expect(bare.free_tags ?? '').not.toContain('wombat');
+        // The copy's own word, as anyone reads it: the column could be right and the read not.
+        const read = await (await signedGet(global_.url, `/api/marketplace/posts?id=${id}`, me)).json() as Array<{ tags?: string[]; freeTags?: string[] }>;
+        expect(read[0].tags ?? []).toEqual([]);
+        expect(read[0].freeTags ?? []).toEqual([]);
+
+        const moved = (await copyRow(id)).updated_at;
+        await tendCopies(me, deps());
+        expect((await copyRow(id)).updated_at).toBe(moved);
+    }, START_MS);
+
+    it('one tag of two taken off leaves the other, and tags left alone at home are left alone on the copy', async () => {
+        const me = await memberOfBoth('Tobi');
+        const home = await eventAtHome(me, 'Plant swap', { freeTags: ['wombat', 'quoll'] });
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await repeatOnCopy(await editAtHome(me, home.id, { title: 'Plant swap, renamed' }), me, deps());
+        expect((await copyRow(id)).free_tags).toContain('quoll');
+        await repeatOnCopy(await editAtHome(me, home.id, { freeTags: ['quoll'] }), me, deps());
+        const after = await copyRow(id);
+        expect(after.free_tags).toContain('quoll');
+        expect(after.free_tags).not.toContain('wombat');
+    }, START_MS);
+
+    it('an "until" cleared at home is cleared on the copy, and one still set stays', async () => {
+        const me = await memberOfBoth('Ulla');
+        const start = new Date(Date.now() + 8 * 24 * 3_600_000);
+        const clock = (d: Date) => d.toISOString().slice(0, 16);
+        const day = (d: Date) => d.toISOString().slice(0, 10);
+        const until = day(new Date(start.getTime() + 28 * 24 * 3_600_000));
+        const home = await eventAtHome(me, 'Weekly bee', {
+            eventStartLocal: clock(start), eventEndLocal: clock(new Date(start.getTime() + 2 * 3_600_000)), eventTz: 'UTC',
+            eventRepeat: repeatPatternFor('weekly', day(start)), eventRepeatUntil: until,
+        });
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        expect((await copyRow(id)).event_repeat_until).toBe(until);
+
+        await repeatOnCopy(await editAtHome(me, home.id, { title: 'Weekly bee, renamed' }), me, deps());
+        expect(await copyRow(id)).toMatchObject({ title: 'Weekly bee, renamed', event_repeat_until: until });
+
+        await repeatOnCopy(await editAtHome(me, home.id, { eventRepeatUntil: null }), me, deps());
+        const after = await copyRow(id);
+        expect(after.event_repeat_until).toBeNull();
+        expect(after.event_repeat).toBeTruthy();
+    }, START_MS);
+
     it('a new photo goes with the edit; an unchanged one is not sent again', async () => {
         const me = await memberOfBoth('Sam');
         const home = await eventAtHome(me, 'Plant swap');
@@ -390,6 +449,7 @@ describe('an in-person event shown on the global community (the phone against tw
         expect(await showOnGlobal(first, local.url, me, deps())).toBe('later');
         expect(copyResultLine('later')).toBe('It will go up on the global community as soon as it can.');
         expect(await stopShowing(second.id, me, deps())).toBe(false);
+        expect(stopLaterLine()).toBe('It will come down from the global community as soon as it can.');
         globalDown = false;
 
         await tendCopies(me, deps());

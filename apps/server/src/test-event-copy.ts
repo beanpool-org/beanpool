@@ -15,6 +15,8 @@
  *   7. an edit keeps to the times and the rounded pin; a cancel takes it off the board
  *   8. probation and retention count the copy
  *   9. a local community ignores the field
+ *  10. no read goes by who wrote it: a reader's block, the author's holiday or pause and a new name move their listings,
+ *      each proved by a control, and leave a copy reading as it did, in every list, delta, count and tag
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-event-copy)
  */
@@ -316,6 +318,134 @@ async function main() {
         'where no directory is kept the field is ignored, and the answer says so by what it lacks');
     assert(stored(ignored.body?.post?.id)?.event_place_name === PLACE, 'and the post is an ordinary one');
     setSwitch('directoryMirror', null);
+
+    // ── 10. No read goes by who wrote it ──
+    // A copy shows no author, so a read that changed with its author's row would say whose it is. Each rule is tested on an
+    // author who has a copy and an ordinary listing: the listing is the control, proving the rule ran, and the copy of an
+    // author it wasn't aimed at is the other, so "reads the same" can't pass on two reads that both lost it.
+    console.log('\n── 10. No read goes by who wrote it ──');
+    const tick = () => new Promise((r) => setTimeout(r, 5));
+    const rows = (body: any): any[] => Array.isArray(body) ? body : body?.posts ?? [];
+    const writer = member('WriterOfCopies');
+    const loner = member('AuthorOfOneCopy');
+    const watcher = member('WatchingReader');
+    setMemberArea(watcher.pubKeyHex, ROUNDED);
+    const soon = { eventStartAt: inHours(20), eventEndAt: inHours(22), freeTags: ['lanternwalk'] };
+    const copyA: string = (await postCopy(writer, 'Lantern walk by the river', soon)).body?.post?.id;
+    const copyB: string = (await postCopy(loner, 'Lantern walk by the sea', soon)).body?.post?.id;
+    const plainA: string = (await postCopy(writer, 'Lantern walk of their own', { ...soon, shownFrom: undefined })).body?.post?.id;
+    assert(!!copyA && !!copyB && !!plainA && stored(plainA)?.shown_from_host === null, 'two copies, and one ordinary listing by the first copy\'s author');
+    const READS: Array<[string, string]> = [
+        ['search', '/api/marketplace/posts?q=lantern&types=event&limit=100'],
+        ['a typed tag', '/api/marketplace/posts?free=lanternwalk&types=event&limit=100'],
+        ['the board', '/api/marketplace/posts?type=event&limit=100'],
+        ['from a point', `/api/marketplace/posts?type=event&lat=${ROUNDED.lat}&lng=${ROUNDED.lng}&radiusKm=50`],
+        ['a sync', '/api/marketplace/posts?sync=true&types=event&limit=200'],
+        ['the member\'s set', '/api/marketplace/posts?nearby=1&sync=true&types=event'],
+        ['Home', '/api/home'],
+    ];
+    /** What each read gives of these three, as JSON, 'null' where it left one out. */
+    const sample = async (who: Id | null) => {
+        const seen: Record<string, Record<string, string>> = {};
+        for (const [name, path] of READS) {
+            const body = (await call('GET', path, who)).body;
+            const list: any[] = name === 'Home' ? body?.cards?.events?.items ?? [] : rows(body);
+            seen[name] = Object.fromEntries([copyA, copyB, plainA].map(id => [id, JSON.stringify(list.find(p => p.id === id) ?? null)]));
+        }
+        seen['by id'] = Object.fromEntries(await Promise.all([copyA, copyB].map(async id => [id, JSON.stringify((await byId(id, who)) ?? null)])));
+        return seen;
+    };
+    /** Each read holds `id`, and gives what it gave before. */
+    const readsAsItDid = (before: Awaited<ReturnType<typeof sample>>, after: Awaited<ReturnType<typeof sample>>, id: string, what: string) => {
+        for (const read of Object.keys(before)) {
+            assert(before[read][id] !== 'null' && after[read][id] === before[read][id], `${what}, ${read}: reads as it did${after[read][id] === before[read][id] ? '' : ` (${after[read][id].slice(0, 100)})`}`);
+        }
+    };
+    /** Two copies alike but for who wrote them, and their own words and times. */
+    const bare = (json: string) => {
+        const { id: _id, title: _title, createdAt: _made, updatedAt: _moved, photos: _photos, ...rest } = JSON.parse(json) ?? {};
+        return JSON.stringify(rest);
+    };
+    const setPath = (cursor: string) => `/api/marketplace/posts?nearby=1&sync=true&types=event&updatedAfter=${encodeURIComponent(cursor)}`;
+    const deltaPath = (cursor: string) => `/api/marketplace/posts?sync=true&types=event&limit=200&updatedAfter=${encodeURIComponent(cursor)}`;
+    const blockList = (path: string, key: string) => call('POST', path, watcher, { targetPubkey: key });
+
+    // A block: the finding of the review of #2711, with its control. Blocking half the suspects found the author among 8 in 3 rounds.
+    const unblocked = await sample(watcher);
+    for (const read of ['search', 'the member\'s set']) assert(unblocked[read][plainA] !== 'null', `no block yet, ${read}: the author's ordinary listing is there`);
+    assert((await blockList('/api/blocks', robin.pubKeyHex)).status === 200, 'blocking a key that wrote neither');
+    const blockedAnother = await sample(watcher);
+    readsAsItDid(unblocked, blockedAnother, copyA, 'a block on another key');
+    assert((await blockList('/api/blocks', writer.pubKeyHex)).status === 200, 'blocking the copy\'s author');
+    const blockedWriter = await sample(watcher);
+    assert(blockedWriter.search[plainA] === 'null' && blockedWriter['the member\'s set'][plainA] === 'null', 'control: the block took: their ordinary listing left the search and the set');
+    readsAsItDid(unblocked, blockedWriter, copyA, 'a block on the author: their copy');
+    readsAsItDid(unblocked, blockedWriter, copyB, 'a block on the author: another\'s copy');
+    for (const read of Object.keys(blockedWriter)) assert(bare(blockedWriter[read][copyA]) === bare(blockedWriter[read][copyB]), `${read}: a blocked author's copy reads the same as an unblocked one's`);
+    const setTag = (await call('GET', setPath(new Date().toISOString()), watcher)).etag!;
+    assert((await blockList('/api/blocks', loner.pubKeyHex)).status === 200, 'blocking the other copy\'s author');
+    const quietSet = await call('GET', setPath(new Date().toISOString()), watcher, undefined, { 'If-None-Match': setTag });
+    assert(quietSet.status === 304, `the set's tag doesn't move for a block on a copy's author (${quietSet.status})`);
+    await blockList('/api/blocks/remove', loner.pubKeyHex);
+    await blockList('/api/blocks/remove', writer.pubKeyHex);
+    await blockList('/api/blocks/remove', robin.pubKeyHex);
+    assert((await sample(watcher)).search[plainA] === unblocked.search[plainA], 'control: unblocked, their ordinary listing is back');
+
+    // The board's rule, which an author's row sets: their listings go and come back with it, at one moment, for everyone.
+    const standings: Array<[string, () => void, () => void]> = [
+        ['a holiday', () => { se.setHolidayMode(writer.pubKeyHex, true); }, () => { se.setHolidayMode(writer.pubKeyHex, false); }],
+        ['a paused account', () => se.setUserStatusRow(writer.pubKeyHex, 'disabled'), () => se.setUserStatusRow(writer.pubKeyHex, 'active')],
+    ];
+    for (const [what, begin, end] of standings) {
+        const before = await sample(watcher);
+        const beforeVisitor = await sample(null);
+        await tick();
+        const cursor = new Date().toISOString();
+        await tick();
+        begin();
+        const during = await sample(watcher);
+        assert(during['the board'][plainA] === 'null' && during['the member\'s set'][plainA] === 'null' && during.Home[plainA] === 'null', `${what}, control: the ordinary listing left the board, the set and Home`);
+        assert(JSON.parse(during['a sync'][plainA])?.status === 'paused', `${what}, control: a sync gives it as paused`);
+        readsAsItDid(before, during, copyA, `${what}: a member`);
+        readsAsItDid(beforeVisitor, await sample(null), copyA, `${what}: a visitor`);
+        const delta = rows((await call('GET', deltaPath(cursor), watcher)).body);
+        assert(delta.some(p => p.id === plainA), `${what}, control: a delta sends the ordinary listing again`);
+        assert(!delta.some(p => p.id === copyA), `${what}: and not the copy, which would tie the two together`);
+        await tick();
+        const afterRead = new Date().toISOString();
+        await tick();
+        await byId(plainA, watcher);
+        await byId(copyA, watcher);
+        const resent = rows((await call('GET', deltaPath(afterRead), watcher)).body);
+        assert(resent.some(p => p.id === plainA && p.resentAt), `${what}, control: an off-board event read by id is sent again`);
+        assert(!resent.some(p => p.id === copyA), `${what}: a copy read by id is not`);
+        end();
+        assert((await sample(watcher))['the board'][plainA] !== 'null', `${what}, control: over, the ordinary listing is back`);
+    }
+
+    // A new name or face: a delta sends a listing's row again for it, and the set's tag moves. Neither for a copy.
+    await tick();
+    const cardCursor = new Date().toISOString();
+    await tick();
+    const newCard = (who: Id, name: string) => db.prepare(`UPDATE members SET callsign = ?, profile_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(name, who.pubKeyHex);
+    const cardTag = (await call('GET', setPath(cardCursor), watcher)).etag!;
+    newCard(loner, 'AuthorRenamed');
+    const copyOnly = await call('GET', setPath(cardCursor), watcher, undefined, { 'If-None-Match': cardTag });
+    assert(copyOnly.status === 304, `a new name on a copy's author moves nothing in the reader's set (${copyOnly.status})`);
+    newCard(writer, 'WriterRenamed');
+    const named = await call('GET', setPath(cardCursor), watcher, undefined, { 'If-None-Match': cardTag });
+    assert(named.status === 200 && rows(named.body).some(p => p.id === plainA), `control: a new name on a listing's author moves the tag and sends the listing (${named.status})`);
+    assert(!rows(named.body).some(p => p.id === copyA), 'and leaves their copy out of the delta');
+
+    // A count: Home's "events soon", where a node shows it (guestListingsOnly off). A count that fell by the copy too would say the same.
+    setSwitch('guestListingsOnly', 'false');
+    const eventsSoon = async () => (await call('GET', '/api/home?cards=community', watcher)).body?.cards?.community?.eventsSoon as number;
+    const countBefore = await eventsSoon();
+    se.setHolidayMode(writer.pubKeyHex, true);
+    const countDuring = await eventsSoon();
+    se.setHolidayMode(writer.pubKeyHex, false);
+    assert(typeof countBefore === 'number' && countDuring === countBefore - 1, `the events-soon count loses the ordinary listing and not the copy (${countBefore} → ${countDuring})`);
+    setSwitch('guestListingsOnly', null);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

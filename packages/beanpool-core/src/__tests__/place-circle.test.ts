@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { GROUP_KIND_CIRCLE, PLACE_CIRCLE_WORDS, circleKnockLine, circleKnockTrouble, groupClosedShown } from '../place-circle.js';
 import { t } from '../words.js';
 
-describe('what a knock\'s answer means for "Join when it starts"', () => {
-    it.each([429, 500, 502, 503, 504, 520])('a %i says nothing about this person: it waits for the next read', status => {
+describe('what a knock\'s answer means for Ask to join', () => {
+    it.each([429, 500, 502, 503, 504, 520])('a %i says nothing about this person: the button stays for another tap', status => {
         expect(circleKnockTrouble({ kind: 'refused', status })).toBe('later');
     });
 
@@ -12,7 +12,7 @@ describe('what a knock\'s answer means for "Join when it starts"', () => {
         expect(circleKnockTrouble({ kind: 'no_address' })).toBe('later');
     });
 
-    it.each([400, 403, 404, 409])('a %i is the community\'s answer, and no later read changes it', status => {
+    it.each([400, 403, 404, 409])('a %i is the community\'s answer, and another tap would not change it', status => {
         expect(circleKnockTrouble({ kind: 'refused', status })).toBe('refused');
     });
 

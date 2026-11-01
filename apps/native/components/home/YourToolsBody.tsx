@@ -9,7 +9,6 @@ import { View, Text, Pressable } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { t, toolLineText } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
-import { homeStyles } from './HomeParts';
 import { phoneTools, type PhoneTool } from '../../tools/index';
 import { readToolDoc, subscribeToolStore } from '../../tools/store';
 import { openTool, safeLine } from '../../tools/frame';
@@ -35,8 +34,6 @@ export function YourToolsBody({
     onChangeTools,
     allTools = DEFAULT_TOOLS,
 }: Props) {
-    const s = homeStyles(colors);
-
     // Only tools with a Home card and a phone half in this build are offered.
     const available = useMemo(
         () => allTools.filter((t) => !!t.manifest.homeCard),
@@ -89,7 +86,7 @@ export function YourToolsBody({
     return (
         <View testID="home-tools-body">
             {chosen.length === 0 ? (
-                <Text style={[s.note, { marginBottom: 8 }]} testID="home-tools-empty">
+                <Text style={{ fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginBottom: 8 }} testID="home-tools-empty">
                     {t('Add a tool to keep it here.')}
                 </Text>
             ) : (

@@ -3672,5 +3672,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "Oy verebilecek üye sayısı çok azken bir sahip karar verdi, ama artık yeterli sayıda üye oy verebiliyor, bu yüzden kararı bu oylama verecek. Gerekçe: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "Oy verebilecek üye sayısı çok azken bir sahip karar verdi, ama artık yeterli sayıda üye oy verebiliyor, bu yüzden kararı bu oylama verecek.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "Oy verebilecek üye sayısı çok az, bu yüzden daha fazla üye oy vermezse, bu oylama kapandığında {name} geri döner.",
-  "Not executed: a reinstatement vote cancelled it": "Yürütülmedi: yeniden göreve getirme oylaması bunu iptal etti"
+  "Not executed: a reinstatement vote cancelled it": "Yürütülmedi: yeniden göreve getirme oylaması bunu iptal etti",
+  "Not sure what to charge? View the Community Pricing Guide": "Ne kadar isteyeceğinizden emin değil misiniz? Topluluk Fiyatlandırma Rehberini Görüntüleyin"
 }

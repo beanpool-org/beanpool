@@ -270,6 +270,33 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(detail).toHaveTextContent('Hosted by Hazel');
         expect(detail).toHaveTextContent('Bindarrabi Hall');
     });
+
+    it('Pricing Guide chip on Market: choosing an item carries its price into the form via onComposer', async () => {
+        vi.spyOn(api, 'getPricingGuideApi').mockResolvedValue({ items: [], config: {} } as any);
+        const onComposer = vi.fn();
+        const onNavigate = vi.fn();
+        render(<MarketplacePage identity={identity} onComposer={onComposer} onNavigate={onNavigate} />);
+
+        const guideChip = await screen.findByRole('button', { name: /Pricing Guide/i });
+        await act(async () => { guideChip.click(); });
+
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeInTheDocument();
+
+        const selectBtn = within(dialog).getByRole('button', { name: /Select Artisan Sourdough Loaf for offer at 8 Beans/i });
+        await act(async () => { selectBtn.click(); });
+
+        expect(onComposer).toHaveBeenCalledWith({
+            type: 'offer',
+            title: 'Artisan Sourdough Loaf',
+            description: 'Naturally leavened fresh whole wheat or white sourdough',
+            category: 'food',
+            credits: 8,
+            priceType: 'fixed',
+            repeatable: false,
+            cashAlsoNeeded: false,
+        });
+    });
 });
 
 // "Your events" — the row at the top of ★ For You (decision 1). It is its own read of /api/events/mine,

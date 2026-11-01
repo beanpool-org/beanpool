@@ -4188,5 +4188,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "قرّر أحد المالكين حين كان عدد الأعضاء الذين يمكنهم التصويت قليلًا جدًا، لكن العدد يكفي الآن، لذا يحسم هذا التصويت الأمر. السبب: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "قرّر أحد المالكين حين كان عدد الأعضاء الذين يمكنهم التصويت قليلًا جدًا، لكن العدد يكفي الآن، لذا يحسم هذا التصويت الأمر.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "عدد الأعضاء الذين يمكنهم التصويت قليل جدًا، لذا ما لم يصوّت عدد أكبر منهم، يعود {name} عند إغلاق هذا التصويت.",
-  "Not executed: a reinstatement vote cancelled it": "لم يُنفَّذ: ألغاه تصويت على إعادة العضو"
+  "Not executed: a reinstatement vote cancelled it": "لم يُنفَّذ: ألغاه تصويت على إعادة العضو",
+  "Not sure what to charge? View the Community Pricing Guide": "لست متأكدًا مما يجب فرضه؟ راجع دليل التسعير المجتمعي"
 }

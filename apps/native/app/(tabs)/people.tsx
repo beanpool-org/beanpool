@@ -687,22 +687,25 @@ export default function PeopleScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            const { clearDB } = await import('../../utils/db');
-                            await clearDB();
-                            // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
-                            const { forgetSyncCursors } = await import('../../services/pillar-sync');
-                            await forgetSyncCursors();
-                            
                             const activeUrl = anchorUrl;
-                            await AsyncStorage.removeItem('beanpool_anchor_url');
-                            // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
-                            communitySwitched();
+                            const { forgetCommunityPush } = await import('../../utils/account-leaves-phone');
+                            await forgetCommunityPush(identity, activeUrl ?? '', async () => {
+                                const { clearDB } = await import('../../utils/db');
+                                await clearDB();
+                                // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                                const { forgetSyncCursors } = await import('../../services/pillar-sync');
+                                await forgetSyncCursors();
 
-                            if (activeUrl) {
-                                const { removeSavedNode } = await import('../../utils/nodes');
-                                await removeSavedNode(activeUrl);
-                            }
-                            
+                                await AsyncStorage.removeItem('beanpool_anchor_url');
+                                // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
+                                communitySwitched();
+
+                                if (activeUrl) {
+                                    const { removeSavedNode } = await import('../../utils/nodes');
+                                    await removeSavedNode(activeUrl);
+                                }
+                            });
+
                             setIsGuest(false);
                             router.replace('/welcome');
                         } catch (err: any) {

@@ -32,8 +32,8 @@ import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import { anchorUrl } from '../utils/node-post';
 import { copiesAtFor } from '../utils/copies-rule';
 import {
-    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom, removeEverything, removeVaultCopy,
-    sameCommunity, wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
+    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom, removeEverything, removeEverythingAsksVault, removeVaultCopy, removeVaultHalf,
+    sameCommunity, vaultHalfOf, wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
 } from '../utils/ways-back';
 
 export { ErrorBoundary };
@@ -58,11 +58,15 @@ function communityResult(name: string, removal: Removal): string {
         : t("Not removed yet: {community} didn't answer. The app tries again each time it opens.", { community: name });
 }
 
-/** What removing a community's copy for its admins says (VR3): gone on its own answer, or not, to try again. */
+/**
+ * What removing a community's copy for its admins says (VR3): gone on its own answer, or not, to try again. Any reason but
+ * `unreachable` is the vault's, which a shared copy's Remove (VR4) asks first: the community was never asked, and isn't blamed.
+ */
 function adminsResult(name: string, removal: Removal): string {
-    return removal.removed
-        ? t('Removed from {community}.', { community: name })
-        : t("Not removed: {community} couldn't do it just now. Try again later.", { community: name });
+    if (removal.removed) return t('Removed from {community}.', { community: name });
+    return removal.why === 'unreachable'
+        ? t("Not removed: {community} couldn't do it just now. Try again later.", { community: name })
+        : vaultNotRemoved(removal.why);
 }
 
 /** Remove everything's result, keeper by keeper: only what each one's own answer says. */
@@ -147,21 +151,43 @@ export default function WaysBackScreen() {
 
     const onRemove = (copy: CopyAt) => {
         if (!identity || !ways || busy) return;
+        if (copy.at === 'vault-half') {
+            // Half a copy no community on this phone can be keeping the rest of (`strayVaultHalves`): it goes from the vault alone,
+            // and is no way back.
+            confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), t('Remove this copy?'), VAULT_DELETES(), () => {
+                void (async () => {
+                    setBusy(true);
+                    try {
+                        const removal = await removeVaultHalf(identity, copy.ref);
+                        await after([removal.removed ? t("Removed from BeanPool's key vault.") : vaultNotRemoved(removal.why)]);
+                    } finally {
+                        setBusy(false);
+                    }
+                })();
+            });
+            return;
+        }
         if (copy.at === 'admins') {
             // The copy a community keeps for its admins to bring the member back from (VR3): the row's own words.
             const at = ways.communities.find(c => sameCommunity(c.url, copy.url));
             if (!at) return;
-            // One its server can't open is no way back now: the ask says what removing it does, and nothing more.
-            const cantOpen = !at.status?.adminsCopy && !!at.status?.adminsCopyUnopenable;
+            // A shared copy (VR4) is one way back in two places: its one Remove asks both. The vault is asked by this member's label
+            // for the community, so a build with no vault, or a server still starting, leaves it out, and so does the ask.
+            const vaultToo = !!at.vaultRef && (at.status?.adminsCopy?.placement === 'shared' || !!vaultHalfOf(ways, at));
+            // One its server can't open is no way back now: the ask says what removing it does, and nothing more. Unless the vault
+            // keeps half of it: that goes too, and it is the rest of a pair the people who run the server could still put back.
+            const cantOpen = !vaultToo && !at.status?.adminsCopy && !!at.status?.adminsCopyUnopenable;
             confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), cantOpen ? t('Remove this copy?') : t('Remove this way back?'),
                 cantOpen
                     ? t("{community}'s server deletes the copy it can't open. Your 12 words still work.", { community: at.name })
-                    : t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
+                    : vaultToo
+                        ? t(WAYS_BACK_LINES.removeShared, { community: at.name })
+                        : t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
                 () => {
                     void (async () => {
                         setBusy(true);
                         try {
-                            await after([adminsResult(at.name, await removeAdminsCopyFrom(identity, at))]);
+                            await after([adminsResult(at.name, await removeAdminsCopyFrom(identity, at, { vaultToo }))]);
                         } finally {
                             setBusy(false);
                         }
@@ -203,7 +229,7 @@ export default function WaysBackScreen() {
     const onRemoveEverything = () => {
         if (!identity || !ways || busy) return;
         const parts: string[] = [];
-        if (ways.vault.kind === 'unknown' || (ways.vault.kind === 'listed' && ways.vault.copies.length > 0)) {
+        if (removeEverythingAsksVault(ways)) {
             parts.push(t("BeanPool's key vault deletes its copies at once, and from its backups within 30 days, or later if the vault is paused in that time."));
         }
         if (ways.communities.some(c => (c.status?.providers.length ?? 0) > 0 || !!c.status?.adminsCopy || !!c.status?.adminsCopyUnopenable)) {

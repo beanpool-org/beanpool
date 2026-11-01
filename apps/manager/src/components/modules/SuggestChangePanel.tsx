@@ -15,7 +15,7 @@ import {
 } from '@beanpool/core';
 
 interface Props {
-    appVersion: string;
+    appVersion?: string | null;
     /** Injected in tests; defaults to the real client. */
     submit?: (input: FeedbackInput) => Promise<FeedbackResult>;
 }

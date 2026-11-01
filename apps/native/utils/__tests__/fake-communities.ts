@@ -42,11 +42,13 @@ export interface Sent {
  * the server does. `answer` decides what a request meets on the way: 'up', 'down' (a network error), a status the
  * community answers without acting (e.g. 421, 500), 'hold' (it waits until released, then acts), 'portal' (a captive
  * portal answers 200 with its sign-in page, and the community never sees it), or 'silent' (no answer ever: the request
- * ends only when the phone gives up on it).
+ * ends only when the phone gives up on it). A community's members are its own: `join` makes a key one. It answers the
+ * membership probe as the server does (routes/community.ts): only to a request signed by the key asked about.
  */
 export class Communities {
     rows = new Map<string, Map<string, number | null>>();
     leaves = new Map<string, Map<string, number>>();
+    members = new Map<string, Set<string>>();
     sent: Sent[] = [];
     log: string[] = [];
     answer: (s: Sent) => 'up' | 'down' | 'hold' | 'portal' | 'silent' | number = () => 'up';
@@ -77,6 +79,14 @@ export class Communities {
 
     releaseHeld(): void {
         for (const release of this.held.splice(0)) release();
+    }
+
+    /** `key` is a member at each of `communities`. */
+    join(key: string, ...communities: string[]): void {
+        for (const community of communities) {
+            if (!this.members.has(community)) this.members.set(community, new Set());
+            this.members.get(community)!.add(key);
+        }
     }
 
     rowsAt(community: string): Map<string, number | null> {
@@ -118,6 +128,12 @@ export class Communities {
             if (typeof leftAt === 'number') this.applyLeave(s.community, publicKey, token, leftAt);
             else this.rowsAt(s.community).delete(`${publicKey}|${token}`);
             return json(200, { success: true });
+        }
+        const probe = /^\/api\/community\/membership\/([0-9a-f]{64})$/.exec(s.path);
+        if (probe && s.method === 'GET') {
+            if (!s.headers['X-Signature']) return json(401, { code: 'signature_required' });
+            if (!signed(probe[1])) return json(403, { code: 'not_your_key' });
+            return json(200, { isMember: this.members.get(s.community)?.has(probe[1]) ?? false });
         }
         const leave = /^\/api\/push-tokens\/leave\/([0-9a-f]{64})$/.exec(s.path);
         if (leave && s.method === 'POST') {

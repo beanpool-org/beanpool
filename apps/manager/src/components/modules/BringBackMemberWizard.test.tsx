@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BringBackMemberWizard, BRING_BACK_WORDS, ONLY_IN_PERSON, REKEY_INSTEAD_WORDS } from './BringBackMemberWizard';
+import { BringBackMemberWizard, BRING_BACK_WORDS, ONLY_IN_PERSON, REKEY_INSTEAD_WORDS, SHARED_DAY_WORDS } from './BringBackMemberWizard';
 import { REKEY_PROPOSALS_POLL_MS } from './RekeyMemberWizard';
 import * as nodeClient from '../../lib/node-client';
 
@@ -49,6 +49,32 @@ describe('BringBackMemberWizard', () => {
         fireEvent.click(screen.getByTestId('bring-back-confirm'));
         expect(await screen.findByTestId('bring-back-done')).toBeDefined();
         expect(bind).toHaveBeenLastCalledWith('http://localhost:3000', member.publicKey, 'BB-1234-5678', '47', undefined, undefined);
+    });
+
+    it('half kept at BeanPool\'s key vault (vault rethink VR4): it says the day first, and after the number never says they are back', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            ...base,
+            pendingRequest: { id: 1, code: 'BB-1234-5678', kind: 'bring_back', old_pubkey: member.publicKey, new_pubkey: null, operator_pubkey: 'owner:password', status: 'pending', created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3_600_000).toISOString() },
+            communityCopy: { kept: true, since: null, placement: 'shared' },
+        } as nodeClient.RekeyStatusResponse);
+        vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockResolvedValue({ success: true, oldPubkey: member.publicKey, newPubkey: '', callsign: 'alice', broughtBack: true, placement: 'shared' });
+        render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        fireEvent.change(await screen.findByTestId('bring-back-number'), { target: { value: '47' } });
+        fireEvent.click(screen.getByTestId('bring-back-confirm'));
+        const done = await screen.findByTestId('bring-back-done');
+        expect(done.textContent).toMatch(/holds the rest for a day, so their other phones can stop it/);
+        expect(done.textContent).not.toMatch(/has their account back/);
+    });
+
+    it('before the code, a shared copy says what it takes; a whole copy doesn\'t', async () => {
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({ ...base, communityCopy: { kept: true, since: null, placement: 'shared' } });
+        const { unmount } = render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        expect((await screen.findByTestId('bring-back-shared')).textContent).toBe(SHARED_DAY_WORDS);
+        unmount();
+        read.mockResolvedValue({ ...base, communityCopy: { kept: true, since: null, placement: 'whole' } });
+        render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        await screen.findByTestId('bring-back-can');
+        expect(screen.queryByTestId('bring-back-shared')).toBeNull();
     });
 
     describe('the same brakes as Re-Key: the phones that asked, Not theirs, and codes being guessed at', () => {

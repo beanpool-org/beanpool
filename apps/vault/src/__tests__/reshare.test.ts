@@ -3,7 +3,11 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkVaultAnswer, checkVaultTicket, newVaultChallenge, openSeedFromSso, openVaultRelease } from '@beanpool/core';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import {
+    checkVaultAnswer, checkVaultTicket, joinCopyKeyHalves, joinVaultVoucher, newVaultChallenge, openSeedFromSso, openSeedWithCopyKey, openVaultRelease,
+    sealSeedToCopyKey, sealVaultDepositBox, splitCopyKey, vaultCommunityRef, vaultCopyDigest, vaultVoucherToSign, VAULT_COMMUNITY_PROVIDER,
+} from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { HOLD_MS } from '../api/server.js';
 import { cancelPending, confirmShare, custodianKey, fetchPendingShare, genesis, presentShare, restoreFromBackup, type CustodianKey } from '../custodian/lib.js';
@@ -138,6 +142,46 @@ describe('reshare', () => {
         await present(newRestore, c2, fresh[1]);
         expect((await present(newRestore, c4, fresh[2])).body.state).toBe('open');
         await expectCopy(newRestore, 'facebook', '10150000000004040', m2);
+    });
+
+    it('a community copy is re-wrapped like any other: its half, its label and its keyed index come through, and a voucher still finds it (vault rethink VR4)', async () => {
+        const v = await vault();
+        const g = await doGenesis(v);
+        const [c1, c2] = v.custodians;
+        const member = newMember();
+        const nodeSeed = crypto.randomBytes(32);
+        const nodeKey = Buffer.from(ed25519.getPublicKey(nodeSeed)).toString('hex');
+        const { copy, copyKey } = sealSeedToCopyKey(member.seed);
+        const { vaultHalf, nodeHalf } = splitCopyKey(copyKey);
+        const ref = vaultCommunityRef(member.seed, nodeKey);
+        const ticket = async (seed: Uint8Array, purpose: 'deposit' | 'restore') => (await signed(v, '/v1/ticket', { purpose, provider: VAULT_COMMUNITY_PROVIDER }, seed)).body.ticket as string;
+        const box = sealVaultDepositBox({ clientCopy: copy, community: { nodeKey, half: vaultHalf, ref } }, g.depositKey, member.key, VAULT_COMMUNITY_PROVIDER);
+        expect((await signed(v, '/v1/copies', { provider: VAULT_COMMUNITY_PROVIDER, ticket: await ticket(member.seed, 'deposit'), box }, member.seed)).status).toBe(200);
+        expect(wrapVersions(v)).toEqual([1]);
+
+        const newSet = [c1.publicKey, c2.publicKey, custodianKey(crypto.randomBytes(32)).publicKey];
+        await present(v, c1, g.shares[0], { purpose: 'reshare', newCustodians: newSet });
+        const second = await present(v, c2, g.shares[1], { purpose: 'reshare', newCustodians: newSet });
+        await confirmWith(v, second.body.custodianShares as CustodianShare[], [0, 1]);
+        await v.api.idle();
+        expect(wrapVersions(v)).toEqual([2]);
+        expect(v.keyholder().status()).toMatchObject({ generation: 2, wrapVersion: 2 });
+
+        const status = await signed(v, '/v1/copies/status', {}, member.seed);
+        expect(status.body.copies).toMatchObject([{ provider: VAULT_COMMUNITY_PROVIDER, community: ref, copy: vaultCopyDigest(copy) }]);
+        const e = crypto.randomBytes(32);
+        const { payloadB64, bytes } = vaultVoucherToSign({
+            v: 1, community: nodeKey, member: member.key, phone: Buffer.from(ed25519.getPublicKey(e)).toString('hex'), copy: vaultCopyDigest(copy), exp: v.clock.now() + HOLD_MS,
+        });
+        const voucher = joinVaultVoucher(payloadB64, ed25519.sign(bytes, nodeSeed));
+        const held = await signed(v, '/v1/restore', { provider: VAULT_COMMUNITY_PROVIDER, ticket: await ticket(e, 'restore'), voucher }, e);
+        expect(held.body.status).toBe('held');
+        v.clock.advance(HOLD_MS);
+        const released = await signed(v, '/v1/restore/collect', { holdId: held.body.holdId }, e);
+        const opened = openVaultRelease(released.body.release, e);
+        expect(opened.half).toBe(vaultHalf);
+        const { seed } = openSeedWithCopyKey(opened.clientCopy, joinCopyKeyHalves(opened.half as string, nodeHalf), member.key);
+        expect(Buffer.from(seed).equals(Buffer.from(member.seed))).toBe(true);
     });
 
     it('the first custodian may correct their proposal before anyone joins it', async () => {

@@ -51,9 +51,11 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { WelcomeDoors } from '../../components/WelcomeDoors';
+import { RestoreMenu } from '../../components/welcome/RestoreMenu';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import type { GlobalDoorState } from '../global-entry';
+import { onboardingColors } from '../onboarding-colors';
 
 const STYLES = { homeDoors: {}, memberBtn: {}, memberBtnText: {}, doorLine: {}, inviteOnlyHint: {} };
 const LINE: Record<GlobalDoorState, string | null> = {
@@ -221,6 +223,77 @@ describe('above the fold at 320 dp with text at 1.3×', () => {
         expect(exploreBottom(english)).toBeLessThanOrEqual(VISIBLE);
         expect(exploreBottom(english, sentence)).toBeGreaterThan(VISIBLE);
     });
+});
+
+describe('Restore your account: four rows, at 320 dp with text at 1.3× (vault rethink VR4)', () => {
+    const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+    const restoreMenu = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/RestoreMenu.tsx'), 'utf-8');
+    const LABELS = ['🌐 Recover with Social', '🔑 Recover with 12 Words', '🤝 My community can bring me back', '🪪 An admin gave me a re-key code'];
+    const HINT_LINE = 'For members of a local community.';
+    const menuTaps = { social: 0, words: 0, community: 0, rekey: 0 };
+    async function drawMenu(initial?: UiLang): Promise<void> {
+        const menu = createElement(RestoreMenu, {
+            ...onboardingColors('light'), logos: null,
+            onSocial: () => { menuTaps.social++; }, onWords: () => { menuTaps.words++; },
+            onCommunity: () => { menuTaps.community++; }, onRekey: () => { menuTaps.rekey++; },
+        });
+        await act(async () => {
+            root.render((initial ? createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial }, menu) : menu) as any);
+        });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    }
+
+    it('draws the four rows in order, each working, the third with its hint', async () => {
+        await drawMenu();
+        const rows = buttons();
+        expect(rows).toHaveLength(4);
+        expect(reading()).toEqual([LABELS[0], LABELS[1], LABELS[2], HINT_LINE, LABELS[3]]);
+        expect(rows[2].getAttribute('data-hint')).toBe(HINT_LINE);
+        for (const r of rows) await act(async () => { r.click(); });
+        expect(menuTaps).toEqual({ social: 1, words: 1, community: 1, rekey: 1 });
+    });
+
+    it('no label has a line limit, so a long one wraps and none is cut', async () => {
+        await drawMenu();
+        for (const b of buttons()) for (const s of Array.from(b.querySelectorAll('span'))) expect(s.getAttribute('data-lines')).toBeNull();
+        // The label's Text, centred in its button, wraps there too: nothing here gives it a width of its own.
+        expect(restoreMenu).toMatch(/recoverBtnText: \{[^}]*textAlign: 'center'/);
+    });
+
+    it('every word is through t(): in the pseudo-locale all four are their translations', async () => {
+        await drawMenu('xx');
+        for (const piece of reading()) expect(piece, `"${piece}" bypassed t()`).toMatch(/^\[.*\]$/s);
+    });
+
+    // The menu's column: the scroll's and the card's padding, then the button's. At 1.3× on 320 dp a word wider than this
+    // would be cut mid-word by the button's edge: measured with the doors' generous glyph widths, in every language.
+    const SCROLL = 24;
+    const CARD = 24;
+    const BUTTON = 16;
+    const LINE_WIDTH = 320 - 2 * (SCROLL + CARD + BUTTON);
+    const FONT = 16 * 1.3;
+    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f＀-￯]/u;
+    const em = (c: string) => (/\p{M}/u.test(c) ? 0 : /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
+    const widest = (s: string) => Math.max(...s.split(/\s+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).map((w) => Array.from(w).reduce((n, c) => n + em(c) * FONT, 0)));
+
+    it('the styles the measure rests on are the screen\'s and the rows\'', () => {
+        expect(welcome).toMatch(/\n\s*scroll: \{[^}]*padding: 24/);
+        expect(welcome).toMatch(/\n\s*card: \{[^}]*padding: 24/);
+        expect(restoreMenu).toMatch(/\n\s*recoverBtn: \{[^}]*padding: 16/);
+        expect(restoreMenu).toMatch(/\n\s*recoverBtnText: \{[^}]*fontSize: 16/);
+    });
+
+    const NATIVE_WORDS = path.resolve(__dirname, '../../words');
+    for (const lang of ['en', ...fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => f.slice(0, -5))]) {
+        it(`${lang}: the third row is there, and no word in it is wider than its button`, () => {
+            const cat = lang === 'en' ? {} : JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8')) as Record<string, string>;
+            const say = (k: string) => (lang === 'en' ? k : cat[k]);
+            for (const k of [LABELS[2], HINT_LINE]) {
+                expect(typeof say(k), k).toBe('string');
+                expect(widest(say(k)), say(k)).toBeLessThanOrEqual(LINE_WIDTH);
+            }
+        });
+    }
 });
 
 describe('a line under Explore that arrives late moves neither door', () => {

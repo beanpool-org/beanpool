@@ -53,6 +53,7 @@ interface FleetSidebarProps {
     tabAlertCounts?: Partial<Record<TabId, AlertCounts>>;
     isFleetMode?: boolean;
     communityName?: string;
+    version?: string | null;
     onLogout?: () => void;
     /**
      * `rail` is the desktop sidebar (single-node Settings hides it below `lg`). `drawer` is the same menu in the phone
@@ -88,6 +89,7 @@ export function FleetSidebar({
     tabAlertCounts = {},
     isFleetMode = IS_FLEET_MODE,
     communityName,
+    version,
     onLogout,
     variant = 'rail',
     activeSubTab,
@@ -538,7 +540,13 @@ export function FleetSidebar({
             <div className="p-3 border-t border-nature-800/80 bg-nature-950/60 text-[11px] text-nature-400 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span>{isFleetMode ? 'Decoupled API Client' : 'Sovereign Node v1.4.2'}</span>
+                    <span>
+                        {isFleetMode
+                            ? 'Decoupled API Client'
+                            : version
+                                ? `Sovereign Node ${version.startsWith('v') ? version : `v${version}`}`
+                                : 'Sovereign Node'}
+                    </span>
                 </div>
                 <span className="font-mono text-[10px] text-nature-500">{isFleetMode ? 'Fleet API' : 'Single Node'}</span>
             </div>

@@ -63,8 +63,11 @@ export function rekeyCodeFromSearch(search: string): string | null {
 export type WebRekeyAnswer =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
-    /** A bring-back the admin confirmed with this device's number: the member's copy and its key, sealed to the asking key. */
-    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare }
+    /**
+     * A bring-back the admin confirmed with this device's number: the member's copy and its key, sealed to the asking key.
+     * `phoneOnly`: the copy is kept half at BeanPool's key vault (vault rethink VR4), which this browser can't reach yet.
+     */
+    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare; phoneOnly?: boolean }
     | { state: 'declined' }
     | { state: 'gone' }
     | { state: 'refused'; message: string; code?: string }
@@ -96,6 +99,8 @@ export const WEB_REKEY_TEXT = {
     gone: 'That code isn’t valid any more. Ask the admin for a new one.',
     wrongCommunity: 'That code is for another community. Open the link your admin gave you, or ask them for a new code.',
     unreachable: 'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.',
+    /** The node's refusal of a bring-back's code for an account it has since removed (design §4.4), which arrives in English. */
+    accountGone: 'This community no longer has your account. Use your 12 words or another way back.',
 } as const;
 
 /**
@@ -119,7 +124,10 @@ function readAnswer(status: number, body: any): WebRekeyAnswer {
         if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), linkSignInAgain: body.linkSignInAgain === true };
         if (body.state === 'released' && typeof body.memberKey === 'string' && /^[0-9a-f]{64}$/.test(body.memberKey)
             && body.release && typeof body.release === 'object') {
-            return { state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare };
+            return {
+                state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare,
+                ...(typeof body.voucher === 'string' ? { phoneOnly: true } : {}),
+            };
         }
         if (body.state === 'declined') return { state: 'declined' };
         if (body.state === 'gone') return { state: 'gone' };

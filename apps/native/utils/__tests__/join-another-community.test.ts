@@ -51,6 +51,18 @@ beforeEach(() => {
 });
 
 describe('joining another community with an invite', () => {
+    it('registers this phone\'s token where it is missing once the community is on its list, and a registration that fails fails nothing', async () => {
+        const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
+        const order: string[] = [];
+        d.addSavedNode = vi.fn(async () => { order.push('saved'); });
+        const registerPush = vi.fn(async () => { order.push('registered'); });
+        await joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, { ...d, registerPush });
+        expect(order).toEqual(['saved', 'registered']);
+
+        const failing = vi.fn(async () => { throw new Error('no connection'); });
+        await expect(joinAnotherCommunity({ targetUrl: LOCAL, code: 'ABCD2345', identity: me, returnUrl: GLOBAL }, { ...d, registerPush: failing })).resolves.toBeDefined();
+    });
+
     it('redeems on the new community (not the one it came from) with the member’s key, and stays there', async () => {
         const d = deps(async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }));
         const joined = await joinAnotherCommunity({ targetUrl: `${LOCAL}/`, code: 'ABCD2345', identity: me, returnUrl: GLOBAL, knownName: 'Mullum' }, d);

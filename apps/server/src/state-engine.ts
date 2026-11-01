@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
@@ -64,7 +64,7 @@ import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/m
 import { dropToolStateOf } from './engine/tool-state.js';
 import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
-import { setRequestBroadcast, heldFromUnread, expireOldRequests, tickRequestPushFolds, dropRequestsOf } from './engine/dm-requests.js';
+import { setRequestBroadcast, heldFromUnread, countRequestsWaitingFor, expireOldRequests, dropRequestsOf } from './engine/dm-requests.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
@@ -1116,8 +1116,6 @@ function armMainServerTimers(): void {
         // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
         try { rollDueSeries(broadcast); } catch (e) { console.warn('[Events] Series roll failed:', e); }
         try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
-        // A message request push folded in the last hour goes as one, naming nobody, once the hour is over (engine/dm-requests.ts).
-        try { tickRequestPushFolds(dispatchPushNotification); } catch (e) { console.warn('[Push] Request push fold failed:', e); }
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
@@ -7183,6 +7181,21 @@ export function getListedUnreadCounts(pubkey: string): Record<string, number> {
     return counts;
 }
 
+/** The unread lines in the chats a member's list shows: the push's badge, and `unread` in GET /api/me/unread. */
+export function getListedUnreadTotal(pubkey: string): number {
+    return Object.values(getListedUnreadCounts(pubkey)).reduce((sum, count) => sum + count, 0);
+}
+
+/**
+ * What waits for a member here, in counts alone (GET /api/me/unread, @beanpool/core UnreadAnswer): the two numbers their
+ * conversation list gives as `totalUnread` and `requests.count`, without building that list. `asOf` is taken first, so
+ * no line it claims to cover came after the count.
+ */
+export function getUnreadAnswer(pubkey: string): UnreadAnswer {
+    const now = Date.now();
+    return { unread: getListedUnreadTotal(pubkey), requests: countRequestsWaitingFor(pubkey, now), asOf: new Date(now).toISOString() };
+}
+
 export function ensureTransactionConversation(postId: string, buyerPubkey: string, sellerPubkey: string): string {
     return ensureTransactionConversationEngine(getMessagingCb(), postId, buyerPubkey, sellerPubkey);
 }
@@ -10507,8 +10520,7 @@ export function dispatchPushNotification(
         if (tokens.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
-        const unreadCounts = getListedUnreadCounts(pk);
-        const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+        const totalUnread = getListedUnreadTotal(pk);
 
         // One notice per recipient, the same on each of their phones.
         const notice = newPushNotice(kind, pk, sentAt);

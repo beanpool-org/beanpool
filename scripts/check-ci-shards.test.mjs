@@ -114,7 +114,7 @@ export function shardProblems(ciText, testAllText) {
         const want = Array.from({ length: k || 0 }, (_, i) => `${i + 1}/${k}`).sort().join(' ');
         if (!k || got !== want) problems.push(`the server shards are ${got}, not 1/K to K/K (K = the number of server shards in the matrix)`);
     }
-    // A check that waits for another (website_status for website_contrast's Chromium) is in the same shard as it.
+    // A check that waits for another (website_status for website_contrast_light's Chromium) is in the same shard as it.
     for (const [name, dep] of Object.entries(waits(testAllText))) {
         const a = shards.find((s) => s.checks.includes(name))?.name;
         const b = shards.find((s) => s.checks.includes(dep))?.name;
@@ -332,8 +332,8 @@ test('the fetch of origin/main taken away, or a shard losing it, fails', () => {
     assert.match(compareMainProblems(CI.replace('main=+refs/heads/main:refs/remotes/origin/main', 'main=+refs/heads/main:refs/remotes/origin/x')).join('\n'), /does not write refs\/remotes\/origin\/main/);
     assert.match(compareMainProblems(CI.replace('--depth=50 ', '')).join('\n'), /does not fetch a depth/);
     // A check moved into a shard with no fetch.
-    const moved = CI.replace(' migration_steps ', ' ').replace('name: settings-phone, checks: settings_phone', 'name: settings-phone, checks: "settings_phone migration_steps"');
-    assert.match(compareMainProblems(moved).join('\n'), /shard settings-phone runs migration_steps/);
+    const moved = CI.replace(' migration_steps ', ' ').replace('name: settings-phone-1, checks: settings_phone_width', 'name: settings-phone-1, checks: "settings_phone_width migration_steps"');
+    assert.match(compareMainProblems(moved).join('\n'), /shard settings-phone-1 runs migration_steps/);
     // A shard that compares with nothing, paying for the fetch.
     const idle = CI.replace(/^( {10}- \{ name: server-1,.*) \}$/m, '$1, compare_main: true }');
     assert.match(compareMainProblems(idle).join('\n'), /shard server-1 has compare_main but runs nothing/);
@@ -505,12 +505,12 @@ test('each edit the check exists to catch fails it', () => {
     assert.notEqual(dropped, CI);
     assert.match(shardProblems(dropped, TEST_ALL).join('\n'), /secrets_guard is in no shard/);
     // A check in two shards.
-    const twice = CI.replace(/(name: settings-phone, checks: )settings_phone/, '$1"settings_phone lint"');
+    const twice = CI.replace(/(name: settings-phone-1, checks: )settings_phone_width/, '$1"settings_phone_width lint"');
     assert.notEqual(twice, CI);
     assert.match(shardProblems(twice, TEST_ALL).join('\n'), /lint is in 2 shards/);
     // A split check also named whole in another shard.
     assert.match(shardProblems(CI.replace('name: checks, checks: "build ', 'name: checks, checks: "build test '), TEST_ALL).join('\n'), /test is in 6 shards .*it would run twice/);
-    assert.match(shardProblems(CI.replace('name: checks, checks: "build ', 'name: checks, checks: "build server_suites '), TEST_ALL).join('\n'), /server_suites is in 7 shards/);
+    assert.match(shardProblems(CI.replace('name: checks, checks: "build ', 'name: checks, checks: "build server_suites '), TEST_ALL).join('\n'), /server_suites is in 8 shards/);
     // A new check in test-all.sh that no shard names.
     assert.match(shardProblems(CI, `${TEST_ALL}\nrun_check "brand_new" true\n`).join('\n'), /brand_new is in no shard/);
     // ... and one with a digit in its name (a [a-z_]+ pattern would never see it, so no shard would be asked for it).
@@ -530,7 +530,7 @@ test('each edit the check exists to catch fails it', () => {
     // A waiting check moved away from the check it waits for.
     const moved = CI.replace(' website_status ', ' ').replace(/(name: checks, checks: ")/, '$1website_status ');
     assert.notEqual(moved, CI);
-    assert.match(shardProblems(moved, TEST_ALL).join('\n'), /website_status waits for website_contrast/);
+    assert.match(shardProblems(moved, TEST_ALL).join('\n'), /website_status waits for website_contrast_light/);
     // The aggregate renamed, a second job given the name, or the aggregate no longer always()/gating.
     assert.match(requiredCheckProblems(CI.replace(`    name: ${REQUIRED_CHECK}\n`, '    name: Test-All\n')).join('\n'), /jobs.test-all is not named/);
     assert.match(requiredCheckProblems(CI.replace('Test-All shard ${{ matrix.name }}', REQUIRED_CHECK)).join('\n'), /2 jobs or steps are named/);

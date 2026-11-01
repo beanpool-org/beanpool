@@ -14,8 +14,9 @@ import type { DatabaseSync } from 'node:sqlite';
  * - `temp_store = MEMORY`: sorts and VACUUM's working copy never touch the disk.
  *
  * What is never stored (§1.1): callsigns, emails, addresses, community lists, raw `sub`s, tokens, a copy of what a
- * release handed out. A row holds two HMACs, an envelope the API can't open and a day. `holds.requester_key` is a
- * restoring device's throwaway key, never a member's.
+ * release handed out. A row holds two HMACs, an envelope the API can't open and a day. `holds.requester_key` is the
+ * public key a restore asks with: a device's throwaway, or, for a community's word on a phone that already holds another
+ * account, that account's own (VR4; the phone's utils/rekey-redeem.ts `beginRekey`). It goes with the hold (`pruneHolds`).
  */
 
 const require = createRequire(import.meta.url);

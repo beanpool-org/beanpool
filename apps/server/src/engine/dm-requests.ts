@@ -101,10 +101,11 @@
  *
  * ## Pushes
  *
- * The request's first line pushes "{name} wants to message you" instead of "sent you a message", at most once an hour per
- * person: requests in the hour after one are folded into one "Someone new wants to message you" when the hour is over
- * (tickRequestPushFolds), if any is still waiting. A folded line does the push's work all the same and drops it, as a
- * withheld one does, so the work after the answer never tells a sender which happened (#1403 re-review).
+ * A request alerts nobody until it is accepted: no push and no badge (Marty, 1 Nov 2026, chat design S1.1; it replaced his
+ * answer of 23 Oct, one push an hour, once the push token began going to every community a phone keeps, where a stranger's
+ * line would have reached phones set elsewhere). It waits in the person's Requests. Its line does the push's work all the
+ * same and drops it, as a withheld one does, so the work after the answer never tells a sender which happened (#1403
+ * re-review). Once it is accepted, a line pushes as any line.
  *
  * ## Where it is kept
  *
@@ -133,8 +134,6 @@ export const REQUEST_DAYS = 30;
 const REQUEST_MS = REQUEST_DAYS * 24 * 60 * 60 * 1000;
 /** The most waiting requests one list names; the rest are counted (the apps show 50, then "and {n} more"). */
 export const REQUESTS_LISTED_MAX = 100;
-/** One request push per person per this long; the rest fold into one (Marty's answer 7). */
-export const REQUEST_PUSH_EVERY_MS = 60 * 60 * 1000;
 /** A second line, or a reaction, from the opener of a request still waiting. */
 export const DM_REQUEST_PENDING_CODE = 'dm_request_pending';
 
@@ -588,8 +587,8 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     if (openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
     // One the person ignored whose line its opener withdrew since (Cancel request, decideRequest), with nothing of theirs
     // kept during a block either, stays ignored for the rest of its 30 days: the line moves only the request's time, as one
-    // kept during a block does, so the opener's answers stay a waiting request's, and its push is done and dropped, as a
-    // folded one's is (PR #2540 review 4393642102). Cancelling and writing again never undoes an Ignore; the person reaching
+    // kept during a block does, so the opener's answers stay a waiting request's, and its push is done and dropped, as any
+    // request's is (PR #2540 review 4393642102). Cancelling and writing again never undoes an Ignore; the person reaching
     // out since does (answered above). One ignored before a block lifted since has the line kept during it, and is a new
     // request with this one, as above. One the person reached out in since, and cancelled, is no Ignore of theirs (above).
     if (row.state === 'ignored' && keptLinesSince(row) === 0 && !theirs) {
@@ -782,6 +781,15 @@ export function sortRequestsOut<T extends Listed>(viewer: string, convs: T[], no
     }
     requests.sort((a, b) => a.at - b.at);
     return { listed, requests: requests.slice(0, REQUESTS_LISTED_MAX).map(r => r.entry), count: requests.length };
+}
+
+/**
+ * How many requests wait for `viewer`: {@link sortRequestsOut}'s `count`, asked of the only conversations that can be among
+ * them, so a count (GET /api/me/unread) never builds their whole list and has no rule of its own. None where requests are off.
+ */
+export function countRequestsWaitingFor(viewer: string, now: number = Date.now()): number {
+    if (!requestsOn()) return 0;
+    return sortRequestsOut(viewer, waitingRows(viewer, now).map(r => ({ id: r.conversation_id, type: 'dm' })), now).count;
 }
 
 /**
@@ -983,64 +991,6 @@ export function expireOldRequests(now: number = Date.now()): number {
     if (standbyWritesNothing()) return 0;
     return db.prepare("UPDATE dm_requests SET state = 'expired', decided_at = ? WHERE state = 'pending' AND requested_at <= ?")
         .run(iso(now), iso(now - REQUEST_MS)).changes;
-}
-
-// ── pushes ─────────────────────────────────────────────────────────────────────────────────────────────────────
-
-type PushFn = (targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'chat', kind: 'chat.message') => unknown;
-
-/** Per person: when a request last pushed them, and the requests folded since. In memory: a restart may send one more. */
-const requestPushes = new Map<string, { lastAt: number; folded: Set<string> }>();
-const FOLDED_MAX = 1_000;
-
-/** For a suite: forget every person's last request push, as a restart does. */
-export function resetRequestPushes(): void {
-    requestPushes.clear();
-}
-
-/** The words of a request's own push: its first line, or its first after the 30 days. */
-export function requestPushBody(senderName: string): string {
-    return t('{name} wants to message you', { name: senderName });
-}
-
-/**
- * Whether a request's line pushes `to` now: the first in an hour does; one after it in the same hour is folded (its push's
- * work is done and dropped by the caller), and told in the one push the hour's end sends (tickRequestPushFolds).
- */
-export function requestPushDue(to: string, conversationId: string, now: number = Date.now()): boolean {
-    const had = requestPushes.get(to);
-    if (!had || now - had.lastAt >= REQUEST_PUSH_EVERY_MS) {
-        if (requestPushes.size >= 10_000) {
-            for (const [k, v] of requestPushes) if (now - v.lastAt >= REQUEST_PUSH_EVERY_MS && v.folded.size === 0) requestPushes.delete(k);
-        }
-        requestPushes.set(to, { lastAt: now, folded: new Set() });
-        return true;
-    }
-    if (had.folded.size < FOLDED_MAX) had.folded.add(conversationId);
-    return false;
-}
-
-/**
- * Every minute on the main server (state-engine.ts): each person whose hour since a request push is over, with a folded
- * request still waiting for them, gets one push naming nobody, "Someone new wants to message you", and their next hour
- * starts. Anyone with nothing waiting is forgotten, so their next request pushes at once.
- */
-export function tickRequestPushFolds(dispatch: PushFn, now: number = Date.now()): void {
-    for (const [to, s] of requestPushes) {
-        if (now - s.lastAt < REQUEST_PUSH_EVERY_MS) continue;
-        const stillWaiting = [...s.folded].some(id => waitingRows(to, now, id).length > 0);
-        if (!stillWaiting) {
-            requestPushes.delete(to);
-            continue;
-        }
-        s.lastAt = now;
-        s.folded.clear();
-        try {
-            dispatch([to], 'SYSTEM', '💬 New Message', t('Someone new wants to message you'), { screen: 'requests' }, 'chat', 'chat.message');
-        } catch (e: any) {
-            console.warn('[Push] A folded request push failed:', e?.message ?? e);
-        }
-    }
 }
 
 // ── a member leaving ───────────────────────────────────────────────────────────────────────────────────────────

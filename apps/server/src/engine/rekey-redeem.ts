@@ -46,6 +46,8 @@ export const BRING_BACK_KEY_HAS_ACCOUNT = word('This phone already has an accoun
 /** The admin acts on a code that isn't waiting any more: a re-key's, or a bring-back's, each in its own window's words. */
 export const REKEY_NO_LIVE_CODE = word('This member has no re-key code waiting. Make a new code.');
 export const BRING_BACK_NO_LIVE_CODE = word('This member has no bring-back code waiting. Make a new code.');
+/** A bring-back's code for an account removed or deleted since it was made (design §4.4): no admin can bring it back here. */
+export const BRING_BACK_ACCOUNT_GONE = word('This community no longer has your account. Use your 12 words or another way back.');
 /** A code that has taken all the phones it will. */
 export const REKEY_CODE_FULL = word('This code can’t take any more phones. Ask the admin for a new one.');
 /** An address's wrong codes this hour are used up. */
@@ -221,9 +223,12 @@ export function proposeRekey(rawCode: unknown, newKey: string, address: string, 
         throw new RekeyRedeemRefusal(404, 'code_not_valid', REKEY_CODE_NOT_VALID);
     }
     // A code for an account deleted or removed since it was made binds nothing (completeRekey refuses it, REKEY_ACCOUNT_GONE),
-    // so no phone waits on it: the same one sentence, and nothing written.
+    // so no phone waits on it: the same one sentence, and nothing written. A bring-back's says what is true of it (design
+    // §4.4): a new code wouldn't help, since the community no longer has the account.
     const account = db.prepare('SELECT status FROM members WHERE public_key = ?').get(req.old_pubkey) as { status: string } | undefined;
-    if (!account || account.status === 'pruned') throw new RekeyRedeemRefusal(404, 'code_not_valid', REKEY_CODE_NOT_VALID);
+    if (!account || account.status === 'pruned') {
+        throw new RekeyRedeemRefusal(404, 'code_not_valid', req.kind === 'bring_back' ? BRING_BACK_ACCOUNT_GONE : REKEY_CODE_NOT_VALID);
+    }
     assertPlainTablesWritable();
 
     return db.transaction((): RekeyAsk => {

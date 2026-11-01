@@ -39,7 +39,7 @@ vi.mock('./api', async (importOriginal) => {
         getMarketplacePosts: vi.fn(async () => []),
         getNodeInfo: vi.fn(async () => ({ peerNodes: [] })),
         getRemotePosts: vi.fn(async () => []),
-        getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
+        getMyUnread: vi.fn(async () => ({ unread: 0, requests: 0, asOf: '2026-11-01T00:00:00.000Z' })),
         getMyMarketplaceTransactions: vi.fn(async () => []),
         getCommissionCapacity: vi.fn(async () => ({ links: [] })),
         getNodeConfig: vi.fn(async () => ({ enablePeerConnectors: false })),
@@ -608,13 +608,13 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
     describe('App unread polling & push updates', () => {
         it('refreshes unread and deals on new_message broadcast', async () => {
             const ws = await setupWsConnection();
-            const convSpy = vi.spyOn(api, 'getConversations');
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
 
             await act(async () => {
                 render(<App />);
                 await vi.advanceTimersByTimeAsync(100);
             });
-            const initialCalls = convSpy.mock.calls.length;
+            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(2500);
@@ -627,41 +627,42 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 await vi.advanceTimersByTimeAsync(500);
             });
 
-            expect(convSpy.mock.calls.length).toBeGreaterThan(initialCalls);
+            expect(unreadSpy.mock.calls.length).toBeGreaterThan(initialCalls);
         });
 
         it('the backstop still fires when no broadcast arrives (300s)', async () => {
             await setupWsConnection();
-            const convSpy = vi.spyOn(api, 'getConversations');
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
 
             await act(async () => {
                 render(<App />);
                 await vi.advanceTimersByTimeAsync(50);
             });
-            const initialCalls = convSpy.mock.calls.length;
+            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(370_000);
             });
 
-            expect(convSpy.mock.calls.length).toBeGreaterThan(initialCalls);
+            expect(unreadSpy.mock.calls.length).toBeGreaterThan(initialCalls);
         });
 
         it('becoming visible refreshes exactly once', async () => {
             const ws = await setupWsConnection();
-            const convSpy = vi.spyOn(api, 'getConversations');
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
 
             await act(async () => {
                 render(<App />);
                 await vi.advanceTimersByTimeAsync(50);
             });
-            const initialCalls = convSpy.mock.calls.length;
 
             await act(async () => {
                 Object.defineProperty(document, 'hidden', { value: true, configurable: true });
                 document.dispatchEvent(new Event('visibilitychange'));
                 await vi.advanceTimersByTimeAsync(5000);
             });
+            // After the hide: leaving reads the count once, by itself.
+            const initialCalls = unreadSpy.mock.calls.length;
 
             await act(async () => {
                 Object.defineProperty(document, 'hidden', { value: false, configurable: true });
@@ -670,7 +671,68 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 await vi.advanceTimersByTimeAsync(300);
             });
 
-            expect(convSpy.mock.calls.length).toBe(initialCalls + 1);
+            expect(unreadSpy.mock.calls.length).toBe(initialCalls + 1);
+        });
+
+        it('a new_message with the tab hidden reads the count alone, and the tab shows it', async () => {
+            document.title = 'BeanPool';
+            const ws = await setupWsConnection();
+            await act(async () => {
+                render(<App />);
+                await vi.advanceTimersByTimeAsync(100);
+            });
+            await act(async () => {
+                Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+                document.dispatchEvent(new Event('visibilitychange'));
+                await vi.advanceTimersByTimeAsync(2500);
+            });
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
+            const dealsSpy = vi.spyOn(api, 'getMyMarketplaceTransactions');
+            unreadSpy.mockClear();
+            dealsSpy.mockClear();
+            unreadSpy.mockResolvedValue({ unread: 3, requests: 0, asOf: '2026-11-01T00:00:00.000Z' });
+
+            await act(async () => {
+                ws.onmessage({ data: JSON.stringify({ type: 'new_message', conversationId: 'c-1', id: 'm-1' }) });
+                await vi.advanceTimersByTimeAsync(500);
+            });
+
+            expect(unreadSpy).toHaveBeenCalledTimes(1);
+            expect(dealsSpy).not.toHaveBeenCalled();
+            expect(document.title).toBe('(3) BeanPool');
+            unreadSpy.mockResolvedValue({ unread: 0, requests: 0, asOf: '2026-11-01T00:00:00.000Z' });
+        });
+
+        it('a busy node, tab hidden: fifty doorbells in ten seconds are a handful of reads, and the last line still lands', async () => {
+            document.title = 'BeanPool';
+            const ws = await setupWsConnection();
+            await act(async () => {
+                render(<App />);
+                await vi.advanceTimersByTimeAsync(100);
+            });
+            await act(async () => {
+                Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+                document.dispatchEvent(new Event('visibilitychange'));
+                await vi.advanceTimersByTimeAsync(2500);
+            });
+            const unreadSpy = vi.spyOn(api, 'getMyUnread');
+            unreadSpy.mockClear();
+
+            for (let i = 1; i <= 50; i++) {
+                unreadSpy.mockResolvedValue({ unread: i, requests: 0, asOf: '2026-11-01T00:00:00.000Z' });
+                await act(async () => {
+                    ws.onmessage({ data: JSON.stringify({ type: 'new_message', conversationId: 'c-1', id: `m-${i}` }) });
+                    await vi.advanceTimersByTimeAsync(200);
+                });
+            }
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(8000);
+            });
+
+            // One read per 2 s floor at most, through a run of 10 s and the trailing read after it.
+            expect(unreadSpy.mock.calls.length).toBeLessThanOrEqual(7);
+            expect(document.title).toBe('(50) BeanPool');
+            unreadSpy.mockResolvedValue({ unread: 0, requests: 0, asOf: '2026-11-01T00:00:00.000Z' });
         });
     });
 

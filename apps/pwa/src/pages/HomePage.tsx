@@ -360,6 +360,7 @@ function MarketListingItem({
                         decoding="async"
                         onError={onPictureError}
                         className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
+                        style={{ objectPosition: '50% 33%' }}
                     />
                 ) : (
                     <div className="w-full h-24 rounded-lg overflow-hidden mb-2">

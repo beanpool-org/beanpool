@@ -6,12 +6,14 @@ import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import type { Notification, NotificationResponse } from 'expo-notifications';
 import { loadIdentity, KEY_ITEM_OPTIONS } from '../utils/identity';
-import { registerAccountForPush, retryDueRegistrations } from '../utils/push-registrations';
+import { markAlertsOn } from '../utils/push-alerts-off';
+import { communityAddress, registerAccountForPush, registerWhereMissing, retryDueRegistrations } from '../utils/push-registrations';
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../utils/push-notice-check';
 import { openNoticeIn } from '../utils/push-notice-switch';
 import { countNotice, watchNoticeCounts } from '../utils/notice-counts';
 import { postAllNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
 import { notificationChannels } from '../utils/notification-channels';
+import { onCommunitySwitched } from '../utils/community-switch';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 import { toolReminderRoute } from '../tools/reminders';
 
@@ -89,8 +91,8 @@ if (!isExpoGo) {
  * Registers for Expo Push Notifications and transmits the token to the BeanPool server.
  * Should be called once the user is logged in and has an identity.
  *
- * With the community the phone is set to, which the phone records first: as the account leaves the phone, only the
- * communities it sent the token to are asked to drop it. One that doesn't land, the token not to be had yet included
+ * With every community the phone keeps, each of which the phone records first: as the account leaves the phone, only
+ * the communities it sent the token to are asked to drop it. One that doesn't land, the token not to be had yet included
  * (no connection), stays due and is tried again as the app comes back ({@link retryPushRegistrations};
  * utils/push-registrations.ts `registerAccountForPush`).
  */
@@ -99,7 +101,7 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
 }
 
 /**
- * The member picked another language (components/LanguageProvider.tsx `onPicked`): the community the phone is set to is
+ * The member picked another language (components/LanguageProvider.tsx `onPicked`): every community the phone keeps is
  * told at once, on the push registration's `lang`, so its next push is written in that language rather than after the
  * next app start. Never asks for permission; nothing without an account on the phone or a token. Never throws.
  */
@@ -111,11 +113,24 @@ export function registerPushInPickedLanguage(): void {
 }
 
 /**
- * The registrations the account on the phone still needs, tried again as the app comes back and with the 5-minute sync
- * (app/_layout.tsx; utils/push-registrations.ts `retryDueRegistrations`). Never asks for permission. Never throws.
+ * The registrations the account on the phone still needs, tried again as the app comes back, with the 5-minute sync
+ * (app/_layout.tsx), after a join and after a restore's list of communities comes back: what failed, and any community
+ * the phone keeps that was never asked (utils/push-registrations.ts `registerWhereMissing`). Never asks for permission.
+ * Never throws.
  */
 export function retryPushRegistrations(): Promise<void> {
-    return retryDueRegistrations(() => phonePushToken(false), Platform.OS);
+    return registerWhereMissing(() => phonePushToken(false), Platform.OS);
+}
+
+/**
+ * The per-community switch turned on again (design R8; the sheet's switch is its own slice): its community comes off the
+ * alerts-off list and is registered with. Throws when the list can't be written.
+ */
+export async function turnAlertsOnAt(community: string): Promise<void> {
+    const base = communityAddress(community);
+    if (!base) return;
+    await markAlertsOn(base);
+    await retryPushRegistrations();
 }
 
 /**
@@ -261,6 +276,9 @@ export function setupNotificationResponseHandler(options: NotificationTapOptions
     }
 
     const stopCounting = watchNoticeCounts(AsyncStorage);
+    // Every switch is another chance for what is still due (utils/community-switch.ts). What is due only: a phone set to
+    // a community it has never registered with may be only looking, and a guest's mark can come just after the switch.
+    const stopRetrying = onCommunitySwitched(() => { void retryDueRegistrations(() => phonePushToken(false), Platform.OS); });
     void countWaitingNotices();
     const appState = AppState.addEventListener('change', (next) => {
         if (next === 'active') void countWaitingNotices();
@@ -270,6 +288,7 @@ export function setupNotificationResponseHandler(options: NotificationTapOptions
         remove: () => {
             subscription.remove();
             stopCounting();
+            stopRetrying();
             appState.remove();
         },
     };

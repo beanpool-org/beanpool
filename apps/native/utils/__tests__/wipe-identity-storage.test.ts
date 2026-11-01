@@ -26,6 +26,10 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_saved_nodes: JSON.stringify([{ url: 'https://test.beanpool.org', name: 'Test' }]),
             pillar_sync_cursor: '42',
             'pillar:outbox': '[]',
+            // The communities this account turned alerts off for (push-registrations.ts): its own choice, and where it belongs.
+            beanpool_push_alerts_off: JSON.stringify(['https://test.beanpool.org']),
+            // The communities this account still owes a leave (push-registrations.ts): where it belonged, too.
+            beanpool_push_leaves_owed: JSON.stringify(['https://test.beanpool.org']),
             // The communities this key asked to join (#1179 review 4109868126): they say where the member lives.
             beanpool_knocks: JSON.stringify({ pubkey: 'ab'.repeat(32), knocks: [{ node: 'https://near.example', name: 'Near' }] }),
             // The background sync's notes on them (sync-notices.ts): this key was an owner there, and saw this many

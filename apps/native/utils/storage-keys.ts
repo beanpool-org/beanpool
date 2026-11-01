@@ -210,6 +210,22 @@ export const PUSH_REGISTERED_AT_STORE_KEY = 'beanpool_push_registered_at';
 export const PUSH_REGISTRATIONS_DUE_STORE_KEY = 'beanpool_push_registrations_due';
 
 /**
+ * The communities the member turned alerts off for, one switch per community, default on (utils/push-registrations.ts):
+ * this phone's token is not registered with these. A community leaves the list as it leaves the phone, and a followed
+ * one keeps its place on it at its new address. Sign Out wipes it with the account (utils/identity.ts
+ * wipeIdentityScopedStorage).
+ */
+export const PUSH_ALERTS_OFF_STORE_KEY = 'beanpool_push_alerts_off';
+
+/**
+ * The communities on the push record told to let the token go that heard nothing: the DELETE failed and no statement was
+ * written down (utils/push-registrations.ts `leavesOwed`). Each return tries again (utils/account-leaves-phone.ts
+ * `retryLeavesOwed`). Apart from the record because the record can't say so: it also holds a moved community's old
+ * address, which must hear no DELETE. Sign Out wipes it with the account (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const PUSH_LEAVES_OWED_STORE_KEY = 'beanpool_push_leaves_owed';
+
+/**
  * This phone's last push stamp (utils/push-registrations.ts `nextPushStamp`): each registration and each leave statement
  * takes a later one, whatever the clock does. Phone-wide, not the account's: Sign Out keeps it, so a statement the old
  * account made can never outrank the registration of an account that signs in after it. Kept under this name twice, in
@@ -236,6 +252,8 @@ export const IDENTITY_THIS_DEVICE_STORE_KEY = 'beanpool_identity_this_device_onl
  * lost answer or a restart comes back to the same hold; removed once the account is saved or the restore ends.
  */
 export const VAULT_RESTORE_STORE_KEY = 'beanpool_vault_restore';
+/** A shared bring-back waiting on the key vault (utils/community-recovery.ts), in the secure store. */
+export const COMMUNITY_RESTORE_STORE_KEY = 'beanpool_community_restore';
 
 /** When one account last said "Not now" to moving its sign-in recovery to the key vault (utils/vault.ts). */
 export function vaultMoveLaterStoreKey(publicKey: string): string {

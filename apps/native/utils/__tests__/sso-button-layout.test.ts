@@ -126,12 +126,14 @@ describe('the social sign-in screen: Apple, Google and Facebook buttons', () => 
 
 describe('Restore your account: the Recover with Social button', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+    // The four rows are drawn by components/welcome/RestoreMenu.tsx (vault rethink VR4), in its styles with welcome.tsx's logos.
+    const menu = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/RestoreMenu.tsx'), 'utf-8');
     /**
-     * A one-line entry in welcome.tsx's StyleSheet (inside makeStyles(colors, dark)), in light and in dark: only the
+     * A one-line entry in RestoreMenu.tsx's StyleSheet (inside makeStyles(colors, dark)), in light and in dark: only the
      * colours may differ between the two, so the layout below holds in both.
      */
     function style(name: string): Style {
-        const m = src.match(new RegExp(`^ {4}${name}: (\\{[^\\n]*\\}),$`, 'm'));
+        const m = menu.match(new RegExp(`^ {8}${name}: (\\{[^\\n]*\\}),$`, 'm'));
         expect(m, `styles.${name}`).not.toBeNull();
         const inScheme = (theme: 'light' | 'dark') => {
             const { colors, dark } = onboardingColors(theme);
@@ -144,14 +146,14 @@ describe('Restore your account: the Recover with Social button', () => {
     }
     const member = (() => {
         const from = src.indexOf("if (mode === 'member') {");
-        const to = src.indexOf('Recover with 12 Words', from);
+        const to = src.indexOf('onSocial=', from);
         expect(from).toBeGreaterThan(-1);
         expect(to).toBeGreaterThan(from);
-        return src.slice(from, to);
+        return `${src.slice(from, to)}${menu.slice(0, menu.indexOf('Recover with 12 Words'))}`;
     })();
 
     it('the label and logos sit in the named row styles, not inline ones', () => {
-        expect(member).toContain('<Pressable\n                            style={styles.ssoRecoverBtn}');
+        expect(member).toContain('<Pressable style={styles.ssoRecoverBtn}');
         expect(member).toContain('<View style={styles.ssoRecoverRow}>');
         expect(member).toContain("<Text style={styles.ssoRecoverBtnText}>{t('🌐 Recover with Social')}</Text>");
         expect(member).toContain('<View style={styles.ssoRecoverLogos}>');

@@ -123,7 +123,7 @@ let harvesterTimer: NodeJS.Timeout | null = null;
 // Default starter nodes if manager-nodes.json doesn't exist yet
 const DEFAULT_NODES: FleetNodeConfig[] = [
     { id: 'test', name: 'Test Staging Node', url: 'https://test.beanpool.org' },
-    { id: 'mullum', name: 'Mullumbimby', url: 'https://mullum.beanpool.org' },
+    { id: 'mullum', name: 'Mullumbimby', url: 'https://byron.beanpool.org' },
     { id: 'bris', name: 'Brisbane', url: 'https://bris.beanpool.org' },
     { id: 'bindarrabi', name: 'Bindarrabi', url: 'https://bindarrabi.beanpool.org' },
     { id: 'eastgippy', name: 'East Gippsland', url: 'https://eastgippy.beanpool.org' },

@@ -21,6 +21,7 @@ import { createRefreshGate, fitNeedsYou, isOwnInviteChange, needsYouRowOrder, NE
 import { t, tn } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
 import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS, forgetHomeForHeader } from '../lib/home-store';
+import { onConversationRead } from '../lib/conversation-read';
 import { onSyncActivity } from '../lib/sync';
 import { useDialogFocus } from './dialog-focus';
 import * as api from '../lib/api';
@@ -292,6 +293,11 @@ export function NeedsYouIcons({
             settleTimer = setTimeout(poke, WS_SETTLE_MS);
         });
 
+        const unsubRead = onConversationRead(() => {
+            forgetHomeForHeader();
+            poke();
+        });
+
         return () => {
             stopPoll();
             if (typeof document !== 'undefined') {
@@ -302,6 +308,7 @@ export function NeedsYouIcons({
             }
             wide?.removeEventListener?.('change', poke);
             unsubSync();
+            unsubRead();
             if (settleTimer) clearTimeout(settleTimer);
         };
     }, [identityPubkey]);

@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 function open(onDone = vi.fn(), dark = false) {
-    act(() => root.render(createElement(DoorCheckSheet, { check: CHECK, publicKey: KEY, dark, colors: colorsFor(dark), onDone })));
+    act(() => root.render(createElement(DoorCheckSheet, { check: CHECK, publicKey: KEY, dark, colors: colorsFor(dark), onDone }) as any));
     return onDone;
 }
 const say = (data: string, url = PAGE) => act(() => web.props.onMessage({ nativeEvent: { data, url } }));
@@ -136,7 +136,7 @@ describe('useDoorCheck', () => {
             ask = check.ask;
             return check.sheet;
         };
-        act(() => root.render(createElement(Host)));
+        act(() => root.render(createElement(Host) as any));
         expect(web.props).toBeNull();
         let answered: unknown;
         act(() => { ask(CHECK, KEY).then((r: unknown) => { answered = r; }); });

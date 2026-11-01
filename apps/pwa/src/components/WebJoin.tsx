@@ -651,7 +651,8 @@ export function WebJoin({
             if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] could not ask for work:', e);
             return { kind: 'work', work: null };
         }
-        if (asked.kind === 'none') return { kind: 'work', work: null };
+        // The person check is the 12-words door's: a sign-in never needs one.
+        if (asked.kind === 'none' || asked.kind === 'check') return { kind: 'work', work: null };
         if (asked.kind === 'refused') {
             const outcome = doorOutcome(asked.answer, proof.provider);
             return outcome.kind === 'rate_limited' ? { kind: 'refused', outcome } : { kind: 'work', work: null };

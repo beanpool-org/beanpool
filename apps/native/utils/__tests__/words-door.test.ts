@@ -666,7 +666,7 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
 
     it('the 12-words join: the name check, then the work (Back still works), then the key onto the phone, then the join', () => {
         const join = between(src('app/welcome.tsx'), 'async function handleWordsJoin()', 'async function afterDoorAnswer(');
-        const order = ['checkNameAtDoor(', 'await solutionUnlessLeft(run, leave.signal)', 'joinSendingRef.current = true', 'commitJoinKey(key, name)', 'submitWordsJoin('].map(s => join.indexOf(s));
+        const order = ['checkNameAtDoor(', 'await workPastCheck(run, leave.signal, doorCheck.ask)', 'joinSendingRef.current = true', 'commitJoinKey(key, name)', 'submitWordsJoin('].map(s => join.indexOf(s));
         expect(order.every(i => i >= 0)).toBe(true);
         expect([...order].sort((a, b) => a - b)).toEqual(order);
     });
@@ -679,7 +679,7 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         expect(between(welcome, 'function signInAgainAtDoor()', 'function chooseWordsAtDoor()')).toMatch(/nameCheckRef\.current\?\.abort\(\);\s*setLoading\(false\);/);
         const account = src('app/join-open-door.tsx');
         const words = between(account, 'async function handleWordsJoin()', 'async function afterAnswer(');
-        expect(words).toContain('await solutionUnlessLeft(run, stop.signal)');
+        expect(words).toContain('await workPastCheck(run, stop.signal, doorCheck.ask)');
         expect(words).not.toContain('await run.solution()');
         expect(between(account, 'function signInAgain()', 'async function ')).toMatch(/nameCheckRef\.current\?\.abort\(\);\s*setLoading\(false\);/);
     });
@@ -689,7 +689,7 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         expect(join).not.toMatch(/authenticateUser|commitJoinKey|importIdentity|keepJoinedIdentity/);
         // The phone's own account joins as it is; only a key this door made (S2, a phone with no account) is written, at Join.
         expect(join).toContain('const joining = account.createdHere ? await commitOpenDoorKey(doorUrl, account, typed) : account.identity;');
-        expect(join).toMatch(/submitWordsJoin\(doorUrl, joining, typed, run\)/);
+        expect(join).toMatch(/submitWordsJoin\(doorUrl, joining, typed, run, /);
     });
 
     it('Safety Backup for a 12-words member: the words note first, the tickbox, then "Add a sign-in as a second way back"', () => {

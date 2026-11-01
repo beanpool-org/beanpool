@@ -16,7 +16,7 @@ vi.mock('expo-linking', () => ({ addEventListener: vi.fn(() => ({ remove: vi.fn(
 vi.mock('expo-web-browser', () => ({ openAuthSessionAsync: vi.fn(), openBrowserAsync: vi.fn(), dismissAuthSession: vi.fn(), dismissBrowser: vi.fn(async () => undefined) }));
 vi.mock('expo-apple-authentication', () => ({ isAvailableAsync: vi.fn(async () => false), signInAsync: vi.fn(), AppleAuthenticationScope: { EMAIL: 0, FULL_NAME: 1 } }));
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn(() => new Uint8Array(32)), digest: vi.fn() }));
-vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(), deleteItemAsync: vi.fn() }));
+vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(), deleteItemAsync: vi.fn() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
 
 const { checkPageMayLoad, doorCheckUrl, readCheckMessage, readDoorCheck } = await import('../door-check');
@@ -41,7 +41,7 @@ function runAtBusyDoor(good = 'tok') {
         return { kind: 'refused' as const, answer };
     });
     const solve = vi.fn(async () => ({ counters: [1, 2, 3, 4, 5, 6, 7, 8], tries: 8, ms: 1 }));
-    const run = startDoorWork({ url: 'https://global.test', identity, door: 'words', fetchWork: fetchWork as any, solve, setTimer: () => 1, clearTimer: () => {} });
+    const run = startDoorWork({ url: 'https://global.test', identity, door: 'words', fetchWork: fetchWork as any, solve, now: () => 1_000, setTimer: () => 1, clearTimer: () => {} });
     return { run, asked, solve };
 }
 
@@ -106,7 +106,7 @@ describe('at the tap that needs it', () => {
         const fetchWork = vi.fn(async () => issued);
         const run = startDoorWork({
             url: 'https://global.test', identity, door: 'words', fetchWork: fetchWork as any,
-            solve: vi.fn(async () => ({ counters: [1], tries: 1, ms: 1 })), setTimer: () => 1, clearTimer: () => {},
+            solve: vi.fn(async () => ({ counters: [1], tries: 1, ms: 1 })), now: () => 1_000, setTimer: () => 1, clearTimer: () => {},
         });
         const ask = vi.fn();
         expect((await workPastCheck(run, new AbortController().signal, ask)).kind).toBe('solved');

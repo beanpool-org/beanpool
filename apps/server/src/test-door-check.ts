@@ -17,7 +17,7 @@
  *   9. nobody can force that: junk, an over-long token and no token at all are refused while Cloudflare answers, and a
  *      client's token that gets no answer changes nothing while the server's own probe is answered; probes are not one
  *      per request
- *  10. the owners' setting: off, nothing asks; set through the shape's write only where the door is open
+ *  10. the owners' setting: the shape reads it where the door is open, and only there (test-community-shape-write sets it)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-door-check.ts
  */
@@ -268,10 +268,11 @@ async function main(): Promise<void> {
     const replay = await askWork(cam, camIp, once);
     assert(replay.status === 403 && replay.body?.code === 'check_failed' && !doorCheckPassed(cam.pk), `a replay: refused (${show(replay)})`);
     assert(cf.forms.length === asked, 'without asking Cloudflare again');
-    const dee = newId(); const deeIp = anotherIp();
-    const both = tokenFor(dee.pk);
-    const [a, b] = await Promise.all([askWork(dee, deeIp, both), askWork(dee, deeIp, both)]);
-    assert([a.status, b.status].sort().join() === '200,403', `the same token twice at once: one passes (${a.status}, ${b.status})`);
+    // Asked of the check itself: over HTTP the second request may arrive after the first passed, and a key with a pass
+    // sends no token to judge.
+    const both = tokenFor(cam.pk);
+    const twice = await Promise.all([verifyDoorCheck(both, cam.pk), verifyDoorCheck(both, cam.pk)]);
+    assert([...twice].sort().join() === 'failed,passed', `the same token twice at once: one passes (${twice.join(', ')})`);
 
     // ── 7. the sign-in door ──────────────────────────────────────────────────────────────────────
     console.log('\n── 7. the sign-in door never needs it ──');

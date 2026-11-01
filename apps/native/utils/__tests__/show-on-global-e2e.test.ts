@@ -1494,9 +1494,15 @@ describe('a listing off the board at home goes nowhere, whichever door asks (sho
         const done = await listingAtHome(me, 'Sloes');
         await homeSql("UPDATE posts SET status = 'completed', active = 0 WHERE id = ?", [done.id]);
         expect(await showOnGlobal(done, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
+        // These two still read back from home, so it is what the row says that refuses them, not an empty answer.
+        const finished = await listingAtHome(me, 'Bullaces');
+        await homeSql("UPDATE posts SET status = 'completed' WHERE id = ?", [finished.id]);
+        expect(await showOnGlobal(finished, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
+        const unpinned = await listingAtHome(me, 'Cobnuts');
+        await homeSql('UPDATE posts SET lat = NULL, lng = NULL WHERE id = ?', [unpinned.id]);
+        expect(await showOnGlobal(unpinned, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
         expect(await copyCount(me)).toBe(0);
-        expect(await pairOf(gone.id, me.publicKey)).toBeNull();
-        expect(await pairOf(done.id, me.publicKey)).toBeNull();
+        for (const home of [gone, done, finished, unpinned]) expect(await pairOf(home.id, me.publicKey)).toBeNull();
     }, START_MS);
 
     it('an event is not asked about (the control): its tick reads nothing of home', async () => {

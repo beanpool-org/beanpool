@@ -74,6 +74,9 @@ import {
     generateReplicationToken,
     setReplicationTokenMode,
     clearReplicationToken,
+    fetchStrandedEscrows,
+    writeOffStrandedEscrow,
+    StrandedEscrowWriteOffError,
 } from './node-client';
 import { FreshProofRequiredError } from './fresh-proof';
 
@@ -208,6 +211,102 @@ describe('resolveNodeApiUrl', () => {
 
         const url = resolveNodeApiUrl('https://node.beanpool.org', '/api/local/admin/onboarding-funnel', { days: '30' });
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
+
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('stranded escrows helpers', () => {
+    it('fetchStrandedEscrows queries /api/local/admin/stranded-escrows with cache no-store and returns data', async () => {
+        const mockData = {
+            success: true,
+            commonsBalance: 10,
+            escrows: [],
+            commonsAfterAll: 10,
+            eligibleCount: 0,
+        };
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => mockData,
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await fetchStrandedEscrows('https://node.example', 'pw123', 'tfa-1');
+        expect(res).toEqual(mockData);
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/stranded-escrows');
+        expect(init.cache).toBe('no-store');
+        expect(init.headers['X-Admin-Password']).toBe('pw123');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+
+        fetchMock.mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            statusText: 'Internal Server Error',
+            json: async () => ({ error: 'Database locked' }),
+        });
+        await expect(fetchStrandedEscrows('https://node.example')).rejects.toThrow('Database locked');
+        vi.unstubAllGlobals();
+    });
+
+    it('writeOffStrandedEscrow sends POST with reason and confirmDeficit, returning success response', async () => {
+        const mockResult = {
+            success: true,
+            escrowId: 'esc-123',
+            tradeId: 'tr-456',
+            amount: 5,
+            transactionId: 'tx-789',
+            memo: 'writeoff memo',
+            commonsBefore: 10,
+            commonsAfter: 5,
+        };
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => mockResult,
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await writeOffStrandedEscrow('https://node.example', 'esc-123', 'Deficit approved', true, 'pw123', 'tfa-1');
+        expect(res).toEqual(mockResult);
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/stranded-escrows/esc-123/write-off');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('pw123');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Deficit approved', confirmDeficit: true });
+
+        vi.unstubAllGlobals();
+    });
+
+    it('writeOffStrandedEscrow throws StrandedEscrowWriteOffError with code and balances on refusal', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            json: async () => ({
+                error: 'Commons deficit must be confirmed',
+                code: 'deficit_unconfirmed',
+                commonsBalance: 2,
+                commonsAfter: -3,
+            }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        let caught: unknown;
+        try {
+            await writeOffStrandedEscrow('https://node.example', 'esc-123', 'Test reason', false);
+        } catch (err) {
+            caught = err;
+        }
+
+        expect(caught).toBeInstanceOf(StrandedEscrowWriteOffError);
+        const writeOffErr = caught as StrandedEscrowWriteOffError;
+        expect(writeOffErr.message).toBe('Commons deficit must be confirmed');
+        expect(writeOffErr.code).toBe('deficit_unconfirmed');
+        expect(writeOffErr.commonsBalance).toBe(2);
+        expect(writeOffErr.commonsAfter).toBe(-3);
 
         vi.unstubAllGlobals();
     });

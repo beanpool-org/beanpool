@@ -1191,8 +1191,11 @@ async function main(): Promise<void> {
             // Each child's health is read at its own port.
             fake.readyFor(oldT, 200, 3);
             fake.readyFor(newT, 503);
-            assert(await until(() => getTunnelStatus().others?.[0]?.connections === 3), `the old name is connected (${JSON.stringify(getTunnelStatus().others)})`);
-            assert(getTunnelStatus().state === 'starting' && getTunnelStatus().others?.[0]?.host === 'two-old.beanpool.org' && getTunnelStatus().others?.[0]?.connections === 3,
+            // Each child's reading lands on its own poll. The new child may or may not have read connected before this 503, so
+            // the stored name reads starting or retrying: either is "not up", which is the point here, beside the old name's 3.
+            const storedNotUp = () => ['starting', 'retrying'].includes(getTunnelStatus().state);
+            assert(await until(() => getTunnelStatus().others?.[0]?.connections === 3 && storedNotUp()), `the old name is connected (${JSON.stringify(getTunnelStatus().others)})`);
+            assert(storedNotUp() && getTunnelStatus().others?.[0]?.host === 'two-old.beanpool.org' && getTunnelStatus().others?.[0]?.connections === 3,
                 `Settings reads the stored name's state, and the other's beside it (${JSON.stringify(getTunnelStatus())})`);
             fake.readyFor(newT, 200);
             assert(await until(() => getTunnelStatus().state === 'connected'), `and the new one in its own time (${getTunnelStatus().state})`);

@@ -393,7 +393,7 @@ describe('Full-page views clear the desktop sidebar', () => {
         // background-image, it reasserted the 1x tile and these views rendered blurry on hidpi screens
         // next to a crisp #root. Hence the declaration is asserted where it must live, not in the base
         // rule, and the base rule is held to carrying no background-image at all.
-        const shared = css.match(/\n#root,\s*\.page-overlay\s*\{([^}]*)\}/);
+        const shared = css.match(/\n#root,\s*\.page-overlay(?:,\s*\.page-wallpaper)?\s*\{([^}]*)\}/);
         expect(shared).not.toBeNull();
         expect(shared![1]).toMatch(/background-image:\s*var\(--pattern-image\)/);
         expect(shared![1]).toMatch(/background-repeat:\s*repeat/);

@@ -88,3 +88,5 @@ While someone is asking for your post, you can still change its words and photos
 In a local community, posts do not expire. Delete them when they are done.
 
 On the global community, a listing is archived 90 days after it last changed: it comes off the Market and its photos are deleted. Saving it with **Edit Post** keeps it for another 90 days. See "The global community's limits".
+
+When you first join a local community from the global community, the phone app offers to post your listings there too, with their photos. See "More than one community".

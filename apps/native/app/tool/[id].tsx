@@ -1,7 +1,8 @@
 /**
  * The one host route of every tool (scratch/tools/DESIGN-tool-template-fable.md §1.3, slice T0.2): `/tool/<id>`, with
- * `screen` (default: the manifest's first) and any params the tool set (`key`, a record's id). Deep links are
- * `beanpool://tool/<id>?screen=…&key=…`. It looks the tool up in the registry (tools/index.ts phoneTool), reads its
+ * `toolScreen` (default: the manifest's first; never `screen` from inside the app, tools/route-params.ts says why) and any
+ * params the tool set (`key`, a record's id). Deep links are `beanpool://tool/<id>?screen=…&key=…`, and either name opens
+ * the screen. It looks the tool up in the registry (tools/index.ts phoneTool), reads its
  * document from the one store (tools/store.ts), builds its host narrowed to its permissions (tools/builder.ts hostFor) and
  * draws the screen inside the frame (tools/frame.tsx), with the two doors while the document is empty.
  *
@@ -10,7 +11,8 @@
  *
  * Each `navigate` pushes another of these routes, so a tool can have several screens open at once (a record over its
  * list): they share its document and its settings ({@link openScreens}), and none of them writes back what another
- * changed. The host is keyed by the screen, so "Remove my data" on a later screen goes back to the first in place.
+ * changed. "Remove my data" on a later screen takes the tool's own screens under it off the stack, or, with none directly
+ * under it, makes that screen the first in place (the host is keyed by the screen).
  *
  * For a tool that asks for `node-copy` (slice T0.4, tools/node-copy.ts): its first screen's open reconciles the phone's
  * copy with the server's, a write is followed five seconds later by one sync, the toggle is a round trip the setting
@@ -18,7 +20,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { t, toolLineText, type AnyToolScreenProps, type ToolCopyOutcome, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
@@ -41,6 +43,7 @@ import {
     toolBack, type ToolCopyNote,
 } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
+import { TOOL_SCREEN_PARAM, toolHref, toolParams, toolScreenOf } from '../../tools/route-params';
 import { shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
 import { SHOP_TOGGLE_READ_MS, readMyShop } from '../../utils/shop';
 
@@ -57,19 +60,12 @@ function tellOpenScreens(key: string, from: Hear | null, next: Partial<SharedSta
     for (const hear of [...(openScreens.get(key) ?? [])]) if (hear !== from) hear(next);
 }
 
-/** The route's params as the tool sees them: every one but the route's own `id` and `screen`. */
-function toolParams(all: Record<string, string | string[] | undefined>): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(all)) if (k !== 'id' && k !== 'screen' && typeof v === 'string') out[k] = v;
-    return out;
-}
-
 export default function ToolRoute() {
     const all = useLocalSearchParams<Record<string, string>>();
     const { colors } = useTheme();
     const id = typeof all.id === 'string' ? all.id : '';
     const tool = phoneTool(id);
-    const screenName = typeof all.screen === 'string' && all.screen ? all.screen : tool?.manifest.screens[0] ?? '';
+    const screenName = toolScreenOf(all) || (tool?.manifest.screens[0] ?? '');
     const Screen = useMemo(() => {
         if (!tool || !tool.manifest.screens.includes(screenName)) return null;
         try {
@@ -90,6 +86,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     Screen: React.ComponentType<AnyToolScreenProps>;
     params: Record<string, string>;
 }) {
+    const navigation = useNavigation();
     const { colors } = useTheme();
     const { identity } = useIdentity();
     const nodeProfile = useNodeProfile();
@@ -269,7 +266,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
             maxBytes: () => toolDocMaxHere(manifest, settingsRef.current),
         },
         navigate: (screen: string, p?: Record<string, string>) => {
-            router.push({ pathname: '/tool/[id]', params: { ...(p ?? {}), id: manifest.id, screen } });
+            router.push(toolHref(manifest.id, screen, p));
         },
         back: toolBack,
         now: () => Date.now(),
@@ -308,14 +305,21 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                         setSettingsOpen(false);
                         tellOpenScreens(shareKey, hear, { doc: empty, stored: false, settings: left, copyNote: null });
                         // On a later screen (a record), back to the first, where the doors are: what it showed has gone.
+                        // The tool's own screens directly under this one come off the stack, so no second copy of the first is
+                        // left to back through; opened straight at this one (a link, a reminder, over a Home that Add to Home
+                        // laid on the tool), there are none under it and it becomes the first.
                         if (screenName !== manifest.screens[0]) {
-                            router.setParams({ screen: manifest.screens[0], ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
+                            const { routes, index } = navigation.getState() as unknown as { routes: Array<{ name: string; params?: { id?: string } }>; index: number };
+                            let over = 0;
+                            while (index - over > 0 && routes[index - over - 1].name === 'tool/[id]' && routes[index - over - 1].params?.id === manifest.id) over++;
+                            if (over > 0) router.dismiss(over);
+                            else router.setParams({ [TOOL_SCREEN_PARAM]: manifest.screens[0], screen: undefined, ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
                         }
                     })().catch((e) => console.warn('[Tools] Could not remove the tool\'s data', e instanceof Error ? e.message : e));
                 },
             },
         ]);
-    }, [owner, manifest, shareKey, hear, screenName, params, url, copy]);
+    }, [owner, manifest, shareKey, hear, screenName, params, url, copy, navigation]);
 
     const about = useCallback(() => {
         Alert.alert(t(manifest.name), t(manifest.line));

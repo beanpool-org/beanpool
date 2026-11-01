@@ -378,4 +378,32 @@ describe('through the door with the key on the phone', () => {
         expect(deps.closeDB).not.toHaveBeenCalled();
         await accountUntouched();
     });
+
+    it('a local community\'s own door is a first local join: the offer to bring the member\'s listings is noted, and never holds the join up', async () => {
+        await seedPhone();
+        globalAnswers();
+        const key = (await accountKeyForDoor())!;
+        const answer = await submitJoin(GLOBAL, key.identity, 'Sam', await signIn(key.identity));
+        if (answer.kind !== 'joined') throw new Error('expected joined');
+        mem.async.set('beanpool_anchor_url', 'https://came-from.example.org');
+        const deps = enterDeps();
+        deps.noteBringOffer = vi.fn(async () => { throw new Error('storage full'); });
+        const joined = await finishJoinFromAccount(answer, key, 'Sam', { deps, at: { url: GLOBAL, name: 'Riverside' } });
+        expect(joined?.name).toBe('Sam');
+        expect(deps.noteBringOffer).toHaveBeenCalledWith({ publicKey: key.identity.publicKey, from: 'https://came-from.example.org', to: GLOBAL, name: 'Riverside', alreadyMember: false });
+        expect(mem.async.get('beanpool_anchor_url')).toBe(GLOBAL);
+    });
+
+    it('the global community\'s own door notes no offer', async () => {
+        await seedPhone();
+        globalAnswers();
+        const key = (await accountKeyForDoor())!;
+        const answer = await submitJoin(GLOBAL, key.identity, 'Sam', await signIn(key.identity));
+        if (answer.kind !== 'joined') throw new Error('expected joined');
+        const deps = enterDeps();
+        deps.noteBringOffer = vi.fn(async () => true);
+        await finishJoinFromAccount(answer, key, 'Sam', { deps });
+        expect(deps.noteBringOffer).not.toHaveBeenCalled();
+        expect(mem.async.get(ANCHOR)).toBe(GLOBAL);
+    });
 });

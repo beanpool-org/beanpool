@@ -1449,7 +1449,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     return (
         // 2rem around the page and inside the card, 1rem each below 360 px: at 320 px with 130 % text the two 2rem paddings
         // left the steps about 150 px for their words (rehearsal 14 Oct, B3 and S10).
-        <div data-testid="welcome-page" className="page-surface min-h-screen text-nature-950 dark:text-oat-50 p-8 max-[359px]:px-4" style={{
+        <div data-testid="welcome-page" className="page-surface page-wallpaper min-h-screen text-nature-950 dark:text-oat-50 p-8 max-[359px]:px-4" style={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -3043,7 +3043,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         </>
                     )}
                 </div>
-                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4, opacity: 0.8 }}>
+                {/* On the card's own ground: this line now sits over the doodles, and it's the terms. */}
+                <p data-testid="welcome-legal" className="bg-white dark:bg-nature-900 rounded-xl px-3 py-2" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4 }}>
                     <span>{t('BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance.')}</span>{' '}
                     <Sentence
                         text={t('By continuing, you agree to our {terms} and {privacy}.')}

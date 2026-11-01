@@ -230,14 +230,18 @@ html, body, #root {
    seamlessly — an easy mistake to ship unnoticed. Whole numbers only: a fractional tile
    size lands on part-pixels and that is what makes a repeat show seams.
 
-   "Plain background" in Settings adds .plain-background to <html>. */
+   "Plain background" in Settings adds .plain-background to <html>.
+
+   .page-wallpaper is for the welcome page, the one screen that scrolls the document. #root is one viewport tall, so
+   its wallpaper stopped there (Marty, 2 Nov: "the background doodle stops halfway down the page"). This layer grows
+   with the page, from the same corner as #root, so nothing jogs. */
 
 /* Both wallpapered selectors paint from here, ABOVE the @supports blocks below, and neither
    may restate background-image later in the file. The override and this rule have equal
    specificity (.page-overlay is 0,1,0 either way), so whichever is declared last wins: a
    base declaration further down silently reasserts the 1x tile and undoes the hidpi upgrade
    for that selector alone. */
-#root, .page-overlay {
+#root, .page-overlay, .page-wallpaper {
   background-image: var(--pattern-image);
   background-repeat: repeat;
   background-size: 890px 890px;
@@ -251,20 +255,21 @@ html, body, #root {
    an engine that only knows the -webkit- form keeps the plain 1x url above instead of losing
    the wallpaper entirely. Old Chrome and Android WebView are the ones that need this. */
 @supports (background-image: -webkit-image-set(url('/pattern-light.webp') 1x)) {
-  #root, .page-overlay { background-image: var(--pattern-image-hidpi-webkit); }
+  #root, .page-overlay, .page-wallpaper { background-image: var(--pattern-image-hidpi-webkit); }
 }
 @supports (background-image: image-set(url('/pattern-light.webp') 1x)) {
-  #root, .page-overlay { background-image: var(--pattern-image-hidpi); }
+  #root, .page-overlay, .page-wallpaper { background-image: var(--pattern-image-hidpi); }
 }
 
 /* Reduced data: use 1x pattern when the user prefers reduced data or has Save-Data enabled. */
 @media (prefers-reduced-data: reduce) {
-  #root, .page-overlay {
+  #root, .page-overlay, .page-wallpaper {
     background-image: var(--pattern-image) !important;
   }
 }
 :root[data-save-data="true"] #root,
-:root[data-save-data="true"] .page-overlay {
+:root[data-save-data="true"] .page-overlay,
+:root[data-save-data="true"] .page-wallpaper {
   background-image: var(--pattern-image) !important;
 }
 
@@ -324,7 +329,7 @@ html, body, #root {
 :root.dark-theme.plain-background { --page-ground: #1d231d; } /* nature-950, as .page-surface gives */
 
 @media print {
-  #root, .page-overlay { background-image: none; }
+  #root, .page-overlay, .page-wallpaper { background-image: none; }
 }
 
 /* Pulse animation for sync indicator */

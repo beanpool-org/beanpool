@@ -25,7 +25,7 @@ const IDENTITY = { publicKey: PUB, privateKey: bytesToHex(toEd25519Pkcs8(SEED)),
 const identityMock = vi.hoisted(() => ({ loadIdentity: vi.fn() }));
 vi.mock('./identity', () => identityMock);
 
-import { buildSignedWsParams, request, signedFetchWithKey } from './api';
+import { buildSignedWsParams, getMyUnread, request, signedFetchWithKey } from './api';
 import { connectToAnchor, resetSyncForTest } from './sync';
 import { resetCoordinatorForTest } from './sync-coordinator';
 
@@ -94,6 +94,16 @@ describe('a request to the node that served the page is signed for its host', ()
         const { headers } = sent();
         expect(headers['X-Signed-For']).toBe(HERE);
         expect(signedFor(headers, PUB, HERE, 'GET', '/api/messages/conversations', '')).toBe(true);
+    });
+
+    it('the Chat badge\'s read asks for the signer\'s counts, naming no key but the signature\'s', async () => {
+        fetchMock.mockResolvedValue(reply(200, { unread: 3, requests: 1, asOf: '2026-11-01T00:00:00.000Z' }));
+
+        await expect(getMyUnread()).resolves.toEqual({ unread: 3, requests: 1, asOf: '2026-11-01T00:00:00.000Z' });
+
+        const { url, headers } = sent();
+        expect(url).toBe('/api/me/unread');
+        expect(signedFor(headers, PUB, HERE, 'GET', '/api/me/unread', '')).toBe(true);
     });
 });
 

@@ -55,7 +55,8 @@ jobs:
           - { name: server-5, checks: server_suites, server_shard: 5/7 }
           - { name: server-6, checks: server_suites, server_shard: 6/7 }
           - { name: server-7, checks: server_suites, server_shard: 7/7 }
-          - { name: settings-phone, checks: settings_phone, browser: true }
+          - { name: settings-phone-1, checks: settings_phone_width, browser: true }
+          - { name: settings-phone-2, checks: "settings_phone_assistants settings_phone_suggestions settings_phone_fresh_proof settings_phone_in_page_confirm", browser: true }
           - { name: vitest-native-1, checks: test, test_slice: "--only --filter=beanpool-pillar -- --shard=1/2" }
           - { name: vitest-native-2, checks: test, test_slice: "--only --filter=beanpool-pillar -- --shard=2/2" }
           - { name: vitest-pwa-1, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=1/2" }

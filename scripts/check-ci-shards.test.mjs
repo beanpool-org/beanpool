@@ -281,8 +281,8 @@ test('the fetch of origin/main taken away, or a shard losing it, fails', () => {
     assert.match(compareMainProblems(CI.replace('main=+refs/heads/main:refs/remotes/origin/main', 'main=+refs/heads/main:refs/remotes/origin/x')).join('\n'), /does not write refs\/remotes\/origin\/main/);
     assert.match(compareMainProblems(CI.replace('--depth=50 ', '')).join('\n'), /does not fetch a depth/);
     // A check moved into a shard with no fetch.
-    const moved = CI.replace(' migration_steps ', ' ').replace('name: settings-phone, checks: settings_phone', 'name: settings-phone, checks: "settings_phone migration_steps"');
-    assert.match(compareMainProblems(moved).join('\n'), /shard settings-phone runs migration_steps/);
+    const moved = CI.replace(' migration_steps ', ' ').replace('name: settings-phone-1, checks: settings_phone_width', 'name: settings-phone-1, checks: "settings_phone_width migration_steps"');
+    assert.match(compareMainProblems(moved).join('\n'), /shard settings-phone-1 runs migration_steps/);
     // A shard that compares with nothing, paying for the fetch.
     const idle = CI.replace(/^( {10}- \{ name: server-1,.*) \}$/m, '$1, compare_main: true }');
     assert.match(compareMainProblems(idle).join('\n'), /shard server-1 has compare_main but runs nothing/);
@@ -398,7 +398,7 @@ test('each edit the check exists to catch fails it', () => {
     assert.notEqual(dropped, CI);
     assert.match(shardProblems(dropped, TEST_ALL).join('\n'), /secrets_guard is in no shard/);
     // A check in two shards.
-    const twice = CI.replace(/(name: settings-phone, checks: )settings_phone/, '$1"settings_phone lint"');
+    const twice = CI.replace(/(name: settings-phone-1, checks: )settings_phone_width/, '$1"settings_phone_width lint"');
     assert.notEqual(twice, CI);
     assert.match(shardProblems(twice, TEST_ALL).join('\n'), /lint is in 2 shards/);
     // A split check also named whole in another shard.

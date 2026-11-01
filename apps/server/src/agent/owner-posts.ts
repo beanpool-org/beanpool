@@ -1067,6 +1067,13 @@ const MADE_COLUMNS = `id, type, status, active, title, author_pubkey, created_by
 const NOT_MADE_HERE = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
 
 /**
+ * Is this post the owner's own, or an enterprise's they keep now? One test for what update_post may change and my_posts may
+ * read: someone who left an enterprise is no host of its events (the engine's isEventHost), so neither reads their note.
+ */
+const stillTheirs = (grant: AgentGrant, r: Pick<MadeRow, 'author_pubkey' | 'created_by'>): boolean =>
+    r.author_pubkey === grant.member || (r.created_by === grant.member && canOperateTreasury(grant.member, r.author_pubkey));
+
+/**
  * The post `postId` names, when THIS grant made it (created_via) and it is this community's own (not a copy pulled from
  * another), still by the owner or an enterprise they keep now; else why not, in words.
  */
@@ -1075,9 +1082,7 @@ function madePost(grant: AgentGrant, postId: unknown): { ok: true; row: MadeRow 
     const row = db.prepare(`SELECT ${MADE_COLUMNS} FROM posts
         WHERE id = ? AND created_via = ? AND origin_node IS NULL`).get(postId.trim().slice(0, 200), createdViaOf(grant)) as MadeRow | undefined;
     if (!row) return { ok: false, error: NOT_MADE_HERE };
-    if (row.author_pubkey !== grant.member && !(row.created_by === grant.member && canOperateTreasury(grant.member, row.author_pubkey))) {
-        return { ok: false, error: "That post is an enterprise's you no longer keep: its keepers edit or remove it in the app." };
-    }
+    if (!stillTheirs(grant, row)) return { ok: false, error: "That post is an enterprise's you no longer keep: its keepers edit or remove it in the app." };
     return { ok: true, row };
 }
 
@@ -1389,6 +1394,16 @@ function eventFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
     };
 }
 
+/** What update_post can change on any post, read back for one still the owner's (stillTheirs). */
+function editableFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
+    return {
+        // Whole, not a list's preview: an edit replaces all of it.
+        description: fence(boundary, `post ${r.id}, description`, r.description, LISTING_DESCRIPTION_LIMIT.chars),
+        lat: r.lat, lng: r.lng, photoCount: r.photo_count,
+        ...(r.type === 'event' ? eventFieldsOf(r, boundary) : listingFieldsOf(r, boundary)),
+    };
+}
+
 /** my_posts: what THIS grant made, newest first (design §2.2: the undo list). */
 function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: string): ToolResult {
     const status = args.status === 'removed' ? 'removed' : args.status === 'all' ? 'all' : 'live';
@@ -1410,10 +1425,8 @@ function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: str
                 // What an edit replaces: update_post takes the whole new list of either.
                 tags: postTagsOf(r.tags),
                 freeTags: fence(boundary, `post ${r.id}, free tags`, freeTagsOf(r.free_tags).join(', ')),
-                // Whole, not a list's preview: an edit replaces all of it.
-                description: fence(boundary, `post ${r.id}, description`, r.description, LISTING_DESCRIPTION_LIMIT.chars),
-                lat: r.lat, lng: r.lng, photoCount: r.photo_count,
-                ...(r.type === 'event' ? eventFieldsOf(r, boundary) : listingFieldsOf(r, boundary)),
+                // An enterprise's post the owner no longer keeps stays on the undo list and reads nothing more.
+                ...(stillTheirs(grant, r) ? editableFieldsOf(r, boundary) : {}),
             })),
             _notice: MEMBER_TEXT_NOTICE,
         },
@@ -1435,7 +1448,8 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
             + "its link, its library tags, its pin and how many photos, and fenced its title, description and its own tags; a listing's category, price, shop and "
             + "lending terms; an event's start and end, its clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule: what "
-            + 'update_post can change, to read before it edits. The live ones (the default), the removed ones, or all',
+            + 'update_post can change, to read before it edits. An enterprise\'s post you no longer keep lists only its id, kind, status, when, whose it is, its link, title and tags. '
+            + 'The live ones (the default), the removed ones, or all',
         never: "a post made in the app or by another assistant, who is going to an event, another member's data, or a key",
         memberText: true,
         ownerOnly: true,
@@ -1465,7 +1479,8 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
             + `place, tags and photos; on an Offer or a Need its category, price, repeat and cash note; on an Offer its shop and lending; on an event its times, zone, `
             + `place name, online, link, note, who it lets in and repeat. The post keeps its id, so move a pin here, never by removing it and making it again: an event keeps its RSVPs and `
             + `links, and everyone going is told when its time or place moves, as for a host's own edit. A moved pin leaves place_name as it is: send it too when the `
-            + `place itself changed. A pin moved into another time zone keeps the moment, so its clock changes: the answer says it, and start_at sets it. Only the fields sent change; a field its kind does not take is refused in words. At most ${AGENT_EDITS_PER_DAY} edits a day; any `
+            + `place itself changed. A pin moved into another time zone takes that zone: a one-off keeps the moment, so its clock changes, and a repeating event keeps its clock with its repeat `
+            + `rule, as a host's own edit does, so the moment changes. The answer says the clock, and start_at sets it. Only the fields sent change; a field its kind does not take is refused in words. At most ${AGENT_EDITS_PER_DAY} edits a day; any `
             + `other post is refused; ${TAGS_WORDS}; tags or free_tags sent is the whole new list of that kind, left out it stays; my_posts reads what it holds now`,
         never: "anything but the post's id, its link and the place and time it now holds, or another member's data; it never moves Beans",
         ownerOnly: true,

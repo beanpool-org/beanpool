@@ -8,11 +8,11 @@
  *   2. A listing moves: the pin rounded as a create's, the id kept; found by distance at the new place and no longer at the old.
  *   3. A place the rules refuse: out of range, half a pin, null, nothing written.
  *   4. An event moves: the same id, its RSVPs and its reminder marks; UPDATED, a push to those going, the socket; the community's
- *      places follow; a title edit stays silent.
+ *      places follow; a title edit stays silent; a repeating event moved into another zone keeps its clock with its rule.
  *   5. An event's times, zone, end, repeat, online, link, note and who it lets in, each with the engine's own refusals.
  *   6. A listing's terms, shop and lending, each with its refusals.
  *   7. A field on the wrong kind is refused in words, never dropped.
- *   8. Someone else's post, and a grant not ticked "May post for me".
+ *   8. Someone else's post, a grant not ticked "May post for me", and what my_posts reads of an enterprise no longer kept.
  *   9. A copy: pulled from another community, refused; a member's copy, held to the times and a rounded pin.
  *  10. A live deal holds the price and lets the place move; a paused, a removed, a cancelled and an ended post are refused.
  *  11. The search fields follow, created_via stands, and the day's edits are the most: nothing past them is written.
@@ -41,6 +41,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { setMemberArea } from './engine/member-area.js';
 import { EVENT_UPDATED_PUSH_TITLE, PRICE_FROZEN_ERROR } from './engine/posts.js';
+import { rollDueSeries } from './engine/event-series-roll.js';
 import { openShop } from './engine/shops.js';
 import { toldPush } from './push-notice-test-harness.js';
 import { db } from './db/db.js';
@@ -244,6 +245,32 @@ async function main(): Promise<void> {
         assert(!across.isError && row(acrossId)?.event_tz === 'Australia/Perth' && row(acrossId)?.event_start_at === startedAt && row(acrossId)?.event_start_local !== clockBefore
             && structured(across)?.timezone === 'Australia/Perth' && structured(across)?.startsLocal === row(acrossId)?.event_start_local,
             `a pin moved into another zone keeps the moment, and the answer says the clock it now shows (${errorText(across) || `${clockBefore} → ${structured(across)?.startsLocal}`})`);
+        // A repeating event's clock is its rule's, so it stays with the rule, as in a person's edit: Brisbane to Perth.
+        // At a set hour, 11:00 in Brisbane: from a start late in the evening, the moment kept two hours east below lands on the next day, off the rule.
+        const weeklyStart = `${inDays(5).slice(0, 10)}T01:00:00.000Z`;
+        const weeklyId = await made('create_event', event('Moved a long way, every week', { start_at: weeklyStart, end_at: new Date(Date.parse(weeklyStart) + 2 * 3_600_000).toISOString() }));
+        const weekday = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][new Date(`${row(weeklyId)?.event_start_local}:00Z`).getUTCDay()];
+        await edit({ post_id: weeklyId, repeat: { freq: 'weekly', byDay: weekday } });
+        rsvpEvent(weeklyId, mia.pub, 'going');
+        const weeklyBefore = row(weeklyId);
+        const ruleOf = (id: string) => JSON.parse(row(id)?.event_repeat ?? '{}') as { time?: string };
+        const weeklyAcross = await edit({ post_id: weeklyId, lat: -31.95, lng: 115.86 });
+        const weeklyAfter = row(weeklyId);
+        assert(!weeklyAcross.isError && weeklyAfter?.event_tz === 'Australia/Perth' && weeklyAfter?.event_start_local === weeklyBefore?.event_start_local
+            && ruleOf(weeklyId).time === weeklyBefore?.event_start_local.slice(11) && weeklyAfter?.event_start_at !== weeklyBefore?.event_start_at,
+            `a repeating event moved into another zone keeps its clock and its rule, another moment (${errorText(weeklyAcross) || `${weeklyBefore?.event_start_local} → ${weeklyAfter?.event_start_local}, rule ${ruleOf(weeklyId).time}`})`);
+        assert(structured(weeklyAcross)?.startsLocal === weeklyBefore?.event_start_local && structured(weeklyAcross)?.timezone === 'Australia/Perth',
+            `and the answer says the clock it kept (${JSON.stringify(structured(weeklyAcross)?.startsLocal)})`);
+        const miaDate = (db.prepare('SELECT occurrence_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(weeklyId, mia.pub) as any)?.occurrence_at;
+        assert(miaDate === weeklyAfter?.event_start_at, `the RSVP goes with it (${miaDate})`);
+        rollDueSeries(undefined, Date.parse(weeklyAfter?.event_end_at) + 1000);
+        const weekLater = new Date(Date.parse(`${weeklyBefore?.event_start_local}:00Z`) + 7 * DAY).toISOString().slice(0, 16);
+        assert(row(weeklyId)?.event_start_local === weekLater, `the roll takes the next week, never the same date again (${row(weeklyId)?.event_start_local}, wanted ${weekLater})`);
+        const weeklyMoment = row(weeklyId)?.event_start_at as string;
+        const momentKept = await edit({ post_id: weeklyId, lat: -27.47, lng: 153.03, start_at: weeklyMoment });
+        const weeklyKept = row(weeklyId);
+        assert(!momentKept.isError && weeklyKept?.event_tz === 'Australia/Brisbane' && weeklyKept?.event_start_at === weeklyMoment && ruleOf(weeklyId).time === weeklyKept?.event_start_local.slice(11),
+            `start_at sent with the pin keeps the moment, and the rule goes to the new clock (${errorText(momentKept) || `${weeklyKept?.event_start_local}, rule ${ruleOf(weeklyId).time}`})`);
         const named = await edit({ post_id: eventId, place_name: 'The new hall' });
         assert(!named.isError && row(eventId)?.event_place_name === 'The new hall' && row(eventId)?.event_state === 'updated', `a new place name moves it too (${errorText(named) || row(eventId)?.event_state})`);
 
@@ -432,8 +459,24 @@ async function main(): Promise<void> {
             const r = await edit({ post_id: id, lat: -30, lng: 150 });
             assert(r.isError === true && errorText(r) === notMine && row(id)?.lat === -28.55, `${label} post → refused in words, its pin unchanged (${errorText(r).slice(0, 50)})`);
         }
+        const myPost = async (id: string) => { breathe(); return (structured(await a.callTool({ name: 'my_posts', arguments: { status: 'all', limit: 100 } }))?.posts as any[]).find((p) => p.postId === id); };
+        await edit({ post_id: asBakeryEvent, private_note: 'Bakery gate 1111' });
+        const stillKept = await myPost(asBakeryEvent);
+        assert(/Bakery gate 1111/.test(fenced(stillKept?.privateNote)) && /The bakery/.test(fenced(stillKept?.placeName)) && stillKept?.lat === -28.71, `a keeper reads an enterprise's event whole (${Object.keys(stillKept ?? {}).length} fields)`);
         db.prepare('DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').run(bakery, owner.pub);
         clearEnterpriseFloorCache(db);
+        // Another keeper sets a new note and a new join link after the owner left: the engine reads them to the hosts and the people going, and to nobody else.
+        db.prepare('UPDATE posts SET event_private_note = ?, event_online = 1, event_link = ?, event_place_name = NULL WHERE id = ?').run('NEW gate code 9876, set after Olive left', 'https://meet.example/set-after-olive-left', asBakeryEvent);
+        const readByFormer = await myPost(asBakeryEvent);
+        const UNDO_LIST = ['postId', 'kind', 'status', 'createdAt', 'by', 'link', 'title', 'tags', 'freeTags'];
+        assert(!/9876|set-after-olive-left|Bakery gate/.test(JSON.stringify(readByFormer)) && readByFormer?.privateNote === undefined && readByFormer?.joinLink === undefined,
+            `my_posts gives a former keeper no note and no join link, as the engine does not (${JSON.stringify(readByFormer).slice(0, 160)})`);
+        assert(JSON.stringify(Object.keys(readByFormer ?? {})) === JSON.stringify(UNDO_LIST), `an event of an enterprise no longer kept reads the undo list and nothing added to it (${Object.keys(readByFormer ?? {}).join(', ')})`);
+        const listingOfFormer = await myPost(asBakery);
+        assert(JSON.stringify(Object.keys(listingOfFormer ?? {})) === JSON.stringify(UNDO_LIST), `its listing the same: no description, pin, price, shop or lending (${Object.keys(listingOfFormer ?? {}).join(', ')})`);
+        assert((await myPost(offerId))?.lendable === true && (await myPost(offerId))?.category === 'tools', 'the owner\'s own post still reads whole');
+        const sameRule = await edit({ post_id: asBakeryEvent, private_note: 'mine' });
+        assert(sameRule.isError === true && /no longer keep/.test(errorText(sameRule)), `update_post refuses the same post, one rule for the two (${errorText(sameRule)})`);
         const noLonger = await edit({ post_id: asBakery, lat: -30, lng: 150 });
         assert(noLonger.isError === true && /no longer keep/.test(errorText(noLonger)) && row(asBakery)?.lat === -28.7, `an enterprise the owner no longer keeps → refused (${errorText(noLonger)})`);
         const notTicked = await reader.callTool({ name: 'update_post', arguments: { post_id: offerId, lat: -30, lng: 150 } });

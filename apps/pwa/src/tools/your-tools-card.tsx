@@ -120,7 +120,7 @@ export function YourToolsCard({
                                 <button
                                     type="button"
                                     onClick={() => onNavigate('tool', toolTarget(tool.id))}
-                                    aria-label={`${name} · ${stateText}`}
+                                    aria-label={t('{tool} · {state}', { tool: name, state: stateText })}
                                     data-testid={`home-tool-open-${tool.id}`}
                                     className="flex-1 min-w-0 flex items-center gap-3 text-left bg-transparent border-0 cursor-pointer p-0 text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
                                 >

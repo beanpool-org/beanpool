@@ -117,7 +117,7 @@ export function YourToolsBody({
                                         gap: 12,
                                     }, pressed && { opacity: 0.7 }]}
                                     accessibilityRole="button"
-                                    accessibilityLabel={`${name}, ${stateText}`}
+                                    accessibilityLabel={t('{tool}, {state}', { tool: name, state: stateText })}
                                     testID={`home-tool-open-${tool.manifest.id}`}
                                 >
                                     <Text style={{ fontSize: 22 }}>{tool.manifest.icon}</Text>

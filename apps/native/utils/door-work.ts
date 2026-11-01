@@ -25,6 +25,11 @@
  * The phone times its own first part: the time per try, from at least {@link ESTIMATE_MIN_TRIES} tries, times the tries
  * a whole solve takes on average at that level. That is what the busy-level sentence says ({@link busyLevelSentence}).
  *
+ * ## The person check on a busy day (utils/door-check.ts)
+ *
+ * The node may answer the work route `check_required` instead of handing out work: no phone spends any on a join the door
+ * would refuse. {@link workPastCheck} takes the check at the tap that needs it and asks again with its token.
+ *
  * ## Never a hard gate
  *
  * A phone that can't run the solver (no native hash) is told so in a sentence, with the sign-in door beside it
@@ -43,6 +48,7 @@ import {
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { readWordsDoorAnswer, retryAfterSeconds, DOOR_MESSAGES, JOIN_TIMEOUT_MS, type DoorAnswer } from './global-join';
+import type { AskDoorCheck, DoorCheck } from './door-check';
 
 export const DOOR_WORK_PATH = '/api/join/work';
 
@@ -75,6 +81,8 @@ export const DOOR_WORK_MESSAGES = {
     solverUnavailable: 'This phone can\'t finish setting up a 12-words account right now. Try again, or sign in.',
     /** Under the joining spinner while the work finishes. */
     settingUp: 'Setting up your account…',
+    /** Under the 12-words button when the door has asked for the person check: said before the tap that opens it. */
+    checkFirst: 'Lots of people are joining right now, so this way starts with a quick check from Cloudflare. Or sign in to join now.',
 } as const;
 
 /** `expo-crypto`'s native SHA-256 (one call over the whole buffer). Read when called, never at import. */
@@ -137,14 +145,14 @@ export function readIssuedWork(body: unknown): IssuedDoorWork | 'none' | null {
  * and every refusal is a {@link DoorAnswer} the screens already know how to say.
  */
 export async function fetchDoorWork(
-    url: string, identity: BeanPoolIdentity, door: DoorWorkDoor, options: { timeoutMs?: number; now?: () => number } = {},
+    url: string, identity: BeanPoolIdentity, door: DoorWorkDoor, options: { timeoutMs?: number; now?: () => number; turnstile?: string } = {},
 ): Promise<DoorWorkFetch> {
     const now = options.now ?? Date.now;
     let res: Response | null;
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), options.timeoutMs ?? JOIN_TIMEOUT_MS);
     try {
-        res = await signedPost(url, DOOR_WORK_PATH, { door }, identity, stop.signal);
+        res = await signedPost(url, DOOR_WORK_PATH, options.turnstile ? { door, turnstile: options.turnstile } : { door }, identity, stop.signal);
     } catch {
         res = null;
     } finally {
@@ -254,6 +262,8 @@ export interface DoorWorkRun {
     renew(): boolean;
     /** The node refused the work it was sent (`work_*`): a new challenge, solved, quietly. Never rejects. */
     again(): Promise<DoorWorkOutcome>;
+    /** Back from the person check: a new challenge asked for with its token, and solved. Never rejects. */
+    checked(token: string): Promise<DoorWorkOutcome>;
     /** Stop: nothing more is fetched or hashed. */
     cancel(): void;
 }
@@ -317,14 +327,14 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
         }, wait);
     };
 
-    function begin(): Promise<DoorWorkOutcome> {
+    function begin(turnstile?: string): Promise<DoorWorkOutcome> {
         const gen = ++generation;
         roundExpiresAt = null;
         roundSettled = false;
         refusal = null;
         set(gen, { phase: 'fetching', level: null, partsDone: 0, estimateMs: null, startedAt: null, answer: undefined });
         const r = (async (): Promise<DoorWorkOutcome> => {
-            const fetched = await fetchWork(o.url, o.identity, o.door);
+            const fetched = await (turnstile ? fetchWork(o.url, o.identity, o.door, { turnstile }) : fetchWork(o.url, o.identity, o.door));
             if (cancelled) return { kind: 'cancelled' };
             if (fetched.kind === 'none') {
                 set(gen, { phase: 'none' });
@@ -432,6 +442,11 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
             begin();
             return solution();
         },
+        async checked(token) {
+            if (cancelled) return { kind: 'cancelled' };
+            begin(token);
+            return solution();
+        },
         cancel() {
             cancelled = true;
             generation++;
@@ -450,7 +465,7 @@ const LEFT = Symbol('left');
  * it works again; the work itself keeps running in the run (the hook's), for a member who comes back to it.
  * PR #1452 deciding review, finding 2.
  */
-export async function solutionUnlessLeft(run: DoorWorkRun, signal: AbortSignal): Promise<DoorWorkOutcome> {
+export async function solutionUnlessLeft(run: DoorWorkRun, signal: AbortSignal, turnstile?: string): Promise<DoorWorkOutcome> {
     if (signal.aborted) return { kind: 'cancelled' };
     let onAbort: (() => void) | null = null;
     const left = new Promise<typeof LEFT>((resolve) => {
@@ -458,11 +473,28 @@ export async function solutionUnlessLeft(run: DoorWorkRun, signal: AbortSignal):
         signal.addEventListener('abort', onAbort);
     });
     try {
-        const outcome = await Promise.race([run.solution(), left]);
+        const outcome = await Promise.race([turnstile ? run.checked(turnstile) : run.solution(), left]);
         return outcome === LEFT ? { kind: 'cancelled' } : outcome;
     } finally {
         if (onAbort) signal.removeEventListener('abort', onAbort);
     }
+}
+
+/**
+ * Take the person check, then the work its token brings. Closed by the member: `cancelled`, and they stay where they were.
+ * One that wouldn't load or pass is a sentence, with the sign-in door beside it, and is never a dead end.
+ */
+export async function passDoorCheck(run: DoorWorkRun, check: DoorCheck, signal: AbortSignal, ask: AskDoorCheck): Promise<DoorWorkOutcome> {
+    const result = await ask(check, run.publicKey);
+    if (signal.aborted || result.kind === 'closed') return { kind: 'cancelled' };
+    if (result.kind === 'failed') return { kind: 'refused', answer: { kind: 'try_again', message: DOOR_MESSAGES.checkWontLoad } };
+    return solutionUnlessLeft(run, signal, result.token);
+}
+
+/** The run's work for a join, past the person check when the door asks for one first. */
+export async function workPastCheck(run: DoorWorkRun, signal: AbortSignal, ask: AskDoorCheck): Promise<DoorWorkOutcome> {
+    const outcome = await solutionUnlessLeft(run, signal);
+    return outcome.kind === 'refused' && outcome.answer.kind === 'check' ? passDoorCheck(run, outcome.answer.check, signal, ask) : outcome;
 }
 
 /** "about 15 seconds", "about 2 minutes": an estimate, never more precise than it is. */
@@ -481,7 +513,8 @@ export function aboutHowLong(ms: number): string {
  * of the first part, with the sign-in door beside it. Null below the busy level, and before the first part is timed.
  * Never a refusal.
  */
-export function busyLevelSentence(state: Pick<DoorWorkState, 'level' | 'estimateMs' | 'startedAt' | 'phase'>, now: number = Date.now()): string | null {
+export function busyLevelSentence(state: Pick<DoorWorkState, 'level' | 'estimateMs' | 'startedAt' | 'phase' | 'answer'>, now: number = Date.now()): string | null {
+    if (state.phase === 'refused' && state.answer?.kind === 'check') return DOOR_WORK_MESSAGES.checkFirst;
     if (state.level === null || state.level < BUSY_LEVEL || state.estimateMs === null) return null;
     if (state.phase !== 'solving' && state.phase !== 'ready') return null;
     const left = state.phase === 'ready' ? 0 : Math.max(0, state.estimateMs - (now - (state.startedAt ?? now)));

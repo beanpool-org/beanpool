@@ -38,6 +38,7 @@
  *   shareOutside refused on while the private preview is on (it shows visitors nothing). Set off, every link a member
  *               shared outside stops at once (engine/peek-tickets.ts stopAllPeekTickets), in the same transaction: set on
  *               again, none of them opens anything.
+ *   doorCheck   only where the open door is set (400 otherwise); no lock.
  *   dmRequests, decisions, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail, sharePhone,
  *   shareHealth: no lock.
  *   recoveryCopies  'vault' | 'server' | 'none' (config/recovery-copies.ts, vault rethink VR2): no lock. Only where new
@@ -91,7 +92,7 @@ const bad = (setting: string | undefined, message: string, code = 'bad_setting')
 
 /** Each a profile switch's override, in the shape's name. The 12-words door is `ssoRequiredForJoin` the other way up. */
 const SWITCH_OF = {
-    knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', shareOutside: 'shareOutside', listed: 'publishToDirectory',
+    doorCheck: 'doorCheck', knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', shareOutside: 'shareOutside', listed: 'publishToDirectory',
     probation: 'probation', autoHide: 'autoHideReports', autoMute: 'autoMute',
 } as const satisfies Record<string, ProfileSwitch>;
 type SwitchSetting = keyof typeof SWITCH_OF;
@@ -105,7 +106,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 
 /** Checked and written in this order, so a request with two refusals is always refused for the same one. */
 const SETTINGS_IN_ORDER = [
-    'join', 'wordsDoor', 'knocks', 'beans', 'knownFloor', 'dmRequests', 'decisions', 'shareOutside', 'listed',
+    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'dmRequests', 'decisions', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
     'recoveryCopies',
 ] as const;
@@ -121,7 +122,8 @@ const NOT_CHANGED_HERE: Record<string, string> = {
 
 /** The settings' names, for the owners' alert and the server's log (design §8.1). */
 const SETTING_NAMES: Record<ShapeSettingName, string> = {
-    join: 'Who can join', wordsDoor: '12 words at the open door', knocks: 'Requests to join', beans: 'Beans',
+    join: 'Who can join', wordsDoor: '12 words at the open door',
+    doorCheck: 'A person check on busy days', knocks: 'Requests to join', beans: 'Beans',
     knownFloor: 'Known floor for confirmed members', dmRequests: 'First message from someone new',
     decisions: 'Community votes (Decisions)', shareOutside: 'Members may share listings outside the community',
     listed: 'Listed in the BeanPool directory',
@@ -295,6 +297,17 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
             if (S.wordsDoor!.lock) refuse('wordsDoor', S.wordsDoor!.lock);
             planned.push({ setting: 'wordsDoor', from: onOff(S.wordsDoor!.configured), to: onOff(v) });
             switches.push(['ssoRequiredForJoin', !v]);
+        }
+    }
+
+    // The person check on busy days: only where the open door is set; no lock, and members are not told (the sentence
+    // they would read is on the door, for those who meet it).
+    if (asked.doorCheck !== undefined) {
+        const v = boolOf('doorCheck', asked.doorCheck);
+        if (!S.doorCheck) bad('doorCheck', 'A person check is only for a community whose door is open (the global kind).', 'not_changeable');
+        if (v !== S.doorCheck!.configured) {
+            planned.push({ setting: 'doorCheck', from: onOff(S.doorCheck!.configured), to: onOff(v) });
+            switches.push(['doorCheck', v]);
         }
     }
 

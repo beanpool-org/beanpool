@@ -51,6 +51,14 @@
  *
  * A words join can land only while its challenge is good (ten minutes from when the node issued it, which is before
  * the join went), as a sign-in join can only while its nonce is: so SENT_JOIN_CAN_LAND_MS holds for both.
+ *
+ * ## The person check on a busy day (apps/server/src/services/door-check.ts)
+ *
+ * When the node asks for one (429 `check_required`, with its page and site key) a 12-words join LEAVES THE PAGE, as a
+ * sign-in does: Turnstile is a third party's script, and this origin holds the seed, so it never runs here and this
+ * page's policy does not change. `doorCheckUrl` is the hop to the check's own origin (apps/door-check), which comes back
+ * to `/app/auth/check` with the token or what went wrong in the fragment, read as a provider's return is. The token goes
+ * to the work route, and the node is the check that decides.
  */
 
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -85,6 +93,8 @@ export const MAX_JOIN_CALLSIGN = 20;
 
 /** Where the provider sends the browser back: this web app's own origin, so the pending join is there to meet it. */
 export const RETURN_PATH_PREFIX = '/app/auth/';
+/** The person check's return: `/app/auth/check`. */
+const CHECK_RETURN = 'check';
 
 export function returnUri(origin: string, provider: JoinProvider): string {
     return `${origin}${RETURN_PATH_PREFIX}${provider}`;
@@ -171,6 +181,8 @@ export interface AuthReturn {
     idToken: string | null;
     error: string | null;
     errorDescription: string | null;
+    /** The person check's return (`/app/auth/check`), and not a provider's: its token, or null when it didn't pass. */
+    check?: { token: string | null; error: string | null };
 }
 
 /** The answer in a return URL, from its fragment only, or null when this is not a return URL. */
@@ -188,6 +200,7 @@ export function readAuthReturn(pathname: string, hash: string): AuthReturn | nul
         idToken: field('id_token'),
         error: field('error'),
         errorDescription: field('error_description'),
+        ...(named === CHECK_RETURN ? { check: { token: field('token'), error: field('error') } } : {}),
     };
 }
 
@@ -434,10 +447,31 @@ export function wordsJoinBody(callsign: string, work: DoorWorkSolution): Record<
     return { door: 'words', callsign, work: { challenge: work.challenge, counters: work.counters } };
 }
 
+/** Where the node's person check is, as it says (`turnstile` in its `check_required` answer). */
+export interface DoorCheck {
+    siteKey: string;
+    page: string;
+}
+
+/** The check in a `check_required` answer, or null when it names none this page can go to. */
+export function readDoorCheck(body: Record<string, any>): DoorCheck | null {
+    const { siteKey, page } = body.turnstile ?? {};
+    return body.code === 'check_required' && typeof siteKey === 'string' && siteKey && typeof page === 'string' && page.startsWith('https://')
+        ? { siteKey, page }
+        : null;
+}
+
+/** The hop to the check's own origin. Everything goes in the fragment, so none of it is in a request line. */
+export function doorCheckUrl(check: DoorCheck, publicKey: string, origin: string, theme: 'light' | 'dark'): string {
+    return `${check.page}#${query([['sitekey', check.siteKey], ['cdata', publicKey.slice(0, 32)], ['return', origin], ['theme', theme]])}`;
+}
+
 /** The node's answer to `POST /api/join/work`. */
 export type DoorWorkAnswer =
     /** A challenge to solve. */
     | { kind: 'work'; work: DoorWorkChallenge }
+    /** The door is busy: this key needs the person check first, and no work was handed out. */
+    | { kind: 'check'; check: DoorCheck }
     /** None is needed (a sign-in at ordinary rates, or a node from before the work). */
     | { kind: 'none' }
     /** Refused (a network's ceiling, the 12-words door shut here, …): `answer` says why. */
@@ -445,12 +479,15 @@ export type DoorWorkAnswer =
 
 /**
  * Ask the node for work for `which` door, signed by the joining key. A node from before the work (no such route: a 404
- * without the door's own code) needs none. Throws DoorUnreachableError when there is no answer.
+ * without the door's own code) needs none. `token`: the person check's, back from its page. Throws
+ * DoorUnreachableError when there is no answer.
  */
-export async function requestDoorWork(identity: BeanPoolIdentity, which: DoorWorkDoor, now: () => number = Date.now): Promise<DoorWorkAnswer> {
-    const answer = await door('POST', '/api/join/work', { door: which }, identity);
+export async function requestDoorWork(identity: BeanPoolIdentity, which: DoorWorkDoor, now: () => number = Date.now, token?: string): Promise<DoorWorkAnswer> {
+    const answer = await door('POST', '/api/join/work', token ? { door: which, turnstile: token } : { door: which }, identity);
     const b = answer.body;
     if (answer.status === 404 && b.code !== 'invite_only') return { kind: 'none' };
+    const check = readDoorCheck(b);
+    if (check) return { kind: 'check', check };
     if (answer.status !== 200) return { kind: 'refused', answer };
     if (b.work === null) return { kind: 'none' };
     const w = b.work;
@@ -550,6 +587,8 @@ export type DoorOutcome =
     | { kind: 'already_joined'; message: string }
     | { kind: 'expired'; message: string }
     | { kind: 'rate_limited'; message: string }
+    /** The door got busy after the work was asked for: the person check, then the join again. */
+    | { kind: 'check'; check: DoorCheck }
     /** The work was refused: the page fetches new work and sends again, once, before it says anything. */
     | { kind: 'work'; code: DoorWorkRefusal; message: string }
     /** The node takes no 12-words joins now (its operator turned that door off): the sign-in is the way in. */
@@ -609,6 +648,8 @@ export function doorOutcome(answer: DoorAnswer, provider: JoinProvider | null): 
     if (status === 403 && body.code === 'sign_in_required') return { kind: 'sign_in_required', message: said ?? SIGN_IN_REQUIRED };
     if (status === 403 && body.code === 'private_preview') return { kind: 'door_closed', message: said ?? PRIVATE_PREVIEW_MESSAGE };
     if (status === 401 && provider) return { kind: 'expired', message: EXPIRED };
+    const check = readDoorCheck(body);
+    if (check) return { kind: 'check', check };
     if (status === 429) {
         const sentence = body.code === 'network_busy' && said ? said : said && !/^Too many attempts/.test(said) ? said : TOO_MANY;
         return { kind: 'rate_limited', message: withRetryAfter(sentence, answer.retryAfterSeconds) };

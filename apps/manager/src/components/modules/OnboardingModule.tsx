@@ -74,6 +74,7 @@ const OPEN_DOOR_REFUSALS: Record<string, string> = {
     work_invalid: "Setting up didn't check out",
     work_expired: 'Setting up took over ten minutes',
     work_spent: 'Setting up was used twice',
+    check_required: 'A busy day: no person check where one was needed (the sign-in way stayed open)',
     sign_in: 'Sign-in not accepted',
     sign_in_unavailable: "Couldn't reach the sign-in provider",
     join_failed: "The join couldn't be saved",

@@ -115,9 +115,9 @@ export function cardLanguage(ctx: Pick<Koa.Context, 'query' | 'get'>): Lang | nu
     return null;
 }
 
-const RTL: ReadonlySet<string> = new Set(['ar', 'fa', 'ur']);
+export const RTL: ReadonlySet<string> = new Set(['ar', 'fa', 'ur']);
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
@@ -138,7 +138,7 @@ const GROUNDS = {
 } as const;
 
 /** The page's colours: the brand roles it uses, from core's one library (brand-colours.ts), in each theme. */
-function cardStyle(): string {
+export function cardStyle(): string {
     const roles = ['--bp-commit-fill', '--bp-commit-hover', '--bp-commit-on', '--bp-ink-brand', '--bp-ink-accent', '--bp-ink-info', '--bp-chip-ok-tint', '--bp-chip-ok-ink'];
     const vars = (theme: 'light' | 'dark') => {
         const map = brandCssVariableMap(theme);

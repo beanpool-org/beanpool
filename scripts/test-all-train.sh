@@ -2,6 +2,10 @@
 # test-all-train.sh — tests up to four cleared PRs in ONE full local run and merges them in order (Fable's test-throughput
 # design S2; Marty, 31 Oct 2026: "let's go with all of Fable's recommendations").
 #
+# NOT the way to main any more (Marty, 1 Nov 2026: "drop the Mac and go GH"; docs/merge-gate.md). Once the merge queue's ruleset
+# is applied, its `gh pr merge --admin` is refused and it ends with exit 3: use --no-merge. Cleared PRs go by
+# scripts/merge-queue/board.sh, which still reads MONEY_PATHS and MONEY_LINE below, from main.
+#
 #   bash scripts/test-all-train.sh <PR> [<PR>…] [--no-merge] [--keep] [--shadow]
 #
 # Makes a scratch worktree at origin/main and merges each PR head into it in the order given. A conflict only in word
@@ -58,7 +62,7 @@ CATALOG_RE='^(apps|packages)/[^/]+/words/[^/]+\.json$'
 # the schema, the treasury routes, and the two scripts that guard conservation. A file too central to list whole (db.ts,
 # state-engine.ts, decisions-engine.ts, engine/sync.ts, engine/key-move.ts, engine/audit.ts: 5 of 9 PRs rode alone on 1 Nov
 # 2026, a words-only one for touching decisions-engine.ts) counts by its changed lines instead: a line there, or anywhere, that
-# calls conservingTransaction or writes a balance. Keep this on one line, in this form: board.sh reads it with sed.
+# calls conservingTransaction or writes a balance. Keep this and MONEY_LINE on one line, in this form: board.sh reads them with sed.
 MONEY_PATHS='^(packages/beanpool-core/src/ledger|apps/server/src/(federation-settlement-exchange|srv20-ledger-reset)\.ts$|apps/server/src/engine/(escrow|money-requests|unfunded-pledges|stranded-pledges|names-debts)\.ts$|apps/server/src/db/schema\.sql$|apps/server/src/routes/treasury|scripts/(check-balance-writes|audit-conservation)\.mjs$)'
 # The changed-line rule, for git diff -G, which reads one line at a time and so has to name each shape a write takes in this code:
 # a call to conservingTransaction; SET … balance =, wherever the UPDATE is (a line of its own, or ON CONFLICT … DO UPDATE); a line

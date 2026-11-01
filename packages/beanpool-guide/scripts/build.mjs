@@ -214,6 +214,12 @@ export function findBase() {
     }
     const head = git('rev-parse', 'HEAD');
     if (!head) return { ref: null, why: 'this is not a git checkout' };
+    // A merge queue entry is main, then one squash commit for each PR ahead, then this PR's: its first parent is what it lands on.
+    // Main under them all would read the PRs ahead as this one: a publish ahead of a page edit as one change doing both.
+    if (process.env.GITHUB_EVENT_NAME === 'merge_group') {
+        const landsOn = git('rev-parse', '--verify', '--quiet', 'HEAD^1');
+        if (landsOn) return { ref: landsOn, why: 'what this merge queue entry lands on' };
+    }
     const hasOriginMain = git('rev-parse', '--verify', '--quiet', 'origin/main^{commit}') !== null;
     const forked = hasOriginMain ? git('merge-base', 'HEAD', 'origin/main') : null;
     if (forked && forked !== head) return { ref: forked, why: 'where this branch left origin/main' };

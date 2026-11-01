@@ -101,19 +101,18 @@ gh api repos/beanpool-org/beanpool/commits/<SHA>/check-runs \
   --jq '.check_runs[] | "\(.name): \(.conclusion // .status)"'  # must be success
 ```
 
-Then:
+Then, through the merge queue (`docs/merge-gate.md`):
 
 ```bash
-gh pr merge <PR> --squash --admin
+bash scripts/merge-queue/board.sh <PR>@<SHA>
 ```
 
-`--admin` is required: `main` has rulesets (review + code-owner + copilot + test-all) that a
-self-authored PR cannot satisfy. Do **not** pass `--delete-branch` — branches may be checked out
-in another agent's worktree.
+`--admin` is refused: there is no bypass on `main`. The board waits until the PR has landed. Do **not**
+delete the branch afterwards — branches may be checked out in another agent's worktree.
 
-**Merge one at a time, not as a batch.** Simultaneous merges race the ghcr `:latest` tag and the
-last build to *finish* wins, so a deploy can silently ship an older commit. After merging, confirm
-which build actually won:
+**Landings can come close together.** The queue lands one PR at a time, but two can land seconds apart,
+and the last build to *finish* wins, so a deploy can silently ship an older commit. After merging,
+confirm which build actually won:
 
 ```bash
 gh run list --branch main --limit 4 \

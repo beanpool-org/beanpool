@@ -1,10 +1,11 @@
 #!/bin/bash
 # test-all.sh — BeanPool automated check runner with concurrency capping & scope auto-detection.
 #
-# `bash scripts/test-all.sh --all` is the gate before anything merges to main (Marty, 2026-09-30): it runs every
-# check with no diff-scoping, and a run that passes every check on a clean, committed tree appends a record to
-# <git common dir>/test-all-green that scripts/test-all-merge-check.sh reads. scripts/test-all-pr.sh runs it on a PR
-# merged with current main.
+# GitHub is the merge gate (Marty, 1 Nov 2026; docs/merge-gate.md): .github/workflows/ci.yml runs this script's checks,
+# split across shards, on a PR and on its merge queue entry. On a Mac, for a lane or scripts/merge-queue/tripwire.sh, it
+# decides no merge. `bash scripts/test-all.sh --all` runs every check with no diff-scoping, and a run that passes every
+# check on a clean, committed tree appends a record to <git common dir>/test-all-green that
+# scripts/test-all-merge-check.sh reads. scripts/test-all-pr.sh runs it on a PR merged with current main.
 
 set -o pipefail
 
@@ -396,7 +397,7 @@ run_check "deploy_package" bash scripts/test-deploy-package.sh
 # instant, and it is the only check here that tests this script rather than the product.
 run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 
-# The merge gate rests on this script's green record, scripts/test-all-merge-check.sh and scripts/test-all-pr.sh, and
+# A Mac's run rests on this script's green record, scripts/test-all-merge-check.sh and scripts/test-all-pr.sh, and
 # on check-deps-installed.mjs telling a stale install from broken code. This runs all four against a throwaway
 # repository with a stub `gh` (no GitHub, no network). A few seconds.
 run_check "merge_gate" bash scripts/test-merge-gate.sh
@@ -428,8 +429,10 @@ run_check "directory_register" bash scripts/test-directory-register.sh
 # Every GitHub workflow pins its actions to a full commit SHA, says what its token may do, and gates the job that moves
 # the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
 # the repository's workflows and each edit the check exists to catch. check-ci-shards.test.mjs: every check here runs in
-# exactly one of CI's shards (.github/workflows/ci.yml) and the required check's name is on the aggregate job alone. Instant.
-run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs
+# exactly one of CI's shards (.github/workflows/ci.yml), the required check's name is on the aggregate job alone, and the
+# merge queue's ruleset and trigger are what the gate rests on. scripts/merge-queue: the board, requeue, tripwire and self-test
+# against a stand-in gh and a throwaway origin; selftest.test.mjs is the test the self-test's throwaway PRs make fail. Seconds.
+run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs scripts/merge-queue/merge-queue.test.mjs scripts/merge-queue/selftest.test.mjs
 
 # No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.
@@ -679,7 +682,7 @@ fi
 # Cleanup
 [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 
-# The merge gate's record (scripts/test-all-lib.sh): only an --all run, not --fast or narrowed by TEST_ALL_ONLY, in which
+# The local record (scripts/test-all-lib.sh): only an --all run, not --fast or narrowed by TEST_ALL_ONLY, in which
 # every check ran and passed.
 if [ $FAIL -eq 0 ] && [ $ALL_REQUESTED -eq 1 ] && [ $FAST -eq 0 ] && [ -z "$TEST_ALL_ONLY" ] && [ ${#SKIPPED_NAMES[@]} -eq 0 ]; then
   echo ""
@@ -687,4 +690,11 @@ if [ $FAIL -eq 0 ] && [ $ALL_REQUESTED -eq 1 ] && [ $FAST -eq 0 ] && [ -z "$TEST
 fi
 
 # Exit with failure if anything failed
-[ $FAIL -eq 0 ]
+[ $FAIL -eq 0 ] || exit 1
+
+# On GitHub a skip is a failure: GitHub is the gate, a shard's exit is all the required check reads, and a check that
+# compared nothing has proved nothing. Off GitHub a skip already costs the run its green record, above.
+if [ -n "${GITHUB_ACTIONS:-}" ] && [ ${#SKIPPED_NAMES[@]} -gt 0 ]; then
+  echo "❌ Skipped on GitHub, which is the merge gate: ${SKIPPED_NAMES[*]}. A check that compared nothing is not a pass."
+  exit 1
+fi

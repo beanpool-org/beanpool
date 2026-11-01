@@ -448,6 +448,56 @@ test("in CI's checkout of a pull request — its merge commit, two commits deep,
     }
 });
 
+test('a merge queue entry is compared with what it lands on: a publish ahead of a page edit is not one change doing both', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        openPr(cwd, 'first', c => editPage(c, 'content/ledger/gifts.md', 'Words waiting for their publish.'));
+        assert.deepEqual(mergeOnMain(cwd, 'first'), []);
+        const main = git(cwd, 'rev-parse', 'origin/main');
+        // The director's publish of those words, and a page edit, each a branch off main.
+        git(cwd, 'checkout', '-q', '-b', 'publish', main);
+        assert.equal(build(cwd, '--publish').status, 0);
+        git(cwd, 'add', '-A');
+        git(cwd, 'commit', '-q', '-m', 'publish');
+        openPr(cwd, 'pages', c => editPage(c, 'content/ledger/gifts.md', 'Words a later PR adds.'));
+
+        // The queue's branch: a squash commit on main for each PR, the one ahead first, and CI's checkout of it with origin/main fetched.
+        const queued = (n, ...branches) => {
+            git(cwd, 'checkout', '-q', '--detach', main);
+            for (const b of branches) { git(cwd, 'merge', '-q', '--squash', b); git(cwd, 'commit', '-q', '-m', `squash ${b}`); }
+            git(cwd, 'push', '-q', 'origin', `HEAD:refs/heads/gh-readonly-queue/main/pr-${n}-abc`);
+            const tip = git(cwd, 'rev-parse', 'HEAD');
+            git(cwd, 'checkout', '-q', 'main');
+            const dir = fs.mkdtempSync(path.join(repo.root, 'queue-'));
+            git(dir, 'init', '-q');
+            git(dir, 'remote', 'add', 'origin', `file://${path.join(repo.root, 'origin.git')}`);
+            git(dir, 'fetch', '-q', '--no-tags', '--depth=2', 'origin', `+refs/heads/gh-readonly-queue/main/pr-${n}-abc:refs/remotes/queue`);
+            git(dir, 'checkout', '-q', '--detach', 'refs/remotes/queue');
+            // As ci.yml's "Fetch origin/main": both ends 50 deep, the head by its sha (by a ref that is up to date, nothing deepens).
+            git(path.join(repo.root, 'origin.git'), 'config', 'uploadpack.allowAnySHA1InWant', 'true');
+            git(dir, 'fetch', '-q', '--no-tags', '--depth=50', 'origin', '+refs/heads/main:refs/remotes/origin/main', tip);
+            assert.equal(git(dir, 'merge-base', 'HEAD', 'origin/main'), main, 'the step gives a merge base: main under every entry');
+            return { dir, parent: git(dir, 'rev-parse', 'HEAD^1') };
+        };
+
+        const behindPublish = queued(2, 'publish', 'pages');
+        const ok = ciCheck(behindPublish.dir, 'merge_group');
+        assert.equal(ok.status, 0, said(ok));
+        assert.match(ok.stdout, new RegExp(`checked against ${behindPublish.parent.slice(0, 10)}`));
+        const asIfOneChange = ciCheck(behindPublish.dir, 'pull_request');
+        assert.equal(asIfOneChange.status, 1, 'compared with main under both, the two PRs read as one change');
+        assert.match(asIfOneChange.stderr, /AND publishes them/);
+
+        // The other way round the publish is stale: its text is not the pages' now. That red is right: publish again.
+        const staleBehindPages = ciCheck(queued(3, 'pages', 'publish').dir, 'merge_group');
+        assert.equal(staleBehindPages.status, 1, said(staleBehindPages));
+        assert.match(staleBehindPages.stderr, /is not the text of the pages/);
+    } finally {
+        repo.cleanup();
+    }
+});
+
 test('a branch whose tip merged origin/main, checked out with no origin/main outside a pull request (a workflow_dispatch run): versions not compared, never blamed for main\'s publish', () => {
     const repo = makeRepo();
     try {

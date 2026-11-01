@@ -3672,5 +3672,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "വോട്ട് ചെയ്യാൻ കഴിയുന്ന അംഗങ്ങൾ വളരെ കുറവായിരുന്നപ്പോൾ ഒരു ഉടമ തീരുമാനിച്ചു, പക്ഷേ ഇപ്പോൾ ആവശ്യത്തിന് അംഗങ്ങൾക്ക് വോട്ട് ചെയ്യാം, അതിനാൽ ഈ വോട്ടെടുപ്പ് തീരുമാനിക്കും. കാരണം: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "വോട്ട് ചെയ്യാൻ കഴിയുന്ന അംഗങ്ങൾ വളരെ കുറവായിരുന്നപ്പോൾ ഒരു ഉടമ തീരുമാനിച്ചു, പക്ഷേ ഇപ്പോൾ ആവശ്യത്തിന് അംഗങ്ങൾക്ക് വോട്ട് ചെയ്യാം, അതിനാൽ ഈ വോട്ടെടുപ്പ് തീരുമാനിക്കും.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "വോട്ട് ചെയ്യാൻ കഴിയുന്ന അംഗങ്ങൾ വളരെ കുറവാണ്, അതിനാൽ കൂടുതൽ പേർ വോട്ട് ചെയ്തില്ലെങ്കിൽ, ഈ വോട്ടെടുപ്പ് അവസാനിക്കുമ്പോൾ {name} തിരിച്ചെത്തും.",
-  "Not executed: a reinstatement vote cancelled it": "നടപ്പിലാക്കിയില്ല: പുനഃസ്ഥാപിക്കാനുള്ള ഒരു വോട്ടെടുപ്പ് ഇത് റദ്ദാക്കി"
+  "Not executed: a reinstatement vote cancelled it": "നടപ്പിലാക്കിയില്ല: പുനഃസ്ഥാപിക്കാനുള്ള ഒരു വോട്ടെടുപ്പ് ഇത് റദ്ദാക്കി",
+  "Not sure what to charge? View the Community Pricing Guide": "എത്ര തുക നൽകണമെന്ന് ഉറപ്പില്ലേ? കമ്മ്യൂണിറ്റി വിലനിർണ്ണയ ഗൈഡ് കാണുക"
 }

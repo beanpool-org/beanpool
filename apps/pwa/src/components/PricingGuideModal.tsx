@@ -223,7 +223,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pricing-guide-title"
@@ -440,7 +440,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                 {/* Report Feedback Modal */}
                 {reportingItem && (
                     <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                        className="fixed inset-0 z-[1110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="report-modal-title"

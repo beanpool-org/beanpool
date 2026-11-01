@@ -26,8 +26,9 @@ import {
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
-    editedTagsOver, postTagsOf, searchTagsFor, storedPostTags, tagIndex,
+    editedTagsOver, postTagsOf, searchTagsFor, storedPostTags, tagIndex, normalizeCategory,
 } from '@beanpool/core';
+import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -122,6 +123,7 @@ interface Props {
      */
     onSaveSearch?: (settings: HomeSearchSettings) => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
+    onComposer?: (draft: ComposerDraft) => void;
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
     onRefreshTransactions?: () => void;
@@ -306,7 +308,7 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -4339,9 +4341,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 isOpen={showPricingGuide}
                 onClose={() => setShowPricingGuide(false)}
                 reporterPubkey={identity?.publicKey}
-                onSelectOfferItem={() => {
+                onSelectOfferItem={(item, effectivePrice) => {
                     setShowPricingGuide(false);
-                    onNavigate?.('map-post');
+                    const draft: ComposerDraft = {
+                        type: 'offer',
+                        title: item.name,
+                        description: item.description,
+                        category: normalizeCategory(item.category),
+                        credits: effectivePrice,
+                        priceType: 'fixed',
+                        repeatable: false,
+                        cashAlsoNeeded: false,
+                    };
+                    if (onComposer) {
+                        onComposer(draft);
+                    } else {
+                        onNavigate?.('map-post');
+                    }
                 }}
             />
 

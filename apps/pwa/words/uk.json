@@ -3930,5 +3930,6 @@
   "An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}": "Власник вирішив, коли голосувати могли надто мало членів спільноти, але тепер їх достатньо, тож вирішує це голосування. Причина: {reason}",
   "An owner decided when too few members could vote, but enough can now, so this vote decides.": "Власник вирішив, коли голосувати могли надто мало членів спільноти, але тепер їх достатньо, тож вирішує це голосування.",
   "Too few members can vote, so unless more of them vote, {name} is back when this vote closes.": "Проголосувати можуть надто мало членів спільноти, тож, якщо більше ніхто не проголосує, {name} повернеться, коли це голосування закриється.",
-  "Not executed: a reinstatement vote cancelled it": "Не виконано: скасовано голосуванням про поновлення"
+  "Not executed: a reinstatement vote cancelled it": "Не виконано: скасовано голосуванням про поновлення",
+  "Not sure what to charge? View the Community Pricing Guide": "Не впевнені, яку ціну вказати? Перегляньте довідник цін спільноти"
 }

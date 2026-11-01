@@ -48,19 +48,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: server-1, checks: server_suites, server_shard: 1/6 }
-          - { name: server-2, checks: server_suites, server_shard: 2/6 }
-          - { name: server-3, checks: server_suites, server_shard: 3/6 }
-          - { name: server-4, checks: server_suites, server_shard: 4/6 }
-          - { name: server-5, checks: server_suites, server_shard: 5/6 }
-          - { name: server-6, checks: server_suites, server_shard: 6/6 }
-          - { name: settings-phone, checks: settings_phone, browser: true }
+          - { name: server-1, checks: server_suites, server_shard: 1/7 }
+          - { name: server-2, checks: server_suites, server_shard: 2/7 }
+          - { name: server-3, checks: server_suites, server_shard: 3/7 }
+          - { name: server-4, checks: server_suites, server_shard: 4/7 }
+          - { name: server-5, checks: server_suites, server_shard: 5/7 }
+          - { name: server-6, checks: server_suites, server_shard: 6/7 }
+          - { name: server-7, checks: server_suites, server_shard: 7/7 }
+          - { name: settings-phone-1, checks: settings_phone_width, browser: true }
+          - { name: settings-phone-2, checks: "settings_phone_assistants settings_phone_suggestions settings_phone_fresh_proof settings_phone_in_page_confirm", browser: true }
           - { name: vitest-native-1, checks: test, test_slice: "--only --filter=beanpool-pillar -- --shard=1/2" }
           - { name: vitest-native-2, checks: test, test_slice: "--only --filter=beanpool-pillar -- --shard=2/2" }
           - { name: vitest-pwa-1, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=1/2" }
           - { name: vitest-pwa-2, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=2/2" }
           - { name: vitest-rest, checks: test, test_slice: "--filter=!beanpool-pillar --filter=!@beanpool/pwa", expect: true, compare_main: true }
-          - { name: web-pages, checks: "pwa_dark_classes pwa_wide_pages native_phone_width website_colours website_contrast website_status website_android website_start website_lang", browser: true }
+          - { name: web-pwa, checks: "pwa_dark_classes pwa_wide_pages native_phone_width", browser: true }
+          - { name: web-pages-1, checks: "website_colours website_contrast_light website_status website_android website_start", browser: true }
+          - { name: web-pages-2, checks: "website_contrast_dark website_lang", browser: true }
           - { name: checks, checks: "build lint typecheck native_dark_contrast suite_registration tool_budgets deploy_preserve deploy_no_fleet_secrets deploy_health deploy_package fail_summary merge_gate undeclared_imports balance_writes migration_steps directory_register workflows no_google_fonts website_global_link website_links setup_backup token_scripts reddit_inbox words secrets_guard", compare_main: true }
 
     steps:

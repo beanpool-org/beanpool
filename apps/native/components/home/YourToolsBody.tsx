@@ -24,6 +24,8 @@ interface Props {
     allTools?: readonly PhoneTool[];
 }
 
+const DEFAULT_TOOLS: readonly PhoneTool[] = phoneTools();
+
 export function YourToolsBody({
     tools,
     owner,
@@ -31,7 +33,7 @@ export function YourToolsBody({
     now,
     onOpenTool = openTool,
     onChangeTools,
-    allTools = phoneTools(),
+    allTools = DEFAULT_TOOLS,
 }: Props) {
     const s = homeStyles(colors);
 

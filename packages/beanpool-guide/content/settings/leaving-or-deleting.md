@@ -43,7 +43,7 @@ This cannot be undone, even with your 12 words.
 - If an admin had confirmed you and you owe Beans, the admins' names list keeps a note of what you owed for 3 years, and nobody can be confirmed against that entry until it is settled. See "What the admins can see".
 - Your profile becomes "Deleted Member".
 - Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as "Deleted post".
-- Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and project and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see "What stays a while" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.
+- Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and project and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, a message someone reported, or a backup of the server made before you deleted (see "What stays a while" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.
 - If you replied to the case on a vote on removing you, your reply is deleted, whether the vote is still open or has closed. The vote and its case stay.
 - Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.
 - A poll you asked is closed. It keeps its question and its votes.
@@ -56,8 +56,9 @@ If you run your community's server and you are its only owner, you cannot delete
 
 ### What stays a while
 
-Your community's server deletes all of the above at once. It also takes your name and key out of its log. Some copies hold on for a while:
+Your community's server deletes all of the above at once, apart from a message someone reported. It also takes your name and key out of its log. Some copies hold on for a while:
 
+- **A message someone reported.** If someone reported a direct message of yours, the report keeps it: the message still sealed, its signature, and the words as they read it. It stays with the report after your account has gone, and a report isn't deleted on a timer.
 - **A standby.** If your community has a standby copy of its server, the standby deletes them at its next copy.
 - **Snapshots.** The server keeps a copy of itself from each day, to undo a mistake. Each copy still holds your account as it was until the copy is deleted. That is after a week with the usual settings, and never more than 14 days.
 - **Backups.** A backup that an owner of the server downloaded before you deleted keeps everything until they delete it. The server can't reach it.

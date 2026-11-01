@@ -590,8 +590,8 @@ export function CommunityShapeSection({
                             id="dmRequests"
                             icon="💬"
                             name={t('First message from someone new')}
-                            summary={t('On: it waits under Requests until the person accepts.')}
-                            displayValue={settings.dmRequests.value ? t('Waits under Requests') : t('Arrives straight away')}
+                            summary={t('On: it waits under Message requests until the person accepts.')}
+                            displayValue={settings.dmRequests.value ? t('Waits under Message requests') : t('Arrives straight away')}
                             lock={settings.dmRequests.lock}
                             isOwner={isOwner && !standby}
                             isOpen={openSetting === 'dmRequests'}
@@ -605,7 +605,7 @@ export function CommunityShapeSection({
                                         onChange={(e) => setDraftValue(e.target.checked)}
                                         className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
                                     />
-                                    <span>{t('Hold first message under Requests')}</span>
+                                    <span>{t('Hold first message under Message requests')}</span>
                                 </label>
                                 <RowControls
                                     onSave={() => handleSave('dmRequests')}

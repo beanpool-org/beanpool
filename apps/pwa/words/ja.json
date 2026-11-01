@@ -2682,7 +2682,6 @@
   "What you take on": "運営者の役割",
   "Reports from your members come to you. The data folder is yours to back up, with a recovery code. Keep two owners, and keep the server on and up to date.": "メンバーからの通報が届きます。データフォルダは復元コードを使って自身でバックアップします。オーナーは2人体制にし、サーバーを常時稼働させて最新に保ってください。",
   "What you never see": "閲覧できないもの",
-  "Your members' direct messages.": "メンバー間のダイレクトメッセージ。",
   "About half an hour if you can follow a recipe: paste one block of commands, then run beanpool claim on the server and scan its code with your phone to become the owner.": "手順通りに進めれば約30分で完了します。一連のコマンドを貼り付けて実行し、サーバー上で「beanpool claim」を実行して表示されたコードをスマートフォンでスキャンすればオーナーになれます。",
   "The setup chapter: the first start and claiming it with your phone": "セットアップ手順：初回起動とスマートフォンによる所有権の申請",
   "Same as device": "端末の設定に合わせる",

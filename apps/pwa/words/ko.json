@@ -2386,7 +2386,6 @@
   "What you take on": "운영자가 맡는 역할",
   "Reports from your members come to you. The data folder is yours to back up, with a recovery code. Keep two owners, and keep the server on and up to date.": "멤버들의 신고가 운영자에게 전달돼요. 복구 코드를 사용해 데이터 폴더를 백업하고, 두 명의 소유자를 지정하며, 서버를 켜두고 최신 상태로 유지하세요.",
   "What you never see": "운영자가 볼 수 없는 정보",
-  "Your members' direct messages.": "멤버 간의 1:1 메시지.",
   "About half an hour if you can follow a recipe: paste one block of commands, then run beanpool claim on the server and scan its code with your phone to become the owner.": "설명서대로 따라 하면 약 30분이면 돼요. 명령어 한 단락을 붙여넣은 뒤 서버에서 beanpool claim을 실행하고 휴대폰으로 코드를 스캔하면 소유자가 됩니다.",
   "The setup chapter: the first start and claiming it with your phone": "설치 챕터: 첫 시작 및 휴대폰으로 소유권 등록하기",
   "Same as device": "기기 설정과 동일",

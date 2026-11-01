@@ -42,6 +42,7 @@ import { parseToolTarget, type OpenTool } from './tools/route';
 import type { ComposerDraft } from './tools/builder';
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
+import { onConversationRead } from './lib/conversation-read';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
@@ -361,6 +362,7 @@ export function App() {
     const myTransactionsRef = useRef<MarketplaceTransaction[]>([]);
     useLayoutEffect(() => { myTransactionsRef.current = myTransactions; }, [myTransactions]);
     useEffect(() => registerLivePostTie(openDealTie(() => myTransactionsRef.current)), []);
+    const refreshAfterReadRef = useRef<() => Promise<void>>(() => Promise.resolve());
     const [marketClickCount, setMarketClickCount] = useState(0);
     // null until the node has answered the membership check. The Market, Commons and Map pages wait for it
     // before asking for the viewer's balance, so a guest never sends that request; everything else reads
@@ -803,11 +805,41 @@ export function App() {
             return pollUnread();
         });
 
+        // After a conversation's unread lines are marked read on the server:
+        // App's count refreshes immediately. Must read after the mark has landed (the event only fires
+        // once the mark has landed), bypasses the 2s cooldown, and if a poll is currently in-flight,
+        // awaits it and runs a fresh poll so the count does not stay stale.
+        let refreshQueued = false;
+        const refreshAfterRead = async (): Promise<void> => {
+            if (cancelled) return;
+            if (pollPromise) {
+                if (refreshQueued) return;
+                refreshQueued = true;
+                try {
+                    await pollPromise;
+                } catch {
+                    /* in-flight poll failure is handled by pollUnread */
+                }
+                refreshQueued = false;
+                if (cancelled) return;
+                return refreshAfterRead();
+            }
+            return pollUnread();
+        };
+        refreshAfterReadRef.current = refreshAfterRead;
+
+        const unsubRead = onConversationRead(() => {
+            if (cancelled) return;
+            void refreshAfterRead();
+        });
+
         return () => {
             cancelled = true;
+            refreshAfterReadRef.current = () => Promise.resolve();
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
+            unsubRead();
         };
     }, [identity]);
 
@@ -1188,7 +1220,16 @@ export function App() {
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                 />
                             )}
-                            {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'messages' && (
+                                <MessagesPage
+                                    identity={identity}
+                                    openConversationId={openConversationId}
+                                    onConversationOpened={() => setOpenConversationId(null)}
+                                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                    onConversationRead={() => { void refreshAfterReadRef.current(); }}
+                                />
+                            )}
                             {activeTab === 'people' && (
                                 <PeoplePage
                                     identity={identity}

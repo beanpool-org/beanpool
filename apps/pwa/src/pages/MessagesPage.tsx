@@ -52,6 +52,7 @@ import { ChatDealStrip } from '../components/ChatDealStrip';
 import { ChatMenuModal } from '../components/ChatMenuModal';
 import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute';
 import { EventChat } from '../components/EventChat';
+import { notifyConversationRead } from '../lib/conversation-read';
 import { FoldedChatText } from '../components/FoldedChatText';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
@@ -129,6 +130,8 @@ interface Props {
     onNavigate?: (tab: string, contextId?: string, txId?: string) => void;
     /** A person's profile: a request's sender, from their card or the chat's header in request mode. */
     onOpenProfile?: (pubkey: string) => void;
+    /** Called when an open conversation's unread lines have been marked read on the server. */
+    onConversationRead?: (conversationId: string) => void;
 }
 
 // ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
@@ -255,7 +258,7 @@ function ChatPhotoShown({ uri, failed, onOpen }: { uri: string | null; failed: b
     );
 }
 
-export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile }: Props) {
+export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile, onConversationRead }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
     // null where the community has requests off (its list has no `requests`).
@@ -300,6 +303,30 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const peerRead = activeConv.peerLastReadAt ? new Date(activeConv.peerLastReadAt).getTime() : -Infinity;
         awaitingPeerReadRef.current = ownNewest > peerRead;
     }, [messages, activeConv?.type, activeConv?.peerLastReadAt, identity?.publicKey]);
+    const markingReadRef = useRef<Set<string>>(new Set());
+    const markReadIfNeeded = async (convId: string, initialUnread?: number) => {
+        if (!identity?.publicKey) return;
+        const row = conversationsRef.current.find(c => c.id === convId);
+        const unread = Math.max(
+            initialUnread ?? 0,
+            row?.unreadCount ?? 0,
+            (activeConvRef.current?.id === convId ? activeConvRef.current.unreadCount : 0) ?? 0,
+        );
+        if (unread <= 0) return;
+        if (markingReadRef.current.has(convId)) return;
+        markingReadRef.current.add(convId);
+        try {
+            await markConversationReadApi(identity.publicKey, convId);
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
+            setActiveConv(prev => (prev && prev.id === convId ? { ...prev, unreadCount: 0 } : prev));
+            onConversationRead?.(convId);
+            notifyConversationRead(convId);
+        } catch {
+            // offline: the next poll tries again
+        } finally {
+            markingReadRef.current.delete(convId);
+        }
+    };
     // Keys handed to members who lack them, once per group per page (GroupKeyring.serveMissing).
     const servedMissingRef = useRef<Set<string>>(new Set());
     const [draft, setDraft] = useState('');
@@ -590,10 +617,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // The initial load happens in startPolling() below; calling it here as well fired two
             // concurrent loads (and two decrypt passes) for the same conversation on open, which
             // could land out of order and overwrite the newer result with the older one.
-            // Mark conversation as read when opened and clear unread count immediately
-            markConversationReadApi(identity.publicKey, activeConv.id).then(() => {
-                setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, unreadCount: 0 } : c));
-            }).catch(() => {});
+            // Mark conversation as read when opened (only if it showed unread) and refresh App's count
+            void markReadIfNeeded(activeConv.id, activeConv.unreadCount);
             // Check for prefilled draft from sessionStorage (e.g. Archetype synergy chat nudge)
             const prefill = consumeChatPrefill(activeConv.id, activeConv.participants);
             if (prefill) {
@@ -722,6 +747,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 return true;
             }).map((c: Conversation) => {
                 if (activeConvIdRef.current && c.id === activeConvIdRef.current) {
+                    if ((c.unreadCount ?? 0) > 0) {
+                        void markReadIfNeeded(c.id, c.unreadCount);
+                    }
                     return { ...c, unreadCount: 0 };
                 }
                 return c;
@@ -883,8 +911,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         setGroupChat({ id: convId, answer, error, nodeSaysLocked, seenLocked, thread, roster });
         setChatMute(prev => chatMuteFromAnswer(answer, prev));
         if (answer) {
-            markConversationReadApi(identity.publicKey, convId).catch(() => {});
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
+            await markReadIfNeeded(convId, answer.conversation?.unreadCount);
         }
         if (nodeSaysLocked && !servedMissingRef.current.has(convId)) {
             servedMissingRef.current.add(convId);
@@ -917,8 +944,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setMessages(uniqueMessages);
             setLoadedDmId(convId);
             if (identity?.publicKey) {
-                markConversationReadApi(identity.publicKey, convId).catch(() => {});
-                setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
+                await markReadIfNeeded(convId, result.conversation?.unreadCount);
             }
             // A DM stays a DM: one seen as one here, or whose lines are encrypted (lib/dm-guard.ts).
             const locked = result.conversation ? await lockedGroupsOrNull(identity.publicKey) : null;
@@ -934,6 +960,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     return {
                         ...prev,
                         ...heldConv,
+                        unreadCount: 0,
                         request: requestAfterRead(prev.request, heldConv),
                         peerLastReadAt: isDm
                             ? (peerCursor?.lastReadAt ?? (heldConv as any).peerLastReadAt ?? prev.peerLastReadAt)

@@ -1130,6 +1130,8 @@ CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(upd
 -- (stamped by a set, a radius change, a notice and a re-key), with a `place_watches` tombstone keyed by `id` for each
 -- removal, so a server that takes over has every watch and each member's quiet day. Carried in file and sealed
 -- backups. Goes with the member on a prune or a self-deletion, and moves with them on a re-key.
+-- `would_help`: they also said "I'd help start one here" (the place circle, engine/place-circles.ts). The one fact a
+-- circle adds to a watch: no name, no town, no second place.
 CREATE TABLE IF NOT EXISTS place_watches (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL REFERENCES members(public_key),
@@ -1139,9 +1141,12 @@ CREATE TABLE IF NOT EXISTS place_watches (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_notified_at TEXT,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    would_help INTEGER NOT NULL DEFAULT 0 CHECK (would_help IN (0, 1)),
     UNIQUE (pubkey, lat, lng)
 );
 CREATE INDEX IF NOT EXISTS idx_place_watches_updated_at ON place_watches(updated_at);
+-- The public count near a point reads a box of cells (engine/place-circles.ts waitingNear).
+CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 
 -- 14f. "Ask to join" (G6, design §3.3, engine/knocks.ts): a stranger's request to join this community, which any
 -- member may answer with an invite.
@@ -2475,7 +2480,18 @@ CREATE TABLE IF NOT EXISTS groups (
     lead_pubkey TEXT REFERENCES members(public_key),
     join_policy TEXT NOT NULL DEFAULT 'open' CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- A place circle (engine/place-circles.ts): the node made this group for people waiting near one place. NULL on every
+    -- other group. `place_cell` is the circle's 0.1° cell, "lat,lng", which no response or push carries.
+    kind TEXT CHECK (kind IS NULL OR kind = 'circle'),
+    place_cell TEXT,
+    -- When a listed community retired the circle, and which (its key in directory_cache, so the card reads its name as
+    -- the directory has it now). The circle's chat stays CIRCLE_CHAT_KEEP_MS after, then it closes (group_closures).
+    circle_done_at TEXT,
+    circle_community_key TEXT,
+    -- Who said "I'm starting one here", and when they last did.
+    circle_starter TEXT REFERENCES members(public_key),
+    circle_starting_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_groups_updated_at ON groups(updated_at);
 CREATE INDEX IF NOT EXISTS idx_groups_slug ON groups(slug);

@@ -13,10 +13,16 @@
  *          card needs in one request (session-cost-baselines). → { point, communities, communityCount, nearbyPosts,
  *          watches, knock, directoryFetchedAt }. Its communities' shuffle is the reader's own until the mirror next
  *          writes the cache (cardOrder), so the Home screen's tag holds.
+ *   GET    /api/global/demand?lat&lng                         public. How many people are waiting around a point, and how
+ *          many would help start a community (engine/place-circles.ts waitingNear: a fixed tile, nothing below 3).
+ *          → { waiting, helping }
  *   GET    /api/global/watches                                a member's own watches. → { watches, limit }
- *   POST   /api/global/watches  { lat, lng, radiusKm? }       set one (the 0.1° cell; the same cell again: its radius;
- *                                                            radiusKm left out or null: the default)
+ *   POST   /api/global/watches  { lat, lng, radiusKm?, wouldHelp? }   set one (the 0.1° cell; the same cell again: its
+ *                                                            radius; radiusKm left out or null: the default). wouldHelp,
+ *                                                            "I'd help start one here": sent with no radius, it keeps the
+ *                                                            watch's own
  *   DELETE /api/global/watches/:id                            remove one's own
+ *   POST   /api/global/circles/:id/starting  { starting }     "I'm starting one here", by someone in the circle. → { circle }
  *
  * Every route is 404 `feature_off` unless the profile switch `directoryMirror` is on (the global profile's default),
  * before any handler runs (routes/profile-feature-gate.ts): nothing here exists on a local community.
@@ -33,7 +39,7 @@
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { ONE_PASS_MAX_MEASURED } from '@beanpool/engine';
-import { getPosts, isNodeMember } from '../state-engine.js';
+import { broadcast, dispatchPushNotification, getPosts, isNodeMember } from '../state-engine.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { viewerTier } from './viewer.js';
@@ -43,8 +49,9 @@ import { listCommunities, listedCommunityCount, readMirrorStatus } from '../engi
 import {
     listPlaceWatches, setPlaceWatch, removePlaceWatch, PlaceWatchLimitError, placeWatchLimit, PLACE_WATCH_RADIUS_KM,
 } from '../engine/place-watches.js';
+import { CircleError, circleOfMember, setCircleStarting, tellCircle, waitingNear } from '../engine/place-circles.js';
 import type { RouteDeps } from './types.js';
-import { askHost, word } from '@beanpool/core';
+import { askHost, word, type CircleCard, type CircleDemand } from '@beanpool/core';
 
 const MAX_QUERY_CHARS = 80;
 const DEFAULT_LIMIT = 20;
@@ -140,6 +147,10 @@ export interface LandingCard {
     watches: ReturnType<typeof listPlaceWatches> | null;
     knock: null;
     directoryFetchedAt: string | null;
+    /** How many are waiting around the point (nothing below 3, never who or where); null with no point. */
+    demand: CircleDemand | null;
+    /** The reader's own place circle, on a member's read; null with none. */
+    circle: (CircleCard & { id: string }) | null;
 }
 
 /**
@@ -198,6 +209,8 @@ export function landingCardFor(actor: string | undefined, asked: Point | null, g
         watches: member ? listPlaceWatches(actor!) : null,
         knock: openKnockFor(actor),
         directoryFetchedAt: status.fetchedAt,
+        demand: point ? waitingNear(point) : null,
+        circle: member ? circleOfMember(actor!) : null,
     };
 }
 
@@ -250,6 +263,15 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         ctx.body = landingCardFor(ctx.state.actor as string | undefined, asked.value, viewerTier(ctx) === 'guest');
     });
 
+    router.get('/api/global/demand', async (ctx) => {
+        const point = parsePoint(ctx.query);
+        if (!point.ok) return badRequest(ctx, point.error);
+        if (!point.value) return badRequest(ctx, 'Send lat and lng: the place to count around.');
+        // The same for every reader: an edge in front may keep it for a minute (guest-cache.ts, slice L0).
+        setReadCaching(ctx, true);
+        ctx.body = waitingNear(point.value);
+    });
+
     router.get('/api/global/watches', async (ctx) => {
         const actor = watcher(ctx);
         if (!actor) return;
@@ -260,18 +282,19 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
     router.post('/api/global/watches', async (ctx) => {
         const actor = watcher(ctx);
         if (!actor) return;
-        const { lat, lng, radiusKm } = (ctx as any).requestBody || {};
+        const { lat, lng, radiusKm, wouldHelp } = (ctx as any).requestBody || {};
         if (!isPoint(lat, lng)) {
             return badRequest(ctx, 'Send lat (-90 to 90) and lng (-180 to 180) as numbers: the place to watch.');
         }
+        if (wouldHelp !== undefined && typeof wouldHelp !== 'boolean') return badRequest(ctx, 'wouldHelp must be true or false.');
         const { min, max } = PLACE_WATCH_RADIUS_KM;
-        // Left out or null: the default.
-        const radius = radiusKm ?? PLACE_WATCH_RADIUS_KM.default;
-        if (typeof radius !== 'number' || !Number.isFinite(radius) || radius < min || radius > max) {
+        // Left out or null: the default. With wouldHelp and no radius, the watch keeps the radius it has.
+        const radius = radiusKm ?? (wouldHelp === undefined ? PLACE_WATCH_RADIUS_KM.default : undefined);
+        if (radius !== undefined && (typeof radius !== 'number' || !Number.isFinite(radius) || radius < min || radius > max)) {
             return badRequest(ctx, `radiusKm must be a number from ${min} to ${max}, or left out for ${PLACE_WATCH_RADIUS_KM.default}.`);
         }
         try {
-            const r = setPlaceWatch(actor, { lat, lng }, Math.round(radius));
+            const r = setPlaceWatch(actor, { lat, lng }, radius === undefined ? undefined : Math.round(radius), wouldHelp);
             ctx.set('Cache-Control', 'private, no-store');
             ctx.body = { success: true, watch: r.watch, created: r.created };
         } catch (e) {
@@ -293,6 +316,27 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
             return;
         }
         ctx.body = { success: true };
+    });
+
+    router.post('/api/global/circles/:id/starting', async (ctx) => {
+        const actor = watcher(ctx);
+        if (!actor) return;
+        const { starting } = (ctx as any).requestBody || {};
+        if (typeof starting !== 'boolean') return badRequest(ctx, 'starting must be true or false.');
+        try {
+            const { card, tell } = setCircleStarting(String(ctx.params.id), actor, starting);
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = { success: true, circle: card };
+            // After the answer: its push is the same whoever is in the circle.
+            if (tell.length > 0) setImmediate(() => tellCircle({ broadcast, dispatchPushNotification }, String(ctx.params.id), tell));
+        } catch (e) {
+            if (e instanceof CircleError) {
+                ctx.status = e.status;
+                ctx.body = { error: e.message };
+                return;
+            }
+            throw e;
+        }
     });
 
     return router;

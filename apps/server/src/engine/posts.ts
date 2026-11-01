@@ -16,6 +16,7 @@ import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './pos
 import { photoRefusalError, photosRefusal } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
+import { CIRCLE_CLOSED_BY } from './place-circles.js';
 import { zoneOfPin } from './event-zone.js';
 import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT, rollDueSeries } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
@@ -447,6 +448,7 @@ function placelessListingArea(authorPublicKey: string): { lat: number; lng: numb
 
 /** What a closed group answers a new post (state-engine GROUP_CLOSED is its chat's and its door's words). */
 export const GROUP_CLOSED_TO_POSTS = 'This group was closed by a vote of its members. It takes no new posts.';
+export const PLACE_CIRCLE_CLOSED_TO_POSTS = word('This circle has finished. It takes no new posts.');
 
 /** Closes every active poll past its closing time, so it no longer counts against the active-poll limits. */
 function sweepExpiredPolls(): void {
@@ -601,9 +603,9 @@ export function createPost(
             throw new Error(unauthorized(word('Must be an active convenor or member to post to a group')));
         }
         // A group its members closed by a vote takes no new post: offers, needs, polls and events (close_group, §2.3).
-        if (db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(options.targetGroupId)) {
-            throw new Error(GROUP_CLOSED_TO_POSTS);
-        }
+        // A place circle closes by itself, and no vote closed it.
+        const closure = db.prepare('SELECT decision_id FROM group_closures WHERE group_id = ?').get(options.targetGroupId) as { decision_id: string } | undefined;
+        if (closure) throw new Error(closure.decision_id === CIRCLE_CLOSED_BY ? PLACE_CIRCLE_CLOSED_TO_POSTS : GROUP_CLOSED_TO_POSTS);
     } else if (audienceScope === 'direct') {
         if (!options?.targetPubkey && !options?.assignedTo) {
             throw new Error('targetPubkey or assignedTo is required when audienceScope is direct');

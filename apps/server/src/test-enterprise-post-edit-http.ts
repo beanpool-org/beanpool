@@ -18,6 +18,8 @@
  *     keeper (403 moderation_muted), a keeper of a closed enterprise (403); a group's or a direct post the enterprise
  *     wrote stays its author's alone (404). Nothing changes on any of them.
  *  6. The web's edit (the web sends `photos` as a list every time) works the same.
+ *  7. Both create doors carry the tags a keeper typed, beside the library's, and refuse in words what no listing may carry
+ *     (DESIGN-tags-free-entry-fable.md §2, F2).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-post-edit-http.ts
  */
@@ -79,8 +81,8 @@ async function signedFetch(method: 'POST' | 'GET', path: string, body: unknown, 
     return { status: res.status, body: json, error: json?.error as string | undefined, res };
 }
 
-const rowOf = (id: string) => db.prepare('SELECT title, description, author_pubkey, created_by, type FROM posts WHERE id = ?').get(id) as
-    { title: string; description: string; author_pubkey: string; created_by: string | null; type: string } | undefined;
+const rowOf = (id: string) => db.prepare('SELECT title, description, author_pubkey, created_by, type, tags, free_tags FROM posts WHERE id = ?').get(id) as
+    { title: string; description: string; author_pubkey: string; created_by: string | null; type: string; tags: string; free_tags: string } | undefined;
 const photoCountOf = (id: string) => (db.prepare('SELECT COUNT(*) c FROM post_photos WHERE post_id = ?').get(id) as { c: number }).c;
 const bytesOf = (pk: string) => getMemberPhotoUsageForTests(pk).usedBytes;
 const show = (r: { status: number; error?: string; body?: any }) => `${r.status} ${r.error ?? ''}${r.body?.code ? ` [${r.body.code}]` : ''}`;
@@ -121,10 +123,16 @@ async function main(): Promise<void> {
     const enterpriseBytes0 = bytesOf(enterprise);
     const offer = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
         category: 'food', title: 'Dozen eggs', description: 'Laid this week', credits: 6, priceType: 'fixed', repeatable: true, photos: [PHOTO],
+        tags: ['food.eggs'], freeTags: ['#Free Range', 'limón'],
     }, keeper);
     assert(offer.status === 200 && offer.body?.success === true, `a keeper posts the enterprise's Offer with a photo (${show(offer)})`);
     const offerId: string = offer.body?.post?.id;
     assert(!!offerId && photoCountOf(offerId) === 1, '...and it keeps the photo');
+    assert(rowOf(offerId)?.free_tags === '["free range","limón"]' && rowOf(offerId)?.tags === 'food.eggs', "...and the tags the keeper typed, stored, beside the library's");
+    const refused = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
+        category: 'food', title: 'Refused', credits: 6, priceType: 'fixed', photos: [PHOTO], freeTags: ['me@example.org'],
+    }, keeper);
+    assert(refused.status === 400 && refused.error === 'A tag is a word to find your listing by, not a contact', `...and a contact is refused in words (${show(refused)})`);
     assert(bytesOf(keeper.pubKeyHex) > keeperBytes0 && bytesOf(enterprise) === enterpriseBytes0,
         `...whose bytes are charged to the keeper who sent it, not the enterprise (keeper +${bytesOf(keeper.pubKeyHex) - keeperBytes0}, enterprise +${bytesOf(enterprise) - enterpriseBytes0})`);
 
@@ -158,10 +166,11 @@ async function main(): Promise<void> {
     // ── 4. A Need ───────────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. A Need ──');
     const need = await signedFetch('POST', `/api/treasury/${enterprise}/need`, {
-        category: 'food', title: 'Tend the flock', description: 'Saturday mornings', credits: 10, priceType: 'fixed', photos: [PHOTO],
+        category: 'food', title: 'Tend the flock', description: 'Saturday mornings', credits: 10, priceType: 'fixed', photos: [PHOTO], freeTags: ['saturday help'],
     }, keeper);
     assert(need.status === 200 && need.body?.success === true, `a keeper posts the enterprise's Need (${show(need)})`);
     const needId: string = need.body?.post?.id;
+    assert(rowOf(needId)?.free_tags === '["saturday help"]', '...and the tag the keeper typed');
     const needEdit = await signedFetch('POST', '/api/marketplace/posts/update',
         phoneEdit(needId, keeper, { type: 'need', title: 'Tend the flock (and the garden)', credits: 10, description: 'Saturday mornings', photos: [PHOTO] }), keeper);
     assert(needEdit.status === 200 && needEdit.body?.success === true, `a keeper edits the enterprise's Need and adds a photo (${show(needEdit)})`);

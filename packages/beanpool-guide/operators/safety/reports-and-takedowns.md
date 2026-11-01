@@ -77,6 +77,12 @@ In **Triage & Moderation**, find the post in the posts list and delete it.
 
 **Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: "The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report." The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed.
 
+## A place circle
+
+On the global community, people waiting near the same place who said they would help start a community are put in a place circle together, once there are 3 of them within about 25 km. A circle is an ordinary group, hidden from anyone outside it, and made by the server, not by a member. Its name, its purpose and who can join it stay as they are, so its convenor cannot turn it into something else.
+
+A report on a line in a circle's chat reaches you like a report on any group's chat, and the same actions apply. There is no action that closes a whole circle yet. Act on the people in it: warn, suspend or remove. A circle closes by itself 30 days after a community starts near it. A suspended account is not put in a circle, and neither are two people when one has blocked the other.
+
 ## Automated safety and reports
 
 On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **How this community works** (under Safety):

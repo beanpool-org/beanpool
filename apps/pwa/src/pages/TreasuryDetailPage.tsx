@@ -300,6 +300,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [postDescription, setPostDescription] = useState('');
     const [postRepeatable, setPostRepeatable] = useState(true);
     const [postTags, setPostTags] = useState<string[]>([]);
+    const [postFreeTags, setPostFreeTags] = useState<string[]>([]);
     // Its photos, added while posting it, as the member's own composer adds them (Damo, 26 Oct: the only way was to post
     // it, then edit it to add one).
     const [postPhotos, setPostPhotos] = useState<string[]>([]);
@@ -1006,6 +1007,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     repeatable: postRepeatable,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
                     ...(postTags.length > 0 ? { tags: postTags } : {}),
+                    ...(postFreeTags.length > 0 ? { freeTags: postFreeTags } : {}),
                 });
             } else {
                 await treasuryPostNeed(pubkey, {
@@ -1016,6 +1018,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     description: postDescription.trim() || undefined,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
                     ...(postTags.length > 0 ? { tags: postTags } : {}),
+                    ...(postFreeTags.length > 0 ? { freeTags: postFreeTags } : {}),
                 });
             }
             setPostModalMode(null);
@@ -1024,6 +1027,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostCredits('');
             setPostPhotos([]);
             setPostTags([]);
+            setPostFreeTags([]);
             const offer = postModalMode === 'offer';
             setActionFeedback({
                 type: 'success',
@@ -2985,6 +2989,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <TagPicker
                                     tags={postTags}
                                     onChange={setPostTags}
+                                    freeTags={postFreeTags}
+                                    onFreeTagsChange={setPostFreeTags}
                                     category={postCategory}
                                     title={postTitle}
                                     description={postDescription}

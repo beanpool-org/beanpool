@@ -12,7 +12,8 @@ import { useIdentity } from './IdentityContext';
 import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails, runANodeLabel, runANodeUrl } from '../utils/start-community';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { SetUpServerRow } from '../components/SetUpServerRow';
-import { inCapitalsOf, t } from '@beanpool/core';
+import { circleDemandLine, inCapitalsOf, t } from '@beanpool/core';
+import { useFindCardRead } from '../components/MarketCircleLine';
 
 export { ErrorBoundary };
 
@@ -29,6 +30,8 @@ export default function StartCommunityScreen() {
     const [place, setPlace] = useState('');
     const [contact, setContact] = useState('');
     const [copied, setCopied] = useState(false);
+    // The people already waiting here (doors S8): said on the global community, and only from 3.
+    const demandLine = circleDemandLine(useFindCardRead(useNodeProfile()?.profile === 'global', identity)?.demand);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -80,6 +83,7 @@ export default function StartCommunityScreen() {
                 bottomOffset={16}
             >
                 <Text style={styles.intro}>{t(START_COMMUNITY_COPY.intro)}</Text>
+                {!!demandLine && <Text style={[styles.intro, { marginTop: 8, fontWeight: '700' }]} testID="start-demand">{demandLine}</Text>}
 
                 <Text style={styles.sectionLabel}>{t('THREE WAYS TO RUN ONE')}</Text>
                 {START_COMMUNITY_COPY.ways.map(w => (

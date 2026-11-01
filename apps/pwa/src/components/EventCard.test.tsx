@@ -37,6 +37,15 @@ describe('an event\'s tags on its page (DESIGN-owner-seeding-tags-fable.md §4.4
         expect(onOpenTag).toHaveBeenCalledWith('food.fruit.lemon');
     });
 
+    it('a tag its host typed shows as #word and opens exactly that tag', () => {
+        const onOpenFreeTag = vi.fn();
+        render(<EventDetail post={{ ...baseEvent, freeTags: ['live music'] }} identity={identity} onOpenTag={vi.fn()} onOpenFreeTag={onOpenFreeTag} />);
+        const row = screen.getByTestId('post-detail-tags');
+        expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['#live music']);
+        fireEvent.click(within(row).getByRole('button', { name: 'Filter marketplace by tag #live music' }));
+        expect(onOpenFreeTag).toHaveBeenCalledWith('live music');
+    });
+
     it('no tags, or only ones it can\'t label: no row', () => {
         const { unmount } = render(<EventDetail post={baseEvent} identity={identity} onOpenTag={vi.fn()} />);
         expect(screen.queryByTestId('post-detail-tags')).toBeNull();

@@ -284,3 +284,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `getReplicationTokenStatus`, `generateReplicationToken`, `setReplicationTokenMode`, and `clearReplicationToken` in `apps/manager/src/lib/node-client.ts` were untested directly.
 **Learning:** Asserting fetch call URLs in `node-client.test.ts` requires wrapping endpoints with `resolveNodeApiUrl(nodeUrl, path)` to account for default proxy routing logic in tests.
 **Action:** Continue identifying utility functions with missing direct unit assertions across `apps/manager/src/lib/`.
+
+## 2026-11-02 - [manager tests] stranded escrows helpers unit tests
+**Gap:** `fetchStrandedEscrows` and `writeOffStrandedEscrow` in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage in `node-client.test.ts`.
+**Learning:** Testing `writeOffStrandedEscrow` error handling verifies `StrandedEscrowWriteOffError` construction with custom server message, `code`, and Commons before/after balances.
+**Action:** Continue identifying remaining untested helper utilities in `apps/manager/src/lib/`.

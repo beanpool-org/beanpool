@@ -21,6 +21,16 @@ vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }),
 }));
 
+const eventListeners = vi.hoisted(() => ({
+    listeners: {} as Record<string, ((...args: any[]) => void)[]>,
+    emit(event: string, ...args: any[]) {
+        (this.listeners[event] || []).forEach((fn) => fn(...args));
+    },
+    reset() {
+        this.listeners = {};
+    },
+}));
+
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -42,12 +52,25 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        FlatList: ({ data, renderItem }: any) => createElement('div', { 'data-testid': 'flat-list' },
-            (data || []).map((item: any, idx: number) => renderItem({ item, index: idx }))
+        FlatList: ({ data, renderItem, keyExtractor }: any) => createElement('div', { 'data-testid': 'flat-list' },
+            (data || []).map((item: any, idx: number) => {
+                const key = keyExtractor ? keyExtractor(item, idx) : (item?.id ?? idx);
+                return createElement('div', { key }, renderItem({ item, index: idx }));
+            })
         ),
         AccessibilityInfo: { announceForAccessibility: vi.fn() },
         StyleSheet: { create: (s: unknown) => s, flatten: (s: unknown) => flat(s), hairlineWidth: 1 },
-        DeviceEventEmitter: { addListener: () => ({ remove: () => {} }) },
+        DeviceEventEmitter: {
+            addListener: (event: string, fn: (...args: any[]) => void) => {
+                (eventListeners.listeners[event] = eventListeners.listeners[event] || []).push(fn);
+                return {
+                    remove: () => {
+                        eventListeners.listeners[event] = (eventListeners.listeners[event] || []).filter((l) => l !== fn);
+                    },
+                };
+            },
+            emit: (event: string, ...args: any[]) => eventListeners.emit(event, ...args),
+        },
     };
 });
 
@@ -174,12 +197,14 @@ describe('CalendarScreen route component', () => {
             expect(day2Btn).toBeTruthy();
             act(() => day2Btn.click());
 
-            expect(stackPanel?.textContent).toContain('1 event');
-            expect(stackPanel?.textContent).toContain('Seed Swap');
+            const swappedPanel = container.querySelector('[data-testid="map-stack-list"]');
+            expect(swappedPanel?.textContent).toContain('1 event');
+            expect(swappedPanel?.textContent).toContain('Seed Swap');
         }
 
         // Tap ✕ on MapStackList closes the panel
-        const closeBtn = stackPanel?.querySelector('[aria-label="Close"]') as HTMLButtonElement;
+        const activePanel = container.querySelector('[data-testid="map-stack-list"]');
+        const closeBtn = activePanel?.querySelector('[aria-label="Close"]') as HTMLButtonElement;
         expect(closeBtn).toBeTruthy();
         act(() => closeBtn.click());
 
@@ -201,5 +226,101 @@ describe('CalendarScreen route component', () => {
             pathname: '/new-listing',
             params: { newPost: 'event' },
         });
+    });
+
+    it('preserves active user date selection across background sync updates', async () => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        const d1 = now.getDate() + 1 <= 28 ? now.getDate() + 1 : now.getDate();
+        const d2 = d1 + 2 <= 28 ? d1 + 2 : d1;
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const date1 = `${y}-${pad(m)}-${pad(d1)}`;
+        const date2 = `${y}-${pad(m)}-${pad(d2)}`;
+
+        fakeDb.events = [
+            {
+                id: 'ev-2',
+                type: 'event',
+                title: 'Later Event',
+                status: 'active',
+                active: 1,
+                event_start_local: `${date2}T14:00`,
+                event_end_local: `${date2}T16:00`,
+                event_start_at: `${date2}T14:00:00.000Z`,
+                event_end_at: `${date2}T16:00:00.000Z`,
+            },
+        ];
+
+        await act(async () => {
+            root.render(createElement(CalendarScreen) as any);
+        });
+
+        // Initially date2 is active
+        const stackPanel = container.querySelector('[data-testid="map-stack-list"]');
+        expect(stackPanel).toBeTruthy();
+        expect(stackPanel?.textContent).toContain('Later Event');
+
+        // Background sync introduces an earlier event (date1)
+        fakeDb.events = [
+            {
+                id: 'ev-1',
+                type: 'event',
+                title: 'Earlier New Event',
+                status: 'active',
+                active: 1,
+                event_start_local: `${date1}T09:00`,
+                event_end_local: `${date1}T11:00`,
+                event_start_at: `${date1}T09:00:00.000Z`,
+                event_end_at: `${date1}T11:00:00.000Z`,
+            },
+            ...fakeDb.events,
+        ];
+
+        await act(async () => {
+            eventListeners.emit('sync_data_updated');
+        });
+
+        // The user's active selection (date2) should still be selected, NOT overwritten by date1
+        const updatedPanel = container.querySelector('[data-testid="map-stack-list"]');
+        expect(updatedPanel?.textContent).toContain('Later Event');
+        expect(updatedPanel?.textContent).not.toContain('Earlier New Event');
+    });
+
+    it('clears selected date immediately upon month navigation', async () => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        const d1 = now.getDate() + 1 <= 28 ? now.getDate() + 1 : now.getDate();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const date1 = `${y}-${pad(m)}-${pad(d1)}`;
+
+        fakeDb.events = [
+            {
+                id: 'ev-1',
+                type: 'event',
+                title: 'Current Month Event',
+                status: 'active',
+                active: 1,
+                event_start_local: `${date1}T09:00`,
+                event_end_local: `${date1}T11:00`,
+                event_start_at: `${date1}T09:00:00.000Z`,
+                event_end_at: `${date1}T11:00:00.000Z`,
+            },
+        ];
+
+        await act(async () => {
+            root.render(createElement(CalendarScreen) as any);
+        });
+
+        expect(container.querySelector('[data-testid="map-stack-list"]')).toBeTruthy();
+
+        // Navigate to next month
+        const nextBtn = container.querySelector('[data-testid="month-next"]') as HTMLButtonElement;
+        expect(nextBtn).toBeTruthy();
+        act(() => nextBtn.click());
+
+        // Panel should be closed immediately during transition
+        expect(container.querySelector('[data-testid="map-stack-list"]')).toBeNull();
     });
 });

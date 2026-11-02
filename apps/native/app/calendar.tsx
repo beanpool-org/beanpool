@@ -112,15 +112,16 @@ export default function CalendarScreen() {
         });
     }, [year, month, todayStr, events]);
 
-    // When viewed month changes, auto-select first active date unless dismissed
+    // When viewed month changes, auto-select first active date unless dismissed or user already selected a date in this month
     useEffect(() => {
         if (dismissedMonthKey === monthModel.monthKey) return;
+        if (selectedDate && selectedDate.startsWith(monthModel.monthKey)) return;
         if (monthModel.firstActiveDate) {
             setSelectedDate(monthModel.firstActiveDate);
         } else {
             setSelectedDate(null);
         }
-    }, [monthModel.monthKey, monthModel.firstActiveDate, dismissedMonthKey]);
+    }, [monthModel.monthKey, monthModel.firstActiveDate, dismissedMonthKey, selectedDate]);
 
     const handleSelectDate = (date: string) => {
         setSelectedDate(date);
@@ -131,12 +132,14 @@ export default function CalendarScreen() {
         if (monthModel.isCurrentOrPastMonth) return;
         setYear(monthModel.prevMonth.year);
         setMonth(monthModel.prevMonth.month);
+        setSelectedDate(null);
         setDismissedMonthKey(null);
     };
 
     const handleNextMonth = () => {
         setYear(monthModel.nextMonth.year);
         setMonth(monthModel.nextMonth.month);
+        setSelectedDate(null);
         setDismissedMonthKey(null);
     };
 
@@ -196,6 +199,7 @@ export default function CalendarScreen() {
 
             {selectedDate ? (
                 <MapStackList
+                    key={selectedDate}
                     posts={selectedDayEvents}
                     heading={calendarDayHeading(selectedDate, selectedDayEvents.length)}
                     onOpen={(id) => router.push({ pathname: '/post/[id]', params: { id } })}

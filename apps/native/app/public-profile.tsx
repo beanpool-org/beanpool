@@ -547,7 +547,7 @@ export default function PublicProfileScreen() {
 
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
         // A guest visit keeps it on the phone: the member isn't in this community, so nothing goes to it. Nor into the row:
-        // left empty, the device's copy is the newer at the join, and the join sends it (utils/working-style.ts).
+        // left empty, the device's copy is the newer once they join, and their first publish there carries it (utils/working-style.ts).
         const visiting = !!url && await onGuestVisit(url);
         const localUpdate: any = {
             callsign: nameToUse,

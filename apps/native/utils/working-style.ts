@@ -33,8 +33,9 @@ type Signer = { publicKey: string; privateKey: string };
 
 /**
  * The quiz is done: its result is the device's now, and it waits for every other community saved on the phone. Not for
- * a guest visit: the member isn't in that one, and a community they join later gets the result at the join. What waited
- * there from before goes, or it would go ahead of this result at that join.
+ * a guest visit: the member isn't in that one, and a community they join later gets the result at their first publish
+ * there (archetypeToSend: the device's copy is newer than an empty row). What waited there from before goes, or it would
+ * go ahead of this result.
  */
 export async function keepQuizResult(result: QuizResult, publicKey: string, openCommunity: string | null): Promise<void> {
     await saveCanonicalProfile({ archetype: JSON.stringify(result) });

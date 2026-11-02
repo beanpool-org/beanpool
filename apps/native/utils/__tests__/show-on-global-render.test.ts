@@ -587,3 +587,22 @@ describe('the door on a copy (slice GD)', () => {
     });
 });
 
+describe('a listing from the phone\'s own row', () => {
+    const ROW = { id: 'home-1', type: 'offer', title: 'Loaves', author_pubkey: 'ab'.repeat(32), tags: '', lat: -28.6, lng: 153.5, status: 'active' };
+    const PATH = '/api/marketplace/posts/home-1/photos/0?v=abc';
+
+    it('hands a copy the node\'s own path, whatever address the page put in front for the carousel', async () => {
+        const home = listingForCopy(ROW, [`https://mullum.beanpool.org${PATH}`, `http://localhost:8080${PATH}`]);
+        expect(home.photos).toEqual([PATH, PATH]);
+        const { photosOf } = await import('@beanpool/core');
+        const fetchPhoto = vi.fn(async () => ({ photo: 'data:image/png;base64,iVBORw0KGgo=' }));
+        const { photos, missed } = await photosOf(home, 'https://mullum.beanpool.org', { fetchPhoto });
+        expect(fetchPhoto).toHaveBeenCalledWith(`https://mullum.beanpool.org${PATH}`);
+        expect({ sent: photos.length, missed }).toEqual({ sent: 2, missed: 0 });
+    });
+
+    it('leaves what is already a path, and a phone\'s own file, as they are', () => {
+        expect(listingForCopy(ROW, [PATH, 'file:///data/a.jpg']).photos).toEqual([PATH, 'file:///data/a.jpg']);
+    });
+});
+

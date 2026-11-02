@@ -30,12 +30,17 @@ export const showListingOnGlobalHint = (need = false) => need
     : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To buy or take it, they ask to join.");
 const joinFirstWords = () => t('Join the global community to show this there');
 
-/** A listing as the phone's own row holds it, as show-on-global reads one. */
+/**
+ * A listing as the phone's own row holds it, as show-on-global reads one. The page's photos have the community's address in
+ * front for the carousel (utils/db.ts getPost), and a copy goes by the node's own paths: with the address on, it found no photo
+ * to send, and global answered "Add a photo first" to every show from a listing's page.
+ */
 export function listingForCopy(post: any, photos: string[]): HomeEvent {
     return {
         id: post.id, type: post.type, category: post.category, title: post.title, description: post.description, credits: post.credits, priceType: post.price_type ?? 'fixed',
         authorPublicKey: post.author_pubkey, audienceScope: post.audience_scope ?? 'public', originNode: post.origin_node ?? null,
-        lat: post.lat, lng: post.lng, photos, tags: postTagsOf(post.tags), freeTags: listingFreeTags(post), status: post.status,
+        lat: post.lat, lng: post.lng, photos: photos.map((p) => p.replace(/^https?:\/\/[^/]+(?=\/api\/)/, '')),
+        tags: postTagsOf(post.tags), freeTags: listingFreeTags(post), status: post.status,
     };
 }
 

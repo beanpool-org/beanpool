@@ -256,7 +256,7 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                 data-card-wide={wide ? 'true' : 'false'}
                 data-container-width={width}
                 style={{ containerType: 'inline-size', ...(accent ? { borderColor: 'var(--bp-card-amber-ink)' } : {}), ...style }}
-                className={`bg-bg-card rounded-2xl shadow-sm border p-4 ${arrange ? 'pb-2 scroll-mt-20' : ''} mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
+                className={`bg-bg-card rounded-2xl shadow-sm border p-4 ${arrange ? 'pb-2' : ''} mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
             >
                 <div
                     {...hold}

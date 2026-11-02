@@ -206,6 +206,8 @@ const NOTE_FEWER = 'note-fewer';
 const NOTE_HINT = 'note-hint';
 /** Arrange's + Add a card tile, packed as one card is. */
 const ARRANGE_ADD = 'arrange-add';
+/** The room left under Arrange's bar when a card or a control is brought into view. */
+const ARRANGE_CLEAR_PX = 8;
 /** Which packed child a child of the grid is, by the testids the page gives them; an element that is none has no id. */
 function packIdOf(el: Element): string | null {
     const testId = el.getAttribute('data-testid') ?? '';
@@ -1742,6 +1744,25 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }
     const endArrangeRef = useRef(endArrange);
     endArrangeRef.current = endArrange;
+    // The bar stands over the top of the page and a phone's tab bar over its bottom: what a move, Tab or Shift+Tab brings
+    // into view stops clear of both. The bar's height follows the language and the text size, so it is measured.
+    useEffect(() => {
+        const scroller = pageRef.current?.closest('main');
+        const bar = pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-bar"]');
+        if (!inArrange || !scroller || !bar) return;
+        const keepClear = () => {
+            scroller.style.scrollPaddingTop = `${bar.offsetHeight + ARRANGE_CLEAR_PX}px`;
+            scroller.style.scrollPaddingBottom = getComputedStyle(scroller).paddingBottom;
+        };
+        keepClear();
+        const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(keepClear);
+        watch?.observe(bar);
+        return () => {
+            watch?.disconnect();
+            scroller.style.scrollPaddingTop = '';
+            scroller.style.scrollPaddingBottom = '';
+        };
+    }, [inArrange]);
     useEffect(() => {
         const page = pageRef.current;
         if (inArrange) {
@@ -2309,7 +2330,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             case 'safety':
                 // The two-doors card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
-                // Its "…" (Move up · Move down · Remove) sits over the card's own ✕. The cell comes with the card: put away
+                // Its "…" (Arrange · Remove) sits over the card's own ✕. The cell comes with the card: put away
                 // or checked, it has nothing to say and takes no cell (PR #2411 review). `c.safety` is the node's word that the
                 // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
                 // (arriving second in the order, it moved every card after it to another cell).

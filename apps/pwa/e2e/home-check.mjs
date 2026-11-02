@@ -1374,6 +1374,39 @@ async function arrangeAcross(browser, root) {
                 await page.getByTestId('home-arrange-up-tips').click();
                 await wait(400);
                 check(JSON.stringify(await order()) === JSON.stringify(was), `${tag}: ↑ puts it back`);
+                // Whatever a key brings into view stands clear of the bar above it and the tab bar below it.
+                const room = () => page.evaluate(() => {
+                    const el = document.activeElement;
+                    const box = el.getBoundingClientRect();
+                    const nav = document.querySelector('[data-testid="mobile-bottom-nav"]')?.getBoundingClientRect();
+                    return {
+                        id: el.dataset.testid,
+                        over: box.top - document.querySelector('[data-testid="home-arrange-bar"]').getBoundingClientRect().bottom,
+                        under: (nav?.height ? nav.top : window.innerHeight) - box.bottom,
+                    };
+                });
+                const clearOf = async (what, moves) => {
+                    const seen = [];
+                    for (const press of moves) {
+                        await page.keyboard.press(press);
+                        await wait(what.startsWith('Tab') || what.startsWith('Shift') ? 60 : 350);
+                        const at = await room();
+                        if (at.id !== 'home-arrange-done') seen.push(at);
+                    }
+                    const over = Math.min(...seen.map((s) => s.over));
+                    const under = Math.min(...seen.map((s) => s.under));
+                    check(over >= 0 && under >= 0, `${tag}: ${what} stays clear of both bars (closest ${Math.round(over)} px under the bar, ${Math.round(under)} px over the tab bar)`);
+                };
+                const movable = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid^="home-arrange-up-"]')).map((b) => b.dataset.testid.replace('home-arrange-up-', '')));
+                const steps = (key) => movable.slice(1).map(() => key);
+                await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 1e6));
+                await page.getByTestId(`home-arrange-up-${movable.at(-1)}`).focus();
+                await clearOf('a card walked to the top', steps('Enter'));
+                await clearOf('a card walked back down', steps('Enter'));
+                await page.getByTestId('home-arrange-done').focus();
+                const stops = inOrder.slice(1).map(() => 'Tab');
+                await clearOf('Tab through Arrange', stops);
+                await clearOf('Shift+Tab back through Arrange', stops.map(() => 'Shift+Tab'));
             } finally {
                 await context.close();
                 await node.stop();

@@ -1628,6 +1628,29 @@ describe('Arrange', () => {
         expect(cardIds()).toEqual(['events', 'market', 'pulse', 'community']);
     });
 
+    it('what a key brings into view stops clear of the bar and the tab bar, and <main>, which every page shares, gets its scroll back at Done and on leaving Home', async () => {
+        layout3();
+        const main = document.createElement('main');
+        main.style.paddingBottom = '60px';
+        document.body.appendChild(main);
+        const { unmount } = render(<HomePage identity={ME} onNavigate={vi.fn()} />, { container: main });
+        await screen.findByTestId('home-card-pulse');
+        expect(main.style.scrollPaddingTop).toBe('');
+        openArrange();
+        // jsdom measures the bar at 0 px, so this is the room left under it; the real height is home-check's `arrangeAcross`.
+        expect(main.style.scrollPaddingTop).toBe('8px');
+        expect(main.style.scrollPaddingBottom).toBe('60px');
+        doneArrange();
+        expect(main.style.scrollPaddingTop).toBe('');
+        expect(main.style.scrollPaddingBottom).toBe('');
+        openArrange();
+        expect(main.style.scrollPaddingTop).toBe('8px');
+        unmount();
+        expect(main.style.scrollPaddingTop).toBe('');
+        expect(main.style.scrollPaddingBottom).toBe('');
+        main.remove();
+    });
+
     it('in the pseudo-locale, every line and label of Arrange goes through the words layer', async () => {
         await showIn('xx');
         await land();

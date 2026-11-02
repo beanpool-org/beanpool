@@ -54,6 +54,10 @@ Nobody can buy it, take it up or start a deal on it there, and the global commun
 
 Edit the listing here and the copy follows. Pause it, or have it in a deal, out on loan or hidden by reports, and the copy comes down, then goes back up as a new copy when it is back on the board. Remove it, or finish its deal, and the copy goes for good. **Stop showing** on the listing's page takes it down at any time. All of this runs on the phone or in the browser where you ticked it: it catches up when that app next opens, and a change made in the other one reaches the copy then too. Tick it on both and there is still one copy. Copies count as posts on the global community, with its daily limits for a new account.
 
+**Take questions about this on the global community** sits under that tick, in the form and on the listing's page. It is off until you tick it, one listing at a time. While it is off, nobody on the global community can see who posted the copy or write to you from it. Tick it and members of the global community see your name there and can send you one message. It waits under **Message requests** at the top of Chat, with no alert, until you accept it, and accepting makes nobody a friend. If your phone or browser is on your own community, the same row says how many wait on the global community and takes you there. Visitors still see no name, and nothing can be bought or paid for on a copy either way.
+
+Untick it and your name comes off at once. A message already sent stays yours to accept or decline, and anyone can still write to you on the global community if they have your key, as they can to any member there. An event has no such tick: to go, people ask to join your community.
+
 ## Not sure what to charge?
 
 On the phone, tap **Not sure what to charge?** under the price. In the web app the form has no such line: open **💡 Pricing Guide** on the Market instead. A rough guide: 40 beans is about an hour of someone's time. The **Community Pricing Guide** has estimates for many everyday things. On the phone, tapping one fills in an Offer for you. In the web app, tapping one opens the New Post form on the Map without filling anything in.

@@ -59,7 +59,7 @@ export function ListingCopyFooter({ post, copy, reader, onOpenChat }: Props) {
                 <div data-testid="listing-copy-ask" className="mt-3 min-w-0">
                     <p className="m-0 text-sm font-semibold text-nature-800 dark:text-oat-50 break-words">{askLine(ask.name)}</p>
                     <button type="button" data-testid="listing-copy-ask-button" disabled={busy}
-                        onClick={() => void run(async () => onOpenChat?.((await createConversationApi('dm', [reader, ask.key], reader)).conversation.id))}
+                        onClick={() => void run(async () => { const { conversation } = await createConversationApi('dm', [reader, ask.key], reader); onOpenChat?.(conversation.id); })}
                         className="w-full min-h-[48px] mt-2 rounded-xl bg-nature-600 text-white hover:bg-nature-700 font-semibold text-sm cursor-pointer break-words">
                         {askButton()}
                     </button>

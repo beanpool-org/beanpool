@@ -4,14 +4,14 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ShowOnGlobalHostRow, ShowOnGlobalTick, showEventOnGlobal } from './ShowOnGlobalRow';
+import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal } from './ShowOnGlobalRow';
 import { useCommunityInfo } from '../lib/features';
 import * as copies from '../lib/show-on-global';
 
 vi.mock('../lib/features', async () => ({ ...(await vi.importActual('../lib/features')), useCommunityInfo: vi.fn() }));
 vi.mock('../lib/show-on-global', async () => ({
     ...(await vi.importActual('../lib/show-on-global')),
-    askGlobalStanding: vi.fn(), copyPairOf: vi.fn(), forgetGlobalStanding: vi.fn(), readGlobalStanding: vi.fn(), showPostOnGlobal: vi.fn(), stopShowing: vi.fn(),
+    askGlobalStanding: vi.fn(), copyPairOf: vi.fn(), forgetGlobalStanding: vi.fn(), readGlobalStanding: vi.fn(), showPostOnGlobal: vi.fn(), stopShowing: vi.fn(), takeQuestions: vi.fn(),
 }));
 
 const me: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' };
@@ -284,3 +284,73 @@ describe('what the tap sends on', () => {
         expect(vi.mocked(alert).mock.calls[0][0]).toContain('directory');
     });
 });
+
+describe('the door\'s tick (slice GD)', () => {
+    const DOOR = 'Take questions about this on the global community';
+    const host = (extra: Record<string, unknown> = {}) => render(<ShowOnGlobalHostRow post={listing} identity={me} enabled listing {...extra} />);
+
+    it('says what it makes public, and is a real checkbox with a 44 px target', () => {
+        render(<TakeQuestionsTick checked={false} onChange={() => {}} />);
+        const row = screen.getByTestId('take-questions-tick');
+        expect(row.textContent).toContain(DOOR);
+        expect(row.textContent).toContain('will see your name');
+        expect(row.className).toContain('min-h-[44px]');
+        expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+    });
+
+    it('none on a listing that isn\'t shown, none on an event, and drawing it asks nobody anything', async () => {
+        host();
+        await act(async () => {});
+        expect(screen.queryByTestId('take-questions-tick')).toBeNull();
+        document.body.innerHTML = '';
+        vi.mocked(copies.copyPairOf).mockResolvedValue({ copyId: 'c1' } as never);
+        render(<ShowOnGlobalHostRow post={listing} identity={me} enabled />);
+        await screen.findByText('Stop showing');
+        expect(screen.queryByTestId('take-questions-tick')).toBeNull();
+        expect(copies.takeQuestions).not.toHaveBeenCalled();
+    });
+
+    it('shown, it is offered off, and the tap opens it', async () => {
+        vi.mocked(copies.copyPairOf).mockResolvedValue({ copyId: 'c1' } as never);
+        vi.mocked(copies.takeQuestions).mockImplementation(async () => {
+            vi.mocked(copies.copyPairOf).mockResolvedValue({ copyId: 'c1', questions: true } as never);
+            return 'shown';
+        });
+        host();
+        const row = await screen.findByTestId('take-questions-tick');
+        const box = row.querySelector('input') as HTMLInputElement;
+        expect(box.checked).toBe(false);
+        fireEvent.click(box);
+        await waitFor(() => expect(copies.takeQuestions).toHaveBeenCalledWith('home-1', true, me));
+        await waitFor(() => expect((screen.getByTestId('take-questions-tick').querySelector('input') as HTMLInputElement).checked).toBe(true));
+    });
+
+    it('an Off that didn\'t land is said, and the tick says what the member asked for', async () => {
+        vi.mocked(copies.copyPairOf).mockResolvedValue({ copyId: 'c1', questions: true } as never);
+        vi.mocked(copies.takeQuestions).mockImplementation(async () => {
+            vi.mocked(copies.copyPairOf).mockResolvedValue({ copyId: 'c1', questions: false, questionsOwed: true } as never);
+            return 'later';
+        });
+        host();
+        fireEvent.click((await screen.findByTestId('take-questions-tick')).querySelector('input') as HTMLInputElement);
+        await waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining('It will stop taking questions as soon as the global community answers.')));
+        await waitFor(() => expect((screen.getByTestId('take-questions-tick').querySelector('input') as HTMLInputElement).checked).toBe(false));
+    });
+
+    it('a refusal says global\'s own words', async () => {
+        vi.mocked(copies.copyPairOf).mockResolvedValue({ copyId: 'c1' } as never);
+        vi.mocked(copies.takeQuestions).mockResolvedValue({ refused: 'Not while muted.' });
+        host();
+        fireEvent.click((await screen.findByTestId('take-questions-tick')).querySelector('input') as HTMLInputElement);
+        await waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining('Not while muted.')));
+    });
+
+    it('the composer\'s tick goes with the listing; a plain one sends none', async () => {
+        vi.mocked(copies.showPostOnGlobal).mockResolvedValue(null);
+        await showEventOnGlobal(listing, me);
+        expect(vi.mocked(copies.showPostOnGlobal).mock.calls[0][2]).toBe(false);
+        await showEventOnGlobal(listing, me, true);
+        expect(vi.mocked(copies.showPostOnGlobal).mock.calls[1][2]).toBe(true);
+    });
+});
+

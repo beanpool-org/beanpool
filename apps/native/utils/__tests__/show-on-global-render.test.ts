@@ -48,12 +48,13 @@ const world = vi.hoisted(() => ({
     answer: 'member' as string,
     pushed: [] as string[],
 }));
-const calls = vi.hoisted(() => ({ ask: vi.fn(), show: vi.fn(), pair: vi.fn(async (): Promise<unknown> => null), stop: vi.fn() }));
+const calls = vi.hoisted(() => ({ ask: vi.fn(), show: vi.fn(), pair: vi.fn(async (): Promise<unknown> => null), stop: vi.fn(), take: vi.fn(), noted: vi.fn(), openChat: vi.fn(), signed: vi.fn() }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: world.identity }) }));
 vi.mock('expo-router', () => ({ router: { push: (r: string) => world.pushed.push(r) } }));
 vi.mock('../node-post', () => ({ anchorUrl: async () => 'https://mullum.example.org' }));
 vi.mock('../global-entry', () => ({ readGlobalStanding: async () => world.kept, askGlobalStanding: calls.ask }));
-vi.mock('../db', () => ({ deletePost: vi.fn(), reportAbuse: vi.fn() }));
+vi.mock('../db', () => ({ deletePost: vi.fn(), reportAbuse: vi.fn(), createConversationApi: calls.openChat, signedRequest: calls.signed }));
+vi.mock('../global-requests', () => ({ noteQuestionsOpened: calls.noted }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children, behavior }: { children?: unknown; behavior?: string }) => createElement('div', { 'data-kav': behavior }, children as any),
@@ -61,12 +62,12 @@ vi.mock('react-native-keyboard-controller', () => ({
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
 vi.mock('../../components/PostTagChips', () => ({ PostTagChips: () => null }));
 vi.mock('../../components/ReportReasonBox', () => ({ ReportReasonBox: () => null }));
-vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: calls.stop, stopLaterLine: () => 'It comes down later' }));
+vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: calls.stop, stopLaterLine: () => 'It comes down later', takeQuestions: calls.take, questionsLaterLine: () => 'It stops later' }));
 
 import { EventCopyDoor } from '../../components/EventCopyDoor';
 import { ListingCopyDetail } from '../../components/ListingCopy';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
-import { ShowOnGlobalHostRow, ShowOnGlobalTick, listingForCopy, showListingOnGlobalHint, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
+import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, listingForCopy, showEventOnGlobal, showListingOnGlobalHint, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
 import { deletePost } from '../db';
 
@@ -109,6 +110,11 @@ beforeEach(() => {
     calls.pair.mockReset();
     calls.pair.mockImplementation(async () => null);
     calls.stop.mockReset();
+    calls.take.mockReset();
+    calls.noted.mockReset();
+    calls.openChat.mockReset();
+    calls.signed.mockReset();
+    calls.show.mockReset();
 });
 
 afterEach(async () => {
@@ -454,3 +460,130 @@ describe('a copy of an Offer or a Need', () => {
             .toMatchObject({ id: 'h', type: 'need', credits: 5, priceType: 'hourly', authorPublicKey: 'k', audienceScope: 'public', lat: 1, lng: 2, photos: ['/p/0'], tags: ['food.eggs'], status: 'paused' });
     });
 });
+
+describe('the door on a copy (slice GD)', () => {
+    const KEY = 'ef'.repeat(32);
+    const LABEL = 'Take questions about this on the global community';
+    const OPEN = { id: 'c1', type: 'offer', title: 'Sourdough loaves', description: 'Fresh', author_pubkey: KEY, author_callsign: 'Robin Sellerton of the Valley', photos: '[]', tags: '', shownCopy: true, shownFrom: FROM, shownPrice: '20 fixed', takesQuestions: true };
+    const SHUT = { ...OPEN, author_pubkey: 'hidden', author_callsign: '', takesQuestions: undefined };
+    const EVENT = { id: 'home-1', title: 'Loaves', authorPublicKey: world.identity.publicKey };
+
+    describe('the tick', () => {
+        it.each([['light', lightColors], ['dark', darkColors]])('holds in 320 dp at 1.3× text, %s, a target of at least 44 dp', async (scheme, colors) => {
+            theme.scheme = scheme;
+            theme.colors = colors;
+            await draw(createElement(TakeQuestionsTick, { checked: false, onChange: () => {} }));
+            const tick = byId('take-questions-tick')!;
+            expect(tick.textContent).toContain(LABEL);
+            const box = layOut(byId('floor')!, { width: WIDTH, height: 568 }, { fontScale: 1.3 }).box(tick);
+            expect(box.left + box.width).toBeLessThanOrEqual(WIDTH);
+            expect(box.height).toBeGreaterThanOrEqual(44);
+        });
+
+        it('a screen reader hears what it makes public', async () => {
+            await draw(createElement(TakeQuestionsTick, { checked: false, onChange: () => {} }));
+            expect(byId('take-questions-tick')!.getAttribute('data-a11y-hint')).toContain('will see your name');
+        });
+
+        it('the host\'s page draws none on a listing that isn\'t shown, none on an event, and it asks nobody', async () => {
+            await draw(createElement(ShowOnGlobalHostRow, { event: EVENT as any, enabled: true, listing: true }));
+            expect(byId('take-questions-tick')).toBeNull();
+            calls.pair.mockImplementation(async () => ({ copyId: 'c1' }));
+            await draw(createElement(ShowOnGlobalHostRow, { event: EVENT as any, enabled: true }));
+            expect(byId('take-questions-tick')).toBeNull();
+            expect(fetched).not.toHaveBeenCalled();
+        });
+
+        it('shown, the page offers it off; the tap opens it, and marks this phone as having asked', async () => {
+            calls.pair.mockImplementation(async () => ({ copyId: 'c1' }));
+            calls.take.mockImplementation(async () => { calls.pair.mockImplementation(async () => ({ copyId: 'c1', questions: true })); return 'shown'; });
+            await draw(createElement(ShowOnGlobalHostRow, { event: EVENT as any, enabled: true, listing: true }));
+            expect(byId('take-questions-tick')!.getAttribute('aria-checked')).toBe('false');
+            await press('take-questions-tick');
+            expect(calls.take).toHaveBeenCalledWith('home-1', true, world.identity);
+            expect(calls.noted).toHaveBeenCalledWith(world.identity.publicKey);
+            expect(byId('take-questions-tick')!.getAttribute('aria-checked')).toBe('true');
+        });
+
+        it('an Off that didn\'t land is said once, in words, and the tick still says what the member asked for', async () => {
+            calls.pair.mockImplementation(async () => ({ copyId: 'c1', questions: true }));
+            calls.take.mockImplementation(async () => { calls.pair.mockImplementation(async () => ({ copyId: 'c1', questions: false, questionsOwed: true })); return 'later'; });
+            await draw(createElement(ShowOnGlobalHostRow, { event: EVENT as any, enabled: true, listing: true }));
+            await press('take-questions-tick');
+            expect(calls.take).toHaveBeenCalledWith('home-1', false, world.identity);
+            expect(calls.noted).not.toHaveBeenCalled();
+            expect((globalThis as any).__alerts).toEqual([[LABEL, 'It stops later']]);
+            expect(byId('take-questions-tick')!.getAttribute('aria-checked')).toBe('false');
+        });
+
+        it('a refusal says global\'s own words', async () => {
+            calls.pair.mockImplementation(async () => ({ copyId: 'c1' }));
+            calls.take.mockImplementation(async () => ({ refused: 'Not while muted.' }));
+            await draw(createElement(ShowOnGlobalHostRow, { event: EVENT as any, enabled: true, listing: true }));
+            await press('take-questions-tick');
+            expect((globalThis as any).__alerts).toEqual([[LABEL, 'Not while muted.']]);
+        });
+
+        it('the composer\'s tick goes with the listing, and a plain one sends none and marks nothing', async () => {
+            calls.show.mockImplementation(async () => 'shown');
+            await showEventOnGlobal({ id: 'home-1' } as any, world.identity);
+            expect(calls.show.mock.calls[0][4]).toBe(false);
+            expect(calls.noted).not.toHaveBeenCalled();
+            await showEventOnGlobal({ id: 'home-1' } as any, world.identity, true);
+            expect(calls.show.mock.calls[1][4]).toBe(true);
+            expect(calls.noted).toHaveBeenCalledWith(world.identity.publicKey);
+        });
+    });
+
+    describe('the copy\'s page', () => {
+        it('door off: no name, no way to write, as before', async () => {
+            await draw(createElement(ListingCopyDetail, { post: SHUT }));
+            expect(byId('listing-copy-ask')).toBeNull();
+            expect(host.textContent).not.toContain('Robin');
+        });
+
+        it('a stale row that says it takes questions and names nobody draws no door', async () => {
+            await draw(createElement(ListingCopyDetail, { post: { ...SHUT, takesQuestions: true } }));
+            expect(byId('listing-copy-ask')).toBeNull();
+        });
+
+        it.each([['light', lightColors], ['dark', darkColors]])('door on: the name and one way to write, in 320 dp at 1.3× text, %s', async (scheme, colors) => {
+            theme.scheme = scheme;
+            theme.colors = colors;
+            await draw(createElement(ListingCopyDetail, { post: OPEN }));
+            const ask = byId('listing-copy-ask')!;
+            expect(ask.textContent).toContain('Robin Sellerton of the Valley takes questions about this');
+            const laid = layOut(byId('floor')!, { width: WIDTH, height: 900 }, { fontScale: 1.3 });
+            expect(laid.box(ask).left + laid.box(ask).width).toBeLessThanOrEqual(WIDTH);
+            expect(laid.box(byId('listing-copy-ask-button')!).height).toBeGreaterThanOrEqual(44);
+        });
+
+        it('door on, still no deal: the price stays words and the door stays the community\'s', async () => {
+            await draw(createElement(ListingCopyDetail, { post: OPEN }));
+            expect(byId('event-copy-door')).not.toBeNull();
+            expect(host.textContent).not.toMatch(/Accept|Request|Pay/);
+        });
+
+        it('the button opens a chat with the key on the row, for no post: a request is a chat with nothing of a deal', async () => {
+            calls.openChat.mockImplementation(async () => ({ id: 'conv-1' }));
+            await draw(createElement(ListingCopyDetail, { post: OPEN }));
+            await press('listing-copy-ask-button');
+            expect(calls.openChat).toHaveBeenCalledWith('dm', [KEY, world.identity.publicKey], world.identity.publicKey);
+            expect(world.pushed).toEqual(['/chat/conv-1']);
+        });
+
+        it('its author has no ask, and can stop from here: a new phone holds no pair to untick', async () => {
+            await draw(createElement(ListingCopyDetail, { post: { ...OPEN, author_pubkey: world.identity.publicKey } }));
+            expect(byId('listing-copy-ask')).toBeNull();
+            await press('listing-copy-stop-questions');
+            expect(calls.signed).toHaveBeenCalledWith('/api/marketplace/posts/takes-questions', { id: 'c1', on: false });
+            expect(byId('listing-copy-stop-questions')).toBeNull();
+        });
+
+        it('a shut copy offers its author nothing to stop', async () => {
+            await draw(createElement(ListingCopyDetail, { post: { ...SHUT, author_pubkey: world.identity.publicKey } }));
+            expect(byId('listing-copy-stop-questions')).toBeNull();
+        });
+    });
+});
+

@@ -9,7 +9,7 @@
  * "…" afterwards (after Hide, which takes the card and its "…" away, the page moves it to the nearest card left). Each
  * item is a full-width button at least 44 px tall.
  */
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
 import { t, type CardHue } from '@beanpool/core';
 
 export interface CardContainerState {
@@ -133,24 +133,45 @@ interface CardProps {
     onHeight?: (height: number) => void;
 }
 
+/** A packed child's height: its border box, whatever its span (it stands `align-self: start`). */
+export const packedHeight = (el: HTMLElement) => el.offsetHeight || Math.round(el.getBoundingClientRect().height);
+
+/**
+ * Tells `onHeight` an element's height before the first paint and at every change after it. No `onHeight` (one column,
+ * where nothing is packed) reads nothing; no ResizeObserver keeps today's grid.
+ */
+export function useReportHeight(ref: RefObject<HTMLElement | null>, onHeight?: (height: number) => void) {
+    const report = useRef(onHeight);
+    report.current = onHeight;
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const measure = () => { if (report.current) report.current(packedHeight(el)); };
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [ref]);
+}
+
+/** A packed child that isn't a HomeCard (the "One way back" frame, Home's two notes), measured as a HomeCard is. */
+export function PackedBlock({ tag: Tag = 'div', onHeight, ...rest }: { tag?: 'div' | 'p'; onHeight?: (height: number) => void; 'data-testid'?: string } & HTMLAttributes<HTMLElement>) {
+    const ref = useRef<HTMLElement | null>(null);
+    useReportHeight(ref, onHeight);
+    return <Tag ref={ref as RefObject<never>} {...rest} />;
+}
+
 export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue, onHeight }: CardProps) {
     const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const headingId = `home-card-${id}-title`;
     const sectionRef = useRef<HTMLElement | null>(null);
     const [width, setWidth] = useState(0);
-    const onHeightRef = useRef(onHeight);
-    onHeightRef.current = onHeight;
+    useReportHeight(sectionRef, onHeight);
 
     useLayoutEffect(() => {
         const el = sectionRef.current;
         if (!el) return;
-        const measure = () => {
-            setWidth(el.clientWidth);
-            if (typeof ResizeObserver !== 'undefined') {
-                const h = el.offsetHeight || Math.round(el.getBoundingClientRect().height);
-                if (h > 0) onHeightRef.current?.(h);
-            }
-        };
+        const measure = () => setWidth(el.clientWidth);
         measure();
         if (typeof ResizeObserver === 'undefined') {
             window.addEventListener('resize', measure);

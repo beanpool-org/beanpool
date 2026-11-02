@@ -9,10 +9,10 @@ import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
 /** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
-    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
+    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
     columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
     moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, searchEmptyLine, searchFirstLine, type HomeLayoutV2, type PackableCard,
+    resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
@@ -524,5 +524,88 @@ describe('packing by height on a wide screen (DESIGN-home-layout-fable.md §3.1,
             { id: 'c3', col: 2, rowStart: 15, rowSpan: 17 },
             { id: 'c4', col: 1, rowStart: 30, rowSpan: 24 },
         ]);
+    });
+});
+
+describe('settleHeights: a height that keeps turning back stops moving the cards (PR #2748)', () => {
+    const report = (was: Readonly<Record<string, PackHeight>>, height: number, now: number) => settleHeights(was, { tips: height }, now);
+
+    it('a new height lands, in a new object; the old one is left as it was', () => {
+        const was = settleHeights({}, { tips: 100 }, 0);
+        const frozen = JSON.stringify(was);
+        const now = report(was, 140, 1000);
+        expect(now.tips.height).toBe(140);
+        expect(now).not.toBe(was);
+        expect(JSON.stringify(was)).toBe(frozen);
+    });
+
+    it('the same height, or none, gives back the same object: React renders nothing', () => {
+        const was = settleHeights({}, { tips: 100 }, 0);
+        expect(report(was, 100, 1)).toBe(was);
+        expect(report(was, 0, 1)).toBe(was);
+        expect(settleHeights(was, {}, 1)).toBe(was);
+        expect(settleHeights({}, { tips: Number.NaN }, 1)).toEqual({});
+    });
+
+    it('turning back quickly and for ever: bounded, and it stands at the taller height', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        let moves = 0;
+        for (let i = 1; i <= 100; i += 1) {
+            const next = report(was, i % 2 ? 140 : 100, i * 16);
+            if (next.tips.height !== was.tips.height) moves += 1;
+            was = next;
+        }
+        expect(moves).toBeLessThanOrEqual(HOME_PACK_MAX_FLIPS + 2);
+        expect(was.tips.height).toBe(140);
+        expect(report(was, 100, 101 * 16).tips.height).toBe(140);
+    });
+
+    it('three heights going round are bounded the same way', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        let moves = 0;
+        const round = [140, 180, 100];
+        for (let i = 0; i < 99; i += 1) {
+            const next = report(was, round[i % 3], (i + 1) * 16);
+            if (next.tips.height !== was.tips.height) moves += 1;
+            was = next;
+        }
+        expect(moves).toBeLessThanOrEqual(HOME_PACK_MAX_FLIPS * 2 + 2);
+        expect(was.tips.height).toBe(180);
+    });
+
+    it('growing always lands, even past the limit: a stale short height is an overlap', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        for (let i = 1; i <= 20; i += 1) was = report(was, i % 2 ? 140 : 100, i * 16);
+        expect(report(was, 300, 400).tips.height).toBe(300);
+    });
+
+    it('a held card lets go once it has been still: the shrink that comes after lands', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        for (let i = 1; i <= 20; i += 1) was = report(was, i % 2 ? 140 : 100, i * 16);
+        const held = was.tips;
+        expect(held.height).toBe(140);
+        expect(report(was, 100, held.at + HOME_PACK_FLIP_MS - 1).tips.height).toBe(140);
+        expect(report(was, 100, held.at + HOME_PACK_FLIP_MS).tips.height).toBe(100);
+    });
+
+    it('a person opening and closing a card, however often, is never held', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        for (let i = 1; i <= 21; i += 1) was = report(was, i % 2 ? 300 : 100, i * HOME_PACK_FLIP_MS);
+        expect(was.tips.height).toBe(300);
+        expect(report(was, 100, 22 * HOME_PACK_FLIP_MS).tips.height).toBe(100);
+    });
+
+    it('a window dragged one way is never held: heights going one way are not turns', () => {
+        let was = settleHeights({}, { tips: 400 }, 0);
+        for (let i = 1; i <= 100; i += 1) was = report(was, 400 - i, i);
+        expect(was.tips.height).toBe(300);
+    });
+
+    it('one card going round holds only that card', () => {
+        let was = settleHeights({}, { tips: 100, market: 200 }, 0);
+        for (let i = 1; i <= 20; i += 1) was = settleHeights(was, { tips: i % 2 ? 140 : 100 }, i * 16);
+        const now = settleHeights(was, { tips: 100, market: 150 }, 21 * 16);
+        expect(now.tips.height).toBe(140);
+        expect(now.market.height).toBe(150);
     });
 });

@@ -2,9 +2,9 @@
  * A Home card's "…" (components/HomeCard.tsx): version 1's Hide · Move up · Move down, and the card frame's (CARD-FRAME
  * §1.3, slice F3) Settings… · Move up · Move down · Remove, named by the card's screen-reader name, never its caption.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { CardMenu, HomeCard } from './HomeCard';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CardMenu, HomeCard, PackedBlock } from './HomeCard';
 
 describe('HomeCard menu', () => {
     it('the card frame: Settings… · Move up · Move down · Remove, labelled by the saved search\'s words; the caption stays fixed words', () => {
@@ -139,6 +139,77 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
         const aside = band.querySelector('div:last-child') as HTMLElement;
         expect(aside.className).toContain('items-center');
         expect(aside.className).not.toContain('items-start');
+    });
+
+    describe('reporting a height after mount (PR #2748)', () => {
+        let observers: { callback: () => void; disconnected: boolean }[] = [];
+        let height = 0;
+        let spy: { mockRestore(): void } | null = null;
+        let reads = 0;
+        beforeEach(() => {
+            observers = [];
+            height = 240;
+            reads = 0;
+            vi.stubGlobal('ResizeObserver', class {
+                entry: { callback: () => void; disconnected: boolean };
+                constructor(callback: () => void) { this.entry = { callback, disconnected: false }; observers.push(this.entry); }
+                observe() {}
+                disconnect() { this.entry.disconnected = true; }
+            });
+            spy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => { reads += 1; return height; });
+        });
+        afterEach(() => { spy?.mockRestore(); vi.unstubAllGlobals(); });
+        const fire = () => act(() => { observers.filter(o => !o.disconnected).forEach(o => o.callback()); });
+
+        it('a HomeCard tells every later height, and stops when it goes', () => {
+            const onHeight = vi.fn();
+            const { unmount } = render(<HomeCard id="tips" title="Tips" onHeight={onHeight}><p>body</p></HomeCard>);
+            height = 320;
+            fire();
+            expect(onHeight).toHaveBeenLastCalledWith(320);
+            unmount();
+            onHeight.mockClear();
+            fire();
+            expect(onHeight).not.toHaveBeenCalled();
+        });
+
+        it('a HomeCard follows the newest onHeight it was given', () => {
+            const first = vi.fn();
+            const second = vi.fn();
+            const { rerender } = render(<HomeCard id="tips" title="Tips" onHeight={first}><p>body</p></HomeCard>);
+            rerender(<HomeCard id="tips" title="Tips" onHeight={second}><p>body</p></HomeCard>);
+            first.mockClear();
+            height = 320;
+            fire();
+            expect(second).toHaveBeenLastCalledWith(320);
+            expect(first).not.toHaveBeenCalled();
+        });
+
+        it('with no onHeight it reads no height at all', () => {
+            render(<HomeCard id="tips" title="Tips"><p>body</p></HomeCard>);
+            fire();
+            expect(reads).toBe(0);
+        });
+
+        it('a PackedBlock is measured the same way, with its tag, testid, style and class kept', () => {
+            const onHeight = vi.fn();
+            render(<PackedBlock tag="p" onHeight={onHeight} data-testid="note" className="mb-3" style={{ gridRow: '1 / span 4' }}>A note</PackedBlock>);
+            expect(onHeight).toHaveBeenCalledWith(240);
+            height = 300;
+            fire();
+            expect(onHeight).toHaveBeenLastCalledWith(300);
+            const note = screen.getByTestId('note');
+            expect(note.tagName).toBe('P');
+            expect(note.className).toBe('mb-3');
+            expect(note.style.gridRow).toBe('1 / span 4');
+        });
+
+        it('with no ResizeObserver there is nothing to report, and no error', () => {
+            vi.stubGlobal('ResizeObserver', undefined);
+            const onHeight = vi.fn();
+            render(<PackedBlock onHeight={onHeight}>A block</PackedBlock>);
+            expect(onHeight).not.toHaveBeenCalled();
+        });
     });
 
     it('reports its measured height via onHeight callback (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {

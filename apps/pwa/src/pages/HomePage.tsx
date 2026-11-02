@@ -59,7 +59,7 @@ import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
     canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackableCard,
+    resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
@@ -88,7 +88,7 @@ import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/mar
 import { CategoryTile } from '../components/CategoryTile';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
-import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../components/HomeCard';
+import { CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, packedHeight, useCardContainer } from '../components/HomeCard';
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
@@ -199,6 +199,16 @@ function reducedMotion(): boolean {
 const FULL_ROW: React.CSSProperties = { gridColumn: '1 / -1' };
 /** Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3). */
 const spansRow = (type: string) => type === FIXED_FIRST || type === FIXED_LAST;
+/** The two one-time notes, when they stand in the grid, packed as full rows of it. */
+const NOTE_FEWER = 'note-fewer';
+const NOTE_HINT = 'note-hint';
+/** Which packed child a child of the grid is, by the testids the page gives them; an element that is none has no id. */
+function packIdOf(el: Element): string | null {
+    const testId = el.getAttribute('data-testid') ?? '';
+    if (testId === 'home-fewer') return NOTE_FEWER;
+    if (testId === 'home-hint') return NOTE_HINT;
+    return testId.startsWith('home-card-') ? testId.slice('home-card-'.length) : null;
+}
 
 /**
  * How many columns Home's cards stand in (DESIGN-home-wide-and-content-fable.md D1, slice W2; Auto only): the page's own
@@ -1185,21 +1195,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const interestsCardRef = useRef<HTMLDivElement | null>(null);
     const pageRef = useRef<HTMLDivElement | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
-    const fewerRef = useRef<HTMLParagraphElement | null>(null);
-    const hintRef = useRef<HTMLParagraphElement | null>(null);
     const [measurePage, cols] = useHomeColumns();
     const setPage = useCallback((el: HTMLDivElement | null) => { pageRef.current = el; measurePage(el); }, [measurePage]);
-    const [cardHeights, setCardHeights] = useState<Record<string, number>>({});
-    const cardHeightsRef = useRef<Record<string, number>>({});
-    cardHeightsRef.current = cardHeights;
-
+    // The updater is the only reader, so every report sees the one before it, however many land in one batch, and an
+    // unchanged height comes back as the same object and renders nothing. No ref of these: a ref holding this state was
+    // written to directly, which changed the state under React and swallowed every height after the first (PR #2748).
+    const [cardHeights, setCardHeights] = useState<Readonly<Record<string, PackHeight>>>({});
     const onCardHeight = useCallback((id: string, h: number) => {
-        if (!h || cardHeightsRef.current[id] === h) return;
-        cardHeightsRef.current[id] = h;
-        setCardHeights(prev => {
-            if (prev[id] === h) return prev;
-            return { ...prev, [id]: h };
-        });
+        const now = Date.now();
+        setCardHeights(prev => settleHeights(prev, { [id]: h }, now));
     }, []);
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
     const focusAfterHide = useRef<string[] | null>(null);
@@ -1653,63 +1657,44 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
     const shownKey = shown.map(c => `${c.id}:${c.type}`).join(',');
 
+    // Each child reports its own height at mount and by its own ResizeObserver, but that comes a frame late, so when the
+    // columns or the list change every child is read here, before the paint. The grid's direct children are the packed ones.
     useLayoutEffect(() => {
-        if (cols <= 1 || typeof ResizeObserver === 'undefined') return;
-        let changed = false;
-        const next = { ...cardHeightsRef.current };
-        const checkEl = (key: string, el: HTMLElement | null) => {
-            if (!el) return;
-            const h = el.offsetHeight || Math.round(el.getBoundingClientRect().height);
-            if (h > 0 && next[key] !== h) {
-                next[key] = h;
-                changed = true;
-            }
-        };
-        checkEl('note-fewer', fewerRef.current);
-        checkEl('note-hint', hintRef.current);
-        if (gridRef.current) {
-            const knownIds = new Set(shown.map(c => c.id));
-            const cardEls = gridRef.current.querySelectorAll<HTMLElement>('[data-testid^="home-card-"]');
-            cardEls.forEach(cardEl => {
-                const testId = cardEl.getAttribute('data-testid');
-                if (!testId || testId === 'home-card-menu') return;
-                const cardId = testId.replace('home-card-', '');
-                if (knownIds.has(cardId)) {
-                    checkEl(cardId, cardEl);
-                }
-            });
+        const grid = gridRef.current;
+        if (cols <= 1 || !grid || typeof ResizeObserver === 'undefined') return;
+        const seen: Record<string, number> = {};
+        for (const el of Array.from(grid.children) as HTMLElement[]) {
+            const id = packIdOf(el);
+            if (id) seen[id] = packedHeight(el);
         }
-        if (changed) {
-            cardHeightsRef.current = next;
-            setCardHeights(next);
-        }
+        const now = Date.now();
+        setCardHeights(prev => settleHeights(prev, seen, now));
     }, [cols, shownKey, notesUnderFirst, fewerOpen, hintOpen, safetyDrawn]);
 
     const packedList = useMemo(() => {
         if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
-        const hasHeights = Object.values(cardHeights).some(h => h > 0);
-        if (!hasHeights) return [];
+        if (Object.keys(cardHeights).length === 0) return [];
         const items: PackableCard[] = [];
         for (let i = 0; i < shown.length; i++) {
             const card = shown[i];
             if (card.type === 'safety' && !safetyDrawn) continue;
             items.push({
                 id: card.id,
-                height: cardHeights[card.id] || 0,
+                height: cardHeights[card.id]?.height ?? 0,
                 fullRow: spansRow(card.type),
             });
             if (i === 0 && notesUnderFirst) {
                 if (fewerOpen && !isVisitor) {
                     items.push({
-                        id: 'note-fewer',
-                        height: cardHeights['note-fewer'] || 0,
+                        id: NOTE_FEWER,
+                        height: cardHeights[NOTE_FEWER]?.height ?? 0,
                         fullRow: true,
                     });
                 }
                 if (hintOpen && !isVisitor && !startUp) {
                     items.push({
-                        id: 'note-hint',
-                        height: cardHeights['note-hint'] || 0,
+                        id: NOTE_HINT,
+                        height: cardHeights[NOTE_HINT]?.height ?? 0,
                         fullRow: true,
                     });
                 }
@@ -2154,6 +2139,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         return <HomeLine key={i} onClick={go} label={item.accent ? t('{line}. Waiting on you.', { line: words }) : words} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
     }
 
+    /** One column packs nothing, so nothing is measured or kept there: a phone browser runs none of this (§3.1). */
+    const reportHeight = (id: string) => (cols > 1 ? (h: number) => onCardHeight(id, h) : undefined);
+
     function renderCard(card: HomeCardInstance, index: number): ReactNode {
         const id = card.type as HomeCardId;
         const c = a.cards;
@@ -2174,7 +2162,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             hue,
             menu: menuFor(card),
             style: { ...cardStyle(index), ...placementStyle },
-            onHeight: (h: number) => onCardHeight(card.id, h),
+            onHeight: reportHeight(card.id),
         };
         switch (card.type) {
             case 'needs':
@@ -2192,10 +2180,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return identity && (
                     <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn}
                         keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => (
-                        <div style={{ ...cardStyle(index), ...placementStyle }} data-testid={`home-card-${card.id}`}>
+                        <PackedBlock onHeight={common.onHeight} style={{ ...cardStyle(index), ...placementStyle }} data-testid={`home-card-${card.id}`} className="mb-3 [&>section]:mb-0">
                             {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
                             {oneWayBack}
-                        </div>
+                        </PackedBlock>
                     )} />
                 );
             case 'find': {
@@ -2761,27 +2749,29 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             gridColumn: '1 / -1',
             gridRow: `${packed.rowStart} / span ${packed.rowSpan}`,
             alignSelf: 'start',
+            // `-mt-1` is for the unpacked grid's rows: here it would only move 4 px from above the note to below it.
+            marginTop: 0,
         };
     };
     const firstNotes = (under: boolean) => (
         <>
             {fewerOpen && !isVisitor && (
-                <p ref={under ? fewerRef : undefined} data-testid="home-fewer" style={under ? notePacking('note-fewer') : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                <PackedBlock tag="p" onHeight={under ? reportHeight(NOTE_FEWER) : undefined} data-testid="home-fewer" style={under ? notePacking(NOTE_FEWER) : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
                     <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.fewerCards)}</span>
                     <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                         ✕
                     </button>
-                </p>
+                </PackedBlock>
             )}
             {hintOpen && !isVisitor && !startUp && (
-                <p ref={under ? hintRef : undefined} data-testid="home-hint" style={under ? notePacking('note-hint') : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                <PackedBlock tag="p" onHeight={under ? reportHeight(NOTE_HINT) : undefined} data-testid="home-hint" style={under ? notePacking(NOTE_HINT) : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
                     <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.hint)}</span>
                     <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                         ✕
                     </button>
-                </p>
+                </PackedBlock>
             )}
         </>
     );

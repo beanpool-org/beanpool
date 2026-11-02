@@ -552,6 +552,47 @@ export interface PackedCard {
 }
 
 /**
+ * What Home keeps of one card's height. `packHome` places a card by the cards before it only, so a card's own height can't
+ * move it; the one way round is the page itself: a taller page brings the scrollbar, the scrollbar narrows every card, a
+ * card crossing `wide` changes height, and the page changes back. `settleHeights` is what stops that going round.
+ */
+export interface PackHeight {
+    height: number;
+    /** The last time this card reported a new height, landed or refused. */
+    at: number;
+    rising: boolean;
+    /** Turns from growing to shrinking or back, each within `HOME_PACK_FLIP_MS` of the last change. */
+    flips: number;
+}
+
+/** Quicker than a person can open and close a card, and slower than a re-pack on an old tablet. */
+export const HOME_PACK_FLIP_MS = 250;
+/** Turns before a card counts as going round. */
+export const HOME_PACK_MAX_FLIPS = 4;
+
+/**
+ * The heights to pack from, given heights just measured. Returns `was` itself when nothing changed, so React renders
+ * nothing. Growing always lands, since a stale short height overlaps the next card. A card past `HOME_PACK_MAX_FLIPS`
+ * stops shrinking until it has been still for `HOME_PACK_FLIP_MS`: the taller height holds, the grid's height stops
+ * changing, and the scrollbar with it. The worst left behind is a small gap, never an overlap and never a flicker.
+ */
+export function settleHeights(was: Readonly<Record<string, PackHeight>>, seen: Readonly<Record<string, number>>, now: number): Readonly<Record<string, PackHeight>> {
+    let next: Record<string, PackHeight> | null = null;
+    for (const [id, height] of Object.entries(seen)) {
+        if (!(height > 0)) continue;
+        const had = was[id];
+        if (had?.height === height) continue;
+        const rising = !had || height > had.height;
+        const quick = !!had && now - had.at < HOME_PACK_FLIP_MS;
+        const flips = !quick ? 0 : had.flips + (rising === had.rising ? 0 : 1);
+        next ??= { ...was };
+        // A refused shrink changes nothing on the screen; it only keeps the clock on the card, which has not been still.
+        next[id] = !rising && flips > HOME_PACK_MAX_FLIPS ? { ...had, at: now } : { height, at: now, rising, flips };
+    }
+    return next ?? was;
+}
+
+/**
  * At two or more columns, each card is placed under the column whose stack is shortest at that moment,
  * in the saved order. Full-row cards wait until every column is free and span them all.
  * At one column (or invalid counts), no placement is returned: one column gives no placement.

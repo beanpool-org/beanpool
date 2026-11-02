@@ -1586,6 +1586,31 @@ describe('the door on a copy', () => {
             expect(phone.pairs()[0].questionsOwed).toBe(false);
         });
 
+        it('an On stays where it is: on that lost first send it waits for the home read, and opens nothing with the community down', async () => {
+            const w = world();
+            const phone = w.device();
+            w.busyOn(1);
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps);
+            const { copyId } = phone.pairs()[0];
+            w.rows.set(copyId, { id: copyId, type: 'offer', status: 'active', title: 'Tomatoes' });
+            w.homeAnswers(refuses);
+            expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('shown');
+            await phone.tendCopies(identity, w.deps);
+            expect(w.doorSends).toEqual([]);
+            expect(phone.pairs()[0]).toMatchObject({ questions: true, questionsOwed: true });
+        });
+
+        it('an Off that throws holds up nothing else in the tend, and stays owed', async () => {
+            const w = world();
+            const phone = w.device();
+            await offOwed(w, phone);
+            w.doorAnswers(() => { throw new TypeError('Network request failed'); });
+            w.home.title = 'Green tomatoes';
+            await phone.tendCopies(identity, w.deps);
+            expect(up(w).title).toBe('Green tomatoes');
+            expect(phone.pairs()[0].questionsOwed).toBe(true);
+        });
+
         it('refused while the copy is still up, the door is still open: it stays owed, the member hears why, and it lands when it can', async () => {
             const w = world();
             const phone = w.device();

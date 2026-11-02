@@ -79,6 +79,8 @@ export interface MarketplacePost {
     createdAt: string;
     photos?: string[];
     status?: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
+    pinnedUntil?: string | null;
+    pinnedAt?: string | null;
     repeatable?: boolean;
     lendable?: boolean;
     /** #108: a real cash outlay is involved (fuel / consumables). No amount — terms live in chat. */

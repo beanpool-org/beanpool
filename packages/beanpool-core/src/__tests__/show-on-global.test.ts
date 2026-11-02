@@ -1671,7 +1671,10 @@ describe('the door on a copy', () => {
             const phone = w.device();
             await owed(w, phone);
             const at = Date.now();
-            expect(await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_FIRST_MS - 1000)).toBe(1000);
+            // `at` is read after the tap, so a millisecond or two can pass between them: the wait left is 1 s at most, and not 0.
+            const left = (await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_FIRST_MS - 1000)) as number;
+            expect(left).toBeGreaterThan(0);
+            expect(left).toBeLessThanOrEqual(1000);
             expect(w.doorSends).toEqual([]);
             let now = at + OFF_RETRY_FIRST_MS;
             for (const wait of [60_000, 120_000, OFF_RETRY_MOST_MS, OFF_RETRY_MOST_MS, OFF_RETRY_MOST_MS]) {

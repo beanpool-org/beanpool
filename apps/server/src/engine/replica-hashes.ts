@@ -72,7 +72,11 @@ export interface TableHashes {
 /**
  * 11: posts gains shown_price (DESIGN-reaching-across-fable.md §1 row 4, slice G1′). Raised for the same reason as 8.
  */
-export const TABLE_HASHES_VERSION = 11;
+/**
+ * 12: confirmations gains stepped_back_owing (the balance rule, S1). Raised for the same reason as 4: a standby updated before
+ * its main server hashes `confirmations` over one more column. Every community with a known floor has rows there.
+ */
+export const TABLE_HASHES_VERSION = 12;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts
@@ -118,7 +122,7 @@ export interface HashOptions {
  * Every copied table this server has, with the columns hashed, the order its rows are hashed in, and the condition on the
  * rows that travel when not all do (the manifest's RowRule): the rest are hashed on neither server.
  */
-function hashedTables(conn: Database.Database): { table: string; columns: string[]; order: string[]; where: string | null }[] {
+export function hashedTables(conn: Database.Database): { table: string; columns: string[]; order: string[]; where: string | null }[] {
     const out: { table: string; columns: string[]; order: string[]; where: string | null }[] = [];
     for (const [table, entry] of Object.entries(TABLES)) {
         if ((entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || NOT_HASHED[table]) continue;

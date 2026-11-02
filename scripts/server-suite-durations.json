@@ -523,7 +523,7 @@
  "test-standby-envelopes": 3.4,
  "test-standby-health": 44.4,
  "test-standby-in-flight": 19.2,
- "test-standby-known-consents": 8.2,
+ "test-standby-step-back": 8.2,
  "test-standby-known-pledge-once": 8,
  "test-standby-ledger-copy": 43,
  "test-standby-ledger-gate": 0.4,

@@ -10,6 +10,7 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-replica-hashes.ts
  */
 
+import { createHash } from 'node:crypto';
 import { db, initSchema } from './db/db.js';
 import {
     readTableHashes,
@@ -17,6 +18,7 @@ import {
     tableContentHashesInSlices,
     compareTableHashes,
     TABLE_HASHES_VERSION,
+    hashedTables,
 } from './engine/replica-hashes.js';
 
 let testsRun = 0;
@@ -44,6 +46,16 @@ async function main(): Promise<void> {
     assert(readTableHashes(undefined) === null, 'undefined raw payload returns null');
     assert(readTableHashes('string') === null, 'string raw payload returns null');
     assert(readTableHashes({}) === null, 'empty object returns null');
+    // The columns hashed belong to a version. A column added with the version left alone makes two sides on different releases
+    // read every whole copy as wrong (#2736, and decisions in af712414 before it). Changed the columns? Raise
+    // TABLE_HASHES_VERSION, say why in its notes, and add a line here.
+    const hashedColumns = createHash('sha256')
+        .update(JSON.stringify(hashedTables(db).map((t) => [t.table, t.columns]).sort()))
+        .digest('hex').slice(0, 16);
+    const COLUMNS_OF_VERSION: Record<number, string> = { 12: '94ccf348f3c0a4d2' };
+    assert(COLUMNS_OF_VERSION[TABLE_HASHES_VERSION] === hashedColumns,
+        `the hashed columns belong to version ${TABLE_HASHES_VERSION} (they read ${hashedColumns})`);
+
     assert(readTableHashes({ v: TABLE_HASHES_VERSION - 1, tables: {} }) === null, 'wrong version returns null');
     assert(readTableHashes({ v: TABLE_HASHES_VERSION, tables: 'invalid' }) === null, 'non-object tables returns null');
 

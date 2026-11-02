@@ -164,7 +164,7 @@ async function main(): Promise<void> {
         const r = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: body.confirmation } } }, owner);
         return r.status === 200 ? { ...r, body: (await read()).body } : r;
     };
-    const terms = () => call('GET', null, '/api/community/consent-terms');
+    const terms = () => call('GET', null, '/api/community/known-rule');
 
     // ── 0. the global profile: Beans off ───────────────────────────────────────────────────────
     console.log('── 0. the global profile ──');
@@ -182,7 +182,9 @@ async function main(): Promise<void> {
     assert(confirmationDialOn(db) === false && memberKnownGrant(db, gia.pk) === 0 && (await read()).body?.confirmation === false,
         "an 'on' row (an older version's, a restored copy's) reads off too: Beans off decides");
     const gTerms = await terms();
-    assert(gTerms.status === 200 && gTerms.body?.known === false, `the join screen asks no consent (${show(gTerms)})`);
+    assert(gTerms.status === 200 && gTerms.body?.known === false, `the join screen draws no rule (${show(gTerms)})`);
+    const gBack = await call('POST', gia, '/api/names/step-back', {});
+    assert(gBack.status === 404 && gBack.body?.code === 'feature_off', `and nobody steps back: the global community has no names list (${show(gBack)})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(CONFIRMATION_DIAL_KEY);
     db.prepare('DELETE FROM confirmations WHERE member_pubkey = ?').run(gia.pk);
     delete process.env.NODE_PROFILE;

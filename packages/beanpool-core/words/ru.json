@@ -971,7 +971,7 @@
   "{n} at this spot": "В этом месте: {n}",
   "Calendar": "Календарь",
   "Nothing on {date}": "Ничего нет на {date}",
-  "Nothing on in {month}.": "В {month} ничего нет.",
+  "Nothing on in {month}.": "На {month} ничего нет.",
   "Next: {date} ›": "Следующее: {date} ›",
   "No events coming up yet.": "Предстоящих мероприятий пока нет.",
   "Start one ›": "Создать ›",

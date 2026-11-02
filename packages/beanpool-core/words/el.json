@@ -893,7 +893,7 @@
   "{n} at this spot": "{n} σε αυτό το σημείο",
   "Calendar": "Ημερολόγιο",
   "Nothing on {date}": "Τίποτα στις {date}",
-  "Nothing on in {month}.": "Τίποτα τον {month}.",
+  "Nothing on in {month}.": "Τίποτα τον μήνα {month}.",
   "Next: {date} ›": "Επόμενο: {date} ›",
   "No events coming up yet.": "Δεν υπάρχουν προσεχείς εκδηλώσεις ακόμα.",
   "Start one ›": "Ξεκινήστε μία ›",

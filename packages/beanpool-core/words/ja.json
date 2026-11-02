@@ -854,7 +854,7 @@
   "{n} at this spot": "この場所に{n}件",
   "Calendar": "カレンダー",
   "Nothing on {date}": "{date}には何もありません",
-  "Nothing on in {month}.": "{month}には何もありません。",
+  "Nothing on in {month}.": "{month}月には何もありません。",
   "Next: {date} ›": "次: {date} ›",
   "No events coming up yet.": "今後のイベントはまだありません。",
   "Start one ›": "作成する ›",

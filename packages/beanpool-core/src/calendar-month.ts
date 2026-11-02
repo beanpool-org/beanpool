@@ -608,6 +608,14 @@ export function calendarWeekdayLabels(lang?: UiLang, width: 'short' | 'long' = '
     return labels;
 }
 
+function activeTranslator(lang?: UiLang): { t: typeof t; tn: typeof tn } {
+    if (!lang || lang === currentLanguage()) {
+        return { t, tn };
+    }
+    const w = wordsFor(lang);
+    return { t: w.t, tn: w.tn };
+}
+
 /**
  * Heading for a day's list in the calendar:
  * When count > 0: "Sat 7 Nov: 2 events" (or "Sat 7 Nov: 1 event")
@@ -616,13 +624,7 @@ export function calendarWeekdayLabels(lang?: UiLang, width: 'short' | 'long' = '
 export function calendarDayHeading(date: string, count: number, lang?: UiLang): string {
     const d = new Date(utcOf(date));
     const formattedDate = formatDate(d, 'weekday-day-month', { utc: true, lang });
-    if (lang) {
-        const w = wordsFor(lang);
-        if (count <= 0) {
-            return w.t('Nothing on {date}', { date: formattedDate });
-        }
-        return w.tn(count, '{date}: {n} event', '{date}: {n} events', { date: formattedDate });
-    }
+    const { t, tn } = activeTranslator(lang);
     if (count <= 0) {
         return t('Nothing on {date}', { date: formattedDate });
     }
@@ -635,9 +637,7 @@ export function calendarDayHeading(date: string, count: number, lang?: UiLang): 
 export function calendarMonthEmptyText(year: number, month: number, lang?: UiLang): string {
     const w = dateWordsForLang(lang);
     const monthName = w.monthsStandalone[month - 1] ?? w.monthsLong[month - 1];
-    if (lang) {
-        return wordsFor(lang).t('Nothing on in {month}.', { month: monthName });
-    }
+    const { t } = activeTranslator(lang);
     return t('Nothing on in {month}.', { month: monthName });
 }
 
@@ -647,26 +647,24 @@ export function calendarMonthEmptyText(year: number, month: number, lang?: UiLan
 export function calendarNextEventLabel(date: string, lang?: UiLang): string {
     const d = new Date(utcOf(date));
     const formattedDate = formatDate(d, 'weekday-day-month', { utc: true, lang });
-    if (lang) {
-        return wordsFor(lang).t('Next: {date} ›', { date: formattedDate });
-    }
+    const { t } = activeTranslator(lang);
     return t('Next: {date} ›', { date: formattedDate });
 }
 
 /** Text shown when no events are coming up at all. */
 export function calendarNoEventsComingUpText(lang?: UiLang): string {
-    if (lang) return wordsFor(lang).t('No events coming up yet.');
+    const { t } = activeTranslator(lang);
     return t('No events coming up yet.');
 }
 
 /** Link text to start an event from the empty calendar state. */
 export function calendarStartOneText(lang?: UiLang): string {
-    if (lang) return wordsFor(lang).t('Start one ›');
+    const { t } = activeTranslator(lang);
     return t('Start one ›');
 }
 
 /** Screen title / button accessibility label: "Calendar". */
 export function calendarTitle(lang?: UiLang): string {
-    if (lang) return wordsFor(lang).t('Calendar');
+    const { t } = activeTranslator(lang);
     return t('Calendar');
 }

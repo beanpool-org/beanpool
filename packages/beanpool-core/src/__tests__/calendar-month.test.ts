@@ -411,6 +411,10 @@ describe('calendar-month: day heading & empty states in words layer', () => {
             expect(calendarNoEventsComingUpText()).toBe('Aún no hay eventos próximos.');
             expect(calendarStartOneText()).toBe('Crear uno ›');
             expect(calendarTitle()).toBe('Calendario');
+            // When lang is explicitly passed matching currentLanguage(), translations are preserved
+            expect(calendarDayHeading('2026-11-07', 1, 'es')).toBe('sáb, 7 nov: 1 evento');
+            expect(calendarMonthEmptyText(2026, 11, 'es')).toBe('Nada en noviembre.');
+            expect(calendarTitle('es')).toBe('Calendario');
         } finally {
             setLanguage('en');
         }
@@ -443,6 +447,22 @@ describe('calendar-month: day heading & empty states in words layer', () => {
             expect(calendarDayHeading('2026-11-07', 1)).toBe('сб, 7 нояб.: 1 мероприятие');
             expect(calendarDayHeading('2026-11-07', 2)).toBe('сб, 7 нояб.: 2 мероприятия');
             expect(calendarDayHeading('2026-11-07', 5)).toBe('сб, 7 нояб.: 5 мероприятий');
+            expect(calendarMonthEmptyText(2026, 11)).toBe('На ноябрь ничего нет.');
+        } finally {
+            setLanguage('en');
+        }
+    });
+
+    it('calendarMonthEmptyText in ja, uk, el with grammar-checked templates', () => {
+        try {
+            setLanguage('ja', [loadCatalog('ja')]);
+            expect(calendarMonthEmptyText(2026, 11)).toBe('11月には何もありません。');
+
+            setLanguage('uk', [loadCatalog('uk')]);
+            expect(calendarMonthEmptyText(2026, 11)).toBe('На листопад нічого немає.');
+
+            setLanguage('el', [loadCatalog('el')]);
+            expect(calendarMonthEmptyText(2026, 11)).toBe('Τίποτα τον μήνα Νοεμβρίου.');
         } finally {
             setLanguage('en');
         }

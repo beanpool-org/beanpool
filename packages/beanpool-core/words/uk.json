@@ -971,7 +971,7 @@
   "{n} at this spot": "У цьому місці: {n}",
   "Calendar": "Календар",
   "Nothing on {date}": "Нічого немає на {date}",
-  "Nothing on in {month}.": "У {month} нічого немає.",
+  "Nothing on in {month}.": "На {month} нічого немає.",
   "Next: {date} ›": "Наступна: {date} ›",
   "No events coming up yet.": "Майбутніх подій поки немає.",
   "Start one ›": "Створити ›",

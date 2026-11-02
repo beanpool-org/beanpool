@@ -7,7 +7,8 @@
  *
  * - **What goes.** The times, the rounded pin, the words, the photos, and the community's host and the event's id. Never
  *   the exact pin, the typed place or the note ({@link CopyKeeper.copyFields}). Nothing of the member's name: a copy shows no
- *   author. An Offer or a Need sends its price as words (`shownPrice`), never as a price: nothing of a deal goes.
+ *   author, unless its member takes questions (below), and then global says it, not this file. An Offer or a Need sends its
+ *   price as words (`shownPrice`), never as a price: nothing of a deal goes.
  * - **Who says where it is from.** Global, from its own directory (apps/server engine/event-copy.ts). The host goes for it
  *   to look up; a community that isn't listed gets no line and no door, and the member is told once.
  * - **Staying in step.** An edit, a cancel and a cancelled date repeat at the moment, and {@link CopyKeeper.tendCopies} catches
@@ -29,7 +30,9 @@
  * - **Its door is global's word, and a tap's (slice GD).** "Take questions about this on the global community" goes by a request of
  *   its own ({@link CopyKeeper.takeQuestions}), never with an edit: a device that fell behind must not open a door the member has
  *   shut from the other one. A tap that didn't land stays owed, and `tendCopies` sends it, so an Off holds without an answer.
- *   A rest reads the door from global first, and the copy goes back up as global last had it: off, if it can't say.
+ *   An Off needs nothing but global: a tend sends every one before it asks any community, and it goes after a copy that is up
+ *   whether or not this device heard it land. A rest reads the door from global first, and the copy goes back up as global last
+ *   had it: off, if it can't say.
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
  *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
  *   pair goes only once global says the copy isn't up (`followCopy`): it is the device's only way to that copy.
@@ -572,6 +575,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
             const followed = await followCopy(pair, identity, deps);
             if (followed === 'later') return 'later';
             if (followed && followed.copyId !== pair.copyId) return sendQuestions(followed, identity, deps);
+            // Up, and global wouldn't shut it: the door is still open, so the Off stays owed and the member hears why.
+            if (followed && !on) return answer;
             await store.change((pairs) => pairs.map((p) => (p.copyId === pair.copyId ? { ...p, questions: false, questionsOwed: false } : p)));
             return on ? answer : 'shown';
         }
@@ -579,10 +584,19 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         return 'shown';
     }
 
-    /** Sends what a pair owes, if it has landed and stays up. A pair still to land carries it with the create, and a rest with its return. */
+    /**
+     * Sends what a pair owes, if it stays up. A pair still to land carries it with the create, and a rest with its return. An Off
+     * can't wait for that: a first send whose answer was lost is up, door and all, so global is asked, and only global.
+     */
     async function settleQuestions(copyId: string, identity: I, deps: CopyDeps<I>): Promise<CopyResult | null> {
         const pair = await storedPair(copyId);
-        return pair?.questionsOwed && pair.sent && !pair.resting && !pair.leaving ? sendQuestions(pair, identity, deps) : null;
+        if (!pair?.questionsOwed || pair.resting || pair.leaving) return null;
+        if (pair.sent) return sendQuestions(pair, identity, deps);
+        if (pair.questions) return null;
+        const place = await placeOf(pair, identity, deps);
+        if (place === 'later') return 'later';
+        const placed = place.up ? await movedTo(pair, place) : null;
+        return placed ? sendQuestions(placed, identity, deps) : null;
     }
 
     /** The tick beside "Shown on the global community". `later`: global didn't answer, and it is tried again. */
@@ -789,7 +803,13 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
 
     async function tendPairs(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
         const holidays = new Map<string, Promise<boolean | 'later'>>();
-        for (const { copyId } of (await readPairs()).filter((p) => p.publicKey === identity.publicKey)) {
+        const mine = async () => (await readPairs()).filter((p) => p.publicKey === identity.publicKey);
+        // An Off needs nothing but global, so all of them go before any community is asked. In the loop below, a community that
+        // hangs would hold up the next pair's by a timeout for each pair before it.
+        for (const pair of await mine()) {
+            if (pair.questionsOwed && !pair.questions) await settleQuestions(pair.copyId, identity, deps).catch(() => null);
+        }
+        for (const { copyId } of await mine()) {
             try {
                 let pair = await storedPair(copyId);
                 if (!pair) continue;

@@ -39,7 +39,9 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
     let onRead: (() => Promise<unknown> | void) | null = null;
     let removeAnswer: ((id: string) => Response | null) | null = null;
     let doorAnswer: ((id: string) => Response | null) | null = null;
+    let homeAnswer: ((path: string) => Response | null) | null = null;
     const doorSends: { id: string; on: boolean }[] = [];
+    const asked: string[] = [];
     const bodies: any[] = [];
     const reads: string[][] = [];
     const removes: string[] = [];
@@ -52,7 +54,10 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
         global: GLOBAL,
         async get(url, path) {
             const q = new URL(`${url}${path}`).searchParams;
-            if (url === HOME) return path.startsWith('/api/members/preferences') ? json({ holiday_mode: String(holiday) }) : json([home]);
+            if (url === HOME) {
+                asked.push('home');
+                return homeAnswer?.(path) ?? (path.startsWith('/api/members/preferences') ? json({ holiday_mode: String(holiday) }) : json([home]));
+            }
             const ids = q.get('ids')?.split(',') ?? [q.get('id') as string];
             reads.push(ids);
             if (lostRead) throw new TypeError('Network request failed');
@@ -65,6 +70,7 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
             bodies.push(body);
             if (path.endsWith('/takes-questions')) {
                 doorSends.push(body);
+                asked.push('door');
                 const answer = doorAnswer?.(body.id);
                 if (answer) return answer;
                 const row = rows.get(body.id);
@@ -127,8 +133,12 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
         removeAnswers: (answer: ((id: string) => Response | null) | null) => { removeAnswer = answer; },
         /** Global answers a door's tick with this instead of doing it; null, it does them all. */
         doorAnswers: (answer: ((id: string) => Response | null) | null) => { doorAnswer = answer; },
+        /** The member's own community answers its reads with this, or throws it; null, it answers them all. */
+        homeAnswers: (answer: ((path: string) => Response | null) | null) => { homeAnswer = answer; },
         /** Every door's tick sent, and every body posted, in order. */
         doorSends, bodies,
+        /** Which was asked in what order, a community's reads and global's door. */
+        asked,
         /** The ids of each read of global, and of each remove, in order. */
         reads, removes,
         json,
@@ -1485,6 +1495,110 @@ describe('the door on a copy', () => {
         await phone.stopShowing('home-1', identity, w.deps);
         expect(w.up()).toEqual([]);
         expect(phone.pairs()).toEqual([]);
+    });
+
+    describe('an Off owed needs nothing but global', () => {
+        const refuses = () => new Response(JSON.stringify({ error: 'Busy' }), { status: 503 });
+        const throws = (): Response => { throw new TypeError('Network request failed'); };
+        const offOwed = async (w: ReturnType<typeof world>, phone: ReturnType<ReturnType<typeof world>['device']>) => {
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+            w.doorAnswers(none);
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+            w.doorAnswers(null);
+        };
+
+        it.each([
+            ['refuses every read', refuses],
+            ['throws on every read, as with no network', throws],
+            ['answers for the listing and not for the holiday', (path: string) => (path.startsWith('/api/members/preferences') ? refuses() : null)],
+        ])('its community %s: the tend still shuts the door, and sends it once', async (_how, down) => {
+            const w = world();
+            const phone = w.device();
+            await offOwed(w, phone);
+            w.homeAnswers(down);
+            w.doorSends.length = 0;
+            await phone.tendCopies(identity, w.deps);
+            expect(up(w).takesQuestions).toBe(false);
+            expect(phone.pairs()[0]).toMatchObject({ questions: false, questionsOwed: false });
+            w.homeAnswers(null);
+            await phone.tendCopies(identity, w.deps);
+            expect(w.doorSends).toEqual([{ id: phone.pairs()[0].copyId, on: false }]);
+        });
+
+        it('a community that hangs on one listing holds up no other: every Off goes before any community is asked', async () => {
+            const w = world();
+            const phone = w.device();
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps);
+            await phone.showOnGlobal({ ...w.home, id: 'home-2' }, HOME, identity, w.deps, true);
+            w.doorAnswers(none);
+            await phone.takeQuestions('home-2', false, identity, w.deps);
+            w.doorAnswers(null);
+            w.asked.length = 0;
+            await phone.tendCopies(identity, w.deps);
+            expect(w.asked.indexOf('door')).toBe(0);
+            expect(w.up().map((r) => !!r.takesQuestions)).toEqual([false, false]);
+        });
+
+        it('a first send whose answer was lost is up, door and all: the Off shuts it with its community down', async () => {
+            const w = world();
+            const phone = w.device();
+            w.busyOn(1);
+            expect(await phone.showOnGlobal(w.home, HOME, identity, w.deps, true)).toBe('later');
+            const { copyId } = phone.pairs()[0];
+            w.rows.set(copyId, { id: copyId, type: 'offer', status: 'active', title: 'Tomatoes', takesQuestions: true });
+            w.silentOn(() => true);
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+            expect(up(w).takesQuestions).toBe(true);
+            w.silentOn(null);
+            w.homeAnswers(refuses);
+            await phone.tendCopies(identity, w.deps);
+            expect(up(w).takesQuestions).toBe(false);
+            expect(phone.pairs()[0]).toMatchObject({ questions: false, questionsOwed: false, sent: '' });
+        });
+
+        it('that first send lost at an id the other device moved it to: the Off goes after the copy, and the pair with it', async () => {
+            const w = world();
+            const phone = w.device();
+            w.busyOn(1);
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+            const first = phone.pairs()[0].copyId;
+            const next = await copyIdOf('home-1', 1, sign);
+            w.rows.set(first, { id: first, type: 'offer', status: 'cancelled', title: 'Tomatoes' });
+            w.rows.set(next, { id: next, type: 'offer', status: 'active', title: 'Tomatoes', takesQuestions: true });
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('shown');
+            expect(w.rows.get(next)?.takesQuestions).toBe(false);
+            expect(phone.pairs()[0].copyId).toBe(next);
+        });
+
+        it('a tick still to land has nothing up: nothing is sent, the pair waits, and the create carries no door', async () => {
+            const w = world();
+            const phone = w.device();
+            w.busyOn(1);
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('shown');
+            w.homeAnswers(refuses);
+            await phone.tendCopies(identity, w.deps);
+            expect(w.doorSends).toEqual([]);
+            expect(phone.pairs()).toHaveLength(1);
+            w.homeAnswers(null);
+            await phone.tendCopies(identity, w.deps);
+            expect(up(w).takesQuestions).toBeUndefined();
+            expect(phone.pairs()[0].questionsOwed).toBe(false);
+        });
+
+        it('refused while the copy is still up, the door is still open: it stays owed, the member hears why, and it lands when it can', async () => {
+            const w = world();
+            const phone = w.device();
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+            w.doorAnswers(() => w.json({ error: 'Members only' }, 403));
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toMatchObject({ refused: 'Members only' });
+            expect(up(w).takesQuestions).toBe(true);
+            expect(phone.pairs()[0]).toMatchObject({ questions: false, questionsOwed: true });
+            w.doorAnswers(null);
+            await phone.tendCopies(identity, w.deps);
+            expect(up(w).takesQuestions).toBe(false);
+            expect(phone.pairs()[0].questionsOwed).toBe(false);
+        });
     });
 
     it('no pair: a tap says the words, and asks nobody', async () => {

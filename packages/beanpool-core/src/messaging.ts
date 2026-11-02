@@ -14,7 +14,10 @@ const QUIET_SQL = QUIET_SYSTEM_TYPES.map(t => `'${t}'`).join(', ');
  * in a group chat). Takes ONE bound parameter: the viewer's pubkey.
  */
 export function countsAsUnreadSql(tableAlias: string = 'm'): string {
-    return `NOT (${tableAlias}.type = 'system' AND (
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableAlias)) {
+        throw new TypeError(`Invalid SQL table alias: ${tableAlias}`);
+    }
+    return `NOT (COALESCE(${tableAlias}.type, '') = 'system' AND (
     COALESCE(${tableAlias}.system_type, '') IN (${QUIET_SQL})
     OR COALESCE(CASE WHEN json_valid(${tableAlias}.metadata) THEN json_extract(${tableAlias}.metadata, '$.actorPubkey') END, '') = ?
 ))`;

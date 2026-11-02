@@ -97,7 +97,7 @@ export function MonthGrid({
                         >
                             {calendarNextEventLabel(month.nextEventDate)}
                         </button>
-                    ) : (
+                    ) : onStartEvent ? (
                         <button
                             type="button"
                             data-testid="calendar-start-one-link"
@@ -106,7 +106,7 @@ export function MonthGrid({
                         >
                             {calendarStartOneText()}
                         </button>
-                    )}
+                    ) : null}
                 </div>
             ) : (
                 <div role="grid" aria-label={month.heading} className="flex flex-col gap-1 p-2">

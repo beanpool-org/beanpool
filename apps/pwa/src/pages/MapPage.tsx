@@ -427,9 +427,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
     const [enterprises, setEnterprises] = useState<EnterpriseMapPin[]>([]);
 
-    // Keyboard accessibility: Escape closes preview card or calendar overlay (defers to lightbox if open)
+    // Keyboard accessibility: Escape closes preview card or stack list (defers to lightbox if open)
     useEffect(() => {
-        if ((!previewPost && !stackOpen && !calendarOpen) || covered) return;
+        if ((!previewPost && !stackOpen) || covered) return;
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if (e.key === 'Escape') {
                 if (lightboxState?.isOpen) return;
@@ -437,12 +437,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 e.stopPropagation();
                 setPreviewPost(null);
                 setStackList(stackShut);
-                setCalendarOpen(false);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [previewPost, stackOpen, calendarOpen, lightboxState?.isOpen, covered]);
+    }, [previewPost, stackOpen, lightboxState?.isOpen, covered]);
 
     // A pin's card takes the list's place.
     useEffect(() => {
@@ -2360,13 +2359,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
         {calendarOpen && (
             <MapCalendar
-                posts={posts}
+                posts={posts.filter((p) => !blockedSet.has(p.authorPublicKey) && !inactiveEnterpriseKeys.has(p.authorPublicKey))}
                 covered={covered}
                 onClose={() => setCalendarOpen(false)}
                 onOpenPost={(post) => {
                     if (onNavigate) onNavigate('marketplace', post.id);
                 }}
-                onStartEvent={() => {
+                onStartEvent={visitor ? undefined : () => {
+                    setCalendarOpen(false);
                     setNewPostType('event');
                     tryOpenComposer();
                 }}

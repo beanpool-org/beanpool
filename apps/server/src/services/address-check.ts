@@ -34,7 +34,8 @@
 
 import crypto from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
-import { addressNextStep, wordsFor, type AddressAnswer, type AddressStep } from '@beanpool/core';
+import { addressNextStep, wordsFor, type AddressAnswer, type AddressStep, type DnsSeen, type AddressReach } from '@beanpool/core';
+export type { DnsSeen, AddressReach };
 import { db } from '../db/db.js';
 import { getNodeConfig, getNodeRole } from '../state-engine.js';
 import { logger } from '../logger.js';
@@ -71,14 +72,6 @@ const AT_ONCE = 4;
  */
 const TLS_FAILURE = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ALTNAME|HOSTNAME_MISMATCH|^ERR_SSL_|^ERR_TLS_|^EPROTO$/;
 
-export interface DnsSeen {
-    /** `answers`: some record; `no-such-name`: the resolver says there is none; `failed`: it couldn't say. */
-    outcome: 'answers' | 'no-such-name' | 'failed';
-    a: string[];
-    aaaa: string[];
-    cname: string[];
-}
-
 export interface AddressCheck {
     checkedAt: number;
     /** Null when it wasn't asked: a home-network address, by its shape (`dns` null) or by what its name points at from here. */
@@ -87,17 +80,6 @@ export interface AddressCheck {
     ownAt: number | null;
     /** Null for a number, or a name with no lookup to make. */
     dns: DnsSeen | null;
-}
-
-/** One address as `appAddressesReport` shows it. */
-export interface AddressReach extends Omit<AddressCheck, 'checkedAt' | 'ownAt'> {
-    checkedAt: string;
-    ownAt: string | null;
-    step: AddressStep;
-    /** How long ago a `new-name` was made. */
-    minutes: number | null;
-    /** The step's sentence in English; the screens draw it with addressNextStep in their reader's language. */
-    nextStep: string;
 }
 
 // ── The row ─────────────────────────────────────────────────────────────────────────────────
@@ -270,8 +252,21 @@ function liveNamesMade(): Map<string, number> {
     return new Map(live.map((e) => [e.address, Date.parse(e.since)]));
 }
 
+function registrarStatusMap(): Map<string, string> {
+    const list = parseRegistrarNames((getNodeConfig() as any).registrarNames);
+    return new Map(list.map((e) => [e.address, e.status]));
+}
+
 /** `letGo`: a former or lost name. Only this server's own key answering there still matters. */
-export function stepOf(host: string, c: AddressCheck, made: number | undefined, certified: Set<string>, now: number, letGo: boolean): { step: AddressStep; minutes: number | null } {
+export function stepOf(
+    host: string,
+    c: AddressCheck,
+    made: number | undefined,
+    certified: Set<string>,
+    now: number,
+    letGo: boolean,
+    registrarStatus?: string | null,
+): { step: AddressStep; minutes: number | null } {
     const only = (step: AddressStep) => ({ step, minutes: null });
     if (letGo && c.answers !== 'own') return only('no-longer-ours');
     switch (c.answers) {
@@ -282,6 +277,10 @@ export function stepOf(host: string, c: AddressCheck, made: number | undefined, 
         case 'tls': return only('certificate');
     }
     if (c.dns?.outcome === 'no-such-name') {
+        if (isBeanPoolName(host)) {
+            if (registrarStatus === 'pending') return only('awaiting-approval');
+            if (registrarStatus === 'blocked' || registrarStatus === 'paused') return only('stopped');
+        }
         const age = made === undefined ? NaN : now - made;
         if (age >= 0 && age < NEW_NAME_MS) return { step: 'new-name', minutes: Math.max(1, Math.round(age / 60_000)) };
         return only(isBeanPoolName(host) ? 'no-dns-beanpool' : 'no-dns-own');
@@ -297,10 +296,11 @@ export function addressReaches(now = Date.now()): Map<string, AddressReach> {
     const checks = readChecks(now);
     if (Object.keys(checks).length === 0) return out;
     const made = liveNamesMade();
+    const statuses = registrarStatusMap();
     const certified = new Set(heldCertificates(now).map((c) => c.host));
     const letGo = new Set(configuredAddresses().filter((a) => a.former || a.lost).map((a) => a.address));
     for (const [host, c] of Object.entries(checks)) {
-        const { step, minutes } = stepOf(host, c, made.get(host), certified, now, letGo.has(host));
+        const { step, minutes } = stepOf(host, c, made.get(host), certified, now, letGo.has(host), statuses.get(host));
         out.set(host, {
             answers: c.answers, dns: c.dns, step, minutes, nextStep: addressNextStep(step, minutes, english),
             checkedAt: new Date(c.checkedAt).toISOString(), ownAt: c.ownAt !== null ? new Date(c.ownAt).toISOString() : null,

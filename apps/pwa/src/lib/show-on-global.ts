@@ -85,7 +85,8 @@ const keeper = makeCopyKeeper<BeanPoolIdentity>({
     store: copyPairs,
     // Each call below hands in the global this community names.
     deps: depsFor(''),
-    copyId: copyIdFor,
+    // Read at the call, never as this file loads: Chat loads it for what waits on global, and only a tick needs a copy's id.
+    copyId: (homeId, generation, identity) => copyIdFor(homeId, generation, identity),
     plainOrigin: (url) => { try { return new URL(url).origin; } catch { return null; } },
     isEventEnded: (home: HomeEvent) => {
         const end = eventEndMs({ eventStartAt: home.eventStartAt, eventEndAt: home.eventEndAt });

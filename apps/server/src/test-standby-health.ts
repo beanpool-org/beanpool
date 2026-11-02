@@ -488,7 +488,8 @@ async function main(): Promise<void> {
         // Version 10: posts with shown_from_host and shown_from_post_id (a member's copy of an event, slice G2′).
         // Version 11: posts with shown_price (a copy's price at home, in words, slice G1′).
         // Version 12: confirmations with stepped_back_owing (the balance rule, S1).
-        assert(snap?.tableHashes?.v === 12 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 13: posts with shown_takes_questions (the door on a copy, slice GD).
+        assert(snap?.tableHashes?.v === 13 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

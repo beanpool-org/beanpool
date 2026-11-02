@@ -1331,15 +1331,21 @@ describe('Arrange', () => {
 
     it('the order is what comes back: the next landing draws the moved order, the same shape, nothing new in it', async () => {
         await render();
+        const was = cards();
         await open();
         await press('home-arrange-events-down');
         await done();
         const list = JSON.parse(sent().at(-1)!.body).preferences['home.layout'];
         expect(Object.keys(list).sort()).toEqual(['cards', 'dismissed', 'updatedAt', 'v']);
         const order = cards();
+        // The move shows, or the two reads below would agree about nothing.
+        expect(order).not.toEqual(was);
+        expect(order.indexOf('events')).toBeGreaterThan(was.indexOf('events'));
         node.answer = { ...node.answer, layout: list };
         act(() => root?.unmount());
         host?.remove();
+        // A new phone: nothing kept here, the account's list alone.
+        for (const key of homeKeys()) mem.store.delete(key);
         await render();
         expect(cards()).toEqual(order);
     });

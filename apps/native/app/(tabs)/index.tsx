@@ -1344,13 +1344,17 @@ export default function HomeScreen() {
                     <Pressable accessibilityRole="button" accessibilityLabel={t(ARRANGE_WORDS.done)} style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={endArrange} testID="home-arrange-done">
                         <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('Done')}</Text>
                     </Pressable>
-                ) : !fabAside && (
-                    <Pressable accessibilityRole="button" accessibilityLabel={t('Add a post')} style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={() => setPostPicker(true)} testID="home-add-post">
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
-                            <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('ADD POST')}</Text>
-                        </View>
-                    </Pressable>
+                ) : (
+                    <>
+                        {!fabAside && (
+                            <Pressable accessibilityRole="button" accessibilityLabel={t('Add a post')} style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={() => setPostPicker(true)} testID="home-add-post">
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
+                                    <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('ADD POST')}</Text>
+                                </View>
+                            </Pressable>
+                        )}
+                    </>
                 )}
 
                 <HomeCardMenu

@@ -53,9 +53,23 @@ describe('calendar-month: pure (no Intl, no clock read, now passed in)', () => {
         const cell10m2 = m2.cells.find((c) => c.date === '2026-11-10')!;
         expect(cell10m2.isToday).toBe(false);
         expect(cell10m2.isPast).toBe(true);
-        // Past days show no dots
+        // Past days show no dots and have eventCount 0 (active events only), while preserving cell.events
         expect(cell10m2.hasEvents).toBe(false);
+        expect(cell10m2.eventCount).toBe(0);
+        expect(cell10m2.events).toHaveLength(1);
+        const cell15m2 = m2.cells.find((c) => c.date === '2026-11-15')!;
+        expect(cell15m2.isToday).toBe(false);
+        expect(cell15m2.isPast).toBe(false);
+        expect(cell15m2.hasEvents).toBe(true);
+        expect(cell15m2.eventCount).toBe(1);
         expect(m2.firstActiveDate).toBe('2026-11-15');
+
+        // Date object passed to now formats the local device calendar date
+        const localNow = new Date(2026, 10, 10, 8, 30); // Nov 10 in device timezone
+        const mDate = buildCalendarMonth({ year: 2026, month: 11, now: localNow, events });
+        const cell10Date = mDate.cells.find((c) => c.date === '2026-11-10')!;
+        expect(cell10Date.isToday).toBe(true);
+        expect(cell10Date.isPast).toBe(false);
     });
 
     it('navigation target and isCurrentOrPastMonth grey state', () => {

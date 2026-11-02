@@ -466,7 +466,7 @@ export function buildCalendarMonth<T extends CalendarEventInput = CalendarEventI
     const { year, month } = options;
     const todayStr = typeof options.now === 'string'
         ? options.now.slice(0, 10)
-        : dateOfUtc(options.now.getTime());
+        : formatLocalDate(options.now.getFullYear(), options.now.getMonth() + 1, options.now.getDate());
 
     const dim = daysInMonth(year, month);
     const monthStart = formatLocalDate(year, month, 1);
@@ -511,7 +511,7 @@ export function buildCalendarMonth<T extends CalendarEventInput = CalendarEventI
             isToday,
             isPast,
             hasEvents,
-            eventCount: dayEvents.length,
+            eventCount: isPast ? 0 : dayEvents.length,
             events: dayEvents,
         });
     }

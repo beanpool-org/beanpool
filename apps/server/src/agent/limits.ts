@@ -11,7 +11,7 @@ export const AGENT_CALLS_PER_DAY = 2000;
 export const AGENT_BACKUPS_PER_DAY = 2;
 export const AGENT_LIST_MAX = 50;
 /**
- * Offers, Needs, events and enterprise listings one owner's assistant may make in a UTC day (on top of the calls above): an
+ * Offers, Needs, events, enterprise listings and polls one owner's assistant may make in a UTC day (on top of the calls above): an
  * owners' setting, first "Assistant posts a day" (Marty, 30 Oct: 100 by default, up to 1,000 for seeding a community), kept in
  * this server's local config, read on every post, so a change takes effect at once. Since 31 Oct (Marty: "make it the same
  * as the posts limits setting") it is the "Owner and admin limit": owners' and admins' own content limits in the apps too

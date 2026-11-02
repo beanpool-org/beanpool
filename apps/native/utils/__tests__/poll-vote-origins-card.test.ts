@@ -42,6 +42,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({ LocalCommunityM
 vi.mock('../db', () => ({ votePoll: vi.fn(), closePoll: vi.fn() }));
 vi.mock('../node-profile', () => ({ INFORMAL_POLL_NOTE: 'An informal poll; it decides nothing' }));
 
+import { Alert } from 'react-native';
 import { PollCard } from '../../components/PollCard';
 import { votePoll } from '../db';
 
@@ -178,5 +179,23 @@ describe('the phone\'s poll card: where the votes came from', () => {
             expect(e.parentElement?.tagName).toBe('BUTTON');
             expect(e.parentElement?.getAttribute('data-row')).toBeNull();
         }
+    });
+});
+
+describe('the phone\'s poll card: a card older than an edit', () => {
+    it('the node\'s refusal is said, no vote is shown, and the answers can be tapped again', async () => {
+        vi.mocked(Alert.alert).mockClear();
+        // What utils/db.ts votePoll throws on the node's 400: its own `error`, as it came.
+        vi.mocked(votePoll).mockRejectedValueOnce(new Error('Invalid poll option'));
+        const onVoteSuccess = vi.fn();
+        await act(async () => {
+            root.render(createElement(PollCard, { post: poll(OPEN), currentPubkey: 'me'.padEnd(64, '0'), onVoteSuccess }) as any);
+        });
+        await act(async () => { answer('Yes').click(); });
+        expect(Alert.alert).toHaveBeenCalledTimes(1);
+        expect(Alert.alert).toHaveBeenCalledWith('Voting Error', 'Invalid poll option');
+        expect(onVoteSuccess).not.toHaveBeenCalled();
+        expect(container.textContent).toContain('12 total votes cast');
+        expect((answer('Yes') as HTMLButtonElement).disabled).toBe(false);
     });
 });

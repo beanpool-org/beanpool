@@ -4781,7 +4781,7 @@
   "Assistant: “{name}” (the name it gave itself)": "Βοηθός: «{name}» (το όνομα που έδωσε ο ίδιος στον εαυτό του)",
   "Assistant: no name given": "Βοηθός: δεν δόθηκε όνομα",
   "Sends what it reads to: {host}": "Στέλνει ό,τι διαβάζει στο: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Διαβάζει την υγεία, τα αντίγραφα ασφαλείας, τα σύνολα, τις αναφορές και τα αιτήματα συμμετοχής ως εσύ. Αν είσαι ιδιοκτήτης, μπορεί επίσης να πάρει αντίγραφο ασφαλείας και να αναρτά Προσφορές, Ανάγκες και εκδηλώσεις για σένα, αμέσως και χωρίς έγκριση. Οτιδήποτε άλλο μπορεί μόνο να το προτείνει, και τίποτα δεν αλλάζει μέχρι να το εγκρίνεις.",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Διαβάζει την υγεία, τα αντίγραφα ασφαλείας, τα σύνολα, τις αναφορές και τα αιτήματα συμμετοχής ως εσύ. Αν είσαι ιδιοκτήτης, μπορεί επίσης να πάρει αντίγραφο ασφαλείας και να αναρτά Προσφορές, Ανάγκες, εκδηλώσεις και ψηφοφορίες για σένα, αμέσως και χωρίς έγκριση. Οτιδήποτε άλλο μπορεί μόνο να το προτείνει, και τίποτα δεν αλλάζει μέχρι να το εγκρίνεις.",
   "{time} left": "απομένουν {time}",
   "Computer: A browser": "Υπολογιστής: Ένα πρόγραμμα περιήγησης",
   "Computer: {browser}": "Υπολογιστής: {browser}",

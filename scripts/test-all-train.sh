@@ -389,6 +389,9 @@ TRAIN=($(riding))
 ORIG_DIR=$(pwd)
 WT=$(mktemp -d "${TMPDIR:-/tmp}/test-all-train.XXXXXX") || exit 1
 cleanup() {
+  # A child inherits this trap until bash resets it. with_limit's watcher, killed just after its fork, can run it: measured on
+  # bash 5.2 on 2 Nov 2026, and in CI it removed the tree the train was still in. Only the train's own shell cleans up.
+  [ "${BASHPID:-$(exec sh -c 'echo $PPID')}" = "$$" ] || return 0
   shadow_record
   cd "$ORIG_DIR" || return
   if [ $KEEP -eq 1 ]; then echo "Scratch worktree kept: $WT"

@@ -9,7 +9,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getConversationMessages, getGroupChat, sendMessageApi, type ApiMessage } from '../lib/api';
-import { lockForDm } from '../lib/dm-lock';
+import { dmKeyContext, lockForDm } from '../lib/dm-lock';
+import { openDmLine } from '../lib/e2e-crypto';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys, groupKeyring, memoryGroupLockStore } from '../lib/group-chat-keys';
@@ -272,6 +273,29 @@ describe('two quick lines are chained as lines sent one at a time', () => {
         expect((await screen.findByTestId('dm-line-note')).textContent).toContain(OUT_OF_ORDER);
     });
 
+    it('a DM\'s photo behind a line waits for it too, and is written after it', async () => {
+        photoStubs();
+        const { composer } = await openDm();
+        let answerLine!: (v: unknown) => void;
+        vi.mocked(sendMessageApi).mockReturnValueOnce(new Promise((r) => { answerLine = r; }) as never).mockResolvedValue({ success: true } as never);
+        await typed(composer, 'A line first');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+
+        fireEvent.paste(composer, { clipboardData: clipboardWith(picture()) });
+        const preview = await screen.findByTestId('chat-image-preview');
+        await act(async () => { fireEvent.click(within(preview).getByRole('button', { name: 'Send' })); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+        expect(sendMessageApi).toHaveBeenCalledTimes(1);
+
+        await act(async () => { answerLine({ success: true }); });
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(2));
+        const [line, photo] = vi.mocked(sendMessageApi).mock.calls;
+        expect(photo[4]).toBe('image');
+        const ctx = dmKeyContext(dmConv as never, me)!;
+        const opened = openDmLine({ ciphertext: photo[2], nonce: photo[3] }, ctx, { conversationId: ctx.conversationId, senderPubHex: ana.publicKey, messageId: photo[7]!, part: 'body', metadata: photo[6] });
+        expect(opened.after).toBe(line[7]);
+    });
+
     it('a photo behind a line waits for it, written after it, the composer resting meanwhile', async () => {
         photoStubs();
         const { composer } = await openGroup();
@@ -354,6 +378,50 @@ describe('the echo of a line, and an answer that can\'t be checked', () => {
         await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
         expect(window.alert).not.toHaveBeenCalled();
         expect(screen.getAllByText('Echoed then cut off')).toHaveLength(1);
+    });
+});
+
+describe('a line on its way', () => {
+    it('in an empty chat is the chat: "No messages yet" goes as it shows', async () => {
+        const { composer } = await openDm();
+        expect(screen.getByText('No messages yet. Say hello! 👋')).toBeTruthy();
+        await typedNoAnswer(composer, 'Hello there');
+        expect(screen.queryByText('No messages yet. Say hello! 👋')).toBeNull();
+    });
+
+    it('as a reply quotes what it answers, and goes sealed to it, as a reply always did', async () => {
+        const asked = sealedDm(ben, 'Are you free Saturday?');
+        dm.rows = [asked];
+        const { composer } = await openDm();
+        fireEvent.click(screen.getByRole('button', { name: 'Reply to message' }));
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await typed(composer, 'Saturday suits');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        const pendingQuote = await screen.findByTestId('dm-quote');
+        expect(pendingQuote.textContent).toContain('Are you free Saturday?');
+
+        const call = vi.mocked(sendMessageApi).mock.calls[0];
+        expect(JSON.parse(String(call[6])).replyToId).toBe(asked.id);
+        dm.rows = [asked, rowOfSend(call)];
+        await ringDoorbell();
+        await waitFor(() => expect(screen.queryByTestId('chat-line-pending')).toBeNull());
+        expect(screen.getByText('Saturday suits')).toBeTruthy();
+        expect(screen.getByTestId('dm-quote').textContent).toContain('Are you free Saturday?');
+        expect(screen.queryByTestId('dm-line-unattributed')).toBeNull();
+    });
+
+    it('is left out while searching the chat: a search finds what the chat holds', async () => {
+        const { composer } = await openGroup();
+        let release!: () => void;
+        holdGroupPost = new Promise((r) => { release = r; });
+        await typed(composer, 'Working late');
+        await waitFor(() => expect(node.lines).toHaveLength(2));
+        expect(screen.getByText('Working late')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('group-chat-search-toggle'));
+        fireEvent.change(screen.getByTestId('group-chat-search'), { target: { value: 'Working' } });
+        await screen.findByText('Working bee Saturday 9am');
+        expect(screen.queryByText('Working late')).toBeNull();
+        await act(async () => { release(); });
     });
 });
 

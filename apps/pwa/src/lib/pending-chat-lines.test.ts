@@ -211,6 +211,13 @@ describe('what the next line is written after', () => {
     });
 });
 
+describe('where the words are kept', () => {
+    it('is nowhere but this module\'s memory: it names no storage at all', () => {
+        const source = fs.readFileSync(path.resolve(__dirname, 'pending-chat-lines.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB|caches\b|cookie/i);
+    });
+});
+
 describe('the words these lines say', () => {
     const WEB = path.resolve(__dirname, '../../words');
     const PHONE = path.resolve(__dirname, '../../../native/words');

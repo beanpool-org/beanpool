@@ -63,7 +63,7 @@ A group's chat is end-to-end encrypted: only the group's members can read it, no
 
 - You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words or photos.
 - When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.
-- A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.
+- A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it; in the web app, use **Retry** or **Discard** on the message.
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
 - If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **An earlier message was removed when this chat was locked**, and several in a row show as one line, such as **11 earlier messages removed when this chat was locked**.
 
@@ -82,7 +82,7 @@ A group's chat works exactly like a chat with one person. Tap a message and smal
 
 Two or more messages in a row that their authors deleted show as one line, such as **3 messages were deleted**. Two or more that a convenor removed show as **3 messages removed by a convenor**.
 
-Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
+Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it, or in the web app use **Retry** or **Discard** on the message. There are no blue double ticks in a group: a group has no single reader.
 
 In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. It can be deleted like any message (the author; a convenor can remove it), on the phone and the web.
 

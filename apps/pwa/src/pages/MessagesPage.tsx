@@ -1341,11 +1341,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return !!answer?.messages?.some((m: ApiMessage) => m.id === line.id);
     }
 
-    function handleRetryLine(id: string, text: string, replyToId: string | null, owner: string) {
+    function handleRetryLine(line: NewChatLine) {
         if (!activeConv) return;
-        if (draft === text) setDraft('');
+        if (draft === line.text) setDraft('');
         setChatRefusal(null);
-        retryChatLine(id, lineSender({ id, conversationId: activeConv.id, owner, text, replyToId }, activeConv));
+        retryChatLine(line.id, lineSender(line, activeConv));
     }
 
     /**
@@ -3065,8 +3065,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         <FoldedChatText text={line.text} mine={!failed} />
                                     </div>
                                     {failed && (
-                                        <div role="status" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '4px 8px', marginTop: '4px' }}>
-                                            <span data-testid="chat-line-failed" style={{ fontSize: '0.8rem', fontWeight: 700 }}>{t('! not delivered')}</span>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '4px 8px', marginTop: '4px' }}>
+                                            <span data-testid="chat-line-failed" role="status" style={{ fontSize: '0.8rem', fontWeight: 700 }}>{t('! not delivered')}</span>
                                             <button
                                                 type="button"
                                                 data-testid="chat-line-discard"
@@ -3081,7 +3081,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             <button
                                                 type="button"
                                                 data-testid="chat-line-retry"
-                                                onClick={(e) => { e.stopPropagation(); handleRetryLine(line.id, line.text, line.replyToId, line.owner); }}
+                                                onClick={(e) => { e.stopPropagation(); handleRetryLine(line); }}
                                                 style={{
                                                     minHeight: '44px', minWidth: '44px', padding: '0 14px', border: 'none', borderRadius: '8px', font: 'inherit', fontSize: '0.85rem', fontWeight: 700,
                                                     background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', cursor: 'pointer',

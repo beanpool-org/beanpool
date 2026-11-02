@@ -52,10 +52,10 @@ The ticks under your message:
 
 - one tick: sent;
 - two blue ticks: read;
-- a clock: still sending;
-- **not delivered**: it failed. Tap it to **Resend** or **Discard** it.
+- a clock: still sending. The web app says **Sending…**;
+- **not delivered**: it failed. Tap it to **Resend** or **Discard** it. In the web app, use **Retry** or **Discard** on the message.
 
-The clock and **not delivered** are on the phone. In the web app a message that fails stays in the box, and the app says so.
+Use these rather than typing the message again: if it did reach your community's server, trying again won't send it twice. In the web app a message that didn't go stays until you close the tab, and its chat says **! not delivered** in your list.
 
 ## Reply, react, edit, delete
 

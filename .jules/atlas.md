@@ -289,3 +289,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `fetchStrandedEscrows` and `writeOffStrandedEscrow` in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage in `node-client.test.ts`.
 **Learning:** Testing `writeOffStrandedEscrow` error handling verifies `StrandedEscrowWriteOffError` construction with custom server message, `code`, and Commons before/after balances.
 **Action:** Continue identifying remaining untested helper utilities in `apps/manager/src/lib/`.
+
+## 2026-11-03 - [manager tests] key-session handoff helpers unit tests
+**Gap:** `carriesHandoff`, `handoffRefusedMessage`, `handoffResumedMessage`, `otherSessionMessage`, and `HANDOFF_SECTIONS` in `apps/manager/src/lib/key-session.ts` lacked direct unit test assertions.
+**Learning:** Testing `otherSessionMessage` verifies notice distinctions when `who` is password vs member callsign or unknown account fallback, as well as `sure` flag boolean branching.
+**Action:** Check remaining utility files in `apps/manager/src/lib/` (e.g. `community-shape.ts`) for unasserted constants or helper functions.

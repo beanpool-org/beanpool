@@ -369,7 +369,7 @@ export const AGENT_TOOLS: AgentTool[] = [
             + 'new members in the last 7 and 30 days, the number of posts, and how far members who joined got (newMembers, for the last '
             + `90 days and all time): how many joined and made a first listing, how many completed a first trade (at least this many, in steps of ${FIRST_TRADE_MIN_GROUP}), `
             + 'and the median days from joining to a first listing and from a first listing to a first trade. '
-            + `A null there means too few yet to show (under ${FIRST_TRADE_MIN_GROUP} people): say so, never read it as 0. `
+            + `A null there means held back: under ${FIRST_TRADE_MIN_GROUP} people in that group, or under ${FIRST_TRADE_MIN_GROUP} between the two windows, so it can hide a large number: say too few to show, never read it as 0 or as a small number. `
             + 'beans false means this community has no Beans, so no trades to measure; anyTrades false means no trade has been finished here yet',
         never: "any member's balance, per-member figures, any member's dates, names or keys, or the list of members in debit",
         inputSchema: NO_ARGS,

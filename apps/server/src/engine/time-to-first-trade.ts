@@ -34,8 +34,9 @@
  * count and not in this median: their wait wasn't for a buyer.
  *
  * What small numbers would give away, and what this does about it. Owners and admins already see who joined and when, and
- * every member sees every public listing, so `joined` and `firstListing` are exact: they tell nobody anything new. A trade
- * is different: "Admins never see anyone's trades".
+ * every member sees every public listing, so `joined` and `firstListing` are exact: they tell nobody anything new. Trades
+ * are different. A member's count of finished trades is on their trust profile, one look at a time, but when they traded is
+ * theirs, and this panel tells the admins "Admins never see anyone's trades".
  *  - No median of fewer than FIRST_TRADE_MIN_GROUP people, ever: "1 member, 3 days" is a person.
  *  - The first-trade count is shown in steps of 5, rounded down, so fewer than 5 reads the same as none. An exact count that
  *    moved by one would name someone: when one member ages out of the window, whether it falls says whether they had traded,
@@ -48,6 +49,8 @@
  * of the 90 days, see a median move or a step fall, and infer that member was in it. A median can't be rounded out of that, and
  * only a window that stopped sliding would end it. It needs a daily habit, a small community and a median near a boundary,
  * and tells only that a first trade happened, not with whom or for how much.
+ * Also accepted: a group that all traded says so ("Joined 5", "At least 5"). That each of them has traded is on each one's
+ * trust profile, which every member can read; the median beside it is the middle person's, not anyone's in particular.
  *
  * Cost, on a panel load and on the assistant's read: one pass over the members who joined here, with indexed lookups for each
  * (idx_posts_author_created_local, idx_posts_created_by, the deals' buyer and seller indexes, the post and status one, and

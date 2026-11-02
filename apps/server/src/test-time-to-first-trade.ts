@@ -26,7 +26,8 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { consumeHandshakeToken, mintHandshakeToken } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
@@ -465,6 +466,22 @@ async function main(): Promise<void> {
         assert(nobody.status === 401, `an unsigned request is refused (${nobody.status})`);
         const noPassword = await get(health);
         assert(noPassword.status === 401 || noPassword.status === 403, `and the panel's own route needs an admin (${noPassword.status})`);
+        // The route the panel itself reads, by the session Settings opens: a key session carries the role.
+        const session = (pk: string, role: 'admin' | 'moderator') => {
+            const opened = consumeHandshakeToken(mintHandshakeToken(pk, role).handshakeToken);
+            if (!opened.ok || !opened.sessionId) throw new Error(`could not open a test key session: ${opened.error}`);
+            return { 'X-Admin-Session': opened.sessionId };
+        };
+        const adminSession = await get(health, session(ada.pk, 'admin'));
+        assert(adminSession.status === 200 && adminSession.body?.totals?.newMembers?.allTime?.joined === 12, `an admin's session reads it on the panel's route (${adminSession.status})`);
+        const modSession = await get(health, session(moe.pk, 'moderator'));
+        assert(modSession.status === 403 && !modSession.text.includes('newMembers'), `a moderator's session is refused on the panel's route too (${modSession.status} ${modSession.text.slice(0, 120)})`);
+        const readToken = await get(health, ownerTokenHeaders('read', founderPk));
+        assert(readToken.status === 200 && readToken.body?.totals?.newMembers?.allTime?.joined === 12, `an owner's read token reads it as an admin does, as the panel's rule is today (${readToken.status})`);
+        for (const scope of ['backups', 'agent'] as const) {
+            const refused = await get(health, ownerTokenHeaders(scope, founderPk));
+            assert(refused.status === 403 && !refused.text.includes('newMembers'), `a token of the ${scope} scope is refused: this panel is not its scope (${refused.status})`);
+        }
         for (const path of ['/api/community/info', '/api/community/health', '/api/home', '/api/community/known-rule', '/api/community/directory']) {
             const r = await get(path);
             assert(!r.text.includes('newMembers') && !r.text.includes('firstTrade'), `${path} doesn't carry it (${r.status})`);
@@ -473,6 +490,9 @@ async function main(): Promise<void> {
         const answer = await tool.run({ role: 'admin' } as never, {}, 'x') as unknown as { ok: boolean; result: { newMembers: { allTime: { firstTrade: number } } } };
         assert(answer.ok && answer.result.newMembers.allTime.firstTrade === 10, `the assistant's community_totals carries it (${JSON.stringify(answer.result.newMembers.allTime)})`);
         assert(/first trade/.test(tool.reads) && /too few/.test(tool.reads), `and its description says what it reads and what a null means`);
+        // 10 of 10 traded in the window, and the window reads null (the two-windows scene in part 5): "under 5 people" alone would be false.
+        assert(/between the two windows/.test(tool.reads) && /can hide a large number/.test(tool.reads) && /never read it as 0 or as a small number/.test(tool.reads),
+            `and a null can't be told to an owner as a small number: it can be a window held back beside another`);
         assert(/names or keys/.test(tool.never), `and what it never does`);
         const everything = [owner.text, asAdmin.text, JSON.stringify(answer.result), JSON.stringify(communityTotals(NOW))];
         const leaks: string[] = [];

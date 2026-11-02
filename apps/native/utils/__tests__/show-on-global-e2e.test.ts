@@ -1,5 +1,5 @@
 /**
- * "Also show this on the global community", end to end (slice G2′, utils/show-on-global.ts): the phone's own code against two
+ * "Also show this on the global community", end to end (slices G2′ and G1′, utils/show-on-global.ts): the phone's own code against two
  * REAL nodes on this machine, apps/server/src/phone-door-test-harness.ts, one the global profile and one a community with
  * Beans on, as utils/__tests__/bring-listings-e2e.test.ts runs them.
  *
@@ -53,11 +53,11 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 
-import { repeatPatternFor, roundToArea } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, repeatPatternFor, roundToArea } from '@beanpool/core';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
 import { fetchedPostPhoto } from '../post-photo';
-import { COPY_KEEP_ALIVE_MS, COPY_TIMEOUT_MS, copyFields, copyResultLine, homeHostOf, pairOf, repeatOnCopy, showOnGlobal, stopLaterLine, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
+import { COPY_KEEP_ALIVE_MS, COPY_TIMEOUT_MS, copyFields, copyResultLine, homeHostOf, mayShowOnGlobal, pairOf, repeatOnCopy, showOnGlobal, stopLaterLine, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
 const START_MS = 120_000;
@@ -154,6 +154,8 @@ let loseNextCreate = false;
 let mainAddress: string | null = null;
 /** The home community answers everything but what the member's preferences are. */
 let homeHidesPreferences = false;
+/** The home community answers everything but a read of its listings: its photos still come, so only the read itself can hold a tick back. */
+let homeHidesListings = false;
 
 const deps = (): CopyDeps => ({ global: global_.url, get: signedGet, post: signedPost, del: signedDelete, fetchPhoto: fetchedPostPhoto, hostOf: () => HOST });
 
@@ -171,6 +173,7 @@ beforeAll(async () => {
         if (toGlobal && globalDown) throw new TypeError('Network request failed');
         if (toLocal) phoneToLocal.push(`${String(init?.method ?? 'GET')} ${url.pathname}${url.search}`);
         if (toLocal && homeHidesPreferences && url.pathname === '/api/members/preferences') return new Response('{}', { status: 503 });
+        if (toLocal && homeHidesListings && url.pathname === '/api/marketplace/posts') return new Response('{}', { status: 503 });
         const res = await realFetch(input, init);
         if (toLocal && mainAddress && url.pathname === '/api/community/info') {
             const info = await res.json() as Record<string, unknown>;
@@ -196,6 +199,7 @@ beforeEach(async () => {
     loseNextCreate = false;
     mainAddress = null;
     homeHidesPreferences = false;
+    homeHidesListings = false;
     await Promise.all([global_.control('limiters'), local.control('limiters')]);
     await global_.control('profileSwitch', { name: 'probation', value: 'false' });
     await global_.control('directory', { url: `https://${HOST}`, name: 'Mullumbimby' });
@@ -468,7 +472,9 @@ describe('an in-person event shown on the global community (the phone against tw
             await tendCopies(me, deps());
             globalDown = false;
             expect((await copyRow(id)).status).toBe('active');
-            expect(await pairOf(home.id, me.publicKey)).toMatchObject({ copyId: id, leaving: true, resting: true });
+            // Global didn't say whether reports hold it, so the rest hasn't started: nothing is marked until it can read.
+            expect(await pairOf(home.id, me.publicKey)).toMatchObject({ copyId: id });
+            expect((await pairOf(home.id, me.publicKey))?.leaving).toBeFalsy();
 
             await tendCopies(me, deps());
             expect((await copyRow(id)).status).toBe('cancelled');
@@ -1124,5 +1130,551 @@ describe('an in-person event shown on the global community (the phone against tw
         await tendCopies(other, deps(), Date.now() + COPY_KEEP_ALIVE_MS + 1000);
         expect((await copyRow(await copyIdOf(home.id, me))).updated_at).toBe(before);
         expect(await pairOf(home.id, other.publicKey)).toBeNull();
+    }, START_MS);
+});
+
+/** An Offer or a Need on the home community, as the app posts one: the member's answer. */
+async function listingAtHome(me: BeanPoolIdentity, title: string, extra: Record<string, unknown> = {}): Promise<HomeEvent> {
+    const res = await signedPost(local.url, '/api/marketplace/posts', {
+        id: randomUUID(), type: 'offer', category: 'food', title, description: `About ${title}`, authorPublicKey: me.publicKey, credits: 20, ...PIN, photos: [PNG], ...extra,
+    }, me);
+    const answer = await res.json() as { post?: HomeEvent; error?: string };
+    expect(answer.error, title).toBeUndefined();
+    return answer.post!;
+}
+
+const liveCopies = async (me: BeanPoolIdentity) => (await global_.control<Array<Record<string, any>>>('sql', {
+    sql: "SELECT * FROM posts WHERE author_pubkey = ? AND status = 'active' AND active = 1", params: [me.publicKey], all: true,
+}));
+const homeSql = (sql: string, params: unknown[]) => local.control('sql', { sql, params });
+
+describe('an Offer or a Need shown on the global community (the phone against two real nodes)', () => {
+    it('the tick: the same key, 0 Beans, the price as words, the rounded point, its photos; home hears nothing of it', async () => {
+        const me = await memberOfBoth('Robin Offers');
+        const home = await listingAtHome(me, 'Sourdough loaves', { credits: 20 });
+        const asked = await local.control<string[]>('requests');
+        const fromPhone = phoneToLocal.length;
+
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+
+        const row = await copyRow(await copyIdOf(home.id, me));
+        expect(row).toMatchObject({ author_pubkey: me.publicKey, type: 'offer', title: 'Sourdough loaves', credits: 0, price_type: 'fixed', shown_price: '20 fixed', status: 'active', photo_count: 1,
+            shown_from_host: HOST, shown_from_post_id: home.id, reach: 'local', repeatable: 0 });
+        expect(row.lat).toBe(roundToArea(PIN.lat));
+        expect(row.lng).toBe(roundToArea(PIN.lng));
+        expect(await hashes(global_, row.id)).toEqual(await hashes(local, home.id));
+        expect(JSON.stringify(copyFields(home, me.publicKey))).not.toMatch(/153\.52219|credits/);
+
+        // A visitor reads nobody, and the line is the directory's and the price's words.
+        const read = await (await realFetch(`${global_.url}/api/marketplace/posts?id=${row.id}`)).json() as any[];
+        expect(read[0]).toMatchObject({ authorPublicKey: 'hidden', shownCopy: true, shownFrom: { name: 'Mullumbimby', door: 'ask', host: HOST }, shownPrice: '20 fixed', credits: 0 });
+        expect(copyPriceLine(eventCopyOf(read[0])!)).toBe("20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.");
+
+        // Home hears the phone and nobody else: its photos, and the one read a listing's tick needs (is it on the board?).
+        const after = await local.control<string[]>('requests');
+        expect(after.slice(asked.length)).toEqual(phoneToLocal.slice(fromPhone));
+        const isPhoto = (r: string) => /^GET \/api\/marketplace\/posts\/[^/]+\/photos\//.test(r);
+        expect(after.slice(asked.length).filter((r) => !isPhoto(r))).toEqual([`GET /api/marketplace/posts?id=${home.id}`]);
+        expect(after.slice(asked.length).some(isPhoto)).toBe(true);
+        expect(local.log()).not.toContain('BLOCKED-FETCH');
+    }, START_MS);
+
+    it('a Need, and a lendable Offer as an Offer: the price and its unit, and nothing of the loan', async () => {
+        const me = await memberOfBoth('Noor Lends');
+        const loan = await listingAtHome(me, 'Post-hole digger', { credits: 3, priceType: 'daily', lendable: true, lendMaxDays: 7, lendTerms: 'Ring 0400 000 000', replacementValue: '50 dollars' });
+        expect((loan as { lendable?: boolean }).lendable).toBe(true);
+        expect(await showOnGlobal(loan, local.url, me, deps())).toBe('shown');
+        const copy = await copyRow(await copyIdOf(loan.id, me));
+        expect(copy).toMatchObject({ shown_price: '3 daily', credits: 0, lend_terms: null, replacement_value: null });
+        expect(copy.lendable ?? 0).toBe(0);
+        const need = await listingAtHome(me, 'Help moving a piano', { type: 'need', credits: 5, priceType: 'hourly' });
+        expect(await showOnGlobal(need, local.url, me, deps())).toBe('shown');
+        const needCopy = await copyRow(await copyIdOf(need.id, me));
+        expect(needCopy).toMatchObject({ type: 'need', shown_price: '5 hourly', credits: 0 });
+        const read = await (await realFetch(`${global_.url}/api/marketplace/posts?id=${needCopy.id}`)).json() as any[];
+        expect(copyPriceLine(eventCopyOf(read[0])!)).toBe("5 Beans an hour in Mullumbimby · You can't answer this until Mullumbimby welcomes you.");
+    }, START_MS);
+
+    it('an edit at home follows: its words, its price, and a tend then finds nothing owed', async () => {
+        const me = await memberOfBoth('Tam Edits');
+        const home = await listingAtHome(me, 'Rye loaves', { credits: 20, freeTags: ['wombat'] });
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await editAtHome(me, home.id, { title: 'Rye loaves, fresh', category: 'tools', credits: 25, priceType: 'hourly', lat: -28.91234, lng: 153.11111, freeTags: [] });
+        await tendCopies(me, deps());
+        const row = await copyRow(id);
+        expect(row).toMatchObject({ title: 'Rye loaves, fresh', category: 'tools', shown_price: '25 hourly', credits: 0, lat: -28.9, lng: 153.1 });
+        expect(row.free_tags ?? '').not.toContain('wombat');
+        await tendCopies(me, deps());
+        expect((await copyRow(id)).updated_at).toBe(row.updated_at);
+    }, START_MS);
+
+    it('pause at home takes the copy down, and un-pause brings it back', async () => {
+        const me = await memberOfBoth('Pia Pauses');
+        const home = await listingAtHome(me, 'Lemons');
+        await showOnGlobal(home, local.url, me, deps());
+        const paused = await signedPost(local.url, '/api/marketplace/posts/pause', { postId: home.id, authorPublicKey: me.publicKey }, me);
+        expect(paused.ok).toBe(true);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect((await pairOf(home.id, me.publicKey))?.resting).toBe(true);
+
+        await signedPost(local.url, '/api/marketplace/posts/resume', { postId: home.id, authorPublicKey: me.publicKey }, me);
+        await tendCopies(me, deps());
+        expect((await liveCopies(me)).map((r) => r.title)).toEqual(['Lemons']);
+        expect((await pairOf(home.id, me.publicKey))?.resting).toBeFalsy();
+    }, START_MS);
+
+    it('hidden by reports at home takes the copy down, and a moderator\'s restore brings it back', async () => {
+        const me = await memberOfBoth('Hana Hidden');
+        const home = await listingAtHome(me, 'Eggs');
+        await showOnGlobal(home, local.url, me, deps());
+        await homeSql("UPDATE posts SET hidden_by_reports_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", [home.id]);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        await homeSql('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ?', [home.id]);
+        await tendCopies(me, deps());
+        expect((await liveCopies(me)).map((r) => r.title)).toEqual(['Eggs']);
+    }, START_MS);
+
+    it('in a deal at home it rests; the deal called off brings it back, and a finished one takes it down for good', async () => {
+        const me = await memberOfBoth('Dana Deals');
+        const home = await listingAtHome(me, 'Firewood');
+        await showOnGlobal(home, local.url, me, deps());
+        await homeSql("UPDATE posts SET status = 'pending' WHERE id = ?", [home.id]);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        await homeSql("UPDATE posts SET status = 'active' WHERE id = ?", [home.id]);
+        await tendCopies(me, deps());
+        expect((await liveCopies(me)).map((r) => r.title)).toEqual(['Firewood']);
+        await homeSql("UPDATE posts SET status = 'completed', active = 0 WHERE id = ?", [home.id]);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('removed at home, here or in the web app: the copy goes and the pair with it', async () => {
+        const me = await memberOfBoth('Remy Removes');
+        const here = await listingAtHome(me, 'Honey');
+        const there = await listingAtHome(me, 'Jam');
+        await showOnGlobal(here, local.url, me, deps());
+        await showOnGlobal(there, local.url, me, deps());
+        expect(await stopShowing(here.id, me, deps())).toBe(true);
+        expect((await liveCopies(me)).map((r) => r.title)).toEqual(['Jam']);
+        await signedPost(local.url, '/api/marketplace/posts/remove', { id: there.id, authorPublicKey: me.publicKey }, me);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await pairOf(there.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('a listing that is not the member\'s own, for everyone, with a place is never sent, whatever a screen asks', async () => {
+        const me = await memberOfBoth('Gil Groups');
+        const home = await listingAtHome(me, 'Plums');
+        for (const home2 of [{ ...home, audienceScope: 'group' }, { ...home, audienceScope: 'direct' }, { ...home, authorPublicKey: 'an-enterprise' }, { ...home, lat: null }, { ...home, originNode: 'peer' }, { ...home, type: 'poll' }]) {
+            expect(mayShowOnGlobal(home2 as HomeEvent, me.publicKey)).toBe(false);
+            expect(await showOnGlobal(home2 as HomeEvent, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
+        }
+        expect(await liveCopies(me)).toEqual([]);
+        expect(mayShowOnGlobal(home, me.publicKey)).toBe(true);
+    }, START_MS);
+
+    it('an unlisted community: no name, no door, the price in words, and the member told once', async () => {
+        const me = await memberOfBoth('Una Unlisted');
+        const home = await listingAtHome(me, 'Quiet valley honey');
+        const result = await showOnGlobal(home, local.url, me, { ...deps(), hostOf: () => 'not-listed.example.org' });
+        expect(result).toBe('shown-no-name');
+        expect(copyResultLine(result)).toBe("Your community isn't in the directory, so this shows there without its name.");
+        const id = await copyIdOf(home.id, me);
+        expect(await copyRow(id)).toMatchObject({ shown_from_host: '', shown_from_post_id: null, shown_price: '20 fixed' });
+        const read = await (await realFetch(`${global_.url}/api/marketplace/posts?id=${id}`)).json() as any[];
+        expect(copyPriceLine(eventCopyOf(read[0])!)).toBe("20 Beans in another community · You can't buy or take this here.");
+    }, START_MS);
+});
+
+/** Off the board at home and back, each as it happens there: what a rest and a return go through. */
+const homeRests: Array<[string, (me: BeanPoolIdentity, home: HomeEvent) => Promise<unknown>, (me: BeanPoolIdentity, home: HomeEvent) => Promise<unknown>]> = [
+    ['a pause and un-pause',
+        (me, home) => signedPost(local.url, '/api/marketplace/posts/pause', { postId: home.id, authorPublicKey: me.publicKey }, me),
+        (me, home) => signedPost(local.url, '/api/marketplace/posts/resume', { postId: home.id, authorPublicKey: me.publicKey }, me)],
+    ['a deal called off',
+        (_me, home) => homeSql("UPDATE posts SET status = 'pending' WHERE id = ?", [home.id]),
+        (_me, home) => homeSql("UPDATE posts SET status = 'active' WHERE id = ?", [home.id])],
+    ['a report hide restored',
+        (_me, home) => homeSql("UPDATE posts SET hidden_by_reports_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", [home.id]),
+        (_me, home) => homeSql('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ?', [home.id])],
+    ['a holiday ending',
+        (me) => signedPost(local.url, '/api/members/holiday', { enabled: true }, me),
+        (me) => signedPost(local.url, '/api/members/holiday', { enabled: false }, me)],
+];
+
+/** What Stop showing on the copy's own page does (ListingCopyDetail, then utils/db.ts deletePost): global by the copy's id, then the pair. */
+async function stopFromCopysPage(me: BeanPoolIdentity, copyId: string): Promise<boolean> {
+    expect((await signedPost(global_.url, '/api/marketplace/posts/remove', { id: copyId, authorPublicKey: me.publicKey }, me)).ok).toBe(true);
+    return stopShowing(copyId, me, deps());
+}
+
+const globalSql = (sql: string, params: unknown[]) => global_.control('sql', { sql, params });
+const holdByReports = (copyId: string) => globalSql("UPDATE posts SET hidden_by_reports_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", [copyId]);
+
+describe('a copy global\'s reports hold: a rest at home waits, so nothing comes back clean', () => {
+    it.each(homeRests)('it stays held and no new copy is posted through %s', async (why, off, on) => {
+        const me = await memberOfBoth(`Holly ${why}`);
+        const home = await listingAtHome(me, 'Plums');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await holdByReports(id);
+
+        await off(me, home);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(1);
+        expect(await copyIdOf(home.id, me)).toBe(id);
+    }, START_MS);
+
+    it('the row\'s own tick on a paused listing goes the same way: the held copy stays', async () => {
+        const me = await memberOfBoth('Holly Ticks');
+        const home = await listingAtHome(me, 'Medlars');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await holdByReports(id);
+        const [, off] = homeRests[0];
+        await off(me, home);
+        expect(await showOnGlobal({ ...home, status: 'paused' }, local.url, me, deps())).toBe('later');
+        expect(await copyCount(me)).toBe(1);
+        expect(await copyIdOf(home.id, me)).toBe(id);
+    }, START_MS);
+
+    it('global doesn\'t answer the read, though it would take the remove: the rest waits, then goes ahead', async () => {
+        const me = await memberOfBoth('Holly Unread');
+        const home = await listingAtHome(me, 'Sloes');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const [, off] = homeRests[0];
+        await off(me, home);
+        const noReads: CopyDeps = { ...deps(), get: (async (url: string, ...rest: any[]) => {
+            if (String(url).startsWith(global_.url)) throw new Error('timed out');
+            return (signedGet as any)(url, ...rest);
+        }) as any };
+        await tendCopies(me, noReads);
+        expect(await copyIdOf(home.id, me)).toBe(id);
+        expect(await liveCopies(me)).toHaveLength(1);
+
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+    }, START_MS);
+
+    it('a rest whose remove went unanswered asks again: a hold since then keeps the copy', async () => {
+        const me = await memberOfBoth('Holly Retry');
+        const home = await listingAtHome(me, 'Damsons');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        const noPosts: CopyDeps = { ...deps(), post: (async (url: string, ...rest: any[]) => {
+            if (String(url).startsWith(global_.url)) throw new Error('timed out');
+            return (signedPost as any)(url, ...rest);
+        }) as any };
+        await tendCopies(me, noPosts);
+        expect((await pairOf(home.id, me.publicKey))?.leaving).toBe(true);
+
+        await holdByReports(id);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(1);
+        expect((await copyRow(id)).status).toBe('active');
+    }, START_MS);
+
+    describe('a first send landed but its answer was lost, so the pair has nothing in sent', () => {
+        const sentUnanswered = async (name: string, title: string) => {
+            const me = await memberOfBoth(name);
+            const home = await listingAtHome(me, title);
+            const lostAnswer: CopyDeps = { ...deps(), post: (async (url: string, ...rest: any[]) => {
+                const answer = await (signedPost as any)(url, ...rest);
+                if (String(url).startsWith(global_.url)) throw new Error('timed out');
+                return answer;
+            }) as any };
+            await showOnGlobal(home, local.url, me, lostAnswer);
+            const id = await copyIdOf(home.id, me);
+            expect((await pairOf(home.id, me.publicKey))?.sent).toBe('');
+            expect(await copyCount(me)).toBe(1);
+            await holdByReports(id);
+            return { me, home, id };
+        };
+
+        it('a tend\'s rest still waits for a hold', async () => {
+            const { me, home, id } = await sentUnanswered('Holly Unheard', 'Bullaces');
+            const [, off, on] = homeRests[0];
+            await off(me, home);
+            await tendCopies(me, deps());
+            await on(me, home);
+            await tendCopies(me, deps());
+            expect(await copyCount(me)).toBe(1);
+            expect((await copyRow(id)).status).toBe('active');
+        }, START_MS);
+
+        it('the rest asked for from a screen still waits for a hold', async () => {
+            const { me, home, id } = await sentUnanswered('Holly Asked', 'Greengages');
+            const [, off] = homeRests[0];
+            await off(me, home);
+            expect(await showOnGlobal({ ...home, status: 'paused' }, local.url, me, deps())).toBe('later');
+            expect(await copyCount(me)).toBe(1);
+            expect(await copyIdOf(home.id, me)).toBe(id);
+            expect((await copyRow(id)).status).toBe('active');
+        }, START_MS);
+    });
+
+    it('a moderator\'s takedown of a held copy doesn\'t keep a rest\'s retry waiting: the stamp is on a cancelled row', async () => {
+        const me = await memberOfBoth('Holly Taken');
+        const home = await listingAtHome(me, 'Mulberries');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const [, off] = homeRests[0];
+        await off(me, home);
+        const noPosts: CopyDeps = { ...deps(), post: (async (url: string, ...rest: any[]) => {
+            if (String(url).startsWith(global_.url)) throw new Error('timed out');
+            return (signedPost as any)(url, ...rest);
+        }) as any };
+        await tendCopies(me, noPosts);
+        expect((await pairOf(home.id, me.publicKey))?.leaving).toBe(true);
+
+        await holdByReports(id);
+        await globalSql("UPDATE posts SET status = 'cancelled' WHERE id = ?", [id]);
+        await tendCopies(me, deps());
+        expect((await pairOf(home.id, me.publicKey))?.leaving).toBeFalsy();
+    }, START_MS);
+
+    it('a moderator\'s restore while the listing is off the board: the rest goes ahead and the copy comes back', async () => {
+        const me = await memberOfBoth('Holly Restored');
+        const home = await listingAtHome(me, 'Pears');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        await holdByReports(id);
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(1);
+
+        await globalSql('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ?', [id]);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toHaveLength(1);
+        expect(await copyCount(me)).toBe(2);
+    }, START_MS);
+
+    it('a listing finished at home still takes a held copy down and ends the pair', async () => {
+        const me = await memberOfBoth('Holly Finished');
+        const home = await listingAtHome(me, 'Quinces');
+        await showOnGlobal(home, local.url, me, deps());
+        await holdByReports(await copyIdOf(home.id, me));
+        await homeSql("UPDATE posts SET status = 'completed' WHERE id = ?", [home.id]);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+});
+
+describe('Stop showing from the copy\'s own page: all it knows is the copy\'s id', () => {
+    it.each(homeRests)('the pair goes, the home row stops saying Shown, and nothing comes back through %s', async (why, off, on) => {
+        const me = await memberOfBoth(`Stella ${why}`);
+        const home = await listingAtHome(me, 'Cherries');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        expect(await liveCopies(me)).toHaveLength(1);
+
+        expect(await stopFromCopysPage(me, id)).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+
+        await off(me, home);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await copyCount(me)).toBe(1);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('an event\'s copy, cancelled from its own page by the same door (EventDetail): the holiday\'s end brings nothing back', async () => {
+        const me = await memberOfBoth('Evie Stops');
+        const home = await eventAtHome(me, 'Barn dance');
+        await showOnGlobal(home, local.url, me, deps());
+        expect(await stopFromCopysPage(me, await copyIdOf(home.id, me))).toBe(true);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        await signedPost(local.url, '/api/members/holiday', { enabled: true }, me);
+        await tendCopies(me, deps());
+        await signedPost(local.url, '/api/members/holiday', { enabled: false }, me);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await copyCount(me)).toBe(1);
+    }, START_MS);
+
+    it('a page left open through a rest holds the id the copy had: its Stop showing still ends the pair, under the new id', async () => {
+        const me = await memberOfBoth('Olive Stale');
+        const home = await listingAtHome(me, 'Olives');
+        await showOnGlobal(home, local.url, me, deps());
+        const before = await copyIdOf(home.id, me);
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        await tendCopies(me, deps());
+        const resting = await pairOf(home.id, me.publicKey);
+        expect(resting?.resting).toBe(true);
+        expect(resting?.copyId).not.toBe(before);
+
+        expect(await stopFromCopysPage(me, before)).toBe(true);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await copyCount(me)).toBe(1);
+    }, START_MS);
+
+    it('global not answering the stop: it comes down at the next tend, and the pair still goes', async () => {
+        const me = await memberOfBoth('Gale Offline');
+        const home = await listingAtHome(me, 'Quinces');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        globalDown = true;
+        expect(await stopShowing(id, me, deps())).toBe(false);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        globalDown = false;
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await copyCount(me)).toBe(1);
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        await tendCopies(me, deps());
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await copyCount(me)).toBe(1);
+    }, START_MS);
+
+    it('someone else\'s phone holding that id ends nothing of this member\'s', async () => {
+        const me = await memberOfBoth('Mo Mine');
+        const other = await memberOfBoth('Ot Other');
+        const home = await listingAtHome(me, 'Medlars');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        expect(await stopShowing(id, other, deps())).toBe(true);
+        expect(await copyIdOf(home.id, me)).toBe(id);
+        expect((await liveCopies(me)).map((r) => r.title)).toEqual(['Medlars']);
+    }, START_MS);
+
+    it('a copy\'s id is no home event: what follows a home event never takes a copy for one', async () => {
+        const me = await memberOfBoth('Theo Twice');
+        const home = await listingAtHome(me, 'Walnuts');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        expect(await pairOf(id, me.publicKey)).toBeNull();
+        const row = await copyRow(id);
+        await repeatOnCopy({ ...home, id, title: 'Written over' }, me, deps());
+        expect((await copyRow(id)).title).toBe(row.title);
+    }, START_MS);
+
+    it('taken down behind this phone (another phone, a moderator): the next rest ends the pair, and it stays down', async () => {
+        const me = await memberOfBoth('Bea Elsewhere');
+        const home = await listingAtHome(me, 'Chestnuts');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        expect((await signedPost(global_.url, '/api/marketplace/posts/remove', { id, authorPublicKey: me.publicKey }, me)).ok).toBe(true);
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        await tendCopies(me, deps());
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await copyCount(me)).toBe(1);
+    }, START_MS);
+});
+
+describe('a listing off the board at home goes nowhere, whichever door asks (show-on-global itself, on its community\'s word)', () => {
+    const OFF_THE_BOARD = homeRests.slice(0, 3);
+
+    it.each(OFF_THE_BOARD)('at the start of %s: nothing is sent, the tick waits, and the listing\'s return sends it', async (why, off, on) => {
+        const me = await memberOfBoth(`Rhea ${why}`);
+        const home = await listingAtHome(me, 'Pears');
+        await off(me, home);
+
+        // What the screen holds may still read active: the phone's table has no hidden_by_reports_at, and it can be behind.
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('later');
+        expect(await copyCount(me)).toBe(0);
+        expect((await pairOf(home.id, me.publicKey))?.resting).toBe(true);
+
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(0);
+
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect((await liveCopies(me)).map((r) => r.title)).toEqual(['Pears']);
+        expect((await pairOf(home.id, me.publicKey))?.resting).toBeFalsy();
+    }, START_MS);
+
+    it('a door holding a paused row is told the same, and Stop showing ends the wait', async () => {
+        const me = await memberOfBoth('Pax Waits');
+        const home = await listingAtHome(me, 'Plumcots');
+        const [, off, on] = homeRests[0];
+        await off(me, home);
+        expect(await showOnGlobal({ ...home, status: 'paused' }, local.url, me, deps())).toBe('later');
+        expect(await stopShowing(home.id, me, deps())).toBe(true);
+        await on(me, home);
+        await tendCopies(me, deps());
+        expect(await copyCount(me)).toBe(0);
+    }, START_MS);
+
+    it('a pair already held, its listing now off the board: the copy comes down, and the pair rests under a new id', async () => {
+        const me = await memberOfBoth('Kit Kept');
+        const home = await listingAtHome(me, 'Figs');
+        await showOnGlobal(home, local.url, me, deps());
+        const id = await copyIdOf(home.id, me);
+        const [, off] = homeRests[0];
+        await off(me, home);
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('later');
+        expect(await liveCopies(me)).toEqual([]);
+        const pair = await pairOf(home.id, me.publicKey);
+        expect(pair?.resting).toBe(true);
+        expect(pair?.copyId).not.toBe(id);
+    }, START_MS);
+
+    it('home not answering: nothing goes on the phone\'s word alone; the tick waits, and home\'s word decides', async () => {
+        const me = await memberOfBoth('Hal Waits');
+        const home = await listingAtHome(me, 'Nectarines');
+        homeHidesListings = true;
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('later');
+        expect(await copyCount(me)).toBe(0);
+        expect((await pairOf(home.id, me.publicKey))?.resting).toBeFalsy();
+        homeHidesListings = false;
+        await tendCopies(me, deps());
+        expect((await liveCopies(me)).map((r) => r.title)).toEqual(['Nectarines']);
+    }, START_MS);
+
+    it('gone or finished at home, though the screen still shows it: refused, and no pair is left to come back', async () => {
+        const me = await memberOfBoth('Finn Finished');
+        const gone = await listingAtHome(me, 'Damsons');
+        await signedPost(local.url, '/api/marketplace/posts/remove', { id: gone.id, authorPublicKey: me.publicKey }, me);
+        expect(await showOnGlobal(gone, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
+        const done = await listingAtHome(me, 'Sloes');
+        await homeSql("UPDATE posts SET status = 'completed', active = 0 WHERE id = ?", [done.id]);
+        expect(await showOnGlobal(done, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
+        // These two still read back from home, so it is what the row says that refuses them, not an empty answer.
+        const finished = await listingAtHome(me, 'Bullaces');
+        await homeSql("UPDATE posts SET status = 'completed' WHERE id = ?", [finished.id]);
+        expect(await showOnGlobal(finished, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
+        const unpinned = await listingAtHome(me, 'Cobnuts');
+        await homeSql('UPDATE posts SET lat = NULL, lng = NULL WHERE id = ?', [unpinned.id]);
+        expect(await showOnGlobal(unpinned, local.url, me, deps())).toEqual({ refused: "The global community can't show this yet." });
+        expect(await copyCount(me)).toBe(0);
+        for (const home of [gone, done, finished, unpinned]) expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it('an event is not asked about (the control): its tick reads nothing of home', async () => {
+        const me = await memberOfBoth('Eve Control');
+        const home = await eventAtHome(me, 'Harvest supper');
+        const fromPhone = phoneToLocal.length;
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        expect(phoneToLocal.slice(fromPhone).every((r) => /^GET \/api\/marketplace\/posts\/[^/]+\/photos\//.test(r))).toBe(true);
     }, START_MS);
 });

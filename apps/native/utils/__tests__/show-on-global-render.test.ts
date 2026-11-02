@@ -8,7 +8,7 @@
  * phone told it is a stranger there gets the door's words, never a join. The global community itself draws none of it.
  * The door: the words and the way through, to the community's own card; by invite, no button that goes nowhere.
  */
-import { act, createElement, type ReactNode } from 'react';
+import { act, createElement, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { layOut } from './yoga-dom-layout';
@@ -609,8 +609,11 @@ describe('a listing from the phone\'s own row', () => {
 describe('the door\'s tick in a form', () => {
     let flip: (on: boolean) => void = () => {};
     let seen: boolean[] = [];
-    function Form({ shown }: { shown: boolean }) {
+    let show: (on: boolean) => void = () => {};
+    function Form() {
+        const [shown, setShown] = useState(true);
         const [on, setOn] = useTakeQuestionsTick(shown);
+        show = setShown;
         flip = setOn;
         seen.push(on);
         return null;
@@ -619,15 +622,14 @@ describe('the door\'s tick in a form', () => {
 
     it('starts off, and is never found ticked on the next listing: a post made, or the form moved away, clears it', async () => {
         seen = [];
-        await draw(createElement(Form, { shown: true }));
+        await draw(createElement(Form));
         expect(last()).toBe(false);
         await act(async () => { flip(true); });
         expect(last()).toBe(true);
-        await act(async () => { root?.render(createElement(Form, { shown: false }) as any); });
-        await settle();
+        // The same mounted form, as a post made leaves it: only the hook can take the tick off.
+        await act(async () => { show(false); });
         expect(last()).toBe(false);
-        await act(async () => { root?.render(createElement(Form, { shown: true }) as any); });
-        await settle();
+        await act(async () => { show(true); });
         expect(last()).toBe(false);
     });
 });

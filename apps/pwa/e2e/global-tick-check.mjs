@@ -592,6 +592,21 @@ async function screens(ctx, dark) {
         await tall('show-on-global-tick');
         await noSideways('the Offer composer');
         await shot('composer-offer');
+        check(await page.getByTestId('take-questions-tick').count() === 0, 'the door\'s tick waits for the listing to be shown');
+        await page.getByTestId('show-on-global-tick').locator('input').click();
+        const doorTick = page.getByTestId('take-questions-tick');
+        await doorTick.waitFor({ timeout: 15000 });
+        check(!(await doorTick.locator('input').isChecked()), 'ticked to show, the door is there, off');
+        await doorTick.locator('input').click();
+        await doorTick.scrollIntoViewIfNeeded();
+        await noSideways('the composer, with the door');
+        await shot('composer-door');
+        await page.getByTestId('show-on-global-tick').locator('input').click();
+        await doorTick.waitFor({ state: 'detached', timeout: 15000 });
+        await page.getByTestId('show-on-global-tick').locator('input').click();
+        await doorTick.waitFor({ timeout: 15000 });
+        check(!(await doorTick.locator('input').isChecked()), 'unticked and ticked again, the door is off: it is never found on');
+        await page.getByTestId('show-on-global-tick').locator('input').click();
     }
     await panel.getByRole('button', { name: /^Event$/ }).first().click();
     const eventTick = await page.getByTestId('show-on-global-tick').waitFor({ timeout: 15000 }).then(() => true, () => false);

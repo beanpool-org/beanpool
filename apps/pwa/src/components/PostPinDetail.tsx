@@ -47,8 +47,8 @@ export function PostPinDetail({
         (!post.audienceScope || post.audienceScope === 'public') &&
         post.status === 'active' &&
         post.active !== false &&
-        !post.hiddenByReportsAt &&
-        !post.removedByModeratorAt &&
+        !(post as any).hiddenByReportsAt &&
+        !(post as any).removedByModeratorAt &&
         (post.type !== 'event' || (post.eventState !== 'cancelled' && (!post.eventEndAt && !post.eventStartAt || Date.parse(post.eventEndAt ?? post.eventStartAt!) > Date.now()))) &&
         (post.type !== 'poll' || (!post.pollClosesAt || Date.parse(post.pollClosesAt) > Date.now()));
 

@@ -230,7 +230,7 @@ describe('PostPinDetail', () => {
     });
 
     it('never offers Pin to the top on group-scoped posts', () => {
-        const groupPost = { ...unpinnedPost, audienceScope: 'group' };
+        const groupPost: MarketplacePost = { ...unpinnedPost, audienceScope: 'group' };
         render(
             <PostPinDetail
                 post={groupPost}
@@ -244,7 +244,7 @@ describe('PostPinDetail', () => {
     });
 
     it('never offers Pin to the top on ended or cancelled events', () => {
-        const cancelledEvent = {
+        const cancelledEvent: MarketplacePost = {
             ...unpinnedPost,
             type: 'event',
             eventState: 'cancelled',
@@ -261,10 +261,10 @@ describe('PostPinDetail', () => {
         );
         expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
 
-        const pastEvent = {
+        const pastEvent: MarketplacePost = {
             ...unpinnedPost,
             type: 'event',
-            eventState: 'confirmed',
+            eventState: 'scheduled',
             eventStartAt: pastDate,
             eventEndAt: pastDate,
         };
@@ -281,7 +281,7 @@ describe('PostPinDetail', () => {
     });
 
     it('never offers Pin to the top on closed polls', () => {
-        const closedPoll = {
+        const closedPoll: MarketplacePost = {
             ...unpinnedPost,
             type: 'poll',
             pollClosesAt: pastDate,

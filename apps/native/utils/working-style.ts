@@ -1,5 +1,6 @@
 import { archetypeToCarry, publicArchetype, type QuizResult } from '@beanpool/core';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
+import { fetchMembership } from './membership-probe';
 import { plainOriginOf } from './node-url';
 import { getSavedNodes, isGuestNode } from './nodes';
 import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from './pending-profile-sync';
@@ -17,6 +18,9 @@ import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from '.
  *   - a Save or a catch-up publish, carrying what waits there or a device copy newer than the row (archetypeToSend);
  *   - the heal at that community's own next sync, carrying only the result (db.ts pushWaitingArchetype).
  */
+
+/** How long a community is given to say who its members are: as long as the delete's own ask (delete-here.ts). */
+const MEMBERSHIP_TIMEOUT_MS = 8000;
 
 /**
  * The quiz is done: its result is the device's now, and it waits for every other community saved on the phone. Not for
@@ -47,9 +51,24 @@ export async function archetypeToSend(community: string, publicKey: string, row:
     const archetype = waiting ?? archetypeToCarry(canonical?.archetype, row);
     if (!archetype) return null;
     if (await isGuestNode(community).catch(() => true)) return null;
-    // Loaded when used: delete-here pulls in the data layer that loads this file.
-    const { membershipAt } = await import('./delete-here');
-    const membership = await membershipAt(community, publicKey);
-    if (membership === 'stranger' && waiting) await clearWaitingArchetype(community, waiting);
-    return membership === 'member' ? archetype : null;
+    const member = await saysMember(community, publicKey);
+    if (member === false && waiting) await clearWaitingArchetype(community, waiting);
+    return member === true ? archetype : null;
+}
+
+/** What `community` says of the key, asked as every probe asks (membership-probe.ts): null for no answer. Never throws. */
+async function saysMember(community: string, publicKey: string): Promise<boolean | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MEMBERSHIP_TIMEOUT_MS);
+    try {
+        const res = await fetchMembership(community, publicKey, controller.signal);
+        if (!res.ok) return null;
+        const { isMember, isRecovering } = (await res.json()) as { isMember?: unknown; isRecovering?: unknown };
+        if (isMember === true || isRecovering === true) return true;
+        return isMember === false ? false : null;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
 }

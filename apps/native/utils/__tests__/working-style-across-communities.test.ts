@@ -80,7 +80,7 @@ import { publicArchetype, type QuizResult } from '@beanpool/core';
 import { retireParkedPickAfterPublish } from '../avatar-value';
 import { getCanonicalProfile, saveCanonicalProfile } from '../canonical-profile';
 import { closeDB, getDb, getMemberProfile, pushProfileToServer, pushWaitingArchetype, updateMemberProfile } from '../db';
-import { addSavedNode, markGuestNode, removeSavedNode } from '../nodes';
+import { addSavedNode, clearGuestNode, markGuestNode, removeSavedNode } from '../nodes';
 import {
     carryPendingProfileChange, clearPendingProfileChange, clearWaitingArchetype, keepPendingProfileChange, keepWaitingArchetype, pendingProfileChange, waitingArchetype,
 } from '../pending-profile-sync';
@@ -378,6 +378,41 @@ describe('nothing goes to a community the member isn\'t in', () => {
         await pushProfileToServer();
         expect(sentTo(B)[0] ?? {}).not.toHaveProperty('archetype');
         expect(nodeAt(B).probes).toBe(0);
+    });
+
+    describe('an older result left waiting at a community that became a guest visit', () => {
+        // Saved and only looked at, so a quiz marked it; then Add & Connect found the key is no member there.
+        const first = quiz('2026-11-02', 'sage');
+        const retake = quiz('2026-11-03', 'spark');
+        const leftWaitingAtAGuestVisit = async () => {
+            await addSavedNode(A);
+            await addSavedNode(B);
+            await keepQuizResult(first, ME, A);
+            expect(await waitingArchetype(B, ME)).toBe(publicOf(first));
+            await markGuestNode(B);
+        };
+        const joinB = async () => {
+            await clearGuestNode(B);
+            await openCommunity(B);
+            await pushProfileToServer();
+        };
+
+        it('a retake in another community: the join sends the retake, not what was left there', async () => {
+            await leftWaitingAtAGuestVisit();
+            await keepQuizResult(retake, ME, A);
+            expect(await waitingArchetype(B, ME)).toBeNull();
+            await joinB();
+            expect(sentTo(B)[0].archetype).toBe(publicOf(retake));
+        });
+
+        it('a retake on the visit itself: the same', async () => {
+            await leftWaitingAtAGuestVisit();
+            await openCommunity(B);
+            await keepQuizResult(retake, ME, B);
+            expect(await waitingArchetype(B, ME)).toBeNull();
+            await joinB();
+            expect(sentTo(B)[0].archetype).toBe(publicOf(retake));
+        });
     });
 
     it('a saved community that says the key is no member: nothing sent, and it stops waiting there', async () => {

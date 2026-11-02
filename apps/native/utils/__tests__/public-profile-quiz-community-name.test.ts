@@ -321,6 +321,16 @@ describe('the quiz is one result, for every community on the phone (working styl
         expect(waitingAt(NODE)).toBe(SENT);
     });
 
+    it('a phone that can\'t write what waits still publishes', async () => {
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
+        await render();
+        const { default: storage } = await import('@react-native-async-storage/async-storage');
+        vi.mocked(storage.setItem).mockRejectedValueOnce(new Error('disk full'));
+        await takeQuiz();
+        expect(published()).toHaveLength(1);
+        expect(published()[0].archetype).toBe(SENT);
+    });
+
     it('a publish that landed leaves nothing waiting here', async () => {
         communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
         await render();

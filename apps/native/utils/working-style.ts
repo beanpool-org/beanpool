@@ -20,7 +20,7 @@ import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from '.
  *   - the heal at that community's own next sync, carrying only the result (db.ts pushWaitingArchetype).
  */
 
-export { keepWaitingArchetype };
+export { clearWaitingArchetype, keepWaitingArchetype };
 
 /** Whether the phone is only visiting `community`: no answer counts as a visit, so nothing goes on a guess. */
 export const onGuestVisit = (community: string): Promise<boolean> => isGuestNode(community).catch(() => true);
@@ -33,14 +33,19 @@ type Signer = { publicKey: string; privateKey: string };
 
 /**
  * The quiz is done: its result is the device's now, and it waits for every other community saved on the phone. Not for
- * a guest visit: the member isn't in that one, and a community they join later gets the result at the join.
+ * a guest visit: the member isn't in that one, and a community they join later gets the result at the join. What waited
+ * there from before goes, or it would go ahead of this result at that join.
  */
 export async function keepQuizResult(result: QuizResult, publicKey: string, openCommunity: string | null): Promise<void> {
     await saveCanonicalProfile({ archetype: JSON.stringify(result) });
     const archetype = publicArchetype(result);
     for (const node of await getSavedNodes()) {
+        if (await onGuestVisit(node.url)) {
+            const older = await waitingArchetype(node.url, publicKey);
+            if (older) await clearWaitingArchetype(node.url, older);
+            continue;
+        }
         if (plainOriginOf(node.url) === plainOriginOf(openCommunity)) continue;
-        if (await onGuestVisit(node.url)) continue;
         await keepWaitingArchetype(node.url, publicKey, archetype);
     }
 }

@@ -11,7 +11,7 @@ import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { keepQuizResult, keepWaitingArchetype, onGuestVisit } from '../utils/working-style';
+import { clearWaitingArchetype, keepQuizResult, keepWaitingArchetype, onGuestVisit } from '../utils/working-style';
 import { parseArchetype, calculateSynergy, newestArchetype, publicArchetype, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
@@ -545,22 +545,27 @@ export default function PublicProfileScreen() {
             || (ownShown ? own.callsign?.trim() : undefined);
         const nameToUse = communityName || identity.callsign || '';
 
+        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+        // A guest visit keeps it on the phone: the member isn't in this community, so nothing goes to it. Nor into the row:
+        // left empty, the device's copy is the newer at the join, and the join sends it (utils/working-style.ts).
+        const visiting = !!url && await onGuestVisit(url);
         const localUpdate: any = {
             callsign: nameToUse,
             archetype: jsonStr,
         };
-        await updateMemberProfile(identity.publicKey, localUpdate);
+        if (!visiting) await updateMemberProfile(identity.publicKey, localUpdate);
         if (isSelf) {
             setProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
         }
 
         // The device's result now, waiting for every other community on the phone (utils/working-style.ts).
-        const url = await AsyncStorage.getItem('beanpool_anchor_url');
         await keepQuizResult(quizResult, identity.publicKey, url).catch((e) => console.warn('[Archetype] Device copy best effort:', e));
 
-        // A guest visit keeps it on the phone: the member isn't in that community, so nothing goes to it.
-        if (!url || await onGuestVisit(url)) return;
+        if (!url || visiting) return;
         const archetype = publicArchetype(quizResult);
+        // It waits here before it goes: over an older result waiting here, which a same-day tie would otherwise send back
+        // over this one, and for the next sync if the app dies with the publish out.
+        await keepWaitingArchetype(url, identity.publicKey, archetype).catch((e) => console.warn('[Archetype] Waiting copy best effort:', e));
         let landed = false;
         try {
             const payloadObj: any = {
@@ -579,8 +584,8 @@ export default function PublicProfileScreen() {
         } catch (e) {
             console.warn('[Archetype] Profile push best effort:', e);
         }
-        // The row here holds it already, so nothing else would send it: it waits for this community's next sync.
-        if (!landed) await keepWaitingArchetype(url, identity.publicKey, archetype);
+        // Not landed: the row here holds it already, so nothing else would send it, and it waits for this community's next sync.
+        if (landed) await clearWaitingArchetype(url, archetype);
     };
 
     useEffect(() => {

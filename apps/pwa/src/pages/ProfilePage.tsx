@@ -36,6 +36,8 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
     const [contactValue, setContactValue] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'community' | 'friends'>('hidden');
     const [archetype, setArchetype] = useState<string | null>(null);
+    // A retake whose publish failed. A Save sends it ahead of the rule, which can't tell it from a row dated the same day.
+    const [unsentArchetype, setUnsentArchetype] = useState<string | null>(null);
     // The node has shown its row for this key: a Save carries the working style only then (lib/working-style.ts).
     const [rowRead, setRowRead] = useState(false);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -79,6 +81,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
         setSaving(true);
         setSaved(false);
         try {
+            const unsent = rowRead ? unsentArchetype : null;
             await updateMemberProfile(identity.publicKey, {
                 avatar,
                 bio,
@@ -86,8 +89,12 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     ? { value: contactValue.trim(), visibility: contactVisibility }
                     : null,
                 callsign: callsign.trim() || undefined,
-                archetype: (rowRead ? workingStyleToCarry(identity.publicKey, archetype) : null) ?? undefined,
+                archetype: (unsent ?? (rowRead ? workingStyleToCarry(identity.publicKey, archetype) : null)) ?? undefined,
             });
+            if (unsent) {
+                setArchetype(unsent);
+                setUnsentArchetype(null);
+            }
             // Update callsign if changed
             if (callsign.trim() && callsign.trim() !== identity.callsign) {
                 const updated = await updateCallsign(callsign.trim());
@@ -109,9 +116,13 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
         const taken = keepQuizResult(identity.publicKey, quizResult);
         try {
             // Only once it is there: this holds what the community holds, so a publish that failed is still newer at a Save.
-            if (await publishQuizResult(identity.publicKey, quizResult)) setArchetype(taken);
+            if (await publishQuizResult(identity.publicKey, quizResult)) {
+                setArchetype(taken);
+                setUnsentArchetype(null);
+            }
         } catch (e) {
             console.warn('[Archetype] Save failed:', e);
+            setUnsentArchetype(taken);
             throw e;
         }
     };
@@ -289,7 +300,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
 
             {/* Working style (self) */}
             {(() => {
-                const mine = parseArchetype(newestArchetype(archetype, readWorkingStyle(identity.publicKey)));
+                const mine = parseArchetype(unsentArchetype ?? newestArchetype(archetype, readWorkingStyle(identity.publicKey)));
                 const primary = mine ? ARCHETYPES[mine.primary] : null;
                 const secondary = mine ? ARCHETYPES[mine.secondary] : null;
 

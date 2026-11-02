@@ -123,7 +123,7 @@ const STUBS = {
     'ReviewModal': `export const ReviewModal = () => null;`,
     'ArchetypeQuizModal': `export const ArchetypeQuizModal = () => null;`,
     'canonical-profile': `export const getCanonicalProfile = async () => null;`,
-    'working-style': `export const keepQuizResult = async () => {}, keepWaitingArchetype = async () => {}, onGuestVisit = async () => false;`,
+    'working-style': `export const clearWaitingArchetype = async () => {}, keepQuizResult = async () => {}, keepWaitingArchetype = async () => {}, onGuestVisit = async () => false;`,
     'ChannelChips': `export const ChannelChips = () => null;`,
     'channels': `export const fetchPublicChannels = async () => [];`,
     'use-node-profile': `export const useNodeProfile = () => ({ profile: 'local', features: { beans: true }, checkedAt: '' });`,

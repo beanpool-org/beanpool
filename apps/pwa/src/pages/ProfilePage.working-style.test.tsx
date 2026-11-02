@@ -122,6 +122,72 @@ describe('the quiz on the web', () => {
         expect(sentArchetypes()).toEqual([newerSent, newerSent]);
     });
 
+    describe('a publish that failed, with a row dated the same day', () => {
+        const today = JSON.stringify({ primary: 'guardian', secondary: 'weaver', mode: 'quick', takenOn: newer.takenOn });
+        const saveAgain = async (calls: number) => {
+            fireEvent.click(screen.getByText('Save Profile Changes'));
+            await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(calls));
+            await screen.findByText('Save Profile Changes');
+        };
+        const failedRetake = async () => {
+            await openProfile(today);
+            vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+            fireEvent.click(screen.getByLabelText('Retake community working style quiz'));
+            fireEvent.click(await screen.findByText('Finish quiz'));
+            await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(1));
+        };
+
+        it('the next Save sends it, though the rule sees a tie', async () => {
+            await failedRetake();
+            await saveAgain(2);
+            expect(sentArchetypes()).toEqual([newerSent, newerSent]);
+        });
+
+        it('the card shows the retake, not the row it couldn\'t replace', async () => {
+            await failedRetake();
+            expect(await screen.findByText(ARCHETYPES.spark.name, { exact: false })).toBeTruthy();
+            expect(screen.queryByText(ARCHETYPES.guardian.name, { exact: false })).toBeNull();
+        });
+
+        it('sent once: the Save after that carries nothing, and the card keeps it', async () => {
+            await failedRetake();
+            await saveAgain(2);
+            await saveAgain(3);
+            expect(sentArchetypes()).toEqual([newerSent, newerSent, undefined]);
+            expect(await screen.findByText(ARCHETYPES.spark.name, { exact: false })).toBeTruthy();
+        });
+
+        it('a Save that failed too keeps it for the next', async () => {
+            await failedRetake();
+            vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+            await saveAgain(2);
+            await saveAgain(3);
+            alert.mockRestore();
+            expect(sentArchetypes()).toEqual([newerSent, newerSent, newerSent]);
+        });
+
+        it('the quiz\'s own Save landing it: the next Save has nothing to carry', async () => {
+            await failedRetake();
+            fireEvent.click(await screen.findByText('Finish quiz'));
+            await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(2));
+            await saveAgain(3);
+            expect(sentArchetypes()).toEqual([newerSent, newerSent, undefined]);
+        });
+
+        it('a row the node never showed: it stays here, as any result does', async () => {
+            vi.mocked(api.getMemberProfile).mockRejectedValue(new Error('offline'));
+            render(<ProfilePage identity={ME} onBack={() => {}} />);
+            await screen.findByText('Save Profile Changes');
+            vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+            fireEvent.click(screen.getByText('⚡ Take 60s Quiz'));
+            fireEvent.click(await screen.findByText('Finish quiz'));
+            await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(1));
+            await saveAgain(2);
+            expect(sentArchetypes()).toEqual([newerSent, undefined]);
+        });
+    });
+
     it('PublicProfilePage: the same', async () => {
         vi.mocked(api.getMemberProfile).mockResolvedValue(myProfile(null) as any);
         render(<PublicProfilePage identity={ME} pubkey={ME.publicKey} onBack={() => {}} onMessage={() => {}} onNavigatePost={() => {}} />);

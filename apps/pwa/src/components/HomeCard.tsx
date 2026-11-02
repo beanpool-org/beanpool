@@ -10,7 +10,7 @@
  * item is a full-width button at least 44 px tall.
  */
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { t } from '@beanpool/core';
+import { t, type CardHue } from '@beanpool/core';
 
 export interface CardContainerState {
     width: number;
@@ -38,9 +38,11 @@ interface MenuProps {
      * honest words, since "up" can be "left" there (DESIGN-home-wide-and-content-fable.md §1).
      */
     across?: boolean;
+    /** The card caption band's ink colour, for the "…" button. */
+    ink?: string;
 }
 
-export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove, across }: MenuProps) {
+export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove, across, ink }: MenuProps) {
     const said = label ?? title;
     const [open, setOpen] = useState(false);
     const button = useRef<HTMLButtonElement | null>(null);
@@ -94,7 +96,8 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
             <button ref={button} type="button" aria-label={t('Card options for {card}', { card: said })} aria-haspopup="true" aria-expanded={open}
                 aria-controls={open ? menuId : undefined} data-testid="home-card-menu"
                 onClick={() => setOpen(o => !o)}
-                className="min-w-[44px] min-h-[44px] -mr-2 -mt-2 flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary hover:text-text-primary text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                style={ink ? { color: ink } : undefined}
+                className="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
@@ -124,9 +127,12 @@ interface CardProps {
     accent?: boolean;
     children: ReactNode;
     style?: React.CSSProperties;
+    /** The card's hue from brand-colours (S1). */
+    hue?: CardHue;
 }
 
-export function HomeCard({ id, title, titleAside, menu, accent, children, style }: CardProps) {
+export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue }: CardProps) {
+    const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const headingId = `home-card-${id}-title`;
     const sectionRef = useRef<HTMLElement | null>(null);
     const [width, setWidth] = useState(0);
@@ -155,17 +161,24 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style 
                 data-testid={`home-card-${id}`}
                 data-card-wide={wide ? 'true' : 'false'}
                 data-container-width={width}
-                style={{ containerType: 'inline-size', ...style }}
-                className={`bg-bg-card rounded-2xl shadow-sm border p-4 mb-3 min-w-0 home-card-container ${accent ? 'border-amber-300 dark:border-amber-700' : 'border-border-primary'}`}
+                style={{ containerType: 'inline-size', ...(accent ? { borderColor: 'var(--bp-card-amber-ink)' } : {}), ...style }}
+                className={`bg-bg-card rounded-2xl shadow-sm border p-4 mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
             >
-                <div className="flex items-start justify-between gap-2 mb-1 min-w-0">
+                <div
+                    data-testid={`home-card-${id}-band`}
+                    className="-mx-4 -mt-4 px-4 mb-3 py-1 rounded-t-2xl flex items-start justify-between min-h-[48px] gap-2 min-w-0"
+                    style={{
+                        backgroundColor: `var(--bp-card-${cardHue}-tint)`,
+                        color: `var(--bp-card-${cardHue}-ink)`,
+                    }}
+                >
                     {/* Focusable from the page (never by Tab): where focus goes when the card above it is hidden. */}
-                    <h2 id={headingId} tabIndex={-1} className="m-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider text-text-secondary">
+                    <h2 id={headingId} tabIndex={-1} className="m-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider" style={{ color: `var(--bp-card-${cardHue}-ink)` }}>
                         {title}
                     </h2>
                     <div className="flex items-start justify-end gap-1 min-w-0">
                         {titleAside}
-                        {menu && <CardMenu title={title} {...menu} />}
+                        {menu && <CardMenu title={title} ink={`var(--bp-card-${cardHue}-ink)`} {...menu} />}
                     </div>
                 </div>
                 {children}

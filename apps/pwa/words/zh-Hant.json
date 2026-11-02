@@ -3555,5 +3555,7 @@
   "Offer": "提供",
   "Need": "需求",
   "Enterprise": "在地事業",
-  "! not delivered": "! 未送達"
+  "! not delivered": "! 未送達",
+  "Discard": "捨棄",
+  "Message not delivered": "訊息未送達"
 }

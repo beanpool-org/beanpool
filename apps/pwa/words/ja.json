@@ -3555,5 +3555,7 @@
   "Offer": "ゆずれる",
   "Need": "もとむ",
   "Enterprise": "事業体",
-  "! not delivered": "! 未配信"
+  "! not delivered": "! 未配信",
+  "Discard": "破棄",
+  "Message not delivered": "メッセージが配信されませんでした"
 }

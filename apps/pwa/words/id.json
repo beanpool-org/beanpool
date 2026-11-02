@@ -3555,5 +3555,7 @@
   "Offer": "Penawaran",
   "Need": "Permintaan",
   "Enterprise": "Usaha",
-  "! not delivered": "! tidak terkirim"
+  "! not delivered": "! tidak terkirim",
+  "Discard": "Buang",
+  "Message not delivered": "Pesan tidak terkirim"
 }

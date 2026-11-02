@@ -3685,5 +3685,7 @@
   "Offer": "Oferta",
   "Need": "Pedido",
   "Enterprise": "Empreendimento",
-  "! not delivered": "! não entregue"
+  "! not delivered": "! não entregue",
+  "Discard": "Descartar",
+  "Message not delivered": "Mensagem não entregue"
 }

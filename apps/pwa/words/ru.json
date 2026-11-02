@@ -3942,5 +3942,7 @@
   "Offer": "Предложение",
   "Need": "Спрос",
   "Enterprise": "Предприятие",
-  "! not delivered": "! не доставлено"
+  "! not delivered": "! не доставлено",
+  "Discard": "Отменить",
+  "Message not delivered": "Сообщение не доставлено"
 }

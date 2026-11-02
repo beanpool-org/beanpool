@@ -3555,5 +3555,7 @@
   "Offer": "제공",
   "Need": "요청",
   "Enterprise": "기업",
-  "! not delivered": "! 전송되지 않음"
+  "! not delivered": "! 전송되지 않음",
+  "Discard": "삭제",
+  "Message not delivered": "메시지가 전송되지 않았어요"
 }

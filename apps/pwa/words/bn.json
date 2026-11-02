@@ -3684,5 +3684,7 @@
   "Offer": "প্রস্তাব",
   "Need": "প্রয়োজন",
   "Enterprise": "উদ্যোগ",
-  "! not delivered": "! পৌঁছায়নি"
+  "! not delivered": "! পৌঁছায়নি",
+  "Discard": "বাতিল করুন",
+  "Message not delivered": "বার্তা পৌঁছায়নি"
 }

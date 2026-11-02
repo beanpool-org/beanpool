@@ -6,6 +6,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { getConversationMessages, sendMessageApi, getConversations, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
+import { resetPendingChatLinesForTest } from '../lib/pending-chat-lines';
 
 if (typeof window !== 'undefined' && window.HTMLElement) {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -133,6 +134,7 @@ beforeEach(() => {
     window.alert = vi.fn();
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     resetGroupChatLockStoreForTest();
+    resetPendingChatLinesForTest();
     vi.clearAllMocks();
     syncListeners = [];
     currentGeneratedId = 'msg-opt-1';
@@ -239,7 +241,7 @@ describe('Web instant chat message sending (optimistic)', () => {
         expect(screen.getAllByText('No duplicate message')).toHaveLength(1);
     });
 
-    it('a failure keeps the text, says plainly ! not delivered, and can be retried', async () => {
+    it('a failure with no answer keeps the words on the line, says plainly ! not delivered, and can be retried', async () => {
         let rejectSend!: (err: any) => void;
         const sendPromise = new Promise((_, reject) => { rejectSend = reject; });
         sendPromise.catch(() => {});
@@ -271,8 +273,9 @@ describe('Web instant chat message sending (optimistic)', () => {
         const retryBtn = screen.getByTestId('chat-line-retry');
         expect(retryBtn).toBeInTheDocument();
 
-        // 4. Draft text is kept in composer as well
-        expect(composer.value).toBe('Important unsent words');
+        // 4. The words stay on the line, not in the composer: the node may have this line, and a copy sent from the composer
+        // would go under a new id and reach the other person twice. Its Retry reuses the id.
+        expect(composer.value).toBe('');
 
         // 5. Retrying attempts to send again
         vi.mocked(sendMessageApi).mockResolvedValueOnce({
@@ -297,10 +300,9 @@ describe('Web instant chat message sending (optimistic)', () => {
             expect(sendMessageApi).toHaveBeenCalledTimes(2);
         });
 
-        // 6. Composer text is cleared when retry succeeds
-        await waitFor(() => {
-            expect(composer.value).toBe('');
-        });
+        // 6. And it went under the same id
+        const calls = vi.mocked(sendMessageApi).mock.calls;
+        expect(calls[1][7]).toBe(calls[0][7]);
     });
 
     it('the message order stays right, and two quick sends do not swap', async () => {
@@ -347,7 +349,7 @@ describe('Web instant chat message sending (optimistic)', () => {
         });
     });
 
-    it('in a sealed group chat, the line shows immediately and after binds to the last confirmed server line, never to pending lines', async () => {
+    it('in a sealed group chat, the line shows immediately and after binds to the line before it once the node has taken it, never to one still pending', async () => {
         mockConversations = [
             {
                 id: 'conv-group-1',
@@ -428,8 +430,8 @@ describe('Web instant chat message sending (optimistic)', () => {
             resolveFirstGroupSend();
         });
 
-        // sendSealedGroupLine for line 2 must ALSO bind after to 'msg-server-confirmed',
-        // NOT to the unconfirmed pending lines ('group-pending-1' or 'group-pending-2')
+        // Line 2 goes once line 1 is taken, so it is written after line 1: never after a line still pending, which it can't be
+        // here (it waits its turn), and never after 'msg-server-confirmed' as well, which would let a node swap the two.
         await waitFor(() => {
             expect(mockSendSealedGroupLine).toHaveBeenCalledTimes(2);
         });
@@ -440,15 +442,14 @@ describe('Web instant chat message sending (optimistic)', () => {
             expect.objectContaining({
                 clientId: 'group-pending-2',
                 text: 'Optimistic group line 2',
-                after: 'msg-server-confirmed',
+                after: 'group-pending-1',
             }),
         );
         const secondCall = mockSendSealedGroupLine.mock.calls[1] as any[];
-        expect(secondCall[3]?.after).not.toBe('group-pending-1');
         expect(secondCall[3]?.after).not.toBe('group-pending-2');
     });
 
-    it('in a DM, unconfirmed pending lines carry pending: true and are ignored during dmAfterReference', async () => {
+    it('in a DM, a line still pending shows, and is sent once', async () => {
         mockMessagesByConv['conv-dm-1'] = [
             {
                 id: 'dm-server-1',

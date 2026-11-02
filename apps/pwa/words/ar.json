@@ -4200,5 +4200,7 @@
   "Offer": "عرض",
   "Need": "طلب",
   "Enterprise": "مؤسسة",
-  "! not delivered": "! لم يتم التسليم"
+  "! not delivered": "! لم يتم التسليم",
+  "Discard": "تجاهل",
+  "Message not delivered": "لم يتم تسليم الرسالة"
 }

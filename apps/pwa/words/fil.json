@@ -3684,5 +3684,7 @@
   "Offer": "Alok",
   "Need": "Kahilingan",
   "Enterprise": "Negosyo",
-  "! not delivered": "! hindi naihatid"
+  "! not delivered": "! hindi naihatid",
+  "Discard": "Ibalewala",
+  "Message not delivered": "Hindi naihatid ang mensahe"
 }

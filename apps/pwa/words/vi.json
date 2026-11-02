@@ -3555,5 +3555,7 @@
   "Offer": "Chia sẻ",
   "Need": "Nhu cầu",
   "Enterprise": "Doanh nghiệp",
-  "! not delivered": "! chưa được gửi"
+  "! not delivered": "! chưa được gửi",
+  "Discard": "Hủy bỏ",
+  "Message not delivered": "Tin nhắn chưa được gửi"
 }

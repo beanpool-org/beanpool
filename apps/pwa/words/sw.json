@@ -3684,5 +3684,7 @@
   "Offer": "Ofa",
   "Need": "Hitaji",
   "Enterprise": "Biashara",
-  "! not delivered": "! haijawasilishwa"
+  "! not delivered": "! haijawasilishwa",
+  "Discard": "Tupa",
+  "Message not delivered": "Ujumbe haujawasilishwa"
 }

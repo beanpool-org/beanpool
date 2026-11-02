@@ -3684,5 +3684,7 @@
   "Offer": "Angebot",
   "Need": "Gesuch",
   "Enterprise": "Betrieb",
-  "! not delivered": "! nicht zugestellt"
+  "! not delivered": "! nicht zugestellt",
+  "Discard": "Verwerfen",
+  "Message not delivered": "Nachricht nicht zugestellt"
 }

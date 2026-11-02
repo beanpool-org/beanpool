@@ -3684,5 +3684,7 @@
   "Offer": "प्रस्ताव",
   "Need": "ज़रूरत",
   "Enterprise": "उद्यम",
-  "! not delivered": "! नहीं पहुँचा"
+  "! not delivered": "! नहीं पहुँचा",
+  "Discard": "रद्द करें",
+  "Message not delivered": "संदेश नहीं पहुँचा"
 }

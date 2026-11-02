@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "el",
+    "name": "Greek",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Μόνο ο ιδιοκτήτης ή ο διαχειριστής μπορεί να καρφιτσώσει μια ανάρτηση.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Μόνο ο ιδιοκτήτης, ο διαχειριστής ή ο συντάκτης της ανάρτησης μπορεί να βγάλει το καρφίτσωμα.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Το καρφίτσωμα διαρκεί 1 ημέρα, 3 ημέρες ή 1 εβδομάδα.",
+  "That post is no longer here.": "Αυτή η ανάρτηση δεν είναι πια εδώ.",
+  "Only a public post can be pinned.": "Μόνο μια δημόσια ανάρτηση μπορεί να καρφιτσωθεί.",
+  "Only this community's own posts can be pinned.": "Μόνο οι αναρτήσεις αυτής της κοινότητας μπορούν να καρφιτσωθούν.",
+  "This post has ended, so it can't be pinned.": "Αυτή η ανάρτηση έχει λήξει, οπότε δεν μπορεί να καρφιτσωθεί.",
+  "Three posts are pinned already. Take one off first.": "Τρεις αναρτήσεις είναι ήδη καρφιτσωμένες. Βγάλτε πρώτα μία."
+}

@@ -12,5 +12,13 @@
   "Only the person who sent a message request can cancel it.": "Только отправитель запроса сообщения может отменить его.",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Отправьте conversationId, чат, и decision, 'accept', 'ignore' или 'cancel'.",
   "This community has a new address": "У этого сообщества новый адрес",
-  "This community is also at {address}. The old address keeps working.": "Это сообщество теперь доступно и по адресу {address}. Старый адрес продолжает работать."
+  "This community is also at {address}. The old address keeps working.": "Это сообщество теперь доступно и по адресу {address}. Старый адрес продолжает работать.",
+  "Only an owner or admin can pin a post.": "Закреплять публикации могут только владелец или администратор.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Снять закрепление могут только владелец, администратор или автор публикации.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Закрепление действует 1 день, 3 дня или 1 неделю.",
+  "That post is no longer here.": "Этой публикации здесь больше нет.",
+  "Only a public post can be pinned.": "Закрепить можно только открытую публикацию.",
+  "Only this community's own posts can be pinned.": "Закрепить можно только публикации этого сообщества.",
+  "This post has ended, so it can't be pinned.": "Эта публикация завершена, поэтому её нельзя закрепить.",
+  "Three posts are pinned already. Take one off first.": "Уже закреплены три публикации. Сначала снимите одну."
 }

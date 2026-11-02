@@ -12,5 +12,13 @@
   "Only the person who sent a message request can cancel it.": "Apenas a pessoa que enviou um pedido de mensagem pode cancelá-lo.",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envie conversationId, o chat, e decision, 'accept', 'ignore' ou 'cancel'.",
   "This community has a new address": "Esta comunidade tem um novo endereço",
-  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando."
+  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando.",
+  "Only an owner or admin can pin a post.": "Só o proprietário ou um administrador pode fixar uma publicação.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Só o proprietário, um administrador ou quem fez a publicação pode remover a fixação.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Uma fixação dura 1 dia, 3 dias ou 1 semana.",
+  "That post is no longer here.": "Essa publicação não está mais aqui.",
+  "Only a public post can be pinned.": "Só uma publicação pública pode ser fixada.",
+  "Only this community's own posts can be pinned.": "Só as publicações desta comunidade podem ser fixadas.",
+  "This post has ended, so it can't be pinned.": "Esta publicação terminou, por isso não pode ser fixada.",
+  "Three posts are pinned already. Take one off first.": "Já há três publicações fixadas. Remova uma primeiro."
 }

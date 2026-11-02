@@ -15,5 +15,13 @@
   "This community is also at {address}. The old address keeps working.": "Esta comunidad también está en {address}. La dirección anterior sigue funcionando.",
   "To go, ask to join {community}": "Para ir, pide unirte a {community}",
   "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir.",
-  "This is shown from another community, so it can't be bought or taken here.": "Esto se muestra desde otra comunidad, así que aquí no se puede comprar ni tomar."
+  "This is shown from another community, so it can't be bought or taken here.": "Esto se muestra desde otra comunidad, así que aquí no se puede comprar ni tomar.",
+  "Only an owner or admin can pin a post.": "Solo el propietario o un administrador puede fijar una publicación.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Solo el propietario, un administrador o quien hizo la publicación puede quitar la fijación.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Una fijación dura 1 día, 3 días o 1 semana.",
+  "That post is no longer here.": "Esa publicación ya no está aquí.",
+  "Only a public post can be pinned.": "Solo se puede fijar una publicación pública.",
+  "Only this community's own posts can be pinned.": "Solo se pueden fijar las publicaciones de esta comunidad.",
+  "This post has ended, so it can't be pinned.": "Esta publicación ha terminado, así que no se puede fijar.",
+  "Three posts are pinned already. Take one off first.": "Ya hay tres publicaciones fijadas. Quita una primero."
 }

@@ -19,7 +19,7 @@ Les discussions associées à un groupe, une entreprise ou un événement se tro
 - Le bouton de filtre trie par **Récents** ou **Non lus** (et, lorsque votre communauté utilise des haricots, par montant en haricots de chaque accord, du plus élevé au plus faible ou inversement), et peut n'afficher que **Non lus seulement** ou **Amis seulement**.
 - Sur le téléphone, la recherche et le bouton de filtre s'estompent lorsque vous faites défiler vers le bas. Remontez légèrement pour les faire réapparaître. Touchez à nouveau **Chat** pour remonter tout en haut.
 
-Dans l'application web, il s'agit de l'onglet **Discussion**. Il regroupe toutes vos discussions, y compris celles des groupes et événements, avec les filtres **Tout**, **Transactions**, **Direct** et **Groupes** en haut, sans outil de recherche ni tri spécifique.
+Dans l'application web, il s'agit de l'onglet **Chat**. Il regroupe toutes vos discussions, y compris celles des groupes et événements, avec les filtres **Tout**, **Transactions**, **Direct** et **Groupes** en haut, sans outil de recherche ni tri spécifique.
 
 ## Démarrer une discussion
 

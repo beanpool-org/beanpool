@@ -13,7 +13,7 @@ Chaque événement possède sa propre discussion. L'hôte et toutes les personne
 ## L'ouvrir
 
 - Ouvrez l'événement et touchez **Ouvrir le chat de l'événement**.
-- Ou retrouvez-la dans **Chat**, sous **Groupes**, marquée du repère 📅 **Événement**. Dans l'application web, elle se trouve dans l'onglet **Discussion**, avec vos autres échanges.
+- Ou retrouvez-la dans **Chat**, sous **Groupes**, marquée du repère 📅 **Événement**. Dans l'application web, elle se trouve dans l'onglet **Chat**, avec vos autres échanges.
 
 En haut, un encadré épinglé affiche la **Note pour les participants** de l'hôte, telle que l'adresse exacte. Touchez le nom de l'événement tout en haut (dans l'application web, **Voir l'événement**) pour revenir à la fiche de l'événement.
 

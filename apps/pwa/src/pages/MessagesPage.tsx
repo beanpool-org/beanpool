@@ -1768,7 +1768,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     borderRadius: '4px',
                     marginBottom: '6px',
                     fontSize: '0.8rem',
-                    opacity: 0.85,
+                    opacity: ink === 'var(--bp-chip-danger-ink)' ? 1 : 0.85,
                     cursor: 'pointer',
                 }}
                 onClick={() => {

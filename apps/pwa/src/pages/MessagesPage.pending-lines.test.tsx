@@ -755,6 +755,9 @@ describe('a refused reply keeps what it answers', () => {
         vi.mocked(sendMessageApi).mockRejectedValueOnce(limit());
         await typed(composer, 'Yes');
         await waitFor(() => expect(composer.value).toBe('Yes'));
+        // Full ink on a failed line: at 0.85 the quote is 4.0:1 on the danger tint in light.
+        const quotes = screen.getAllByTestId('dm-quote');
+        expect(quotes[quotes.length - 1].style.opacity).toBe('1');
         vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
         await act(async () => { fireEvent.click(screen.getByTestId('chat-line-retry')); });
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(2));

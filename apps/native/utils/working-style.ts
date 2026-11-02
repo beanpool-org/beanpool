@@ -76,6 +76,7 @@ export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> 
         let handle: any = null;
         try {
             handle = await SQLite.openDatabaseAsync(filename, { useNewConnection: true });
+            await handle.execAsync('PRAGMA busy_timeout = 30000;');
             const row = await handle.getFirstAsync(
                 'SELECT archetype FROM members WHERE public_key = ?',
                 [publicKey]

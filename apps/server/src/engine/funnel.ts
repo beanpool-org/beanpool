@@ -125,7 +125,7 @@ export function hasNoAvatarYet(publicKey: string): boolean {
  * query and missing from the activation one, so the operator's first post counted as a
  * new member getting started. Two copies of a predicate drift; one cannot.
  */
-const JOINED_HERE = `m.home_node_url IS NULL AND COALESCE(m.invite_code, '') != 'genesis'`;
+export const JOINED_HERE = `m.home_node_url IS NULL AND COALESCE(m.invite_code, '') != 'genesis'`;
 
 interface CohortMemberRow {
     day: string;

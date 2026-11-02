@@ -25,6 +25,7 @@ import { db } from '../db/db.js';
 import { confirmationDialOn, isConfirmed, knownFloor } from '@beanpool/engine';
 import { getBalance, getCommonsBalance, getMember, isVisitorKey } from '../state-engine.js';
 import { listDebts } from './names-debts.js';
+import { firstTradeFunnel } from './time-to-first-trade.js';
 import { stepBack } from './names-list.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
@@ -167,7 +168,10 @@ export function setHealthSettings(actor: string, body: { debtLinePct?: unknown; 
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** The community's totals: public by rule. Members and enterprises; the Commons pot on its own line. */
+/**
+ * The community's totals: public by rule. Members and enterprises; the Commons pot on its own line. `newMembers` is not
+ * public, and goes only where this does, to owners and admins: how far new members get (engine/time-to-first-trade.ts).
+ */
 export function communityTotals(now = new Date()) {
     const t = db.prepare(`SELECT
             COALESCE(SUM(CASE WHEN a.balance > 0 THEN a.balance ELSE 0 END), 0) AS credit,
@@ -189,6 +193,7 @@ export function communityTotals(now = new Date()) {
         commonsPot: commons,
         tradesThisMonth: trades.n,
         monthStart,
+        newMembers: firstTradeFunnel(now),
     };
 }
 

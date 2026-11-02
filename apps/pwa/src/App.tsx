@@ -28,6 +28,7 @@ import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
 import { setAccountHint } from './lib/community-card';
 import { MarketplacePage } from './pages/MarketplacePage';
+import type { PostType } from './lib/marketplace';
 import { LedgerPage } from './pages/LedgerPage';
 import { readsOwn, useCommunityInfo, useFeatureMode } from './lib/features';
 import { onlyAdminsInvite, readInviteRole, mayInviteHere, takesKnocks, type InviteRole } from './lib/node-invites';
@@ -271,6 +272,12 @@ export function App() {
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
     const clearMarketSearch = useCallback(() => setOpenMarketSearch(null), []);
+    // The calendar door on Home ("Calendar ›") and Market's calendar button: opens the calendar on MapPage.
+    const [openMapCalendar, setOpenMapCalendar] = useState(false);
+    const clearOpenMapCalendar = useCallback(() => setOpenMapCalendar(false), []);
+    // Doors to the Market's filter (e.g. Home's "All events ›" opens the Events pill).
+    const [openMarketFilter, setOpenMarketFilter] = useState<PostType | 'all' | 'for-you' | null>(null);
+    const clearOpenMarketFilter = useCallback(() => setOpenMarketFilter(null), []);
     // The Market's "Save this search to Home": the search Home opens the saved search's dialog with, taken once.
     const [saveSearchToHome, setSaveSearchToHome] = useState<HomeSearchSettings | null>(null);
     const clearSaveSearch = useCallback(() => setSaveSearchToHome(null), []);
@@ -458,9 +465,21 @@ export function App() {
             if (contextId) setEditEventPostId(contextId);
             return;
         }
+        if (tab === 'map-calendar' || tab === 'calendar') {
+            setActiveTab('map');
+            setOpenMapCalendar(true);
+            return;
+        }
+        if (tab === 'marketplace-events' || (tab === 'marketplace' && (contextId === 'events' || contextId === 'event'))) {
+            setActiveTab('marketplace');
+            setOpenMarketFilter('event');
+            return;
+        }
         if (tab === 'map') {
             setActiveTab('map');
-            if (contextId) {
+            if (contextId === 'calendar') {
+                setOpenMapCalendar(true);
+            } else if (contextId) {
                 setOpenNewPost(true);
                 setOpenNewPostGroupId(contextId);
             }
@@ -1217,6 +1236,8 @@ export function App() {
                                         onCopyEventHandled={clearCopyEventPost}
                                         editEventPostId={editEventPostId}
                                         onEditEventHandled={clearEditEventPost}
+                                        openCalendar={openMapCalendar}
+                                        onOpenCalendarHandled={clearOpenMapCalendar}
                                     />
                                 </Suspense>
                             )}
@@ -1245,6 +1266,8 @@ export function App() {
                                     onReviewOpened={() => setOpenMarketReviewTxId(null)}
                                     openSearch={openMarketSearch}
                                     onSearchOpened={clearMarketSearch}
+                                    openFilter={openMarketFilter}
+                                    onFilterOpened={clearOpenMarketFilter}
                                     onSaveSearch={(settings) => { setSaveSearchToHome(settings); setActiveTab('home'); }}
                                     onComposer={openComposerFromTool}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}

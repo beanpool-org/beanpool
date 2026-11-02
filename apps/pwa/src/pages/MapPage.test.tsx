@@ -3459,5 +3459,21 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
             // Composer modal must open
             expect(await view!.findByTestId('map-new-post-panel')).toBeInTheDocument();
         });
+
+        it('calendar-s4: opens calendar when openCalendar prop is true and calls onOpenCalendarHandled', async () => {
+            const onOpenCalendarHandled = vi.fn();
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(
+                    <MapPage
+                        identity={mockIdentity}
+                        openCalendar={true}
+                        onOpenCalendarHandled={onOpenCalendarHandled}
+                    />
+                );
+            });
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            expect(onOpenCalendarHandled).toHaveBeenCalled();
+        });
     });
 });

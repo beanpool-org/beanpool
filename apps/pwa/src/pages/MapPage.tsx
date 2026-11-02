@@ -231,6 +231,9 @@ interface Props {
      */
     editEventPostId?: string | null;
     onEditEventHandled?: () => void;
+    /** Open the event calendar overlay/panel (e.g. from Home's "Calendar ›" or Market's calendar button). */
+    openCalendar?: boolean;
+    onOpenCalendarHandled?: () => void;
     /**
      * A visitor to the global lobby (G9b): the node's guest view of each listing, pinned where the node puts it (the
      * centre of its area); a pin's card has the title, "near here" and the way to its detail sheet, and nothing on the
@@ -243,7 +246,7 @@ interface Props {
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, openCalendar, onOpenCalendarHandled, visitor = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     /**
@@ -2028,6 +2031,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setPreviewPost(target);
         onFocusPostHandled?.();
     }, [focusPostId, posts, onFocusPostHandled]);
+
+    // Open the calendar overlay/panel when requested by a door (Home "Calendar ›", Market's calendar button).
+    useEffect(() => {
+        if (!openCalendar) return;
+        setCalendarOpen(true);
+        setPreviewPost(null);
+        setStackList(stackShut);
+        onOpenCalendarHandled?.();
+    }, [openCalendar, onOpenCalendarHandled]);
 
     // Only an event the map can pin: an online one has no place, so the chips would filter nothing (review of #1952, finding 8).
     const hasOpenEvents = posts.some(p => p.type === 'event' && p.lat != null && p.lng != null && isEventOpen(p) && !(p as any)._remoteNode);

@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { COPY_IDS_LOOKED_AT, copyIdOf, ed25519Signer, makeCopyKeeper, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
+import { COPY_IDS_LOOKED_AT, copyIdOf, ed25519Signer, makeCopyKeeper, OFF_RETRY_FIRST_MS, OFF_RETRY_MOST_MS, owesOff, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
 
 const seed = new Uint8Array(32).fill(7);
 const pkcs8 = toEd25519Pkcs8(seed);
@@ -1623,6 +1623,193 @@ describe('the door on a copy', () => {
             await phone.tendCopies(identity, w.deps);
             expect(up(w).takesQuestions).toBe(false);
             expect(phone.pairs()[0].questionsOwed).toBe(false);
+        });
+    });
+
+    describe('an Off between tends: a name left up does not wait out the hour', () => {
+        const NOW = Date.now();
+        const later = (ms: number) => NOW + ms;
+        const busy = (status: number, retryAfter?: string) => () => new Response(JSON.stringify({ error: 'Busy' }), {
+            status, headers: retryAfter ? { 'Retry-After': retryAfter } : {},
+        });
+        /** An open door, with an Off tapped while global gave no answer. */
+        const owed = async (w: ReturnType<typeof world>, phone: ReturnType<ReturnType<typeof world>['device']>, answer = none) => {
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+            w.doorAnswers(answer);
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+            w.doorSends.length = 0;
+            w.asked.length = 0;
+        };
+
+        it('sends the Off and nothing else: no community is asked, and no other pair is tended', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone);
+            w.doorAnswers(null);
+            await phone.showOnGlobal({ ...w.home, id: 'home-2' }, HOME, identity, w.deps);
+            w.asked.length = 0;
+            w.home.title = 'Green tomatoes';
+            expect(await phone.tendOwedOffs(identity, w.deps, later(10 * 60_000))).toBeNull();
+            expect(w.asked).toEqual(['door']);
+            expect(up(w).takesQuestions).toBe(false);
+            expect(w.up().map((r) => r.title)).toEqual(['Tomatoes', 'Tomatoes']);
+        });
+
+        it('with nothing owed asks nobody at all, however often it is called', async () => {
+            const w = world();
+            const phone = w.device();
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+            const before = [w.reads.length, w.bodies.length];
+            w.asked.length = 0;
+            for (let minutes = 0; minutes < 12; minutes++) expect(await phone.tendOwedOffs(identity, w.deps, later(minutes * 60_000))).toBeNull();
+            expect([w.reads.length, w.bodies.length]).toEqual(before);
+            expect(w.asked).toEqual([]);
+        });
+
+        it('backs off while global gives no answer: nothing before the wait is up, doubling, to the longest', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone);
+            const at = Date.now();
+            expect(await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_FIRST_MS - 1000)).toBe(1000);
+            expect(w.doorSends).toEqual([]);
+            let now = at + OFF_RETRY_FIRST_MS;
+            for (const wait of [60_000, 120_000, OFF_RETRY_MOST_MS, OFF_RETRY_MOST_MS, OFF_RETRY_MOST_MS]) {
+                expect(await phone.tendOwedOffs(identity, w.deps, now)).toBe(wait);
+                now += wait;
+            }
+            expect(w.doorSends.length).toBe(5);
+            w.doorAnswers(null);
+            expect(await phone.tendOwedOffs(identity, w.deps, now)).toBeNull();
+            expect(up(w).takesQuestions).toBe(false);
+            expect(phone.pairs()[0].questionsOwed).toBe(false);
+            expect(w.doorSends.length).toBe(6);
+            expect(await phone.tendOwedOffs(identity, w.deps, now + OFF_RETRY_MOST_MS)).toBeNull();
+            expect(w.doorSends.length).toBe(6);
+        });
+
+        it('a 429 is honoured: its Retry-After holds the next try, and no try goes before it', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone, busy(429, '600'));
+            const at = Date.now();
+            expect(await phone.tendOwedOffs(identity, w.deps, at + 599_000)).toBeLessThanOrEqual(1000);
+            expect(w.doorSends).toEqual([]);
+        });
+
+        it('a wait global asked for holds once: the next no-answer goes by the back-off', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone, busy(429, '600'));
+            w.doorAnswers(none);
+            expect(await phone.tendOwedOffs(identity, w.deps, Date.now() + 600_000)).toBe(60_000);
+        });
+
+        it('a 429 with no Retry-After a browser can read waits the longest at once', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone, busy(429));
+            const at = Date.now();
+            await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_MOST_MS - 1000);
+            expect(w.doorSends).toEqual([]);
+        });
+
+        it('a Retry-After past all reason holds an Off no longer than the hour a tend goes by', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone, busy(429, '99999999'));
+            const wait = await phone.tendOwedOffs(identity, w.deps, Date.now());
+            expect(wait).toBeGreaterThan(OFF_RETRY_MOST_MS);
+            expect(wait).toBeLessThanOrEqual(60 * 60_000);
+        });
+
+        it('a 503 with no wait of its own goes by the back-off', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone, busy(503));
+            const at = Date.now();
+            await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_FIRST_MS + 1000);
+            expect(w.doorSends.length).toBe(1);
+        });
+
+        it('a refusal is an answer: no more tries until a tend asks again, and that one still lands', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone);
+            w.doorAnswers(() => w.json({ error: 'Members only' }, 403));
+            expect(await phone.tendOwedOffs(identity, w.deps, later(OFF_RETRY_FIRST_MS * 2))).toBeNull();
+            const refused = w.doorSends.length;
+            expect(refused).toBe(1);
+            expect(phone.pairs()[0].questionsOwed).toBe(true);
+            expect(await phone.tendOwedOffs(identity, w.deps, later(OFF_RETRY_MOST_MS * 3))).toBeNull();
+            expect(w.doorSends.length).toBe(refused);
+            w.doorAnswers(null);
+            await phone.tendCopies(identity, w.deps);
+            expect(up(w).takesQuestions).toBe(false);
+        });
+
+        it('a tick that never landed has nothing up to shut: it stops, and the Off stays owed for the copy to land with no door', async () => {
+            const w = world();
+            const phone = w.device();
+            w.busyOn(1);
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+            await phone.takeQuestions('home-1', false, identity, w.deps);
+            const reads = w.reads.length;
+            expect(await phone.tendOwedOffs(identity, w.deps, later(OFF_RETRY_MOST_MS * 2))).toBeNull();
+            expect(phone.pairs()[0]).toMatchObject({ questions: false, questionsOwed: true });
+            expect(w.reads.length).toBe(reads + 1);
+            expect(await phone.tendOwedOffs(identity, w.deps, later(OFF_RETRY_MOST_MS * 3))).toBeNull();
+            expect(w.reads.length).toBe(reads + 1);
+        });
+
+        it('an On global did not answer starts no tries, and an On owed is not an Off', async () => {
+            const w = world();
+            const phone = w.device();
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps);
+            w.doorAnswers(none);
+            expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('later');
+            w.doorSends.length = 0;
+            expect(await phone.tendOwedOffs(identity, w.deps, later(OFF_RETRY_MOST_MS))).toBeNull();
+            expect(w.doorSends).toEqual([]);
+        });
+
+        it('a pair at rest or on its way out owes no Off: the copy is down, or going, door and all', () => {
+            const pair = { questionsOwed: true, questions: false } as CopyPair;
+            expect(owesOff(pair)).toBe(true);
+            expect(owesOff({ ...pair, resting: true })).toBe(false);
+            expect(owesOff({ ...pair, leaving: true })).toBe(false);
+            expect(owesOff({ ...pair, questions: true })).toBe(false);
+            expect(owesOff({ ...pair, questionsOwed: false })).toBe(false);
+        });
+
+        it('goes after a tend that is under way, never beside it: two would each write the pairs', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone);
+            let release = () => {};
+            const held = new Promise<void>((resolve) => { release = resolve; });
+            const slowHome: CopyDeps = { ...w.deps, get: async (url, path, id, signal) => {
+                if (url === HOME) await held;
+                return w.deps.get(url, path, id, signal);
+            } };
+            const tend = phone.tendCopies(identity, slowHome);
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            const sentByTheTend = w.doorSends.length;
+            w.doorAnswers(null);
+            const off = phone.tendOwedOffs(identity, w.deps, later(OFF_RETRY_MOST_MS * 2));
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            expect(w.doorSends.length).toBe(sentByTheTend);
+            release();
+            await Promise.all([tend, off]);
+            expect(w.doorSends.length).toBe(sentByTheTend + 1);
+        });
+
+        it('a pair of another key on this device is left alone', async () => {
+            const w = world();
+            const phone = w.device();
+            await owed(w, phone);
+            expect(await phone.tendOwedOffs({ publicKey: 'ab'.repeat(32) }, w.deps, later(OFF_RETRY_MOST_MS))).toBeNull();
+            expect(w.doorSends).toEqual([]);
         });
     });
 

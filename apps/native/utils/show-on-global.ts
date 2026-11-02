@@ -59,7 +59,7 @@ function copyIdFor(homeId: string, generation: number, identity: BeanPoolIdentit
     return copyIdOf(homeId, generation, memberSigner(identity.privateKey));
 }
 
-export const { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions, repeatOnCopy, stopShowing, tendCopies } = makeCopyKeeper<BeanPoolIdentity>({
+export const { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions, repeatOnCopy, stopShowing, tendCopies, tendOwedOffs } = makeCopyKeeper<BeanPoolIdentity>({
     store,
     deps: liveDeps,
     copyId: copyIdFor,
@@ -69,9 +69,16 @@ export const { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions,
 
 let lastTended = 0;
 
-/** {@link tendCopies} when the app comes to the front, at most hourly. Never in anyone's way. */
+/**
+ * {@link tendCopies} when the app comes to the front and on the 5-minute timer (app/_layout.tsx), at most hourly. Never in anyone's
+ * way. Inside the hour only an Off global hasn't answered goes: that is a name left up, and nothing else here is in a hurry.
+ */
 export async function tendCopiesSoon(identity: BeanPoolIdentity | null | undefined, now: number = Date.now()): Promise<void> {
-    if (!identity || now - lastTended < TEND_EVERY_MS) return;
+    if (!identity) return;
+    if (now - lastTended < TEND_EVERY_MS) {
+        await tendOwedOffs(identity, undefined, now).catch(() => {});
+        return;
+    }
     lastTended = now;
-    await tendCopies(identity).catch(() => {});
+    await tendCopies(identity, undefined, now).catch(() => {});
 }

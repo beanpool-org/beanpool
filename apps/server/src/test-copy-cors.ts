@@ -110,6 +110,7 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     const made = await signed(member, 'POST', POSTS, copyBody(id, member));
     assert(made.res.status === 200 && made.body?.post?.shownCopy === true, `a signed create from another origin lands, as the route has always answered it, 200 (${made.res.status} ${JSON.stringify(made.body?.error ?? '')})`);
     assert(acao(made.res) === '*', `its answer is readable there (${acao(made.res)})`);
+    assert(lower(made.res.headers.get('access-control-expose-headers')).join() === 'retry-after', 'and so is the wait a 429 asks for, and no other header');
     assert(made.res.headers.get('access-control-allow-credentials') === null, 'with no credentials');
     assert(!made.body?.post?.shownFrom, 'a community the directory does not show has no line');
     const stored = db.prepare('SELECT shown_from_host, shown_from_post_id, credits, lat, lng FROM posts WHERE id = ?').get(id) as any;

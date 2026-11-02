@@ -235,6 +235,17 @@ describe('what waits on global, for the one Message requests row (slice GD)', ()
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it('with no answer, what the page shows stands; a real nothing takes it away', async () => {
+        const shown = { count: 3, href: 'https://global.test/' };
+        await takeQuestions('home-1', true, me).catch(() => {});
+        fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+        expect(await requestsWaitingOnGlobal(me, shown)).toBe(shown);
+        fetchMock.mockResolvedValue(new Response('{}', { status: 503 }));
+        expect(await requestsWaitingOnGlobal(me, shown)).toBe(shown);
+        ask(0);
+        expect(await requestsWaitingOnGlobal(me, shown)).toBeNull();
+    });
+
     it('a plain show leaves no mark', async () => {
         ask(2);
         await showPostOnGlobal({ id: 'home-1' } as never, me).catch(() => {});

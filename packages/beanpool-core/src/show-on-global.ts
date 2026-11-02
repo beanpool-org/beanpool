@@ -31,8 +31,9 @@
  *   its own ({@link CopyKeeper.takeQuestions}), never with an edit: a device that fell behind must not open a door the member has
  *   shut from the other one. A tap that didn't land stays owed, and `tendCopies` sends it, so an Off holds without an answer.
  *   An Off needs nothing but global: a tend sends every one before it asks any community, and it goes after a copy that is up
- *   whether or not this device heard it land. A rest reads the door from global first, and the copy goes back up as global last
- *   had it: off, if it can't say.
+ *   whether or not this device heard it land. It is a name left up, so it doesn't wait for a tend's hour: each app tries it on
+ *   its own, with {@link CopyKeeper.tendOwedOffs}, while global hasn't answered. A rest reads the door from global first, and
+ *   the copy goes back up as global last had it: off, if it can't say.
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
  *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
  *   pair goes only once global says the copy isn't up (`followCopy`): it is the device's only way to that copy.
@@ -65,6 +66,12 @@ export const COPY_IDS_LOOKED_AT = 16;
  * nothing for one, and the row stays for good, so its id is never free again.
  */
 export const POST_ID_TAKEN_CODE = 'post_id_taken';
+/** After an Off global didn't answer, the next try waits this long, and twice that each time after. */
+export const OFF_RETRY_FIRST_MS = 30_000;
+/** The longest of those waits: inside the phone's 5-minute timer, so each of its ticks tries. */
+export const OFF_RETRY_MOST_MS = 4 * 60_000;
+/** The longest a device holds an Off for a `Retry-After`: a tend goes by the hour whatever global said. */
+const OFF_WAIT_ASKED_MOST_MS = 60 * 60 * 1000;
 /** A listing carries at most this many photos (the node keeps five). */
 export const BRING_MOST_PHOTOS = 5;
 /** The node reads at most 2 MB of JSON (https-server.ts MAX_JSON_BODY_BYTES). Edits can build a listing past one body. */
@@ -182,6 +189,7 @@ export interface CopyKeeper<I extends CopyIdentity> {
     repeatOnCopy(home: HomeEvent, identity: I, deps?: CopyDeps<I>): Promise<void>;
     stopShowing(id: string, identity: I, deps?: CopyDeps<I>): Promise<boolean>;
     tendCopies(identity: I, deps?: CopyDeps<I>, now?: number): Promise<void>;
+    tendOwedOffs(identity: I, deps?: CopyDeps<I>, now?: number): Promise<number | null>;
 }
 
 /** Online, from a node row (true) or a phone's cached one (1). */
@@ -250,6 +258,12 @@ export async function photosOf(post: { photos?: string[] }, from: string, deps: 
 
 const isListing = (home: Pick<HomeEvent, 'type'>): boolean => home.type === 'offer' || home.type === 'need';
 
+/**
+ * A door the member shut that global hasn't heard of yet, and one a request can shut: a pair on its way out or at rest has no door
+ * up, and one coming back carries what the tick says.
+ */
+export const owesOff = (p: CopyPair): boolean => !!p.questionsOwed && !p.questions && !p.leaving && !p.resting;
+
 /** Shown, waiting to be, or resting: it stays theirs to stop. */
 const stillTheirs = (p: CopyPair) => !p.leaving || !!p.resting;
 
@@ -284,6 +298,12 @@ async function answerOf(res: Response): Promise<{ done: any } | 'later' | { refu
     if (res.ok) return answer?.success === true ? { done: answer } : 'later';
     if (res.status === 401 || res.status === 408 || res.status === 429 || res.status >= 500) return 'later';
     return typeof answer?.error === 'string' && answer.error ? { refused: answer.error, code: answer.code } : 'later';
+}
+
+/** The wait an answer asks of a device, in ms. A 429 with no `Retry-After` to read is told the longest of an Off's waits. */
+function waitAskedOf(res: Response): number {
+    const seconds = Number(res.headers.get('Retry-After'));
+    return seconds > 0 ? Math.min(seconds * 1000, OFF_WAIT_ASKED_MOST_MS) : res.status === 429 ? OFF_RETRY_MOST_MS : 0;
 }
 
 /** Nothing at home has stopped it. Whether its date has passed is another question (`rollsOn`). */
@@ -325,6 +345,12 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     const { store, deps: liveDeps } = setup;
 
     const readPairs = () => store.read();
+
+    /** Tries of an Off global hasn't answered, and when the next is due. Infinity: it answered, and what is left waits for a tend. */
+    let offTries = 0;
+    let offDue = 0;
+    /** The longest wait global has asked for since the last time these were set. */
+    let offWaitAsked = 0;
 
     /** The pair as it is stored now: a tap may have changed it, or taken it away, since it was read. */
     async function storedPair(copyId: string): Promise<CopyPair | undefined> {
@@ -568,7 +594,11 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     /** What the pair owes global of its door. Refused, global's word stands: an Off that finds no copy has nothing to shut. */
     async function sendQuestions(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<CopyResult> {
         const on = !!pair.questions;
-        const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, QUESTIONS_PATH, { id: pair.copyId, on }, identity, signal)));
+        const answer = await withTimeout(async (signal) => {
+            const res = await deps.post(deps.global, QUESTIONS_PATH, { id: pair.copyId, on }, identity, signal);
+            offWaitAsked = Math.max(offWaitAsked, waitAskedOf(res));
+            return answerOf(res);
+        });
         if (answer === 'later') return 'later';
         if ('refused' in answer) {
             // The member's other device may have moved the copy on: the door goes with the listing, not one id.
@@ -604,7 +634,31 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         const pair = await pairOf(homeId, identity.publicKey);
         if (!pair) return { refused: t("The global community can't show this yet.") };
         await savePair({ ...pair, questions: on, questionsOwed: true });
-        return (await settleQuestions(pair.copyId, identity, deps).catch(() => 'later' as const)) ?? 'shown';
+        const result = (await settleQuestions(pair.copyId, identity, deps).catch(() => 'later' as const)) ?? 'shown';
+        if (!on && result === 'later') offUnanswered(Date.now());
+        return result;
+    }
+
+    /** Global didn't answer an Off: when the next try is due, by how many there have been, or by what global asked for. */
+    function offUnanswered(now: number): void {
+        offTries++;
+        offDue = now + Math.max(Math.min(OFF_RETRY_FIRST_MS * 2 ** (offTries - 1), OFF_RETRY_MOST_MS), offWaitAsked);
+        offWaitAsked = 0;
+    }
+
+    /** Sends every Off this key owes. An answer ends the tries, whatever it was: a refusal stays owed, for the next tend to ask. */
+    async function sendOffs(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
+        let later = false;
+        let left = false;
+        for (const pair of await readPairs()) {
+            if (pair.publicKey !== identity.publicKey || !owesOff(pair)) continue;
+            const result = await settleQuestions(pair.copyId, identity, deps).catch(() => 'later' as const);
+            later = later || result === 'later';
+            left = left || result !== 'shown';
+        }
+        if (later) return offUnanswered(now);
+        offTries = 0;
+        offDue = left ? Infinity : 0;
     }
 
     /** The dates cancelled at home, cancelled on the copy; a date brought back, brought back. */
@@ -796,9 +850,25 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      * one long unchanged is sent again. A community that gives no answer changes nothing.
      */
     function tendCopies(identity: I, deps: CopyDeps<I> = liveDeps, now: number = Date.now()): Promise<void> {
-        const run = lastTend.then(() => tendPairs(identity, deps, now));
+        return afterLastTend(() => tendPairs(identity, deps, now));
+    }
+
+    function afterLastTend<T>(work: () => Promise<T>): Promise<T> {
+        const run = lastTend.then(work);
         lastTend = run.catch(() => {});
         return run;
+    }
+
+    /**
+     * The Offs this key owes and nothing else, for an app to call between tends: a tend's hour is too long to leave a name up. It
+     * reads no community and tends no other pair, and asks nobody where nothing is owed or the wait isn't up. Gives the ms until
+     * another call is worth making, or null where none is, for an app with no timer of its own to go by.
+     */
+    function tendOwedOffs(identity: I, deps: CopyDeps<I> = liveDeps, now: number = Date.now()): Promise<number | null> {
+        return afterLastTend(async () => {
+            if (now >= offDue) await sendOffs(identity, deps, now);
+            return offTries > 0 ? offDue - now : null;
+        });
     }
 
     async function tendPairs(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
@@ -806,9 +876,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         const mine = async () => (await readPairs()).filter((p) => p.publicKey === identity.publicKey);
         // An Off needs nothing but global, so all of them go before any community is asked. In the loop below, a community that
         // hangs would hold up the next pair's by a timeout for each pair before it.
-        for (const pair of await mine()) {
-            if (pair.questionsOwed && !pair.questions) await settleQuestions(pair.copyId, identity, deps).catch(() => null);
-        }
+        await sendOffs(identity, deps, now);
         for (const { copyId } of await mine()) {
             try {
                 let pair = await storedPair(copyId);
@@ -865,5 +933,5 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         }
     }
 
-    return { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions, repeatOnCopy, stopShowing, tendCopies };
+    return { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions, repeatOnCopy, stopShowing, tendCopies, tendOwedOffs };
 }

@@ -4,14 +4,15 @@
  * community says this key is a member.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { QuizResult } from '@beanpool/core';
 import { memoryIndexedDB } from './memory-indexeddb';
 import { clearAccountStorage } from './device-prefs';
 import { endAccountEpoch, resetAccountEpochForTest } from './account-epoch';
 import { resetGroupChatLockStoreForTest } from './group-chat-lock-store';
-import {
-    adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle, reconcileWorkingStyleAtOpen, workingStyleToCarry,
-} from './working-style';
+import { PROFILE_SAVED_EVENT } from './profile-saved';
+import { useOwnAvatar } from './useOwnAvatar';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from './working-style';
 import * as api from './api';
 
 vi.mock('./api', async (importOriginal) => ({
@@ -114,18 +115,28 @@ describe('adopting a newer row into the browser copy', () => {
     });
 });
 
+// The read at web open is the sidebar's (App.tsx useOwnAvatar): nothing else reads the row before a screen is opened.
 describe('at web open', () => {
+    const takenOn = () => JSON.parse(readWorkingStyle(ME)!).takenOn;
+    /** The node's row, with a picture: the hook shows it the moment before it adopts, so the read is known to be done. */
+    const answers = (archetype: string) => vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, avatar: '/api/avatar/me', archetype } as any);
+
     it('adopts a newer row from the node into the browser copy', async () => {
         keepQuizResult(ME, quiz('2026-11-01'));
-        vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, archetype: row('2026-11-03') } as any);
-        await reconcileWorkingStyleAtOpen(ME);
-        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ takenOn: '2026-11-03' });
+        answers(row('2026-11-03'));
+        renderHook(() => useOwnAvatar(ME));
+        await waitFor(() => expect(takenOn()).toBe('2026-11-03'));
     });
 
-    it('an older row from the node changes nothing', async () => {
+    it('an older row from the node changes nothing, and the read after a Save still adopts a newer one', async () => {
         keepQuizResult(ME, quiz('2026-11-03'));
-        vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, archetype: row('2026-11-01') } as any);
-        await reconcileWorkingStyleAtOpen(ME);
-        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ takenOn: '2026-11-03' });
+        answers(row('2026-11-01'));
+        const { result } = renderHook(() => useOwnAvatar(ME));
+        await waitFor(() => expect(result.current).not.toBeNull());
+        expect(takenOn()).toBe('2026-11-03');
+
+        answers(row('2026-11-04'));
+        act(() => { window.dispatchEvent(new Event(PROFILE_SAVED_EVENT)); });
+        await waitFor(() => expect(takenOn()).toBe('2026-11-04'));
     });
 });

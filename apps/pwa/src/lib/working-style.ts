@@ -1,6 +1,6 @@
 import { archetypeIsNewer, archetypeToCarry, parseArchetype, publicArchetype, type QuizResult } from '@beanpool/core';
 import { accountEpochHolds } from './account-epoch';
-import { checkMembership, getMemberProfile, updateMemberProfile } from './api';
+import { checkMembership, updateMemberProfile } from './api';
 
 /**
  * The member's working style in this browser (scratch/fable-design/DESIGN-archetype-across-fable.md, slice S1): the same
@@ -71,21 +71,3 @@ export function adoptWorkingStyle(publicKey: string, row: string | null | undefi
         return false;
     }
 }
-
-/**
- * At web open, adopt the community's row into the browser copy when the row is newer.
- * Safe to run on every open. Older never overwrites newer; a tie changes nothing.
- */
-export async function reconcileWorkingStyleAtOpen(publicKey: string): Promise<boolean> {
-    if (!publicKey) return false;
-    try {
-        const profile = await getMemberProfile(publicKey, publicKey);
-        if (profile?.archetype) {
-            return adoptWorkingStyle(publicKey, profile.archetype);
-        }
-    } catch {
-        // Offline or not a member: what is in localStorage stands.
-    }
-    return false;
-}
-

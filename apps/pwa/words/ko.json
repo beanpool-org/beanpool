@@ -3560,5 +3560,8 @@
   "Message not delivered": "메시지가 전송되지 않았어요",
   "Stop taking questions": "질문 받기 중단",
   "on the global community": "글로벌 커뮤니티에서",
-  "Open their requests there": "거기서 요청 열기"
+  "Open their requests there": "거기서 요청 열기",
+  "Previous month": "이전 달",
+  "Next month": "다음 달",
+  "Event · {from}": "이벤트 · {from}"
 }

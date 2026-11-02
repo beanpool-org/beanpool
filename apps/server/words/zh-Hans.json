@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "zh-Hans",
+    "name": "Chinese (Simplified)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "只有所有者或管理员可以置顶帖子。",
+  "Only an owner, an admin or the post's author can take a pin off.": "只有所有者、管理员或帖子作者可以取消置顶。",
+  "A pin lasts 1 day, 3 days or 1 week.": "置顶可持续 1 天、3 天或 1 周。",
+  "That post is no longer here.": "该帖子已不在这里。",
+  "Only a public post can be pinned.": "只有公开帖子可以置顶。",
+  "Only this community's own posts can be pinned.": "只有本社区自己的帖子可以置顶。",
+  "This post has ended, so it can't be pinned.": "此帖子已结束，无法置顶。",
+  "Three posts are pinned already. Take one off first.": "已有三个帖子置顶。请先取消一个。"
+}

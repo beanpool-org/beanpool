@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "ko",
+    "name": "Korean",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "소유자나 관리자만 게시물을 고정할 수 있어요.",
+  "Only an owner, an admin or the post's author can take a pin off.": "소유자, 관리자 또는 게시물 작성자만 고정을 해제할 수 있어요.",
+  "A pin lasts 1 day, 3 days or 1 week.": "고정은 1일, 3일 또는 1주일 동안 유지돼요.",
+  "That post is no longer here.": "그 게시물은 이제 여기 없어요.",
+  "Only a public post can be pinned.": "공개 게시물만 고정할 수 있어요.",
+  "Only this community's own posts can be pinned.": "이 커뮤니티의 게시물만 고정할 수 있어요.",
+  "This post has ended, so it can't be pinned.": "이 게시물은 끝나서 고정할 수 없어요.",
+  "Three posts are pinned already. Take one off first.": "이미 세 개의 게시물이 고정되어 있어요. 먼저 하나를 해제하세요."
+}

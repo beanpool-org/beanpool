@@ -3560,5 +3560,8 @@
   "Message not delivered": "メッセージが配信されませんでした",
   "Stop taking questions": "質問の受け付けをやめる",
   "on the global community": "グローバルコミュニティで",
-  "Open their requests there": "そこでリクエストを開く"
+  "Open their requests there": "そこでリクエストを開く",
+  "Previous month": "前の月",
+  "Next month": "次の月",
+  "Event · {from}": "イベント · {from}"
 }

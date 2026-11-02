@@ -3690,5 +3690,8 @@
   "Message not delivered": "Message non distribué",
   "Stop taking questions": "Ne plus recevoir de questions",
   "on the global community": "sur la communauté globale",
-  "Open their requests there": "Ouvrir leurs demandes là-bas"
+  "Open their requests there": "Ouvrir leurs demandes là-bas",
+  "Previous month": "Mois précédent",
+  "Next month": "Mois suivant",
+  "Event · {from}": "Événement · {from}"
 }

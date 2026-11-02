@@ -344,6 +344,12 @@ CREATE TABLE IF NOT EXISTS posts (
     -- the board (live or paused). A pause or an end takes it off the shopfront by its status and the stamp stays; out of its
     -- shop, or its shop closed, the stamp goes. NULL on every other row. Added to an older database by db.ts.
     featured_at TEXT,
+    -- A pin (scratch/fable-design/DESIGN-pinning-fable.md §2; engine/pins.ts, @beanpool/core pinLive): when it ends, and when it
+    -- was made. Both NULL on every row nobody pinned; a pin ends by the clock on every read, and the hourly hygiene clears
+    -- the stamps (state-engine.ts runMarketplaceHygiene). A row that leaves the board loses them in the same statement
+    -- (posts_pin_ends_off_board, below). Three at most, a week at most. Added to an older database by db.ts.
+    pinned_until TEXT,
+    pinned_at TEXT,
     -- What made it when that was not its author's own app: 'assistant:<grant id>' for a post an owner's AI assistant made
     -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
     -- an older database by db.ts.
@@ -1493,6 +1499,26 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE posts SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+-- The live pins (posts.pinned_until): a few rows, so every Market read can ask for them for next to nothing.
+CREATE INDEX IF NOT EXISTS idx_posts_pinned_until ON posts(pinned_until) WHERE pinned_until IS NOT NULL;
+
+-- A pin ends when its post leaves the board (DESIGN-pinning-fable.md §2.5), by whichever write takes it off: a pause (its
+-- author's, or a shop's), a deal taking it up, a report hiding it, a moderator's removal, its end. So a post that comes back
+-- (a resume, a restored report, a deal called off) comes back unpinned, and the stamps a pin write counts are never one
+-- that can return past the three (engine/pins.ts). On the table, as the touch trigger above is, because such writes are
+-- many. No connection function: a plain handle and an older image write through it as they did.
+CREATE TRIGGER IF NOT EXISTS posts_pin_ends_off_board
+AFTER UPDATE OF active, status, audience_scope, hidden_by_reports_at, removed_by_moderator_at, event_state ON posts
+FOR EACH ROW
+WHEN NEW.pinned_until IS NOT NULL AND (
+    NEW.active IS NOT 1 OR NEW.status IS NOT 'active'
+    OR COALESCE(NEW.audience_scope, 'public') != 'public'
+    OR NEW.hidden_by_reports_at IS NOT NULL OR NEW.removed_by_moderator_at IS NOT NULL
+    OR NEW.event_state IS 'cancelled')
+BEGIN
+    UPDATE posts SET pinned_until = NULL, pinned_at = NULL WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS messages_set_updated_at_on_insert

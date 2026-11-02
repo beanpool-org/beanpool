@@ -3947,5 +3947,8 @@
   "Message not delivered": "Повідомлення не доставлено",
   "Stop taking questions": "Більше не приймати запитання",
   "on the global community": "у глобальній спільноті",
-  "Open their requests there": "Відкрити їхні запити там"
+  "Open their requests there": "Відкрити їхні запити там",
+  "Previous month": "Попередній місяць",
+  "Next month": "Наступний місяць",
+  "Event · {from}": "Подія · {from}"
 }

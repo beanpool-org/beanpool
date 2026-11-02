@@ -1084,6 +1084,9 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.shop_id != null ? { shopId: row.shop_id } : {}),
         // When it was featured in its shop, as the main server holds it (apps/server engine/sync.ts postFeatured).
         ...(row.featured_at != null ? { featuredAt: row.featured_at } : {}),
+        // A pin, as the main server holds it (apps/server engine/sync.ts postPinned): none said is none.
+        ...(row.pinned_until != null ? { pinnedUntil: row.pinned_until } : {}),
+        ...(row.pinned_at != null ? { pinnedAt: row.pinned_at } : {}),
         // What made it, when an owner's AI assistant did (apps/server engine/sync.ts postCreatedVia): none said is none.
         ...(row.created_via != null ? { createdVia: row.created_via } : {}),
         // Its tags, as the main server holds them (apps/server engine/sync.ts postTags): none said is none.

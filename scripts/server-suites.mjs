@@ -534,6 +534,8 @@ export const SUITES = [
     'test-enterprise-post-pause-http',
     'test-event-times-http',
     'test-event-series-http',
+    'test-post-pinning',
+    'test-post-pinning-global',
     'test-event-zone',
     'test-online-events-nearby',
     'test-online-events-set-cap',

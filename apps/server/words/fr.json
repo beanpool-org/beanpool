@@ -26,5 +26,13 @@
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Pour répondre Autre, écrivez votre réponse. S'il n'y a nulle part où écrire, mettez l'application à jour.",
   "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Vous avez déjà répondu à ce sondage, et rien ne relie votre réponse à vous : elle ne peut donc pas être modifiée.",
   "Only an Offer or Need shown on the global community can take questions.": "Seule une Offre ou un Besoin affiché sur la communauté globale peut recevoir des questions.",
-  "This community isn't taking message requests right now, so this can't take questions.": "Cette communauté n'accepte pas les demandes de message pour le moment, donc ceci ne peut pas recevoir de questions."
+  "This community isn't taking message requests right now, so this can't take questions.": "Cette communauté n'accepte pas les demandes de message pour le moment, donc ceci ne peut pas recevoir de questions.",
+  "Only an owner or admin can pin a post.": "Seul un propriétaire ou un administrateur peut épingler une publication.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Seul un propriétaire, un administrateur ou l'auteur de la publication peut retirer une épingle.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Une épingle dure 1 jour, 3 jours ou 1 semaine.",
+  "That post is no longer here.": "Cette publication n'est plus ici.",
+  "Only a public post can be pinned.": "Seule une publication publique peut être épinglée.",
+  "Only this community's own posts can be pinned.": "Seules les publications de cette communauté peuvent être épinglées.",
+  "This post has ended, so it can't be pinned.": "Cette publication est terminée, elle ne peut donc pas être épinglée.",
+  "Three posts are pinned already. Take one off first.": "Trois publications sont déjà épinglées. Retirez-en une d'abord."
 }

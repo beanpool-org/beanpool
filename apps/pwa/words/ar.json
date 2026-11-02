@@ -4205,5 +4205,8 @@
   "Message not delivered": "لم يتم تسليم الرسالة",
   "Stop taking questions": "إيقاف استقبال الأسئلة",
   "on the global community": "في المجتمع العالمي",
-  "Open their requests there": "افتح طلباتهم هناك"
+  "Open their requests there": "افتح طلباتهم هناك",
+  "Previous month": "الشهر السابق",
+  "Next month": "الشهر التالي",
+  "Event · {from}": "فعالية · {from}"
 }

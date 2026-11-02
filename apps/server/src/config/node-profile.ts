@@ -312,6 +312,7 @@ export interface NodeFeatures {
      *  every member's set and Home hold them wherever the member is (director amendment 2). The apps offer "Online" only
      *  where it is true: a server from before it would refuse the event, or keep it from everyone but its host. */
     onlineEvents: boolean;
+    pins: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
     /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
@@ -576,6 +577,8 @@ export function getNodeFeatures(): NodeFeatures {
         distanceSearch: true,
         // Also the build's: every profile carries online events.
         onlineEvents: true,
+        // And pins (engine/pins.ts): an app offers one only where the node says so (DESIGN-pinning-fable.md §2.11).
+        pins: true,
         probation: s.probation,
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,

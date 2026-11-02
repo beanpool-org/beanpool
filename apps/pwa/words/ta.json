@@ -3688,5 +3688,8 @@
   "Message not delivered": "செய்தி போய்ச் சேரவில்லை",
   "Stop taking questions": "கேள்விகளை ஏற்பதை நிறுத்து",
   "on the global community": "உலகளாவிய சமூகத்தில்",
-  "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்"
+  "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்",
+  "Previous month": "முந்தைய மாதம்",
+  "Next month": "அடுத்த மாதம்",
+  "Event · {from}": "நிகழ்வு · {from}"
 }

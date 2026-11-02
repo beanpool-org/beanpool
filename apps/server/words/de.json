@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "de",
+    "name": "German",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Nur Inhaber oder Admins können einen Beitrag anpinnen.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Nur Inhaber, Admins oder wer den Beitrag verfasst hat, können eine Anpinnung entfernen.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Eine Anpinnung gilt 1 Tag, 3 Tage oder 1 Woche.",
+  "That post is no longer here.": "Dieser Beitrag ist nicht mehr hier.",
+  "Only a public post can be pinned.": "Nur ein öffentlicher Beitrag kann angepinnt werden.",
+  "Only this community's own posts can be pinned.": "Nur Beiträge dieser Community können angepinnt werden.",
+  "This post has ended, so it can't be pinned.": "Dieser Beitrag ist beendet und kann daher nicht angepinnt werden.",
+  "Three posts are pinned already. Take one off first.": "Es sind schon drei Beiträge angepinnt. Entferne zuerst einen."
+}

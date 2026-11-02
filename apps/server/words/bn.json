@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "bn",
+    "name": "Bengali",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "শুধু মালিক বা অ্যাডমিন কোনো পোস্ট পিন করতে পারেন।",
+  "Only an owner, an admin or the post's author can take a pin off.": "শুধু মালিক, অ্যাডমিন বা পোস্টের লেখক পিন সরাতে পারেন।",
+  "A pin lasts 1 day, 3 days or 1 week.": "একটি পিন ১ দিন, ৩ দিন বা ১ সপ্তাহ থাকে।",
+  "That post is no longer here.": "সেই পোস্টটি আর এখানে নেই।",
+  "Only a public post can be pinned.": "শুধু সর্বজনীন পোস্ট পিন করা যায়।",
+  "Only this community's own posts can be pinned.": "শুধু এই সম্প্রদায়ের নিজের পোস্ট পিন করা যায়।",
+  "This post has ended, so it can't be pinned.": "এই পোস্টটি শেষ হয়ে গেছে, তাই এটি পিন করা যাবে না।",
+  "Three posts are pinned already. Take one off first.": "তিনটি পোস্ট ইতিমধ্যে পিন করা আছে। আগে একটি সরান।"
+}

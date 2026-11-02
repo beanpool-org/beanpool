@@ -531,3 +531,112 @@ export function columnsFor(width: number, most = 3): number {
 
 /** The widest the grid of `cols` columns is drawn, gaps included: what the notes and the Join card above it line up with. */
 export const gridWidth = (cols: number) => cols * HOME_COLUMN_MAX + (cols - 1) * HOME_COLUMN_GAP;
+
+// ── Packing by height (DESIGN-home-layout-fable.md §3.1, slice L1) ───────────────────────────────────
+
+export const HOME_PACK_ROW_HEIGHT = 4;
+export const HOME_PACK_ROW_GAP = 16;
+
+export interface PackableCard {
+    id: string;
+    height: number;
+    fullRow?: boolean;
+}
+
+export interface PackedCard {
+    id: string;
+    col: number;
+    rowStart: number;
+    rowSpan: number;
+    fullRow?: boolean;
+}
+
+/**
+ * What Home keeps of one card's height. `packHome` places a card by the cards before it only, so a card's own height can't
+ * move it; the one way round is the page itself: a taller page brings the scrollbar, the scrollbar narrows every card, a
+ * card crossing `wide` changes height, and the page changes back. `settleHeights` is what stops that going round.
+ */
+export interface PackHeight {
+    height: number;
+    /** The last time this card reported a new height, landed or refused. */
+    at: number;
+    rising: boolean;
+    /** Turns from growing to shrinking or back, each within `HOME_PACK_FLIP_MS` of the last change. */
+    flips: number;
+}
+
+/** Quicker than a person opens and closes a card; the loop itself turned every 33 ms in Chromium (PR #2748). */
+export const HOME_PACK_FLIP_MS = 250;
+/** Turns before a card counts as going round. */
+export const HOME_PACK_MAX_FLIPS = 4;
+
+/**
+ * The heights to pack from, given heights just measured. Returns `was` itself when nothing changed, so React renders
+ * nothing. Growing always lands, since a stale short height overlaps the next card. A card past `HOME_PACK_MAX_FLIPS`
+ * stops shrinking until it has been still for `HOME_PACK_FLIP_MS`: the taller height holds, the grid's height stops
+ * changing, and the scrollbar with it. The worst left behind is a small gap, never an overlap and never a flicker.
+ */
+export function settleHeights(was: Readonly<Record<string, PackHeight>>, seen: Readonly<Record<string, number>>, now: number): Readonly<Record<string, PackHeight>> {
+    let next: Record<string, PackHeight> | null = null;
+    for (const [id, height] of Object.entries(seen)) {
+        if (!(height > 0)) continue;
+        const had = was[id];
+        if (had?.height === height) continue;
+        const rising = !had || height > had.height;
+        const quick = !!had && now - had.at < HOME_PACK_FLIP_MS;
+        const flips = !quick ? 0 : had.flips + (rising === had.rising ? 0 : 1);
+        next ??= { ...was };
+        // A refused shrink changes nothing on the screen; it only keeps the clock on the card, which has not been still.
+        next[id] = !rising && flips > HOME_PACK_MAX_FLIPS ? { ...had, at: now } : { height, at: now, rising, flips };
+    }
+    return next ?? was;
+}
+
+/**
+ * At two or more columns, each card is placed under the column whose stack is shortest at that moment,
+ * in the saved order. Full-row cards wait until every column is free and span them all.
+ * At one column (or invalid counts), no placement is returned: one column gives no placement.
+ */
+export function packHome(cards: readonly PackableCard[], cols: number): PackedCard[] {
+    if (!Number.isFinite(cols) || cols <= 1 || cards.length === 0) return [];
+    const columnCount = Math.floor(cols);
+    const bottoms = new Array(columnCount).fill(1);
+    const result: PackedCard[] = [];
+
+    for (const card of cards) {
+        const h = Math.max(0, card.height || 0);
+        const span = Math.ceil((h + HOME_PACK_ROW_GAP) / HOME_PACK_ROW_HEIGHT);
+
+        if (card.fullRow) {
+            const rowStart = Math.max(...bottoms);
+            result.push({
+                id: card.id,
+                col: 1,
+                rowStart,
+                rowSpan: span,
+                fullRow: true,
+            });
+            bottoms.fill(rowStart + span);
+        } else {
+            let minIdx = 0;
+            let minVal = bottoms[0];
+            for (let c = 1; c < columnCount; c++) {
+                if (bottoms[c] < minVal) {
+                    minVal = bottoms[c];
+                    minIdx = c;
+                }
+            }
+            const col = minIdx + 1;
+            const rowStart = bottoms[minIdx];
+            result.push({
+                id: card.id,
+                col,
+                rowStart,
+                rowSpan: span,
+            });
+            bottoms[minIdx] += span;
+        }
+    }
+    return result;
+}
+

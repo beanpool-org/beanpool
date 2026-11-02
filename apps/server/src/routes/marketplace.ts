@@ -13,7 +13,7 @@ import {
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
     getMember, getBalance, getPostsVersion,
     canOperateTreasury,
-    closePoll, votePoll, rsvpEvent, letInEvent,
+    closePoll, votePoll, rsvpEvent, letInEvent, isReportRateLimited,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
     nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
 } from '../state-engine.js';
@@ -38,6 +38,9 @@ import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
+import { PollOtherError, readPollOtherAnswers, removePollOtherAnswer, reportPollOtherAnswer } from '../engine/poll-other.js';
+import { noteNewReport } from '../services/alerts.js';
+import { logger } from '../logger.js';
 import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, LISTING_COPY_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
@@ -754,7 +757,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
     // A member's copy holds only what a copy may (engine/event-copy.ts); every other post is the body as it came.
     const requestBody = copyBody((ctx as any).requestBody || {});
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo,
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo,
         lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom } = requestBody;
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -831,7 +834,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
             {
-                reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts,
+                reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts,
                 // A lendable Offer and its terms, raw: the engine checks each (engine/post-fields.ts assertLendFields).
                 lendable, lendMaxDays, lendTerms, replacementValue,
                 // The shop to put it in, raw: the engine checks it is the author's own (engine/shops.ts assertShopForPost).
@@ -1012,7 +1015,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
 router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
     try {
         const { id } = ctx.params;
-        const { optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
+        const { optionId, voterPublicKey, voterPubkey, signature, otherWords } = (ctx as any).requestBody || {};
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
@@ -1031,7 +1034,7 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
         }
         const voter = actor;
         const sig = signature;
-        const result = votePoll(id, voter, optionId, sig);
+        const result = votePoll(id, voter, optionId, sig, otherWords);
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
@@ -1039,9 +1042,69 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
     }
 });
 
+// A poll's typed Other: its maker's and the owners' only (engine/poll-other.ts, which says who and when). Each answers for the
+// signer alone, and only these routes carry the words.
+function pollOtherRefused(ctx: any, e: any, fallback: string): void {
+    ctx.status = e instanceof PollOtherError ? e.status : 400;
+    ctx.body = { error: memberErrorText(e, fallback) };
+}
+
+router.get('/api/marketplace/posts/:id/other-answers', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    try {
+        // Fresh for each reader: never in a shared cache.
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = readPollOtherAnswers(ctx.params.id, actor);
+    } catch (e: any) {
+        pollOtherRefused(ctx, e, word('Failed to read the typed answers'));
+    }
+});
+
+router.post('/api/marketplace/posts/:id/other-answers/:answerId/report', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    if (isReportRateLimited(actor)) {
+        ctx.status = 429;
+        ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
+        return;
+    }
+    try {
+        const report = reportPollOtherAnswer(ctx.params.id, ctx.params.answerId, actor);
+        // The owners and admins hear of it, by kind and count: not awaited, as a report's route does (routes/community.ts).
+        if (!report.duplicate) noteNewReport('', actor).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
+        ctx.body = { success: true, duplicate: report.duplicate };
+    } catch (e: any) {
+        pollOtherRefused(ctx, e, word('Failed to report the typed answer'));
+    }
+});
+
+router.post('/api/marketplace/posts/:id/other-answers/:answerId/remove', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    try {
+        removePollOtherAnswer(ctx.params.id, ctx.params.answerId, actor);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        pollOtherRefused(ctx, e, word('Failed to remove the typed answer'));
+    }
+});
+
 router.post('/api/marketplace/polls/vote', async (ctx) => {
     try {
-        const { postId, id, optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
+        const { postId, id, optionId, voterPublicKey, voterPubkey, signature, otherWords } = (ctx as any).requestBody || {};
         const targetId = postId || id;
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
@@ -1061,7 +1124,7 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
         }
         const voter = actor;
         const sig = signature;
-        const result = votePoll(targetId, voter, optionId, sig);
+        const result = votePoll(targetId, voter, optionId, sig, otherWords);
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;

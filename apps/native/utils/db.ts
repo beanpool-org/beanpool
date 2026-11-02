@@ -34,7 +34,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { eventCopyColumn, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
+import { eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -2187,6 +2187,8 @@ export async function createPost(post: any) {
             durationDays: post.durationDays || 7,
             // Anonymous unless its creator chose an open vote (2026-09-28); only `true` opens one.
             pollOpenVote: post.pollOpenVote === true,
+            // A typed Other, only when the maker asked and the node said it can (NewPollModal).
+            ...(post.pollOther === true ? { pollOther: true } : {}),
         } : {}),
         // Events (docs/events-on-the-map.md §2.2): the server forces reach local and the other trade fields.
         ...(post.type === 'event' ? {
@@ -2316,7 +2318,7 @@ export async function createPost(post: any) {
     return { eventTimeAdjusted: answer?.eventTimeAdjusted ?? null, post: answer?.post ?? null };
 }
 
-export async function votePoll(postId: string, optionId: string) {
+export async function votePoll(postId: string, optionId: string, otherWords?: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
         throw new Error('You are currently offline.');
@@ -2328,7 +2330,8 @@ export async function votePoll(postId: string, optionId: string) {
     const body = {
         postId,
         optionId,
-        voterPublicKey: identity.publicKey
+        voterPublicKey: identity.publicKey,
+        ...(otherWords === undefined ? {} : { otherWords }),
     };
     const bodyString = JSON.stringify(body);
     const voteUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/vote`;
@@ -2651,6 +2654,44 @@ export async function updateEvent(postId: string, patch: EventEditPatch, out?: {
 /** The member's copy on the global community follows, if there is one. Loaded when used; a miss is caught up later. */
 function repeatOnGlobalCopy(run: (copy: typeof import('./show-on-global')) => Promise<unknown>): void {
     import('./show-on-global').then(run).catch(() => {});
+}
+
+/** A poll's typed answers as its maker or an owner reads them (apps/server engine/poll-other.ts). */
+export interface PollOtherRead {
+    state: 'held' | 'open';
+    count: number;
+    answers: Array<{ id: string; words: string; reported: boolean }>;
+    removed: number;
+    canRemove: boolean;
+}
+
+let ownerHereRead: { anchor: string | null; owner: Promise<boolean> } | null = null;
+
+/** Whether the signer is an owner on this community (GET /api/node-admin/me), asked once per community a run, and only by a poll card with words to offer. It decides nothing: the node checks every read. */
+export async function isOwnerHere(): Promise<boolean> {
+    const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (ownerHereRead?.anchor === anchor) return ownerHereRead.owner;
+    const owner = signedGet('/api/node-admin/me')
+        .then(res => (res.ok ? res.json() : null))
+        .then((body: { role?: unknown } | null) => body?.role === 'owner')
+        .catch(() => { ownerHereRead = null; return false; });
+    ownerHereRead = { anchor, owner };
+    return owner;
+}
+
+export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {
+    const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.error || 'The typed answers could not be read.');
+    return body as PollOtherRead;
+}
+
+export async function reportPollOtherAnswer(postId: string, answerId: string) {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/report`, {});
+}
+
+export async function removePollOtherAnswer(postId: string, answerId: string) {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/remove`, {});
 }
 
 export async function closePoll(postId: string) {
@@ -3789,6 +3830,18 @@ function syncedPhotosColumn(p: any): string | null {
 }
 
 /**
+ * The node says this member has answered a sealed poll, perhaps on the web or before a reinstall, and that is all it can say
+ * (@beanpool/core poll-other). Kept as this phone keeps its own votes, so the card says so with no answer ticked: no answer
+ * has this id. An answer this phone gave stays as it is.
+ */
+async function noteSealedAnswer(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    if (p?.pollAnswered !== true) return;
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return;
+    await txn.runAsync('INSERT OR IGNORE INTO poll_votes (post_id, voter_pubkey, option_id, signature) VALUES (?, ?, ?, ?)', [p.id, me, POLL_BALLOT_SEALED, '']);
+}
+
+/**
  * One listing as the node sends it, written to the cache. The only row writer the delta sync, a pushed change and
  * the by-id refresh in getPost use. It names every column the node sends: INSERT OR REPLACE does not keep a column
  * it leaves out, it puts it back to the table default, which is how every sync once cleared the 💸 marker and
@@ -3796,6 +3849,7 @@ function syncedPhotosColumn(p: any): string | null {
  * sends it and nothing reads it.
  */
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
         'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, shown_from, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',

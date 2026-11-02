@@ -1865,6 +1865,32 @@ describe("the poll form's note for a placeless listing (S4)", () => {
         return { panel, me };
     }
 
+    // A typed Other (@beanpool/core poll-other): new app, old node.
+    it('a node that does not say it can: no tick, and a poll sent with no Other', async () => {
+        const { panel } = await openPoll({ ...BY_AREA, profile: 'local', features: { openJoin: false } }, null);
+        await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+        expect(within(panel).queryByTestId('poll-other')).toBeNull();
+    });
+
+    it('a node that says it can: the tick is there, off', async () => {
+        const { panel } = await openPoll({ ...BY_AREA, pollOther: true }, null);
+        const tick = await within(panel).findByTestId('poll-other') as HTMLInputElement;
+        expect(tick.checked).toBe(false);
+    });
+
+    it('ticked, the poll asks for Other', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ id: 'p' } as any);
+        const { panel } = await openPoll({ ...BY_AREA, pollOther: true }, null);
+        const tick = await within(panel).findByTestId('poll-other');
+        fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'What is missing?' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'Buses' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'Beans' } });
+        await act(async () => { fireEvent.click(tick); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        expect(create.mock.calls[0]![0]).toMatchObject({ pollOther: true });
+    });
+
     it('by area, no area set: the note says so', async () => {
         const { panel } = await openPoll(BY_AREA, null);
         await waitFor(() => expect(within(panel).getByTestId('poll-placeless-note').textContent).toBe(

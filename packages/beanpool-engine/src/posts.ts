@@ -22,7 +22,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlOf, lendBackAroundOf, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
+import { avatarUrlOf, lendBackAroundOf, pollIsSealed, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
@@ -43,6 +43,8 @@ export interface PollOption {
      * poll whose split may be shown (POLL_ORIGINS_SPLIT_MIN). Counted from the votes on each read, never from a stored copy.
      */
     newOrWordsVotes?: number;
+    /** This option is Other, which takes typed words (@beanpool/core poll-other). Only the node sets it. */
+    other?: true;
 }
 
 export interface PollVoteRecord {
@@ -197,6 +199,11 @@ export interface MarketplacePost {
      */
     pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
+    /**
+     * The reader has answered this sealed poll (@beanpool/core pollIsSealed), which is all the node knows of their answer, so
+     * `userVotedOptionId` is never set on one. The reader's own: never on a broadcast, never a visitor's.
+     */
+    pollAnswered?: boolean;
     pollVotes?: PollVoteRecord[];
     // Audience scoping (docs/the-commons.md §9, Item 10)
     audienceScope?: AudienceScope;
@@ -674,6 +681,17 @@ export function pollOriginsMayShow(row: { poll_open_vote?: unknown; status?: unk
     if (row.poll_open_vote === 1 || row.poll_open_vote === true) return false;
     if (row.status === 'completed') return true;
     return typeof row.poll_closes_at === 'string' && row.poll_closes_at !== '' && row.poll_closes_at <= nowIso;
+}
+
+/** A poll row's stored answers, or none when the row holds no list that parses. */
+function pollOptionsOf(row: { poll_options?: unknown }): PollOption[] {
+    if (typeof row.poll_options !== 'string' || !row.poll_options) return [];
+    try {
+        const parsed = JSON.parse(row.poll_options) as unknown;
+        return Array.isArray(parsed) ? parsed as PollOption[] : [];
+    } catch {
+        return [];
+    }
 }
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
@@ -2221,6 +2239,24 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // Safe fallback if poll_votes table does not exist in testing handle
         }
     }
+    // A sealed poll's counts (@beanpool/core pollIsSealed): its poll_votes rows say only that someone answered, so what was
+    // answered is counted from poll_answers, which names nobody. Only the counts are read here: the words never leave by
+    // this read, for any reader (apps/server engine/poll-other.ts is their one way out).
+    const sealedCounts = new Map<string, Map<string, number>>();
+    const sealedRows = pollRows.filter(r => pollIsSealed(pollOptionsOf(r), r.poll_open_vote));
+    if (sealedRows.length > 0) {
+        try {
+            const counts = selectInChunks(db, sealedRows.map(r => r.id), ph => `
+                SELECT post_id, option_id, COUNT(*) AS c FROM poll_answers WHERE post_id IN (${ph}) GROUP BY post_id, option_id
+            `);
+            for (const c of counts as any[]) {
+                if (!sealedCounts.has(c.post_id)) sealedCounts.set(c.post_id, new Map());
+                sealedCounts.get(c.post_id)!.set(c.option_id, c.c);
+            }
+        } catch {
+            // Table absent on an older test handle
+        }
+    }
     // Where the votes on the public board's closed anonymous polls came from, where the node says
     // (configurePollVoteOrigins, pollOriginsMayShow). A failure reads as a node that doesn't say: the counts themselves
     // never depend on it.
@@ -2394,11 +2430,17 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 post.status = 'completed';
             }
             const votes = pollVotesByPost.get(post.id) || [];
-            const totalVotes = votes.length;
+            const sealed = pollIsSealed(post.pollOptions, post.pollOpenVote);
+            const voteCounts = sealed ? (sealedCounts.get(post.id) ?? new Map<string, number>()) : new Map<string, number>();
+            let totalVotes = sealed ? 0 : votes.length;
+            if (sealed) for (const c of voteCounts.values()) totalVotes += c;
             post.totalVotes = totalVotes;
-            const voteCounts = new Map<string, number>();
             let userVotedOptionId: string | undefined;
             for (const v of votes) {
+                if (sealed) {
+                    if (viewer && v.voter_pubkey === viewer) post.pollAnswered = true;
+                    continue;
+                }
                 voteCounts.set(v.option_id, (voteCounts.get(v.option_id) || 0) + 1);
                 if (viewer && v.voter_pubkey === viewer) {
                     userVotedOptionId = v.option_id;
@@ -2416,7 +2458,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 for (const c of origins.values()) fromNew += c;
                 const rest = totalVotes - fromNew;
                 post.pollNewOrWordsVotes = fromNew;
-                split = fromNew >= POLL_ORIGINS_SPLIT_MIN && (rest === 0 || rest >= POLL_ORIGINS_SPLIT_MIN);
+                // A sealed poll's stamps sit on the ballots, which say nothing of how anyone answered: a total, and no split.
+                split = !sealed && fromNew >= POLL_ORIGINS_SPLIT_MIN && (rest === 0 || rest >= POLL_ORIGINS_SPLIT_MIN);
             }
             if (post.pollOptions) {
                 post.pollOptions = post.pollOptions.map((stored: any) => {
@@ -2542,7 +2585,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
     acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop', lendBackAround: 'drop',
-    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', myLastRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', pollAnswered: 'drop', myRsvp: 'drop', myLastRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
@@ -2576,7 +2619,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
  */
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
     // What made it is its author's own read only (getPosts): never every socket's.
-    const { reachPeers: _peers, userVotedOptionId: _ownVote, createdVia: _via, ...shared } = post;
+    const { reachPeers: _peers, userVotedOptionId: _ownVote, pollAnswered: _ownAnswer, createdVia: _via, ...shared } = post;
     if (shared.type !== 'event') return shared;
     const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, myLastRsvp: _last, myLetIn: _letIn, ...rest } = shared;
     return rest;

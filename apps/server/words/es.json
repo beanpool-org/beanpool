@@ -17,6 +17,17 @@
   "To go, ask to join {community}": "Para ir, pide unirte a {community}",
   "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir.",
   "This is shown from another community, so it can't be bought or taken here.": "Esto se muestra desde otra comunidad, así que aquí no se puede comprar ni tomar.",
+  "To answer Other, type your answer. If there is nowhere to type, update the app.": "Para responder Otro, escribe tu respuesta. Si no hay dónde escribir, actualiza la app.",
+  "Only Other takes a typed answer": "Solo Otro admite una respuesta escrita",
+  "A typed answer is at most {n} characters": "Una respuesta escrita tiene como máximo {n} caracteres",
+  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Ya has respondido a esta encuesta, y nada vincula tu respuesta contigo, así que no se puede cambiar.",
+  "This poll already offers Other: leave it out of the answers": "Esta encuesta ya ofrece Otro: quítalo de las respuestas",
+  "Typed answers are for the poll's maker and the owners": "Las respuestas escritas son para quien creó la encuesta y los dueños",
+  "That typed answer is not here": "Esa respuesta escrita no está aquí",
+  "Only an owner can remove a typed answer": "Solo un dueño puede quitar una respuesta escrita",
+  "Failed to read the typed answers": "No se pudieron leer las respuestas escritas",
+  "Failed to report the typed answer": "No se pudo denunciar la respuesta escrita",
+  "Failed to remove the typed answer": "No se pudo quitar la respuesta escrita",
   "Only an Offer or Need shown on the global community can take questions.": "Solo una Oferta o Necesidad mostrada en la comunidad global puede recibir preguntas.",
   "This community isn't taking message requests right now, so this can't take questions.": "Esta comunidad no acepta solicitudes de mensaje ahora mismo, así que esto no puede recibir preguntas."
 }

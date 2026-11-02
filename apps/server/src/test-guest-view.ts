@@ -1421,7 +1421,7 @@ async function main(): Promise<void> {
             // A post shared outside (front doors S6, routes/peek.ts): the read opens only with a ticket (test-peek-ticket).
             'GET /api/marketplace/posts/:id',
             'GET /api/marketplace/posts/:id/chat', 'POST /api/marketplace/posts/:id/chat/message', 'POST /api/marketplace/posts/:id/chat/remove',
-            'POST /api/marketplace/posts/:id/close', 'GET /api/marketplace/posts/:id/photos/:orderNum', 'POST /api/marketplace/posts/:id/rsvp',
+            'POST /api/marketplace/posts/:id/close', 'GET /api/marketplace/posts/:id/other-answers', 'POST /api/marketplace/posts/:id/other-answers/:answerId/report', 'POST /api/marketplace/posts/:id/other-answers/:answerId/remove', 'GET /api/marketplace/posts/:id/photos/:orderNum', 'POST /api/marketplace/posts/:id/rsvp',
             'POST /api/marketplace/posts/:id/let-in',
             'POST /api/marketplace/posts/:id/vote', 'POST /api/marketplace/posts/accept', 'POST /api/marketplace/posts/pause',
             'POST /api/marketplace/posts/remove', 'POST /api/marketplace/posts/request', 'POST /api/marketplace/posts/resume', 'POST /api/marketplace/posts/takes-questions',

@@ -61,6 +61,7 @@ const COPY_FROM = { host: 'mullum.example.org', postId: '5b0d5a3e-5d6c-4f0a-9a57
 const PINS = { up: [-28.6432, 153.6198], sold: [-28.6543, 153.6287], down: [-28.6654, 153.6376], ruled: [-28.6765, 153.6465], event: [-28.6876, 153.6554], lent: [-28.6987, 153.6643] };
 /** The poll's question stays after she deletes: a closed poll is the community's record. */
 const POLL_QUESTION = 'Quibblefen question: which day suits the market?';
+const TYPED_LINE = 'Quibblefen typed line, on a poll whose maker leaves';
 const CALLSIGN = 'Rheanwyn';
 const TITLE_WORDS = ['Quorvex', 'Brindlewick', 'Zelkovan', 'Marmalith', 'Tavirush', 'Pellucine', 'Wexmoorian', 'Oxbalm', 'Oskaloo', 'Fennimore', 'Glimmerhook', 'Xanthrip', 'Drumbellow', 'Sprocklin', 'Vardengrove', 'Ombrequill', 'Nimblethorpe', 'Quillonbury'];
 const DELETED_POST_TITLE = 'Deleted post';
@@ -137,6 +138,13 @@ async function child(): Promise<void> {
             return true;
         },
         /** The rows a standby must hold as this server does: the posts, their photos, the replies, the chats. */
+        /** A poll's typed lines as this server holds them, and whether these words are in state.db or its WAL. */
+        'typed-lines': async (a: { postId: string; words: string }) => {
+            const { db } = await import('./db/db.js');
+            const lines = db.prepare('SELECT id, words, words_removed FROM poll_answers WHERE post_id = ? ORDER BY id').all(a.postId);
+            const onDisk = ['', '-wal'].some((end) => { try { return fs.readFileSync(db.name + end).includes(a.words); } catch { return false; } });
+            return { lines, onDisk };
+        },
         rows: async () => {
             const { db } = await import('./db/db.js');
             return {
@@ -362,9 +370,11 @@ async function main(): Promise<void> {
         built('Bo is going', await S_(bo, `/api/marketplace/posts/${event.id}/rsvp`, { status: 'going' }));
         const poll = built('Rhea asks a poll', await S_(rhea, '/api/marketplace/posts', {
             type: 'poll', category: 'general', title: POLL_QUESTION, description: 'Pick one', authorPublicKey: rhea.pk,
-            pollOptions: [{ id: 'sat', text: 'Saturday' }, { id: 'sun', text: 'Sunday' }], durationDays: 7,
+            pollOptions: [{ id: 'sat', text: 'Saturday' }, { id: 'sun', text: 'Sunday' }], durationDays: 7, pollOther: true,
         })).post;
-        built('Bo votes in it', await S_(bo, `/api/marketplace/posts/${poll.id}/vote`, { optionId: 'sat' }));
+        built('Bo votes in it, with a typed answer', await S_(bo, `/api/marketplace/posts/${poll.id}/vote`, {
+            optionId: poll.pollOptions.find((o: { other?: boolean }) => o.other).id, otherWords: TYPED_LINE,
+        }));
         const lent = built('Rhea lists a thing to lend', await S_(rhea, '/api/marketplace/posts', {
             type: 'offer', category: 'tools', title: WORDS.lentTitle, description: WORDS.lentText, credits: 0, priceType: 'fixed', authorPublicKey: rhea.pk,
             lat: PINS.lent[0], lng: PINS.lent[1], photos: [TINY_PNG],
@@ -475,6 +485,8 @@ async function main(): Promise<void> {
         require_(firstPull.ok === true, `S: the first pull lands (${firstPull.ok ? firstPull.mode : firstPull.error})`);
         const s1 = await standby.send('posts', { ids: wiped });
         const sIndex1 = await standby.send('search-index', { words: TITLE_WORDS });
+        const typedOnS = await standby.send('typed-lines', { postId: poll.id, words: TYPED_LINE });
+        assert(typedOnS.lines.length === 1 && typedOnS.onDisk === true, `S holds the typed line on her open poll (${typedOnS.lines.length} answer)`);
         require_(s1[0].photoObjects === 2 && s1[0].row?.title === WORDS.upTitle && sIndex1.matches.Quorvex === 1,
             `S: holds her words and photos too (${s1[0].photoObjects} photo objects; ${s1[0].row?.title})`);
 
@@ -521,6 +533,9 @@ async function main(): Promise<void> {
         assert(pollAfter.row.title === POLL_QUESTION && pollAfter.row.description === 'Pick one' && pollAfter.row.status === 'completed'
             && pollAfter.votes === 1 && pollAfter.row.poll_options === m1[wiped.length].row.poll_options,
             `the poll is closed and keeps its question, options and vote (${pollAfter.row.status}; ${pollAfter.votes} vote)`);
+        const typedOnM = await main.send('typed-lines', { postId: poll.id, words: TYPED_LINE });
+        assert(typedOnM.lines.length === 1 && !typedOnM.onDisk && typedOnM.lines[0].words === null && typedOnM.lines[0].words_removed === 1,
+            `a poll open when its maker left takes its typed answers: none in the table, state.db or its WAL, and the answer still counts (${JSON.stringify(typedOnM.lines.map((l: any) => l.words_removed))})`);
         const trades = await main.send('trades', { ids: wiped });
         assert(trades.deals.length === 2 && trades.deals.every((d: any) => d.found === d.post_id && d.status === 'completed'),
             `the two deals still find their listings (${JSON.stringify(trades.deals.map((d: any) => [d.status, !!d.found]))})`);
@@ -559,6 +574,9 @@ async function main(): Promise<void> {
         let sRows: Rows = await standby.send('rows');
         assert(rowsDiff(mRows, sRows).length === 0, `S's posts, photos, replies and chats are M's, every column and stamp (differences ${first(rowsDiff(mRows, sRows))})`);
         assert((sRows.posts as any[]).filter((p) => p.shown_takes_questions === 1).length === 1, 'S holds the one door that is open: a take-over must not close it, nor open another');
+        const typedOnS4 = await standby.send('typed-lines', { postId: poll.id, words: TYPED_LINE });
+        assert(!typedOnS4.onDisk && JSON.stringify(typedOnS4.lines) === JSON.stringify(typedOnM.lines),
+            `S ends up the same: the same rows, and the words in neither its database nor its WAL (${JSON.stringify(typedOnS4)})`);
         const s4 = await standby.send('posts', { ids: wiped });
         assert(s4.every((p: any) => p.photos === 0 && p.objects === 0), `S deletes its photo objects too (${JSON.stringify(s4.map((p: any) => p.objects))})`);
         const sIndex4 = await standby.send('search-index', { words: TITLE_WORDS });

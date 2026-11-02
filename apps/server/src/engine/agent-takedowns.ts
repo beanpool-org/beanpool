@@ -336,10 +336,16 @@ export interface TakedownLine {
     posts: TakedownPostLine[];
 }
 
-/** Settings' list, newest first: names and titles as they are now, for a screen that shows them as plain text. */
+/**
+ * Settings' list, newest first: names and titles as they are now, for a screen that shows them as plain text. Every call with a post
+ * still waiting, because this is where it can be undone and the sweep won't wait (their number is bounded by the day's cap and the
+ * 7 days), and otherwise the newest `limit`.
+ */
 export function listTakedowns(now: number = Date.now(), limit = 100): TakedownLine[] {
     const calls = db.prepare(`SELECT t.*, m.callsign FROM agent_takedowns t LEFT JOIN members m ON m.public_key = t.member_pubkey
-                               ORDER BY t.at DESC, t.rowid DESC LIMIT ?`).all(limit) as
+                               WHERE t.id IN (SELECT id FROM agent_takedowns ORDER BY at DESC, rowid DESC LIMIT ?)
+                                  OR t.id IN (SELECT takedown_id FROM agent_takedown_posts WHERE put_back_at IS NULL AND final_at IS NULL)
+                               ORDER BY t.at DESC, t.rowid DESC`).all(limit) as
         { id: string; grant_id: string; grant_name: string; callsign: string | null; at: string; reason: string; why: string; via: 'ids' | 'reports' }[];
     const posts = db.prepare(`SELECT tp.post_id, tp.put_back_at, tp.final_at, p.title, p.type, m.callsign,
                                      ${moneyHeldOn('tp.post_id')} AS deal

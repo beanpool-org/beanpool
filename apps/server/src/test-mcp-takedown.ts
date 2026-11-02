@@ -45,6 +45,7 @@ import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { forgetTakedownsOf, sweepTakedowns, takedownsToday, TAKEDOWN } from './engine/agent-takedowns.js';
 import { muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
+import { rollDueSeries } from './engine/event-series-roll.js';
 import { setAgentPostsPerDay } from './agent/limits.js';
 import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
 import type { AgentGrant, ToolResult } from './agent/tools.js';
@@ -328,6 +329,18 @@ async function main(): Promise<void> {
             await a.callTool({ name: 'take_down', arguments: { post_id: oldPost, reason: 'spam', why: WHY } });
             await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: oldPost } });
             assert(muteOf(already.pub).muted, 'a mute this takedown did not bring stays');
+            // The restore route is the same undo, so the same mute goes with it, there and on no other's account.
+            const restoredVictim = keypair();
+            addMember(restoredVictim, 'Ros Restored');
+            const threeMore = [post('Four', restoredVictim.pub), post('Five', restoredVictim.pub), post('Six', restoredVictim.pub)];
+            await a.callTool({ name: 'take_down_many', arguments: { post_ids: threeMore, reason: 'spam', why: WHY } });
+            assert(muteOf(restoredVictim.pub).muted, 'three more, muted again');
+            const viaRoute = await call('POST', `/api/local/admin/posts/${threeMore[0]}/restore`, { headers: adminHeaders, body: {} });
+            assert(viaRoute.status === 200 && !muteOf(restoredVictim.pub).muted, `the restore route lifts the mute a takedown brought, as Put back does (${show(viaRoute)})`);
+            const oldToo = post('Before the mute, by the other door', already.pub);
+            await a.callTool({ name: 'take_down', arguments: { post_id: oldToo, reason: 'spam', why: WHY } });
+            await call('POST', `/api/local/admin/posts/${oldToo}/restore`, { headers: adminHeaders, body: {} });
+            assert(muteOf(already.pub).muted, 'and by that door too, a mute it did not bring stays');
         }
         delete process.env.NODE_PROFILE;
 
@@ -372,6 +385,15 @@ async function main(): Promise<void> {
         assert(removeNow.status === 200 && removeNow.body?.left?.[0] === a3 && row(a3).active === 1, `Remove now leaves a deal for a person, one at a time (${show(removeNow)})`);
         db.prepare("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?").run(tx2);
         assert(sweepTakedowns() === 1 && row(a3).status === 'cancelled', 'once the deal is over, the sweep finishes it');
+        // A repeating event moves to its next date on its own row, so a takedown holds across it.
+        const weekly = createPost('event', 'community', 'Weekly fake meet-up', 'Words.', 0, 'fixed', sam.pub, -28.55, 153.5, [AVATAR], false, undefined, false,
+            { eventStartLocal: '2027-10-01T20:50', eventEndLocal: '2027-10-01T22:50', eventTz: 'Australia/Sydney', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' }, eventPlaceName: 'The hall' })!.id;
+        await a.callTool({ name: 'take_down', arguments: { post_id: weekly, reason: 'rules', why: WHY } });
+        const dateOf = () => (db.prepare('SELECT event_start_at FROM posts WHERE id = ?').get(weekly) as { event_start_at: string }).event_start_at;
+        const firstDate = dateOf();
+        rollDueSeries(undefined, Date.parse('2027-10-02T00:00:00.000Z'));
+        assert(dateOf() > firstDate && !!row(weekly).hidden_by_reports_at && !!row(weekly).removed_by_moderator_at && row(weekly).active === 1,
+            `a repeating event rolls to its next date still taken down (${firstDate} → ${dateOf()})`);
 
         // ── 7. Caps ──────────────────────────────────────────────────────────────────────────────────
         db.prepare('DELETE FROM agent_takedown_posts').run();
@@ -419,6 +441,20 @@ async function main(): Promise<void> {
         assert(status.assistants.takedowns === takedownsToday() && status.assistants.takedowns >= 12, `the owners' daily line counts them (${status.assistants.takedowns})`);
         const alert = status.recent.find(r => r.key === 'sec.agent' && /took down/.test(r.detail));
         assert(!!alert && /An AI assistant took down \d+ posts? in the last day\./.test(alert.detail) && !alert.detail.includes('Stolen'), `the sec.agent alert counts them and names nobody (${alert?.detail})`);
+
+        // One post a call is how an assistant works through a list: a hundred later calls don't push a takedown off the screen
+        // that can undo it, or the sweep makes it final before anyone sees it. Calls with nothing waiting stay bounded.
+        const longWaiting = post('Waiting behind a hundred calls', mia.pub);
+        await s.callTool({ name: 'take_down', arguments: { post_id: longWaiting, reason: 'spam', why: WHY } });
+        const later = db.prepare(`INSERT INTO agent_takedowns (id, grant_id, grant_name, member_pubkey, at, reason, why, via, posts) VALUES (?, 'later', 'Later calls', '', ?, 'spam', '', 'ids', 0)`);
+        for (let i = 1; i <= 120; i++) later.run(`later-${i}`, new Date(Date.now() + i * 1000).toISOString());
+        const longList = (await call('GET', PATH, { headers: session })).body?.takedowns as any[] | undefined;
+        const waitingLine = longList?.find(t => t.posts.some((p: any) => p.id === longWaiting));
+        assert(waitingLine?.posts[0].state === 'hidden', 'a takedown still waiting stays listed, however many calls came after it');
+        assert(longList?.length === 101, `calls with nothing waiting stay at the newest hundred (${longList?.length})`);
+        const longBack = await call('POST', `${PATH}/${waitingLine?.id}/remove-now`, { headers: phone, body: {} });
+        assert(longBack.status === 200 && row(longWaiting).status === 'cancelled', `and Remove now reaches it (${show(longBack)})`);
+        db.prepare("DELETE FROM agent_takedowns WHERE grant_id = 'later'").run();
 
         // A member deleting their own account leaves the record, as they leave a burst's.
         const leaving = keypair();

@@ -356,13 +356,16 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
     if (!post.hidden_by_reports_at) return 'not_hidden';
     let reporters: string[] = [];
     let restored = false;
+    let itsMute = false;
     db.transaction(() => {
-        // A takedown on hold comes back whole, by this route or Settings' Put back: nothing of it counts against its author.
+        // A takedown on hold comes back whole, by this route or Settings' Put back: nothing of it counts against its author, and a
+        // mute it brought goes with it. Read before the record closes: on a standby that took over there is no record, and so no lift.
         const held = onHold(post);
         const res = db.prepare(`UPDATE posts SET hidden_by_reports_at = NULL, updated_at = ?${held ? ', removed_by_moderator_at = NULL' : ''}
                                  WHERE id = ? AND hidden_by_reports_at IS NOT NULL`).run(iso(now), postId);
         if (res.changes === 0) return;
         restored = true;
+        itsMute = held && !!db.prepare('SELECT 1 FROM agent_takedown_posts WHERE post_id = ? AND muted_author = 1 AND put_back_at IS NULL AND final_at IS NULL').get(postId);
         if (held) db.prepare('UPDATE agent_takedown_posts SET put_back_at = ? WHERE post_id = ? AND put_back_at IS NULL AND final_at IS NULL').run(iso(now), postId);
         reporters = (db.prepare(
             `SELECT DISTINCT reporter_pubkey FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
@@ -378,6 +381,7 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
     // "it's back" only when it is still up, not after they or a moderator took it down.
     announceVisibilityChange(cb, postId);
     if (isLive(post)) notifyPostBack(cb, forNotice(post));
+    if (itsMute && post.author_pubkey && muteOf(post.author_pubkey, now).muted) liftMuteNoLongerEarned(cb, post.author_pubkey, now);
     for (const r of reporters) if (r !== post.author_pubkey) notifyReportDismissed(cb, r, postId, isLive(post));
     return 'restored';
 }

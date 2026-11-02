@@ -3341,6 +3341,13 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
     });
 
     describe('MapCalendar integration in MapPage (PR #2762 fixes)', () => {
+        // The month reads today: a day that has gone is shut, so these dates need a today of their own.
+        beforeEach(() => {
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(new Date('2026-11-03T10:00:00'));
+        });
+        afterEach(() => { vi.useRealTimers(); });
+
         const allowedEvent: MarketplacePost = {
             id: 'ev-allowed',
             type: 'event',

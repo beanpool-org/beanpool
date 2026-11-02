@@ -39,6 +39,17 @@ export function MonthGrid({
     onJumpToDate,
     onStartEvent,
 }: MonthGridProps) {
+    // A grid only when there are days to hold: the empty month's weekdays are for the eye.
+    const weekdays = (inGrid: boolean) => (
+        <div role={inGrid ? 'row' : undefined} aria-hidden={inGrid ? undefined : true} className="grid grid-cols-7 gap-1 px-3 py-1.5 border-b border-nature-100 dark:border-nature-800 text-center">
+            {month.weekdayHeaders.map((header, idx) => (
+                <span key={idx} role={inGrid ? 'columnheader' : undefined} className="text-xs font-bold text-gray-500 dark:text-gray-400 select-none py-1">
+                    {header}
+                </span>
+            ))}
+        </div>
+    );
+
     return (
         <section aria-label={month.heading} className="flex flex-col w-full">
             {/* Month navigation header: ‹ Month Year › */}
@@ -67,21 +78,10 @@ export function MonthGrid({
                 </button>
             </header>
 
-            {/* Weekday headers row */}
-            <div role="row" className="grid grid-cols-7 gap-1 px-3 py-1.5 border-b border-nature-100 dark:border-nature-800 text-center">
-                {month.weekdayHeaders.map((header, idx) => (
-                    <span
-                        key={idx}
-                        role="columnheader"
-                        className="text-xs font-bold text-gray-500 dark:text-gray-400 select-none py-1"
-                    >
-                        {header}
-                    </span>
-                ))}
-            </div>
-
-            {/* Under the weekday row: empty month state OR cell grid */}
+            {/* An empty month's words, or the grid of its days */}
             {month.totalEvents === 0 ? (
+                <>
+                {weekdays(false)}
                 <div data-testid="month-empty-state" className="flex flex-col items-center justify-center p-6 text-center">
                     <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 m-0 mb-3">
                         {month.nextEventDate
@@ -108,8 +108,11 @@ export function MonthGrid({
                         </button>
                     ) : null}
                 </div>
+                </>
             ) : (
-                <div role="grid" aria-label={month.heading} className="flex flex-col gap-1 p-2">
+                <div role="grid" aria-label={month.heading}>
+                    {weekdays(true)}
+                    <div className="flex flex-col gap-1 p-2">
                     {month.weeks.map((week, weekIdx) => (
                         <div key={weekIdx} role="row" className="grid grid-cols-7 gap-1">
                             {week.map((cell, cellIdx) => {
@@ -130,13 +133,12 @@ export function MonthGrid({
                                     : formatDate(new Date(utcOf(cell.date)), 'weekday-day-month', { utc: true });
 
                                 return (
-                                    <div key={cellIdx} role="gridcell" className="flex items-center justify-center">
+                                    <div key={cellIdx} role="gridcell" aria-selected={isSelected} className="flex items-center justify-center">
                                         <button
                                             type="button"
                                             data-testid="month-day-cell"
                                             data-date={cell.date}
                                             aria-label={label}
-                                            aria-selected={isSelected}
                                             aria-current={cell.isToday ? 'date' : undefined}
                                             disabled={cell.isPast}
                                             onClick={() => {
@@ -168,6 +170,7 @@ export function MonthGrid({
                             })}
                         </div>
                     ))}
+                    </div>
                 </div>
             )}
         </section>

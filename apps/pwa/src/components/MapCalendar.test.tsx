@@ -1,9 +1,16 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapCalendar } from './MapCalendar';
 import type { MarketplacePost } from '../lib/api';
 
 describe('MapCalendar (DESIGN-map-calendar-fable.md §1, §4, §8 S3)', () => {
+    // The month reads today: a day that has gone is shut, so these dates need a today of their own.
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-03T10:00:00'));
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
     const localEvent: MarketplacePost = {
         id: 'ev-local-1',
         type: 'event',
@@ -220,5 +227,21 @@ describe('MapCalendar (DESIGN-map-calendar-fable.md §1, §4, §8 S3)', () => {
         const newHeading = within(screen.getByTestId('map-stack-list')).getByRole('heading');
         expect(newHeading.textContent).toMatch(/Nothing on Tue 10 Nov/);
         expect(document.activeElement).toBe(newHeading);
+    });
+    it('the weekdays and days sit in one grid, the selected day says so on its cell, and an empty month is no grid', () => {
+        const { unmount } = render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} onOpenPost={vi.fn()} />);
+        const grid = screen.getByRole('grid');
+        expect(within(grid).getAllByRole('columnheader')).toHaveLength(7);
+        fireEvent.click(screen.getAllByTestId('month-day-cell').find((c) => c.dataset.date === '2026-11-07')!);
+        const day = screen.getAllByTestId('month-day-cell').find((c) => c.dataset.date === '2026-11-07')!;
+        expect(day).not.toHaveAttribute('aria-selected');
+        expect(day.closest('[role="gridcell"]')).toHaveAttribute('aria-selected', 'true');
+        unmount();
+
+        render(<MapCalendar posts={[]} onClose={vi.fn()} onOpenPost={vi.fn()} />);
+        expect(screen.getByTestId('month-empty-state')).toBeInTheDocument();
+        expect(screen.queryByRole('grid')).toBeNull();
+        expect(screen.queryByRole('row')).toBeNull();
+        expect(screen.queryByRole('columnheader')).toBeNull();
     });
 });

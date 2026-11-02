@@ -6,8 +6,8 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import {
-    TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
-    tipsCaption, tipsFor, type TipsRecord,
+    TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
+    tipsCaption, tipsFor, type CardHue, type TipsRecord,
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
 } from '@beanpool/core';
@@ -948,13 +948,17 @@ export default function HomeScreen() {
         const caption = type === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(type, answer);
         // Getting started has no "…": Skip is its remove.
         const menu = tailor && type !== 'start' && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
-        const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
-            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
+        const hue: CardHue = type === 'needs' ? (needsEntries.some(e => e.accent) ? 'amber' : 'sage') : homeCardHue(inst);
+        const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean; hue?: CardHue }) => (
+            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent} hue={extra?.hue ?? hue}>
                 {body}
             </HomeCard>
         );
         switch (type) {
-            case 'needs': return frame(<NeedsBody entries={needsEntries} colors={colors} onOpen={openNeeds} />, { accent: needsEntries.some(e => e.accent) });
+            case 'needs': {
+                const hasAccent = needsEntries.some(e => e.accent);
+                return frame(<NeedsBody entries={needsEntries} colors={colors} onOpen={openNeeds} />, { accent: hasAccent, hue: hasAccent ? 'amber' : 'sage' });
+            }
             case 'safety':
                 // Its own card (the two-doors design's): it says when it is up, and keeps its own ✕ and schedule.
                 return (
@@ -1024,7 +1028,7 @@ export default function HomeScreen() {
                     right: tailor ? (
                         <Pressable onPress={openTune} style={{ minHeight: 48, minWidth: 48, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}
                             accessibilityRole="button" accessibilityLabel={t("Tune: pick what you're into")} testID="home-market-tune">
-                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.link }}>{t('Tune')}</Text>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.card.orange.ink }}>{t('Tune')}</Text>
                         </Pressable>
                     ) : undefined,
                 },

@@ -1249,9 +1249,8 @@ async function main(): Promise<void> {
             'POST /api/commons/pay': { amount: 1 },
             'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
             'POST /api/names/debts/:id/work-off': { memberPubkey: alice.pk },
-            // The Community health panel and the consent: the owner's two lines, and a member's consent to the terms.
+            // The Community health panel: the owner's two lines.
             'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
-            'POST /api/names/consent': { version: '1:50:60' },
             'POST /api/local/admin/community-health': { debtLinePct: 90 },
             'POST /api/local/admin/start-community-url': { url: 'https://start.example.org/how' },
             // The listing promise's ticks and closing day (owner only): past the body checks to the write.
@@ -1285,7 +1284,7 @@ async function main(): Promise<void> {
             'POST /api/commons/decisions/:id/vote', 'POST /api/commons/decisions/:id/reply', 'POST /api/commons/decisions/:id/report',
             'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
             'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',
-            'GET /api/community/card', 'GET /api/community/consent-terms', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area',
+            'GET /api/community/card', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/known-rule', 'GET /api/community/me', 'POST /api/community/me/area',
             'POST /api/community/me/key-succession', 'GET /api/community/members',
             'GET /api/community/membership/:publicKey', 'POST /api/community/register',
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',
@@ -1446,7 +1445,7 @@ async function main(): Promise<void> {
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
             'GET /api/names/debts', 'POST /api/names/debts/:id/settle', 'POST /api/names/debts/:id/work-off',
             'GET /api/names/health', 'GET /api/names/health/exceptions', 'GET /api/names/health/log', 'POST /api/names/health/settings',
-            'GET /api/names/consent', 'POST /api/names/consent', 'DELETE /api/names/consent',
+            'POST /api/names/step-back',
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',

@@ -45,8 +45,8 @@
  * confirmation per member and per entry. An admin confirms only against an entry they can open, and not themselves
  * unless they are the community's only admin. Where the community asks for two admins (`names_two_admins`, the owner's
  * setting, off by default) and it has two or more, a confirmation waits for a second admin, who must also be able to
- * open the entry. Any admin revokes one. Removing a member or their deleting their account revokes theirs. It is a fact
- * about a member, never a tier, and in this slice it gates nothing.
+ * open the entry. Any admin revokes one, and a member may step back from theirs ({@link stepBack}). Removing a member or
+ * their deleting their account revokes theirs. It is a fact about a member, never a tier, and in this slice it gates nothing.
  *
  * ## The access log
  *
@@ -599,6 +599,39 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
 }
 
 /**
+ * A member steps back from being confirmed (scratch/fable-design/DESIGN-balance-rule-fable.md §1): their own revoke, one
+ * signed request, at any time. The known grant ends with it, and the entry is free for an admin to confirm them again.
+ * `owesPastOrdinaryLine` is read inside the revoke, so it sees their line without the grant: where it says yes, the row
+ * remembers it, and they stay on the admins' list until they are back within it (engine/community-health.ts
+ * openExceptions). Without that, a member could borrow on the known floor and step out of sight.
+ */
+export function stepBack(member: string, owesPastOrdinaryLine: () => boolean): { id: string; status: ConfirmationStatus; owing: boolean } {
+    assertPlainTablesWritable();
+    const row = db.prepare('SELECT * FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(member) as ConfirmationRow | undefined;
+    if (!row || confirmationStatus(row) !== 'confirmed') throw new NamesListError(409, 'not_confirmed', word('You aren’t confirmed here, so there is nothing to step back from.'));
+    let owing = false;
+    db.transaction(() => {
+        db.prepare("UPDATE confirmations SET revoked_by = ?, revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = 'member' WHERE id = ?")
+            .run(member, row.id);
+        log(member, 'revoke', row.entry_id, member);
+        endWorkOff(member, member, row.id);
+        owing = owesPastOrdinaryLine();
+        if (owing) db.prepare('UPDATE confirmations SET stepped_back_owing = 1 WHERE id = ?').run(row.id);
+    })();
+    return { id: row.id, status: 'revoked', owing };
+}
+
+/**
+ * The entry a member who stepped back last stood on: their newest confirmation, if it was theirs to end. A confirmation
+ * that was never live (awaiting a second admin) doesn't count: it gave them nothing.
+ */
+function steppedBackEntryOf(pubkey: string): string | undefined {
+    const newest = db.prepare(`SELECT entry_id, revoke_reason FROM confirmations WHERE member_pubkey = ? AND (needs_second = 0 OR seconded_at IS NOT NULL)
+                               ORDER BY confirmed_at DESC LIMIT 1`).get(pubkey) as { entry_id: string; revoke_reason: string | null } | undefined;
+    return newest?.revoke_reason === 'member' ? newest.entry_id : undefined;
+}
+
+/**
  * A member leaving: their live confirmation is revoked (`removed` by the community or an admin, `account_deleted` by
  * themselves), and, where they held the current key, they are marked as no longer holding it (a new key is then needed
  * before anything is written). Called inside adminPruneUser's and purgeMemberSelf's transactions (state-engine.ts), on a
@@ -607,7 +640,8 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
 export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account_deleted', balance = 0): void {
     // Leaving in debt (`balance` before the Commons settled it): a debt record on their entry (engine/names-debts.ts).
     const live = db.prepare('SELECT entry_id FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(pubkey) as { entry_id: string } | undefined;
-    recordDepartedDebt(pubkey, live?.entry_id ?? null, balance, reason);
+    // Stepping back first takes no debt off the entry: the debt was run up on it, and it stops a new key being confirmed there.
+    recordDepartedDebt(pubkey, live?.entry_id ?? steppedBackEntryOf(pubkey) ?? null, balance, reason);
     db.prepare(`UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = ?
                 WHERE member_pubkey = ? AND revoked_at IS NULL`).run(reason, pubkey);
     const current = currentGeneration();

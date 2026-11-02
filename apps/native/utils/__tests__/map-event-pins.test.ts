@@ -1113,9 +1113,8 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
                 expect(host.querySelectorAll('[data-ring]')).toHaveLength(1);
             });
 
-            it('draws nothing at the library\'s opacity 0, draws with none given, and runs the same hooks either way', async () => {
+            it('draws nothing at the library\'s opacity 0, and draws with none given, as the new-listing map gives none', async () => {
                 const area = { lat: AT.lat, lng: AT.lng, radiusKm: 5 };
-                const fails = vi.spyOn(console, 'error').mockImplementation(() => {});
                 const render = (opacity?: number) => act(async () => { root.render(createElement(MapAreaRing, { area, darkMap: false, opacity })); });
                 await render(0);
                 expect(host.querySelectorAll('[data-ring]')).toHaveLength(0);
@@ -1123,7 +1122,13 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
                 expect(host.querySelectorAll('[data-ring]')).toHaveLength(1);
                 await render(0);
                 expect(host.querySelectorAll('[data-ring]')).toHaveLength(0);
-                expect(fails).not.toHaveBeenCalled();
+            });
+
+            it('leaves its opacity check after the useMemo, so every render runs the same hooks', () => {
+                // Read from the source: React's own check misses it, because a render with no hooks at all passes that check.
+                const source = readFileSync(join(NATIVE, 'components/MapAreaRing.tsx'), 'utf8');
+                expect(source.indexOf('useMemo(() =>')).toBeGreaterThan(-1);
+                expect(source.indexOf('useMemo(() =>')).toBeLessThan(source.indexOf('if (opacity === 0)'));
             });
 
             it('wears the map\'s colour, not the app\'s: the moon darkens the map in a light app, and the ring with it', async () => {

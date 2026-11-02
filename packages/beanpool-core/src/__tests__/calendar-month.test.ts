@@ -476,4 +476,22 @@ describe('calendar-month: day heading & empty states in words layer', () => {
         expect(findNextEventDateAfter(events, '2026-12-31')).toBe('2027-01-10');
         expect(findNextEventDateAfter(events, '2027-02-01')).toBeNull();
     });
+
+    it('groupEventsByLocalDay sorts same-day events soonest first with snake_case and local times', () => {
+        const events: CalendarEventInput[] = [
+            // SQLite replica row (snake_case)
+            { id: 'ev-late', event_start_at: '2026-11-10T16:00:00.000Z', event_start_local: '2026-11-10T16:00' },
+            // Earlier one-off event with camelCase
+            { id: 'ev-early', eventStartAt: '2026-11-10T09:00:00.000Z', eventStartLocal: '2026-11-10T09:00' },
+            // Event with only local clock string (no UTC timestamp)
+            { id: 'ev-mid', event_start_local: '2026-11-10T12:00' },
+        ];
+        const grouped = groupEventsByLocalDay(events, { start: '2026-11-10', end: '2026-11-10' });
+        const ids = grouped['2026-11-10'].map((e) => e.id);
+        expect(ids).toEqual(['ev-early', 'ev-mid', 'ev-late']);
+        // Verify field normalization on one-off occurrence
+        expect(grouped['2026-11-10'][0].eventStartLocal).toBe('2026-11-10T09:00');
+        expect(grouped['2026-11-10'][1].eventStartLocal).toBe('2026-11-10T12:00');
+        expect(grouped['2026-11-10'][2].eventStartLocal).toBe('2026-11-10T16:00');
+    });
 });

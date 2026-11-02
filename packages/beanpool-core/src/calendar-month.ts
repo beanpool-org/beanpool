@@ -253,9 +253,17 @@ export function expandEventSeries<T extends CalendarEventInput>(event: T, range:
     // If not repeating or invalid rule, treat as single occurrence
     if (!rule) {
         if (anchorDate >= range.start && anchorDate <= range.end) {
+            const startLocal = event.eventStartLocal ?? event.event_start_local;
+            const startAt = event.eventStartAt ?? event.event_start_at;
+            const endLocal = event.eventEndLocal ?? event.event_end_local;
+            const endAt = event.eventEndAt ?? event.event_end_at;
             return [{
                 ...event,
                 date: anchorDate,
+                ...(startLocal !== undefined && event.eventStartLocal === undefined ? { eventStartLocal: startLocal } : {}),
+                ...(startAt !== undefined && event.eventStartAt === undefined ? { eventStartAt: startAt } : {}),
+                ...(endLocal !== undefined && event.eventEndLocal === undefined ? { eventEndLocal: endLocal } : {}),
+                ...(endAt !== undefined && event.eventEndAt === undefined ? { eventEndAt: endAt } : {}),
                 isExpanded: false,
                 baseEvent: event,
             }];
@@ -396,9 +404,16 @@ export function groupEventsByLocalDay<T extends CalendarEventInput>(
     // Sort each day's occurrences soonest start first
     for (const day of Object.keys(result)) {
         result[day].sort((a, b) => {
-            const timeA = a.eventStartAt ? Date.parse(a.eventStartAt) : utcOf(a.date);
-            const timeB = b.eventStartAt ? Date.parse(b.eventStartAt) : utcOf(b.date);
-            return timeA - timeB;
+            const startA = a.eventStartAt ?? a.event_start_at;
+            const startB = b.eventStartAt ?? b.event_start_at;
+            const timeA = startA ? Date.parse(startA) : NaN;
+            const timeB = startB ? Date.parse(startB) : NaN;
+            if (Number.isFinite(timeA) && Number.isFinite(timeB) && timeA !== timeB) {
+                return timeA - timeB;
+            }
+            const localA = a.eventStartLocal ?? a.event_start_local ?? '';
+            const localB = b.eventStartLocal ?? b.event_start_local ?? '';
+            return localA.localeCompare(localB);
         });
     }
     return result;

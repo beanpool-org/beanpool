@@ -6202,5 +6202,13 @@
   "Poll": "പോൾ",
   "Stop taking questions": "ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നത് നിർത്തുക",
   "on the global community": "ആഗോള കമ്മ്യൂണിറ്റിയിൽ",
-  "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക"
+  "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക",
+  "Alerts from this community": "ഈ കമ്മ്യൂണിറ്റിയിൽ നിന്നുള്ള അറിയിപ്പുകൾ",
+  "Stops notifications and unread message checks from this community": "ഈ കമ്മ്യൂണിറ്റിയിൽ നിന്നുള്ള അറിയിപ്പുകളും വായിക്കാത്ത സന്ദേശ പരിശോധനകളും നിർത്തുന്നു",
+  "Remove from your saved list": "സേവ് ചെയ്ത ലിസ്റ്റിൽ നിന്ന് നീക്കം ചെയ്യുക",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community}-ൽ {n} പുതിയ സന്ദേശം · മാറുക",
+    "other": "{community}-ൽ {n} പുതിയ സന്ദേശങ്ങൾ · മാറുക"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "നിങ്ങൾ സൂക്ഷിക്കുന്ന ഓരോ കമ്മ്യൂണിറ്റിയിൽ നിന്നും നിങ്ങളുടെ ഫോണിൽ അറിയിപ്പുകൾ എത്തും. BeanPool ഷീറ്റിൽ ഒരു കമ്മ്യൂണിറ്റിക്കായി നിങ്ങൾക്ക് അവ ഓഫാക്കാം."
 }

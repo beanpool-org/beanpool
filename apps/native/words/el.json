@@ -6202,5 +6202,13 @@
   "Poll": "Ψηφοφορία",
   "Stop taking questions": "Σταμάτα να δέχεσαι ερωτήσεις",
   "on the global community": "στην παγκόσμια κοινότητα",
-  "Open their requests there": "Άνοιξε τα αιτήματά τους εκεί"
+  "Open their requests there": "Άνοιξε τα αιτήματά τους εκεί",
+  "Alerts from this community": "Ειδοποιήσεις από αυτή την κοινότητα",
+  "Stops notifications and unread message checks from this community": "Διακόπτει τις ειδοποιήσεις και τον έλεγχο μη αναγνωσμένων μηνυμάτων από αυτή την κοινότητα",
+  "Remove from your saved list": "Αφαίρεση από την αποθηκευμένη λίστα σας",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} νέο μήνυμα στο {community} · Αλλαγή",
+    "other": "{n} νέα μηνύματα στο {community} · Αλλαγή"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Οι ειδοποιήσεις φτάνουν στο τηλέφωνό σας από κάθε κοινότητα που διατηρείτε. Μπορείτε να τις απενεργοποιήσετε για μια κοινότητα στην καρτέλα BeanPool."
 }

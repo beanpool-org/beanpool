@@ -3563,5 +3563,7 @@
   "Open their requests there": "そこでリクエストを開く",
   "Previous month": "前の月",
   "Next month": "次の月",
-  "Event · {from}": "イベント · {from}"
+  "Event · {from}": "イベント · {from}",
+  "Messages in your other communities show on your phone, or when you open that community here.": "他のコミュニティのメッセージはスマートフォンに表示されるか、ここでそのコミュニティを開いたときに表示されます。",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "参加しているすべてのコミュニティからの通知がスマートフォンに届きます。BeanPoolシートでコミュニティごとにオフにできます。"
 }

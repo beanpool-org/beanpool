@@ -6202,5 +6202,13 @@
   "Poll": "Poll",
   "Stop taking questions": "Itigil ang pagtanggap ng mga tanong",
   "on the global community": "sa pandaigdigang komunidad",
-  "Open their requests there": "Buksan doon ang mga kahilingan nila"
+  "Open their requests there": "Buksan doon ang mga kahilingan nila",
+  "Alerts from this community": "Mga alerto mula sa komunidad na ito",
+  "Stops notifications and unread message checks from this community": "Ititigil ang mga abiso at pagsusuri ng hindi pa nababasang mensahe mula sa komunidad na ito",
+  "Remove from your saved list": "Alisin sa iyong naka-save na listahan",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} bagong mensahe sa {community} · Lumipat",
+    "other": "{n} mga bagong mensahe sa {community} · Lumipat"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Dumarating ang mga alerto sa iyong telepono mula sa bawat komunidad na iyong pinapanatili. Maaari mong i-off ang mga ito para sa isang komunidad sa BeanPool sheet."
 }

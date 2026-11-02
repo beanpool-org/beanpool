@@ -6202,5 +6202,13 @@
   "Poll": "Enquete",
   "Stop taking questions": "Deixar de receber perguntas",
   "on the global community": "na comunidade global",
-  "Open their requests there": "Abrir os pedidos lá"
+  "Open their requests there": "Abrir os pedidos lá",
+  "Alerts from this community": "Alertas desta comunidade",
+  "Stops notifications and unread message checks from this community": "Interrompe notificações e verificações de mensagens não lidas desta comunidade",
+  "Remove from your saved list": "Remover da sua lista salva",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} nova mensagem em {community} · Mudar",
+    "other": "{n} novas mensagens em {community} · Mudar"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Os alertas chegam ao seu telefone de cada comunidade que você mantém. Você pode desativá-los para uma comunidade na aba BeanPool."
 }

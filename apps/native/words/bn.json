@@ -6202,5 +6202,13 @@
   "Poll": "পোল",
   "Stop taking questions": "প্রশ্ন নেওয়া বন্ধ করুন",
   "on the global community": "বিশ্বব্যাপী সম্প্রদায়ে",
-  "Open their requests there": "সেখানে তাদের অনুরোধ খুলুন"
+  "Open their requests there": "সেখানে তাদের অনুরোধ খুলুন",
+  "Alerts from this community": "এই সম্প্রদায়ের সতর্কতা",
+  "Stops notifications and unread message checks from this community": "এই সম্প্রদায়ের বিজ্ঞপ্তি এবং অপঠিত বার্তা পরীক্ষা বন্ধ করে",
+  "Remove from your saved list": "সংরক্ষিত তালিকা থেকে সরান",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community}-এ {n}টি নতুন বার্তা · পরিবর্তন করুন",
+    "other": "{community}-এ {n}টি নতুন বার্তা · পরিবর্তন করুন"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "আপনার সংরক্ষিত প্রতিটি সম্প্রদায় থেকে সতর্কতা আপনার ফোনে পৌঁছায়। আপনি BeanPool শিটে একটি সম্প্রদায়ের জন্য সেগুলি বন্ধ করতে পারেন।"
 }

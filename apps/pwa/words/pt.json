@@ -3693,5 +3693,7 @@
   "Open their requests there": "Abrir os pedidos lá",
   "Previous month": "Mês anterior",
   "Next month": "Mês seguinte",
-  "Event · {from}": "Evento · {from}"
+  "Event · {from}": "Evento · {from}",
+  "Messages in your other communities show on your phone, or when you open that community here.": "As mensagens em suas outras comunidades aparecem no seu telefone ou quando você abre essa comunidade aqui.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Os alertas chegam ao seu telefone de cada comunidade que você mantém. Você pode desativá-los para uma comunidade na aba BeanPool."
 }

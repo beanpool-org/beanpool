@@ -5963,5 +5963,12 @@
   "Poll": "投票",
   "Stop taking questions": "質問の受け付けをやめる",
   "on the global community": "グローバルコミュニティで",
-  "Open their requests there": "そこでリクエストを開く"
+  "Open their requests there": "そこでリクエストを開く",
+  "Alerts from this community": "このコミュニティからの通知",
+  "Stops notifications and unread message checks from this community": "このコミュニティからの通知と未読メッセージの確認を停止します",
+  "Remove from your saved list": "保存したリストから削除",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{community} に {n} 件の新しいメッセージ · 切り替え"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "参加しているすべてのコミュニティからの通知がスマートフォンに届きます。BeanPoolシートでコミュニティごとにオフにできます。"
 }

@@ -6683,5 +6683,15 @@
   "Poll": "Опрос",
   "Stop taking questions": "Больше не принимать вопросы",
   "on the global community": "в глобальном сообществе",
-  "Open their requests there": "Открыть их запросы там"
+  "Open their requests there": "Открыть их запросы там",
+  "Alerts from this community": "Оповещения от этого сообщества",
+  "Stops notifications and unread message checks from this community": "Отключает уведомления и проверку непрочитанных сообщений из этого сообщества",
+  "Remove from your saved list": "Удалить из сохраненного списка",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} новое сообщение в {community} · Перейти",
+    "few": "{n} новых сообщения в {community} · Перейти",
+    "many": "{n} новых сообщений в {community} · Перейти",
+    "other": "{n} нового сообщения в {community} · Перейти"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Оповещения приходят на ваш телефон из каждого сохраненного сообщества. Вы можете отключить их для сообщества на панели BeanPool."
 }

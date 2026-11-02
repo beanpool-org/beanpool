@@ -6202,5 +6202,13 @@
   "Poll": "Anket",
   "Stop taking questions": "Soru kabul etmeyi durdur",
   "on the global community": "küresel toplulukta",
-  "Open their requests there": "İsteklerini orada aç"
+  "Open their requests there": "İsteklerini orada aç",
+  "Alerts from this community": "Bu topluluktan gelen bildirimler",
+  "Stops notifications and unread message checks from this community": "Bu topluluktan gelen bildirimleri ve okunmamış mesaj kontrollerini durdurur",
+  "Remove from your saved list": "Kayıtlı listenizden kaldırın",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community} topluluğunda {n} yeni mesaj · Değiştir",
+    "other": "{community} topluluğunda {n} yeni mesaj · Değiştir"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Bildirimler, kayıtlı tuttuğunuz her topluluktan telefonunuza ulaşır. BeanPool sayfasında bir topluluk için bunları kapatabilirsiniz."
 }

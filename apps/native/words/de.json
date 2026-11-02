@@ -6201,5 +6201,13 @@
   "Poll": "Umfrage",
   "Stop taking questions": "Keine Fragen mehr annehmen",
   "on the global community": "in der globalen Community",
-  "Open their requests there": "Ihre Anfragen dort öffnen"
+  "Open their requests there": "Ihre Anfragen dort öffnen",
+  "Alerts from this community": "Benachrichtigungen aus dieser Community",
+  "Stops notifications and unread message checks from this community": "Stoppt Benachrichtigungen und Prüfungen auf ungelesene Nachrichten aus dieser Community",
+  "Remove from your saved list": "Aus deiner gespeicherten Liste entfernen",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} neue Nachricht in {community} · Wechseln",
+    "other": "{n} neue Nachrichten in {community} · Wechseln"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Benachrichtigungen erreichen dein Telefon von jeder gespeicherten Community. Du kannst sie auf dem BeanPool-Blatt für eine Community ausschalten."
 }

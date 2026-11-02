@@ -5963,5 +5963,12 @@
   "Poll": "投票",
   "Stop taking questions": "停止接受提問",
   "on the global community": "在全球社群",
-  "Open their requests there": "在那裡開啟他們的請求"
+  "Open their requests there": "在那裡開啟他們的請求",
+  "Alerts from this community": "來自此社群的通知",
+  "Stops notifications and unread message checks from this community": "停止接收來自此社群的通知和未讀訊息檢查",
+  "Remove from your saved list": "從已儲存清單中移除",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{community} 中有 {n} 則新訊息 · 切換"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "來自你保留的每個社群的通知都會傳送到你的手機。你可以在 BeanPool 頁面上關閉特定社群的通知。"
 }

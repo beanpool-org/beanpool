@@ -3692,5 +3692,7 @@
   "Open their requests there": "İsteklerini orada aç",
   "Previous month": "Önceki ay",
   "Next month": "Sonraki ay",
-  "Event · {from}": "Etkinlik · {from}"
+  "Event · {from}": "Etkinlik · {from}",
+  "Messages in your other communities show on your phone, or when you open that community here.": "Diğer topluluklarınızdaki mesajlar telefonunuzda veya o topluluğu burada açtığınızda gösterilir.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Bildirimler, kayıtlı tuttuğunuz her topluluktan telefonunuza ulaşır. BeanPool sayfasında bir topluluk için bunları kapatabilirsiniz."
 }

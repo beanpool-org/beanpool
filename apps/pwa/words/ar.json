@@ -4208,5 +4208,7 @@
   "Open their requests there": "افتح طلباتهم هناك",
   "Previous month": "الشهر السابق",
   "Next month": "الشهر التالي",
-  "Event · {from}": "فعالية · {from}"
+  "Event · {from}": "فعالية · {from}",
+  "Messages in your other communities show on your phone, or when you open that community here.": "تظهر الرسائل في مجتمعاتك الأخرى على هاتفك، أو عند فتح ذلك المجتمع هنا.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "تصل التنبيهات إلى هاتفك من كل مجتمع تحتفظ به. يمكنك إيقاف تشغيلها لمجتمع ما في ورقة BeanPool."
 }

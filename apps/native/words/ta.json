@@ -6201,5 +6201,13 @@
   "Poll": "வாக்கெடுப்பு",
   "Stop taking questions": "கேள்விகளை ஏற்பதை நிறுத்து",
   "on the global community": "உலகளாவிய சமூகத்தில்",
-  "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்"
+  "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்",
+  "Alerts from this community": "இந்தச் சமூகத்தின் அறிவிப்புகள்",
+  "Stops notifications and unread message checks from this community": "இந்தச் சமூகத்தின் அறிவிப்புகள் மற்றும் படிக்காத செய்தி சோதனைகளை நிறுத்துகிறது",
+  "Remove from your saved list": "சேமித்த பட்டியலிலிருந்து அகற்று",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community} இல் {n} புதிய செய்தி · மாறு",
+    "other": "{community} இல் {n} புதிய செய்திகள் · மாறு"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "நீங்கள் வைத்திருக்கும் ஒவ்வொரு சமூகத்திலிருந்தும் அறிவிப்புகள் உங்கள் தொலைபேசியை அடைகின்றன. BeanPool தாளில் ஒரு சமூகத்திற்கு அவற்றை முடக்கலாம்."
 }

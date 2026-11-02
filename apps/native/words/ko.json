@@ -5963,5 +5963,12 @@
   "Poll": "설문",
   "Stop taking questions": "질문 받기 중단",
   "on the global community": "글로벌 커뮤니티에서",
-  "Open their requests there": "거기서 요청 열기"
+  "Open their requests there": "거기서 요청 열기",
+  "Alerts from this community": "이 커뮤니티의 알림",
+  "Stops notifications and unread message checks from this community": "이 커뮤니티의 알림 및 읽지 않은 메시지 확인을 중지합니다",
+  "Remove from your saved list": "저장된 목록에서 제거",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{community}에 새 메시지 {n}개 · 전환"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "저장된 모든 커뮤니티의 알림이 휴대전화로 전송됩니다. BeanPool 시트에서 커뮤니티별로 알림을 끌 수 있습니다."
 }

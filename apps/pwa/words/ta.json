@@ -3691,5 +3691,7 @@
   "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்",
   "Previous month": "முந்தைய மாதம்",
   "Next month": "அடுத்த மாதம்",
-  "Event · {from}": "நிகழ்வு · {from}"
+  "Event · {from}": "நிகழ்வு · {from}",
+  "Messages in your other communities show on your phone, or when you open that community here.": "உங்கள் பிற சமூகங்களில் உள்ள செய்திகள் உங்கள் தொலைபேசியில் அல்லது அந்த சமூகத்தை இங்கே திறக்கும்போது காட்டப்படும்.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "நீங்கள் வைத்திருக்கும் ஒவ்வொரு சமூகத்திலிருந்தும் அறிவிப்புகள் உங்கள் தொலைபேசியை அடைகின்றன. BeanPool தாளில் ஒரு சமூகத்திற்கு அவற்றை முடக்கலாம்."
 }

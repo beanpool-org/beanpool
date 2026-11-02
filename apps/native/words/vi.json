@@ -5962,5 +5962,12 @@
   "Poll": "Thăm dò",
   "Stop taking questions": "Ngừng nhận câu hỏi",
   "on the global community": "trên cộng đồng toàn cầu",
-  "Open their requests there": "Mở các yêu cầu của họ ở đó"
+  "Open their requests there": "Mở các yêu cầu của họ ở đó",
+  "Alerts from this community": "Thông báo từ cộng đồng này",
+  "Stops notifications and unread message checks from this community": "Dừng nhận thông báo và kiểm tra tin nhắn chưa đọc từ cộng đồng này",
+  "Remove from your saved list": "Xóa khỏi danh sách đã lưu",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{n} tin nhắn mới trong {community} · Chuyển"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Thông báo gửi đến điện thoại của bạn từ mọi cộng đồng bạn lưu. Bạn có thể tắt thông báo cho một cộng đồng trên bảng BeanPool."
 }

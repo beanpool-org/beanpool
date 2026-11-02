@@ -3950,5 +3950,7 @@
   "Open their requests there": "Відкрити їхні запити там",
   "Previous month": "Попередній місяць",
   "Next month": "Наступний місяць",
-  "Event · {from}": "Подія · {from}"
+  "Event · {from}": "Подія · {from}",
+  "Messages in your other communities show on your phone, or when you open that community here.": "Повідомлення в інших ваших спільнотах відображаються на вашому телефоні або коли ви відкриваєте цю спільноту тут.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Сповіщення надходять на ваш телефон з кожної збереженої спільноти. Ви можете вимкнути їх для спільноти на панелі BeanPool."
 }

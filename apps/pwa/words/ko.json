@@ -3563,5 +3563,7 @@
   "Open their requests there": "거기서 요청 열기",
   "Previous month": "이전 달",
   "Next month": "다음 달",
-  "Event · {from}": "이벤트 · {from}"
+  "Event · {from}": "이벤트 · {from}",
+  "Messages in your other communities show on your phone, or when you open that community here.": "다른 커뮤니티의 메시지는 휴대전화에 표시되거나 여기에서 해당 커뮤니티를 열 때 표시됩니다.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "저장된 모든 커뮤니티의 알림이 휴대전화로 전송됩니다. BeanPool 시트에서 커뮤니티별로 알림을 끌 수 있습니다."
 }

@@ -6201,5 +6201,13 @@
   "Poll": "Kura ya maoni",
   "Stop taking questions": "Acha kupokea maswali",
   "on the global community": "kwenye jumuiya ya kimataifa",
-  "Open their requests there": "Fungua maombi yao huko"
+  "Open their requests there": "Fungua maombi yao huko",
+  "Alerts from this community": "Arifa kutoka kwa jumuiya hii",
+  "Stops notifications and unread message checks from this community": "Hukomesha arifa na ukaguzi wa ujumbe ambao haujasomwa kutoka kwa jumuiya hii",
+  "Remove from your saved list": "Ondoa kwenye orodha yako iliyohifadhiwa",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "Ujumbe mpya {n} katika {community} · Badilisha",
+    "other": "Ujumbe mpya {n} katika {community} · Badilisha"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Arifa hufika kwenye simu yako kutoka kwa kila jumuiya unayoweka. Unaweza kuzizima kwa ajili ya jumuiya kwenye ukurasa wa BeanPool."
 }

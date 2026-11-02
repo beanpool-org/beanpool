@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CommunityShapeModal } from './CommunityShapeModal';
 import type { CommunityShapeFeatures } from '@beanpool/core';
@@ -86,6 +86,7 @@ describe('CommunityShapeModal', () => {
         it('an older node states no lines: the floor stays, no rule line, and nothing is asked', async () => {
             stubRule(null);
             render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{ door: 'members', beans: true }} />);
+            await act(async () => { await new Promise(r => setTimeout(r, 20)); });
             expect(screen.queryByText(SOURCE)).toBeNull();
             expect(fetch).not.toHaveBeenCalled();
         });

@@ -108,8 +108,8 @@ function daysWords(n: number): string {
 }
 
 /**
- * The rule in the community's own numbers, for anyone reading before they are confirmed; null from a node that doesn't
- * state both lines, which draws no rule line (DESIGN-balance-rule-fable.md §2, §5).
+ * The rule in the community's own numbers, on the join screen and "How this community works"; null from a node that
+ * doesn't state both lines, which draws no rule line (DESIGN-balance-rule-fable.md §2, §5).
  */
 export function knownRuleLine(lines: KnownRuleLines | null | undefined): string | null {
     const pct = lines?.debtLinePct;

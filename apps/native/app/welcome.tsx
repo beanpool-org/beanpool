@@ -2586,7 +2586,7 @@ export default function WelcomeScreen() {
                             // carry it, so the label is just the sentence.
                             accessibilityLabel={t("I've saved these words")}
                         >
-                            {/* Shrinks to the box and wraps, as the consent tickbox does: alone in a row, it ran past the box
+                            {/* Shrinks to the box and wraps: alone in a row, it ran past the box
                                 at 320 dp with 1.3x text, and longer languages more. */}
                             <Text style={[styles.checkboxText, { flexShrink: 1 }]}>
                                 {seedConfirmed ? '✅ ' : '⬜ '} <Text>{t("I've saved these words")}</Text>

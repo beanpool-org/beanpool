@@ -63,6 +63,7 @@ describe('reading the node', () => {
     it('a whole known community only: an older node, a plain community and a bad answer are null', () => {
         expect(readKnownRule({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, ruleFrom: '2026-11-16T04:00:00.000Z', debtLineFrom: null, quietDaysFrom: null })).toEqual(RULE);
         expect(readKnownRule({ known: false })).toBeNull();
+        expect(readKnownRule({ known: false, knownFloor: 1000, debtLinePct: 50, quietDays: 60 })).toBeNull();
         expect(readKnownRule(null)).toBeNull();
         expect(readKnownRule({ error: 'Not found' })).toBeNull();
         expect(readKnownRule({ known: true, knownFloor: '1000', debtLinePct: 50, quietDays: 60 })).toBeNull();

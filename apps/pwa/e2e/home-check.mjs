@@ -1427,7 +1427,7 @@ function pointerDriver(page, cdp, mode) {
     let cur = { x: 0, y: 0 };
     const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x, y, id: 1 }] });
     return {
-        down: async (x, y) => { cur = { x, y }; if (mode === 'mouse') { await page.mouse.move(x, y); await page.mouse.down(); } else await touch('touchStart', x, y); },
+        down: async (x, y) => { cur = { x, y }; if (mode === 'mouse') { await page.mouse.move(x, y); await page.mouse.down(); } else await touch('touchStart', x, y);  if (mode === 'touch') await page.waitForTimeout(230); },
         move: async (x, y, steps = 1) => {
             for (let i = 1; i <= steps; i++) {
                 const at = { x: cur.x + ((x - cur.x) * i) / steps, y: cur.y + ((y - cur.y) * i) / steps };

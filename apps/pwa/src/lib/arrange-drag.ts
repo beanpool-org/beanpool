@@ -1,7 +1,7 @@
 /**
  * Dragging a band in Arrange (DESIGN-home-layout-fable.md §3.2, slice L3): Pointer Events, no library. The arrows stay;
  * this is one more way to the same saved list. A press on a band (never on a button in it) that travels past a few pixels
- * lifts the card, which follows the pointer while the others slide aside, live, by the half of the card under the pointer:
+ * lifts the card (a finger holds first), which follows the pointer while the others slide aside, live, by the half of the card under the pointer:
  * the top half puts the lifted card before it, the bottom half after. Release saves through `onDrop`. Escape, a lost
  * pointer, a pointer cancel and a window blur put everything back and save nothing. A press that never travels is a tap.
  *
@@ -12,6 +12,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 
 /** A pointer that moves this far from where it went down is dragging, not tapping. */
 const SLOP_PX = 4;
+/** A finger holds this long before a card lifts (design §3.2): a swipe that starts on a band moves nothing. */
+const HOLD_MS = 200;
 /** Within this of the scrolling edge the page scrolls, faster the nearer the edge. */
 const EDGE_PX = 80;
 const SCROLL_MAX_PX = 16;
@@ -25,6 +27,8 @@ interface Gesture {
     /** Where the press began, where the pointer is now, and where in the card it took hold. */
     sx: number; sy: number; px: number; py: number; gx: number; gy: number;
     lifted: boolean; frame: number;
+    /** A finger's press: when it went down. A mouse needs no hold. */
+    heldFrom: number | null;
 }
 
 export interface ArrangeDrag {
@@ -96,7 +100,7 @@ export function useArrangeDrag({ gridRef, ids, enabled, onDrop }: {
             const bottom = Math.min(r.bottom, window.innerHeight);
             const push = s.py < top + EDGE_PX ? -(1 - Math.max(s.py - top, 0) / EDGE_PX) : s.py > bottom - EDGE_PX ? 1 - Math.max(bottom - s.py, 0) / EDGE_PX : 0;
             if (!push) return;
-            scroller.scrollTop += Math.sign(push) * Math.ceil(Math.abs(push) * SCROLL_MAX_PX);
+            scroller.scrollTop += (push < 0 ? -1 : 1) * Math.ceil(Math.abs(push) * SCROLL_MAX_PX);
             follow();
             retarget(s);
         }
@@ -137,6 +141,7 @@ export function useArrangeDrag({ gridRef, ids, enabled, onDrop }: {
             s.py = e.clientY;
             if (!s.lifted) {
                 if (Math.hypot(s.px - s.sx, s.py - s.sy) < SLOP_PX) return;
+                if (s.heldFrom !== null && e.timeStamp - s.heldFrom < HOLD_MS) { end(false); return; }
                 const el = cardEl(s.id);
                 if (!el) { end(false); return; }
                 const r = el.getBoundingClientRect();
@@ -167,7 +172,7 @@ export function useArrangeDrag({ gridRef, ids, enabled, onDrop }: {
             const was = live.current.ids.indexOf(id);
             if (g.current || was < 0 || !e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0) || (e.target as Element).closest?.('button, a')) return;
             const band = e.currentTarget;
-            g.current = { id, pointerId: e.pointerId, band, was, sx: e.clientX, sy: e.clientY, px: e.clientX, py: e.clientY, gx: 0, gy: 0, lifted: false, frame: 0 };
+            g.current = { id, pointerId: e.pointerId, band, was, sx: e.clientX, sy: e.clientY, px: e.clientX, py: e.clientY, gx: 0, gy: 0, lifted: false, frame: 0, heldFrom: e.pointerType === 'touch' ? e.timeStamp : null };
             try { band.setPointerCapture(e.pointerId); } catch { /* a pointer that has gone */ }
             window.addEventListener('pointermove', onMove, true);
             window.addEventListener('pointerup', onUp, true);

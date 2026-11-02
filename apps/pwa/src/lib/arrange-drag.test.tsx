@@ -53,6 +53,26 @@ const move = (y: number, x = 20) => act(() => { fireEvent.pointerMove(window, { 
 const up = () => act(() => { fireEvent.pointerUp(window, { pointerId: 1 }); });
 
 describe('dragging a band', () => {
+    const finger = (id: string, y = 50) => fireEvent.pointerDown(screen.getByTestId(`card-band-${id}`), { pointerId: 1, isPrimary: true, pointerType: 'touch', clientX: 20, clientY: y });
+
+    it('a swipe that starts on a band moves nothing: a finger holds before a card lifts', () => {
+        render(<Grid />);
+        finger('c');
+        move(140);
+        up();
+        expect(onDrop).not.toHaveBeenCalled();
+    });
+
+    it('a finger that holds lifts the card, and it drops as a mouse\'s does', async () => {
+        render(<Grid />);
+        finger('c');
+        await act(async () => { await new Promise((r) => setTimeout(r, 230)); });
+        move(40);
+        move(12);
+        up();
+        expect(onDrop).toHaveBeenCalledTimes(1);
+    });
+
     it('a press that never travels is a tap: nothing lifts, nothing drops', () => {
         render(<Grid />);
         down('c');

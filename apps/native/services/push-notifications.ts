@@ -11,7 +11,8 @@ import { communityAddress, registerAccountForPush, registerWhereMissing, retryDu
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../utils/push-notice-check';
 import { openNoticeIn } from '../utils/push-notice-switch';
 import { countNotice, watchNoticeCounts } from '../utils/notice-counts';
-import { postAllNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
+import { keepsOtherCommunities, noticesAfterSync, roundWhileOpen, showUnreadSum, type PhoneNotices } from '../utils/other-communities-unread';
+import type { LocalNotice } from '../utils/sync-notices';
 import { notificationChannels } from '../utils/notification-channels';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
@@ -52,6 +53,7 @@ async function countWaitingNotices(): Promise<void> {
         const waiting = await Notifications.getPresentedNotificationsAsync();
         const recipient = (await loadIdentity().catch(() => null))?.publicKey ?? null;
         for (const n of waiting) await countForItsCommunity(incoming(n), recipient);
+        await showBadgeSum();
     } catch (e) {
         console.warn('[Push] Could not count the notices waiting on the phone', e);
     }
@@ -63,23 +65,53 @@ async function postLocalNotice(notice: LocalNotice): Promise<void> {
     await Notifications.scheduleNotificationAsync({ content: { title: notice.title, body: notice.body, data: notice.data }, trigger: null });
 }
 
+/** What the rounds that ask the other communities need of the phone (utils/other-communities-unread.ts). Never asks for permission. */
+const phoneNotices: PhoneNotices = {
+    mayNotify: async () => (await Notifications?.getPermissionsAsync())?.status === 'granted',
+    post: postLocalNotice,
+    setBadge: async (count) => Notifications?.setBadgeCountAsync(count),
+};
+
+/**
+ * The app-icon badge set to the sum over the phone's communities, from what it already knows, while the app is open (utils/
+ * other-communities-unread.ts). Nothing on a phone with one community. Never throws.
+ */
+export function showBadgeSum(): Promise<void> {
+    return showUnreadSum(AsyncStorage, phoneNotices.setBadge);
+}
+
+/**
+ * A round of the phone's other communities, as the app opens or comes back and with the 5-minute sync (app/_layout.tsx): at
+ * most six are asked for their unread counts, at most every 5 minutes. Never asks for permission. Never throws.
+ */
+export async function askOtherCommunitiesNow(): Promise<void> {
+    try {
+        await roundWhileOpen(AsyncStorage, await loadIdentity(), phoneNotices);
+    } catch (e) {
+        console.warn('[Notices] The other communities were not asked', e);
+    }
+}
+
 if (!isExpoGo) {
     try {
         Notifications = require('expo-notifications');
         // While the app is open, a push shows only when its own community signed it for this account and it is new;
         // an unsigned one from a community that signs nothing yet shows with fixed words; anything else is dropped
         // (utils/push-notice-check.ts). The app's own notices show as they are. Each one its own community signed is
-        // counted for that community, unless it is the one in use (utils/notice-counts.ts).
+        // counted for that community, unless it is the one in use (utils/notice-counts.ts). A push's own badge is its
+        // community's number alone, so a phone with more than one community doesn't take it: it sets the sum itself
+        // (utils/other-communities-unread.ts).
         Notifications?.setNotificationHandler({
             handleNotification: async (notification) => {
                 const recipient = (await loadIdentity().catch(() => null))?.publicKey ?? null;
                 const decision = await checkWhileOpen(incoming(notification), { storage: AsyncStorage, recipient });
-                void countForItsCommunity(incoming(notification), recipient);
+                void countForItsCommunity(incoming(notification), recipient).then(showBadgeSum);
                 if (decision.kind === 'replace') {
                     postLocalNotice(decision).catch((e) => console.warn('[Push] Could not show a notification in its own words', e));
                 }
                 const show = decision.kind === 'show';
-                return { shouldShowAlert: show, shouldPlaySound: show, shouldSetBadge: show, shouldShowBanner: show, shouldShowList: show };
+                const pushBadge = show && !await keepsOtherCommunities(AsyncStorage);
+                return { shouldShowAlert: show, shouldPlaySound: show, shouldSetBadge: pushBadge, shouldShowBanner: show, shouldShowList: show };
             },
         });
     } catch (e) {
@@ -279,6 +311,8 @@ export function setupNotificationResponseHandler(options: NotificationTapOptions
     // Every switch is another chance for what is still due (utils/community-switch.ts). What is due only: a phone set to
     // a community it has never registered with may be only looking, and a guest's mark can come just after the switch.
     const stopRetrying = onCommunitySwitched(() => { void retryDueRegistrations(() => phonePushToken(false), Platform.OS); });
+    // The community now in use leaves the badge's sum, after its count clears above (notice-counts.ts orders them).
+    const stopSumming = onCommunitySwitched(() => { void showBadgeSum(); });
     void countWaitingNotices();
     const appState = AppState.addEventListener('change', (next) => {
         if (next === 'active') void countWaitingNotices();
@@ -289,25 +323,35 @@ export function setupNotificationResponseHandler(options: NotificationTapOptions
             subscription.remove();
             stopCounting();
             stopRetrying();
+            stopSumming();
             appState.remove();
         },
     };
 }
 
 /**
+ * What waits at the community in use, as the phone's own copy counts it, for the badge while the app is closed: the sync
+ * that came before it has brought that copy up to date.
+ */
+async function unreadInUse(publicKey: string): Promise<number> {
+    const { getGlobalUnreadCount } = await import('../utils/db');
+    return getGlobalUnreadCount(publicKey);
+}
+
+/**
  * The background sync's notices (utils/sync-notices.ts): the community the phone is set to asked for its member's
- * unseen notices, and one posted on the phone for each recent one not shown before. Only while the app is not open
- * (the socket's alerts show them then), and only when the phone lets the app notify. Returns how many were posted.
- * Never throws.
+ * unseen notices, and one posted on the phone for each recent one not shown before; and a round of its other communities
+ * (utils/other-communities-unread.ts). Only while the app is not open (the socket's alerts and the 5-minute tick do it
+ * then). Nothing is posted unless the phone lets the app notify, and a round still moves the numbers and the badge when it
+ * doesn't. Returns how many were posted. Never throws.
  */
 export async function postNoticesAfterSync(): Promise<number> {
     if (isExpoGo || !Notifications) return 0;
     try {
         if (AppState.currentState === 'active') return 0;
-        if ((await Notifications.getPermissionsAsync()).status !== 'granted') return 0;
-        // The unseen notices, the answers to this phone's requests to join, and new requests for an owner or admin with
-        // no push here, all at once under one deadline (utils/sync-notices.ts), inside the task's ~30 seconds.
-        return await postAllNoticesFromSync({ storage: AsyncStorage, account: await loadIdentity(), post: postLocalNotice });
+        // The unseen notices, the answers to this phone's requests to join, new requests for an owner or admin with no
+        // push here, and the round, all at once under one deadline (utils/sync-notices.ts), inside the task's ~30 seconds.
+        return await noticesAfterSync({ storage: AsyncStorage, account: await loadIdentity(), phone: phoneNotices, activeUnread: unreadInUse });
     } catch (e) {
         console.warn('[Notices] The sync\'s notices were not posted', e);
         return 0;

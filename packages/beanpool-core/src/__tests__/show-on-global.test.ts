@@ -1738,6 +1738,28 @@ describe('the door on a copy', () => {
             });
         }
 
+        for (const [name, again] of [
+            ['a tend', (phone: ReturnType<ReturnType<typeof world>['device']>, w: ReturnType<typeof world>) => phone.tendCopies(identity, w.deps)],
+            ['a fresh show', (phone: ReturnType<ReturnType<typeof world>['device']>, w: ReturnType<typeof world>) => phone.showOnGlobal(w.home, HOME, identity, w.deps, false)],
+        ] as const) {
+            it(`a wait met by ${name}, whose answer nobody weighs, is gone once global has answered`, async () => {
+                const w = world();
+                const phone = w.device();
+                await owed(w, phone);
+                w.doorAnswers(busy(429, '3000'));
+                await again(phone, w);
+                w.doorAnswers(null);
+                await phone.takeQuestions('home-1', true, identity, w.deps);
+                w.doorAnswers(busy(503));
+                expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+                w.doorSends.length = 0;
+                w.doorAnswers(null);
+                // By the back-off and no longer: its earlier tries still count, the 50 minutes must not.
+                expect(await phone.tendOwedOffs(identity, w.deps, Date.now() + OFF_RETRY_MOST_MS)).toBeNull();
+                expect(w.doorSends).toHaveLength(1);
+            });
+        }
+
         it('a wait global asked for holds once: the next no-answer goes by the back-off', async () => {
             const w = world();
             const phone = w.device();

@@ -349,8 +349,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     /** Tries of an Off global hasn't answered, and when the next is due. Infinity: it answered, and what is left waits for a tend. */
     let offTries = 0;
     let offDue = 0;
-    /** The longest wait global has asked for since the last time these were set. */
-    let offWaitAsked = 0;
+    /** When the wait global asked of an unanswered Off ends: 0 once global has answered anything. */
+    let offHeldUntil = 0;
 
     /** The pair as it is stored now: a tap may have changed it, or taken it away, since it was read. */
     async function storedPair(copyId: string): Promise<CopyPair | undefined> {
@@ -597,9 +597,10 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         const answer = await withTimeout(async (signal) => {
             const res = await deps.post(deps.global, QUESTIONS_PATH, { id: pair.copyId, on }, identity, signal);
             const said = await answerOf(res);
-            // Only an Off still waiting has anything to wait for: a wait left here by an On, or by an Off global answered, would
-            // hold the next Off for no reason of its own.
-            if (!on) offWaitAsked = said === 'later' ? Math.max(offWaitAsked, waitAskedOf(res)) : 0;
+            // A time, not a length: nothing that outlives its deadline can hold an Off. And an answer of any kind ends it: global is
+            // back, so a wait from before can't be charged to a later Off, whichever path took it.
+            if (said !== 'later') offHeldUntil = 0;
+            else if (!on && waitAskedOf(res) > 0) offHeldUntil = Math.max(offHeldUntil, Date.now() + waitAskedOf(res));
             return said;
         });
         if (answer === 'later') return 'later';
@@ -645,8 +646,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     /** Global didn't answer an Off: when the next try is due, by how many there have been, or by what global asked for. */
     function offUnanswered(now: number): void {
         offTries++;
-        offDue = now + Math.max(Math.min(OFF_RETRY_FIRST_MS * 2 ** (offTries - 1), OFF_RETRY_MOST_MS), offWaitAsked);
-        offWaitAsked = 0;
+        offDue = Math.max(now + Math.min(OFF_RETRY_FIRST_MS * 2 ** (offTries - 1), OFF_RETRY_MOST_MS), offHeldUntil);
+        offHeldUntil = 0;
     }
 
     /** Sends every Off this key owes. An answer ends the tries, whatever it was: a refusal stays owed, for the next tend to ask. */

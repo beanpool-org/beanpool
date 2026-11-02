@@ -159,8 +159,8 @@ async function main() {
     const forged = await post('/api/marketplace/posts', { type: 'poll', category: 'community', title: 'forged other', description: '', authorPublicKey: reader.pubKeyHex,
         pollOptions: [{ id: 'a', text: 'A', other: true }, { id: 'b', text: 'B' }], durationDays: 3 }, reader);
     assert(forged.status === 200 && !forged.body.post.pollOptions.some((o: any) => o.other), 'a client cannot mark an answer as Other: only the node does');
-    const named = await makePoll({ pollOther: true, pollOptions: [{ id: 'a', text: 'Buses' }, { id: 'b', text: 'other' }] });
-    assert(named.status === 400, 'an answer called Other beside Other is refused');
+    const named = await makePoll({ pollOther: true, pollOptions: [{ id: 'a', text: 'Buses' }, { id: 'b', text: 'other' }] }, plain);
+    assert(named.status === 400 && /already offers Other/.test(named.body?.error ?? ''), `an answer called Other beside Other is refused (${named.text.slice(0, 80)})`);
 
     const sockets = {
         member: await openSocket(`${BASE.replace('https', 'wss')}/ws?${signedWsQuery(reader)}`),
@@ -381,6 +381,11 @@ async function main() {
         db.prepare(`UPDATE posts SET poll_closes_at = '2001-01-01T00:00:00.000Z' WHERE id = ?`).run(id);
         const read = await get(`/api/marketplace/posts/${id}/other-answers`, maker);
         assert(read.body.state === 'open' && read.body.answers.length === 1, 'past its closing time the words read, before the sweep reaches it');
+        // A paused poll's status never reads as closed, so the time alone says it.
+        db.prepare(`UPDATE posts SET status = 'paused' WHERE id = ?`).run(id);
+        const paused = await get(`/api/marketplace/posts/${id}/other-answers`, maker);
+        assert(paused.body.state === 'open', 'and so do a poll paused past its time');
+        db.prepare(`UPDATE posts SET status = 'active' WHERE id = ?`).run(id);
         closeExpiredPolls();
     }
 

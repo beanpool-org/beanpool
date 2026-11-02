@@ -51,7 +51,7 @@ export interface PollOtherRead {
 /** The poll, for someone who may read its words; else refused, as an id nobody has where they can't see it. */
 function pollForWords(postId: string, reader: string): MarketplacePost {
     const post = getPosts(db, { id: postId, includeAllScopes: true, viewerPubkey: reader })[0];
-    if (!post || post.type !== 'poll' || !post.active || post.status === 'cancelled' || marketplacePostOutOfSight(post, reader) || !pollOtherOption(post.pollOptions)) {
+    if (!post || post.type !== 'poll' || marketplacePostOutOfSight(post, reader) || !pollOtherOption(post.pollOptions)) {
         throw new PollOtherError(404, word('Poll not found'));
     }
     // A pruned account's or an old key's row still says it made the poll: only someone who reads as a member here reads on.

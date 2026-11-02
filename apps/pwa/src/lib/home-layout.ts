@@ -531,3 +531,71 @@ export function columnsFor(width: number, most = 3): number {
 
 /** The widest the grid of `cols` columns is drawn, gaps included: what the notes and the Join card above it line up with. */
 export const gridWidth = (cols: number) => cols * HOME_COLUMN_MAX + (cols - 1) * HOME_COLUMN_GAP;
+
+// ── Packing by height (DESIGN-home-layout-fable.md §3.1, slice L1) ───────────────────────────────────
+
+export const HOME_PACK_ROW_HEIGHT = 4;
+export const HOME_PACK_ROW_GAP = 16;
+
+export interface PackableCard {
+    id: string;
+    height: number;
+    fullRow?: boolean;
+}
+
+export interface PackedCard {
+    id: string;
+    col: number;
+    rowStart: number;
+    rowSpan: number;
+    fullRow?: boolean;
+}
+
+/**
+ * At two or more columns, each card is placed under the column whose stack is shortest at that moment,
+ * in the saved order. Full-row cards wait until every column is free and span them all.
+ * At one column (or invalid counts), no placement is returned: one column gives no placement.
+ */
+export function packHome(cards: readonly PackableCard[], cols: number): PackedCard[] {
+    if (!Number.isFinite(cols) || cols <= 1 || cards.length === 0) return [];
+    const columnCount = Math.floor(cols);
+    const bottoms = new Array(columnCount).fill(1);
+    const result: PackedCard[] = [];
+
+    for (const card of cards) {
+        const h = Math.max(0, card.height || 0);
+        const span = Math.ceil((h + HOME_PACK_ROW_GAP) / HOME_PACK_ROW_HEIGHT);
+
+        if (card.fullRow) {
+            const rowStart = Math.max(...bottoms);
+            result.push({
+                id: card.id,
+                col: 1,
+                rowStart,
+                rowSpan: span,
+                fullRow: true,
+            });
+            bottoms.fill(rowStart + span);
+        } else {
+            let minIdx = 0;
+            let minVal = bottoms[0];
+            for (let c = 1; c < columnCount; c++) {
+                if (bottoms[c] < minVal) {
+                    minVal = bottoms[c];
+                    minIdx = c;
+                }
+            }
+            const col = minIdx + 1;
+            const rowStart = bottoms[minIdx];
+            result.push({
+                id: card.id,
+                col,
+                rowStart,
+                rowSpan: span,
+            });
+            bottoms[minIdx] += span;
+        }
+    }
+    return result;
+}
+

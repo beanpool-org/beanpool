@@ -129,18 +129,28 @@ interface CardProps {
     style?: React.CSSProperties;
     /** The card's hue from brand-colours (S1). */
     hue?: CardHue;
+    /** Reports measured height for web grid packing (DESIGN-home-layout-fable.md §3.1, slice L1). */
+    onHeight?: (height: number) => void;
 }
 
-export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue }: CardProps) {
+export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue, onHeight }: CardProps) {
     const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const headingId = `home-card-${id}-title`;
     const sectionRef = useRef<HTMLElement | null>(null);
     const [width, setWidth] = useState(0);
+    const onHeightRef = useRef(onHeight);
+    onHeightRef.current = onHeight;
 
     useLayoutEffect(() => {
         const el = sectionRef.current;
         if (!el) return;
-        const measure = () => setWidth(el.clientWidth);
+        const measure = () => {
+            setWidth(el.clientWidth);
+            if (typeof ResizeObserver !== 'undefined') {
+                const h = el.offsetHeight || Math.round(el.getBoundingClientRect().height);
+                if (h > 0) onHeightRef.current?.(h);
+            }
+        };
         measure();
         if (typeof ResizeObserver === 'undefined') {
             window.addEventListener('resize', measure);

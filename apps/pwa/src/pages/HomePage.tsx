@@ -56,10 +56,10 @@ import {
     type HomeFind,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
     canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
-    listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
+    listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
+    resetLayout, sameList, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackableCard,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
@@ -1184,8 +1184,51 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     pointRef.current = point;
     const interestsCardRef = useRef<HTMLDivElement | null>(null);
     const pageRef = useRef<HTMLDivElement | null>(null);
+    const gridRef = useRef<HTMLDivElement | null>(null);
+    const fewerRef = useRef<HTMLParagraphElement | null>(null);
+    const hintRef = useRef<HTMLParagraphElement | null>(null);
     const [measurePage, cols] = useHomeColumns();
     const setPage = useCallback((el: HTMLDivElement | null) => { pageRef.current = el; measurePage(el); }, [measurePage]);
+    const [cardHeights, setCardHeights] = useState<Record<string, number>>({});
+    const cardHeightsRef = useRef<Record<string, number>>({});
+    cardHeightsRef.current = cardHeights;
+
+    const onCardHeight = useCallback((id: string, h: number) => {
+        if (!h || cardHeightsRef.current[id] === h) return;
+        setCardHeights(prev => {
+            if (prev[id] === h) return prev;
+            return { ...prev, [id]: h };
+        });
+    }, []);
+
+    useLayoutEffect(() => {
+        if (cols <= 1 || typeof ResizeObserver === 'undefined') return;
+        let changed = false;
+        const next = { ...cardHeightsRef.current };
+        const checkEl = (key: string, el: HTMLElement | null) => {
+            if (!el) return;
+            const h = el.offsetHeight || Math.round(el.getBoundingClientRect().height);
+            if (h > 0 && next[key] !== h) {
+                next[key] = h;
+                changed = true;
+            }
+        };
+        checkEl('note-fewer', fewerRef.current);
+        checkEl('note-hint', hintRef.current);
+        if (gridRef.current) {
+            const cardEls = gridRef.current.querySelectorAll<HTMLElement>('[data-testid^="home-card-"]');
+            cardEls.forEach(cardEl => {
+                const testId = cardEl.getAttribute('data-testid');
+                if (!testId || testId === 'home-card-menu') return;
+                const cardId = testId.replace('home-card-', '');
+                checkEl(cardId, cardEl);
+            });
+        }
+        if (changed) {
+            cardHeightsRef.current = next;
+            setCardHeights(next);
+        }
+    });
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
     const focusAfterHide = useRef<string[] | null>(null);
     // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
@@ -1634,6 +1677,43 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
     const startUp = shown.some(c => c.type === 'start');
+    const isVisitor = !answer || !!answer.welcome || !answer.me;
+    const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
+
+    const packedList = useMemo(() => {
+        if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
+        const hasHeights = Object.values(cardHeights).some(h => h > 0);
+        if (!hasHeights) return [];
+        const items: PackableCard[] = [];
+        for (let i = 0; i < shown.length; i++) {
+            const card = shown[i];
+            items.push({
+                id: card.id,
+                height: cardHeights[card.id] || 0,
+                fullRow: spansRow(card.type),
+            });
+            if (i === 0 && notesUnderFirst) {
+                if (fewerOpen && !isVisitor) {
+                    items.push({
+                        id: 'note-fewer',
+                        height: cardHeights['note-fewer'] || 0,
+                        fullRow: true,
+                    });
+                }
+                if (hintOpen && !isVisitor && !startUp) {
+                    items.push({
+                        id: 'note-hint',
+                        height: cardHeights['note-hint'] || 0,
+                        fullRow: true,
+                    });
+                }
+            }
+        }
+        return packHome(items, cols);
+    }, [cols, shown, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp]);
+
+    const packedMap = useMemo(() => new Map(packedList.map(p => [p.id, p])), [packedList]);
+    const isPacked = typeof ResizeObserver !== 'undefined' && cols > 1 && packedList.length > 0;
 
     // ── "Save this search to Home" from the Market (Marty, 7 Oct) ──
     // The search to add, its dialog open; and why one couldn't be (the same search there, five there, Home full, Home not
@@ -1933,7 +2013,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     const a = answer;
     const profile = String(a.profile);
-    const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
     const pins = currentPins(a, now);
     let imgCount = 0;
@@ -2076,7 +2155,21 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const hue: CardHue = card.type === 'needs'
             ? (c.needs?.items.some(i => i.accent) ? 'amber' : 'sage')
             : homeCardHue(card);
-        const common = { id: card.id, title, hue, menu: menuFor(card), style: spansRow(card.type) ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
+        const packed = packedMap.get(card.id);
+        const placementStyle: React.CSSProperties = packed ? {
+            gridColumn: packed.fullRow ? '1 / -1' : String(packed.col),
+            gridRow: `${packed.rowStart} / span ${packed.rowSpan}`,
+            alignSelf: 'start',
+        } : (spansRow(card.type) ? FULL_ROW : {});
+
+        const common = {
+            id: card.id,
+            title,
+            hue,
+            menu: menuFor(card),
+            style: { ...cardStyle(index), ...placementStyle },
+            onHeight: (h: number) => onCardHeight(card.id, h),
+        };
         switch (card.type) {
             case 'needs':
                 return c.needs && (
@@ -2093,7 +2186,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return identity && (
                     <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn}
                         keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => (
-                        <div style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
+                        <div style={{ ...cardStyle(index), ...placementStyle }} data-testid={`home-card-${card.id}`}>
                             {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
                             {oneWayBack}
                         </div>
@@ -2654,11 +2747,20 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // only when the first card is a full row itself: with nothing waiting there is no Needs you, and a full-row note after
     // a one-cell card would push the cards beside it to the next row, leaving the first row empty (PR #2411 review). There
     // the notes stand above the grid, as wide as it. One column keeps them under the first card, as before.
-    const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
+    const notePacking = (id: string): React.CSSProperties => {
+        const packed = packedMap.get(id);
+        if (!packed) return FULL_ROW;
+        return {
+            ...FULL_ROW,
+            gridColumn: '1 / -1',
+            gridRow: `${packed.rowStart} / span ${packed.rowSpan}`,
+            alignSelf: 'start',
+        };
+    };
     const firstNotes = (under: boolean) => (
         <>
             {fewerOpen && !isVisitor && (
-                <p data-testid="home-fewer" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                <p ref={under ? fewerRef : undefined} data-testid="home-fewer" style={under ? notePacking('note-fewer') : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
                     <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.fewerCards)}</span>
                     <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -2667,7 +2769,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 </p>
             )}
             {hintOpen && !isVisitor && !startUp && (
-                <p data-testid="home-hint" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                <p ref={under ? hintRef : undefined} data-testid="home-hint" style={under ? notePacking('note-hint') : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
                     <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.hint)}</span>
                     <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -2726,12 +2828,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 {askedCommunity && identity && answer && !shown.some(c => c.type === 'find') && (
                     <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />
                 )}
-                {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
-                    own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
-                    Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}
-                <div data-testid="home-grid" style={{
+                {/* The cards (D1): columns 320–576 px wide, packed shortest column first in the saved order (slice L1).
+                    When packed: 4 px row tracks, 0 row gap, with cards positioned by gridColumn/gridRow and self-aligned.
+                    One column keeps its natural layout without grid packing. */}
+                <div ref={gridRef} data-testid="home-grid" style={{
                     display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, ${HOME_COLUMN_MAX}px))`, columnGap: HOME_COLUMN_GAP,
-                    rowGap: cols > 1 ? 4 : 0, justifyContent: 'center', alignItems: 'start',
+                    rowGap: isPacked ? 0 : (cols > 1 ? 4 : 0),
+                    gridAutoRows: isPacked ? `${HOME_PACK_ROW_HEIGHT}px` : undefined,
+                    justifyContent: 'center', alignItems: 'start',
                 }}>
                     {shown.map((card, i) => (
                         <Fragment key={card.id}>

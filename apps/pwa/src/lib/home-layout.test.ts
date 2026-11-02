@@ -9,10 +9,10 @@ import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
 /** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
-    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
+    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
     columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
-    moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, searchEmptyLine, searchFirstLine, type HomeLayoutV2,
+    moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
+    resetLayout, sameList, searchEmptyLine, searchFirstLine, type HomeLayoutV2, type PackableCard,
 } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
@@ -414,5 +414,115 @@ describe('the columns on a wide screen (DESIGN-home-wide-and-content-fable.md D1
 
     it('the grid is never wider than its columns at 576 px and the gaps between them', () => {
         expect([1, 2, 3].map(gridWidth)).toEqual([576, 1168, 1760]);
+    });
+});
+
+describe('packing by height on a wide screen (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
+    it('packHome puts card 4 under the shortest of 1–3', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 }, // span = ceil(116/4) = 29 -> bottoms[0] = 30
+            { id: 'c2', height: 40 },  // span = ceil(56/4) = 14  -> bottoms[1] = 15
+            { id: 'c3', height: 120 }, // span = ceil(136/4) = 34 -> bottoms[2] = 35
+            { id: 'c4', height: 60 },  // shortest is col 2 (15)  -> span = ceil(76/4) = 19 -> bottoms[1] = 34
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed).toEqual([
+            { id: 'c1', col: 1, rowStart: 1, rowSpan: 29 },
+            { id: 'c2', col: 2, rowStart: 1, rowSpan: 14 },
+            { id: 'c3', col: 3, rowStart: 1, rowSpan: 34 },
+            { id: 'c4', col: 2, rowStart: 15, rowSpan: 19 },
+        ]);
+    });
+
+    it('ties to the first column on equal heights', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 },
+            { id: 'c2', height: 100 },
+            { id: 'c3', height: 100 },
+            { id: 'c4', height: 50 },
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed[3]).toEqual({
+            id: 'c4',
+            col: 1,
+            rowStart: 30,
+            rowSpan: Math.ceil((50 + HOME_PACK_ROW_GAP) / HOME_PACK_ROW_HEIGHT),
+        });
+    });
+
+    it('full rows wait for every column', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 }, // span 29 -> bottom 30
+            { id: 'c2', height: 40 },  // span 14 -> bottom 15
+            { id: 'c3', height: 120 }, // span 34 -> bottom 35
+            { id: 'c4', height: 50, fullRow: true }, // waits for max(30, 15, 35) = 35; span 17 -> bottoms = [52, 52, 52]
+            { id: 'c5', height: 60 },  // starts at 52, ties to col 1
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed[3]).toEqual({
+            id: 'c4',
+            col: 1,
+            rowStart: 35,
+            rowSpan: 17,
+            fullRow: true,
+        });
+        expect(packed[4]).toEqual({
+            id: 'c5',
+            col: 1,
+            rowStart: 52,
+            rowSpan: 19,
+        });
+    });
+
+    it('one column gives no placement', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 },
+            { id: 'c2', height: 40 },
+            { id: 'c3', height: 50, fullRow: true },
+        ];
+        expect(packHome(cards, 1)).toEqual([]);
+        expect(packHome(cards, 0)).toEqual([]);
+        expect(packHome(cards, -1)).toEqual([]);
+        expect(packHome([], 3)).toEqual([]);
+    });
+
+    it('notes under a full-row first card wait and span all columns, followed by standard cards', () => {
+        const cards: PackableCard[] = [
+            { id: 'needs', height: 80, fullRow: true },    // span 24 -> bottoms = [25, 25, 25]
+            { id: 'note-fewer', height: 40, fullRow: true }, // span 14 -> bottoms = [39, 39, 39]
+            { id: 'note-hint', height: 40, fullRow: true },  // span 14 -> bottoms = [53, 53, 53]
+            { id: 'tips', height: 100 },                     // span 29 -> col 1, row 53 -> bottom[0] = 82
+            { id: 'events', height: 60 },                    // span 19 -> col 2, row 53 -> bottom[1] = 72
+            { id: 'market', height: 120 },                   // span 34 -> col 3, row 53 -> bottom[2] = 87
+            { id: 'pulse', height: 80 },                     // span 24 -> col 2 (shortest 72) -> bottom[1] = 96
+            { id: 'community', height: 100, fullRow: true }, // span 29 -> max(82, 96, 87) = 96 -> bottoms = [125, 125, 125]
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed).toEqual([
+            { id: 'needs', col: 1, rowStart: 1, rowSpan: 24, fullRow: true },
+            { id: 'note-fewer', col: 1, rowStart: 25, rowSpan: 14, fullRow: true },
+            { id: 'note-hint', col: 1, rowStart: 39, rowSpan: 14, fullRow: true },
+            { id: 'tips', col: 1, rowStart: 53, rowSpan: 29 },
+            { id: 'events', col: 2, rowStart: 53, rowSpan: 19 },
+            { id: 'market', col: 3, rowStart: 53, rowSpan: 34 },
+            { id: 'pulse', col: 2, rowStart: 72, rowSpan: 24 },
+            { id: 'community', col: 1, rowStart: 96, rowSpan: 29, fullRow: true },
+        ]);
+    });
+
+    it('gaps gone at 2 columns: cards pack under shortest column', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 }, // span 29 -> col 1, row 1 -> bottom 30
+            { id: 'c2', height: 40 },  // span 14 -> col 2, row 1 -> bottom 15
+            { id: 'c3', height: 50 },  // span 17 -> col 2 (shortest 15), row 15 -> bottom 32
+            { id: 'c4', height: 80 },  // span 24 -> col 1 (shortest 30), row 30 -> bottom 54
+        ];
+        const packed = packHome(cards, 2);
+        expect(packed).toEqual([
+            { id: 'c1', col: 1, rowStart: 1, rowSpan: 29 },
+            { id: 'c2', col: 2, rowStart: 1, rowSpan: 14 },
+            { id: 'c3', col: 2, rowStart: 15, rowSpan: 17 },
+            { id: 'c4', col: 1, rowStart: 30, rowSpan: 24 },
+        ]);
     });
 });

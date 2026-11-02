@@ -140,5 +140,25 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
         expect(aside.className).toContain('items-center');
         expect(aside.className).not.toContain('items-start');
     });
+
+    it('reports its measured height via onHeight callback (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
+        const onHeight = vi.fn();
+        vi.stubGlobal('ResizeObserver', class {
+            observe() {}
+            disconnect() {}
+        });
+        const offsetSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(240);
+        try {
+            render(
+                <HomeCard id="tips" title="Tips" onHeight={onHeight}>
+                    <p>body</p>
+                </HomeCard>,
+            );
+            expect(onHeight).toHaveBeenCalledWith(240);
+        } finally {
+            offsetSpy.mockRestore();
+            vi.unstubAllGlobals();
+        }
+    });
 });
 

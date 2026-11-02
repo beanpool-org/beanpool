@@ -3010,6 +3010,161 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
     });
 });
 
+describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
+    let width = 0;
+    let measured: { mockRestore(): void } | null = null;
+    let heights: Record<string, number> = {};
+    let offsetSpy: { mockRestore(): void } | null = null;
+
+    beforeEach(() => {
+        width = 0;
+        heights = {};
+        vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+        measured = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+            return this.getAttribute('data-testid') === 'home-page' ? width : 0;
+        });
+        offsetSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+            const testId = this.getAttribute('data-testid');
+            if (testId && heights[testId]) return heights[testId];
+            return 0;
+        });
+    });
+
+    afterEach(() => {
+        measured?.mockRestore();
+        offsetSpy?.mockRestore();
+    });
+
+    const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
+    const grid = () => screen.getByTestId('home-grid');
+
+    async function landWithHeights(w: number, h: Record<string, number>, cards: HomeAnswer['cards'] = { needs: NEEDS }) {
+        width = w;
+        heights = h;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, cards)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+    }
+
+    it('gaps gone at 2 and 3 columns: cards pack under shortest column', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+
+        expect(grid().style.rowGap).toBe('0px');
+        expect(grid().style.gridAutoRows).toBe('4px');
+
+        const tips = screen.getByTestId('home-card-tips');
+        const events = screen.getByTestId('home-card-events');
+        const market = screen.getByTestId('home-card-market');
+
+        expect(tips.style.gridColumn).toBe('1');
+        expect(events.style.gridColumn).toBe('2');
+        expect(market.style.gridColumn).toBe('2');
+        // Needs (100px: span 29) + note-hint (0px: span 4) start at 1 -> row 34.
+        // Events (150px: span 42) -> ends at 34 + 42 = 76.
+        expect(market.style.gridRow).toBe('76 / span 34');
+
+        cleanup();
+
+        await landWithHeights(1400, {
+            'home-card-needs': 100,
+            'home-card-tips': 300,
+            'home-card-events': 100,
+            'home-card-market': 200,
+            'home-card-pulse': 50,
+            'home-card-beans': 60,
+            'home-card-community': 100,
+        });
+        expect(grid().style.rowGap).toBe('0px');
+        expect(grid().style.gridAutoRows).toBe('4px');
+        const pulse = screen.getByTestId('home-card-pulse');
+        expect(pulse.style.gridColumn).toBe('2');
+        // Needs + note-hint = row 1..34.
+        // Events in col 2: span (100) = 29 -> ends at 34 + 29 = 63.
+        expect(pulse.style.gridRow).toBe('63 / span 17');
+    });
+
+    it('order kept: DOM elements follow saved member order even when packed into different columns', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        const domIds = Array.from(grid().querySelectorAll('[data-testid^="home-card-"]'))
+            .map(e => e.getAttribute('data-testid')?.replace('home-card-', ''))
+            .filter(id => id !== 'menu');
+        expect(domIds).toEqual(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community']);
+    });
+
+    it('full-row cards: wait for every column and span 1 / -1', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        const needs = screen.getByTestId('home-card-needs');
+        const community = screen.getByTestId('home-card-community');
+
+        expect(needs.style.gridColumn).toBe('1 / -1');
+        expect(needs.style.gridRow).toBe('1 / span 29');
+
+        expect(community.style.gridColumn).toBe('1 / -1');
+        // Col 1 bottom: 34 + 54 (tips) + 24 (pulse) = 112.
+        // Col 2 bottom: 34 + 42 (events) + 34 (market) + 27 (beans) = 137.
+        // Deepest column is 137, so community starts at row 137!
+        expect(community.style.gridRow).toBe('137 / span 32');
+    });
+
+    it('one column unchanged: does not apply packing styles even when heights are reported', async () => {
+        await landWithHeights(360, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        expect(grid().style.gridAutoRows).toBe('');
+        const tips = screen.getByTestId('home-card-tips');
+        expect(tips.style.gridRow).toBe('');
+        expect(tips.style.gridColumn).toBe('');
+    });
+
+    it('no-ResizeObserver fallback keeps today\'s grid (gaps and all)', async () => {
+        vi.stubGlobal('ResizeObserver', undefined);
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        expect(grid().style.gridAutoRows).toBe('');
+        expect(grid().style.rowGap).toBe('4px');
+        const tips = screen.getByTestId('home-card-tips');
+        expect(tips.style.gridRow).toBe('');
+        expect(tips.style.gridColumn).toBe('');
+    });
+});
+
 describe('Home in the member\'s language: every line a card draws from lib/home-cards.ts and the lines lib keeps', () => {
     const rich = () => answer({ me: { ...answer().me!, joinedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), probation: {
         onProbation: true, ageEndsAt: null, keptPosts: 0, keptPostsNeeded: 1, limits: { posts: { limit: 3 }, new_dm_recipients: { limit: 10 } }, endsWhen: { hours: 72, keptPosts: 1 },

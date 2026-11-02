@@ -9,7 +9,7 @@ import type { AppColors } from '../../constants/colors';
 import { SEARCH_KIND_CHIPS, SKY_PLACE_CHIPS, cardName } from '../../utils/home-cards';
 import { POST_CATEGORIES, categoryLabel } from '../../constants/categories';
 import { HOME_TARGET_DP, homeStyles } from './HomeParts';
-import { editHomeStyles } from './EditHomeSheet';
+import { sheetStyles } from './sheet-parts';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
 
 /**
@@ -66,15 +66,15 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
-            <View style={editHomeStyles.backdrop}>
-                <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="card-settings-sheet">
-                    <View style={editHomeStyles.head}>
-                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">{name}</Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID="card-settings-cancel">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
+            <View style={sheetStyles.backdrop}>
+                <View style={[sheetStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="card-settings-sheet">
+                    <View style={sheetStyles.head}>
+                        <Text style={[sheetStyles.title, { color: colors.text.heading }]} accessibilityRole="header">{name}</Text>
+                        <Pressable onPress={onClose} style={sheetStyles.done} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID="card-settings-cancel">
+                            <Text style={[sheetStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView style={editHomeStyles.list} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
+                    <ScrollView style={sheetStyles.list} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
                         {sky ? (
                             <SettingChips label={t('Whose place')} id="place" colors={colors} value={place} onPick={setPlace}
                                 options={SKY_PLACE_CHIPS.map(p => ({ value: p.place, label: t(p.label) }))} />

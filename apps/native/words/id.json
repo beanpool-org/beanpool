@@ -2,10 +2,10 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, shop and probes top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, shop and probes top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-11-02",
+    "updated": "2026-11-03",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "kacang",
@@ -364,13 +364,10 @@
   "The code is on your server: {command} shows it.": "Kode ada di server Anda: {command} menampilkannya.",
   "Join a community": "Gabung komunitas",
   "BeanPool can't open this community's door: its address isn't a plain web address it can safely connect to. Nothing was sent. Check the address with whoever gave it to you.": "BeanPool tidak dapat membuka pintu komunitas ini: alamatnya bukan alamat web biasa yang aman untuk dihubungi. Tidak ada data yang dikirim. Periksa alamat dengan pemberi undangan.",
-  "Edit home": "Edit beranda",
   "Add a card": "Tambah kartu",
   "Words to look for": "Kata yang dicari",
   "eggs\u0004an example of words to look for": "telur",
   "Remove": "Hapus",
-  "Move up": "Pindah ke atas",
-  "Move down": "Pindah ke bawah",
   "All {n} group|All {n} groups": {
     "other": "Semua {n} grup"
   },
@@ -503,7 +500,6 @@
   },
   "{title} {line} Opens it.": "{title} {line} Membuka ini.",
   "Invite someone": "Undang seseorang",
-  "Edit home: move or remove cards": "Edit beranda: pindahkan atau hapus kartu",
   "Read more": "Baca selengkapnya",
   "Read more in the guide: {page}": "Baca selengkapnya di panduan: {page}",
   "Looks for {words}.": "Mencari {words}.",
@@ -536,7 +532,6 @@
   "Needs": "Permintaan",
   "{kind} · {words}": "{kind} · {words}",
   "Home now starts with fewer cards. Add a card brings the rest back.": "Beranda kini dimulai dengan lebih sedikit kartu. Tambah kartu memunculkan kembali sisanya.",
-  "This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.": "Ini adalah Beranda Anda. Tambahkan kartu di bagian bawah, atau ketuk … pada kartu untuk memindahkan atau menghapusnya.",
   "Both": "Keduanya",
   "Shows when your community answers": "Muncul saat komunitas Anda merespons",
   "Every listing": "Semua daftar",
@@ -700,7 +695,6 @@
   "Add {card} to Home": "Tambah {card} ke Beranda",
   "Add": "Tambah",
   "{card} is already on Home": "{card} sudah ada di Beranda",
-  "On Home": "Di Beranda",
   "Done adding cards": "Selesai menambahkan kartu",
   "Whose place": "Lokasi siapa",
   "Show": "Tampilkan",
@@ -711,13 +705,10 @@
   "Save {card}": "Simpan {card}",
   "Add to Home": "Tambah ke Beranda",
   "Save": "Simpan",
-  "Needs you stays at the top, and your community's card at the bottom.": "Perlu tindakan Anda tetap di bagian atas, dan kartu komunitas Anda di bagian bawah.",
   "Nothing to show now": "Belum ada yang dapat ditampilkan",
   "Move {card} up": "Pindahkan {card} ke atas",
   "Move {card} down": "Pindahkan {card} ke bawah",
   "Card options for {card}": "Opsi kartu untuk {card}",
-  "Done editing Home": "Selesai mengedit Beranda",
-  "Needs you stays at the top, and your community's card at the bottom. Find your community stays near the top for your first 30 days.": "Perlu tindakan Anda tetap di bagian atas, dan kartu komunitas Anda di bawah. Temukan komunitas Anda tetap di dekat bagian atas selama 30 hari pertama Anda.",
   "Add a card to Home": "Tambah kartu ke Beranda",
   "＋ Add a card": "＋ Tambah kartu",
   "Reset Home to its default cards and order": "Atur ulang Beranda ke kartu dan urutan awal",
@@ -5976,5 +5967,6 @@
   "Event options": "Opsi acara",
   "Poll options": "Opsi jajak pendapat",
   "Failed to pin post": "Gagal menyematkan postingan",
-  "Failed to unpin post": "Gagal melepas sematan postingan"
+  "Failed to unpin post": "Gagal melepas sematan postingan",
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Ini Beranda Anda. Tambahkan kartu di bagian bawah, atau tahan kartu untuk mengatur."
 }

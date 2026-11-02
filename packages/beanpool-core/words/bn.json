@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -245,12 +245,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "পোল মানুষের মতামত জানতে চায় এবং নিজে থেকে কিছু পরিবর্তন করে না। বাজারে পোলস-এর অধীনে এগুলো খুঁজুন।",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "কেবল আপনি নিজের ব্যালেন্স এবং বাণিজ্য দেখতে পারেন। অন্য সদস্যরা আপনার নাম, ছবি, লেভেল এবং পর্যালোচনা দেখেন।",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "যারা যোগ দেননি তারা দেখতে পারেন কী অফার আছে এবং প্রায় কোথায়, তবে আপনার নাম, মুখ বা সঠিক স্থান কখনোই নয়।",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "এটিই শেষ পরামর্শ। পুরো গাইডটি সেটিংসে সহায়তা ও কার্যপদ্ধতির অধীনে আছে এবং অফলাইনেও কাজ করে; নিচের হোম সম্পাদনা আপনার কার্ডগুলো সাজায়।",
   "Tips · {position} of {total}": "পরামর্শ · {total}-এর মধ্যে {position}",
   "Done with tips. The card goes.": "পরামর্শ দেখা শেষ। কার্ডটি সরানো হবে।",
   "Next tip": "পরবর্তী পরামর্শ",
   "Don't show tips again": "পরামর্শ আর দেখাবেন না",
-  "Don't show tips again. Edit home brings them back.": "পরামর্শ আর দেখাবেন না। হোম সম্পাদনা এগুলো ফিরিয়ে আনে।",
   "All tips seen": "সব পরামর্শ দেখা হয়েছে",
   "or type your town": "অথবা আপনার শহরের নাম লিখুন",
   "Not here? Type your town": "এখানে নেই? আপনার শহরের নাম লিখুন",
@@ -924,5 +922,15 @@
   "Ask a question": "একটি প্রশ্ন করুন",
   "It will stop taking questions as soon as the global community answers.": "বিশ্বব্যাপী সম্প্রদায় সাড়া দিলেই প্রশ্ন নেওয়া বন্ধ হবে।",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "সেখানে যে কেউ এটি দেখতে পারেন, এর ছবি, আনুমানিক এলাকা, দাম ও এই সম্প্রদায়ের নাম সহ। সঠিক জায়গা নয়, আর আপনি এ বিষয়ে প্রশ্ন না নিলে আপনার নামও নয়। এটি কিনতে বা নিতে তাঁরা যোগদানের অনুরোধ করেন।",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "সেখানে যে কেউ এটি দেখতে পারেন, এর ছবি, আনুমানিক এলাকা, দাম ও এই সম্প্রদায়ের নাম সহ। সঠিক জায়গা নয়, আর আপনি এ বিষয়ে প্রশ্ন না নিলে আপনার নামও নয়। এর উত্তর দিতে তাঁরা যোগদানের অনুরোধ করেন।"
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "সেখানে যে কেউ এটি দেখতে পারেন, এর ছবি, আনুমানিক এলাকা, দাম ও এই সম্প্রদায়ের নাম সহ। সঠিক জায়গা নয়, আর আপনি এ বিষয়ে প্রশ্ন না নিলে আপনার নামও নয়। এর উত্তর দিতে তাঁরা যোগদানের অনুরোধ করেন।",
+  "Arrange": "সাজান",
+  "Arrange: move the cards on Home": "সাজান: হোমের কার্ডগুলো সরান",
+  "Arrange Home: use the arrows. Done when you're happy.": "হোম সাজান: তীরচিহ্ন ব্যবহার করুন। শেষ হলে হয়েছে চাপুন।",
+  "Arrange Home. Use the arrows on each card.": "হোম সাজান। প্রতিটি কার্ডের তীরচিহ্ন ব্যবহার করুন।",
+  "Stays here": "এখানেই থাকে",
+  "Done arranging Home": "হোম সাজানো শেষ করুন",
+  "{card} moved to {n} of {m}": "{card} {m}-এর মধ্যে {n} নম্বরে সরানো হয়েছে",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "এটিই শেষ পরামর্শ। পুরো গাইডটি সেটিংসে সহায়তা ও কার্যপদ্ধতির অধীনে আছে এবং অফলাইনেও কাজ করে; নিচের সাজান আপনার কার্ডগুলো সরায়।",
+  "Don't show tips again. Add a card brings them back.": "পরামর্শ আর দেখাবেন না। «একটি কার্ড যোগ করুন» এগুলো ফিরিয়ে আনে।",
+  "Arrange ›": "সাজান ›"
 }

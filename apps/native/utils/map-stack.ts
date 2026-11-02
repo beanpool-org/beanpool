@@ -8,7 +8,7 @@
  * Bangalow, 23.5 m at 49° N, which on the screen is 30 dp at zoom 17.0. A pin's head is 36 dp across, inside a 56 dp
  * image, so two pins closer than that overlap and could not be told apart or tapped one at a time anyway.
  */
-import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, orderStack, stackLift, t, type MapFrame, type MapRest, type StackBubble } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, copyFromLine, eventCopyOf, orderStack, stackLift, t, type MapFrame, type MapRest, type StackBubble } from '@beanpool/core';
 import { eventPinCard } from './events';
 import { marketCardPicture } from './market-card-picture';
 
@@ -193,7 +193,9 @@ export function stackRow(post: any): StackRow {
     const type = (post.type || '').toLowerCase();
     const isEvent = type === 'event';
     const card = isEvent ? eventPinCard(post) : null;
-    const typeWord = isEvent ? t('Event') : type === 'offer' ? t('Offer') : type === 'poll' ? t('Poll') : t('Need');
+    const copy = eventCopyOf(post);
+    const baseTypeWord = isEvent ? t('Event') : type === 'offer' ? t('Offer') : type === 'poll' ? t('Poll') : t('Need');
+    const typeWord = copy?.from ? `${baseTypeWord} · ${copyFromLine(copy.from)}` : baseTypeWord;
     const title = card?.title ?? post.title ?? '';
     const when = card?.when || null;
     const { cover, picture } = marketCardPicture(post);

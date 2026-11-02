@@ -16,7 +16,8 @@
  *   for, the full-screen "Update required" (which covers every screen). The notice opens only where the guard lets the
  *   member into the tabs.
  * - **Counted either way** (notice-counts.ts): as the community becomes the one in use its count goes back to nothing;
- *   held, its row on the BeanPool sheet shows it.
+ *   held, its row on the BeanPool sheet shows it. The app's own notice from a round (other-communities-unread.ts) comes
+ *   with no id and counts nothing: its number is already the community's own.
  */
 import type { NoticeRoute } from './push-notice-check';
 import { countNotice } from './notice-counts';
@@ -68,8 +69,8 @@ export type NoticeSwitch = 'switched' | 'held' | 'failed';
  * Notice `id`, tapped, from `community`: counted, then the phone moves there and the guard is asked to open `route()`
  * (asked only once the phone is moving, so a held switch asks that community nothing). Never throws.
  */
-export async function openNoticeIn(community: string, id: string, route: () => Promise<NoticeRoute>, deps: NoticeSwitchDeps): Promise<NoticeSwitch> {
-    await countNotice(deps.storage, community, id);
+export async function openNoticeIn(community: string, id: string | null, route: () => Promise<NoticeRoute>, deps: NoticeSwitchDeps): Promise<NoticeSwitch> {
+    if (id !== null) await countNotice(deps.storage, community, id);
     try {
         if (deps.switchUnderWay() || await deps.joinUnderWay()) {
             console.log(`[Push] A notice from ${community}: the phone stays where it is (a join or a switch is under way)`);

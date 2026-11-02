@@ -8,8 +8,8 @@
  *      clean (light and dark); a tap on an interest reorders the Market card in place and saves on the account; Add a
  *      card is a real dialog (axe clean in both themes, and a saved search's settings sheet too), and Your Beans added
  *      from it by keyboard goes first, under Needs you, read at once, kept on the account (another browser, a reload);
- *      "…" Remove takes a card away with one save and gives focus to the nearest card left; Edit home is a real dialog
- *      with no switches (axe clean, Escape gives focus back), and its Reset to defaults gives back the newcomer's list;
+ *      "…" Remove takes a card away with one save and gives focus to the nearest card left; Arrange folds the cards where
+ *      they stand (axe clean, Escape gives focus back), and its Reset to defaults gives back the newcomer's list;
  *      with the node unreachable the kept answer is drawn and the page says so; Sign Out (Device
  *      Only) leaves no cached Home in the browser; the Tips card after First steps on tip 1, Next by keyboard draws the
  *      next one in place, says it and keeps focus, and the tip's text grows with the reader's text size;
@@ -30,6 +30,10 @@
  *      words in a welcome page that heard another tab's sign-out lands on that account's Home, its Market star saved;
  *   6. the delete at a community the web app was pointed at (two nodes, P and X): a Remove and a doorbell in tabs that
  *      heard nothing put nothing of her Home at X back under X, and file nothing of P's under X; both read P afresh.
+ *
+ *   7. Arrange at 320 px with 1.3x text, 768, 1280 and 1600, in both themes (DESIGN-home-layout-fable.md, slice L2): no two
+ *      cards overlap and no gap opens, folded or after Done; Tab walks the member's order; Done stays on screen; a band
+ *      held enters; a move survives a reload. `HOME_ONLY=arrangeAcross`, and the pictures for its PR.
  *
  * Fails on any sideways scroll, a control under 44 px, an axe violation, a document-policy violation, or a request to
  * any host but this machine.
@@ -534,39 +538,28 @@ async function localMember(browser, root) {
             const el = document.activeElement;
             return el === document.body || !el ? 'BODY' : `${el.closest('section[data-testid^="home-card-"]')?.getAttribute('data-testid')} ${el.getAttribute('data-testid')}`;
         });
-        check(focusAfter === 'home-card-community home-edit-open', `focus goes to the nearest card left (the community card's Edit home), never <body> (${focusAfter})`);
+        check(focusAfter === 'home-card-community home-arrange-open', `focus goes to the nearest card left (the community card's Arrange), never <body> (${focusAfter})`);
         check((await page.getByTestId('home-live').innerText()).trim() === 'Coming up removed. Add a card brings it back.', 'and the page says, politely, where the card went');
 
-        // Edit home: a real dialog, the cards on Home in her order, no switches and no Hidden list.
-        const edit = page.getByTestId('home-edit-open');
-        await edit.scrollIntoViewIfNeeded();
-        await edit.focus();
+        // Arrange: the cards fold where they stand, in her order, with their arrows; no dialog, no list of switches.
+        const arrange = page.getByTestId('home-arrange-open');
+        await arrange.scrollIntoViewIfNeeded();
+        await arrange.focus();
         await page.keyboard.press('Enter');
-        const dialog = page.getByRole('dialog', { name: 'Edit home' });
-        await dialog.waitFor();
-        await noSideScroll(page, 'Edit home');
-        const covered = await page.evaluate(() => {
-            const r = document.querySelector('[role="dialog"]').getBoundingClientRect();
-            const bottom = Math.min(r.bottom, window.innerHeight) - 2;
-            const points = [];
-            for (let y = r.top + 8; y < bottom; y += 40) for (const x of [r.left + 12, r.left + r.width / 2, r.right - 12]) points.push([x, y]);
-            return points.filter(([x, y]) => !document.elementFromPoint(x, y)?.closest('[role="dialog"]')).length;
-        });
-        check(covered === 0, `nothing is drawn over Edit home (the install banner included)${covered ? ` (${covered} points covered)` : ''}`);
-        await touchTargets(page, '[data-testid="home-edit-dialog"]', 'Edit home');
-        await axeClean(page, '[data-testid="home-edit-dialog"]', 'Edit home (light)');
-        await shot(page, '3-member-edit-home', { window: true });
-        const editRows = () => dialog.locator('[data-testid^="home-edit-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('home-edit-row-', '')));
+        const bar = page.getByTestId('home-arrange-bar');
+        await bar.waitFor();
+        await noSideScroll(page, 'Arrange');
+        await touchTargets(page, '[data-testid="home-page"]', 'Arrange');
+        await axeClean(page, '[data-testid="home-page"]', 'Arrange (light)');
+        await shot(page, '3-member-arrange', { window: true });
+        const editRows = () => page.locator('[data-testid^="home-arrange-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('home-arrange-line-', '')).filter((id) => id !== 'needs' && id !== 'community'));
         const rows = await editRows();
-        check(rows[0] === 'beans' && !rows.includes('events') && !rows.includes('needs') && !rows.includes('community')
-            && !(await dialog.getByRole('switch').count()) && !(await dialog.getByText(/^Hidden$/).count()),
-            `Edit home lists the cards on Home in her order, Your Beans first, no switches, no Hidden list (${rows.join(' · ')})`);
-        for (let i = 0; i < 40; i++) await page.keyboard.press('Tab');
-        check(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), 'Tab keeps focus inside the dialog');
+        check(rows[0] === 'beans' && !rows.includes('events') && !(await page.getByRole('dialog').count()),
+            `Arrange folds the cards on Home in her order, Your Beans first, and it is no dialog (${rows.join(' · ')})`);
         // Reset to defaults: the newcomer's list again (core's defaultCards), saved, and Home read again with it.
         const resetAt = net.mark();
         const reset = layoutPost();
-        await dialog.getByTestId('home-edit-reset').click();
+        await page.getByTestId('home-arrange-reset').click();
         await reset;
         await wait(1_500);
         const newcomer = defaultHomeLayout().cards.map((c) => c.id);
@@ -577,8 +570,8 @@ async function localMember(browser, root) {
         const resetReads = net.since(resetAt).filter((r) => r.path === '/api/home');
         check(resetReads.length === 1, `and Home is read again once (${resetReads.map((r) => `${r.status} cards=${new URLSearchParams(r.search).get('cards')}`).join('; ') || 'no read'})`);
         await page.keyboard.press('Escape');
-        await dialog.waitFor({ state: 'detached' });
-        check(await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'home-edit-open'), 'Escape closes it and gives focus back to Edit home');
+        await bar.waitFor({ state: 'detached' });
+        check(await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'home-arrange-open'), 'Escape ends it and gives focus back to Arrange ›');
         await page.getByTestId('home-card-events').waitFor({ timeout: 8_000 }).catch(() => {});
         const resetIds = await cardIds(page);
         check(JSON.stringify(resetIds.filter((id) => id !== 'interests')) === JSON.stringify(ids.filter((id) => id !== 'interests')),
@@ -709,11 +702,11 @@ async function localMember(browser, root) {
         await darkCtx.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
         check(await darkCtx.page.getByTestId('home-card-tips').count() === 1, 'the Tips card is on her Home in dark too (the axe check below takes it in)');
         await axeClean(darkCtx.page, '[data-testid="home-page"]', 'a member\'s Home (dark)');
-        await darkCtx.page.getByTestId('home-edit-open').click();
-        await axeClean(darkCtx.page, '[data-testid="home-edit-dialog"]', 'Edit home (dark)');
-        await shot(darkCtx.page, '5-member-edit-home-dark', { window: true });
-        // Edit home's ＋ Add a card opens the picker in its place; a saved search's settings from there.
-        await darkCtx.page.getByTestId('home-edit-add').click();
+        await darkCtx.page.getByTestId('home-arrange-open').click();
+        await axeClean(darkCtx.page, '[data-testid="home-page"]', 'Arrange (dark)');
+        await shot(darkCtx.page, '5-member-arrange-dark', { window: true });
+        // Arrange's ＋ Add a card opens the picker over it; a saved search's settings from there.
+        await darkCtx.page.getByTestId('home-arrange-add').click();
         await darkCtx.page.getByTestId('home-add-dialog').waitFor();
         await axeClean(darkCtx.page, '[data-testid="home-add-dialog"]', 'Add a card (dark)');
         await shot(darkCtx.page, '5-member-add-a-card-dark', { window: true });
@@ -723,6 +716,8 @@ async function localMember(browser, root) {
         await darkCtx.page.keyboard.press('Escape');
         await darkCtx.page.keyboard.press('Escape');
         await darkCtx.page.getByTestId('home-add-dialog').waitFor({ state: 'detached' });
+        await darkCtx.page.keyboard.press('Escape');
+        await darkCtx.page.getByTestId('home-arrange-bar').waitFor({ state: 'detached' });
         await shot(darkCtx.page, '5-member-home-dark');
         await darkCtx.context.close();
     } finally {
@@ -1159,8 +1154,8 @@ async function globalNode(browser, root) {
         const market = await page.getByTestId('home-card-market').innerText();
         check(/What people post/i.test(market) && /Free, a swap, or ask/.test(market) && !/Beans/.test(market), 'What people post: the terms with no Beans');
         check(/Place shown after you join/.test(await page.getByTestId('home-card-events').innerText()), 'an event\'s place held back until joining');
-        check(!(await page.getByTestId('home-card-menu').count()) && !(await page.getByTestId('home-edit-open').count()) && !(await page.getByTestId('home-add-open').count()),
-            'nothing to tailor (no "…", no Add a card, no Edit home), nothing of a member\'s');
+        check(!(await page.getByTestId('home-card-menu').count()) && !(await page.getByTestId('home-arrange-open').count()) && !(await page.getByTestId('home-add-open').count()),
+            'nothing to tailor (no "…", no Add a card, no Arrange), nothing of a member\'s');
         await noSideScroll(page, 'the visitors\' Home');
         await tabLabelsWhole(page, 'lobby-bottom-nav', 'the lobby\'s three tabs');
         await touchTargets(page, '[data-testid="home-page"]', 'the visitors\' Home');
@@ -1248,6 +1243,178 @@ async function globalNode(browser, root) {
     }
 }
 
+/** No two cards in the grid overlap; in a column, each card starts within 20 px of the one above it (16 + 4 of rounding). */
+async function packedRight(page, where) {
+    const { kids, columns } = await page.evaluate(() => ({
+        columns: Number(document.querySelector('[data-testid="home-page"]').dataset.columns),
+        kids: Array.from(document.querySelector('[data-testid="home-grid"]').children).map((el) => {
+            const r = el.getBoundingClientRect();
+            return { id: el.dataset.testid, top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width };
+        }),
+    }));
+    const overlaps = kids.flatMap((a, i) => kids.slice(i + 1).filter((b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1).map((b) => `${a.id}/${b.id}`));
+    check(overlaps.length === 0, `${where}: no two cards overlap${overlaps.length ? ` (${overlaps.join(' ')})` : ''}`);
+    if (columns < 2) return;
+    const narrow = Math.min(...kids.map((k) => k.width));
+    const gaps = [];
+    for (const k of kids) {
+        if (k.width > narrow * 1.5) continue;
+        const above = kids.filter((o) => o !== k && Math.abs(o.left - k.left) < 2 && o.bottom <= k.top + 1).sort((x, y) => y.bottom - x.bottom)[0];
+        if (above && k.top - above.bottom > 20.5) gaps.push(`${k.id} ${Math.round(k.top - above.bottom)}px`);
+    }
+    check(gaps.length === 0, `${where}: no gap over any card in its column${gaps.length ? ` (${gaps.join(', ')})` : ''}`);
+}
+
+async function arrangeAcross(browser, root) {
+    const before = process.env.HOME_BEFORE === '1';
+    fs.mkdirSync(SHOTS_DIR, { recursive: true });
+    console.log(`\nArrange at each width and in both themes${before ? ' (what main draws, for the pictures)' : ''}:`);
+    for (const dark of [false, true]) {
+        for (const [width, height, large] of [[320, 720, true], [768, 900, false], [1280, 900, false], [1600, 1000, false]]) {
+            // A node each: these reloads would reach the node's own limit on reads from one address.
+            const ana = memberIdentity('Ana');
+            const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }]);
+            const { context, page } = await openContext(browser, node.origin, { identity: ana, dark, installDismissed: true });
+            try {
+                const tag = `${width}-${dark ? 'dark' : 'light'}`;
+                const pic = (name) => page.screenshot({ path: path.join(SHOTS_DIR, `${before ? 'before' : 'after'}-${tag}-${name}.png`) });
+                const open = async () => {
+                    await page.goto(`${node.origin}/app`, { waitUntil: 'load' });
+                    if (large) await scaleText(page);
+                    await page.getByTestId('home-card-community').waitFor({ timeout: 30_000 }).catch(async (e) => {
+                        await pic('failed');
+                        console.log('STUCK', (await page.evaluate(() => document.body.innerText)).slice(0, 400).replace(/\s+/g, ' '), node.log.slice(-6).join(' / ').slice(0, 600));
+                        throw e;
+                    });
+                    await wait(1_200);
+                };
+                await page.setViewportSize({ width, height });
+                await open();
+                // A newcomer's Home is Getting started alone: Skip gives the usual cards.
+                const skip = page.getByTestId('home-card-start').getByRole('button', { name: /skip/i });
+                if (await skip.count()) {
+                    await skip.first().click();
+                    await page.getByTestId('home-card-tips').waitFor({ timeout: 8_000 });
+                    await wait(1_500); // its saves land before the page is read again
+                    await open();
+                }
+                await pic('home');
+                if (before) {
+                    const edit = page.getByTestId('home-edit-open');
+                    await edit.scrollIntoViewIfNeeded();
+                    await edit.click();
+                    await page.getByTestId('home-edit-dialog').waitFor();
+                    await pic('edit-home');
+                    continue;
+                }
+                await packedRight(page, `Home at ${tag}`);
+                // The hold: half a second on a band, with no button under the pointer.
+                // In the middle of the window: the tab bar stands over the bottom of the page at 320 px.
+                await page.getByTestId('card-band-tips').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+                const band = await page.getByTestId('card-band-tips').locator('h2').boundingBox();
+                await page.mouse.move(band.x + 4, band.y + 4);
+                await page.mouse.down();
+                await wait(700);
+                await page.mouse.up();
+                const barEl = page.getByTestId('home-arrange-bar');
+                await barEl.waitFor({ timeout: 3_000 });
+                check(true, `${tag}: a band held for half a second enters Arrange`);
+                await page.keyboard.press('Escape');
+                await barEl.waitFor({ state: 'detached' });
+                await page.getByTestId('home-arrange-open').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+                await page.getByTestId('home-arrange-open').click();
+                await barEl.waitFor();
+                await wait(300);
+                await packedRight(page, `Arrange at ${tag}`);
+                await noSideScroll(page, `Arrange at ${tag}`);
+                await touchTargets(page, '[data-testid="home-page"]', `Arrange at ${tag}`);
+                await axeClean(page, '[data-testid="home-page"]', `Arrange at ${tag}`);
+                await pic('arrange');
+                // Tab walks the bar, the cards in her order, Add a card and Reset, with nothing skipped.
+                const inOrder = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="home-arrange-bar"] button, [data-testid="home-grid"] button:not([disabled]), [data-testid="home-arrange-reset"]')).map((b) => b.dataset.testid));
+                await page.getByTestId('home-arrange-done').focus();
+                const walked = [await page.evaluate(() => document.activeElement?.dataset.testid)];
+                for (let i = 1; i < inOrder.length; i++) {
+                    await page.keyboard.press('Tab');
+                    walked.push(await page.evaluate(() => document.activeElement?.dataset.testid));
+                }
+                check(JSON.stringify(walked) === JSON.stringify(inOrder), `${tag}: Tab walks every control in her order (${walked.length} stops)${JSON.stringify(walked) === JSON.stringify(inOrder) ? '' : `: ${walked.join(' ')} vs ${inOrder.join(' ')}`}`);
+                // Done stays on screen while the page scrolls.
+                await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 1e6));
+                await wait(150);
+                const done = await page.getByTestId('home-arrange-done').boundingBox();
+                check(!!done && done.y >= 0 && done.y + done.height <= height, `${tag}: Done stays on screen at the end of the page (top ${Math.round(done?.y ?? -1)})`);
+                await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 0));
+                // A move by keyboard: the place is said, focus stays, packing holds, and a reload reads it back.
+                const order = () => page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="home-grid"] > [data-testid^="home-card-"]')).map((e) => e.dataset.testid.replace('home-card-', '')));
+                const was = await order();
+                const down = page.getByTestId('home-arrange-down-tips');
+                await down.focus();
+                const saved = page.waitForRequest((r) => r.url().endsWith('/api/members/preferences') && r.method() === 'POST');
+                await page.keyboard.press('Enter');
+                await saved;
+                await wait(400);
+                const now = await order();
+                const at = was.indexOf('tips');
+                const want = [...was];
+                [want[at], want[at + 1]] = [want[at + 1], want[at]];
+                check(JSON.stringify(now) === JSON.stringify(want), `${tag}: ↓ moves the card one place in the reading order (${now.join(' ')})`);
+                check(await page.evaluate(() => document.activeElement?.dataset.testid === 'home-arrange-down-tips'), `${tag}: focus stays on the arrow`);
+                check(/moved to \d+ of \d+/.test(await page.getByTestId('home-live').innerText()), `${tag}: the place is said`);
+                await packedRight(page, `Arrange after a move at ${tag}`);
+                await page.keyboard.press('Escape');
+                await barEl.waitFor({ state: 'detached' });
+                await wait(300);
+                await packedRight(page, `Home after Done at ${tag}`);
+                await open();
+                await page.getByTestId('home-arrange-open').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+                await page.getByTestId('home-arrange-open').click();
+                await barEl.waitFor();
+                check(JSON.stringify(await order()) === JSON.stringify(want), `${tag}: a reload reads the moved order back`);
+                await page.getByTestId('home-arrange-up-tips').click();
+                await wait(400);
+                check(JSON.stringify(await order()) === JSON.stringify(was), `${tag}: ↑ puts it back`);
+                // Whatever a key brings into view stands clear of the bar above it and the tab bar below it.
+                const room = () => page.evaluate(() => {
+                    const el = document.activeElement;
+                    const box = el.getBoundingClientRect();
+                    const nav = document.querySelector('[data-testid="mobile-bottom-nav"]')?.getBoundingClientRect();
+                    return {
+                        id: el.dataset.testid,
+                        over: box.top - document.querySelector('[data-testid="home-arrange-bar"]').getBoundingClientRect().bottom,
+                        under: (nav?.height ? nav.top : window.innerHeight) - box.bottom,
+                    };
+                });
+                const clearOf = async (what, moves) => {
+                    const seen = [];
+                    for (const press of moves) {
+                        await page.keyboard.press(press);
+                        await wait(what.startsWith('Tab') || what.startsWith('Shift') ? 60 : 350);
+                        const at = await room();
+                        if (at.id !== 'home-arrange-done') seen.push(at);
+                    }
+                    const over = Math.min(...seen.map((s) => s.over));
+                    const under = Math.min(...seen.map((s) => s.under));
+                    check(over >= 0 && under >= 0, `${tag}: ${what} stays clear of both bars (closest ${Math.round(over)} px under the bar, ${Math.round(under)} px over the tab bar)`);
+                };
+                const movable = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid^="home-arrange-up-"]')).map((b) => b.dataset.testid.replace('home-arrange-up-', '')));
+                const steps = (key) => movable.slice(1).map(() => key);
+                await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 1e6));
+                await page.getByTestId(`home-arrange-up-${movable.at(-1)}`).focus();
+                await clearOf('a card walked to the top', steps('Enter'));
+                await clearOf('a card walked back down', steps('Enter'));
+                await page.getByTestId('home-arrange-done').focus();
+                const stops = inOrder.slice(1).map(() => 'Tab');
+                await clearOf('Tab through Arrange', stops);
+                await clearOf('Shift+Tab back through Arrange', stops.map(() => 'Shift+Tab'));
+            } finally {
+                await context.close();
+                await node.stop();
+            }
+        }
+    }
+}
+
 async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-home-check-'));
     let browser;
@@ -1256,7 +1423,7 @@ async function main() {
         browser = await chromium.launch();
         console.log('The web app as built; Chromium at 320 px, 1.3x text, reduced motion.');
         const only = process.env.HOME_ONLY?.split(',').map((n) => n.trim()).filter(Boolean);
-        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode].filter((r) => !only?.length || only.includes(r.name))) {
+        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode, arrangeAcross].filter((r) => !only?.length || only.includes(r.name))) {
             try {
                 await run(browser, root);
             } catch (e) {

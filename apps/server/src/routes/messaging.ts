@@ -435,6 +435,7 @@ router.get('/api/me/unread', async (ctx) => {
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
+    // Counts alone: nothing here says which chats are muted, so `alerts` beside `unread` tells only the signer.
     ctx.body = getUnreadAnswer(actor);
 });
 

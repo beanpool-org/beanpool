@@ -120,6 +120,19 @@ const readBoxes = (page) => page.evaluate(() => {
 });
 
 /** Neighbours in each column: the gaps, the worst overlap. A card over a full row may wait for its column; a card never does. */
+/**
+ * A picture of the whole page as a member has it. Not `fullPage`: Chromium shrinks the viewport to 1×1 for a moment, the packing
+ * falls to one column and comes back, and the shot lands in that moment, with a gap and a card in a column no member ever sees.
+ * A resize of the height alone writes no style.
+ */
+async function wholePage(page, file) {
+    const size = page.viewportSize();
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    await page.setViewportSize({ width: size.width, height });
+    await page.screenshot({ path: file });
+    await page.setViewportSize(size);
+}
+
 function measure({ boxes }) {
     const lefts = [...new Set(boxes.filter(b => b.col !== '1 / -1').map(b => b.left))].sort((a, b) => a - b);
     const gaps = [];
@@ -167,7 +180,7 @@ async function widths(browser) {
 
         const first = await readBoxes(page);
         note('landed', first);
-        await page.screenshot({ path: path.join(OUT_DIR, `home-${width}-${theme}-1-landed.png`), fullPage: true });
+        await wholePage(page, path.join(OUT_DIR, `home-${width}-${theme}-1-landed.png`));
 
         // A card that loads late: the kept answer drawn, then the node's, with the Market and Coming up longer.
         node.held = new Promise((release) => { node.release = release; });
@@ -187,7 +200,7 @@ async function widths(browser) {
         note('Market and Coming up grew late', late);
         check(spanOf(late, 'home-card-market') > spanOf(cached, 'home-card-market'), `${name}: the late card's span followed it (${spanOf(cached, 'home-card-market')} → ${spanOf(late, 'home-card-market')})`);
         check(domOrder(late).join() === domOrder(cached).join(), `${name}: the DOM order is the saved order`);
-        await page.screenshot({ path: path.join(OUT_DIR, `home-${width}-${theme}-2-late-card.png`), fullPage: true });
+        await wholePage(page, path.join(OUT_DIR, `home-${width}-${theme}-2-late-card.png`));
 
         // A card that opens, and closes: what the "One way back" frame does on a sign-in problem, and an ordinary card.
         const open1 = await readBoxes(page);
@@ -200,7 +213,7 @@ async function widths(browser) {
         await settle(page);
         const opened = await readBoxes(page);
         note('Coming up opened', opened);
-        await page.screenshot({ path: path.join(OUT_DIR, `home-${width}-${theme}-3-card-opened.png`), fullPage: true });
+        await wholePage(page, path.join(OUT_DIR, `home-${width}-${theme}-3-card-opened.png`));
         await ungrow(page);
         await settle(page);
         const closed = await readBoxes(page);

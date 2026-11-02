@@ -1143,7 +1143,7 @@ export default function MarketScreen() {
     // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
     // empty state's welcome, or after the real listings.
     const showExamples = showExampleListings({
-        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending ? FILL_BELOW : filteredPosts.length + fillRows.length,
+        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending ? FILL_BELOW : filteredPosts.length + pinnedPosts.length + fillRows.length,
     });
 
     // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
@@ -2040,7 +2040,7 @@ export default function MarketScreen() {
                     />
                 }
                 ListEmptyComponent={
-                    fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? null : emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
+                    pinnedPosts.length > 0 || fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? null : emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
                         // Not a member of this community: its listings are its members'. Not "trouble connecting".
                         <View style={{ padding: 32, alignItems: 'center' }} testID="members-only-listings">
                             <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>

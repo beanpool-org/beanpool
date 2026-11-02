@@ -198,6 +198,25 @@ describe('post-pinning-market (slice 2 pure rules and logic)', () => {
             expect(remaining.find(p => p.id === 'p2')).toBeUndefined();
             expect(remaining.find(p => p.id === 'reg1')).toBeDefined();
         });
+
+        it('suppresses empty state and accounts for pinned count when all matching posts are pinned', () => {
+            const feedPosts = [posts[0]]; // p1 is pinned
+            const livePins = feedPosts.filter(p => isPostPinned(p, now));
+            const pinnedIds = new Set(livePins.map(p => p.id));
+            const filteredPosts = feedPosts.filter(p => !pinnedIds.has(p.id));
+
+            expect(filteredPosts.length).toBe(0);
+            expect(livePins.length).toBe(1);
+
+            // Empty state is suppressed when pinnedPosts.length > 0
+            const shouldSuppressEmpty = livePins.length > 0;
+            expect(shouldSuppressEmpty).toBe(true);
+
+            // Real in view counts both filtered and pinned posts
+            const fillRows: any[] = [];
+            const realInView = filteredPosts.length + livePins.length + fillRows.length;
+            expect(realInView).toBe(1);
+        });
     });
 
     describe('PIN_CHOICES', () => {

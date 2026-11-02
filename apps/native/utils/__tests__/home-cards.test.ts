@@ -22,6 +22,7 @@ import {
     MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor, skyOf,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
+import { arrangeCards, cardLine } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
 import { NEAR_COMMUNITY_KM, HOME_STARTER_SET, TIPS_ALL_SEEN, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
@@ -902,7 +903,7 @@ describe('the global node\'s Home (H4)', () => {
         expect(findPinned(member(null), NOW)).toBe(true);
     });
 
-    it('after 30 days it is a card like any other: hidden from its "…" or Edit home, moved, and not asked for once hidden', () => {
+    it('after 30 days it is a card like any other: hidden from its "…", moved, and not asked for once hidden', () => {
         const a = member(FIND_PINNED_DAYS + 1);
         expect(findPinned(a, NOW)).toBe(false);
         const pins = pinnedCards(a, NOW);
@@ -1227,5 +1228,24 @@ describe('sun and moon (CARD-FRAME §4, §5.2 item 22)', () => {
             expect(pickerGroups(node, sky(), null).groups.flatMap(x => x.rows).find(r => r.type === 'sky')!.state).toBe('on-home');
         }
         expect(HOME_DRAWN.has('sky')).toBe(true);
+    });
+});
+
+describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
+    const order = [{ id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }, { id: 'sky', type: 'sky' }, { id: 'chat', type: 'chat' }, { id: 'community', type: 'community' }];
+    const onNode = (type: string) => type !== 'chat';
+
+    it('what is drawn, and every other card on the list this node can show, in the list\'s order', () => {
+        expect(arrangeCards(order, [{ id: 'market' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['market', 'sky', 'community']);
+    });
+
+    it('a fixed card or a pin only while it is drawn', () => {
+        expect(arrangeCards(order, [{ id: 'needs' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['needs', 'market', 'sky', 'community']);
+        expect(arrangeCards([{ id: 'find', type: 'find' }, ...order], [], () => true, ['find']).map(c => c.id)).toEqual(['market', 'sky', 'chat']);
+    });
+
+    it("a folded card's line is the catalogue's; a type nobody knows has none", () => {
+        expect(cardLine('events')).toBe('Events coming up soon.');
+        expect(cardLine('future-card')).toBe('');
     });
 });

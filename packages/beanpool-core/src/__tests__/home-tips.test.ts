@@ -94,7 +94,7 @@ describe('home tips: the wording (approved 8 Oct 2026, word for word)', () => {
         const text = (id: string) => HOME_TIPS.find(t => t.id === id)!.text;
         expect(text('what-this-is')).toBe('BeanPool is neighbours helping neighbours. You offer what you can do or spare, and ask for what you need.');
         expect(text('words')).toBe('Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.');
-        expect(text('guide')).toBe("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.");
+        expect(text('guide')).toBe("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.");
     });
 
     it('the caption and the button labels', () => {
@@ -170,7 +170,7 @@ describe('home tips: rotation and stopping (design §1)', () => {
         expect(again.view!.position).toBe(1);
     });
 
-    it('starts over after a Show: all seen, then switched on in Edit home', () => {
+    it('starts over after a Show: all seen, then added back', () => {
         const allSeen: TipsRecord = { ...emptyTipsRecord(), seen: list.map(t => t.id) };
         expect(tipOnLanding(allSeen, list, D1).view).toBeNull();
         expect(tipOnLanding(restartTips(list, D1), list, D1).view!.tip.id).toBe('what-this-is');

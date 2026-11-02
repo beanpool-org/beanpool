@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t, type ToolOfferDraft } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, homeStyles } from '../components/home/HomeParts';
-import { editHomeStyles } from '../components/home/EditHomeSheet';
+import { sheetStyles } from '../components/home/sheet-parts';
 import { useModalKeyboardLift } from '../components/useModalKeyboardLift';
 import { ShopToggle, shopTakesOffers, type ShopToggleState } from '../components/shop/ShopToggle';
 import type { ToolListFee } from './doors';
@@ -70,15 +70,15 @@ export function ToolListSheet({ draft, beans, needsProfilePhoto, unfinishedPost,
     };
     return (
         <Modal visible={!!draft} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
-            <View style={editHomeStyles.backdrop}>
-                <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="tool-list-sheet">
-                    <View style={editHomeStyles.head}>
-                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header" numberOfLines={2}>{t('List it in the Market')}</Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID="tool-list-cancel">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
+            <View style={sheetStyles.backdrop}>
+                <View style={[sheetStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="tool-list-sheet">
+                    <View style={sheetStyles.head}>
+                        <Text style={[sheetStyles.title, { color: colors.text.heading }]} accessibilityRole="header" numberOfLines={2}>{t('List it in the Market')}</Text>
+                        <Pressable onPress={onClose} style={sheetStyles.done} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID="tool-list-cancel">
+                            <Text style={[sheetStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView contentContainerStyle={editHomeStyles.list} keyboardShouldPersistTaps="handled">
+                    <ScrollView contentContainerStyle={sheetStyles.list} keyboardShouldPersistTaps="handled">
                         {/* What the member wrote, as written. */}
                         <Text style={[s.rowLine, s.rowStrong]} numberOfLines={2} testID="tool-list-title">{draft?.title ?? ''}</Text>
                         {beans ? (

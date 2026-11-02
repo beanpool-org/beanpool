@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -228,12 +228,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "Thăm dò hỏi ý kiến mọi người và tự nó không làm thay đổi điều gì. Tìm các cuộc thăm dò trong Chợ mục Thăm dò.",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "Chỉ bạn mới thấy số dư và giao dịch của mình. Các thành viên khác chỉ thấy tên, ảnh đại diện, cấp độ và đánh giá.",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "Người chưa tham gia có thể thấy những gì đang được đề nghị và vị trí gần đúng, không bao giờ thấy tên, khuôn mặt hay địa chỉ chính xác của bạn.",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "Đó là mẹo cuối cùng. Toàn bộ hướng dẫn có trong Cài đặt mục Trợ giúp & cách hoạt động, xem được khi không có mạng; Chỉnh sửa trang chủ ở dưới cùng giúp sắp xếp các thẻ.",
   "Tips · {position} of {total}": "Mẹo · {position} trên {total}",
   "Done with tips. The card goes.": "Đã xem hết mẹo. Thẻ sẽ ẩn đi.",
   "Next tip": "Mẹo tiếp theo",
   "Don't show tips again": "Không hiển thị lại mẹo",
-  "Don't show tips again. Edit home brings them back.": "Không hiển thị lại mẹo. Chỉnh sửa trang chủ sẽ bật lại thẻ này.",
   "All tips seen": "Đã xem tất cả mẹo",
   "or type your town": "hoặc nhập tên thị trấn",
   "Not here? Type your town": "Không thấy ở đây? Hãy nhập thị trấn của bạn",
@@ -884,5 +882,15 @@
   "Ask a question": "Đặt câu hỏi",
   "It will stop taking questions as soon as the global community answers.": "Sẽ ngừng nhận câu hỏi ngay khi cộng đồng toàn cầu phản hồi.",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "Bất kỳ ai ở đó đều có thể thấy mục này, cùng ảnh, khu vực gần đúng, giá và tên của cộng đồng này. Không có vị trí chính xác, và không có tên bạn trừ khi bạn nhận câu hỏi về mục này. Để mua hoặc lấy mục này, họ xin gia nhập.",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Bất kỳ ai ở đó đều có thể thấy mục này, cùng ảnh, khu vực gần đúng, giá và tên của cộng đồng này. Không có vị trí chính xác, và không có tên bạn trừ khi bạn nhận câu hỏi về mục này. Để trả lời mục này, họ xin gia nhập."
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Bất kỳ ai ở đó đều có thể thấy mục này, cùng ảnh, khu vực gần đúng, giá và tên của cộng đồng này. Không có vị trí chính xác, và không có tên bạn trừ khi bạn nhận câu hỏi về mục này. Để trả lời mục này, họ xin gia nhập.",
+  "Arrange": "Sắp xếp",
+  "Arrange: move the cards on Home": "Sắp xếp: di chuyển các thẻ trên Trang chủ",
+  "Arrange Home: use the arrows. Done when you're happy.": "Sắp xếp Trang chủ: dùng các mũi tên. Nhấn Xong khi đã vừa ý.",
+  "Arrange Home. Use the arrows on each card.": "Sắp xếp Trang chủ. Dùng các mũi tên trên mỗi thẻ.",
+  "Stays here": "Giữ nguyên ở đây",
+  "Done arranging Home": "Kết thúc sắp xếp Trang chủ",
+  "{card} moved to {n} of {m}": "Đã chuyển {card} đến vị trí {n} trên {m}",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Đó là mẹo cuối cùng. Toàn bộ hướng dẫn có trong Cài đặt mục Trợ giúp & cách hoạt động, xem được khi không có mạng; Sắp xếp ở dưới cùng giúp di chuyển các thẻ.",
+  "Don't show tips again. Add a card brings them back.": "Không hiển thị lại mẹo. «Thêm thẻ» sẽ bật lại thẻ này.",
+  "Arrange ›": "Sắp xếp ›"
 }

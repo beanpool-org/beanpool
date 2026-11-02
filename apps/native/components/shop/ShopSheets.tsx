@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SHOP_BLURB_LIMIT, SHOP_CATEGORIES, SHOP_HOW_TO_DEAL_LIMIT, SHOP_NAME_LIMIT, t, type ShopCategory } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
-import { editHomeStyles } from '../home/EditHomeSheet';
+import { sheetStyles } from '../home/sheet-parts';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
 import { backOnChoices, shopCategoryLabel, type BackOnChoice, type ShopListing } from '../../utils/shop';
 
@@ -31,15 +31,15 @@ function Sheet({ visible, title, colors, onClose, testID, children }: {
     const lift = useModalKeyboardLift(insets.top + 8);
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
-            <View style={editHomeStyles.backdrop}>
-                <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID={testID}>
-                    <View style={editHomeStyles.head}>
-                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header" numberOfLines={2}>{title}</Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID={`${testID.replace(/-sheet$/, '')}-cancel`}>
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
+            <View style={sheetStyles.backdrop}>
+                <View style={[sheetStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID={testID}>
+                    <View style={sheetStyles.head}>
+                        <Text style={[sheetStyles.title, { color: colors.text.heading }]} accessibilityRole="header" numberOfLines={2}>{title}</Text>
+                        <Pressable onPress={onClose} style={sheetStyles.done} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID={`${testID.replace(/-sheet$/, '')}-cancel`}>
+                            <Text style={[sheetStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView contentContainerStyle={editHomeStyles.list} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+                    <ScrollView contentContainerStyle={sheetStyles.list} keyboardShouldPersistTaps="handled">{children}</ScrollView>
                 </View>
             </View>
         </Modal>

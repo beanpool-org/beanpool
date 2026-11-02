@@ -28,6 +28,7 @@ import {
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
 import { EventCopyDoor } from './EventCopyDoor';
+import { ShowOnGlobalHostRow } from './ShowOnGlobalRow';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
 import { Sentence } from './Sentence';
@@ -554,6 +555,9 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     </p>
                 )}
                 {copy ? open && !isOwnCopy && <EventCopyDoor copy={copy} /> : <RsvpButtons rsvp={rsvp} />}
+                {isHost && (
+                    <ShowOnGlobalHostRow post={p} identity={identity} enabled={!copy && open && p.eventOnline !== true && (p.audienceScope ?? 'public') === 'public' && p.authorPublicKey === identity?.publicKey} />
+                )}
                 {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
 
                 {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}

@@ -454,6 +454,32 @@ async function run() {
         assert(updatedConfig.publicAddress.communityName === 'Updated Community Name', 'Node config reflects updated community name');
         assert(updatedConfig.publicAddress.contact === 'new-contact@beanpool.org', 'Node config reflects updated contact');
 
+        // --- Test 6b: a claim that names neither (Make main on a name) keeps what this server holds (#2738) ---
+        const claimsBefore = registrarSeen.filter((r) => r.path === '/api/registrar/claim').length;
+        const bareClaimRes = await fetch(`${baseUrl}/api/local/admin/public-address/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'mullum-test', mode: 'tunnel' }),
+        });
+        assert(bareClaimRes.status === 200, 'a claim with no contact or community name succeeds');
+        const bareClaimSeen = registrarSeen.filter((r) => r.path === '/api/registrar/claim');
+        assert(bareClaimSeen.length === claimsBefore + 1, 'and went to the registrar');
+        assert(bareClaimSeen.at(-1)?.body?.contact === 'new-contact@beanpool.org', `the registrar is given the contact this server holds (${JSON.stringify(bareClaimSeen.at(-1)?.body)})`);
+        assert(bareClaimSeen.at(-1)?.body?.community_name === 'Updated Community Name', 'and the community name it holds');
+        const keptConfig = (getNodeConfig() as any).publicAddress;
+        assert(keptConfig.contact === 'new-contact@beanpool.org', `the stored record keeps its contact (${keptConfig.contact})`);
+        assert(keptConfig.communityName === 'Updated Community Name', `and its community name (${keptConfig.communityName})`);
+        // A claim that does name them replaces them, as it always did: only an omitted one is kept.
+        const namedClaimRes = await fetch(`${baseUrl}/api/local/admin/public-address/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'mullum-test', mode: 'tunnel', contact: 'other@beanpool.org', communityName: 'Other Name' }),
+        });
+        assert(namedClaimRes.status === 200, 'a claim that names them succeeds');
+        const namedConfig = (getNodeConfig() as any).publicAddress;
+        assert(namedConfig.contact === 'other@beanpool.org' && namedConfig.communityName === 'Other Name', 'and what it names replaces what was held');
+        assert(registrarSeen.at(-1)?.path !== '/api/registrar/claim' || registrarSeen.at(-1)?.body?.contact === 'other@beanpool.org', 'and goes to the registrar');
+
         // --- Test 7: Tunnel Restart Route ---
         const pidBefore = tunnelConnectorForTests().pid;
         const restartRes = await fetch(`${baseUrl}/api/local/admin/public-address/restart-tunnel`, { method: 'POST' });

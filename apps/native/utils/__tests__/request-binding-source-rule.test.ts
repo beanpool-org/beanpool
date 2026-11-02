@@ -149,6 +149,10 @@ describe('the member key signs only through core\'s builders and the listed old-
             // the host from audienceOf of a plain address, the code id shape-checked (8 hex), the key the phone's own, the
             // proof the phone's own HMAC. Nothing the node wrote goes in unchecked.
             'utils/node-claim.ts buildClaimBody',
+            // A copy's id (utils/show-on-global.ts): core's copyIdOf signs `0xFF ‖ beanpool-copy-id/1\nHOME ID\nGENERATION`, under
+            // its own tag, and hashes the result. The home id is the node's to choose, and that's safe here because nothing
+            // sees the signature: only its hash leaves the phone, as the copy's id.
+            'utils/show-on-global.ts copyIdFor',
         ]);
         expect(sites.filter(s => s.callee === 'memberSigner' && !allowed.has(key(s))).map(key)).toEqual([]);
     });

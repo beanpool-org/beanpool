@@ -50,6 +50,7 @@ describe('no window confirm() for a destructive action', () => {
         const asking = files.filter((f) => /await ask\(\{/.test(f.text)).map((f) => f.rel).sort();
         expect(asking).toEqual([
             'App.tsx',
+            'components/modules/AddressesPanel.tsx',
             'components/modules/ApplianceSection.tsx',
             'components/modules/AutomationTokensPanel.tsx',
             'components/modules/BulletinSection.tsx',

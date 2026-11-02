@@ -212,6 +212,18 @@ export function App() {
     // Home starts the tour and owns what it writes (lib/tour-store.ts); the bar is drawn here, over the real tabs.
     const { run: tour, home: tourHomeNow, offered: tourOffered } = useTour();
     const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
+
+    // The member's copies on the global community come into step on load and when the tab comes back, as the phone's do when it
+    // comes to the front: at most hourly, and only with a copy to tend (lib/show-on-global.ts). Loaded when used.
+    useEffect(() => {
+        if (!identity?.privateKey) return;
+        const tend = () => {
+            if (document.visibilityState === 'visible') void import('./lib/show-on-global').then((copies) => copies.tendCopiesSoon(identity)).catch(() => {});
+        };
+        tend();
+        document.addEventListener('visibilitychange', tend);
+        return () => document.removeEventListener('visibilitychange', tend);
+    }, [identity]);
     const steps = tour ? tourSteps('web', tour.node) : [];
     const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
     const tourTab = tourRunning ? steps[tourIndex]?.tab ?? null : null;

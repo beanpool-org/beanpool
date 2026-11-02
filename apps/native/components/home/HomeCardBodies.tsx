@@ -334,8 +334,12 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
                     />
                 );
             })}
-            <HomeLink id="events:all" colors={colors} text={t('All events')} a11y={t('All events, in the Market')}
-                onPress={() => router.push({ pathname: '/(tabs)/market', params: { filter: 'events' } })} testID="home-events-all" />
+            <View style={communityLinksStyle}>
+                <HomeLink id="events:calendar" colors={colors} text={t('Calendar')} a11y={t('Calendar')}
+                    onPress={() => router.push('/calendar')} testID="home-events-calendar" />
+                <HomeLink id="events:all" colors={colors} text={t('All events')} a11y={t('All events, in the Market')}
+                    onPress={() => router.push({ pathname: '/(tabs)/market', params: { filter: 'events' } })} testID="home-events-all" />
+            </View>
         </>
     );
 }

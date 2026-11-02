@@ -321,10 +321,22 @@ function tradeIdsOf(detail: string | null): string[] | null {
  */
 export function readHealthAccessLog(limit = 100, kind: 'balance' | 'trades' = 'balance') {
     const where = kind === 'balance' ? `action IN ${BALANCE_LOOKS}` : `action NOT IN ${BALANCE_LOOKS}`;
-    return (db.prepare(`SELECT id, actor_pubkey, action, subject_pubkey, detail, token_id, token_name, at FROM health_access_log WHERE ${where} ORDER BY at DESC, rowid DESC LIMIT ?`).all(Math.max(1, Math.min(500, limit))) as any[])
-        .map(r => ({
-            id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
-            subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null,
-            tradeIds: tradeIdsOf(r.detail), token: r.token_id ? { id: r.token_id, name: r.token_name ?? '' } : null, at: r.at,
-        }));
+    const rows = db.prepare(`SELECT id, actor_pubkey, action, subject_pubkey, detail, token_id, token_name, at FROM health_access_log WHERE ${where} ORDER BY at DESC, rowid DESC LIMIT ?`).all(Math.max(1, Math.min(500, limit))) as any[];
+
+    // Performance optimization (Bolt): batch fetch member callsigns in a single query
+    // rather than triggering an N+1 SQLite query for every log row via getMember().
+    const keysToFetch = new Set<string>();
+    for (const r of rows) {
+        if (r.actor_pubkey) keysToFetch.add(r.actor_pubkey);
+        if (r.subject_pubkey) keysToFetch.add(r.subject_pubkey);
+    }
+    const callsignsMap = new Map<string, string>(keysToFetch.size === 0 ? [] :
+        (db.prepare("SELECT public_key, callsign FROM members WHERE public_key IN (SELECT value FROM json_each(?))")
+            .all(JSON.stringify([...keysToFetch])) as any[]).map(m => [m.public_key, m.callsign]));
+
+    return rows.map(r => ({
+        id: r.id, actor: r.actor_pubkey, actorCallsign: callsignsMap.get(r.actor_pubkey) ?? null, action: r.action,
+        subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? callsignsMap.get(r.subject_pubkey) ?? null : null,
+        tradeIds: tradeIdsOf(r.detail), token: r.token_id ? { id: r.token_id, name: r.token_name ?? '' } : null, at: r.at,
+    }));
 }

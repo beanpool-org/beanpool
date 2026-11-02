@@ -126,7 +126,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
     useEffect(() => { top.current?.scrollIntoView?.({ block: 'start' }); }, [post.id]);
     const copy = eventCopyOf(post);
     return (
-        <div ref={top} data-testid="visitor-detail" className="p-4 max-w-lg mx-auto" style={{ paddingBottom: 'calc(var(--bottom-nav-offset, 0px) + 4rem)' }}>
+        <div ref={top} data-testid="visitor-detail" className="p-4 sm:p-6 w-full max-w-3xl mx-auto" style={{ paddingBottom: 'calc(var(--bottom-nav-offset, 0px) + 4rem)' }}>
             {onBack && (
                 <button
                     type="button"
@@ -150,60 +150,64 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                             </span>
                         )}
                     </div>
-                    <div className="p-4">
+                    <div className="p-4 md:p-6">
                         {photos.length === 0 && (
                             <div className="w-full aspect-[3/1] rounded-xl overflow-hidden mb-3">
                                 <CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="banner" />
                             </div>
                         )}
-                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight break-words">{post.title}</h2>
+                        <div className={photos.length > 0 ? "flex flex-col md:grid md:grid-cols-2 md:gap-6 md:items-start" : ""}>
+                            {photos.length > 0 && (
+                                <div data-testid="visitor-detail-photos" className="order-2 md:order-1 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto mb-4 md:mb-0 pb-2 snap-x snap-mandatory" style={{ overscrollBehaviorX: 'contain' }}>
+                                    {photos.map((photo, i) => (
+                                        <img
+                                            key={i}
+                                            src={photo}
+                                            alt={t('Photo {current} of {total}: {title}', { current: i + 1, total: photos.length, title: post.title })}
+                                            className="h-44 sm:h-64 md:h-72 w-auto md:w-full max-w-[85%] md:max-w-none rounded-xl object-cover border border-nature-200 dark:border-nature-800 shrink-0 snap-start"
+                                        />
+                                    ))}
+                                </div>
+                            )}
 
-                        {photos.length > 0 && (
-                            <div data-testid="visitor-detail-photos" className="flex gap-2 overflow-x-auto mb-4 pb-2 snap-x snap-mandatory" style={{ overscrollBehaviorX: 'contain' }}>
-                                {photos.map((photo, i) => (
-                                    <img
-                                        key={i}
-                                        src={photo}
-                                        alt={t('Photo {current} of {total}: {title}', { current: i + 1, total: photos.length, title: post.title })}
-                                        className="h-40 w-auto max-w-[85%] rounded-xl object-cover border border-nature-200 dark:border-nature-800 shrink-0 snap-start"
-                                    />
-                                ))}
+                            <div className={`order-1 ${photos.length > 0 ? "md:order-2" : ""} flex flex-col`}>
+                                <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight break-words">{post.title}</h2>
+
+                                {post.type === 'event' && (
+                                    <div data-testid="visitor-detail-when" className="mb-3">
+                                        <p className="m-0 text-lg font-black text-violet-800 dark:text-violet-200">{formatEventWhen(post)}</p>
+                                        {/* An online event has no place to hold back (the node sends visitors eventOnline): it says so, as its card does. */}
+                                        <p data-testid="visitor-detail-place" className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
+                                            {post.eventOnline
+                                                ? <><span aria-hidden="true">🌐 </span>{t('Online')}</>
+                                                : copy
+                                                    ? (copy.from ? copyFromLine(copy.from) : null)
+                                                    : <><span aria-hidden="true">📍 </span>{t(VISITOR_WORDS.placeAfterJoin)}</>}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {post.description && (
+                                    <p className="text-base text-nature-700 dark:text-nature-200 leading-relaxed mb-4 whitespace-pre-wrap break-words">{post.description}</p>
+                                )}
+
+                                {post.type !== 'event' && copy?.from && (
+                                    <p data-testid="visitor-detail-from" className="m-0 mb-2 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyCardLine(copy.from)}</p>
+                                )}
+                                {post.type !== 'event' && !copy && (
+                                    <p data-testid="visitor-detail-terms" className="m-0 mb-2 text-sm">
+                                        <span className="font-bold uppercase tracking-wide text-xs text-nature-500 dark:text-nature-400">{beans ? t('Price:') : t('In return:')}</span>{' '}
+                                        <span className="font-bold text-nature-900 dark:text-white">{visitorPriceText(post, beans)}</span>
+                                    </p>
+                                )}
+
+                                {distanceKm != null && (
+                                    <p data-testid="visitor-detail-distance" className="m-0 text-sm font-semibold text-nature-600 dark:text-nature-300">
+                                        {t('About {distance} away · area only', { distance: visitorKmText(distanceKm) })}
+                                    </p>
+                                )}
                             </div>
-                        )}
-
-                        {post.type === 'event' && (
-                            <div data-testid="visitor-detail-when" className="mb-3">
-                                <p className="m-0 text-lg font-black text-violet-800 dark:text-violet-200">{formatEventWhen(post)}</p>
-                                {/* An online event has no place to hold back (the node sends visitors eventOnline): it says so, as its card does. */}
-                                <p data-testid="visitor-detail-place" className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
-                                    {post.eventOnline
-                                        ? <><span aria-hidden="true">🌐 </span>{t('Online')}</>
-                                        : copy
-                                            ? (copy.from ? copyFromLine(copy.from) : null)
-                                            : <><span aria-hidden="true">📍 </span>{t(VISITOR_WORDS.placeAfterJoin)}</>}
-                                </p>
-                            </div>
-                        )}
-
-                        {post.description && (
-                            <p className="text-base text-nature-700 dark:text-nature-200 leading-relaxed mb-4 whitespace-pre-wrap break-words">{post.description}</p>
-                        )}
-
-                        {post.type !== 'event' && copy?.from && (
-                            <p data-testid="visitor-detail-from" className="m-0 mb-2 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyCardLine(copy.from)}</p>
-                        )}
-                        {post.type !== 'event' && !copy && (
-                            <p data-testid="visitor-detail-terms" className="m-0 mb-2 text-sm">
-                                <span className="font-bold uppercase tracking-wide text-xs text-nature-500 dark:text-nature-400">{beans ? t('Price:') : t('In return:')}</span>{' '}
-                                <span className="font-bold text-nature-900 dark:text-white">{visitorPriceText(post, beans)}</span>
-                            </p>
-                        )}
-
-                        {distanceKm != null && (
-                            <p data-testid="visitor-detail-distance" className="m-0 text-sm font-semibold text-nature-600 dark:text-nature-300">
-                                {t('About {distance} away · area only', { distance: visitorKmText(distanceKm) })}
-                            </p>
-                        )}
+                        </div>
                     </div>
                 </div>
             )}

@@ -271,6 +271,18 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(detail).toHaveTextContent('Bindarrabi Hall');
     });
 
+    it('item and event detail pages use full width on narrow screens and cap at readable max-w-3xl on wide screens', async () => {
+        render(<MarketplacePage identity={identity} />);
+        const open = await screen.findByRole('button', { name: 'Open event: Working bee' });
+        await act(async () => { open.click(); });
+        const detail = await screen.findByTestId('event-detail');
+        const container = detail.parentElement as HTMLElement;
+        const classes = container.className.split(/\s+/);
+        expect(classes).toContain('w-full');
+        expect(classes).toContain('max-w-3xl');
+        expect(classes).toContain('mx-auto');
+    });
+
     it('Pricing Guide chip on Market: choosing an item carries its price into the form via onComposer', async () => {
         vi.spyOn(api, 'getPricingGuideApi').mockResolvedValue({ items: [], config: {} } as any);
         const onComposer = vi.fn();

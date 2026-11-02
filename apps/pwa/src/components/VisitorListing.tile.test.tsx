@@ -31,4 +31,23 @@ describe('VisitorListing category tile', () => {
         const detail = screen.getByTestId('visitor-detail');
         expect(within(detail).getByTestId('category-tile')).toBeInTheDocument();
     });
+
+    it('VisitorPostDetail uses full width on narrow screens and caps at readable max-w-3xl on wide screens', () => {
+        render(<VisitorPostDetail post={postWithoutPhoto} beans={true} distanceKm={5} onBack={vi.fn()} onJoin={vi.fn()} />);
+        const detail = screen.getByTestId('visitor-detail');
+        const classes = detail.className.split(/\s+/);
+        expect(classes).toContain('w-full');
+        expect(classes).toContain('max-w-3xl');
+        expect(classes).toContain('mx-auto');
+    });
+
+    it('VisitorPostDetail with photos uses responsive two-column grid on wide screens', () => {
+        const postWithPhoto = { ...postWithoutPhoto, photos: ['/photo1.jpg'] };
+        render(<VisitorPostDetail post={postWithPhoto} beans={true} distanceKm={5} onBack={vi.fn()} onJoin={vi.fn()} />);
+        const photosEl = screen.getByTestId('visitor-detail-photos');
+        const container = photosEl.parentElement as HTMLElement;
+        const classes = container.className.split(/\s+/);
+        expect(classes).toContain('md:grid');
+        expect(classes).toContain('md:grid-cols-2');
+    });
 });

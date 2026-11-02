@@ -458,11 +458,13 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     };
 
     return (
-        <div data-testid="event-detail" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-violet-200 dark:border-violet-900/60 rounded-2xl overflow-hidden">
+        <div data-testid="event-detail" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-violet-200 dark:border-violet-900/60 rounded-2xl overflow-hidden md:flex md:flex-row">
             {p.photos && p.photos.length > 0 && (
-                <img src={p.photos[0]} alt={p.title} className="w-full max-h-56 object-cover bg-nature-100 dark:bg-nature-900" />
+                <div className="md:w-1/2 md:shrink-0">
+                    <img src={p.photos[0]} alt={p.title} className="w-full h-56 sm:h-72 md:h-full md:max-h-none object-cover bg-nature-100 dark:bg-nature-900" />
+                </div>
             )}
-            <div className="p-4 flex flex-col gap-3">
+            <div className="p-4 md:p-6 flex-1 flex flex-col gap-3 min-w-0">
                 <h2 className="m-0 min-w-0 flex flex-col gap-1">
                     <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 </h2>

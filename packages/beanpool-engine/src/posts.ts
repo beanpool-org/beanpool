@@ -394,10 +394,12 @@ export interface PostFilter {
      */
     sortByDistance?: boolean;
     /**
-     * The Market's own read (the route's plain read: no search, no tag, no radius, not one member's, not a shop's): the live
-     * pins that pass the read's other conditions come first, newest pin first, then the list in its order, nearest first
-     * or newest first (DESIGN-pinning-fable.md §2.9, §2.10; postRowsWithPins). A pin changes the order only: it passes
-     * every condition any row of the read passes, so nobody reads a post they weren't already shown. No other read has it.
+     * The Market's own read (the route's plain read: no search, no tag, not one member's, not a shop's, and no radius but
+     * the node's own): the live pins that pass the read's other conditions come first, newest pin first, then the list in
+     * its order, nearest first or newest first (DESIGN-pinning-fable.md §2.9, §2.10; postRowsWithPins). They come from
+     * anywhere: `near`'s radius, the node's, bounds the list below them. A pin changes the order only: it passes every
+     * condition any row of the read passes but the distance, and the post is public, so nobody reads a post they weren't
+     * already shown. No other read has it.
      */
     pinsFirst?: boolean;
     /**
@@ -1730,20 +1732,21 @@ function pinsOfRead(db: Db, where: string, whereParams: unknown[]): string[] {
  * an expression there sorts every matching row, full row and trade counts included, where the plain read walks
  * idx_posts_updated_at and stops at its page; and a nearest-first page read in circles never meets a pin outside them. So
  * the pins are read by id, and the page is filled below them from the read as it always was, without them. `read` is that
- * read, for a `where` and a page. The pins count towards the page, so `offset` runs on as a client pages.
+ * read, for a `where` and a page; `pinned` says this is the read of the pins, which no radius bounds. The pins count towards
+ * the page, so `offset` runs on as a client pages.
  */
 function postRowsWithPins(pins: string[], where: string, whereParams: unknown[], filter: PostFilter,
-    read: (where: string, whereParams: unknown[], filter: PostFilter) => any[]): any[] {
+    read: (where: string, whereParams: unknown[], filter: PostFilter, pinned: boolean) => any[]): any[] {
     const offset = filter.offset || 0;
     const onPage = filter.limit ? pins.slice(offset, offset + filter.limit) : pins.slice(offset);
     const held = onPage.length === 0 ? [] : read(`${where} AND p.id IN (SELECT value FROM json_each(?))`,
-        [...whereParams, JSON.stringify(onPage)], { ...filter, limit: undefined, offset: undefined });
+        [...whereParams, JSON.stringify(onPage)], { ...filter, limit: undefined, offset: undefined }, true);
     const byId = new Map(held.map(row => [row.id as string, row]));
     const first = onPage.flatMap(id => byId.get(id) ?? []);
     const room = filter.limit ? filter.limit - onPage.length : undefined;
     if (room === 0) return first;
     return [...first, ...read(`${where} AND p.id NOT IN (SELECT value FROM json_each(?))`, [...whereParams, JSON.stringify(pins)],
-        { ...filter, limit: room, offset: Math.max(0, offset - pins.length) })];
+        { ...filter, limit: room, offset: Math.max(0, offset - pins.length) }, false)];
 }
 
 /** The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks). The nearby set and
@@ -2270,7 +2273,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         rows = postRowsForHeal(db, where, params, heal, filter);
     } else if (pins.length > 0) {
         rows = postRowsWithPins(pins, where, params, filter!, near
-            ? (w, p, f) => rowsNear(db, near, w, p, f)
+            ? (w, p, f, pinned) => rowsNear(db, pinned ? { lat: near.lat, lng: near.lng } : near, w, p, f)
             : (w, p, f) => db.prepare(`${postRowSelect(f)}
         WHERE 1=1${w}${recentOrder(f)}${f.limit ? ' LIMIT ? OFFSET ?' : ''}`).all(...p, ...(f.limit ? [f.limit, f.offset || 0] : [])) as any[]);
     } else if (near) {

@@ -592,10 +592,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A member's copy draws its from-line from the directory (engine/event-copy.ts), and a row's change moves no listing.
     const directoryPart = switches.directoryMirror ? `:dir-${directoryStamp()}` : '';
     // The Market's own read leads with the live pins (DESIGN-pinning-fable.md §2.9, §2.10): not a search or a tag, one
-    // member's or one shop's listings, a radius, a group's or a person's, or a sync. Their tag holds them, so a pin that ends
-    // by the clock, which moves no row and no version, ends the 304 that would confirm it on top. With none, the tag is as it was.
+    // member's or one shop's listings, a group's or a person's, or a sync, and no radius a member chose. The radius a node
+    // that syncs by area names itself (features.nearbyListings) is no member's narrowing: it is what the web's Market reads
+    // by default, around the member's area (apps/pwa lib/listings-near.ts, `from: 'area'`), and a pin reaches a reader
+    // anywhere. A member's Distance goes out a tenth wider than they picked, so it isn't this one. The read's tag holds the
+    // pins, so a pin that ends by the clock, which moves no row and no version, ends the 304 that would confirm it on top.
+    // With none, the tag is as it was.
+    const nodesOwnRadius = radiusKm === undefined || (switches.nearbyListings && radiusKm === nearbyListingsLimits().radiusKm);
     const pinsFirst = !id && !ids && !sync && !updatedAfter && !q && !tags && !free && !author && !shopId && !lendableOnly && !targetGroupId
-        && !assignedTo && radiusKm === undefined && (audienceScope === undefined || audienceScope === 'public') && ctx.query.online === undefined;
+        && !assignedTo && nodesOwnRadius && (audienceScope === undefined || audienceScope === 'public') && ctx.query.online === undefined;
     const pinsNow = pinsFirst ? livePinIds(db) : [];
     const pinsPart = pinsNow.length > 0 ? `:pins-${pinsNow.join(',')}` : '';
     const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}${pinsPart}`;

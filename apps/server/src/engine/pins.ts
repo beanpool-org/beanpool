@@ -92,21 +92,20 @@ export function pinPost(postId: unknown, actor: string, days: unknown, now: numb
     assertNotMuted(actor, now);
     const nowIso = new Date(now).toISOString();
     const until = new Date(now + days * DAY_MS).toISOString();
-    let tidied = 0;
     const done = db.transaction((): PinAnswer => {
         const post = pinRow(postId, nowIso);
         if (!post) throw new PinRefusal(404, 'pin_not_found', PIN_NOT_FOUND);
         if (post.origin_node !== null) throw new PinRefusal(400, 'pin_not_local', PIN_NOT_LOCAL);
         if ((post.audience_scope ?? 'public') !== 'public') throw new PinRefusal(400, 'pin_not_public', PIN_NOT_PUBLIC);
         if (post.on_board !== 1) throw new PinRefusal(400, 'pin_ended', PIN_ENDED);
-        tidied = clearEndedPins(db, nowIso);
+        clearEndedPins(db, nowIso);
         const others = (db.prepare('SELECT COUNT(*) AS n FROM posts WHERE pinned_until IS NOT NULL AND id != ?').get(post.id) as { n: number }).n;
         if (others >= PINS_MAX) throw new PinRefusal(409, 'pins_full', PINS_FULL);
         db.prepare('UPDATE posts SET pinned_until = ?, pinned_at = ?, updated_at = ? WHERE id = ?').run(until, nowIso, nowIso, post.id);
         return { postId: post.id, pinnedUntil: until, pinnedAt: nowIso, changed: true };
     }).immediate();
-    // Refused, the transaction took its tidying back with it: nothing moved.
-    if (done.changed || tidied > 0) bumpPostsVersion();
+    // Only here: a refusal takes the tidying back with the rest of the transaction, so it moved nothing.
+    bumpPostsVersion();
     return done;
 }
 

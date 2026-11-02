@@ -146,6 +146,9 @@ async function main(): Promise<void> {
         return { ...r, ids: (Array.isArray(r.body) ? r.body : []).map((p: any) => p.id as string), rows: (Array.isArray(r.body) ? r.body : []) as any[] };
     };
 
+    const info = await localFetch(`${BASE}/api/community/info`);
+    assert((await info.json() as any).features?.pins === true, 'a node says it takes pins, so an app offers one only there');
+
     // ── 1. Who ─────────────────────────────────────────────────────────────────────────────────
     console.log('── 1. Who may pin ──');
     const a = await post(author);

@@ -3,7 +3,9 @@
  * over HTTP through the real middleware, on the global profile.
  *
  *  1. Nearest first: the live pins lead wherever they are, in the circles' read and past it, and the rest of the page is
- *     the page it was, none repeated. Within a radius a far pin is not there and a near one leads nothing.
+ *     the page it was, none repeated. So they do within the node's own radius, what the web's Market reads by default,
+ *     the list below them still bounded by it. Within a radius a member chose, a far pin is not there and a near one
+ *     leads nothing.
  *  2. Nothing of a place changes: a visitor reads a pin at its area and a whole-km distance, measured from the area; a member
  *     reads it at its neighbourhood, measured from there, as they read it unpinned. The pin's stamps go to a visitor; no name.
  *  3. A member's set holds the live pins wherever they are, kept past the phone's cap (`tied`), under the listing's own rules:
@@ -22,6 +24,7 @@ process.env.NODE_PROFILE = 'global';
 import crypto from 'node:crypto';
 import { getNearbySet, setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { nearbyListingsLimits } from './config/node-profile.js';
 import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
@@ -126,8 +129,14 @@ async function main(): Promise<void> {
     assert([...firstHalf.ids, ...second.ids].join() === led.ids.join(), `pages run on through it (${firstHalf.ids.length}, ${second.ids.length})`);
     const deep = await page(sydney, `${fromSydney}&limit=50`);
     assert(deep.ids[0] === farPin && new Set(deep.ids).size === deep.ids.length && deep.ids.length === 13, `one pass past the circles: first, once (${deep.ids.length} rows)`);
+    const nodeRadius = nearbyListingsLimits().radiusKm;
+    const defaultRead = await page(sydney, `${fromSydney}&radiusKm=${nodeRadius}&sort=distance&limit=10`);
+    assert(defaultRead.ids[0] === farPin && defaultRead.ids.slice(1).join() === before.ids.slice(0, 9).join() && defaultRead.rows[0].distanceKm > nodeRadius,
+        `within the node's own radius, the web's default read, a far pin leads and the list below it is the list (first is ${defaultRead.ids[0]})`);
+    const defaultPage2 = await page(sydney, `${fromSydney}&radiusKm=${nodeRadius}&sort=distance&limit=10&offset=10`);
+    assert(!defaultPage2.ids.includes(farPin) && defaultPage2.rows.every(p => p.distanceKm <= nodeRadius), `and only it comes from past the radius (${defaultPage2.ids.length} on the next page)`);
     const within = await page(sydney, `${fromSydney}&radiusKm=50&limit=50`);
-    assert(within.status === 200 && !within.ids.includes(farPin), 'within a radius a far pin is not there');
+    assert(within.status === 200 && !within.ids.includes(farPin), 'within a radius a member chose, a far pin is not there');
     await unpin(farPin);
     const edge = await post(sydneyAuthor, { lat: SYDNEY.lat + 0.3, lng: SYDNEY.lng });
     await pin(edge);

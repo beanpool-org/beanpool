@@ -4,6 +4,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { listingCopyHint } from '@beanpool/core';
 import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestionsTick } from './ShowOnGlobalRow';
 import { useCommunityInfo } from '../lib/features';
 import * as copies from '../lib/show-on-global';
@@ -99,6 +100,12 @@ describe('the composer\'s tick', () => {
         document.body.innerHTML = '';
         tick({ listing: true, need: true });
         expect(document.body.textContent).toContain('To answer it, they ask to join.');
+    });
+
+    it('says of a listing what holds with the door\'s tick on or off, as core has it', () => {
+        tick({ listing: true });
+        expect(document.body.textContent).toContain(listingCopyHint());
+        expect(document.body.textContent).not.toContain('Not your name');
     });
 
     it('a community that names no global has no tick, nor the global community itself', () => {

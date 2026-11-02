@@ -3,10 +3,10 @@
  * in English and in a language with its machine drafts. A row with no line draws no door.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setLanguage } from '../words.js';
-import { copyAsk, copyCardLine, copyDoorButton, copyDoorLine, copyFromLine, eventCopyColumn, eventCopyOf, type ShownFromLine } from '../event-copy.js';
+import { listingCopyHint, copyAsk, copyCardLine, copyDoorButton, copyDoorLine, copyFromLine, eventCopyColumn, eventCopyOf, type ShownFromLine } from '../event-copy.js';
 
 const FROM: ShownFromLine = { host: 'mullum.example.org', postId: 'p1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' };
 const es = JSON.parse(readFileSync(fileURLToPath(new URL('../../words/es.json', import.meta.url)), 'utf8'));
@@ -56,6 +56,27 @@ describe('the door\'s words', () => {
         expect(copyFromLine(FROM)).toBe('de Mullumbimby');
         expect(copyDoorLine({ from: FROM })).toBe('Para ir, pide unirte a Mullumbimby');
         expect(copyDoorLine({ from: null })).not.toContain('This event');
+    });
+
+    it('a listing\'s hint holds with the door\'s tick on or off: it never says flatly that no name shows', () => {
+        for (const need of [false, true]) {
+            expect(listingCopyHint(need)).toContain('not your name unless you take questions about it');
+            expect(listingCopyHint(need)).not.toContain('Not your name');
+        }
+        expect(listingCopyHint()).toContain('To buy or take it');
+        expect(listingCopyHint(true)).toContain('To answer it');
+    });
+
+    it('a listing\'s hint is in every language, and an Offer\'s and a Need\'s differ there too', () => {
+        const dir = fileURLToPath(new URL('../../words/', import.meta.url));
+        const langs = readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'en.sources.json');
+        expect(langs).toHaveLength(24);
+        for (const file of langs) {
+            setLanguage(file.slice(0, -5), [JSON.parse(readFileSync(`${dir}${file}`, 'utf8'))]);
+            expect(listingCopyHint(), file).not.toContain('Anyone there');
+            expect(listingCopyHint(true), file).not.toContain('Anyone there');
+            expect(listingCopyHint(true), file).not.toBe(listingCopyHint());
+        }
     });
 });
 

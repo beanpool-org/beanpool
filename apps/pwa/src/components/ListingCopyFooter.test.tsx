@@ -60,7 +60,9 @@ describe('a reader', () => {
         vi.mocked(api.createConversationApi).mockRejectedValue(new Error('Not now'));
         render(<ListingCopyFooter post={post} copy={open} reader={ME} />);
         fireEvent.click(screen.getByTestId('listing-copy-ask-button'));
-        expect((await screen.findByRole('alert')).textContent).toBe('Not now');
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toBe('Not now');
+        expect(alert.className).toContain('text-bp-ink-danger');
     });
 });
 

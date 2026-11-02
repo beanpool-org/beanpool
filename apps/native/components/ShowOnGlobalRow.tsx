@@ -24,10 +24,6 @@ import type { HomeEvent } from '../utils/show-on-global';
 
 export const showOnGlobalLabel = () => t('Also show this on the global community');
 export const showOnGlobalHint = () => t("Anyone there can see it, with its times, its rough area and this community's name. Not your name, the place or your note. To go, they ask to join.");
-/** `need`: a Need is answered, not bought (its line on a copy, @beanpool/core copyPriceLine). */
-export const showListingOnGlobalHint = (need = false) => need
-    ? t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To answer it, they ask to join.")
-    : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To buy or take it, they ask to join.");
 const joinFirstWords = () => t('Join the global community to show this there');
 
 /**
@@ -88,7 +84,7 @@ const unreachable = () => Alert.alert(showOnGlobalLabel(), t("The global communi
  */
 export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, listing = false, need = false }: { enabled: boolean; online?: boolean; checked: boolean; onChange: (next: boolean) => void; listing?: boolean; need?: boolean }) {
     const styles = useStyles(makeStyles);
-    const hint = listing ? showListingOnGlobalHint(need) : showOnGlobalHint();
+    const hint = listing ? listingCopyHint(need) : showOnGlobalHint();
     const { offer, ask } = useOffer(enabled);
     const [busy, setBusy] = useState(false);
     // The form outlives its sheet: an answer landing once this row has gone would tick the next event, against "off, every time".
@@ -254,7 +250,7 @@ export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event
                     ? <Text style={styles.title}>{!resting ? t('Shown on the global community')
                         : listing ? t("It comes down while this is off the board here, and goes back up when it's on again.")
                         : t("It comes down while you're on holiday, and goes back up when you're back.")}</Text>
-                    : <Text style={styles.hint}>{listing ? showListingOnGlobalHint(event.type === 'need') : showOnGlobalHint()}</Text>}
+                    : <Text style={styles.hint}>{listing ? listingCopyHint(event.type === 'need') : showOnGlobalHint()}</Text>}
                 <Pressable onPress={act} disabled={busy} style={[styles.action, busy && styles.asking]} accessibilityRole="button" accessibilityState={{ busy }} testID="show-on-global-act">
                     <Text style={styles.link}>{shown ? t('Stop showing') : showOnGlobalLabel()}</Text>
                 </Pressable>

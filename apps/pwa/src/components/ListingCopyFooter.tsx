@@ -25,7 +25,7 @@ export function ListingCopyFooter({ post, copy, reader, onOpenChat }: Props) {
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState<string | null>(null);
     const [closedHere, setClosedHere] = useState(false);
-    const failure = failed && <p role="alert" className="m-0 mt-2 text-sm text-red-700 dark:text-red-300 break-words">{failed}</p>;
+    const failure = failed && <p role="alert" className="m-0 mt-2 text-sm text-bp-ink-danger break-words">{failed}</p>;
     const run = async (step: () => Promise<void>) => {
         setBusy(true);
         setFailed(null);

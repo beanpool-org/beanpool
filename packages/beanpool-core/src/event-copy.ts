@@ -127,6 +127,13 @@ export function copyAsk(copy: EventCopy | null, name: unknown, key: unknown): { 
     return { name, key };
 }
 
+/**
+ * What of a listing shows on a copy. The door's tick sits right under this, so it holds with the tick on or off. `need`: a Need is
+ * answered, not bought ({@link copyPriceLine}).
+ */
+export const listingCopyHint = (need = false) => need
+    ? t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.")
+    : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.");
 export const takeQuestionsLabel = () => t('Take questions about this on the global community');
 export const takeQuestionsHint = () => t('Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.');
 export const askLine = (name: string) => t('{name} takes questions about this', { name });

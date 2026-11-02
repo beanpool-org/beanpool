@@ -64,10 +64,11 @@ vi.mock('../../components/PostTagChips', () => ({ PostTagChips: () => null }));
 vi.mock('../../components/ReportReasonBox', () => ({ ReportReasonBox: () => null }));
 vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: calls.stop, stopLaterLine: () => 'It comes down later', takeQuestions: calls.take, questionsLaterLine: () => 'It stops later' }));
 
+import { listingCopyHint } from '@beanpool/core';
 import { EventCopyDoor } from '../../components/EventCopyDoor';
 import { ListingCopyDetail } from '../../components/ListingCopy';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
-import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, listingForCopy, showEventOnGlobal, showListingOnGlobalHint, showOnGlobalHint, useTakeQuestionsTick } from '../../components/ShowOnGlobalRow';
+import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, listingForCopy, showEventOnGlobal, showOnGlobalHint, useTakeQuestionsTick } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
 import { deletePost } from '../db';
 
@@ -401,7 +402,8 @@ describe('a copy of an Offer or a Need', () => {
 
     it('the tick says what goes of a listing, not of an event', async () => {
         await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: () => {}, listing: true }));
-        expect(byId('show-on-global-tick')!.textContent).toContain(showListingOnGlobalHint());
+        expect(byId('show-on-global-tick')!.textContent).toContain(listingCopyHint());
+        expect(byId('show-on-global-tick')!.textContent).not.toContain('Not your name');
         expect(byId('show-on-global-tick')!.textContent).not.toContain('your note');
     });
 

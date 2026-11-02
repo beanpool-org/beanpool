@@ -13,7 +13,7 @@
  * the listing is to be shown. It asks global nothing until it is tapped either.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listingFreeTags, postTagsOf, questionsLaterLine, t, takeQuestionsHint, takeQuestionsLabel, type HomeEvent } from '@beanpool/core';
+import { listingCopyHint, listingFreeTags, postTagsOf, questionsLaterLine, t, takeQuestionsHint, takeQuestionsLabel, type HomeEvent } from '@beanpool/core';
 import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink } from '../lib/global-entry';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -22,10 +22,6 @@ import { askGlobalStanding, copyPairOf, forgetGlobalStanding, hostHere, readGlob
 
 export const showOnGlobalLabel = () => t('Also show this on the global community');
 export const showOnGlobalHint = () => t("Anyone there can see it, with its times, its rough area and this community's name. Not your name, the place or your note. To go, they ask to join.");
-/** `need`: a Need is answered, not bought (its line on a copy, @beanpool/core copyPriceLine). */
-export const showListingOnGlobalHint = (need = false) => need
-    ? t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To answer it, they ask to join.")
-    : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To buy or take it, they ask to join.");
 const joinFirstWords = () => t('Join the global community to show this there');
 const sameAccountWords = () => t('Choose "I have my 12 words" there, so it stays one account.');
 
@@ -108,7 +104,7 @@ function JoinDoor({ href, onTap }: { href: string | null; onTap: () => void }) {
 export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, identity, listing = false, need = false }: {
     enabled: boolean; online?: boolean; checked: boolean; onChange: (next: boolean) => void; identity: BeanPoolIdentity | null | undefined; listing?: boolean; need?: boolean;
 }) {
-    const hint = listing ? showListingOnGlobalHint(need) : showOnGlobalHint();
+    const hint = listing ? listingCopyHint(need) : showOnGlobalHint();
     const { offer, global, ask, wentToDoor } = useOffer(enabled || online, identity);
     const [busy, setBusy] = useState(false);
     // The form outlives this row: an answer landing once it has gone would tick the next post, against "off, every time".
@@ -234,7 +230,7 @@ export function ShowOnGlobalHostRow({ post, identity, enabled, listing = false }
                 ? <p className="m-0 text-sm font-bold text-nature-800 dark:text-oat-50 leading-snug break-words">{!resting ? t('Shown on the global community')
                     : listing ? t("It comes down while this is off the board here, and goes back up when it's on again.")
                     : t("It comes down while you're on holiday, and goes back up when you're back.")}</p>
-                : <p className="m-0 text-sm text-nature-950 dark:text-nature-100 leading-snug break-words">{listing ? showListingOnGlobalHint(post.type === 'need') : showOnGlobalHint()}</p>}
+                : <p className="m-0 text-sm text-nature-950 dark:text-nature-100 leading-snug break-words">{listing ? listingCopyHint(post.type === 'need') : showOnGlobalHint()}</p>}
             <button type="button" onClick={() => void act()} disabled={busy} data-testid="show-on-global-act"
                 className={`min-h-[44px] text-left text-sm font-bold text-nature-800 dark:text-oat-50 underline break-words cursor-pointer ${busy ? 'opacity-60' : ''}`}>
                 {shown ? t('Stop showing') : showOnGlobalLabel()}

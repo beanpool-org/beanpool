@@ -1115,7 +1115,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
 
             it('draws nothing at the library\'s opacity 0, and draws with none given, as the new-listing map gives none', async () => {
                 const area = { lat: AT.lat, lng: AT.lng, radiusKm: 5 };
-                const render = (opacity?: number) => act(async () => { root.render(createElement(MapAreaRing, { area, darkMap: false, opacity })); });
+                const render = (opacity?: number) => act(async () => { root.render(createElement(MapAreaRing, { area, darkMap: false, opacity }) as any); });
                 await render(0);
                 expect(host.querySelectorAll('[data-ring]')).toHaveLength(0);
                 await render();

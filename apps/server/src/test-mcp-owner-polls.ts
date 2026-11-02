@@ -669,6 +669,15 @@ async function main(): Promise<void> {
         clearBoard();
         const plainPoll = await tool('create_poll', poll({ question: 'No Other unless asked?' }));
         assert(!structured(await results(structured(plainPoll)?.postId))?.options?.some((o: any) => o.other), 'a poll the owner did not ask Other of has none');
+        const addLater = structured(plainPoll)?.postId as string;
+        const added = await tool('update_post', { post_id: addLater, other: true });
+        const addedRead = structured(await results(addLater));
+        assert(!added.isError && addedRead?.options?.some((o: any) => o.other === true) && addedRead.options.length === 3, 'update_post can offer Other before the first vote');
+        const addedAnswers = await tool('update_post', { post_id: addLater, options: ['Saturday', 'Sunday', 'Monday'] });
+        const stillOther = structured(await results(addLater));
+        assert(!addedAnswers.isError && stillOther?.options?.length === 4 && stillOther.options[3].other === true && stillOther.options[3].id !== addedRead.options[2].id, 'a new list of answers keeps Other, under a new id');
+        const taken = await tool('update_post', { post_id: addLater, other: false });
+        assert(!taken.isError && !structured(await results(addLater))?.options?.some((o: any) => o.other), 'and it can take Other away');
         clearBoard();
         const notFlag = await tool('create_poll', poll({ question: 'Other as text?', other: 'yes' }));
         assert(notFlag.isError === true, 'other is true or false');

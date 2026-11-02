@@ -343,6 +343,25 @@ async function main() {
         assert((db.prepare('SELECT other_answer_id FROM poll_votes WHERE post_id = ?').get(id) as any).other_answer_id === null, 'and the link');
     }
 
+    console.log('── switching Other, before the first vote ──');
+    {
+        const p = await makePoll({});
+        const id = p.body.post.id as string;
+        const patch = (updates: Record<string, unknown>) => post('/api/marketplace/posts/update', { id, authorPublicKey: maker.pubKeyHex, ...updates }, maker);
+        const read = async () => first((await get(`/api/marketplace/posts?id=${id}`, maker)).body);
+        await patch({ pollOther: true });
+        const on = await read();
+        const added = on.pollOptions.find((o: any) => o.other);
+        assert(!!added && on.pollOptions.length === 3 && !on.pollOptions.some((o: any) => o.id === 'opt_1'), 'Other can be added: every answer takes a new id');
+        await patch({ pollOptions: [{ id: 'n1', text: 'Trains' }, { id: 'n2', text: 'Beans' }] });
+        const edited = await read();
+        const kept = edited.pollOptions.find((o: any) => o.other);
+        assert(!!kept && kept.id !== added.id && edited.pollOptions.length === 3, 'a new list of answers keeps Other, under a new id');
+        await patch({ pollOther: false });
+        const off = await read();
+        assert(!off.pollOptions.some((o: any) => o.other) && off.pollOptions.length === 2, 'and it can be taken away');
+    }
+
     console.log('── a poll changed after a vote can\'t turn an anonymous Other into a named one ──');
     {
         const p = await makePoll({ pollOther: true });
@@ -403,6 +422,9 @@ async function main() {
 
     console.log('── a standby\'s copy ──');
     {
+        const openOne = await makePoll({ pollOther: true, pollOpenVote: true });
+        const standbyOpenPoll = openOne.body.post.id as string;
+        await vote(standbyOpenPoll, openOne.body.post.pollOptions.find((o: any) => o.other).id, typist, WORDS_OPEN);
         const payload = await exportSyncState('test-node') as any;
         const copied = payload.posts.find((p: any) => p.id === pollId);
         assert(Array.isArray(copied?.pollAnswers) && copied.pollAnswers.length === 3, 'a poll carries its answers to a standby');
@@ -414,6 +436,9 @@ async function main() {
         assert(raw.includes(WORDS_2), 'the rest of the words go, since a standby holds the whole node');
         const ballots = payload.pollVotes.filter((v: any) => v.postId === pollId);
         assert(ballots.length === 3 && ballots.every((b: any) => b.optionId === 'sealed' && !b.otherAnswerId && b.signature === ''), 'and its ballots go as they are: no choice');
+        // An open vote's link to its words goes too, or a changed vote after a take-over leaves the old words behind.
+        const openBallot = payload.pollVotes.find((v: any) => v.postId === standbyOpenPoll);
+        assert(typeof openBallot?.otherAnswerId === 'string' && openBallot.otherAnswerId.length === 32, 'an open vote carries its link to its words');
         // The importer writes them back: test-takeover-parity, on a standby that takes over.
     }
 

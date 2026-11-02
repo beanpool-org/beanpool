@@ -39,7 +39,7 @@ Polls are in the Market. Tap **Polls** in the top row to see only polls.
 - The card shows how many chose each answer.
 - If a poll offers **Other**, tap it, type a short line (at most 140 characters) and tap **Send my answer**. Don't put your name.
 
-On an anonymous poll that offers Other, your answer is final, whichever you choose. Nothing links it to you, so nothing can find it to change it, and the card says only that you have answered, not which. A new phone or another device won't know which either.
+On an anonymous poll that offers Other, your answer is final, whichever you choose. Nothing links it to you, so nothing can find it to change it. The phone you answered on remembers which you chose. The web app and any other device can say only that you have answered.
 
 ## Who can see how you voted
 

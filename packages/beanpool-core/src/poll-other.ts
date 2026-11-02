@@ -5,8 +5,8 @@
  * the words reach only the poll's maker and the owners (apps/server engine/poll-other.ts).
  *
  * An anonymous poll that offers Other is sealed: the node keeps that a member has answered and, with nothing leading from one
- * to the other, what was answered. So the answer is final (nothing can find it to change it), and neither the node nor the
- * member's other devices can say which it was. Its words show only once it has closed, in no order of arrival, so a person
+ * to the other, what was answered. So the answer is final (nothing can find it to change it), and the node can't say which it
+ * was: only the phone it was given on remembers, in its own cache. Its words show only once it has closed, in no order of arrival, so a person
  * who was seen answering at a certain moment can't be matched to a line.
  */
 

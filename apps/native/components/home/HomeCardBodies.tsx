@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -390,7 +390,8 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
     const word = p.type === 'need' ? t('NEED') : t('OFFER');
     const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? beansAmount(p.credits) : null;
     const far = formatDistance(p.distanceKm);
-    const facts = [price, far].filter(Boolean).join(' · ');
+    const copy = eventCopyOf(p);
+    const facts = [copy ? copyPriceLine(copy) : price, far].filter(Boolean).join(' · ');
     const category = categoryLabel(p.category);
     const values = { title: sentence(p.title), facts, category };
     const a11y = p.type === 'need'

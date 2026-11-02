@@ -1218,9 +1218,13 @@ function postFreeTags(rp: any): [string] {
     return [storedFreeTags(copiedFreeTags(rp.freeTags))];
 }
 
-/** A member's copy of an event from their own community (engine/event-copy.ts), plain assignment: none said is none. */
-function postShownFrom(rp: any): [string | null, string | null] {
-    return [typeof rp.shownFromHost === 'string' ? rp.shownFromHost : null, typeof rp.shownFromPostId === 'string' ? rp.shownFromPostId : null];
+/** A member's copy from their own community (engine/event-copy.ts), plain assignment: none said is none. */
+function postShownFrom(rp: any): [string | null, string | null, string | null] {
+    return [
+        typeof rp.shownFromHost === 'string' ? rp.shownFromHost : null,
+        typeof rp.shownFromPostId === 'string' ? rp.shownFromPostId : null,
+        typeof rp.shownPrice === 'string' ? rp.shownPrice : null,
+    ];
 }
 
 // members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
@@ -1997,8 +2001,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2108,6 +2112,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         free_tags = ?,
                         shown_from_host = ?,
                         shown_from_post_id = ?,
+                        shown_price = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,

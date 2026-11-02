@@ -2,10 +2,10 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-23",
+    "updated": "2026-11-02",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "শিম",
@@ -802,5 +802,9 @@
   "Transferring {n} B to {name}": "{name}-কে {n} B স্থানান্তর করা হচ্ছে",
   "That deal is done.": "সেই লেনদেন সম্পন্ন হয়েছে।",
   "That request was declined.": "সেই অনুরোধ প্রত্যাখ্যান করা হয়েছে।",
-  "That deal was cancelled.": "সেই লেনদেন বাতিল করা হয়েছে।"
+  "That deal was cancelled.": "সেই লেনদেন বাতিল করা হয়েছে।",
+  "{price} in {community} · You can't answer this until {community} welcomes you.": "{community}-এ {price} · {community} আপনাকে স্বাগত না জানানো পর্যন্ত আপনি এর উত্তর দিতে পারবেন না।",
+  "{price} in another community · You can't answer this here.": "অন্য সম্প্রদায়ে {price} · আপনি এখানে এর উত্তর দিতে পারবেন না।",
+  "You can't answer this until {community} welcomes you.": "{community} আপনাকে স্বাগত না জানানো পর্যন্ত আপনি এর উত্তর দিতে পারবেন না।",
+  "This is from another community, so you can't answer it here.": "এটি অন্য সম্প্রদায়ের, তাই আপনি এখানে এর উত্তর দিতে পারবেন না।"
 }

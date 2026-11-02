@@ -140,13 +140,18 @@ export interface MarketplacePost {
     photos?: string[];
     originNode?: string;
     /**
-     * A member's copy of an event from their own community (DESIGN-list-on-global-fable.md §3; apps/server
+     * A member's copy of an event, an Offer or a Need from their own community (DESIGN-list-on-global-fable.md §3; apps/server
      * engine/event-copy.ts). The stored columns, read by that file and on the standby copy's payload; no read of a post
      * by a member or a visitor sends either: `shownCopy` and `shownFrom` take their place.
      */
     shownFromHost?: string;
     shownFromPostId?: string;
-    /** This post is such a copy: it shows no author and takes no RSVP. */
+    /**
+     * An Offer's or Need's price at home, as words for a reader to draw ('<beans> <unit>', @beanpool/core copyPriceOf). Never a
+     * price here: `credits` stays 0, and it can't be bought, taken or compared.
+     */
+    shownPrice?: string;
+    /** This post is such a copy: it shows no author, and takes no RSVP and no deal. */
     shownCopy?: boolean;
     /** Where it is from, drawn from the directory row global holds for it at each read, never from the phone's words. */
     shownFrom?: ShownFrom;
@@ -822,7 +827,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         lng: row.lng,
         photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at, row.audience_scope)),
         originNode: row.origin_node,
-        ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}) } : {}),
+        ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}), ...(row.shown_price ? { shownPrice: row.shown_price } : {}) } : {}),
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
         // what an absent value means — on a database upgraded before the column existed, it means "stays
         // home", and that is the answer the poster is entitled to.
@@ -959,7 +964,7 @@ export const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (
 const ENTERPRISE_ON_BOARD_BY_KEY_SQL = `p.author_pubkey NOT IN (SELECT public_key FROM members WHERE NOT (${ENTERPRISE_ON_BOARD_SQL.replace(/\bm\./g, '')}))`;
 
 /**
- * A member's copy of an event (apps/server engine/event-copy.ts) shows no author, so no read of it goes by who wrote it: a
+ * A member's copy (apps/server engine/event-copy.ts) shows no author, so no read of it goes by who wrote it: a
  * list that changed with its author's row would say whose it is. A reader's own block list did: blocking half the suspects
  * each round found a copy's author among 8 in 3 rounds (review of #2711). So every rule a listing takes from its author
  * stops at a copy: a block, a holiday, a paused account, a new name or face. The board's rule costs a copy nothing: it
@@ -2474,8 +2479,9 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
-    // A copy says it is one, and where from when the directory says so. The stored host is never a reader's.
-    shownCopy: 'keep', shownFrom: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop',
+    // A copy says it is one, where from when the directory says so, and its price at home in words. The stored host is never a
+    // reader's.
+    shownCopy: 'keep', shownFrom: 'keep', shownPrice: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop',
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',

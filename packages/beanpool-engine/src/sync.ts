@@ -1050,9 +1050,10 @@ function postOfRow(row: any): MarketplacePost {
         ...(typeof row.tags === 'string' && row.tags ? { tags: row.tags.split(' ').filter(Boolean) } : {}),
         // The tags its author typed, as the main server holds them (apps/server engine/sync.ts postFreeTags): none said is none.
         ...(freeTagsOf(row.free_tags).length > 0 ? { freeTags: freeTagsOf(row.free_tags) } : {}),
-        // A member's copy of an event from their own community, as the main server holds it (apps/server engine/sync.ts postShownFrom).
+        // A member's copy from their own community, as the main server holds it (apps/server engine/sync.ts postShownFrom).
         ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host } : {}),
         ...(row.shown_from_post_id != null ? { shownFromPostId: row.shown_from_post_id } : {}),
+        ...(row.shown_price != null ? { shownPrice: row.shown_price } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

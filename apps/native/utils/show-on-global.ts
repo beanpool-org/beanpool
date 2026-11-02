@@ -1,10 +1,12 @@
 /**
  * "Also show this on the global community" (DESIGN-list-on-global-fable.md §3-§4, reworked by DESIGN-reaching-across-fable.md;
- * slice G2′): the member's own copy of their in-person event, posted by this phone to the global community with their own
- * key. The phone is the only link: their community's server does nothing and learns nothing, and global calls nobody.
+ * slices G2′ and G1′): the member's own copy of their in-person event, Offer or Need, posted by this phone to the global
+ * community with their own key. The phone is the only link: their community's server does nothing and learns nothing, and
+ * global calls nobody.
  *
  * - **What goes.** The times, the rounded pin, the words, the photos, and the community's host and the event's id. Never
  *   the exact pin, the typed place or the note ({@link copyFields}). Nothing of the member's name: a copy shows no author.
+ *   An Offer or a Need sends its price as words (`shownPrice`), never as a price: nothing of a deal goes.
  * - **Who says where it is from.** Global, from its own directory (apps/server engine/event-copy.ts). The host goes for it
  *   to look up; a community that isn't listed gets no line and no door, and the member is told once.
  * - **Staying in step.** An edit, a cancel and a cancelled date repeat at the moment (utils/db.ts), and {@link tendCopies}
@@ -13,9 +15,14 @@
  *   one that can't falls off by itself. The pairs live here alone: a new phone tends nothing, and the copy stays the
  *   member's to take down from My posts on global.
  * - **A holiday at home.** The member's listings leave their community's board, and the copy leaves global with them. The
- *   pair stays, and when the holiday ends the copy goes back up as a new one ({@link CopyPair.resting}).
+ *   pair stays, and when the holiday ends the copy goes back up as a new one ({@link CopyPair.resting}). So does an Offer or
+ *   a Need that is off the board for now: paused, in a deal, out on loan, hidden by reports ({@link restsAtHome}).
  * - **A Stop showing stands.** A tap can land between any two steps of a tend, so each step goes by the pair as it is stored
- *   now: a pair that has gone stays gone, and a send that lands after it comes down ({@link recordSend}).
+ *   now: a pair that has gone stays gone, and a send that lands after it comes down ({@link recordSend}). It stands from
+ *   either end: the host's page knows the home id and the copy's own page only the copy's ({@link stopShowing}), and a copy
+ *   taken down behind this phone isn't brought back by the next rest.
+ * - **Off the board, nothing goes.** A listing is only ever sent on its community's own word ({@link showOnGlobal}): the
+ *   phone's table can be behind, and has nothing of a hide by reports.
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
  *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
  *   pair goes only once global says the copy isn't up ({@link forgetIfGone}): it is the phone's only way to that copy.
@@ -46,6 +53,12 @@ const TEND_EVERY_MS = 60 * 60 * 1000;
 /** The event as the home community gives it, in the node's camelCase. */
 export interface HomeEvent {
     id: string;
+    /** 'event' or absent for an event. */
+    type?: string;
+    category?: string;
+    credits?: number;
+    priceType?: string;
+    originNode?: string | null;
     title: string;
     description?: string;
     authorPublicKey?: string;
@@ -88,6 +101,8 @@ export interface CopyPair {
      * heard yet. Without it the copy is down and the pair holds a new id, since a copy taken down can't be brought back.
      */
     resting?: boolean;
+    /** The ids its copy had before a rest: a page left open on one, or a row still cached, still reaches this pair. */
+    earlierIds?: string[];
 }
 
 export type CopyResult = 'shown' | 'shown-no-name' | 'later' | { refused: string };
@@ -145,21 +160,43 @@ async function dropPair(pair: CopyPair): Promise<void> {
     await writePairs((await readPairs()).filter((p) => p.copyId !== pair.copyId));
 }
 
-/** This key's pair for a home event, if it is shown, waiting to be, or resting: it stays theirs to stop. */
-export async function pairOf(homeId: string, publicKey: string): Promise<CopyPair | null> {
-    return (await readPairs()).find((p) => p.homeId === homeId && p.publicKey === publicKey && (!p.leaving || p.resting)) ?? null;
-}
+/** Shown, waiting to be, or resting: it stays theirs to stop. */
+const stillTheirs = (p: CopyPair) => !p.leaving || !!p.resting;
 
 /**
- * An event the tick is for: the member's own, at a place, for the whole community. The screens offer it for no other, and
- * this holds whatever a screen asks: what a group was told stays in the group.
+ * This key's pair for a home event. By the home id alone: what follows a home event (an edit, a date) goes through here, and
+ * a copy's row must never be taken for the event it copies. {@link stopShowing} is the one that takes a copy's id.
  */
-export function mayShowOnGlobal(home: Pick<HomeEvent, 'eventOnline' | 'audienceScope' | 'authorPublicKey'>, publicKey: string): boolean {
-    return !isOnlineEvent(home) && (home.audienceScope ?? 'public') === 'public' && home.authorPublicKey === publicKey;
+export async function pairOf(homeId: string, publicKey: string): Promise<CopyPair | null> {
+    return (await readPairs()).find((p) => p.homeId === homeId && p.publicKey === publicKey && stillTheirs(p)) ?? null;
+}
+
+const isListing = (home: Pick<HomeEvent, 'type'>): boolean => home.type === 'offer' || home.type === 'need';
+
+/**
+ * What the tick is for: the member's own event at a place, or their own Offer or Need with a place, for the whole community.
+ * An enterprise's has the enterprise as its author, and a linked community's isn't theirs. The screens offer it for no other,
+ * and this holds whatever a screen asks: what a group was told stays in the group.
+ */
+export function mayShowOnGlobal(home: Pick<HomeEvent, 'eventOnline' | 'audienceScope' | 'authorPublicKey'> & Partial<Pick<HomeEvent, 'type' | 'lat' | 'lng' | 'originNode'>>, publicKey: string): boolean {
+    const kind = isListing(home) ? typeof home.lat === 'number' && typeof home.lng === 'number' && !home.originNode : (home.type ?? 'event') === 'event' && !isOnlineEvent(home);
+    return kind && (home.audienceScope ?? 'public') === 'public' && home.authorPublicKey === publicKey;
 }
 
 /** What a copy holds, and all it holds. Nothing else of the event leaves the phone. */
 export function copyFields(home: HomeEvent, publicKey: string): Record<string, unknown> {
+    const tags = {
+        ...(home.tags?.length ? { tags: home.tags } : {}),
+        ...(home.freeTags?.length ? { freeTags: home.freeTags } : {}),
+    };
+    if (isListing(home)) {
+        return {
+            type: home.type, category: home.category, title: home.title, description: home.description ?? '', authorPublicKey: publicKey,
+            lat: roundToArea(Number(home.lat)), lng: roundToArea(Number(home.lng)),
+            shownPrice: { beans: Number(home.credits) || 0, per: home.priceType ?? 'fixed' },
+            ...tags,
+        };
+    }
     const { rule, until } = eventRepeatOf(home);
     return {
         type: 'event', category: 'community', title: home.title, description: home.description ?? '', credits: 0, priceType: 'fixed',
@@ -170,8 +207,7 @@ export function copyFields(home: HomeEvent, publicKey: string): Record<string, u
         ...(home.eventEndLocal ? { eventEndLocal: home.eventEndLocal } : {}),
         ...(home.eventTz ? { eventTz: home.eventTz } : {}),
         ...(rule ? { eventRepeat: rule, ...(until ? { eventRepeatUntil: until } : {}) } : {}),
-        ...(home.tags?.length ? { tags: home.tags } : {}),
-        ...(home.freeTags?.length ? { freeTags: home.freeTags } : {}),
+        ...tags,
     };
 }
 
@@ -223,6 +259,17 @@ async function copyIsThere(pair: CopyPair, identity: BeanPoolIdentity, deps: Cop
 }
 
 /**
+ * Whether a rest has to wait: global's auto-hide leaves the row in place for its author, so `copyIsThere` reads a held copy
+ * as up, and a rest would cancel it and the listing's return post the same words clean, with nobody having chosen that.
+ * An unread answer waits too: a rest is the step that can't be taken back, and the next tend asks again.
+ * A moderator's takedown leaves the stamp on a cancelled row: that one isn't held, and the rest may finish.
+ */
+async function restMustWait(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<boolean> {
+    const rows = await readJson(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, deps).catch(() => null);
+    return !Array.isArray(rows) || rows.some((row) => !!row?.hiddenByReportsAt && row?.status !== 'cancelled');
+}
+
+/**
  * After a refusal, which doesn't say the copy has gone (a mute, a date that has ended, a tag one library lacks, a second
  * send of the same id). The pair goes only if global says the copy isn't up. Otherwise it stays as it was, so a cancel at
  * home can still take the copy down, and the next tend sees what wasn't sent and tries again.
@@ -270,10 +317,13 @@ async function createCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIde
 async function updateCopy(pair: CopyPair, home: HomeEvent, identity: BeanPoolIdentity, deps: CopyDeps): Promise<CopyResult> {
     const fields = copyFields(home, identity.publicKey);
     const fetched = firstPhoto(home) !== pair.photo ? await photosOf({ photos: home.photos ?? [] }, pair.home, deps) : null;
-    const { type: _type, category: _category, credits: _credits, priceType: _priceType, ...edit } = fields;
+    const { type: _type, credits: _credits, priceType: _priceType, ...kept } = fields;
+    const { category: _category, ...eventEdit } = kept;
+    const edit = isListing(home) ? kept : eventEdit;
     // An edit leaves alone what it doesn't name, and copyFields names nothing there is none of: what was taken off at home is
     // sent as taken off, or it stays public here while `sent` says the copy is in step.
-    const taken = { tags: fields.tags ?? [], freeTags: fields.freeTags ?? [], ...(!fields.eventRepeat ? { eventRepeat: null } : fields.eventRepeatUntil ? {} : { eventRepeatUntil: null }) };
+    const repeats = isListing(home) ? {} : !fields.eventRepeat ? { eventRepeat: null } : fields.eventRepeatUntil ? {} : { eventRepeatUntil: null };
+    const taken = { tags: fields.tags ?? [], freeTags: fields.freeTags ?? [], ...repeats };
     const body = { id: pair.copyId, ...edit, ...taken, ...(fetched?.photos.length ? { photos: fetched.photos } : {}) };
     const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, `${POSTS_PATH}/update`, body, identity, signal)));
     if (answer === 'later') return 'later';
@@ -314,14 +364,34 @@ async function repeatDates(pair: CopyPair, home: HomeEvent, identity: BeanPoolId
 /**
  * The tick: makes the pair, then the copy. Waiting on something (no answer, a day's limit) it stays a pair, and
  * {@link tendCopies} sends it. `homeUrl` is the community the event is on.
+ *
+ * An Offer or a Need goes on its community's word, not the screen's: the row a screen holds can be behind, and has nothing of
+ * a hide by reports. Off the board for now, nothing is sent and the tick rests until it is back; gone, it is refused. Home
+ * not saying, it waits: {@link tendCopies} asks again before it sends.
  */
 export async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: BeanPoolIdentity, deps: CopyDeps = liveDeps): Promise<CopyResult> {
-    if (!mayShowOnGlobal(home, identity.publicKey)) return { refused: t("The global community can't show this yet.") };
+    const refused = { refused: t("The global community can't show this yet.") };
+    if (!mayShowOnGlobal(home, identity.publicKey)) return refused;
     const { randomUUID } = await import('expo-crypto');
     const kept = await pairOf(home.id, identity.publicKey);
     if (kept?.resting) return 'later';
     const pair: CopyPair = kept
         ?? { publicKey: identity.publicKey, home: plainOriginOf(homeUrl) ?? homeUrl, homeId: home.id, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
+    if (isListing(home)) {
+        const atHome = await readHome(pair, identity, deps).catch(() => 'later' as const);
+        if (atHome === 'later') {
+            await savePair(pair);
+            return 'later';
+        }
+        if (!mayHaveCopy(atHome, identity.publicKey)) return refused;
+        if (restsAtHome(atHome)) {
+            // A pair held has a copy up to bring down, unless reports hold it. A new one has nothing up, which is what `resting`
+            // without `leaving` says.
+            if (kept && !kept.resting && await restMustWait(kept, identity, deps)) return 'later';
+            await (kept ? restCopy(kept, identity, deps) : savePair({ ...pair, resting: true }));
+            return 'later';
+        }
+    }
     await savePair(pair);
     return sendCopy(pair, home, identity, deps);
 }
@@ -366,15 +436,23 @@ async function takeDown(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDe
 async function restCopy(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyDeps): Promise<void> {
     if (!(await askDown({ ...pair, resting: true }, identity, deps))) return;
     const { randomUUID } = await import('expo-crypto');
-    const waiting: CopyPair = { ...pair, leaving: false, resting: true, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [] };
+    const waiting: CopyPair = {
+        ...pair, leaving: false, resting: true, copyId: randomUUID(), sent: '', sentAt: 0, photo: '', skips: [],
+        earlierIds: [...(pair.earlierIds ?? []), pair.copyId],
+    };
     const pairs = await readPairs();
     if (!pairs.find((p) => p.copyId === pair.copyId)?.resting) return;
     await writePairs([...pairs.filter((p) => p.copyId !== pair.copyId), waiting]);
 }
 
-/** Stop showing, and a cancel at home: the copy goes. False when global didn't answer, and it is tried again. */
-export async function stopShowing(homeId: string, identity: BeanPoolIdentity, deps: CopyDeps = liveDeps): Promise<boolean> {
-    const pair = await pairOf(homeId, identity.publicKey);
+/**
+ * Stop showing, and a cancel at home: the copy goes, and the pair with it, or the next rest brings the copy back. False when
+ * global didn't answer, and it is tried again. `id` is the home event's from the host's page and the copy's from its own
+ * (utils/db.ts deletePost hands on whichever it was given), which may be an id from before a rest.
+ */
+export async function stopShowing(id: string, identity: BeanPoolIdentity, deps: CopyDeps = liveDeps): Promise<boolean> {
+    const pair = (await readPairs()).find((p) => p.publicKey === identity.publicKey && stillTheirs(p)
+        && (p.homeId === id || p.copyId === id || p.earlierIds?.includes(id)));
     return pair ? takeDown(pair, identity, deps) : true;
 }
 
@@ -396,6 +474,17 @@ async function onHoliday(pair: CopyPair, identity: BeanPoolIdentity, deps: CopyD
 /** Nothing at home has stopped it. Whether its date has passed is another question ({@link rollsOn}). */
 const isOn = (home: HomeEvent) => home.status === 'active' && home.active !== false && home.eventState !== 'cancelled' && !home.hiddenByReportsAt;
 
+/** An Offer or a Need off its community's board for now: paused, in a deal, out on loan, hidden by reports. It can come back. */
+function restsAtHome(home: HomeEvent): boolean {
+    if (!isListing(home) || home.active === false) return false;
+    return home.status === 'paused' || home.status === 'pending' || (home.status === 'active' && !!home.hiddenByReportsAt);
+}
+
+/** Can this post have a copy at all, up or resting? Not one gone, cancelled, finished, hidden for good or that can't be shown. */
+function mayHaveCopy(home: HomeEvent | null, publicKey: string): home is HomeEvent {
+    return !!home && (isOn(home) || restsAtHome(home)) && mayShowOnGlobal(home, publicKey);
+}
+
 /**
  * A date of a series is over and the series isn't: its row keeps that date until the community's minute tick moves it on, and
  * a read doesn't move it. The same test as that tick's (apps/server engine/event-series-roll.ts rollDueSeries): a row it
@@ -408,10 +497,10 @@ function rollsOn(home: HomeEvent): boolean {
 }
 
 /**
- * Each of this key's pairs brought into step from its community's own word: an event gone, cancelled, ended, hidden or moved
- * online there takes its copy down; a series between dates waits for the next round; a holiday there rests the copy, and its
- * end brings it back; one waiting goes; one changed follows, and one long unchanged is sent again. A community that gives no
- * answer changes nothing.
+ * Each of this key's pairs brought into step from its community's own word: an event or listing gone, cancelled, ended,
+ * hidden or moved online there takes its copy down; a series between dates waits for the next round; a holiday there, or an
+ * Offer or Need off the board for now, rests the copy, and its end brings it back; one waiting goes; one changed follows, and
+ * one long unchanged is sent again. A community that gives no answer changes nothing.
  */
 export function tendCopies(identity: BeanPoolIdentity, deps: CopyDeps = liveDeps, now: number = Date.now()): Promise<void> {
     const run = lastTend.then(() => tendPairs(identity, deps, now));
@@ -429,22 +518,30 @@ async function tendPairs(identity: BeanPoolIdentity, deps: CopyDeps, now: number
             const pair = await storedPair(copyId);
             if (!pair) continue;
             if (pair.leaving) {
+                // The rest's retry asks again: reports may have held the copy since the first remove went unanswered.
+                if (pair.resting && await restMustWait(pair, identity, deps)) continue;
                 await (pair.resting ? restCopy : takeDown)(pair, identity, deps);
                 continue;
             }
             const home = await readHome(pair, identity, deps);
             if (home === 'later') continue;
-            if (!home || !isOn(home) || !mayShowOnGlobal(home, identity.publicKey)) {
+            if (!mayHaveCopy(home, identity.publicKey)) {
                 await takeDown(pair, identity, deps);
                 continue;
             }
+            const rests = restsAtHome(home);
             if (isEventEnded(home)) {
                 if (!rollsOn(home)) await takeDown(pair, identity, deps);
                 continue;
             }
-            if (!holidays.has(pair.home)) holidays.set(pair.home, onHoliday(pair, identity, deps));
-            const away = await holidays.get(pair.home);
+            if (!rests && !holidays.has(pair.home)) holidays.set(pair.home, onHoliday(pair, identity, deps));
+            const away = rests || await holidays.get(pair.home);
             if (away === 'later') continue;
+            // About to rest a copy that has landed: taken down behind this phone (another phone, a moderator), it stays down. A
+            // rest can't tell, since global answers a second remove as it does the first, and its return would post a new one.
+            if (away && pair.sent && !pair.resting && (await forgetIfGone(pair, identity, deps).catch(() => null)) === false) continue;
+            // Held by global's reports, or global didn't say: the copy stays as it is and the rest waits.
+            if (away && !pair.resting && await restMustWait(pair, identity, deps)) continue;
             // Home may have taken a minute to say: only what is still stored, and not on its way out, goes on from here.
             const still = await storedPair(copyId);
             if (!still || still.leaving) continue;

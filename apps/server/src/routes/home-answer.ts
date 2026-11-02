@@ -255,7 +255,11 @@ export interface HomeMe {
     standing: 'member' | 'suspended';
 }
 
-export interface MarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null }
+export interface MarketItem {
+    id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    /** A member's copy of a listing (engine/event-copy.ts): where it is from, and its price there, in words. */
+    shownCopy?: true; shownFrom?: ShownFrom; shownPrice?: string;
+}
 /**
  * One line of "Coming up". `startLocal` and `tz` are the host's clock and its zone (DESIGN-event-times §4: the line reads the
  * place's clock, with its zone named only when it differs from the reader's); `online` an event with no place. Each is
@@ -904,10 +908,15 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
             ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
             ...(p.eventStartLocal && p.eventTz ? { startLocal: bounded(p.eventStartLocal, ID_CHARS)!, tz: bounded(p.eventTz, ID_CHARS)! } : {}),
             ...(p.eventOnline ? { online: true as const } : {}),
-            ...(p.shownCopy ? { shownCopy: true as const, ...(p.shownFrom ? { shownFrom: p.shownFrom } : {}) } : {}),
+            ...copyFieldsOf(p),
             ...(p.eventRepeat ? { repeat: publicRepeatPattern(p.eventRepeat), ...(p.eventRepeatUntil ? { repeatUntil: p.eventRepeatUntil } : {}) } : {}),
         }));
     return items.length ? { items, radiusKm: near ? EVENTS_RADIUS_KM : null } : undefined;
+}
+
+/** What a Home row says of a copy: nothing on any other post, so those read as they did. */
+function copyFieldsOf(p: MarketplacePost): Pick<MarketItem, 'shownCopy' | 'shownFrom' | 'shownPrice'> {
+    return p.shownCopy ? { shownCopy: true, ...(p.shownFrom ? { shownFrom: p.shownFrom } : {}), ...(p.shownPrice ? { shownPrice: p.shownPrice } : {}) } : {};
 }
 
 function marketCard(c: Ctx): HomeCards['market'] | undefined {
@@ -931,6 +940,7 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
             // Only where there is one, so a member's listing and every visitor's row read as before (test-home W3).
             ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
             ...(c.point ? { distanceKm: p.distanceKm ?? null } : {}),
+            ...copyFieldsOf(p),
         }));
     // The empty state (§6.1): on a node that asks for example cards, fewer than a handful of real listings in view.
     const examples = c.features.exampleListings && pool.length < EXAMPLES_BELOW;
@@ -969,6 +979,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
         photoUrl: p.photos?.[0] ?? null,
         ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
         ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
+        ...copyFieldsOf(p),
     }));
     return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items, more: pool.length > SEARCH_ITEMS };
 }

@@ -102,11 +102,11 @@ export function enterpriseActingFor(actor: string | null | undefined, path: stri
     return canOperateTreasury(actor, id) ? id : null;
 }
 
-/** A listing's author and kind, for a request or a one-step buy. */
+/** A listing's author and kind, for a request or a one-step buy. None for a member's copy: no deal starts on one, and its author isn't read. */
 function listing(postId: unknown): { author: string; type: string } | null {
     const id = str(postId);
     if (!id) return null;
-    return (db.prepare('SELECT author_pubkey AS author, type FROM posts WHERE id = ?').get(id) as { author: string; type: string } | undefined) ?? null;
+    return (db.prepare('SELECT author_pubkey AS author, type FROM posts WHERE id = ? AND shown_from_host IS NULL').get(id) as { author: string; type: string } | undefined) ?? null;
 }
 
 /**

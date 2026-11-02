@@ -329,6 +329,18 @@ function repeatDealPushDue(postId: string, from: string, txId?: string): boolean
     return true;
 }
 
+/** A deal asked of a member's copy (engine/event-copy.ts): 409 with this code, from every door. */
+export const LISTING_COPY_CODE = 'listing_copy';
+
+/**
+ * A copy's price is words, and nobody here can pay it or take it up: its deal is at home. Asked before anything of its author
+ * is read, so a refusal says nothing about them. It holds on any node: one with Beans on and a directory has copies too,
+ * and the Beans switch alone wouldn't stop a deal there.
+ */
+function assertNoDealOnCopy(shownFromHost: string | null | undefined): void {
+    if (shownFromHost != null) throw Object.assign(new Error(word("This is shown from another community, so it can't be bought or taken here.")), { code: LISTING_COPY_CODE, status: 409 });
+}
+
 export function requestPost(
     cb: EscrowCallbacks,
     postId: string,
@@ -352,6 +364,7 @@ export function requestPost(
         || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
         throw Object.assign(new Error(word('Post not found')), { code: POST_GONE_CODE });
     }
+    assertNoDealOnCopy(post.shown_from_host);
     // A lendable Offer that is out says so, to anyone who may see it: the second borrower is told to ask again later.
     if (post.lendable === 1 && post.status === 'pending') throw loanOut();
     if (post.status !== 'active') throw Object.assign(new Error(word('Post is not active')), { code: POST_GONE_CODE });
@@ -498,6 +511,7 @@ export function approvePostRequest(
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (!post || post.type === 'poll' || post.type === 'event') return null;
+    assertNoDealOnCopy(post.shown_from_host);
 
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
@@ -771,6 +785,7 @@ export function acceptPost(
         if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
         throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
     }
+    assertNoDealOnCopy(post.shownFromHost);
     // A lendable Offer is asked for: the lender says yes first (requestPost, then approvePostRequest). Refused here, to anyone
     // who may see it, before anything is held, whoever they are: a member the lender has blocked is told the same words, and
     // their request waits unanswered as any blocked member's does.

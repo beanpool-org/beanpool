@@ -53,7 +53,7 @@
  *   and re-create an event to move a pin, which lost its RSVPs and links): place, an event's times, end, repeat, online, link,
  *   note and who it lets in, a listing's terms, shop and lending. All of it goes to the route's own updatePost, which keeps the
  *   id, the RSVPs and the links and tells whoever a host's edit tells; a member's copy is held as the route holds one
- *   (copyEventUpdates). What the engine would leave out without a word (a term on an Offer that isn't lent, a link on an event
+ *   (copyUpdates). What the engine would leave out without a word (a term on an Offer that isn't lent, a link on an event
  *   in person, a place on an online one) is refused here in words, because the answer's `changed` is what an assistant believes.
  * - Tags T4 (DESIGN-tags-free-entry-fable.md §8, §5; DESIGN-owner-seeding-tags-fable.md §2.6): every create and update_post takes
  *   `tags`, ids from the library in core (tags_search, agent/owner-reads.ts, finds them), and `free_tags`, the words the
@@ -80,7 +80,7 @@ import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS, removePost, upd
 import { logger } from '../logger.js';
 import { createEventFromBody } from '../routes/event-post.js';
 import { EVENT_PRIVATE_NOTE_MAX, type EventTimeOut } from '../engine/posts.js';
-import { copyEventUpdates } from '../engine/event-copy.js';
+import { copyUpdates } from '../engine/event-copy.js';
 import { assertFreeTags, POST_PRICE_TYPES } from '../engine/post-fields.js';
 import { assertMayAddPhotos, assertMayEditPhotos, assertMayPost } from '../engine/probation.js';
 import { enterprisePostLimit } from '../engine/writer-bounds.js';
@@ -1231,7 +1231,7 @@ function eventEdit(row: MadeRow, args: Record<string, unknown>, updates: Updates
 /** What an edit asks of a member's copy, as the route asks it: a refusal in words for what the route leaves out of one. */
 function copyEdit(updates: Updates): string | null {
     const asked = Object.keys(updates);
-    copyEventUpdates(updates);
+    copyUpdates(updates);
     return asked.every((k) => k in updates) ? null : 'This is a copy of an event from your own community: it carries its times and a rounded pin only, never a place name, a note, a link, who it lets in or online.';
 }
 

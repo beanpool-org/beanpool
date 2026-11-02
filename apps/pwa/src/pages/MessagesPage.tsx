@@ -504,7 +504,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 timestamp: p.timestamp,
                 sendState: p.sendState,
                 error: p.error,
-            } as ApiMessage & { sendState: 'sending' | 'failed'; text: string; error?: string }));
+                pending: true,
+            } as ApiMessage & { sendState: 'sending' | 'failed'; text: string; error?: string; pending: boolean }));
     }, [pendingMessages, activeConv, messages, identity.publicKey]);
     const shownMessages = useMemo(() => {
         const combined = [...messages, ...activePending];
@@ -1253,7 +1254,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 if (wasEditing) {
                     await editSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, { groupId: groupIdKey(conv.id), messageId: wasEditing.id, metadata: wasEditing.metadata, text });
                 } else {
-                    const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+                    const newest = [...messages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
                     await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
                         groupId: groupIdKey(conv.id), text, clientId: newDmMessageId(), replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
                         mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
@@ -1275,7 +1276,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const check = await groupSendCheck(conv);
         if (!check) {
             setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed', error: 'refused' } : p));
-            setDraft(prev => prev || item.text);
+            if (activeConvIdRef.current === conv.id) {
+                setDraft(prev => prev || item.text);
+            }
             return;
         }
         const { plan, chat, chatErr } = check;
@@ -1285,7 +1288,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 item.replyToId ? JSON.stringify({ replyToId: item.replyToId }) : undefined, item.id);
         } else {
             try {
-                const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+                const newest = [...messages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
                 await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
                     groupId: groupIdKey(conv.id), text: item.text, clientId: item.id, replyToId: item.replyToId ?? null, after: newest?.id ?? null,
                     mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
@@ -1293,13 +1296,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             } catch (e) {
                 if (saidGroupRefusal(e, chat, chatErr)) {
                     setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed', error: String(e) } : p));
-                    setDraft(prev => prev || item.text);
+                    if (activeConvIdRef.current === conv.id) {
+                        setDraft(prev => prev || item.text);
+                    }
                     return;
                 }
                 throw e;
             }
         }
-        setChatRefusal(null);
+        if (activeConvIdRef.current === conv.id) {
+            setChatRefusal(null);
+            setDraft(prev => prev === item.text ? '' : prev);
+        }
         await loadMessages(conv.id);
     }
 
@@ -1310,21 +1318,26 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             return;
         }
         if (route === 'refuse') {
-            setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+            if (activeConvIdRef.current === conv.id) {
+                setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+                setDraft(prev => prev || item.text);
+            }
             setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed' } : p));
-            setDraft(prev => prev || item.text);
             return;
         }
         const line: DmLineSeal = {
             messageId: item.id,
-            after: dmAfterReference(shownMessages),
+            after: dmAfterReference(messages),
             replyToId: item.replyToId ?? null,
         };
         const { ciphertext, nonce, lineSig } = await payloadFor(item.text, conv, line);
         const metadata = lineMetadata(item.replyToId ?? undefined, lineSig);
         await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
         ownLineTaken(conv.id);
-        setChatRefusal(null);
+        if (activeConvIdRef.current === conv.id) {
+            setChatRefusal(null);
+            setDraft(prev => prev === item.text ? '' : prev);
+        }
         await loadMessages(conv.id);
     }
 
@@ -1337,18 +1350,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
         } catch (err: any) {
             setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed', error: err?.message } : p));
-            setDraft(prev => prev || item.text);
-            if (isDmNotLocked(err)) {
-                setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
-            } else {
-                showChatError(err, t('Failed to send message'));
+            if (activeConvIdRef.current === conv.id) {
+                setDraft(prev => prev || item.text);
+                if (isDmNotLocked(err)) {
+                    setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
+                } else {
+                    showChatError(err, t('Failed to send message'));
+                }
             }
         }
     }
 
     function handleRetryPending(messageId: string) {
         const item = pendingMessages.find(p => p.id === messageId);
-        if (!item || !activeConv) return;
+        if (!item || !activeConv || item.conversationId !== activeConv.id) return;
+        if (draft === item.text) setDraft('');
         setPendingMessages(prev => prev.map(p => p.id === messageId ? { ...p, sendState: 'sending', error: undefined } : p));
         setChatRefusal(null);
         sendQueueRef.current = sendQueueRef.current.then(async () => {
@@ -1409,7 +1425,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (!check) return false;
             if (check.plan === 'readable') { setChatRefusal(GROUP_CHAT_OLD_NODE_NOTICE); return false; }
             const dataUri = await resizePhotoFile(file).catch(() => { throw new Error(t('Could not load image')); });
-            const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+            const newest = [...messages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
             try {
                 await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
                     groupId: groupIdKey(conv.id), text: caption, photo: dataUri, clientId, replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
@@ -1521,7 +1537,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             kind: conv.type === 'group_thread' ? 'group' : 'dm',
         };
 
-        setPendingMessages(prev => [...prev, pendingItem]);
+        setPendingMessages(prev => [
+            ...prev.filter(p => !(p.conversationId === conv.id && p.text === text && p.sendState === 'failed')),
+            pendingItem,
+        ]);
 
         sendQueueRef.current = sendQueueRef.current.then(async () => {
             await performSendItem(pendingItem, conv);
@@ -1554,7 +1573,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const messageId = newDmMessageId();
             const replyToId = replyToMessage?.id ?? null;   // sealed into both parts, as the metadata below names it
             const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment', replyToId });       // big blob -> lazy attachment
-            const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: dmAfterReference(shownMessages), replyToId });   // caption (often empty) -> message body
+            const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: dmAfterReference(messages), replyToId });   // caption (often empty) -> message body
             const metadata = lineMetadata(replyToMessage?.id, encCap.lineSig);
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);

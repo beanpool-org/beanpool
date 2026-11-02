@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getConversationMessages, sendMessageApi, getConversations, type Conversation, type ApiMessage } from '../lib/api';
+import { getConversationMessages, sendMessageApi, getConversations, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 
@@ -43,25 +43,40 @@ vi.mock('../components/ReportModal', () => ({
 }));
 
 let currentGeneratedId = 'msg-opt-1';
-vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
-    dmThreadInShownOrder: (msgs: any[]) => msgs,
-    dmQuoteFrom: () => 'author',
-    dmQuoteLabel: () => 'You',
-    dmLineShownText: (v: any) => v?.text ?? '',
-    dmLineIsUnattributed: () => false,
-    dmReplyToOf: () => null,
-    decodePlaintext: (c: string) => c,
-    encodePlaintext: (text: string) => ({ ciphertext: text, nonce: '00000' }),
-    sealDmLine: (text: string) => ({ ciphertext: text, nonce: '00000' }),
-    signDmLine: () => ({ sig: 'sig', at: '2026-11-01T00:00:00.000Z' }),
-    openDmLine: (p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false }),
-    checkDmThread: () => new Map(),
-    dmAfterReference: () => null,
-    dmLineMarkText: () => null,
-    newDmMessageId: () => currentGeneratedId,
-    isEncryptedNonce: () => false,
-    DM_LINE_NOT_VERIFIED_TEXT: "🔒 This message couldn't be verified, so it isn't shown.",
+const { mockSendSealedGroupLine } = vi.hoisted(() => ({
+    mockSendSealedGroupLine: vi.fn(async (..._args: any[]) => {}),
 }));
+vi.mock('../lib/group-chat-lines', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../lib/group-chat-lines')>();
+    return {
+        ...actual,
+        sendSealedGroupLine: mockSendSealedGroupLine,
+    };
+});
+
+vi.mock('../lib/e2e-crypto', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../lib/e2e-crypto')>();
+    return {
+        ...actual,
+        dmThreadInShownOrder: (msgs: any[]) => msgs,
+        dmQuoteFrom: () => 'author',
+        dmQuoteLabel: () => 'You',
+        dmLineShownText: (v: any) => v?.text ?? '',
+        dmLineIsUnattributed: () => false,
+        dmReplyToOf: () => null,
+        decodePlaintext: (c: string) => c,
+        encodePlaintext: (text: string) => ({ ciphertext: text, nonce: '00000' }),
+        sealDmLine: (text: string) => ({ ciphertext: text, nonce: '00000' }),
+        signDmLine: () => ({ sig: 'sig', at: '2026-11-01T00:00:00.000Z' }),
+        openDmLine: (p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false }),
+        checkDmThread: () => new Map(),
+        dmAfterReference: actual.dmAfterReference,
+        isEncryptedNonce: actual.isEncryptedNonce,
+        dmLineMarkText: () => null,
+        newDmMessageId: () => currentGeneratedId,
+        DM_LINE_NOT_VERIFIED_TEXT: "🔒 This message couldn't be verified, so it isn't shown.",
+    };
+});
 
 let mockConversations: Conversation[] = [];
 let mockMessagesByConv: Record<string, ApiMessage[]> = {};
@@ -281,6 +296,11 @@ describe('Web instant chat message sending (optimistic)', () => {
         await waitFor(() => {
             expect(sendMessageApi).toHaveBeenCalledTimes(2);
         });
+
+        // 6. Composer text is cleared when retry succeeds
+        await waitFor(() => {
+            expect(composer.value).toBe('');
+        });
     });
 
     it('the message order stays right, and two quick sends do not swap', async () => {
@@ -324,6 +344,141 @@ describe('Web instant chat message sending (optimistic)', () => {
         await act(async () => {
             resolveFirst({ success: true, message: { id: 'msg-first' } });
             resolveSecond({ success: true, message: { id: 'msg-second' } });
+        });
+    });
+
+    it('in a sealed group chat, the line shows immediately and after binds to the last confirmed server line, never to pending lines', async () => {
+        mockConversations = [
+            {
+                id: 'conv-group-1',
+                type: 'group_thread',
+                name: 'Community Garden',
+                createdBy: 'my-pubkey',
+                participants: ['my-pubkey', 'peer-pubkey'],
+                createdAt: '2026-11-01T00:00:00Z',
+                unreadCount: 0,
+            },
+        ];
+        mockMessagesByConv = {
+            'conv-group-1': [
+                {
+                    id: 'msg-server-confirmed',
+                    conversationId: 'conv-group-1',
+                    authorPubkey: 'peer-pubkey',
+                    ciphertext: 'Existing confirmed line',
+                    nonce: '00000',
+                    type: 'text',
+                    timestamp: '2026-11-01T00:00:00Z',
+                },
+            ],
+        };
+
+        vi.mocked(getGroupChat).mockImplementation(async (groupId: string) => ({
+            id: groupId,
+            conversation: mockConversations.find(c => c.id === groupId)!,
+            messages: mockMessagesByConv[groupId] || [],
+            canPost: true,
+            encryption: { current: 1, stale: [], fromEpoch: 1 } as any,
+        }));
+
+        let resolveFirstGroupSend!: () => void;
+        const firstSendPromise = new Promise<void>(resolve => { resolveFirstGroupSend = resolve; });
+        mockSendSealedGroupLine.mockReturnValueOnce(firstSendPromise as any);
+
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-group-1" />);
+
+        await screen.findByText('Community Garden');
+        await screen.findByText(/End-to-end encrypted/i);
+        const composer = await screen.findByPlaceholderText('Message...');
+
+        // 1. Send first line
+        currentGeneratedId = 'group-pending-1';
+        fireEvent.change(composer, { target: { value: 'Optimistic group line 1' } });
+        fireEvent.keyDown(composer, { key: 'Enter' });
+
+        // Appears immediately in thread
+        expect(screen.getByText('Optimistic group line 1')).toBeInTheDocument();
+
+        // sendSealedGroupLine was called with after: 'msg-server-confirmed' (NOT 'group-pending-1')
+        await waitFor(() => {
+            expect(mockSendSealedGroupLine).toHaveBeenCalledTimes(1);
+        });
+        expect(mockSendSealedGroupLine).toHaveBeenLastCalledWith(
+            expect.anything(),
+            expect.anything(),
+            expect.anything(),
+            expect.objectContaining({
+                clientId: 'group-pending-1',
+                text: 'Optimistic group line 1',
+                after: 'msg-server-confirmed',
+            }),
+        );
+        const firstCall = mockSendSealedGroupLine.mock.calls[0] as any[];
+        expect(firstCall[3]?.after).not.toBe('group-pending-1');
+
+        // 2. Send second line while first send is still pending
+        currentGeneratedId = 'group-pending-2';
+        fireEvent.change(composer, { target: { value: 'Optimistic group line 2' } });
+        fireEvent.keyDown(composer, { key: 'Enter' });
+
+        expect(screen.getByText('Optimistic group line 2')).toBeInTheDocument();
+
+        // Resolve first send
+        await act(async () => {
+            resolveFirstGroupSend();
+        });
+
+        // sendSealedGroupLine for line 2 must ALSO bind after to 'msg-server-confirmed',
+        // NOT to the unconfirmed pending lines ('group-pending-1' or 'group-pending-2')
+        await waitFor(() => {
+            expect(mockSendSealedGroupLine).toHaveBeenCalledTimes(2);
+        });
+        expect(mockSendSealedGroupLine).toHaveBeenLastCalledWith(
+            expect.anything(),
+            expect.anything(),
+            expect.anything(),
+            expect.objectContaining({
+                clientId: 'group-pending-2',
+                text: 'Optimistic group line 2',
+                after: 'msg-server-confirmed',
+            }),
+        );
+        const secondCall = mockSendSealedGroupLine.mock.calls[1] as any[];
+        expect(secondCall[3]?.after).not.toBe('group-pending-1');
+        expect(secondCall[3]?.after).not.toBe('group-pending-2');
+    });
+
+    it('in a DM, unconfirmed pending lines carry pending: true and are ignored during dmAfterReference', async () => {
+        mockMessagesByConv['conv-dm-1'] = [
+            {
+                id: 'dm-server-1',
+                conversationId: 'conv-dm-1',
+                authorPubkey: 'peer-pubkey',
+                ciphertext: 'Server DM line',
+                nonce: 'x25519-xc20p-v2:validnonce1',
+                type: 'text',
+                timestamp: '2026-11-01T00:00:00Z',
+            },
+        ];
+
+        let resolveSend!: (val: any) => void;
+        const sendPromise = new Promise(resolve => { resolveSend = resolve; });
+        vi.mocked(sendMessageApi).mockReturnValue(sendPromise as any);
+
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-dm-1" />);
+
+        const composer = await screen.findByPlaceholderText('Message...');
+        currentGeneratedId = 'dm-pending-1';
+        fireEvent.change(composer, { target: { value: 'DM line 1' } });
+        fireEvent.keyDown(composer, { key: 'Enter' });
+
+        expect(screen.getByText('DM line 1')).toBeInTheDocument();
+
+        await waitFor(() => {
+            expect(sendMessageApi).toHaveBeenCalledTimes(1);
+        });
+        await act(async () => {
+            resolveSend({ success: true, message: { id: 'dm-pending-1' } });
         });
     });
 });

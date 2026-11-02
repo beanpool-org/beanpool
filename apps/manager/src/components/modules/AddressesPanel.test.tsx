@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { AddressesPanel } from './AddressesPanel';
+import { AddressesPanel, pointsAtText } from './AddressesPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
 const mockActiveNode: NodeProfile = {
@@ -291,5 +291,57 @@ describe('AddressesPanel Component (S2)', () => {
             expect(checkCalled).toBe(true);
         });
         expect(screen.getByText(/Addresses checked from outside\./)).toBeInTheDocument();
+    });
+
+    it('pointsAtText formats IPv4, IPv6 AAAA, combined, and CNAME records correctly', () => {
+        const baseReach = {
+            answers: 'own' as const,
+            step: 'fine' as const,
+            minutes: null,
+            nextStep: 'Fine',
+            checkedAt: '2026-11-02T05:02:00.000Z',
+            ownAt: '2026-11-02T05:02:00.000Z',
+        };
+
+        // IPv6 only
+        expect(pointsAtText('example.org', {
+            ...baseReach,
+            dns: { outcome: 'answers', a: [], aaaa: ['2606:4700::6815:5db3'], cname: [] },
+        })).toBe('2606:4700::6815:5db3');
+
+        // Combined IPv4 + IPv6
+        expect(pointsAtText('example.org', {
+            ...baseReach,
+            dns: { outcome: 'answers', a: ['104.21.93.179'], aaaa: ['2606:4700::6815:5db3'], cname: [] },
+        })).toBe('104.21.93.179, 2606:4700::6815:5db3');
+
+        // CNAME fallback
+        expect(pointsAtText('example.org', {
+            ...baseReach,
+            dns: { outcome: 'answers', a: [], aaaa: [], cname: ['alias.example.com'] },
+        })).toBe('alias.example.com');
+
+        // No DNS answer
+        expect(pointsAtText('example.org', {
+            ...baseReach,
+            dns: { outcome: 'no-such-name', a: [], aaaa: [], cname: [] },
+        })).toBe('no DNS answer yet');
+    });
+
+    it('defensively handles nullish data.addresses on initial load without crashing', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/local/admin/app-addresses')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ named: false }) } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
+        });
+
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('addresses-add-address-btn')).toBeInTheDocument();
+        });
+        expect(screen.getByText(/No addresses configured yet\./)).toBeInTheDocument();
     });
 });

@@ -19,11 +19,11 @@ import {
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
-    checkAppAddresses, confirmAppAddress, getAppAddresses, getTfaSessionToken,
-    removeAppAddress, resolveNodeApiUrl, setOwnAddress,
+    buildAdminHeaders, checkAppAddresses, confirmAppAddress, getAppAddresses, getTfaSessionToken,
+    passwordField, removeAppAddress, resolveNodeApiUrl, setOwnAddress,
     type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
 } from '../../lib/node-client';
-import { t } from '../../lib/fresh-proof';
+import { proofField, t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { standingText } from './AppAddressesPanel';
 import { describeTunnel } from './PublicAddressPanel';
@@ -79,8 +79,10 @@ export function pointsAtText(address: string, reach?: AddressReach | null, tunne
     if (isIpAddress(address)) return address;
     // Own domain: what DNS records were seen
     const a = reach?.dns?.a ?? [];
+    const aaaa = reach?.dns?.aaaa ?? [];
     const cname = reach?.dns?.cname ?? [];
-    if (a.length > 0) return a.join(', ');
+    const records = [...a, ...aaaa];
+    if (records.length > 0) return records.join(', ');
     if (cname.length > 0) return cname.join(', ');
     return t(W.pointsNoDns);
 }
@@ -158,7 +160,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
             setReport(data);
 
             // Also check latest check time from addresses
-            const checkTimes = data.addresses
+            const checkTimes = (data.addresses || [])
                 .map((a) => a.reach?.checkedAt)
                 .filter((t): t is string => !!t)
                 .sort();
@@ -169,7 +171,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
             // Fetch tunnel state if available
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/status'), {
-                    headers: { Authorization: `Bearer ${cred || ''}` },
+                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
                 });
                 if (res.ok) {
                     const st = await res.json().catch(() => ({}));
@@ -210,16 +212,19 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
     const handleMakeMain = async (a: AppAddress, code?: string) => {
         setActionMessage(null);
         try {
+            let got: { communityAddress?: boolean } | undefined;
             if (isBeanPoolName(a.address)) {
                 const name = extractSubdomain(a.address);
                 const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim');
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${cred || ''}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ name, mode: 'tunnel', code }),
+                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
+                    body: JSON.stringify({
+                        ...passwordField(cred),
+                        name,
+                        mode: 'tunnel',
+                        ...proofField(code),
+                    }),
                 });
                 if (await proof.check(res, (c) => handleMakeMain(a, c), code)) return;
                 if (!res.ok) {
@@ -227,14 +232,20 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                     throw new Error(body?.error || `HTTP ${res.status}`);
                 }
             } else if (isIpAddress(a.address)) {
-                await setOwnAddress(activeNode.url, { ip: a.address }, cred, getTfaSessionToken(activeNode.id), code);
+                got = await setOwnAddress(activeNode.url, { ip: a.address }, cred, getTfaSessionToken(activeNode.id), code);
             } else {
-                await setOwnAddress(activeNode.url, { domain: a.address }, cred, getTfaSessionToken(activeNode.id), code);
+                got = await setOwnAddress(activeNode.url, { domain: a.address }, cred, getTfaSessionToken(activeNode.id), code);
             }
-            setActionMessage({ text: `${a.address} is now the main address.`, type: 'success' });
+            proof.close();
+            if (got && !got.communityAddress) {
+                setActionMessage({ text: `${a.address} added, but could not replace the active BeanPool address.`, type: 'warning' });
+            } else {
+                setActionMessage({ text: `${a.address} is now the main address.`, type: 'success' });
+            }
             await loadData();
             onRefreshDiag?.();
         } catch (e: unknown) {
+            if (proof.checkError(e, (c) => handleMakeMain(a, c), code)) return;
             setActionMessage({ text: e instanceof Error ? e.message : 'Could not make main', type: 'error' });
         }
     };
@@ -248,11 +259,12 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                 const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name');
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${cred || ''}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ name, code }),
+                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
+                    body: JSON.stringify({
+                        ...passwordField(cred),
+                        name,
+                        ...proofField(code),
+                    }),
                 });
                 if (await proof.check(res, (c) => handleRemoveOrRelease(a, c), code)) return;
                 if (!res.ok) {
@@ -262,17 +274,19 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
             } else {
                 await removeAppAddress(activeNode.url, a.address, cred, getTfaSessionToken(activeNode.id), code);
             }
+            proof.close();
             setActionMessage({ text: `${a.address} removed.`, type: 'success' });
             await loadData();
             onRefreshDiag?.();
         } catch (e: unknown) {
+            if (proof.checkError(e, (c) => handleRemoveOrRelease(a, c), code)) return;
             setActionMessage({ text: e instanceof Error ? e.message : 'Could not remove address', type: 'error' });
         }
     };
 
     // Handle adding an address (folded form submission)
-    const handleAddSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleAddSubmit = async (e?: React.FormEvent, code?: string) => {
+        if (e) e.preventDefault();
         setSubmittingAdd(true);
         setActionMessage(null);
         try {
@@ -282,17 +296,17 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                 const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim');
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${cred || ''}`,
-                        'Content-Type': 'application/json',
-                    },
+                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
                     body: JSON.stringify({
+                        ...passwordField(cred),
                         name,
                         mode: 'tunnel',
                         communityName: communityName.trim() || undefined,
                         contact: contact.trim() || undefined,
+                        ...proofField(code),
                     }),
                 });
+                if (await proof.check(res, (c) => handleAddSubmit(undefined, c), code)) return;
                 const body = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
                 setActionMessage({ text: `Requested ${name}.beanpool.org`, type: 'success' });
@@ -300,20 +314,22 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
             } else if (addKind === 'ip') {
                 const ip = ipInput.trim();
                 if (!ip) throw new Error('Please enter an IP address');
-                await setOwnAddress(activeNode.url, { ip }, cred, getTfaSessionToken(activeNode.id));
+                await setOwnAddress(activeNode.url, { ip }, cred, getTfaSessionToken(activeNode.id), code);
                 setActionMessage({ text: `Set IP address ${ip}`, type: 'success' });
                 setIpInput('');
             } else {
                 const dom = domainInput.trim().replace(/^https?:\/\//i, '').replace(/[/?#].*$/, '');
                 if (!dom) throw new Error('Please enter a domain');
-                await setOwnAddress(activeNode.url, { domain: dom }, cred, getTfaSessionToken(activeNode.id));
+                await setOwnAddress(activeNode.url, { domain: dom }, cred, getTfaSessionToken(activeNode.id), code);
                 setActionMessage({ text: `Added domain ${dom}`, type: 'success' });
                 setDomainInput('');
             }
+            proof.close();
             setShowAddSection(false);
             await loadData();
             onRefreshDiag?.();
         } catch (err: unknown) {
+            if (proof.checkError(err, (c) => handleAddSubmit(undefined, c), code)) return;
             setActionMessage({ text: err instanceof Error ? err.message : 'Failed to add address', type: 'error' });
         } finally {
             setSubmittingAdd(false);

@@ -4781,7 +4781,7 @@
   "Assistant: “{name}” (the name it gave itself)": "Assistente: “{name}” (il nome che si è dato)",
   "Assistant: no name given": "Assistente: nessun nome fornito",
   "Sends what it reads to: {host}": "Invia ciò che legge a: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Legge stato di integrità, backup, totali, report e richieste di adesione a tuo nome. Se sei un proprietario, può anche fare un backup e pubblicare Offerte, Richieste ed eventi per te, subito e senza approvazione. Tutto il resto può solo suggerirlo, e nulla cambia finché non approvi.",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Legge stato di integrità, backup, totali, report e richieste di adesione a tuo nome. Se sei un proprietario, può anche fare un backup e pubblicare Offerte, Richieste, eventi e sondaggi per te, subito e senza approvazione. Tutto il resto può solo suggerirlo, e nulla cambia finché non approvi.",
   "{time} left": "{time} rimanenti",
   "Computer: A browser": "Computer: Un browser",
   "Computer: {browser}": "Computer: {browser}",

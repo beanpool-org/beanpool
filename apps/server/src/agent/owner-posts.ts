@@ -63,20 +63,29 @@
  *   that names neither leaves them; [] clears; a tag the listing already carries passes, as in the apps; null on an edit is
  *   refused, since a client that fills every field would otherwise clear them unasked. The tools' words say library first,
  *   and that a list of tags never goes in a description, which is what assistants did before this.
+ * - Polls (MCP-OWNER-POSTS-2, slice S3's poll part; Damo via Marty, 2 Nov: "creating, editing, updating all aspects of a POLL so we
+ *   can use in future to get DIRECT market feedback from new users"): create_poll runs what POST /api/marketplace/posts runs for
+ *   type poll, as the owner only: no route posts a poll as an enterprise, and closePoll takes only its author. It takes what the
+ *   apps' forms take (no photo, price, place or tag: no form has one, and the engine would drop all but the tags without a word,
+ *   and no card shows those) and the engine holds it to 2 to 4 answers, 3, 7 or 14 days and the open-poll limits. update_post
+ *   takes what the engine stores on a poll (neither app has an edit screen for one: the route's updatePost is the person's path):
+ *   the question, the answers and open_vote until the first vote, the description always. close_poll is the card's Close Poll
+ *   (closePoll). poll_results reads counts through the engine's own read, which is asked for no voters, so it answers the
+ *   same for an anonymous poll and an open vote: never who.
  * - An answer carries the new post's id and its link in the app (`/?post=<id>`, a path the assistant joins to the address in
  *   its welcome), an event's start and end as its members see them, and the day's count: no key, no token, nothing about
  *   another member. An event's times must carry their offset: one without would be read in this server's own zone.
  */
 import crypto from 'node:crypto';
 import {
-    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LISTING_DESCRIPTION_LIMIT, plainWords,
+    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LISTING_DESCRIPTION_LIMIT, placelessListingNote, plainWords,
     POST_TAGS_MAX, postTagsOf, PRICING_CATEGORIES, singulars, TAG_LIBRARY, tagIndex,
 } from '@beanpool/core';
 import { EVENT_REPEAT_WEEKDAYS, readRepeatRule } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { featureOffFor } from '../routes/profile-feature-gate.js';
-import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS, removePost, updatePost } from '../state-engine.js';
+import { canOperateTreasury, closePoll, createPost, getPosts, MAX_PHOTO_BASE64_CHARS, removePost, updatePost } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { createEventFromBody } from '../routes/event-post.js';
 import { EVENT_PRIVATE_NOTE_MAX, type EventTimeOut } from '../engine/posts.js';
@@ -157,6 +166,8 @@ export const REQUIRED = {
     /** An event in person: a JSON Schema `required` cannot say "unless online", so the schema says it in words. */
     eventInPerson: ['place_name', 'lat', 'lng'],
     enterpriseListing: ['kind', 'as_enterprise', 'title', 'category', 'photos'],
+    /** A poll (phone NewPollModal, web MapPage): its question, its answers and how long it runs. A photo, a place and a price it has none of. */
+    poll: ['question', 'options', 'days'],
 } as const;
 
 /** What create_offer and create_need require on this node now: a price only where it has Beans. */
@@ -183,7 +194,15 @@ function listingRequiredFor(args: Record<string, unknown>): string[] {
 }
 
 /** The composers' title lengths (phone map.tsx's form 50, NewEventModal 140): the engine's own 200 is wider than any app sends. */
-export const AGENT_TITLE_MAX = { listing: 50, event: 140 } as const;
+export const AGENT_TITLE_MAX = { listing: 50, event: 140, poll: 140 } as const;
+
+/** A poll's limits, as both apps' forms and the engine hold them (engine/posts.ts createPost): never wider than theirs. */
+export const POLL_OPTIONS_MIN = 2;
+export const POLL_OPTIONS_MAX = 4;
+export const POLL_OPTION_MAX_CHARS = 80;
+export const POLL_DAYS: readonly number[] = [3, 7, 14];
+/** A poll's description at most, as the phone's form takes it (NewPollModal): the stricter of the two composers (design §2.1 rule 3). */
+export const POLL_DESCRIPTION_MAX = 400;
 
 function titleTooLong(args: Record<string, unknown>, max: number): string | null {
     const title = (args.title as string).trim();
@@ -219,6 +238,9 @@ const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> =
     place_name: { there: isText, asks: 'the name of the place, e.g. "The old bowls club" (or online: true)' },
     kind: { there: isText, asks: 'offer or need' },
     as_enterprise: { there: isText, asks: 'the enterprise, by its ref from my_enterprises' },
+    question: { there: isText, asks: 'what the poll asks, in a line' },
+    options: { there: (v) => Array.isArray(v) && v.length > 0, asks: `the ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers, as a list of text` },
+    days: { there: isNumber, asks: `how many days it runs: ${POLL_DAYS.join(', ')}` },
 };
 
 /** The first required field left out or empty, refused in words that name it; null when every one is there. */
@@ -611,13 +633,16 @@ const NO_AREA = 'use_my_area needs your area, and none is set on this community:
 /** An event's start and end as stored: the clock its members see, in its zone, so the assistant can check what it posted. */
 type EventClock = { startsLocal: string; endsLocal: string; timezone: string };
 
-function answer(grant: AgentGrant, kind: 'offer' | 'need' | 'event', postId: string, asEnterprise: boolean, clock?: EventClock): ToolResult {
+/** A poll as it was made: when it closes, which ballot it is, and who it reaches on a community that shows posts by area. */
+type PollFacts = { closesAt: string; openVote: boolean; shownTo?: string };
+
+function answer(grant: AgentGrant, kind: 'offer' | 'need' | 'event' | 'poll', postId: string, asEnterprise: boolean, facts?: EventClock | PollFacts): ToolResult {
     return {
         ok: true, rows: 1,
         result: {
             postId, kind, asEnterprise,
             link: `/?post=${encodeURIComponent(postId)}`,
-            ...clock,
+            ...facts,
             postsToday: assistantPostsToday(grant), postsPerDay: agentPostsPerDay(),
         },
     };
@@ -800,6 +825,80 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
     });
 }
 
+const CREATE_POLL_FIELDS = ['question', 'options', 'days', 'description', 'open_vote'] as const;
+
+/** A poll's answers as both apps send them, trimmed, or why not: refused in words, as the engine's own check would not say which. */
+function pollAnswers(sent: unknown): { ok: true; options: Array<{ id: string; text: string }> } | { ok: false; error: string } {
+    const refuse = (error: string) => ({ ok: false as const, error });
+    if (!Array.isArray(sent) || sent.some((v) => typeof v !== 'string')) return refuse(`options is a list of ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers, each one text.`);
+    const texts = (sent as string[]).map((v) => v.trim());
+    if (texts.length < POLL_OPTIONS_MIN || texts.length > POLL_OPTIONS_MAX) return refuse(`options: a poll has ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers (this call sends ${texts.length}).`);
+    if (texts.some((text) => !text)) return refuse('options: an answer is empty.');
+    const long = texts.findIndex((text) => text.length > POLL_OPTION_MAX_CHARS);
+    if (long >= 0) return refuse(`options: each answer is at most ${POLL_OPTION_MAX_CHARS} characters, as the apps' form takes (answer ${long + 1} is ${texts[long].length}).`);
+    // The apps' check, which the engine does not make: two answers that read the same split a count nobody can read.
+    if (new Set(texts.map((text) => text.toLowerCase())).size !== texts.length) return refuse('options: each answer must differ from the others, as the apps ask.');
+    return { ok: true, options: texts.map((text, i) => ({ id: `opt_${i + 1}`, text })) };
+}
+
+function pollDescriptionProblem(description: unknown): string | null {
+    if (typeof description !== 'string') return 'description is text: "" takes it off.';
+    const { length } = description.trim();
+    return length > POLL_DESCRIPTION_MAX ? `description is at most ${POLL_DESCRIPTION_MAX} characters on a poll, as the apps' form takes (this one is ${length}).` : null;
+}
+
+function questionProblem(question: unknown): string | null {
+    const { length } = (question as string).trim();
+    return length > AGENT_TITLE_MAX.poll ? `question is at most ${AGENT_TITLE_MAX.poll} characters, as the apps' form takes (this one is ${length}).` : null;
+}
+
+/**
+ * Who a new poll reaches, on a community that shows posts by area (the global community): a poll has no place of its own, so it
+ * takes its author's (engine/posts.ts placelessListingArea). The words both forms show (@beanpool/core placelessListingNote).
+ */
+function pollShownTo(member: string): string | undefined {
+    if (!getProfileSwitches().nearbyListings) return undefined;
+    return placelessListingNote(true, readMemberArea(member)) ?? undefined;
+}
+
+/** A poll, as the owner: what POST /api/marketplace/posts runs for type poll after its signature check. No route makes one as an enterprise. */
+function createPoll(grant: AgentGrant, args: Record<string, unknown>): ToolResult {
+    const refused = gate(grant);
+    if (refused) return { ok: false, error: refused };
+    // The engine would drop a photo, a pin, a price or a category without a word, and the assistant would believe them.
+    const unknown = Object.keys(args).find((k) => !(CREATE_POLL_FIELDS as readonly string[]).includes(k));
+    if (unknown) return { ok: false, error: `A poll has no ${cleanMemberText(unknown, REFUSED_TAG_CHARS)}: create_poll takes ${CREATE_POLL_FIELDS.join(', ')}.` };
+    const missing = missingField(args, REQUIRED.poll) ?? questionProblem(args.question) ?? notAFlag(args, ['open_vote'])
+        ?? (args.description === undefined ? null : pollDescriptionProblem(args.description));
+    if (missing) return { ok: false, error: missing };
+    const days = num(args.days);
+    // Read here: the engine takes a 0 as "the default 7" without a word.
+    if (days === undefined || !POLL_DAYS.includes(days)) return { ok: false, error: `days is how long it runs: ${POLL_DAYS.join(', ')}.` };
+    const answers = pollAnswers(args.options);
+    if (!answers.ok) return answers;
+    if (!admitAgentCreate(grant.id)) return { ok: false, error: dayFull(grant) };
+    const owner = grant.member;
+    try {
+        assertNotMuted(owner);
+        // A poll keeps no photos (the route passes 0).
+        assertMayPost(owner, 0);
+        const post = createPost('poll', 'community', (args.question as string).trim(), typeof args.description === 'string' ? args.description.trim() : '', 0, 'fixed', owner,
+            undefined, undefined, [], false, undefined, false,
+            // Only `true` opens the ballot: the engine's rule, and notAFlag above refuses anything else that was sent.
+            { pollOptions: answers.options, durationDays: days, pollOpenVote: args.open_vote === true, beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant) });
+        if (!post) {
+            returnAgentCreate(grant.id);
+            return { ok: false, error: 'The poll could not be made.' };
+        }
+        syncPulseMarketplaceGate();
+        const shownTo = pollShownTo(owner);
+        return answer(grant, 'poll', post.id, false, { closesAt: post.pollClosesAt as string, openVote: post.pollOpenVote === true, ...(shownTo ? { shownTo } : {}) });
+    } catch (e) {
+        returnAgentCreate(grant.id);
+        return { ok: false, error: refusalText(e, grant, 'The poll could not be made: try again later.') };
+    }
+}
+
 /** The photo rule every create states, since its schema cannot require "one of three" (schemaRequired). */
 const PHOTOS_RULE = `1 to ${AGENT_POST_PHOTOS_MAX} photos are required, from photo_urls, photo_ids and photos together; the server makes each `
     + `${PHOTO_MAX_SIDE} px with no metadata, as the apps do. Never a photo of people you were not given to post`;
@@ -895,15 +994,19 @@ const POST_OUT = {
         startsLocal: { type: 'string', description: "an event's: when it starts as members see it, YYYY-MM-DDTHH:MM in its timezone" },
         endsLocal: { type: 'string', description: "an event's: when it ends, the same way" },
         timezone: { type: 'string', description: "an event's: the IANA zone its times are shown in" },
+        closesAt: { type: 'string', description: "a poll's: when it closes" },
+        openVote: { type: 'boolean', description: "a poll's: true shows members who chose what; false is anonymous" },
+        shownTo: { type: 'string', description: "a poll's, on a community that shows posts by area: who it reaches" },
         postsToday: { type: 'number' }, postsPerDay: { type: 'number' },
     },
     required: ['postId', 'kind', 'asEnterprise', 'link', 'postsToday', 'postsPerDay'],
 };
 /** Every create's and update_post's description says it, for an assistant that reads no field's. */
 const TAGS_WORDS = 'tag it from the library first (tags, ids from tags_search), use free_tags only for what the library lacks, and never list tags in its description';
-const LIMITS_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), which never use up the member's own "
-    + "posts a day from the apps; its photos count against the member's photo room (connection_info's posts.photoRoom); the post is the "
-    + "owner's, deleted as any post is, and moderators see it was made by an assistant";
+const DAY_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), which never use up the member's own "
+    + 'posts a day from the apps';
+const OWNERS_POST_WORDS = "the post is the owner's, deleted as any post is, and moderators see it was made by an assistant";
+const LIMITS_WORDS = `${DAY_WORDS}; its photos count against the member's photo room (connection_info's posts.photoRoom); ${OWNERS_POST_WORDS}`;
 
 /** The rows agent/tools.ts adds to its table: owner-only, all of them. */
 export const OWNER_POST_TOOLS: AgentTool[] = [
@@ -994,6 +1097,38 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         run: (grant, args) => createEvent(grant, args),
     },
     {
+        name: 'create_poll',
+        title: 'Post a poll',
+        reads: `nothing: it posts a poll for this community as the member this assistant acts for, never as an enterprise, live at once: a question, `
+            + `${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers and ${POLL_DAYS.join(', ')} days, and no photo, price, place or tag, as in the apps. It is anonymous: members see only how many `
+            + 'chose each answer, and poll_results reads no more. open_vote: true shows every member who chose what: set it only when the owner asks for that. '
+            + 'Its question, its answers and open_vote stay open to update_post only until the first vote; close_poll ends it early. One poll open at a time for a member; for an '
+            + `owner or admin, the owners' "Owner and admin limit"; and never more than 5 open in the community, from anyone; ${DAY_WORDS}; ${OWNERS_POST_WORDS}. `
+            + "Where this community shows posts by area (the answer's shownTo says so), it reaches the members around the owner's own area",
+        never: "anything but the new post's id, its link, when it closes and which ballot it is; who voted, or another member's data",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        inputSchema: {
+            type: 'object',
+            properties: {
+                question: { type: 'string', maxLength: AGENT_TITLE_MAX.poll, description: `what it asks: at most ${AGENT_TITLE_MAX.poll} characters` },
+                options: {
+                    type: 'array', minItems: POLL_OPTIONS_MIN, maxItems: POLL_OPTIONS_MAX,
+                    items: { type: 'string', maxLength: POLL_OPTION_MAX_CHARS },
+                    description: `the ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers, each different and at most ${POLL_OPTION_MAX_CHARS} characters`,
+                },
+                days: { type: 'integer', enum: [...POLL_DAYS], description: `how long it runs: ${POLL_DAYS.join(', ')} days. It can't be changed afterwards` },
+                description: { type: 'string', maxLength: POLL_DESCRIPTION_MAX, description: `context or notes for members, optional: at most ${POLL_DESCRIPTION_MAX} characters` },
+                open_vote: { type: 'boolean', description: 'false (the default): anonymous, members see only the counts. true: an open vote, every member sees who chose what' },
+            },
+            required: [...REQUIRED.poll],
+            additionalProperties: false,
+        },
+        outputSchema: POST_OUT,
+        run: (grant, args) => createPoll(grant, args),
+    },
+    {
         name: 'create_enterprise_listing',
         title: "Post an enterprise's Offer or Need",
         reads: `nothing: it posts an Offer or a Need in the Market as an enterprise the member this assistant acts for keeps now (as_enterprise, `
@@ -1053,6 +1188,7 @@ interface MadeRow {
     event_start_at: string | null; event_end_at: string | null; event_start_local: string | null; event_end_local: string | null; event_tz: string | null; event_place_name: string | null;
     event_private_note: string | null; event_online: number | null; event_link: string | null; event_host_lets_in: number | null;
     event_repeat: string | null; event_repeat_until: string | null;
+    poll_options: string | null; poll_closes_at: string | null; poll_open_vote: number; poll_vote_count: number;
 }
 
 /** What update_post can change and my_posts reads back, and what either has to know first. */
@@ -1061,7 +1197,8 @@ const MADE_COLUMNS = `id, type, status, active, title, author_pubkey, created_by
     (SELECT COUNT(*) FROM post_photos WHERE post_id = posts.id) AS photo_count,
     lendable, lend_max_days, lend_terms, replacement_value,
     event_start_at, event_end_at, event_start_local, event_end_local, event_tz, event_place_name, event_private_note, event_online, event_link, event_host_lets_in,
-    event_repeat, event_repeat_until`;
+    event_repeat, event_repeat_until,
+    poll_options, poll_closes_at, poll_open_vote, (SELECT COUNT(*) FROM poll_votes WHERE post_id = posts.id) AS poll_vote_count`;
 
 /** The words for a post that is not this assistant's to change (design §2.3). */
 const NOT_MADE_HERE = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
@@ -1088,6 +1225,12 @@ function madePost(grant: AgentGrant, postId: unknown): { ok: true; row: MadeRow 
 
 const isLive = (r: Pick<MadeRow, 'active' | 'status'>): boolean => r.active === 1 && r.status !== 'cancelled';
 
+/** Closed by its author, or past its closing time, which the minute's sweep (closeExpiredPolls) has not reached yet. */
+const pollClosed = (r: Pick<MadeRow, 'status' | 'poll_closes_at'>): boolean =>
+    r.status === 'completed' || (!!r.poll_closes_at && r.poll_closes_at <= new Date().toISOString());
+
+const POLL_CLOSED = 'That poll has closed, and a closed poll is not changed: poll_results reads its counts.';
+
 /** The refusals before an edit, a removal or the undo list: an owner's grant ticked "May post for me", on a server still this community's. */
 function tendGate(grant: AgentGrant): string | null {
     if (grant.role !== 'owner') return "Only an owner's assistant can change posts: an admin's cannot.";
@@ -1102,17 +1245,29 @@ const LEND_TERMS = ['lend_max_days', 'lend_terms', 'replacement_value'] as const
 const OFFER_FIELDS = ['shop_id', 'lendable', ...LEND_TERMS] as const;
 const LISTING_FIELDS = ['category', 'beans', 'price_type', 'use_my_area', 'repeatable', 'cash_also_needed', ...OFFER_FIELDS] as const;
 const EVENT_FIELDS = ['start_at', 'end_at', 'timezone', 'place_name', 'online', 'link', 'private_note', 'host_lets_in', 'repeat', 'repeat_until'] as const;
+const POLL_FIELDS = ['question', 'options', 'open_vote'] as const;
 const ALL_POSTS_FIELDS = ['title', 'description', 'lat', 'lng', 'tags', 'free_tags', ...PHOTO_FIELDS] as const;
-const UPDATE_FIELDS: ReadonlySet<string> = new Set(['post_id', ...ALL_POSTS_FIELDS, ...LISTING_FIELDS, ...EVENT_FIELDS]);
+const UPDATE_FIELDS: ReadonlySet<string> = new Set(['post_id', ...ALL_POSTS_FIELDS, ...LISTING_FIELDS, ...EVENT_FIELDS, ...POLL_FIELDS]);
 /** Null on these is refused, as on tags (heldTags): a client that fills every field would otherwise clear them unasked. */
-const NEVER_NULL = ['lat', 'lng', ...LISTING_FIELDS, ...EVENT_FIELDS] as const;
+const NEVER_NULL = ['lat', 'lng', ...LISTING_FIELDS, ...EVENT_FIELDS, ...POLL_FIELDS] as const;
+/** What the engine drops from a poll's edit, or stores where no card shows it: every field but the description and the poll's own. */
+const NOT_ON_A_POLL = [...ALL_POSTS_FIELDS.filter((k) => k !== 'description'), ...LISTING_FIELDS, ...EVENT_FIELDS];
 
 const EVENT_TAKES = `title, description, lat, lng, tags, free_tags, photos, ${EVENT_FIELDS.join(', ')}`;
 const LISTING_TAKES = `title, description, lat, lng, tags, free_tags, photos, ${LISTING_FIELDS.join(', ')}`;
+const POLL_TAKES = `description, ${POLL_FIELDS.join(', ')}`;
+const takesOf = (row: MadeRow): string => (row.type === 'poll' ? POLL_TAKES : row.type === 'event' ? EVENT_TAKES : LISTING_TAKES);
 
 /** A field the post's kind does not take, in words: the engine would leave some of these out without one. */
 function wrongKind(grant: AgentGrant, row: MadeRow, args: Record<string, unknown>): string | null {
     const sent = (fields: readonly string[]): string | undefined => fields.find((k) => args[k] !== undefined);
+    if (row.type === 'poll') {
+        const field = sent(NOT_ON_A_POLL);
+        if (field === 'title') return `A poll has no title: send question, its words. It takes ${POLL_TAKES}.`;
+        return field ? `A poll has no ${field}: it takes ${POLL_TAKES}.` : null;
+    }
+    const pollField = sent(POLL_FIELDS);
+    if (pollField) return `Only a poll has ${pollField}: this post takes ${takesOf(row)}.`;
     if (row.type === 'event') {
         const field = sent(LISTING_FIELDS);
         return field ? `An event has no ${field}: it takes ${EVENT_TAKES}.` : null;
@@ -1228,6 +1383,30 @@ function eventEdit(row: MadeRow, args: Record<string, unknown>, updates: Updates
     return null;
 }
 
+/** A poll's own fields, under the names the engine takes: it holds the question, the answers and the ballot from the first vote. */
+function pollEdit(args: Record<string, unknown>, updates: Updates): string | null {
+    const flag = notAFlag(args, ['open_vote']);
+    if (flag) return flag;
+    if (args.question !== undefined) {
+        if (!isText(args.question)) return 'question is empty: send the new question, or leave it out to keep it.';
+        const long = questionProblem(args.question);
+        if (long) return long;
+        updates.title = (args.question as string).trim();
+    }
+    if (args.description !== undefined) {
+        const problem = pollDescriptionProblem(args.description);
+        if (problem) return problem;
+        updates.description = (args.description as string).trim();
+    }
+    if (args.options !== undefined) {
+        const answers = pollAnswers(args.options);
+        if (!answers.ok) return answers.error;
+        updates.pollOptions = answers.options;
+    }
+    put(updates, { pollOpenVote: args.open_vote });
+    return null;
+}
+
 /** What an edit asks of a member's copy, as the route asks it: a refusal in words for what the route leaves out of one. */
 function copyEdit(updates: Updates): string | null {
     const asked = Object.keys(updates);
@@ -1242,24 +1421,29 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
     const made = madePost(grant, args.post_id);
     if (!made.ok) return made;
     const { row } = made;
+    const poll = row.type === 'poll';
+    if (poll && isLive(row) && pollClosed(row)) return { ok: false, error: POLL_CLOSED };
     if (!isLive(row) || row.status !== 'active') return { ok: false, error: `That post is ${isLive(row) ? row.status : 'removed'} now: only a live post is edited.` };
     const event = row.type === 'event';
+    // Said by name: nothing in the engine moves a poll's closing time, and an assistant asked to extend one should say so.
+    if (poll && args.days !== undefined) return { ok: false, error: `A poll's length is set when it is made and can't be changed: close_poll ends it early. It takes ${POLL_TAKES}.` };
     const unknown = Object.keys(args).find((k) => !UPDATE_FIELDS.has(k));
-    if (unknown) return { ok: false, error: `update_post has no field ${cleanMemberText(unknown, REFUSED_TAG_CHARS)}: it takes ${event ? EVENT_TAKES : LISTING_TAKES}.` };
+    if (unknown) return { ok: false, error: `update_post has no field ${cleanMemberText(unknown, REFUSED_TAG_CHARS)}: it takes ${takesOf(row)}.` };
     const wrong = wrongKind(grant, row, args);
     if (wrong) return { ok: false, error: wrong };
     const cleared = NEVER_NULL.find((k) => args[k] === null);
     if (cleared) return { ok: false, error: `${cleared} is empty: send the new value, or leave it out to keep it.` };
     const updates: Updates = {};
-    for (const k of ['title', 'description'] as const) {
+    for (const k of poll ? [] : (['title', 'description'] as const)) {
         if (args[k] === undefined) continue;
         if (!isText(args[k])) return { ok: false, error: `${k} is empty: send the new ${k}, or leave it out to keep it.` };
         updates[k] = (args[k] as string).trim();
     }
     const tooLong = updates.title !== undefined ? titleTooLong(args, event ? AGENT_TITLE_MAX.event : AGENT_TITLE_MAX.listing) : null;
     if (tooLong) return { ok: false, error: tooLong };
-    const problem = placeEdit(grant, args, updates) ?? (event ? eventEdit(row, args, updates) : listingEdit(row, grant, args, updates))
-        ?? (row.shown_from_host != null ? copyEdit(updates) : null);
+    const problem = poll
+        ? pollEdit(args, updates)
+        : placeEdit(grant, args, updates) ?? (event ? eventEdit(row, args, updates) : listingEdit(row, grant, args, updates)) ?? (row.shown_from_host != null ? copyEdit(updates) : null);
     if (problem) return { ok: false, error: problem };
     const tagged = heldTags(args, row);
     if (!tagged.ok) return tagged;
@@ -1269,7 +1453,7 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
     if (newPhotos && !newPhotos.ok) return newPhotos;
     if (newPhotos) updates.photos = newPhotos.photos;
     if (!Object.keys(updates).length) {
-        return { ok: false, error: `Send at least one field to change: ${event ? EVENT_TAKES : LISTING_TAKES}, with photos from photo_urls, photo_ids or photos.` };
+        return { ok: false, error: `Send at least one field to change: ${takesOf(row)}${poll ? '' : ', with photos from photo_urls, photo_ids or photos'}.` };
     }
     const edit = (): ToolResult => {
         if (!admitAgentEdit(grant.id)) {
@@ -1293,7 +1477,7 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
                 result: {
                     postId: row.id, kind: row.type, link: `/?post=${encodeURIComponent(row.id)}`,
                     // What the edit stored, for the assistant to check: the rounded pin, and an event's clock as its members see it.
-                    ...(post.lat != null && post.lng != null ? { lat: post.lat, lng: post.lng } : {}),
+                    ...(!poll && post.lat != null && post.lng != null ? { lat: post.lat, lng: post.lng } : {}),
                     ...(post.eventStartLocal && post.eventEndLocal && post.eventTz ? { startsLocal: post.eventStartLocal, endsLocal: post.eventEndLocal, timezone: post.eventTz } : {}),
                     ...(timeOut.eventTimeAdjusted ? { timeAdjusted: timeOut.eventTimeAdjusted } : {}),
                     changed: Object.keys(args).filter((k) => k !== 'post_id' && !(k === 'use_my_area' && args[k] !== true)),
@@ -1306,6 +1490,64 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
         }
     };
     return newPhotos ? withPhotos(grant, newPhotos, edit) : edit();
+}
+
+/** The poll `postId` names, when this grant made it and it is still the owner's (madePost's own test); else why not, in words. */
+function madePoll(grant: AgentGrant, postId: unknown): ReturnType<typeof madePost> {
+    const made = madePost(grant, postId);
+    return made.ok && made.row.type !== 'poll' ? { ok: false, error: 'That post is not a poll: my_posts says what each one is.' } : made;
+}
+
+/** close_poll: the card's Close Poll (routes/marketplace.ts POST /api/marketplace/polls/close, its author only), counted as an edit. */
+function closeMade(grant: AgentGrant, args: Record<string, unknown>): ToolResult {
+    const refused = tendGate(grant);
+    if (refused) return { ok: false, error: refused };
+    const made = madePoll(grant, args.post_id);
+    if (!made.ok) return made;
+    const { row } = made;
+    if (!isLive(row)) return { ok: false, error: 'That poll is removed.' };
+    if (pollClosed(row)) return { ok: false, error: 'That poll has already closed: poll_results reads its counts.' };
+    if (!admitAgentEdit(grant.id)) return { ok: false, error: `This assistant has made ${AGENT_EDITS_PER_DAY} edits today, the most a day allows: try again tomorrow (UTC).` };
+    try {
+        if (!closePoll(row.id, grant.member)) {
+            returnAgentEdit(grant.id);
+            return { ok: false, error: 'The poll could not be closed now: try again later.' };
+        }
+        return {
+            ok: true, rows: 1,
+            result: { postId: row.id, kind: 'poll', link: `/?post=${encodeURIComponent(row.id)}`, closed: true, editsToday: agentEditsToday(grant.id), editsPerDay: AGENT_EDITS_PER_DAY },
+        };
+    } catch (e) {
+        returnAgentEdit(grant.id);
+        return { ok: false, error: refusalText(e, grant, 'The poll could not be closed: try again later.') };
+    }
+}
+
+/**
+ * poll_results: how many chose each answer and how many in all, as every member's card shows them. Built from named fields of the
+ * engine's own read, which is not asked for voters (includeVoters), so an open vote reads as an anonymous poll does: never who. Nor
+ * where a closed poll's votes came from, which the card says: the counts are what this reads.
+ */
+function pollResults(grant: AgentGrant, args: Record<string, unknown>, boundary: string): ToolResult {
+    const refused = tendGate(grant);
+    if (refused) return { ok: false, error: refused };
+    const made = madePoll(grant, args.post_id);
+    if (!made.ok) return made;
+    const { row } = made;
+    if (!isLive(row)) return { ok: false, error: 'That poll is removed, so it has no results to read.' };
+    const post = getPosts({ id: row.id, includeAllScopes: true })[0];
+    if (!post) return { ok: false, error: 'That poll cannot be read now: try again later.' };
+    return {
+        ok: true, rows: 1,
+        result: {
+            postId: row.id, kind: 'poll', link: `/?post=${encodeURIComponent(row.id)}`, status: pollClosed(row) ? 'closed' : 'open', closesAt: row.poll_closes_at,
+            anonymous: row.poll_open_vote !== 1,
+            question: fence(boundary, `poll ${row.id}, question`, row.title),
+            options: (post.pollOptions ?? []).map((o) => ({ id: o.id, text: fence(boundary, `poll ${row.id}, answer ${o.id}`, o.text), votes: o.votes ?? 0 })),
+            totalVotes: post.totalVotes ?? 0,
+            _notice: MEMBER_TEXT_NOTICE,
+        },
+    };
 }
 
 /** One post taken down by `member` through the route's own removePost (the author, or the keeper who made it); why not, in words. */
@@ -1394,12 +1636,32 @@ function eventFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
     };
 }
 
+/** A poll's answers as stored; none when the row holds no list. */
+function storedPollOptions(r: Pick<MadeRow, 'poll_options'>): Array<{ id: string; text: string }> {
+    try {
+        const options = JSON.parse(r.poll_options ?? '[]') as unknown;
+        return Array.isArray(options) ? options as Array<{ id: string; text: string }> : [];
+    } catch {
+        return [];
+    }
+}
+
+/** What update_post can change on a poll, and whether it still can: from the first vote the engine holds all but the description. */
+function pollFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
+    return {
+        options: storedPollOptions(r).map((o) => ({ id: o.id, text: fence(boundary, `post ${r.id}, answer ${o.id}`, o.text) })),
+        openVote: r.poll_open_vote === 1, closesAt: r.poll_closes_at, closed: pollClosed(r), totalVotes: r.poll_vote_count,
+        answersFixed: r.poll_vote_count > 0 || pollClosed(r),
+    };
+}
+
 /** What update_post can change on any post, read back for one still the owner's (stillTheirs). */
 function editableFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
+    // Whole, not a list's preview: an edit replaces all of it.
+    const description = fence(boundary, `post ${r.id}, description`, r.description, LISTING_DESCRIPTION_LIMIT.chars);
+    if (r.type === 'poll') return { description, ...pollFieldsOf(r, boundary) };
     return {
-        // Whole, not a list's preview: an edit replaces all of it.
-        description: fence(boundary, `post ${r.id}, description`, r.description, LISTING_DESCRIPTION_LIMIT.chars),
-        lat: r.lat, lng: r.lng, photoCount: r.photo_count,
+        description, lat: r.lat, lng: r.lng, photoCount: r.photo_count,
         ...(r.type === 'event' ? eventFieldsOf(r, boundary) : listingFieldsOf(r, boundary)),
     };
 }
@@ -1447,10 +1709,11 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         title: 'Posts this assistant made',
         reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
             + "its link, its library tags, its pin and how many photos, and fenced its title, description and its own tags; a listing's category, price, shop and "
-            + "lending terms; an event's start and end, its clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule: what "
-            + 'update_post can change, to read before it edits. An enterprise\'s post you no longer keep lists only its id, kind, status, when, whose it is, its link, title and tags. '
+            + "lending terms; an event's start and end, its clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule; a poll's "
+            + 'answers, whether it is an open vote, when it closes, how many have voted and whether its answers are fixed yet: what '
+            + 'update_post can change, to read before it edits. A poll\'s title is its question, and one that has closed reads status completed. An enterprise\'s post you no longer keep lists only its id, kind, status, when, whose it is, its link, title and tags. '
             + 'The live ones (the default), the removed ones, or all',
-        never: "a post made in the app or by another assistant, who is going to an event, another member's data, or a key",
+        never: "a post made in the app or by another assistant, who is going to an event, who voted in a poll, another member's data, or a key",
         memberText: true,
         ownerOnly: true,
         posts: true,
@@ -1477,7 +1740,8 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         title: 'Edit a post this assistant made',
         reads: `nothing: it changes a live post THIS assistant made, whatever the app's edit changes, under the same rules: on any post its title, description, `
             + `place, tags and photos; on an Offer or a Need its category, price, repeat and cash note; on an Offer its shop and lending; on an event its times, zone, `
-            + `place name, online, link, note, who it lets in and repeat. The post keeps its id, so move a pin here, never by removing it and making it again: an event keeps its RSVPs and `
+            + `place name, online, link, note, who it lets in and repeat; on a poll, and nothing else on one, its question, description, options and open_vote. From a poll's first vote its question, its options `
+            + `and open_vote are fixed, and only its description changes; its length is never changed, and close_poll ends it early. The post keeps its id, so move a pin here, never by removing it and making it again: an event keeps its RSVPs and `
             + `links, and everyone going is told when its time or place moves, as for a host's own edit. A moved pin leaves place_name as it is: send it too when the `
             + `place itself changed. A pin moved into another time zone takes that zone: a one-off keeps the moment, so its clock changes, and a repeating event keeps its clock with its repeat `
             + `rule, as a host's own edit does, so the moment changes. The answer says the clock, and start_at sets it. Only the fields sent change; a field its kind does not take is refused in words. At most ${AGENT_EDITS_PER_DAY} edits a day; any `
@@ -1491,7 +1755,13 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
             properties: {
                 ...POST_ID_PROP,
                 title: { type: 'string', description: `the new title: at most ${AGENT_TITLE_MAX.listing} characters for an Offer or a Need, ${AGENT_TITLE_MAX.event} for an event` },
-                description: { type: 'string', description: `the new details; ${NO_TAGS_HERE}` },
+                description: { type: 'string', description: `the new details; ${NO_TAGS_HERE}. On a poll at most ${POLL_DESCRIPTION_MAX} characters, and "" takes it off` },
+                question: { type: 'string', maxLength: AGENT_TITLE_MAX.poll, description: `a poll's new question, until its first vote: at most ${AGENT_TITLE_MAX.poll} characters` },
+                options: {
+                    type: 'array', minItems: POLL_OPTIONS_MIN, maxItems: POLL_OPTIONS_MAX, items: { type: 'string', maxLength: POLL_OPTION_MAX_CHARS },
+                    description: `a poll's whole new list of ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers, until its first vote: each different and at most ${POLL_OPTION_MAX_CHARS} characters`,
+                },
+                open_vote: { type: 'boolean', description: "a poll's ballot, until its first vote: false, anonymous; true, every member sees who chose what. A member whose app still shows the last copy may vote on what it said, so choose this at create_poll" },
                 category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: "an Offer's or a Need's new Market category" },
                 beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
                 price_type: { type: 'string', enum: [...POST_PRICE_TYPES], description: "an Offer's or a Need's: how the price is counted; a lent Offer's is fixed, daily or weekly" },
@@ -1549,9 +1819,47 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         run: (grant, args) => updateMade(grant, args),
     },
     {
+        name: 'close_poll',
+        title: 'Close a poll early',
+        reads: 'nothing: it closes a poll THIS assistant made, for good, as its author does with Close Poll in the app: no more answers, and nothing reopens it. '
+            + `poll_results reads its counts afterwards. Counts as one of the day's ${AGENT_EDITS_PER_DAY} edits; any other post is refused`,
+        never: "anything but the poll's id and its link, who voted, or another member's data; it never moves Beans",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        destructive: true,
+        inputSchema: { type: 'object', properties: POST_ID_PROP, required: ['post_id'], additionalProperties: false },
+        outputSchema: {
+            type: 'object',
+            properties: { postId: { type: 'string' }, kind: { type: 'string' }, link: { type: 'string' }, closed: { type: 'boolean' }, editsToday: { type: 'number' }, editsPerDay: { type: 'number' } },
+            required: ['postId', 'kind', 'link', 'closed', 'editsToday', 'editsPerDay'],
+        },
+        run: (grant, args) => closeMade(grant, args),
+    },
+    {
+        name: 'poll_results',
+        title: 'Read the results of a poll this assistant made',
+        reads: 'the counts of a poll THIS assistant made, open or closed: how many chose each answer and how many voted in all, as every member\'s card shows them, whether it is open or '
+            + 'closed and when it closes, whether it is anonymous, and fenced its question and its answers. An open poll\'s counts still move, so say they are not final',
+        never: 'who voted or how anyone chose, even on an open vote, where the votes came from, a poll made in the app or by another assistant, or another member\'s data',
+        memberText: true,
+        ownerOnly: true,
+        posts: true,
+        inputSchema: { type: 'object', properties: POST_ID_PROP, required: ['post_id'], additionalProperties: false },
+        outputSchema: {
+            type: 'object',
+            properties: {
+                postId: { type: 'string' }, kind: { type: 'string' }, link: { type: 'string' }, status: { type: 'string', enum: ['open', 'closed'] },
+                closesAt: { type: ['string', 'null'] }, anonymous: { type: 'boolean' }, question: { type: ['object', 'null'] }, options: { type: 'array' }, totalVotes: { type: 'number' },
+            },
+            required: ['postId', 'kind', 'link', 'status', 'closesAt', 'anonymous', 'question', 'options', 'totalVotes'],
+        },
+        run: (grant, args, boundary) => pollResults(grant, args, boundary),
+    },
+    {
         name: 'remove_post',
         title: 'Remove a post this assistant made',
-        reads: 'nothing: it takes down one live post THIS assistant made, as its author does in the app (an event is cancelled and its goers told); '
+        reads: 'nothing: it takes down one live post THIS assistant made, as its author does in the app (an event is cancelled and its goers told; a poll, open or closed, goes with its results); '
             + 'one with a deal in escrow stays up; any other post is refused',
         never: "another member's data; it never moves Beans",
         ownerOnly: true,

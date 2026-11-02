@@ -4593,7 +4593,7 @@
   "Assistant: “{name}” (the name it gave itself)": "어시스턴트: “{name}” (어시스턴트가 지정한 이름)",
   "Assistant: no name given": "어시스턴트: 이름 지정되지 않음",
   "Sends what it reads to: {host}": "읽은 내용을 다음 주소로 전송: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "회원님 본인 자격으로 상태, 백업, 총계, 보고서 및 가입 신청을 읽습니다. 회원님이 소유자라면 백업을 만들고, 회원님을 대신해 제공, 요청, 행사를 승인 없이 바로 등록할 수도 있습니다. 그 밖의 일은 제안만 할 수 있으며, 회원님이 승인하기 전에는 아무것도 바뀌지 않습니다.",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "회원님 본인 자격으로 상태, 백업, 총계, 보고서 및 가입 신청을 읽습니다. 회원님이 소유자라면 백업을 만들고, 회원님을 대신해 제공, 요청, 행사, 설문을 승인 없이 바로 등록할 수도 있습니다. 그 밖의 일은 제안만 할 수 있으며, 회원님이 승인하기 전에는 아무것도 바뀌지 않습니다.",
   "{time} left": "{time} 남음",
   "Computer: A browser": "컴퓨터: 브라우저",
   "Computer: {browser}": "컴퓨터: {browser}",

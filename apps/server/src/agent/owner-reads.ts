@@ -23,7 +23,7 @@ import { placeAs } from '../config/community-place.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import { AGENT_LIST_MAX } from './limits.js';
-import { enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS } from './owner-posts.js';
+import { enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS, POLL_DAYS } from './owner-posts.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 const NOT_TICKED = 'This assistant was connected without "May post for me": it reads what the other tools read, and nothing for seeding.';
@@ -149,12 +149,12 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
     {
         name: 'categories',
         title: 'What a post picks from',
-        reads: 'the Market categories with their English labels and emoji, the kinds of post, the price types, and whether this community has Beans',
+        reads: 'the Market categories with their English labels and emoji, the kinds of post, the price types, the days a poll can run, and whether this community has Beans',
         never: 'any member data',
         ownerOnly: true,
         posts: true,
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        outputSchema: { type: 'object', properties: { categories: { type: 'array' }, kinds: { type: 'array' }, priceTypes: { type: 'array' }, beans: { type: 'boolean' } }, required: ['categories', 'kinds', 'priceTypes', 'beans'] },
+        outputSchema: { type: 'object', properties: { categories: { type: 'array' }, kinds: { type: 'array' }, priceTypes: { type: 'array' }, pollDays: { type: 'array' }, beans: { type: 'boolean' } }, required: ['categories', 'kinds', 'priceTypes', 'pollDays', 'beans'] },
         run: (grant) => {
             const refused = readGate(grant);
             if (refused) return { ok: false, error: refused };
@@ -162,7 +162,7 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
                 ok: true, rows: PRICING_CATEGORIES.length,
                 result: {
                     categories: PRICING_CATEGORIES.map((c) => ({ id: c.id, label: c.label, emoji: c.emoji })),
-                    kinds: ['offer', 'need', 'event'], priceTypes: ['fixed', 'hourly'], beans: getProfileSwitches().beans === true,
+                    kinds: [...KINDS], priceTypes: ['fixed', 'hourly'], pollDays: [...POLL_DAYS], beans: getProfileSwitches().beans === true,
                 },
             };
         },

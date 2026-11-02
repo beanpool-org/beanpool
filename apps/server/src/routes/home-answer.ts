@@ -127,7 +127,7 @@ export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'st
  */
 const BUILT_WHEN_ASKED: ReadonlySet<string> = new Set([...HOME_CARD_IDS, 'shop']);
 
-/** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Edit home". `find` too, for its first 30 days on the global node. */
+/** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Arrange". `find` too, for its first 30 days on the global node. */
 const UNHIDEABLE: ReadonlySet<string> = new Set(['needs', 'community']);
 const FIND_PINNED_DAYS = 30;
 

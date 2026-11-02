@@ -515,8 +515,7 @@ export function changeCardSettings(layout: HomeLayout | null, id: string, settin
 }
 
 /**
- * Up or down past the card next to it in `among` (the cards on screen, for the "…" menu; every card Edit home lists,
- * there), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
+ * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
  */
 export function moveCard(
     layout: HomeLayout | null, id: string, dir: 'up' | 'down', among: readonly HomeCardInstance[], now: number, pinned: readonly HomeCardId[] = [],
@@ -606,14 +605,14 @@ export function searchEmptyLine(q: string, km: number | null): string {
     if (words) return km ? t('No {words} within {km} km right now', { words, km }) : t('No {words} right now', { words });
     return km ? t('No listings within {km} km right now', { km }) : t('No listings right now');
 }
-/** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
+/** Arrange's line while a node before the frame can't keep the member's cards (§2.3). */
 export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");
 
 /** Whose place the sun and moon card shows, as its settings sheet offers it (CARD-FRAME §4). */
 export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: WordKey }> = [
     { place: 'community', label: word('Your community') }, { place: 'me', label: word('Your area') },
 ];
-/** Edit home's line for a sun and moon card with no place to work from. */
+/** Arrange's line for a sun and moon card with no place to work from. */
 export const SKY_NO_PLACE_LINE = word('Nothing to show now: no place is known.');
 
 /**
@@ -689,7 +688,7 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
  * Beans, deals, enterprise, Decide or invites on the worldwide community; Grow your community only where the reader can
  * invite; Find your community only on the global node; "Your way back in" only where the 12-words door is open or the node
  * sent one), and only for a type this build draws. Home draws only these whatever an answer holds, the picker lists only
- * these, and Edit home's "Nothing to show now" is said of a card that could show, never of one that can't.
+ * these, and Arrange's "Nothing to show now" is said of a card that could show, never of one that can't.
  */
 export function cardOnNode(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, role?: HomeRole): boolean {
     const t = homeCardType(type);
@@ -714,7 +713,7 @@ export function invitesForReader(features: HomeAnswer['features'], role: HomeRol
 
 /**
  * Whether the reader tailors this Home: a member (the answer has a `me`). A visitor's answer (a key with no account on
- * the global node gets the public cards, routes/home.ts) has no "…", no Add a card, no Edit home and no hint, and the
+ * the global node gets the public cards, routes/home.ts) has no "…", no Add a card, no Arrange and no hint, and the
  * phone never sends a layout for it: the node keeps a Home only for its members (design §2 (c)).
  */
 export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): boolean => !!answer?.me;

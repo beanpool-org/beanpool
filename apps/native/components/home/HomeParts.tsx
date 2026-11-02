@@ -120,7 +120,9 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
             <Pressable
                 onLongPress={arrange ? undefined : onHold}
                 delayLongPress={HOLD_MS}
+                // No target of its own for TalkBack or a keyboard: the caption stays a heading, and "…" → Arrange is their way in.
                 accessible={false}
+                focusable={false}
                 style={[s.captionRow, arrange && s.captionFolded, { backgroundColor: tint }]}
                 testID={`card-band-${id}`}
             >

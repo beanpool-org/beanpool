@@ -602,7 +602,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         },
     });
 
-    it('the Join card first, then the public cards; no "…", no Edit home, nothing of a member\'s, examples marked Example', async () => {
+    it('the Join card first, then the public cards; no "…", no Arrange, nothing of a member\'s, examples marked Example', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
         render(<HomePage identity={null} visitor={{ joinCard: <section data-testid="lobby-join-card">Join BeanPool</section>, beans: false }} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-community');
@@ -610,7 +610,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         expect(page.querySelector('[data-testid]:not([data-testid="home-live"])')!.getAttribute('data-testid')).toBe('lobby-join-card');
         expect(cardIds()).toEqual(['find', 'events', 'market', 'community']);
         expect(screen.queryAllByTestId('home-card-menu')).toHaveLength(0);
-        expect(screen.queryByTestId('home-edit-open')).toBeNull();
+        expect(screen.queryByTestId('home-arrange-open')).toBeNull();
         expect(screen.queryByTestId('home-hint')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Near you' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'What people post' })).toBeInTheDocument();

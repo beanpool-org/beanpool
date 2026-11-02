@@ -2,7 +2,7 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -806,5 +806,10 @@
   "{price} in {community} · You can't answer this until {community} welcomes you.": "{price} a {community} · Non puoi rispondere finché {community} non ti dà il benvenuto.",
   "{price} in another community · You can't answer this here.": "{price} in un'altra comunità · Qui non puoi rispondere.",
   "You can't answer this until {community} welcomes you.": "Non puoi rispondere finché {community} non ti dà il benvenuto.",
-  "This is from another community, so you can't answer it here.": "Viene da un'altra comunità, quindi qui non puoi rispondere."
+  "This is from another community, so you can't answer it here.": "Viene da un'altra comunità, quindi qui non puoi rispondere.",
+  "Take questions about this on the global community": "Ricevi domande su questo nella comunità globale",
+  "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "I membri della comunità globale vedranno lì il tuo nome e potranno inviarti un messaggio. Resta in Richieste di messaggio finché non lo accetti.",
+  "{name} takes questions about this": "{name} risponde a domande su questo",
+  "Ask a question": "Fai una domanda",
+  "It will stop taking questions as soon as the global community answers.": "Smetterà di ricevere domande appena la comunità globale risponde."
 }

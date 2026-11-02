@@ -5,16 +5,20 @@
  * nothing on the post page has to remember not to, and the node refuses them whatever an app sends.
  *
  * Its author reads it here too: what they can do with it is take it down. Its words are edited at home.
+ *
+ * Its member can take questions about it (slice GD; @beanpool/core copyAsk): a member here then reads their name and one way to
+ * write, and that way is a request (engine/dm-requests.ts): one line, waiting. Still no Accept, no price card and no profile.
+ * Its author can stop from here too: a new phone holds no pair to tick (utils/show-on-global.ts).
  */
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { copyCardLine, copyPriceLine, eventCopyOf, listingFreeTags, t } from '@beanpool/core';
+import { askButton, askLine, copyAsk, copyCardLine, copyPriceLine, eventCopyOf, listingFreeTags, t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
-import { deletePost, reportAbuse } from '../utils/db';
+import { createConversationApi, deletePost, reportAbuse, signedRequest } from '../utils/db';
 import { reportedAlertBody } from '../utils/reportReasons';
 import { EventCopyDoor } from './EventCopyDoor';
 import { PhotoCarousel } from './PhotoCarousel';
@@ -39,6 +43,9 @@ export function ListingCopyDetail({ post }: { post: any }) {
     const [stopping, setStopping] = useState(false);
     const copy = eventCopyOf(post)!;
     const own = !!identity && post.author_pubkey === identity.publicKey;
+    const ask = own || !identity ? null : copyAsk(copy, post.author_callsign, post.author_pubkey);
+    const [asking, setAsking] = useState(false);
+    const [closedHere, setClosedHere] = useState(false);
     const photos = photosOfRow(post.photos);
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
 
@@ -65,6 +72,28 @@ export function ListingCopyDetail({ post }: { post: any }) {
         }
     };
 
+    // A request is a chat with one more state: it opens as any does, and nothing is asked of anyone until they write.
+    const openAsk = async () => {
+        if (!ask || !identity || asking) return;
+        setAsking(true);
+        try {
+            const conv = await createConversationApi('dm', [ask.key, identity.publicKey], identity.publicKey);
+            if (conv) router.push(`/chat/${conv.id}`);
+        } catch (e: any) {
+            Alert.alert(t('Error'), e?.message ? String(e.message) : t('Could not reach the node.'));
+        } finally {
+            setAsking(false);
+        }
+    };
+    const stopQuestions = async () => {
+        try {
+            await signedRequest('/api/marketplace/posts/takes-questions', { id: post.id, on: false });
+            setClosedHere(true);
+        } catch (e: any) {
+            Alert.alert(t('Error'), e?.message ? String(e.message) : t('Could not reach the node.'));
+        }
+    };
+
     return (
         <View style={[styles.screen, { paddingTop: insets.top }]} testID="listing-copy">
             <Pressable onPress={goBack} style={styles.back} accessibilityRole="button" accessibilityLabel={t('Back')}>
@@ -84,12 +113,25 @@ export function ListingCopyDetail({ post }: { post: any }) {
                     ? (
                         <View testID="listing-copy-own">
                             <Text style={styles.body}>{t('This is your copy. Change it in your own community and it follows.')}</Text>
+                            {copy.takesQuestions && !closedHere && (
+                                <Pressable onPress={stopQuestions} style={styles.quiet} accessibilityRole="button" testID="listing-copy-stop-questions">
+                                    <Text style={styles.link}>{t('Stop taking questions')}</Text>
+                                </Pressable>
+                            )}
                             <Pressable onPress={takeDown} disabled={stopping} style={styles.quiet} accessibilityRole="button" accessibilityState={{ disabled: stopping, busy: stopping }} testID="listing-copy-remove">
                                 <Text style={styles.link}>{t('Stop showing')}</Text>
                             </Pressable>
                         </View>
                     )
                     : <EventCopyDoor copy={copy} line={copyPriceLine(copy)} />}
+                {!!ask && (
+                    <View testID="listing-copy-ask">
+                        <Text style={styles.from}>{askLine(ask.name)}</Text>
+                        <Pressable onPress={openAsk} disabled={asking} style={styles.quiet} accessibilityRole="button" accessibilityState={{ busy: asking }} testID="listing-copy-ask-button">
+                            <Text style={styles.link}>{askButton()}</Text>
+                        </Pressable>
+                    </View>
+                )}
                 {!own && !!identity && (
                     <>
                         <Pressable onPress={() => setReporting((r) => !r)} style={styles.quiet} accessibilityRole="button" accessibilityLabel={t('Report Post')} accessibilityState={{ expanded: reporting }} testID="listing-copy-report">

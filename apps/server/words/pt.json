@@ -2,15 +2,18 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning, neutral forms)",
-    "draftedBy": null,
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
   "Add a photo first": "Adicione uma foto primeiro",
   "Only a pending message request can be cancelled.": "Apenas um pedido de mensagem pendente pode ser cancelado.",
   "Only the person who sent a message request can cancel it.": "Apenas a pessoa que enviou um pedido de mensagem pode cancelá-lo.",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envie conversationId, o chat, e decision, 'accept', 'ignore' ou 'cancel'.",
   "This community has a new address": "Esta comunidade tem um novo endereço",
-  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando."
+  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando.",
+  "Only an Offer or Need shown on the global community can take questions.": "Só uma Oferta ou Necessidade mostrada na comunidade global pode receber perguntas.",
+  "This community isn't taking message requests right now, so this can't take questions.": "Esta comunidade não está a aceitar pedidos de mensagem agora, por isso isto não pode receber perguntas."
 }

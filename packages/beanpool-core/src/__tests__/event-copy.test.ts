@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setLanguage } from '../words.js';
-import { copyCardLine, copyDoorButton, copyDoorLine, copyFromLine, eventCopyColumn, eventCopyOf, type ShownFromLine } from '../event-copy.js';
+import { copyAsk, copyCardLine, copyDoorButton, copyDoorLine, copyFromLine, eventCopyColumn, eventCopyOf, type ShownFromLine } from '../event-copy.js';
 
 const FROM: ShownFromLine = { host: 'mullum.example.org', postId: 'p1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' };
 const es = JSON.parse(readFileSync(fileURLToPath(new URL('../../words/es.json', import.meta.url)), 'utf8'));
@@ -58,3 +58,32 @@ describe('the door\'s words', () => {
         expect(copyDoorLine({ from: null })).not.toContain('This event');
     });
 });
+
+describe('who a reader can ask about a copy', () => {
+    const KEY = 'ab'.repeat(32);
+    const row = { shownCopy: true, shownFrom: null, type: 'offer' };
+
+    it('nobody on a shut copy, whatever the row names', () => {
+        expect(copyAsk(eventCopyOf(row), 'Robin', KEY)).toBeNull();
+    });
+    it('their name and key on an open one', () => {
+        expect(copyAsk(eventCopyOf({ ...row, takesQuestions: true }), 'Robin', KEY)).toEqual({ name: 'Robin', key: KEY });
+    });
+    it('nobody where the row names nobody: a visitor\'s neutral author, an empty name', () => {
+        const open = eventCopyOf({ ...row, takesQuestions: true });
+        expect(copyAsk(open, 'Robin', 'hidden')).toBeNull();
+        expect(copyAsk(open, '', KEY)).toBeNull();
+        expect(copyAsk(open, 'Robin', undefined)).toBeNull();
+    });
+    it('only `true` opens one', () => {
+        expect(eventCopyOf({ ...row, takesQuestions: 'true' })?.takesQuestions).toBeUndefined();
+    });
+    it('a phone\'s cached column keeps it, and a shut copy\'s says nothing of one', () => {
+        const open = eventCopyColumn({ shownCopy: true, shownFrom: { host: 'h', name: 'N', url: 'https://h', door: 'ask' }, takesQuestions: true });
+        expect(eventCopyOf({ shown_from: open, type: 'offer' })?.takesQuestions).toBe(true);
+        const shut = eventCopyColumn({ shownCopy: true, shownFrom: { host: 'h', name: 'N', url: 'https://h', door: 'ask' } });
+        expect(shut).not.toContain('takesQuestions');
+        expect(eventCopyOf({ shown_from: shut, type: 'offer' })?.takesQuestions).toBeUndefined();
+    });
+});
+

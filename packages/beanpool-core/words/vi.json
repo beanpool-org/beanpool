@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -769,5 +769,10 @@
   "{price} in {community} · You can't answer this until {community} welcomes you.": "{price} tại {community} · Bạn chưa thể phản hồi mục này cho đến khi {community} chào đón bạn.",
   "{price} in another community · You can't answer this here.": "{price} tại một cộng đồng khác · Bạn không thể phản hồi mục này tại đây.",
   "You can't answer this until {community} welcomes you.": "Bạn chưa thể phản hồi mục này cho đến khi {community} chào đón bạn.",
-  "This is from another community, so you can't answer it here.": "Mục này đến từ một cộng đồng khác, nên bạn không thể phản hồi tại đây."
+  "This is from another community, so you can't answer it here.": "Mục này đến từ một cộng đồng khác, nên bạn không thể phản hồi tại đây.",
+  "Take questions about this on the global community": "Nhận câu hỏi về mục này trên cộng đồng toàn cầu",
+  "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "Thành viên của cộng đồng toàn cầu sẽ thấy tên bạn ở đó và có thể gửi cho bạn một tin nhắn. Tin nhắn sẽ chờ trong Yêu cầu nhắn tin cho đến khi bạn chấp nhận.",
+  "{name} takes questions about this": "{name} nhận câu hỏi về mục này",
+  "Ask a question": "Đặt câu hỏi",
+  "It will stop taking questions as soon as the global community answers.": "Sẽ ngừng nhận câu hỏi ngay khi cộng đồng toàn cầu phản hồi."
 }

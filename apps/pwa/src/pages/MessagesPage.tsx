@@ -15,6 +15,7 @@ import {
     deleteMessageApi, removeGroupChatMessage, muteChatApi, type YourChatMute,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry, type DmRequestEntry,
 } from '../lib/api';
+import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
@@ -262,6 +263,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
     // null where the community has requests off (its list has no `requests`).
     const [requests, setRequests] = useState<{ count: number; conversations: DmRequestEntry[] } | null>(null);
+    // Requests waiting on the global community for a member who takes questions there (lib/show-on-global.ts): behind the same row.
+    const [onGlobal, setOnGlobal] = useState<{ count: number; href: string } | null>(null);
+    useEffect(() => {
+        let gone = false;
+        void requestsWaitingOnGlobal(identity).then((found) => { if (!gone) setOnGlobal(found); });
+        return () => { gone = true; };
+    }, [identity]);
     // Their cards' lines as read, kept here so a chat opened from a card and Back reads none of them again.
     const requestPreviews = useRequestPreviews();
     // A listing the viewer has a conversation about is not applied from the live feed: this list shows its title
@@ -273,7 +281,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
     // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
-    useEffect(() => { if (!requests && activeTab === 'requests') setActiveTab('all'); }, [requests, activeTab]);
+    useEffect(() => { if (!requests && !onGlobal && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, activeTab]);
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to Start something on a community with
@@ -3348,7 +3356,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Requests (lib/dm-requests.ts): one plain row at the top of Chat, where the community has them on and one is waiting. No
     // count and no badge until one is accepted (Marty, 1 Nov 2026): every kind of outside request waits behind it.
     const requestCount = requests?.count ?? 0;
-    const showingRequests = activeTab === 'requests' && !!requests;
+    const showingRequests = activeTab === 'requests' && (!!requests || !!onGlobal);
     // When a person joined, on a request card, where this page holds their card.
     const joinedWordsOf = (pubkey: string): string | null => {
         const joinedAt = membersByPublicKey.get(pubkey)?.joinedAt;
@@ -3410,7 +3418,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 })}
             </div>
 
-            {requests && requestCount > 0 && !showingRequests && (
+            {(requestCount > 0 || !!onGlobal) && !showingRequests && (
                 <button type="button" data-testid="message-requests-row" onClick={() => setActiveTab('requests')} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '48px', padding: '0.5rem 1rem',
                     marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '12px',
@@ -3446,8 +3454,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
             {showingRequests ? (
                 <MessageRequestsList
-                    entries={requests!.conversations}
+                    entries={requests?.conversations ?? []}
                     count={requestCount}
+                    onGlobal={onGlobal}
                     identity={identity}
                     store={requestPreviews}
                     avatar={renderAvatar}

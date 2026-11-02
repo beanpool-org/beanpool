@@ -15,7 +15,7 @@ import { memberSigner } from './crypto';
 import { isEventEnded } from './events';
 import type { BeanPoolIdentity } from './identity';
 
-export { COPY_KEEP_ALIVE_MS, COPY_TIMEOUT_MS, copyResultLine, stopLaterLine, type CopyPair, type CopyResult, type HomeEvent } from '@beanpool/core';
+export { COPY_KEEP_ALIVE_MS, COPY_TIMEOUT_MS, copyResultLine, questionsLaterLine, stopLaterLine, type CopyPair, type CopyResult, type HomeEvent } from '@beanpool/core';
 export type CopyDeps = CoreCopyDeps<BeanPoolIdentity>;
 
 /** {@link tendCopiesSoon}: at most this often. */
@@ -59,7 +59,7 @@ function copyIdFor(homeId: string, generation: number, identity: BeanPoolIdentit
     return copyIdOf(homeId, generation, memberSigner(identity.privateKey));
 }
 
-export const { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, repeatOnCopy, stopShowing, tendCopies } = makeCopyKeeper<BeanPoolIdentity>({
+export const { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions, repeatOnCopy, stopShowing, tendCopies } = makeCopyKeeper<BeanPoolIdentity>({
     store,
     deps: liveDeps,
     copyId: copyIdFor,

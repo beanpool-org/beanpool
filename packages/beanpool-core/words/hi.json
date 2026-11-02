@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -806,5 +806,10 @@
   "{price} in {community} · You can't answer this until {community} welcomes you.": "{community} में {price} · जब तक {community} आपका स्वागत नहीं करता, तब तक इसका उत्तर नहीं दिया जा सकता।",
   "{price} in another community · You can't answer this here.": "किसी दूसरे समुदाय में {price} · यहाँ इसका उत्तर नहीं दिया जा सकता।",
   "You can't answer this until {community} welcomes you.": "जब तक {community} आपका स्वागत नहीं करता, तब तक इसका उत्तर नहीं दिया जा सकता।",
-  "This is from another community, so you can't answer it here.": "यह किसी दूसरे समुदाय से है, इसलिए यहाँ इसका उत्तर नहीं दिया जा सकता।"
+  "This is from another community, so you can't answer it here.": "यह किसी दूसरे समुदाय से है, इसलिए यहाँ इसका उत्तर नहीं दिया जा सकता।",
+  "Take questions about this on the global community": "वैश्विक समुदाय पर इसके बारे में सवाल लें",
+  "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "वैश्विक समुदाय के सदस्य वहाँ आपका नाम देखेंगे और आपको एक संदेश भेज सकेंगे। जब तक आप स्वीकार न करें, यह संदेश अनुरोधों में इंतज़ार करेगा।",
+  "{name} takes questions about this": "{name} इसके बारे में सवाल लेते हैं",
+  "Ask a question": "सवाल पूछें",
+  "It will stop taking questions as soon as the global community answers.": "वैश्विक समुदाय के जवाब देते ही सवाल लेना बंद हो जाएगा।"
 }

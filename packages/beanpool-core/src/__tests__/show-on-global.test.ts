@@ -20,7 +20,7 @@ const sign = ed25519Signer(seed);
 const GLOBAL = 'https://global.test';
 const HOME = 'https://home.test';
 
-interface Row { id: string; type: string; status: string; hiddenByReportsAt?: string; title: string }
+interface Row { id: string; type: string; status: string; hiddenByReportsAt?: string; title: string; takesQuestions?: boolean }
 
 /** What a read by id shows of a row: `active = 1`, or a cancelled event. */
 const readable = (r: Row) => r.status === 'active' || (r.status === 'cancelled' && r.type === 'event');
@@ -38,6 +38,9 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
     let lostRead = false;
     let onRead: (() => Promise<unknown> | void) | null = null;
     let removeAnswer: ((id: string) => Response | null) | null = null;
+    let doorAnswer: ((id: string) => Response | null) | null = null;
+    const doorSends: { id: string; on: boolean }[] = [];
+    const bodies: any[] = [];
     const reads: string[][] = [];
     const removes: string[] = [];
     const home: HomeEvent = {
@@ -59,6 +62,16 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
             return answer;
         },
         async post(_url, path, body: any) {
+            bodies.push(body);
+            if (path.endsWith('/takes-questions')) {
+                doorSends.push(body);
+                const answer = doorAnswer?.(body.id);
+                if (answer) return answer;
+                const row = rows.get(body.id);
+                if (!row || row.status === 'cancelled') return json({ error: 'Post not found or not owned by you' }, 404);
+                row.takesQuestions = body.on;
+                return json({ success: true, takesQuestions: body.on });
+            }
             if (path === '/api/marketplace/posts') {
                 sends++;
                 if (busyOn > 0 && --busyOn === 0) return json({ error: 'Busy' }, 503);
@@ -67,8 +80,9 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
                     return json({ error: 'A new post needs an id nothing else has.', ...(noCode ? {} : { code: POST_ID_TAKEN_CODE }) }, 400);
                 }
                 creates++;
-                rows.set(body.id, { id: body.id, type: body.type, status: 'active', title: body.title });
-                return json({ success: true, post: { shownCopy: true, shownFrom: { host: 'home.test' } } });
+                const door = body.shownFrom?.takesQuestions === true;
+                rows.set(body.id, { id: body.id, type: body.type, status: 'active', title: body.title, ...(door ? { takesQuestions: true } : {}) });
+                return json({ success: true, post: { shownCopy: true, shownFrom: { host: 'home.test' }, ...(door ? { takesQuestions: true } : {}) } });
             }
             const row = rows.get(body.id);
             if (path.endsWith('/remove')) {
@@ -111,6 +125,10 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
         onRead: (run: (() => Promise<unknown> | void) | null) => { onRead = run; },
         /** Global answers a remove with this instead of doing it; null, it does them all. */
         removeAnswers: (answer: ((id: string) => Response | null) | null) => { removeAnswer = answer; },
+        /** Global answers a door's tick with this instead of doing it; null, it does them all. */
+        doorAnswers: (answer: ((id: string) => Response | null) | null) => { doorAnswer = answer; },
+        /** Every door's tick sent, and every body posted, in order. */
+        doorSends, bodies,
         /** The ids of each read of global, and of each remove, in order. */
         reads, removes,
         json,
@@ -1293,5 +1311,186 @@ describe('what a Stop and a tend cost: the look is bounded, and only where somet
         await phone.tendCopies(identity);
         await phone.tendCopies(identity);
         expect(w.reads).toEqual([]);
+    });
+});
+
+describe('the door on a copy', () => {
+    const none = () => new Response(JSON.stringify({ error: 'Busy' }), { status: 503 });
+    const up = (w: ReturnType<typeof world>) => w.up()[0];
+
+    it('is off with a plain tick: nothing of a door goes with the create, and the pair says nothing of one', async () => {
+        const w = world();
+        const phone = w.device();
+        expect(await phone.showOnGlobal(w.home, HOME, identity, w.deps)).toBe('shown');
+        expect(up(w).takesQuestions).toBeUndefined();
+        expect(JSON.stringify(w.bodies)).not.toContain('takesQuestions');
+        expect(phone.pairs()[0].questions).toBeUndefined();
+    });
+
+    it('a pair from before the door has nothing owed: a tend sends no door, and edits nothing that was in step', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps);
+        await phone.tendCopies(identity, w.deps);
+        expect(w.doorSends).toEqual([]);
+    });
+
+    it('the composer\'s tick goes with the create, and nothing is owed after', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        expect(up(w).takesQuestions).toBe(true);
+        expect(phone.pairs()[0]).toMatchObject({ questions: true, questionsOwed: false });
+        expect(w.doorSends).toEqual([]);
+    });
+
+    it('on, then off, each by a request of its own', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps);
+        expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('shown');
+        expect(up(w).takesQuestions).toBe(true);
+        expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('shown');
+        expect(up(w).takesQuestions).toBe(false);
+        expect(w.doorSends.map((d) => d.on)).toEqual([true, false]);
+        expect(phone.pairs()[0]).toMatchObject({ questions: false, questionsOwed: false });
+    });
+
+    it('an edit never says anything of the door: a device behind can\'t open one the member shut on the other', async () => {
+        const w = world();
+        const phone = w.device();
+        const browser = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        await browser.showOnGlobal(w.home, HOME, identity, w.deps);
+        await browser.takeQuestions('home-1', false, identity, w.deps);
+        expect(up(w).takesQuestions).toBe(false);
+        w.home.title = 'Green tomatoes';
+        await phone.repeatOnCopy(w.home, identity, w.deps);
+        await phone.tendCopies(identity, w.deps);
+        expect(up(w).title).toBe('Green tomatoes');
+        expect(up(w).takesQuestions).toBe(false);
+    });
+
+    it('an Off with no answer stays owed, says so, and the next tend sends it', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        w.doorAnswers(none);
+        expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+        expect(phone.pairs()[0]).toMatchObject({ questions: false, questionsOwed: true });
+        expect(up(w).takesQuestions).toBe(true);
+        w.doorAnswers(null);
+        await phone.tendCopies(identity, w.deps);
+        expect(up(w).takesQuestions).toBe(false);
+        expect(phone.pairs()[0].questionsOwed).toBe(false);
+    });
+
+    it('global lost to the network, an Off still lands later: a throw is no answer', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        w.doorAnswers(() => { throw new TypeError('Network request failed'); });
+        expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+        expect(phone.pairs()[0].questionsOwed).toBe(true);
+    });
+
+    it('a refused On is global\'s word: the tick goes back, with its words, and nothing stays owed', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps);
+        w.doorAnswers(() => w.json({ error: 'Muted for now' }, 403));
+        expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toEqual({ refused: 'Muted for now', code: undefined });
+        expect(phone.pairs()[0]).toMatchObject({ questions: false, questionsOwed: false });
+    });
+
+    it('a copy moved on by the other device: an Off follows the listing, not the id it held', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        const first = phone.pairs()[0].copyId;
+        const next = await copyIdOf('home-1', 1, sign);
+        w.rows.set(first, { ...w.rows.get(first)!, status: 'cancelled' });
+        w.rows.set(next, { id: next, type: 'offer', status: 'active', title: 'Tomatoes', takesQuestions: true });
+        expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('shown');
+        expect(w.rows.get(next)?.takesQuestions).toBe(false);
+    });
+
+    it('nothing up to shut: an Off answers done and the pair lets go, with no door left owed', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        w.rows.delete(phone.pairs()[0].copyId);
+        expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('shown');
+        expect(phone.pairs()).toEqual([]);
+    });
+
+    it('a tap while the first send is on its way stands: its Off isn\'t lost to the send landing, and it is sent after', async () => {
+        const w = world();
+        const phone = w.device();
+        w.onRead(async () => {
+            w.onRead(null);
+            await phone.takeQuestions('home-1', false, identity, w.deps);
+        });
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        expect(phone.pairs()[0]).toMatchObject({ questions: false });
+        await phone.tendCopies(identity, w.deps);
+        expect(up(w).takesQuestions).not.toBe(true);
+        expect(phone.pairs()[0].questionsOwed).toBe(false);
+    });
+
+    it('a rest: the copy comes back with its door, as global last had it', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        w.setHoliday(true);
+        await phone.tendCopies(identity, w.deps);
+        expect(w.up()).toEqual([]);
+        w.setHoliday(false);
+        await phone.tendCopies(identity, w.deps);
+        expect(up(w).takesQuestions).toBe(true);
+    });
+
+    it('a door shut on the other device stays shut through this one\'s rest', async () => {
+        const w = world();
+        const phone = w.device();
+        const browser = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        await browser.showOnGlobal(w.home, HOME, identity, w.deps);
+        await browser.takeQuestions('home-1', false, identity, w.deps);
+        w.setHoliday(true);
+        await phone.tendCopies(identity, w.deps);
+        w.setHoliday(false);
+        await phone.tendCopies(identity, w.deps);
+        expect(up(w).takesQuestions).not.toBe(true);
+        expect(phone.pairs()[0].questions).toBe(false);
+    });
+
+    it('a door opened on a resting pair goes with its return', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps);
+        w.setHoliday(true);
+        await phone.tendCopies(identity, w.deps);
+        expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('shown');
+        expect(w.doorSends).toEqual([]);
+        w.setHoliday(false);
+        await phone.tendCopies(identity, w.deps);
+        expect(up(w).takesQuestions).toBe(true);
+    });
+
+    it('a Stop showing takes the door with the copy', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+        await phone.stopShowing('home-1', identity, w.deps);
+        expect(w.up()).toEqual([]);
+        expect(phone.pairs()).toEqual([]);
+    });
+
+    it('no pair: a tap says the words, and asks nobody', async () => {
+        const w = world();
+        const phone = w.device();
+        expect(typeof await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('object');
+        expect(w.doorSends).toEqual([]);
     });
 });

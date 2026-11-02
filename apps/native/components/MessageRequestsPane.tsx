@@ -7,6 +7,7 @@ import { reportedAlertBody } from '../utils/reportReasons';
 import { chatActionErrorMessage, requestDecisionFailureWords, requestIsGone } from '../utils/chat-actions';
 import { ReportMessageSheet } from './ReportMessageSheet';
 import { MemberAvatar } from './MemberAvatar';
+import { openGlobalRequests } from '../utils/global-requests';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 
@@ -314,9 +315,11 @@ interface MessageRequestsPaneProps {
     onChanged: () => void;
     /** Back to the chats: the row at the top of Chat opened this. */
     onBack: () => void;
+    /** How many wait on the global community (utils/global-requests.ts). Their cards are there: this row is the way. */
+    onGlobal?: number;
 }
 
-export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack }: MessageRequestsPaneProps) {
+export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, onGlobal = 0 }: MessageRequestsPaneProps) {
     const { theme, colors } = useTheme();
     const [ignoringAll, setIgnoringAll] = useState(false);
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
@@ -425,7 +428,14 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                 <Text aria-hidden={true} importantForAccessibility="no" style={styles.backText}>‹ </Text>
                 <Text style={styles.backText}>{t('Back to chats')}</Text>
             </Pressable>
-            {count === 0 ? (
+            {onGlobal > 0 && (
+                <Pressable accessibilityRole="button" testID="message-requests-on-global" style={styles.emptyCard} onPress={() => void openGlobalRequests(identity?.publicKey)}>
+                    <Text style={styles.title}>{tn(onGlobal, '{n} person wants to message you', '{n} people want to message you')}</Text>
+                    <Text style={styles.emptyText}>{t('on the global community')}</Text>
+                    <Text style={styles.backText}>{t('Open their requests there')}</Text>
+                </Pressable>
+            )}
+            {count === 0 && onGlobal > 0 ? null : count === 0 ? (
                 <View style={styles.emptyCard}>
                     <Text style={styles.emptyText}>
                         {t("No requests. A first message from someone you haven't added or talked to arrives here.")}

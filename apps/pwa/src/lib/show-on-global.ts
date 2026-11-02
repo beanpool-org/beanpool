@@ -29,6 +29,7 @@ const ASK_TIMEOUT_MS = 12_000;
 const STANDING_TTL_MS = 24 * 60 * 60 * 1000;
 const STANDING_KEY = 'beanpool_global_standing';
 const TENDED_KEY = 'beanpool_copies_tended';
+const QUESTIONS_KEY = 'beanpool_questions_opened';
 
 const homeAddress = () => getNodeApiUrl() || window.location.origin;
 /** This community's host, as a community's address is compared: a port is no part of it. */
@@ -101,9 +102,46 @@ async function withGlobal<T>(run: (deps: CopyDeps<BeanPoolIdentity>) => Promise<
 export const copyPairOf = (homeId: string, publicKey: string): Promise<CopyPair | null> => keeper.pairOf(homeId, publicKey);
 
 /** The tick, for a post as its community answered it. Never throws: it says what it owes the member, or nothing. */
-export async function showPostOnGlobal(post: HomeEvent, identity: BeanPoolIdentity): Promise<string | null> {
-    const result: CopyResult = await withGlobal((deps) => keeper.showOnGlobal(post, homeAddress(), identity, deps), 'later' as CopyResult).catch(() => 'later' as const);
+export async function showPostOnGlobal(post: HomeEvent, identity: BeanPoolIdentity, takesQuestions = false): Promise<string | null> {
+    if (takesQuestions) noteQuestionsOpened(identity.publicKey);
+    const result: CopyResult = await withGlobal((deps) => keeper.showOnGlobal(post, homeAddress(), identity, deps, takesQuestions), 'later' as CopyResult).catch(() => 'later' as const);
     return copyResultLine(result);
+}
+
+/** The door's tick. The pair is this browser's own, so an Off with no answer stays owed, and the next tend sends it. */
+export async function takeQuestions(homeId: string, on: boolean, identity: BeanPoolIdentity): Promise<CopyResult> {
+    if (on) noteQuestionsOpened(identity.publicKey);
+    return withGlobal((deps) => keeper.takeQuestions(homeId, on, identity, deps), 'later' as CopyResult).catch(() => 'later' as const);
+}
+
+/**
+ * The key that has ticked a door in this browser: only then is global asked what waits there (apps/native utils/global-requests.ts
+ * says why). It stays after an Off, since a request already sent is still theirs to answer.
+ */
+function noteQuestionsOpened(publicKey: string): void {
+    try { localStorage.setItem(QUESTIONS_KEY, publicKey); } catch { /* storage off: no row here, and global's own has them */ }
+}
+
+/** How many wait on global for this key, in a count alone, and where they are. Null where nothing does. */
+export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity): Promise<{ count: number; href: string } | null> {
+    try {
+        if (localStorage.getItem(QUESTIONS_KEY) !== identity.publicKey) return null;
+    } catch {
+        return null;
+    }
+    const global = await globalAddress();
+    if (!global || !identity.privateKey) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
+    try {
+        const res = await signedCopyFetch('GET', global, '/api/me/unread', undefined, identity, controller.signal);
+        const answer = res.ok ? await res.json() as { requests?: unknown } : null;
+        return typeof answer?.requests === 'number' && answer.requests > 0 ? { count: answer.requests, href: `${global}/` } : null;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /** After an edit of an event or a cancelled date: the copy follows. A listing's edit goes by its community's word: a tend. */

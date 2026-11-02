@@ -8,14 +8,17 @@
  * answer. Told this key is a stranger there, it offers the door, in a new tab so a form in progress isn't lost. "I have my 12
  * words" is the way in there, which joins with the same key: "I'm new" would make a second account, and the tick would still say Join.
  * A member who has tapped the door is asked after when this tab comes back, so joining there brings the tick back here by itself.
+ *
+ * Under an Offer's or Need's tick, "Take questions about this on the global community" (slice GD): off every time, and only once
+ * the listing is to be shown. It asks global nothing until it is tapped either.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listingFreeTags, postTagsOf, t, type HomeEvent } from '@beanpool/core';
+import { listingFreeTags, postTagsOf, questionsLaterLine, t, takeQuestionsHint, takeQuestionsLabel, type HomeEvent } from '@beanpool/core';
 import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink } from '../lib/global-entry';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { MarketplacePost } from '../lib/api';
-import { askGlobalStanding, copyPairOf, forgetGlobalStanding, hostHere, readGlobalStanding, showPostOnGlobal, stopLaterLine, stopShowing, type GlobalStanding } from '../lib/show-on-global';
+import { askGlobalStanding, copyPairOf, forgetGlobalStanding, hostHere, readGlobalStanding, showPostOnGlobal, stopLaterLine, stopShowing, takeQuestions, type GlobalStanding } from '../lib/show-on-global';
 
 export const showOnGlobalLabel = () => t('Also show this on the global community');
 export const showOnGlobalHint = () => t("Anyone there can see it, with its times, its rough area and this community's name. Not your name, the place or your note. To go, they ask to join.");
@@ -33,8 +36,8 @@ const unreachable = () => say(t("The global community can't be reached right now
 const homeOf = (post: MarketplacePost): HomeEvent => ({ ...post, tags: postTagsOf(post.tags), freeTags: listingFreeTags(post) }) as unknown as HomeEvent;
 
 /** The member's own copy, sent from here: it holds up nothing, and what it owes them comes as its own line. */
-export async function showEventOnGlobal(post: MarketplacePost, identity: BeanPoolIdentity): Promise<void> {
-    say(await showPostOnGlobal(homeOf(post), identity));
+export async function showEventOnGlobal(post: MarketplacePost, identity: BeanPoolIdentity, takesQuestions = false): Promise<void> {
+    say(await showPostOnGlobal(homeOf(post), identity, takesQuestions));
 }
 
 interface Offer {
@@ -146,6 +149,19 @@ export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, i
     );
 }
 
+/** The door's tick, under the tick that shows the listing. */
+export function TakeQuestionsTick({ checked, onChange, busy = false }: { checked: boolean; onChange: (next: boolean) => void; busy?: boolean }) {
+    return (
+        <label data-testid="take-questions-tick" className={`flex items-start gap-2.5 mb-3 min-h-[44px] py-1 cursor-pointer ${busy ? 'opacity-60' : ''}`}>
+            <input type="checkbox" checked={checked} disabled={busy} onChange={() => onChange(!checked)} className="mt-0.5 w-5 h-5 shrink-0 accent-terra-600" />
+            <span className="min-w-0">
+                <span className="block text-sm font-bold text-nature-800 dark:text-oat-50 leading-snug break-words">{takeQuestionsLabel()}</span>
+                <span className="block mt-1 text-xs text-nature-800 dark:text-nature-200 leading-snug break-words">{takeQuestionsHint()}</span>
+            </span>
+        </label>
+    );
+}
+
 /** The host's page: shown, with Stop showing; or the same offer as the composer, for a post made without it. */
 export function ShowOnGlobalHostRow({ post, identity, enabled, listing = false }: {
     post: MarketplacePost; identity: BeanPoolIdentity | null | undefined; enabled: boolean; listing?: boolean;
@@ -153,6 +169,7 @@ export function ShowOnGlobalHostRow({ post, identity, enabled, listing = false }
     const { offer, global, ask, wentToDoor } = useOffer(enabled, identity);
     const [shown, setShown] = useState(false);
     const [resting, setResting] = useState(false);
+    const [questions, setQuestions] = useState(false);
     const [busy, setBusy] = useState(false);
     const publicKey = identity?.publicKey;
     const read = useCallback(() => {
@@ -160,6 +177,7 @@ export function ShowOnGlobalHostRow({ post, identity, enabled, listing = false }
         void copyPairOf(post.id, publicKey).then((p) => {
             setShown(!!p);
             setResting(!!p?.resting);
+            setQuestions(!!p?.questions);
         }).catch(() => {});
     }, [enabled, post.id, publicKey]);
     useEffect(read, [read]);
@@ -186,6 +204,18 @@ export function ShowOnGlobalHostRow({ post, identity, enabled, listing = false }
             setBusy(false);
         }
     };
+    // An Off that didn't reach global stays owed, and the tick says what the member asked: they are told it is still to land.
+    const takeTheQuestions = async (on: boolean) => {
+        setBusy(true);
+        try {
+            const result = await takeQuestions(post.id, on, identity);
+            if (result === 'later') alert([takeQuestionsLabel(), on ? t('It will go up on the global community as soon as it can.') : questionsLaterLine()].join('\n\n'));
+            else if (typeof result === 'object') alert([takeQuestionsLabel(), result.refused].join('\n\n'));
+        } finally {
+            read();
+            setBusy(false);
+        }
+    };
     return (
         <div data-testid="show-on-global-host" className="mt-3 min-w-0">
             {shown
@@ -197,6 +227,7 @@ export function ShowOnGlobalHostRow({ post, identity, enabled, listing = false }
                 className={`min-h-[44px] text-left text-sm font-bold text-nature-800 dark:text-oat-50 underline break-words cursor-pointer ${busy ? 'opacity-60' : ''}`}>
                 {shown ? t('Stop showing') : showOnGlobalLabel()}
             </button>
+            {listing && shown && <TakeQuestionsTick checked={questions} onChange={(on) => void takeTheQuestions(on)} busy={busy} />}
         </div>
     );
 }

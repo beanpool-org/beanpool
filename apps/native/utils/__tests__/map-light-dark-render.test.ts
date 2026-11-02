@@ -177,6 +177,14 @@ describe('Android: the map\'s light and dark are the real thing', () => {
         expect(theMap().made.initialRegion).toEqual(there);
     });
 
+    it('a view across the 180° line opens the new map on the same side of the world', async () => {
+        await open();
+        const there = { latitude: -28.64, longitude: 153.49, latitudeDelta: 40, longitudeDelta: -253 };
+        await act(async () => { theMap().now.onRegionChangeComplete(there); });
+        await flip();
+        expect(theMap().made.initialRegion).toEqual({ ...there, longitudeDelta: 107 });
+    });
+
     it('the buttons drive the new map, not the one that went', async () => {
         await open();
         const first = theMap();

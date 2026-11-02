@@ -29,7 +29,7 @@ import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans } from '../../utils/market-global';
 import { MapStackList } from '../../components/MapStackList';
-import { MARKER_Z, bubbleHolding, mapRestOf, planBubbleTap, regionClearOfList, stackPosts } from '../../utils/map-stack';
+import { MARKER_Z, bubbleHolding, lngSpanOf, mapRestOf, planBubbleTap, regionClearOfList, stackPosts } from '../../utils/map-stack';
 import { darkMapStyle, hidePoisStyle, mapIsDark, mapSchemeKey, type MapSchemePick } from '../../utils/map-scheme';
 
 // The window as the clustering library read it: once, when the app loaded (its helpers.js). A bubble's zoom is worked out in its units.
@@ -581,7 +581,8 @@ export default function MapScreen() {
                         // A tap on the map closes the category panel without changing the filter.
                         closeCategoryPanel();
                     }}
-                    initialRegion={currentRegion}
+                    // The tracked region is what Android reported: a view across the 180° line has a negative delta here.
+                    initialRegion={{ ...currentRegion, longitudeDelta: lngSpanOf(currentRegion) }}
                     renderCluster={renderCluster}
                     superClusterRef={clusterIndex}
                     preserveClusterPressBehavior

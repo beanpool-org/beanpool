@@ -33,7 +33,7 @@ export interface MapPoint { latitude: number; longitude: number }
  * OnRegionChangeEvent subtracts west from east, with no wrap), and a member at Byron reaches one at about zoom 3. Sent back to
  * the map, a negative delta swaps west and east (MapManager.java) and shows the other side of the world.
  */
-const lngSpanOf = (region: MapRegion) => (region.longitudeDelta < 0 ? region.longitudeDelta + 360 : region.longitudeDelta);
+export const lngSpanOf = (region: MapRegion) => (region.longitudeDelta < 0 ? region.longitudeDelta + 360 : region.longitudeDelta);
 
 const TILE = 256;
 const mercatorY = (lat: number) => {

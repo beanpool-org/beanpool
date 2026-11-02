@@ -1401,8 +1401,18 @@ function eventEdit(row: MadeRow, args: Record<string, unknown>, updates: Updates
     return null;
 }
 
+/**
+ * New ids for a poll's answers, in the same words. A vote carries only an id, and the engine takes only an id in the current list,
+ * so new ids are what refuse a vote from a copy of the card older than this edit: one that still says Anonymous on what is now an
+ * open vote, or lists the answers in another order. The refused member's next copy is the one they can answer.
+ */
+function freshPollIds(options: Array<{ text: string }>): Array<{ id: string; text: string }> {
+    const copy = crypto.randomBytes(4).toString('hex');
+    return options.map((option, i) => ({ id: `opt_${copy}_${i + 1}`, text: option.text }));
+}
+
 /** A poll's own fields, under the names the engine takes: it holds the question, the answers and the ballot from the first vote. */
-function pollEdit(args: Record<string, unknown>, updates: Updates): string | null {
+function pollEdit(row: MadeRow, args: Record<string, unknown>, updates: Updates): string | null {
     const flag = notAFlag(args, ['open_vote']);
     if (flag) return flag;
     if (args.question !== undefined) {
@@ -1422,6 +1432,10 @@ function pollEdit(args: Record<string, unknown>, updates: Updates): string | nul
         updates.pollOptions = answers.options;
     }
     put(updates, { pollOpenVote: args.open_vote });
+    // Only with no vote in: from the first one the engine refuses an answers list, and its own refusals must be the ones heard.
+    if (row.poll_vote_count === 0 && (args.question !== undefined || args.options !== undefined || args.open_vote !== undefined)) {
+        updates.pollOptions = freshPollIds((updates.pollOptions as Array<{ text: string }> | undefined) ?? storedPollOptions(row));
+    }
     return null;
 }
 
@@ -1460,7 +1474,7 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
     const tooLong = updates.title !== undefined ? titleTooLong(args, event ? AGENT_TITLE_MAX.event : AGENT_TITLE_MAX.listing) : null;
     if (tooLong) return { ok: false, error: tooLong };
     const problem = poll
-        ? pollEdit(args, updates)
+        ? pollEdit(row, args, updates)
         : placeEdit(grant, args, updates) ?? (event ? eventEdit(row, args, updates) : listingEdit(row, grant, args, updates)) ?? (row.shown_from_host != null ? copyEdit(updates) : null);
     if (problem) return { ok: false, error: problem };
     const tagged = heldTags(args, row);
@@ -1781,7 +1795,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
                     type: 'array', minItems: POLL_OPTIONS_MIN, maxItems: POLL_OPTIONS_MAX, items: { type: 'string', maxLength: POLL_OPTION_MAX_CHARS },
                     description: `a poll's whole new list of ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers, until its first vote: each different and at most ${POLL_OPTION_MAX_CHARS} characters`,
                 },
-                open_vote: { type: 'boolean', description: "a poll's ballot, until its first vote: false, anonymous; true, every member sees who chose what. A member whose app still shows the last copy may vote on what it said, so choose this at create_poll" },
+                open_vote: { type: 'boolean', description: "a poll's ballot, until its first vote: false, anonymous; true, every member sees who chose what" },
                 category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: "an Offer's or a Need's new Market category" },
                 beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
                 price_type: { type: 'string', enum: [...POST_PRICE_TYPES], description: "an Offer's or a Need's: how the price is counted; a lent Offer's is fixed, daily or weekly" },

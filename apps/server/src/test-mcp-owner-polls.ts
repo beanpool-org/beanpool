@@ -9,6 +9,7 @@
  *   3. Each refusal of a create, in words: nothing written, nothing counted, nothing dropped unsaid.
  *   4. The engine's limits, in its words: one open poll by the owners' number, the community's 5, the day's posts, a mute.
  *   5. update_post before the first vote: each field, and nothing the engine would drop.
+ *  5b. A card older than an edit: its vote is refused through the real signed route, nothing stored; the refreshed card's goes through.
  *   6. From the first vote: the question, the answers and the ballot are fixed, the description is not.
  *   7. close_poll: for good, each refusal, a poll past its closing time before the sweep reaches it.
  *   8. poll_results: counts only on an anonymous poll and on an open vote, fenced text, never who.
@@ -92,6 +93,8 @@ const DAY = 86_400_000;
 const row = (id: string): any => db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
 const pollCount = (): number => (db.prepare("SELECT COUNT(*) AS c FROM posts WHERE type = 'poll'").get() as { c: number }).c;
 const optionsOf = (id: string): string[] => (JSON.parse(row(id)?.poll_options ?? '[]') as Array<{ text: string }>).map((o) => o.text);
+const idsOf = (id: string): string[] => (JSON.parse(row(id)?.poll_options ?? '[]') as Array<{ id: string }>).map((o) => o.id);
+const votesIn = (id: string): number => (db.prepare('SELECT COUNT(*) AS c FROM poll_votes WHERE post_id = ?').get(id) as { c: number }).c;
 const fenced = (v: any): string => v?.text ?? '';
 /** Every poll closed, so the next section starts with the community's 5 free. */
 const clearBoard = (): void => { db.prepare("UPDATE posts SET status = 'completed' WHERE type = 'poll' AND status = 'active'").run(); };
@@ -177,6 +180,13 @@ async function main(): Promise<void> {
         const updateProps = Object.keys((named('update_post')?.inputSchema as any).properties ?? {});
         assert(['question', 'options', 'open_vote'].every((f) => updateProps.includes(f)), 'update_post\'s schema names a poll\'s fields');
         assert(/first vote/.test(named('update_post')?.description ?? ''), 'update_post says what the first vote fixes');
+        const openVoteWords = String((named('update_post')?.inputSchema as any).properties.open_vote.description);
+        assert(/until its first vote/.test(openVoteWords) && !/copy|create_poll/.test(openVoteWords), `open_vote warns of no older card: an older card's vote is refused (${openVoteWords})`);
+        const page = (name: string): string => fs.readFileSync(new URL(`../../../packages/beanpool-guide/content/${name}`, import.meta.url), 'utf8');
+        const rulesPage = page('about/rules.md');
+        assert(rulesPage.includes("can't be changed in the app after the Poll is posted. An owner's AI assistant can change it on a Poll it made, only until the first vote.") && !rulesPage.includes("can't be changed after the Poll is posted"),
+            'the Rules page says what polls.md says: not in the app; an owner\'s assistant, on a poll it made, only until the first vote');
+        assert(page('commons/polls.md').includes("You can't change it in the app after the poll is posted. An owner's AI assistant can change it on a poll it made, only until the first vote."), 'and so does the polls page');
         const readerTools = (await reader.listTools()).tools.map((t) => t.name);
         assert(!['create_poll', 'close_poll', 'poll_results'].some((n) => readerTools.includes(n)), 'an assistant not ticked "May post for me" has none of them');
         const notTicked = await tool('create_poll', poll(), reader);
@@ -354,15 +364,96 @@ async function main(): Promise<void> {
             assert(r.isError === true && new RegExp(`Only a poll has ${field}`).test(errorText(r)), `${field} on an Offer → refused in words (${errorText(r).slice(0, 80)})`);
         }
         const readBack = (await (async () => (structured(await tool('my_posts', { limit: 50 }))?.posts as any[]))()).find((p) => p.postId === editId);
-        assert(readBack?.kind === 'poll' && /Saturday morning/.test(fenced(readBack?.options?.[0]?.text)) && readBack?.options?.length === 3 && readBack?.options?.[0]?.id === 'opt_1',
+        assert(readBack?.kind === 'poll' && /Saturday morning/.test(fenced(readBack?.options?.[0]?.text)) && readBack?.options?.length === 3 && readBack?.options?.[0]?.id === idsOf(editId)[0],
             `my_posts reads a poll's answers back, fenced (${String(JSON.stringify(readBack?.options?.[0])).slice(0, 120)})`);
         assert(readBack?.openVote === false && readBack?.closesAt === row(editId)?.poll_closes_at && readBack?.closed === false && readBack?.totalVotes === 0 && readBack?.answersFixed === false,
             `and its ballot, its closing time, its votes, and that its answers can still change (${JSON.stringify({ o: readBack?.openVote, c: readBack?.closed, t: readBack?.totalVotes, f: readBack?.answersFixed })})`);
         assert(readBack?.lat === undefined && readBack?.photoCount === undefined && readBack?.beans === undefined && readBack?.category === undefined, 'and no field a poll does not take');
 
+        // ── 5b. A card older than an edit ────────────────────────────────────────────────────────────
+        section('── 5b. A card older than an edit ──');
+        /** The community's 5 free again, with the poll section 6 goes on to use still open. */
+        const clearAllButEdited = (): void => { db.prepare("UPDATE posts SET status = 'completed' WHERE type = 'poll' AND status = 'active' AND id != ?").run(editId); };
+        clearAllButEdited();
+        /** What a member's app holds of a poll: the answers it shows and the ballot it says. */
+        const card = (id: string) => {
+            const post = getPosts({ type: 'poll', viewerPubkey: mia.pub }).find((p) => p.id === id);
+            return { options: (post?.pollOptions ?? []) as Array<{ id: string; text: string }>, openVote: post?.pollOpenVote };
+        };
+        const answerOf = (c: ReturnType<typeof card>, text: string): string => c.options.find((o) => o.text === text)?.id ?? '';
+        const vote = (id: string, optionId: string, who: Key = mia) => signed(`/api/marketplace/posts/${id}/vote`, { optionId }, who);
+        const refused = (r: { status: number; body: any }) => r.status === 400 && r.body?.error === 'Invalid poll option';
+
+        // The ballot: the card Mia holds says Anonymous, and the poll is now an open vote.
+        const flip = await made();
+        const flipOld = card(flip);
+        assert(flipOld.openVote === false && flipOld.options.length === 2, `Mia's card says Anonymous (${JSON.stringify(flipOld)})`);
+        const opened = await edit({ post_id: flip, open_vote: true });
+        assert(!opened.isError && row(flip)?.poll_open_vote === 1 && JSON.stringify(structured(opened)?.changed) === JSON.stringify(['open_vote']), `the ballot opens, and the answer names only what was sent (${errorText(opened) || 'ok'})`);
+        const flipIds = idsOf(flip);
+        assert(flipIds.every((id) => /^opt_[0-9a-f]{8}_[1-4]$/.test(id)) && !flipIds.some((id) => flipOld.options.some((o) => o.id === id)), `an edit of the ballot gives every answer a new id (${flipIds.join(', ')})`);
+        assert(JSON.stringify(optionsOf(flip)) === JSON.stringify(flipOld.options.map((o) => o.text)), `with the same answers, in the same order (${optionsOf(flip).join(', ')})`);
+        const flipStale = await vote(flip, flipOld.options[0].id);
+        assert(refused(flipStale) && votesIn(flip) === 0, `a vote from the card that said Anonymous → refused, nothing stored (${flipStale.status} ${JSON.stringify(flipStale.body).slice(0, 120)}, ${votesIn(flip)} votes)`);
+        const flipOtherRoute = await signed('/api/marketplace/polls/vote', { postId: flip, optionId: flipOld.options[1].id }, mia);
+        assert(refused(flipOtherRoute) && votesIn(flip) === 0, `and through the node's second vote route, which neither app calls (${flipOtherRoute.status} ${JSON.stringify(flipOtherRoute.body).slice(0, 120)})`);
+        const flipNew = card(flip);
+        assert(flipNew.openVote === true, `the refreshed card says Open vote (${JSON.stringify(flipNew.openVote)})`);
+        const flipFresh = await vote(flip, flipNew.options[0].id);
+        assert(flipFresh.status === 200 && votesIn(flip) === 1, `a vote from the refreshed card goes through (${flipFresh.status}, ${votesIn(flip)} vote)`);
+
+        // The order: a tap on "Yes" on the old card would be counted as "No".
+        const reorder = await made({ options: ['Yes', 'No'] });
+        const reorderOld = card(reorder);
+        const swapped = await edit({ post_id: reorder, options: ['No', 'Yes'] });
+        assert(!swapped.isError && JSON.stringify(optionsOf(reorder)) === JSON.stringify(['No', 'Yes']), `the answers change places (${errorText(swapped) || optionsOf(reorder).join(', ')})`);
+        const reorderStale = await vote(reorder, answerOf(reorderOld, 'Yes'));
+        const noneCounted = structured(await results(reorder));
+        assert(refused(reorderStale) && votesIn(reorder) === 0 && noneCounted?.totalVotes === 0, `"Yes" on the old card → refused, not filed under "No" (${reorderStale.status} ${JSON.stringify(reorderStale.body).slice(0, 120)}, ${noneCounted?.totalVotes} counted)`);
+        const reorderFresh = await vote(reorder, answerOf(card(reorder), 'Yes'));
+        const counted = structured(await results(reorder));
+        const countOf = (text: string): number | undefined => counted?.options?.find((o: any) => fenced(o.text).includes(`\n${text}\n`))?.votes;
+        assert(reorderFresh.status === 200 && counted?.totalVotes === 1 && countOf('Yes') === 1 && countOf('No') === 0, `"Yes" on the refreshed card reads Yes (${reorderFresh.status}, ${JSON.stringify(counted?.options?.map((o: any) => o.votes))})`);
+
+        // The question alone, with the answers as they stood.
+        const reworded = await made();
+        const rewordedOld = card(reworded);
+        const newQuestion = await edit({ post_id: reworded, question: 'Which day, now that the hall has moved?' });
+        const rewordedStale = await vote(reworded, rewordedOld.options[0].id);
+        assert(!newQuestion.isError && JSON.stringify(optionsOf(reworded)) === JSON.stringify(rewordedOld.options.map((o) => o.text)) && refused(rewordedStale) && votesIn(reworded) === 0,
+            `a vote from a card with the old question → refused (${rewordedStale.status} ${JSON.stringify(rewordedStale.body).slice(0, 120)})`);
+
+        // Every edit, not only the first: there and back leaves the first card as old as the second.
+        const backAgain = await made();
+        const backOld = idsOf(backAgain);
+        await edit({ post_id: backAgain, open_vote: true });
+        const backMiddle = idsOf(backAgain);
+        await edit({ post_id: backAgain, open_vote: false });
+        const backNow = idsOf(backAgain);
+        assert(new Set([...backOld, ...backMiddle, ...backNow]).size === 6, `there and back: three copies, no id shared (${[...backOld, ...backMiddle, ...backNow].join(', ')})`);
+        const backStale = await vote(backAgain, backOld[0]);
+        assert(refused(backStale) && votesIn(backAgain) === 0, `and the first copy's vote is still refused, though it reads the same again (${backStale.status})`);
+
+        // What the ballot does not rest on stays as it was: a card with only its notes out of date still answers.
+        clearAllButEdited();
+        const noted = await made();
+        const notedOld = card(noted);
+        await edit({ post_id: noted, description: 'Bring a chair.' });
+        assert(JSON.stringify(card(noted).options.map((o) => o.id)) === JSON.stringify(notedOld.options.map((o) => o.id)), 'the description alone leaves the ids as they were');
+        const notedVote = await vote(noted, notedOld.options[0].id);
+        assert(notedVote.status === 200 && votesIn(noted) === 1, `a card with only its notes out of date still answers (${notedVote.status})`);
+
+        // With a vote in, the edit adds no list of answers: a question and ballot the same as the stored ones change nothing, and are no refusal.
+        const settled = await made();
+        const settledIds = idsOf(settled);
+        await vote(settled, settledIds[0]);
+        const sameAgain = await edit({ post_id: settled, question: row(settled)?.title, open_vote: false });
+        assert(!sameAgain.isError && JSON.stringify(idsOf(settled)) === JSON.stringify(settledIds) && votesIn(settled) === 1, `with a vote in, resending what it holds is no refusal and moves no id (${errorText(sameAgain) || 'ok'})`);
+        clearAllButEdited();
+
         // ── 6. From the first vote ───────────────────────────────────────────────────────────────────
         section('── 6. From the first vote ──');
-        votePoll(editId, mia.pub, 'opt_1');
+        votePoll(editId, mia.pub, idsOf(editId)[0]);
         const editsBeforeLocks = structured(await edit({ post_id: editId, description: 'One vote in.' }));
         assert(row(editId)?.description === 'One vote in.' && editsBeforeLocks?.editsToday >= 1, 'the description still changes after a vote, as the engine lets it');
         const lockedTitle = row(editId)?.title, lockedOptions = row(editId)?.poll_options;
@@ -386,7 +477,7 @@ async function main(): Promise<void> {
         assert(!closed.isError && structured(closed)?.closed === true && row(editId)?.status === 'completed' && structured(closed)?.postId === editId, `a poll closes early, as Close Poll does (${errorText(closed) || JSON.stringify(structured(closed))})`);
         assert((db.prepare("SELECT metadata FROM system_logs WHERE category = 'AGENT' AND message = 'Assistant wrote'").all() as Array<{ metadata: string }>).some((l) => l.metadata.includes('close_poll') && l.metadata.includes(editId)), 'the AGENT line names the poll');
         let lateVote = '';
-        try { votePoll(editId, noah.pub, 'opt_1'); } catch (e) { lateVote = (e as Error).message; }
+        try { votePoll(editId, noah.pub, idsOf(editId)[0]); } catch (e) { lateVote = (e as Error).message; }
         assert(/This poll is closed/.test(lateVote), `no member can answer it now (${lateVote})`);
         const twice = await tool('close_poll', { post_id: editId });
         assert(twice.isError === true && /already closed/.test(errorText(twice)), `closing it again → said so (${errorText(twice)})`);

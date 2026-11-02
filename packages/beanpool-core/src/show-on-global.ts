@@ -34,7 +34,8 @@
  *   there first and takes it up, and two first sends at once are one row. Each tends it; what they send is the same, and a
  *   copy taken down by one is left down by the other at its next look. A device that fell behind holds an id the other has moved
  *   on from, so a Stop showing goes after the listing, not one id, and never says it is done while a read can find the copy up
- *   ({@link CopyKeeper.stopShowing}). The one thing that can't cross: a Stop showing on one device while the listing is off the
+ *   ({@link CopyKeeper.stopShowing}). A rest moves a tick that never landed past no id, or the other device's first tick lands
+ *   below where this one looks. The one thing that can't cross: a Stop showing on one device while the listing is off the
  *   board and the other holds the rest. Nothing is up on global to say so, and the other device brings it back once, where it
  *   reads Shown with Stop showing beside it.
  */
@@ -114,7 +115,8 @@ export interface CopyPair {
     leaving?: boolean;
     /**
      * The member is on holiday at home: the copy comes down, and goes back up when they're back. With `leaving`, global hasn't
-     * heard yet. Without it the copy is down and the pair holds a new id, since a copy taken down can't be brought back.
+     * heard yet. Without it the copy is down and the pair holds a new id, since a copy taken down can't be brought back; a tick
+     * that never landed took no id and has no copy, and holds the id it had.
      */
     resting?: boolean;
     /** The ids its copy had before a rest: a page left open on one, or a row still cached, still reaches this pair. */
@@ -238,7 +240,7 @@ const isListing = (home: Pick<HomeEvent, 'type'>): boolean => home.type === 'off
 /** Shown, waiting to be, or resting: it stays theirs to stop. */
 const stillTheirs = (p: CopyPair) => !p.leaving || !!p.resting;
 
-/** Coming back from a rest that took a copy down. A tick that found its listing off the board rests too, but never had a copy. */
+/** Coming back from a rest that took a copy down. A tick that never landed rests too, but never had a copy. */
 const backFromRest = (p: CopyPair) => !!p.resting && !!p.earlierIds?.length;
 
 const firstPhoto = (home: HomeEvent) => home.photos?.[0] ?? '';
@@ -577,8 +579,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
             }
             if (!mayHaveCopy(atHome, identity.publicKey)) return refused;
             if (restsAtHome(atHome)) {
-                // A pair held has a copy up to bring down, unless reports hold it. A new one has nothing up, which is what `resting`
-                // without `leaving` says.
+                // A pair held may have a copy up to bring down, unless reports hold it. A new one has nothing up, which is what
+                // `resting` without `leaving` says.
                 if (kept && !kept.resting && await restMustWait(kept, identity, deps)) return 'later';
                 await (kept ? restCopy(kept, identity, deps) : savePair({ ...pair, resting: true }));
                 return 'later';
@@ -651,8 +653,22 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     /**
      * A holiday at home: the copy comes down and the pair waits with a new id for the holiday to end. A Stop showing while global
      * was being asked has the last word: `takeDown` saves `resting: false` before it asks, and drops the pair after.
+     *
+     * A tick that never landed took no id, so it rests where it is: gone on to the next, it would look past the one it left free,
+     * where the other device's first tick lands. A first send whose answer was lost is up, so global is read to say which this
+     * is. A Stop or a send can land during that read, and stands: what the read says goes by the pair as it is stored now.
      */
     async function restCopy(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<void> {
+        if (!pair.sent && !pair.leaving) {
+            const there = await copyIsThere(pair, identity, deps).catch(() => 'later' as const);
+            if (there === 'later') return;
+            if (!there) {
+                await store.change((pairs) => pairs.map((p) => (p.copyId === pair.copyId && !p.leaving && !p.sent ? { ...p, resting: true } : p)));
+                return;
+            }
+            const stored = await storedPair(pair.copyId);
+            if (!stored || stored.leaving) return;
+        }
         if (!(await askDown({ ...pair, resting: true }, identity, deps))) return;
         const generation = (pair.generation ?? 0) + 1;
         const waiting: CopyPair = {

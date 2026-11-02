@@ -36,6 +36,7 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
     let onRefused: (() => Promise<unknown>) | null = null;
     let silentRead: ((q: URLSearchParams) => boolean) | null = null;
     let lostRead = false;
+    let onRead: (() => Promise<unknown> | void) | null = null;
     let removeAnswer: ((id: string) => Response | null) | null = null;
     const reads: string[][] = [];
     const removes: string[] = [];
@@ -53,7 +54,9 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
             reads.push(ids);
             if (lostRead) throw new TypeError('Network request failed');
             if (silentRead?.(q)) return json({ error: 'Busy' }, 503);
-            return json(ids.flatMap((id) => { const row = rows.get(id); return row && readable(row) ? [row] : []; }));
+            const answer = json(ids.flatMap((id) => { const row = rows.get(id); return row && readable(row) ? [row] : []; }));
+            await onRead?.();
+            return answer;
         },
         async post(_url, path, body: any) {
             if (path === '/api/marketplace/posts') {
@@ -104,6 +107,8 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
         silentOn: (pick: ((q: URLSearchParams) => boolean) | null) => { silentRead = pick; },
         /** Reads of global fail on the way, as with no network: what a phone's fetch throws. */
         loseReads: (lost: boolean) => { lostRead = lost; },
+        /** Runs while the answer to a read of global is on its way: that answer says what stood before this ran. */
+        onRead: (run: (() => Promise<unknown> | void) | null) => { onRead = run; },
         /** Global answers a remove with this instead of doing it; null, it does them all. */
         removeAnswers: (answer: ((id: string) => Response | null) | null) => { removeAnswer = answer; },
         /** The ids of each read of global, and of each remove, in order. */
@@ -821,6 +826,287 @@ describe('a rest goes by the listing too: a copy moved on is this device\'s to t
     });
 });
 
+/** A tick left waiting for global, on its first answer. */
+async function tickWaiting(w: ReturnType<typeof world>) {
+    const device = w.device();
+    w.busyOn(1);
+    expect(await device.showOnGlobal(w.home, HOME, identity)).toBe('later');
+    expect(device.pairs()[0].sent).toBe('');
+    return device;
+}
+
+/** The first send landed and its answer never came: the row is up, and the pair has nothing in `sent`. */
+async function tickLandedUnheard(w: ReturnType<typeof world>) {
+    const device = await tickWaiting(w);
+    const id = device.pairs()[0].copyId;
+    w.rows.set(id, { id, type: w.home.type as string, status: 'active', title: w.home.title });
+    return device;
+}
+
+/** Runs `then` during the read a rest of a waiting tick adds, the second of a tend's on global, after `restMustWait`'s. */
+function duringTheTicksRead(w: ReturnType<typeof world>, then: () => Promise<unknown> | void) {
+    let reads = 0;
+    w.onRead(async () => {
+        if (++reads === 2) await then();
+    });
+}
+
+/** The phone's tick waits, the phone tends with the listing off the board, the listing is back, and the browser ticks. */
+async function tickRestedWaiting(w: ReturnType<typeof world>, off: (on: boolean) => void) {
+    const phone = await tickWaiting(w);
+    const browser = w.device();
+    off(true);
+    await phone.tendCopies(identity);
+    expect(phone.pairs()[0].resting).toBe(true);
+    off(false);
+    expect(await browser.showOnGlobal(w.home, HOME, identity)).toBe('shown');
+    expect(w.up()).toHaveLength(1);
+    return { phone, browser };
+}
+
+describe('a tick that never landed rests where it is: nothing took its id, and the other device\'s first tick lands there', () => {
+    const listings = [['An Offer', 'offer'], ['A Need', 'need']];
+    const paused = (w: ReturnType<typeof world>) => (on: boolean) => { w.home.status = on ? 'paused' : 'active'; };
+
+    it.each(listings)('%s: back from the rest, it takes up that copy, so one listing is one row', async (_kind, type) => {
+        const w = world();
+        w.home.type = type;
+        const { phone, browser } = await tickRestedWaiting(w, paused(w));
+        await phone.tendCopies(identity);
+        await browser.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(phone.pairs()[0].copyId).toBe(browser.pairs()[0].copyId);
+        expect(phone.pairs()[0].sent).not.toBe('');
+        expect(w.creates()).toBe(1);
+    });
+
+    it.each(listings)('%s: back from the rest, a Stop on it takes down all there is', async (_kind, type) => {
+        const w = world();
+        w.home.type = type;
+        const { phone } = await tickRestedWaiting(w, paused(w));
+        await phone.tendCopies(identity);
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it.each(listings)('%s: a Stop while it rests finds that copy, and is true only once it is down', async (_kind, type) => {
+        const w = world();
+        w.home.type = type;
+        const { phone } = await tickRestedWaiting(w, paused(w));
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+        expect(phone.pairs()).toEqual([]);
+    });
+
+    it('an event, by a holiday, the same', async () => {
+        const w = world();
+        Object.assign(w.home, { type: 'event', category: 'community', eventStartAt: '2030-01-01T10:00:00Z', eventEndAt: '2030-01-01T11:00:00Z' });
+        const { phone, browser } = await tickRestedWaiting(w, (on) => w.setHoliday(on));
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(phone.pairs()[0].copyId).toBe(browser.pairs()[0].copyId);
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('the control: the same two ticks with no rest between are one row', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        expect(await w.device().showOnGlobal(w.home, HOME, identity)).toBe('shown');
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(w.creates()).toBe(1);
+    });
+
+    it('a tick on a row left stale rests the same way: it sits in the rest, not the tend', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        const browser = w.device();
+        const id = phone.pairs()[0].copyId;
+        w.home.status = 'paused';
+        expect(await phone.showOnGlobal(w.home, HOME, identity)).toBe('later');
+        expect(phone.pairs()[0]).toMatchObject({ resting: true, copyId: id });
+        w.home.status = 'active';
+        await browser.showOnGlobal(w.home, HOME, identity);
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(phone.pairs()[0].sent).not.toBe('');
+    });
+
+    it('one device on its own comes back as ever: one send, one row, and a Stop ends it', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(w.creates()).toBe(1);
+        expect(phone.pairs()[0].sent).not.toBe('');
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('a first answer lost reads as up: that copy comes down, and the pair moves on as any rest does', async () => {
+        const w = world();
+        const phone = await tickLandedUnheard(w);
+        const id = phone.pairs()[0].copyId;
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+        expect(w.removes).toEqual([id]);
+        expect(phone.pairs()[0]).toMatchObject({ resting: true, generation: 1 });
+        expect(phone.pairs()[0].leaving).toBeFalsy();
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(phone.pairs()[0].sent).not.toBe('');
+    });
+
+    it('that remove landing and its answer lost: the retry doesn\'t stop to read, or the pair is stuck leaving', async () => {
+        const w = world();
+        const phone = await tickLandedUnheard(w);
+        const id = phone.pairs()[0].copyId;
+        w.removeAnswers(() => {
+            w.rows.get(id)!.status = 'cancelled';
+            return w.json({ error: 'Busy' }, 503);
+        });
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0]).toMatchObject({ resting: true, leaving: true, copyId: id });
+        w.removeAnswers(null);
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0]).toMatchObject({ resting: true, generation: 1 });
+        expect(phone.pairs()[0].leaving).toBeFalsy();
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+    });
+
+    it('its read unanswered, it waits as it is, and the next tend rests it', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        let reads = 0;
+        w.silentOn(() => ++reads === 2);
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(reads).toBe(2);
+        expect(phone.pairs()[0]).toMatchObject({ sent: '', generation: 0 });
+        expect(phone.pairs()[0].resting).toBeFalsy();
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0]).toMatchObject({ resting: true, generation: 0 });
+        expect(w.removes).toEqual([]);
+    });
+
+    it('that read lost on the way answers a tick with later, never a throw', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        let reads = 0;
+        w.onRead(() => {
+            if (++reads === 2) throw new TypeError('Network request failed');
+        });
+        w.home.status = 'paused';
+        await expect(phone.showOnGlobal(w.home, HOME, identity)).resolves.toBe('later');
+        expect(phone.pairs()[0].resting).toBeFalsy();
+    });
+
+    it('a Stop landing during its read stands: the pair stays gone', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        duringTheTicksRead(w, () => phone.stopShowing('home-1', identity));
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()).toEqual([]);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('a Stop still leaving when its read comes back stays a Stop: no rest takes it over, and nothing comes back', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        duringTheTicksRead(w, async () => {
+            w.silentOn((q) => q.has('ids'));
+            expect(await phone.stopShowing('home-1', identity)).toBe(false);
+            w.silentOn(null);
+        });
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0].leaving).toBe(true);
+        expect(phone.pairs()[0].resting).toBeFalsy();
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        await phone.tendCopies(identity);
+        expect(phone.pairs()).toEqual([]);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('a Stop landing during its read of a copy that is up stands too: the pair isn\'t written back', async () => {
+        const w = world();
+        const phone = await tickLandedUnheard(w);
+        duringTheTicksRead(w, () => phone.stopShowing('home-1', identity));
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()).toEqual([]);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()).toEqual([]);
+        expect(w.up()).toEqual([]);
+        expect(w.creates()).toBe(0);
+    });
+
+    it('and a Stop still leaving over a copy that is up stays a Stop: the rest doesn\'t go on and take it over', async () => {
+        const w = world();
+        const phone = await tickLandedUnheard(w);
+        duringTheTicksRead(w, async () => {
+            w.silentOn((q) => q.has('ids'));
+            expect(await phone.stopShowing('home-1', identity)).toBe(false);
+            w.silentOn(null);
+        });
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0].leaving).toBe(true);
+        expect(phone.pairs()[0].resting).toBeFalsy();
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        await phone.tendCopies(identity);
+        expect(phone.pairs()).toEqual([]);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('the rest is that pair\'s alone: a waiting tick on another listing stays as it is', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        const other = { ...w.home, id: 'home-2' };
+        w.busyOn(1);
+        expect(await phone.showOnGlobal(other, HOME, identity)).toBe('later');
+        w.home.status = 'paused';
+        expect(await phone.showOnGlobal(w.home, HOME, identity)).toBe('later');
+        const byHome = (id: string) => phone.pairs().find((p) => p.homeId === id)!;
+        expect(byHome('home-1').resting).toBe(true);
+        expect(byHome('home-2').resting).toBeFalsy();
+    });
+
+    it('a send landing during its read isn\'t rested as if it had none: its copy comes down at the next tend', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        duringTheTicksRead(w, async () => {
+            w.home.status = 'active';
+            expect(await phone.showOnGlobal(w.home, HOME, identity)).toBe('shown');
+            w.home.status = 'paused';
+        });
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0].sent).not.toBe('');
+        expect(phone.pairs()[0].resting).toBeFalsy();
+        w.onRead(null);
+        await phone.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+        expect(phone.pairs()[0]).toMatchObject({ resting: true, generation: 1 });
+    });
+});
+
 describe('what stays, each pinned so a change to it is seen', () => {
     it('a Stop still leaving on one device takes down a tick the other made since: that Stop came first, and the other reads Shown', async () => {
         const w = world();
@@ -872,6 +1158,51 @@ describe('what stays, each pinned so a change to it is seen', () => {
         expect(await browser.showOnGlobal(w.home, HOME, identity)).toBe('later');
         expect(browser.pairs()[0].resting).toBe(true);
         expect(w.up()).toHaveLength(1);
+    });
+
+    it('a tick still waiting comes back past a takedown it can\'t see, a moderator\'s as a Stop: it reads Shown, and a Stop there stands', async () => {
+        const w = world();
+        const { phone } = await tickRestedWaiting(w, (on) => { w.home.status = on ? 'paused' : 'active'; });
+        w.up()[0].status = 'cancelled';
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(phone.pairs()[0].generation).toBe(1);
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('a return whose answer was lost, then a pause: the copy stays up until the listing is back, and a Stop still finds it', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        w.home.status = 'active';
+        w.busyOn(1);
+        await phone.tendCopies(identity);
+        const id = phone.pairs()[0].copyId;
+        w.rows.set(id, { id, type: 'offer', status: 'active', title: w.home.title });
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('a tick over a Stop still leaving, the listing off the board: it takes the leaving pair\'s place, the copy waits for the listing, and a Stop still finds it', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        w.removeAnswers(() => w.json({ error: 'Busy' }, 503));
+        expect(await phone.stopShowing('home-1', identity)).toBe(false);
+        w.removeAnswers(null);
+        w.home.status = 'paused';
+        expect(await phone.showOnGlobal(w.home, HOME, identity)).toBe('later');
+        await phone.tendCopies(identity);
+        expect(phone.pairs()).toHaveLength(1);
+        expect(w.up()).toHaveLength(1);
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
     });
 
     it('a copy past the ids looked at isn\'t seen: a Stop there says done', async () => {
@@ -947,5 +1278,20 @@ describe('what a Stop and a tend cost: the look is bounded, and only where somet
         w.home.status = 'paused';
         await phone.tendCopies(identity);
         expect(w.reads.map((ids) => ids.length)).toEqual([COPY_IDS_LOOKED_AT, 1]);
+    });
+
+    it('a tick that never landed reads its own id once more, at the one tend that rests it, and costs nothing after', async () => {
+        const w = world();
+        const phone = await tickWaiting(w);
+        const id = phone.pairs()[0].copyId;
+        w.reads.length = 0;
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(w.reads).toEqual([[id], [id]]);
+        expect(w.removes).toEqual([]);
+        w.reads.length = 0;
+        await phone.tendCopies(identity);
+        await phone.tendCopies(identity);
+        expect(w.reads).toEqual([]);
     });
 });

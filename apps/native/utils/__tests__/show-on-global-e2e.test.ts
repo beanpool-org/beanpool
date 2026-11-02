@@ -1870,6 +1870,73 @@ describe('Stop showing takes the copy down, whichever device stops it: a phone a
         expect(await liveCopies(me)).toEqual([]);
     }, START_MS);
 
+    describe('a tick left waiting rests where it is, so the other device\'s first tick lands where this one looks', () => {
+        const tickWaits = async (me: BeanPoolIdentity, home: HomeEvent) => {
+            globalDown = true;
+            expect(await showOnGlobal(home, local.url, me, deps())).toBe('later');
+            globalDown = false;
+        };
+        /** The phone's tick waits, the phone tends with the listing off the board, the listing is back, and the browser ticks. */
+        const tickRestedWaiting = async (name: string, make: (me: BeanPoolIdentity) => Promise<HomeEvent>) => {
+            const me = await memberOfBoth(name);
+            const home = await make(me);
+            const browser = otherDevice();
+            await tickWaits(me, home);
+            await pause(me, home);
+            await tendCopies(me, deps());
+            expect(await pairOf(home.id, me.publicKey)).toMatchObject({ resting: true, sent: '' });
+            await resume(me, home);
+            expect(await browser.showOnGlobal(home, local.url, me, deps())).toBe('shown');
+            expect(await liveCopies(me)).toHaveLength(1);
+            return { me, home, browser };
+        };
+
+        it.each(kinds)('%s: the phone comes back to one row, and a Stop on it takes down all there is', async (kind, make) => {
+            const { me, home, browser } = await tickRestedWaiting(`Back ${kind}`, make);
+            await tendCopies(me, deps());
+            await browser.tendCopies(me, deps());
+            expect(await liveCopies(me)).toHaveLength(1);
+            expect((await pairOf(home.id, me.publicKey))?.copyId).toBe(browser.pairs()[0].copyId);
+            expect(await stopShowing(home.id, me, deps())).toBe(true);
+            expect(await liveCopies(me)).toEqual([]);
+        }, START_MS);
+
+        it.each(kinds)('%s: a Stop on the phone while it rests takes down the copy the browser put up', async (kind, make) => {
+            const { me, home } = await tickRestedWaiting(`Rests ${kind}`, make);
+            expect(await stopShowing(home.id, me, deps())).toBe(true);
+            expect(await liveCopies(me)).toEqual([]);
+            expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        }, START_MS);
+
+        it.each(kinds)('%s: the control: the same two ticks with no rest between are one row', async (kind, make) => {
+            const me = await memberOfBoth(`Plain ${kind}`);
+            const home = await make(me);
+            const browser = otherDevice();
+            await tickWaits(me, home);
+            expect(await browser.showOnGlobal(home, local.url, me, deps())).toBe('shown');
+            await tendCopies(me, deps());
+            await browser.tendCopies(me, deps());
+            expect(await liveCopies(me)).toHaveLength(1);
+        }, START_MS);
+
+        it.each(kinds)('%s: one device on its own comes back as ever: one row, and no remove for a copy that never was', async (kind, make) => {
+            const me = await memberOfBoth(`Alone waits ${kind}`);
+            const home = await make(me);
+            await tickWaits(me, home);
+            const before = (await global_.control<string[]>('requests')).length;
+            await pause(me, home);
+            await tendCopies(me, deps());
+            const rest = (await global_.control<string[]>('requests')).slice(before).map((r) => r.replace(/\?.*$/, ''));
+            expect(rest).toEqual(['GET /api/marketplace/posts', 'GET /api/marketplace/posts']);
+            await resume(me, home);
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toHaveLength(1);
+            expect(await copyCount(me)).toBe(1);
+            expect(await stopShowing(home.id, me, deps())).toBe(true);
+            expect(await liveCopies(me)).toEqual([]);
+        }, START_MS);
+    });
+
     describe('the control: one device on its own', () => {
         const stopCost = async (me: BeanPoolIdentity, home: HomeEvent) => {
             const before = (await global_.control<string[]>('requests')).length;

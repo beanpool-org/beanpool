@@ -1274,21 +1274,21 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByRole('heading', { level: 3, name: /Node Identity/i })).toBeInTheDocument();
     });
 
-    it('renders Public Address panel when navigating to network subtab', async () => {
+    it('renders Addresses panel when navigating to network subtab', async () => {
         vi.spyOn(global, 'fetch').mockImplementation((url) => {
             const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/app-addresses')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ primaryAddress: 'test.beanpool.org', addresses: [] }),
+                } as Response);
+            }
             if (strUrl.includes('/api/local/admin/public-address/status')) {
                 return Promise.resolve({
                     ok: true,
                     status: 200,
                     json: () => Promise.resolve({ status: 'none' }),
-                } as Response);
-            }
-            if (strUrl.includes('/api/local/admin/public-address/logs')) {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({ logs: [] }),
                 } as Response);
             }
             return Promise.resolve({
@@ -1320,8 +1320,8 @@ describe('ApplianceSection Component', () => {
             );
         });
 
-        expect(screen.getByTestId('public-address-panel')).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 3, name: /Public Address & DNS Tunnel/i })).toBeInTheDocument();
+        expect(screen.getByTestId('addresses-panel')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 2, name: /Addresses/i })).toBeInTheDocument();
     });
 
     it('renders ReplicationAccessPanel and hides StandbyReplicationPanel on primary nodes', async () => {

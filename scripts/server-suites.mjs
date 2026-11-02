@@ -348,6 +348,7 @@ export const SUITES = [
     'test-former-address',
     'test-registrar-names-record',
     'test-registrar-name-watch',
+    'test-address-check',
     'test-registrar-provisioning',
     'test-registrar-notices',
     'test-public-url-callers',

@@ -3,7 +3,8 @@
  * scratch/fable-design/DESIGN-cross-community-chat-fable.md §1.2 R3, §1.4; Marty, 1 Nov 2026: "never miss a DM"). Over REAL
  * HTTPS through the real signature middleware, signed as both apps sign (format 2, bound to the host):
  *
- *   1. the answer: `unread`, `requests` and `asOf` and nothing else; private, never stored; a line counts until it is read
+ *   1. the answer: `unread`, `alerts`, `requests` and `asOf` and nothing else; private, never stored; a line counts until it
+ *      is read
  *   2. message requests (requests on): a request is in `requests` and never in `unread`; an opened chat with no line, an
  *      ignored request, a blocked sender's and one 30 days old are in neither; accepting one moves its line to `unread`; the
  *      opener never counts their own; and every number is the member's own list's, `totalUnread` and `requests.count`
@@ -19,6 +20,9 @@
  *      all answered for an established member and for a newcomer, one nonce each. A phone asks at most 12 an hour
  *   7. requests off (the `local` run): `requests` is 0, the list has none, and a request ignored while they were on stays
  *      out of `unread`, as it stays out of the list
+ *   8. `alerts`, what a phone with no push tells of itself: each step held to the pushes the real dispatcher handed Expo. A
+ *      muted chat, Direct Messages off, an event's chat and a blocked member's line in a group's chat each count in `unread`
+ *      and not here; an @mention gets through a mute, not through Direct Messages off, and not from someone blocked
  *
  * Run: SERVER_SUITES_ONLY=test-unread-count TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -32,6 +36,7 @@ if (LOCAL_RUN) delete process.env.NODE_PROFILE; else process.env.NODE_PROFILE = 
 
 import crypto from 'node:crypto';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { localFetch } from './keepalive-test-fetch.js';
 
 let run = 0, passed = 0;
@@ -174,8 +179,8 @@ async function main(): Promise<void> {
     const answer = await unreadOf(ann);
     const after = Date.now();
     const asOf = Date.parse(answer.body?.asOf);
-    assert(JSON.stringify(Object.keys(answer.body ?? {}).sort()) === JSON.stringify(['asOf', 'requests', 'unread']),
-        `three fields and no others (${show(answer)})`);
+    assert(JSON.stringify(Object.keys(answer.body ?? {}).sort()) === JSON.stringify(['alerts', 'asOf', 'requests', 'unread']),
+        `four fields and no others (${show(answer)})`);
     assert(Number.isFinite(asOf) && new Date(asOf).toISOString() === answer.body?.asOf && asOf >= before - 1 && asOf <= after + 1,
         `asOf is the moment of the count, in ISO 8601 (${answer.body?.asOf})`);
     assert(answer.headers.get('cache-control') === 'private, no-store', `private and never stored (${answer.headers.get('cache-control')})`);
@@ -224,6 +229,8 @@ async function main(): Promise<void> {
         db.prepare('UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?').run(iso(Date.now() - 31 * DAY), fayConv);
         await counted(ann, 'one 30 days old is in neither', { unread: 0, requests: 1 });
 
+        const beforeAccept = await unreadOf(ann);
+        assert(beforeAccept.body?.requests === 1 && beforeAccept.body?.alerts === 0, `a request is in no count an alert comes of (${show(beforeAccept)})`);
         await decide(ann, boConv, 'accept');
         await counted(ann, 'accepted: Bo\'s line moves from `requests` to `unread`', { unread: 1, requests: 0 });
         await markRead(ann, boConv);
@@ -255,6 +262,98 @@ async function main(): Promise<void> {
     db.prepare('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ?').run(eventPost.id);
     await counted(ann, 'shown again: counted again', { unread: 1, requests: 0 });
     await markRead(ann, eventPost.id);
+
+    // ── 8. What a push would have told ────────────────────────────────────────────────────────────────────────────────
+    // Each step is held to the real dispatcher as well as to a number: `told` is how many pushes it handed Expo for her since
+    // the last step, so `alerts` can't drift from what a phone with push is told.
+    console.log('\n── 8. `alerts`: the lines a push told her of ──');
+    const mae = member('Mae');
+    const kit = member('Kit');
+    const lou = member('Lou');
+    await addFriend(mae, kit);
+    putPushTokenRow(mae.pk, tokenOf(mae), 'android');
+    const says = async (label: string, want: { unread: number; alerts: number; told: number }): Promise<void> => {
+        await flush();
+        const told = pushes.filter(p => p.to === tokenOf(mae)).length;
+        pushes.length = 0;
+        const a = await unreadOf(mae);
+        assert(a.status === 200 && a.body?.unread === want.unread && a.body?.alerts === want.alerts && told === want.told,
+            `${label}: unread ${want.unread}, alerts ${want.alerts}, ${want.told} pushed (${show(a)}; ${told} pushed)`);
+    };
+    const muteChat = (conversationId: string, duration: string) => call('POST', mae, '/api/messages/mute', { conversationId, duration });
+    const directMessages = (on: boolean) => call('POST', mae, '/api/members/preferences', { publicKey: mae.pk, preferences: { notify_chat: on } });
+    const line = (who: Id, groupId: string, mentions?: string[]) =>
+        call('POST', who, `/api/groups/${groupId}/chat/message`, lockedGroupLine(db, groupId, mentions ? { mentions } : {}));
+
+    pushes.length = 0;
+    const kitConv: string = (await open(kit, mae)).body?.conversation?.id;
+    await send(kitConv, kit);
+    await send(kitConv, kit);
+    await says('two direct lines, both pushed', { unread: 2, alerts: 2, told: 2 });
+
+    await muteChat(kitConv, 'always');
+    await says('muted: what waits there leaves `alerts` and stays in `unread`', { unread: 2, alerts: 0, told: 0 });
+    await send(kitConv, kit);
+    await says('a line in a muted chat: unread, and no push', { unread: 3, alerts: 0, told: 0 });
+    await muteChat(kitConv, 'off');
+    await says('unmuted: its lines count again', { unread: 3, alerts: 3, told: 0 });
+    await muteChat(kitConv, '8h');
+    await says('an 8-hour mute holds', { unread: 3, alerts: 0, told: 0 });
+    db.prepare('UPDATE chat_mutes SET muted_until = ? WHERE conversation_id = ? AND member_pubkey = ?').run(iso(Date.now() - 1000), kitConv, mae.pk);
+    await send(kitConv, kit);
+    await says('and one that has run out is no mute', { unread: 4, alerts: 4, told: 1 });
+    await markRead(mae, kitConv);
+    await says('read: neither counts it', { unread: 0, alerts: 0, told: 0 });
+
+    await directMessages(false);
+    await send(kitConv, kit);
+    await says('Direct Messages off: unread, no push, not in `alerts`', { unread: 1, alerts: 0, told: 0 });
+    await directMessages(true);
+    await says('back on: what waits counts again', { unread: 1, alerts: 1, told: 0 });
+    await markRead(mae, kitConv);
+
+    const fete = createPost('event', 'general', 'Street fete', 'Bring a plate', 0, 'fixed', kit.pk, -28.6, 153.6, [TINY_PNG], false, undefined, false, {
+        eventStartAt: iso(Date.now() + 3 * DAY), eventEndAt: iso(Date.now() + 3 * DAY + 3_600_000),
+    } as any)!;
+    ensureEventThread(fete.id);
+    db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(fete.id, mae.pk);
+    se.postEventThreadMessage(fete.id, kit.pk, 'Who is bringing chairs?');
+    await says("an event's chat: unread, and it never pushes", { unread: 1, alerts: 0, told: 0 });
+    await markRead(mae, fete.id);
+
+    const circle = se.createGroup({ name: 'Bread Circle', joinPolicy: 'open', createdBy: lou.pk });
+    se.joinGroup(circle.id, mae.pk);
+    se.joinGroup(circle.id, kit.pk);
+    await says('joining a group brings no line of its own', { unread: 0, alerts: 0, told: 0 });
+    await line(kit, circle.id);
+    await says("a line in a group's chat, pushed", { unread: 1, alerts: 1, told: 1 });
+    await muteChat(circle.id, 'always');
+    await line(kit, circle.id);
+    await says('a muted group: no push, and neither of its lines tells her', { unread: 2, alerts: 0, told: 0 });
+    await line(kit, circle.id, [mae.pk]);
+    await says('an @mention of her gets through the mute: it alone is in `alerts`', { unread: 3, alerts: 1, told: 1 });
+    await line(kit, circle.id, [lou.pk]);
+    await says("an @mention of someone else doesn't", { unread: 4, alerts: 1, told: 0 });
+    await directMessages(false);
+    await line(kit, circle.id, [mae.pk]);
+    await says('nor does hers through Direct Messages off: a mention is a chat push too', { unread: 5, alerts: 0, told: 0 });
+    await directMessages(true);
+    await muteChat(circle.id, 'off');
+    await says('all of it told again', { unread: 5, alerts: 5, told: 0 });
+    await markRead(mae, circle.id);
+
+    await call('POST', mae, '/api/blocks', { targetPubkey: kit.pk });
+    await line(kit, circle.id);
+    await line(kit, circle.id, [mae.pk]);
+    await says('someone she blocked, in a shared chat: unread, no push even for an @mention', { unread: 2, alerts: 0, told: 0 });
+    await line(lou, circle.id);
+    await says('and anyone else there still counts', { unread: 3, alerts: 1, told: 1 });
+    await muteChat(circle.id, 'always');
+    await line(kit, circle.id, [mae.pk]);
+    await line(lou, circle.id, [mae.pk]);
+    await says('muted as well: only the @mention from someone she has not blocked', { unread: 5, alerts: 1, told: 1 });
+    await markRead(mae, circle.id);
+    await says('read: all gone', { unread: 0, alerts: 0, told: 0 });
 
     // ── 5. Who is answered ────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 5. the signer and nobody else ──');
@@ -358,7 +457,7 @@ async function main(): Promise<void> {
     };
     const countCost = await timed(ROUTE);
     const listCost = await timed(`/api/messages/conversations/${bea.pk}`);
-    assert(countCost.res?.body?.unread === 200 && listCost.res?.body?.totalUnread === 200, 'both say 200 lines');
+    assert(countCost.res?.body?.unread === 200 && countCost.res?.body?.alerts === 200 && listCost.res?.body?.totalUnread === 200, 'both say 200 lines');
     assert(countCost.res!.text.length * 100 < listCost.res!.text.length,
         `the count is ${countCost.res!.text.length} bytes, the list ${listCost.res!.text.length}`);
     console.log(`  one read: the count ${countCost.ms.toFixed(1)} ms, the list ${listCost.ms.toFixed(1)} ms`);

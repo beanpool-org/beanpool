@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "ko",
+    "name": "Korean",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ 게시물이 내려졌습니다",
+  "🛡️ Your posts were taken down": "🛡️ 게시물이 내려졌습니다",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "커뮤니티 운영자가 회원님의 게시물 {title}을(를) 내렸습니다. 사유: {reason}. 다른 사람에게는 숨겨져 있으며, 7일 안에 복원되지 않으면 삭제됩니다.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "커뮤니티 운영자가 회원님의 게시물을 내렸습니다. 사유: {reason}. 다른 사람에게는 숨겨져 있으며, 7일 안에 복원되지 않으면 삭제됩니다.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "커뮤니티 운영자가 회원님의 게시물 {n}개를 내렸습니다. 사유: {reason}. 다른 사람에게는 숨겨져 있으며, 7일 안에 복원되지 않으면 삭제됩니다."
+}

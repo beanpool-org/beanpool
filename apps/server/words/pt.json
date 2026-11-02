@@ -2,15 +2,21 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning, neutral forms)",
-    "draftedBy": null,
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
-    "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English.",
+    "review": "machine"
   },
   "Add a photo first": "Adicione uma foto primeiro",
   "Only a pending message request can be cancelled.": "Apenas um pedido de mensagem pendente pode ser cancelado.",
   "Only the person who sent a message request can cancel it.": "Apenas a pessoa que enviou um pedido de mensagem pode cancelá-lo.",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envie conversationId, o chat, e decision, 'accept', 'ignore' ou 'cancel'.",
   "This community has a new address": "Esta comunidade tem um novo endereço",
-  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando."
+  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando.",
+  "🛡️ Your post was taken down": "🛡️ A sua publicação foi retirada",
+  "🛡️ Your posts were taken down": "🛡️ As suas publicações foram retiradas",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Os moderadores da comunidade retiraram a sua publicação {title}. Motivo: {reason}. Ela está oculta para os demais; se não for restaurada em 7 dias, será removida.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Os moderadores da comunidade retiraram a sua publicação. Motivo: {reason}. Ela está oculta para os demais; se não for restaurada em 7 dias, será removida.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Os moderadores da comunidade retiraram {n} das suas publicações. Motivo: {reason}. Elas estão ocultas para os demais; se não forem restauradas em 7 dias, serão removidas."
 }

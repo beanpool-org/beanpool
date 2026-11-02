@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "ml",
+    "name": "Malayalam",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ നിങ്ങളുടെ പോസ്റ്റ് പിൻവലിച്ചു",
+  "🛡️ Your posts were taken down": "🛡️ നിങ്ങളുടെ പോസ്റ്റുകൾ പിൻവലിച്ചു",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "കമ്മ്യൂണിറ്റിയുടെ മോഡറേറ്റർമാർ നിങ്ങളുടെ പോസ്റ്റ് {title} പിൻവലിച്ചു. കാരണം: {reason}. ഇത് മറ്റെല്ലാവരിൽ നിന്നും മറച്ചിരിക്കുന്നു; 7 ദിവസത്തിനുള്ളിൽ തിരികെ വെച്ചില്ലെങ്കിൽ ഇത് നീക്കം ചെയ്യും.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "കമ്മ്യൂണിറ്റിയുടെ മോഡറേറ്റർമാർ നിങ്ങളുടെ പോസ്റ്റ് പിൻവലിച്ചു. കാരണം: {reason}. ഇത് മറ്റെല്ലാവരിൽ നിന്നും മറച്ചിരിക്കുന്നു; 7 ദിവസത്തിനുള്ളിൽ തിരികെ വെച്ചില്ലെങ്കിൽ ഇത് നീക്കം ചെയ്യും.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "കമ്മ്യൂണിറ്റിയുടെ മോഡറേറ്റർമാർ നിങ്ങളുടെ {n} പോസ്റ്റുകൾ പിൻവലിച്ചു. കാരണം: {reason}. അവ മറ്റെല്ലാവരിൽ നിന്നും മറച്ചിരിക്കുന്നു; 7 ദിവസത്തിനുള്ളിൽ തിരികെ വെച്ചില്ലെങ്കിൽ അവ നീക്കം ചെയ്യും."
+}

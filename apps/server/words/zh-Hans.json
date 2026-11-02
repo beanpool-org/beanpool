@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "zh-Hans",
+    "name": "Chinese (Simplified)",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ 你的帖子已被撤下",
+  "🛡️ Your posts were taken down": "🛡️ 你的帖子已被撤下",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "社区管理员撤下了你的帖子 {title}。原因：{reason}。它已对其他人隐藏；如果 7 天内没有恢复，它将被删除。",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "社区管理员撤下了你的帖子。原因：{reason}。它已对其他人隐藏；如果 7 天内没有恢复，它将被删除。",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "社区管理员撤下了你的 {n} 个帖子。原因：{reason}。它们已对其他人隐藏；如果 7 天内没有恢复，它们将被删除。"
+}

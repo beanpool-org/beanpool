@@ -1,7 +1,7 @@
 ---
 slug: ai-assistant
 title: AI assistants
-summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor, or any MCP client you run yourself, such as Hermes or a local model) to your server, what it sees and never sees, the suggestions you approve, the listings an owner's assistant posts, its limits, and disconnecting it.
+summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor, or any MCP client you run yourself, such as Hermes or a local model) to your server, what it sees and never sees, the suggestions you approve, what an owner's assistant posts and takes down, its limits, and disconnecting it.
 related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees, install-with-ai
 ---
 
@@ -124,9 +124,28 @@ An assistant that may post for you can also read what it needs to seed your comm
 - **Remove its posts, in Settings**: under Connected assistants each assistant says how many of its posts are still up, and an owner can press **Remove its posts**. Each one is taken down as its author would take it down (an event is cancelled and its goers told). It works after you disconnect the assistant too: one that is gone but whose posts are still up is listed as a disconnected assistant, with the same button. It asks for a fresh proof each time, as the other owner changes here do: press it from the phone's Manage, or with the password and a current code.
 - **Every removal is logged**: the server writes an ADMIN line with the assistant and the ids of the posts it took down, whether the assistant removed them or an owner pressed the button.
 
+## Taking posts down for you (owners)
+
+An owner's assistant ticked **May take down posts for me** takes posts down at once; you can put them back for 7 days. It still cannot dismiss a report, put a post back, lift a mute, or remove or suspend a member. Ask it "clear the spam from the last two days": it reads the listings and reports, takes the spam down, and tells you what it took down, what it left and why.
+
+The tick is its own, beside **May post for me**, off unless you tick it, on the token form; connecting one ticked asks for the same confirmation. Without the tick an assistant has no such tools, so a token that leaks can take nothing down. An assistant you approved from a page, and an admin's assistant, can't take posts down yet. The list of connected assistants shows which ones may, and how many each took down today.
+
+- **One post or many**: a post, the post a report is about, or up to 200 in one call, events, polls and copies from other communities included. A takedown by report closes every open report on that post, and its reporters are told it was removed, as when you remove it yourself.
+- **Hidden at once, final after 7 days**: the post leaves every list, search, map and count, and nobody can start a deal on it. Its author and the moderators still see it. An event stays as it is for those 7 days; if the takedown stands, it is cancelled then and everyone going is told.
+- **What the author reads**: that the community's moderators took the post down, the reason the assistant picked from the usual five (spam or a scam, offensive content, misleading, unsafe or illegal, against this community's rules), and that it is removed if it is not put back within 7 days. Never that an assistant did it, and never the assistant's own words: those are only in Settings. If a post is put back, its author hears it is back; its reporters are not told.
+- **It never moves a Bean**: a post with a deal in escrow stays up, and the assistant tells you so. Finish or cancel the deal, or remove it yourself. If a post somehow holds a deal after the 7 days, it stays hidden and Settings says so.
+- **What it can't take down**: a post by an owner, an admin or a moderator, or by an enterprise one of them keeps; another community's listing copied here; a Pulse item, which has no hidden state, so the assistant gives you the Settings link for that report. It tells you each one and why, and leaves it up.
+- **Its limit**: the same **Owner and admin limit** as posts (100 a day unless you set it), on its own count, per assistant. Past that, the rest stay up and the assistant is told so.
+- **You are told**: every takedown is in the log with the assistant's name, the Alerts card counts the day's, and the owners get an alert at each assistant's first of the day, with the count.
+- **On a global community**, the third takedown of a member's posts in 30 days mutes them, as three removals by a moderator do. Putting those takedowns back lifts that mute again.
+
+**Taken down by assistants**, under Triage & Moderation in Settings (which Manage in the app opens), lists each call: the assistant, when, the reason, its own words and the posts. **Put back** returns one post; an owner can put back a whole call, or everything one assistant took down in the last day, 2 days or 7 days, in one tap. **Remove now** removes one post without waiting; an owner can remove a whole call, with a confirmation, and a post with a deal in escrow stays for you to remove by itself. An admin acts on one post at a time. After a take-over by a standby the posts stay hidden and the list starts empty: restore a post from the reports or the posts screen.
+
+If a token is stolen, the worst it can do with this tick is hide the day's limit of posts for up to 7 days. Disconnect it, then put back everything it took down. Nothing it hid can't be undone in those 7 days, apart from a deal only asked for on a post, which was declined when the post was taken down: its asker can ask again once the post is back.
+
 ## Suggestions: you approve, it never acts
 
-An assistant can **suggest** what to do about a report: dismiss it and keep the post, remove what was reported, or restore a post hidden by reports. A suggestion changes nothing. It waits for you, the member the assistant acts for, under Triage & Moderation in Settings, which Manage in the app opens; the app's "needs you" count includes it, as a number only.
+Anything but a takedown, it can only suggest. An assistant can **suggest** what to do about a report: dismiss it and keep the post, remove what was reported, or restore a post hidden by reports. A suggestion changes nothing. It waits for you, the member the assistant acts for, under Triage & Moderation in Settings, which Manage in the app opens; the app's "needs you" count includes it, as a number only.
 
 Each card says which assistant suggested it and for whom, and shows **the report itself** (what the reporter and the author wrote) beside the assistant's words, so you judge the original, not the assistant's summary. The assistant's words are shown as plain text: whatever it wrote, it can't change how the card looks or add a button.
 
@@ -136,11 +155,11 @@ Each card says which assistant suggested it and for whom, and shows **the report
 - If the report was dismissed or acted on since the assistant suggested dismissing it or removing what was reported, or the post it suggested restoring was removed since, there is nothing left to approve: the card keeps only Decline.
 - While an owner has AI assistants turned off, their waiting suggestions are hidden and can't be approved. Turned back on within the 48 hours, they wait again.
 
-An assistant can't approve a suggestion, its own or anyone's, and can't reach the moderation steps itself. It can't suggest lifting a mute, answering a join request or sending an announcement yet: those stay with you.
+An assistant can't approve a suggestion, its own or anyone's, and apart from taking posts down when you ticked it, can't reach the moderation steps itself. It can't suggest lifting a mute, answering a join request or sending an announcement yet: those stay with you.
 
 ## What it never sees
 
-Messages and chats, balances, keys, addresses, photos, the names list, logs, who made a report, a Pulse link, where backups go or any password or token. It can't change a setting, a role, a key or anyone's Beans, can't remove, suspend or mute a member, can't act on a report itself (it can only suggest), can't answer a join request, can't send an announcement and can't reach another server. Those stay with you, in Settings.
+Messages and chats, balances, keys, addresses, photos, the names list, logs, who made a report, a Pulse link, where backups go or any password or token. It can't change a setting, a role, a key or anyone's Beans, can't remove, suspend or mute a member, can't dismiss a report, put a post back or lift a mute (it can only suggest; taking a post down is the one thing it does itself, if you ticked it), can't answer a join request, can't send an announcement and can't reach another server. Those stay with you, in Settings.
 
 ## Member-written text is data
 

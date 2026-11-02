@@ -2,10 +2,11 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door)",
+    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
-    "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English.",
+    "review": "machine"
   },
   "Add a photo first": "Añade una foto primero",
   "Only a pending message request can be cancelled.": "Solo se puede cancelar una solicitud de mensaje pendiente.",
@@ -15,5 +16,10 @@
   "This community is also at {address}. The old address keeps working.": "Esta comunidad también está en {address}. La dirección anterior sigue funcionando.",
   "To go, ask to join {community}": "Para ir, pide unirte a {community}",
   "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir.",
-  "This is shown from another community, so it can't be bought or taken here.": "Esto se muestra desde otra comunidad, así que aquí no se puede comprar ni tomar."
+  "This is shown from another community, so it can't be bought or taken here.": "Esto se muestra desde otra comunidad, así que aquí no se puede comprar ni tomar.",
+  "🛡️ Your post was taken down": "🛡️ Tu publicación fue retirada",
+  "🛡️ Your posts were taken down": "🛡️ Tus publicaciones fueron retiradas",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Los moderadores de la comunidad retiraron tu publicación {title}. Motivo: {reason}. Está oculta para los demás; si no se restablece en 7 días, se eliminará.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Los moderadores de la comunidad retiraron tu publicación. Motivo: {reason}. Está oculta para los demás; si no se restablece en 7 días, se eliminará.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Los moderadores de la comunidad retiraron {n} de tus publicaciones. Motivo: {reason}. Están ocultas para los demás; si no se restablecen en 7 días, se eliminarán."
 }

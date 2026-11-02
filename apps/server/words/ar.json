@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "ar",
+    "name": "Arabic",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ أُزيل منشورك",
+  "🛡️ Your posts were taken down": "🛡️ أُزيلت منشوراتك",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "أزال مشرفو المجتمع منشورك {title}. السبب: {reason}. إنه مخفي عن الجميع؛ وإن لم يُعَد خلال 7 أيام فسيُحذف.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "أزال مشرفو المجتمع منشورك. السبب: {reason}. إنه مخفي عن الجميع؛ وإن لم يُعَد خلال 7 أيام فسيُحذف.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "أزال مشرفو المجتمع {n} من منشوراتك. السبب: {reason}. إنها مخفية عن الجميع؛ وإن لم تُعَد خلال 7 أيام فستُحذف."
+}

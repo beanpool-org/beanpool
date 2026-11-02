@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "ur",
+    "name": "Urdu",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ آپ کی پوسٹ ہٹا دی گئی",
+  "🛡️ Your posts were taken down": "🛡️ آپ کی پوسٹس ہٹا دی گئیں",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "کمیونٹی کے ماڈریٹرز نے آپ کی پوسٹ {title} ہٹا دی۔ وجہ: {reason}۔ یہ باقی سب سے چھپی ہوئی ہے؛ اگر 7 دن میں واپس نہ لائی گئی تو حذف کر دی جائے گی۔",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "کمیونٹی کے ماڈریٹرز نے آپ کی پوسٹ ہٹا دی۔ وجہ: {reason}۔ یہ باقی سب سے چھپی ہوئی ہے؛ اگر 7 دن میں واپس نہ لائی گئی تو حذف کر دی جائے گی۔",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "کمیونٹی کے ماڈریٹرز نے آپ کی {n} پوسٹس ہٹا دیں۔ وجہ: {reason}۔ یہ باقی سب سے چھپی ہوئی ہیں؛ اگر 7 دن میں واپس نہ لائی گئیں تو حذف کر دی جائیں گی۔"
+}

@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "fil",
+    "name": "Filipino",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ Tinanggal ang post mo",
+  "🛡️ Your posts were taken down": "🛡️ Tinanggal ang mga post mo",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Tinanggal ng mga moderator ng komunidad ang post mong {title}. Dahilan: {reason}. Nakatago ito sa lahat ng iba; kung hindi ito maibalik sa loob ng 7 araw, buburahin ito.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Tinanggal ng mga moderator ng komunidad ang post mo. Dahilan: {reason}. Nakatago ito sa lahat ng iba; kung hindi ito maibalik sa loob ng 7 araw, buburahin ito.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Tinanggal ng mga moderator ng komunidad ang {n} sa mga post mo. Dahilan: {reason}. Nakatago ang mga ito sa lahat ng iba; kung hindi maibalik sa loob ng 7 araw, buburahin ang mga ito."
+}

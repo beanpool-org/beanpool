@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "it",
+    "name": "Italian",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ Il tuo post è stato rimosso",
+  "🛡️ Your posts were taken down": "🛡️ I tuoi post sono stati rimossi",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "I moderatori della comunità hanno rimosso il tuo post {title}. Motivo: {reason}. È nascosto agli altri; se non viene ripristinato entro 7 giorni, verrà eliminato.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "I moderatori della comunità hanno rimosso il tuo post. Motivo: {reason}. È nascosto agli altri; se non viene ripristinato entro 7 giorni, verrà eliminato.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "I moderatori della comunità hanno rimosso {n} dei tuoi post. Motivo: {reason}. Sono nascosti agli altri; se non vengono ripristinati entro 7 giorni, verranno eliminati."
+}

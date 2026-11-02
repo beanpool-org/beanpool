@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "ja",
+    "name": "Japanese",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ 投稿が取り下げられました",
+  "🛡️ Your posts were taken down": "🛡️ 投稿が取り下げられました",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "コミュニティのモデレーターがあなたの投稿 {title} を取り下げました。理由: {reason}。この投稿は他の人には表示されません。7日以内に戻されない場合は削除されます。",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "コミュニティのモデレーターがあなたの投稿を取り下げました。理由: {reason}。この投稿は他の人には表示されません。7日以内に戻されない場合は削除されます。",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "コミュニティのモデレーターがあなたの投稿 {n} 件を取り下げました。理由: {reason}。これらは他の人には表示されません。7日以内に戻されない場合は削除されます。"
+}

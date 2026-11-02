@@ -9,7 +9,7 @@
 // None of them names the admin or moderator who acted, or anyone who reported: the author hears "the community's
 // moderators", and each reporter hears only about their own report.
 
-import { wordsFor, type PushNoticeKind } from '@beanpool/core';
+import { word, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { keepNotice } from './kept-notices.js';
 
@@ -242,8 +242,8 @@ export function notifyPostBack(cb: ModerationNoticeCallbacks, post: { id: string
 
 // ── An owner's AI assistant took posts down (engine/agent-takedowns.ts) ──────────────────────────
 
-export const POST_TAKEN_DOWN_TITLE = tr('🛡️ Your post was taken down');
-export const POSTS_TAKEN_DOWN_TITLE = tr('🛡️ Your posts were taken down');
+export const POST_TAKEN_DOWN_TITLE = word('🛡️ Your post was taken down');
+export const POSTS_TAKEN_DOWN_TITLE = word('🛡️ Your posts were taken down');
 
 /**
  * The closed list's label, never the assistant's own words, and never that an assistant did it: "the community's moderators", as

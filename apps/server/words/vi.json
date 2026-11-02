@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "language": "vi",
+    "name": "Vietnamese",
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English."
+  },
+  "🛡️ Your post was taken down": "🛡️ Bài đăng của bạn đã bị gỡ",
+  "🛡️ Your posts were taken down": "🛡️ Các bài đăng của bạn đã bị gỡ",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Người kiểm duyệt của cộng đồng đã gỡ bài đăng {title} của bạn. Lý do: {reason}. Bài đăng bị ẩn với mọi người khác; nếu không được khôi phục trong 7 ngày, bài đăng sẽ bị xóa.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Người kiểm duyệt của cộng đồng đã gỡ bài đăng của bạn. Lý do: {reason}. Bài đăng bị ẩn với mọi người khác; nếu không được khôi phục trong 7 ngày, bài đăng sẽ bị xóa.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Người kiểm duyệt của cộng đồng đã gỡ {n} bài đăng của bạn. Lý do: {reason}. Các bài đăng bị ẩn với mọi người khác; nếu không được khôi phục trong 7 ngày, chúng sẽ bị xóa."
+}

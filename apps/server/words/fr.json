@@ -2,15 +2,21 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": null,
+    "draftedBy": "claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
-    "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "updated": "2026-11-02",
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled). Keys are the English sentences; a missing key shows the English.",
+    "review": "machine"
   },
   "Add a photo first": "Ajoutez d'abord une photo",
   "Only a pending message request can be cancelled.": "Seule une demande de message en attente peut être annulée.",
   "Only the person who sent a message request can cancel it.": "Seule la personne qui a envoyé une demande de message peut l'annuler.",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envoyez conversationId, le chat, et decision, 'accept', 'ignore' ou 'cancel'.",
   "This community has a new address": "Cette communauté a une nouvelle adresse",
-  "This community is also at {address}. The old address keeps working.": "Cette communauté est aussi à l'adresse {address}. L'ancienne adresse continue de fonctionner."
+  "This community is also at {address}. The old address keeps working.": "Cette communauté est aussi à l'adresse {address}. L'ancienne adresse continue de fonctionner.",
+  "🛡️ Your post was taken down": "🛡️ Votre annonce a été retirée",
+  "🛡️ Your posts were taken down": "🛡️ Vos annonces ont été retirées",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Les modérateurs de la communauté ont retiré votre annonce {title}. Motif : {reason}. Elle est masquée pour les autres ; si elle n'est pas rétablie sous 7 jours, elle sera supprimée.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Les modérateurs de la communauté ont retiré votre annonce. Motif : {reason}. Elle est masquée pour les autres ; si elle n'est pas rétablie sous 7 jours, elle sera supprimée.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Les modérateurs de la communauté ont retiré {n} de vos annonces. Motif : {reason}. Elles sont masquées pour les autres ; si elles ne sont pas rétablies sous 7 jours, elles seront supprimées."
 }

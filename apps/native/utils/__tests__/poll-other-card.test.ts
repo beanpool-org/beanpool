@@ -46,9 +46,9 @@ import { closePoll, createPost, getPollOtherAnswers, isOwnerHere, removePollOthe
 
 let host: HTMLDivElement;
 let root: Root;
-const mount = async (el: ReactNode) => { await act(async () => { root.render(el as any); }); };
+const mount = async (el: unknown) => { await act(async () => { root.render(el as ReactNode); }); };
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
-const button = (label: RegExp) => [...host.querySelectorAll('button')].find(b => label.test(b.getAttribute('aria-label') ?? b.textContent ?? '')) as HTMLButtonElement | undefined;
+const button = (label: RegExp) => Array.from(host.querySelectorAll('button')).find(b => label.test(b.getAttribute('aria-label') ?? b.textContent ?? '')) as HTMLButtonElement | undefined;
 const click = async (el: HTMLElement | undefined | null) => { await act(async () => { el!.click(); }); };
 const type = async (el: HTMLElement | null, value: string) => {
     await act(async () => {

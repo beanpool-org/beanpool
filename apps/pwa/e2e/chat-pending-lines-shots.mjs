@@ -5,7 +5,8 @@
  *   1. "! not delivered", Retry, Discard and "Sending…" are 4.5:1 or better on what is really behind them;
  *   2. Retry and Discard are 44 px targets;
  *   3. nothing runs off sideways and the failed line's buttons are in view;
- *   4. the chat list's "! not delivered" is 4.5:1 or better.
+ *   4. the chat list's "! not delivered" is 4.5:1 or better;
+ *   5. a failed line long enough to fold: its "…more" is 4.5:1 or better on the failed bubble, and a 44 px target.
  * It prints a table (markdown) and exits non-zero on any failed check.
  *
  * Nothing here touches a BeanPool node: every /api request is answered here, and any other /api or /ws request is aborted.
@@ -36,6 +37,7 @@ const NOW = Date.now();
 const ago = (days) => new Date(NOW - days * 86_400_000).toISOString();
 const VIEWPORTS = [{ w: 320, h: 568, scale: 1.3 }, { w: 1280, h: 800, scale: 1 }];
 const TYPED = 'Can you bring the long ladder on Saturday morning?';
+const TYPED_LONG = Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of a long note`).join(' ');
 
 const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 }, logLevel: 'error' });
 await server.listen();
@@ -103,7 +105,7 @@ const failures = [];
 const check = (ok, what) => { if (!ok) { failures.push(what); console.error(`  ✗ ${what}`); } };
 const rows = [];
 
-async function open(theme, vp, onSend) {
+async function open(theme, vp, onSend, words = TYPED) {
     const context = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, colorScheme: theme });
     await context.route('**/*', (route) => {
         const req = route.request();
@@ -131,7 +133,7 @@ async function open(theme, vp, onSend) {
     await page.goto(`${base}/e2e/chat-pending-lines-harness.html`, { waitUntil: 'load' });
     await page.waitForSelector('textarea', { timeout: 30_000 });
     await page.waitForSelector('text=Happy to help', { timeout: 30_000 });
-    await page.fill('textarea', TYPED);
+    await page.fill('textarea', words);
     await page.press('textarea', 'Enter');
     return { context, page };
 }
@@ -165,18 +167,28 @@ try {
             const list = await cut.page.evaluate(MEASURE, ['chat-row-not-delivered']);
             await cut.context.close();
 
+            const long = await open(theme, vp, (route) => route.abort(), TYPED_LONG);
+            await long.page.waitForSelector('[data-testid="chat-line-failed"]', { timeout: 15_000 });
+            await long.page.waitForSelector('[data-testid="chat-fold-toggle"]', { timeout: 15_000 });
+            await long.page.waitForTimeout(500);
+            const folded = await long.page.evaluate(MEASURE, ['chat-fold-toggle']);
+            const foldedShot = await shot(long.page, vp, `chat-line-failed-long-${tag}`);
+            await long.context.close();
+
             const name = `${vp.w} × ${vp.scale}, ${theme}`;
-            const [s, f, r, d, l] = [sending['chat-line-sending'], failed['chat-line-failed'], failed['chat-line-retry'], failed['chat-line-discard'], list['chat-row-not-delivered']];
+            const [s, f, r, d, l, m] = [sending['chat-line-sending'], failed['chat-line-failed'], failed['chat-line-retry'], failed['chat-line-discard'], list['chat-row-not-delivered'], folded['chat-fold-toggle']];
             check(s.contrast >= 4.5, `${name}: Sending… ${s.contrast}:1`);
             check(f.contrast >= 4.5, `${name}: ! not delivered ${f.contrast}:1`);
             check(r.contrast >= 4.5, `${name}: Retry ${r.contrast}:1`);
             check(d.contrast >= 4.5, `${name}: Discard ${d.contrast}:1`);
             check(l.contrast >= 4.5, `${name}: the list's ! not delivered ${l.contrast}:1`);
+            check(m.contrast >= 4.5, `${name}: …more on a failed line ${m.contrast}:1`);
+            check(m.h >= 44 && m.w >= 44, `${name}: …more ${m.w} × ${m.h}`);
             check(r.h >= 44 && r.w >= 44, `${name}: Retry ${r.w} × ${r.h}`);
             check(d.h >= 44 && d.w >= 44, `${name}: Discard ${d.w} × ${d.h}`);
             check(!sending.sideways && !failed.sideways, `${name}: runs off sideways`);
             check(r.bottom <= failed['chat-thread'].bottom && r.right <= failed.width, `${name}: Retry out of view (${r.bottom} past ${failed['chat-thread'].bottom})`);
-            rows.push({ name, s, f, r, d, l, shots: [sendingShot, failedShot] });
+            rows.push({ name, s, f, r, d, l, m, shots: [sendingShot, failedShot, foldedShot] });
         }
     }
 } finally {
@@ -184,9 +196,9 @@ try {
     await server.close();
 }
 
-console.log('\n| Case | Sending… | ! not delivered | Retry | Discard | List mark | Retry box | Discard box |');
-console.log('|---|---|---|---|---|---|---|---|');
-for (const x of rows) console.log(`| ${x.name} | ${x.s.contrast}:1 | ${x.f.contrast}:1 | ${x.r.contrast}:1 | ${x.d.contrast}:1 | ${x.l.contrast}:1 | ${x.r.w} × ${x.r.h} | ${x.d.w} × ${x.d.h} |`);
+console.log('\n| Case | Sending… | ! not delivered | Retry | Discard | List mark | …more | Retry box | Discard box | …more box |');
+console.log('|---|---|---|---|---|---|---|---|---|---|');
+for (const x of rows) console.log(`| ${x.name} | ${x.s.contrast}:1 | ${x.f.contrast}:1 | ${x.r.contrast}:1 | ${x.d.contrast}:1 | ${x.l.contrast}:1 | ${x.m.contrast}:1 | ${x.r.w} × ${x.r.h} | ${x.d.w} × ${x.d.h} | ${x.m.w} × ${x.m.h} |`);
 console.log(`\nRequests aborted (not this harness's to answer): ${blocked}`);
 for (const x of rows) console.log(x.shots.join('  '));
 if (failures.length) { console.error(`\n${failures.length} check(s) failed`); process.exit(1); }

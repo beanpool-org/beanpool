@@ -17,6 +17,7 @@ import { forgetGroupKeys, groupKeyring, memoryGroupLockStore } from '../lib/grou
 import { sealLine, openLine } from '../lib/group-chat-crypto';
 import { fakeGroupNode, person, type FakeGroupNode } from '../lib/group-chat-fake-node.test-support';
 import { isPendingChatLine, resetPendingChatLinesForTest, sendChatLine } from '../lib/pending-chat-lines';
+import { installFoldLayout, removeFoldLayout } from '../chat-fold-layout.test-support';
 
 const scrolls = vi.hoisted(() => ({ count: 0 }));
 window.HTMLElement.prototype.scrollIntoView = (() => { scrolls.count++; }) as never;
@@ -54,6 +55,8 @@ let extraGroupRows: any[] = [];
 let benSealed: { epoch: number; key: Uint8Array };
 /** A held answer: the node stored the line, and its reply hasn't arrived yet. */
 let holdGroupPost: Promise<void> | null = null;
+/** A proxy in front: the node stored the line, and this is what came back instead of its answer. */
+let answerGroupPostWith: (() => Response) | null = null;
 
 const groupRows = () => [
     ...node.lines.map((l, i) => ({
@@ -73,6 +76,7 @@ vi.mock('../lib/api', () => ({
         post: async (p: string, b: unknown) => {
             const answer = await node.as(ana.publicKey).post(p, b);
             if (holdGroupPost && p.endsWith('/chat/message')) await holdGroupPost;
+            if (answerGroupPostWith && p.endsWith('/chat/message')) return answerGroupPostWith();
             return answer;
         },
     },
@@ -137,6 +141,7 @@ beforeEach(async () => {
     dm.rows = [];
     extraGroupRows = [];
     holdGroupPost = null;
+    answerGroupPostWith = null;
     node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
     const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
     benSealed = { epoch, key };
@@ -503,6 +508,30 @@ describe('a line that couldn\'t go', () => {
         expect(composer.value).toBe('');
     });
 
+    it('in a group, a line stored behind a proxy\'s 502 is simply delivered: nothing was ever said about it', async () => {
+        const { composer } = await openGroup();
+        answerGroupPostWith = () => new Response('{}', { status: 502 });
+        await typed(composer, 'Stored behind a proxy');
+        await waitFor(() => expect(node.lines).toHaveLength(2));
+        await waitFor(() => expect(screen.queryByTestId('chat-line-pending')).toBeNull());
+        expect(screen.getAllByText('Stored behind a proxy')).toHaveLength(1);
+        expect(screen.queryByTestId('chat-refusal')).toBeNull();
+        expect(screen.queryByText('The node answered 502.')).toBeNull();
+        expect(window.alert).not.toHaveBeenCalled();
+        expect(composer.value).toBe('');
+    });
+
+    it('in a group, a 502 for a line the node doesn\'t have is reported once, and the line says it wasn\'t delivered', async () => {
+        const { composer } = await openGroup();
+        node.lie = (_m, path) => (path.endsWith('/chat/message') ? new Response('{}', { status: 502 }) : undefined);
+        await typed(composer, 'Lost behind a proxy');
+        await screen.findByTestId('chat-line-failed');
+        expect(node.lines).toHaveLength(1);
+        expect(screen.queryByTestId('chat-refusal')).toBeNull();
+        expect(window.alert).toHaveBeenCalledTimes(1);
+        expect(window.alert).toHaveBeenCalledWith('The node answered 502.');
+    });
+
     it('a refusal in a group is as it always was: its sentence, the words back in the composer', async () => {
         const { composer } = await openGroup();
         vi.mocked(getGroupChat).mockResolvedValueOnce({ conversation: groupConv(), messages: groupRows(), canPost: false, encryption: { current: node.current(), stale: false, fromEpoch: 1 } } as never);
@@ -565,6 +594,19 @@ describe('a line that couldn\'t go', () => {
         expect(screen.getByTestId('chat-line-discard').style.minHeight).toBe('44px');
     });
 
+    it('folds a long one under a …more in the failed line\'s own ink, never the accent on its tint', async () => {
+        installFoldLayout();
+        try {
+            const { composer } = await openDm();
+            vi.mocked(sendMessageApi).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+            await typed(composer, Array.from({ length: 40 }, (_, i) => `Line ${i + 1} of a long note`).join('\n'));
+            await screen.findByTestId('chat-line-failed');
+            expect(screen.getByTestId('chat-fold-toggle').style.color).toBe('var(--bp-chip-danger-ink)');
+        } finally {
+            removeFoldLayout();
+        }
+    });
+
     it('while it goes says so in words a member can see, off the fill', async () => {
         const { composer } = await openDm();
         await typedNoAnswer(composer, 'On its way');
@@ -572,6 +614,153 @@ describe('a line that couldn\'t go', () => {
         expect(mark.textContent).toContain('Sending…');
         expect(mark.style.color).toBe('var(--text-secondary)');
         expect(within(mark.parentElement!).queryByLabelText('Sent')).toBeNull();
+    });
+});
+
+describe('a refused reply keeps what it answers', () => {
+    const limit = () => Object.assign(new Error('You can send 5 messages a day for now.'), { status: 429, code: 'probation_limit' });
+    const groupWithNoPosting = () => ({ conversation: groupConv(), messages: groupRows(), canPost: false, encryption: { current: node.current(), stale: false, fromEpoch: 1 } });
+    const pressSend = async (composer: HTMLElement) => { await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); }); };
+    const replyTo = (words: string) => fireEvent.click(within(screen.getByText(words).closest('[id^="msg-"]') as HTMLElement).getByRole('button', { name: 'Reply to message' }));
+    const metadataOf = (call: unknown[]) => (call[6] ? JSON.parse(String(call[6])) : {});
+
+    it('in a DM: Send from the composer goes as the reply it was, sealed to what it answers, and the failed line goes', async () => {
+        const asked = sealedDm(ben, 'Can you bring the ladder?');
+        dm.rows = [asked];
+        const { composer } = await openDm();
+        replyTo('Can you bring the ladder?');
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(limit());
+        await typed(composer, 'Yes');
+        await screen.findByText('You can send 5 messages a day for now.');
+        expect(composer.value).toBe('Yes');
+        expect(screen.getByText('Replying to Ben')).toBeTruthy();
+
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await pressSend(composer);
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(2));
+        const [refused, again] = vi.mocked(sendMessageApi).mock.calls;
+        expect(metadataOf(refused).replyToId).toBe(asked.id);
+        expect(metadataOf(again).replyToId).toBe(asked.id);
+        expect(metadataOf(again).lineSig).toBeTruthy();
+        expect(screen.queryByText('Replying to Ben')).toBeNull();
+
+        // The node's row for it opens, with the seal over that reply, and quotes the question.
+        dm.rows = [asked, rowOfSend(again)];
+        await ringDoorbell();
+        await waitFor(() => expect(screen.queryByTestId('chat-line-pending')).toBeNull());
+        expect(screen.getByTestId('dm-quote').textContent).toContain('Can you bring the ladder?');
+        expect(screen.queryByTestId('dm-line-unattributed')).toBeNull();
+    });
+
+    it.each([
+        ['the chat takes no new lines', () => { vi.mocked(getGroupChat).mockResolvedValueOnce(groupWithNoPosting() as never); }],
+        ['the node refuses the sealed line', () => {
+            node.lie = (_m, path) => {
+                if (!path.endsWith('/chat/message')) return undefined;
+                node.lie = null;
+                return new Response('{}', { status: 403 });
+            };
+        }],
+    ])('in a locked group: %s, and Send from the composer goes as the reply it was, sealed to it', async (_why, refuse) => {
+        const { composer } = await openGroup();
+        const asked = node.lines[0].id;
+        replyTo('Working bee Saturday 9am');
+        refuse();
+        await typed(composer, 'I can do Saturday');
+        await screen.findByTestId('chat-line-failed');
+        await waitFor(() => expect(composer.value).toBe('I can do Saturday'));
+        expect(screen.getByText('Replying to Ben')).toBeTruthy();
+
+        await pressSend(composer);
+        await waitFor(() => expect(node.lines).toHaveLength(2));
+        const line = node.lines[1];
+        expect(line.metadata.replyToId).toBe(asked);
+        const opened = openLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { groupId: G, epoch: benSealed.epoch, messageId: line.id, senderPubHex: ana.publicKey, replyToId: asked }, benSealed.key);
+        expect(opened.text).toBe('I can do Saturday');
+        expect(screen.queryByText('Replying to Ben')).toBeNull();
+    });
+
+    it('what it answers isn\'t loaded any more: the line keeps its words and its reply, and its Retry sends them whole', async () => {
+        const asked = sealedDm(ben, 'Can you bring the ladder?');
+        dm.rows = [asked];
+        const { composer, unmount } = await openDm();
+        replyTo('Can you bring the ladder?');
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        await typed(composer, 'Yes');
+        await screen.findByTestId('chat-line-failed');
+        unmount();
+
+        // Back later, and only the newest lines are read: the question isn't one of them.
+        dm.rows = [];
+        const back = await openDm();
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(limit());
+        await act(async () => { fireEvent.click(screen.getByTestId('chat-line-retry')); });
+        await screen.findByText('You can send 5 messages a day for now.');
+        expect(back.composer.value).toBe('');
+        expect(screen.getByTestId('chat-line-failed')).toBeTruthy();
+        expect(screen.getByTestId('dm-quote').textContent).toContain('Message not found');
+
+        // The same words typed by hand are a new line: they don't take the reply away from the one that holds it.
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await typed(back.composer, 'Yes');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(3));
+        expect(metadataOf(vi.mocked(sendMessageApi).mock.calls[2]).replyToId).toBeUndefined();
+        expect(screen.getByTestId('chat-line-failed')).toBeTruthy();
+
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await act(async () => { fireEvent.click(screen.getByTestId('chat-line-retry')); });
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(4));
+        expect(metadataOf(vi.mocked(sendMessageApi).mock.calls[3]).replyToId).toBe(asked.id);
+    });
+
+    it('words written since stay as they are: they don\'t become a reply, and the line keeps its own', async () => {
+        const asked = sealedDm(ben, 'Can you bring the ladder?');
+        dm.rows = [asked];
+        const { composer } = await openDm();
+        replyTo('Can you bring the ladder?');
+        let refuse!: (e: Error) => void;
+        vi.mocked(sendMessageApi).mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never);
+        await typed(composer, 'Yes');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        fireEvent.change(composer, { target: { value: 'Something else entirely' } });
+        await act(async () => { refuse(limit()); });
+        await screen.findByTestId('chat-line-failed');
+        expect(composer.value).toBe('Something else entirely');
+        expect(screen.queryByText('Replying to Ben')).toBeNull();
+        expect(screen.getByTestId('dm-quote').textContent).toContain('Can you bring the ladder?');
+    });
+
+    it('a reply started since stays as it is: the refused words don\'t land under it', async () => {
+        const asked = sealedDm(ben, 'Can you bring the ladder?');
+        const other = sealedDm(ben, 'And the barrow?', asked.id);
+        dm.rows = [asked, other];
+        const { composer } = await openDm();
+        replyTo('Can you bring the ladder?');
+        let refuse!: (e: Error) => void;
+        vi.mocked(sendMessageApi).mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never);
+        await typed(composer, 'Yes');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        replyTo('And the barrow?');
+        await act(async () => { refuse(limit()); });
+        await screen.findByTestId('chat-line-failed');
+        expect(composer.value).toBe('');
+        expect(screen.getByText('Replying to Ben').parentElement!.textContent).toContain('And the barrow?');
+    });
+
+    it('the line\'s own Retry takes the words and the reply back out of the composer, so the next line isn\'t a reply', async () => {
+        const asked = sealedDm(ben, 'Can you bring the ladder?');
+        dm.rows = [asked];
+        const { composer } = await openDm();
+        replyTo('Can you bring the ladder?');
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(limit());
+        await typed(composer, 'Yes');
+        await waitFor(() => expect(composer.value).toBe('Yes'));
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as never);
+        await act(async () => { fireEvent.click(screen.getByTestId('chat-line-retry')); });
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(2));
+        expect(metadataOf(vi.mocked(sendMessageApi).mock.calls[1]).replyToId).toBe(asked.id);
+        expect(composer.value).toBe('');
+        expect(screen.queryByText('Replying to Ben')).toBeNull();
     });
 });
 

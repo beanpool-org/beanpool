@@ -140,9 +140,12 @@ function inTurn(line: NewChatLine, send: SendChatLine) {
     queues.set(line.conversationId, chatSettled(line.conversationId).then(() => attempt(line.id, send)));
 }
 
-/** The member sent a line. One this chat refused with the same words is replaced by it: nothing of that one was stored. */
+/**
+ * The member sent a line. One this chat refused with the same words and the same reply is replaced by it: nothing of that one
+ * was stored. One that answers something else stays, as it alone holds that reply.
+ */
 export function sendChatLine(line: NewChatLine, send: SendChatLine) {
-    const kept = lines.filter((l) => !(l.conversationId === line.conversationId && l.text === line.text && l.state === 'failed' && l.refused));
+    const kept = lines.filter((l) => !(l.conversationId === line.conversationId && l.text === line.text && l.replyToId === line.replyToId && l.state === 'failed' && l.refused));
     put([...kept, { ...line, state: 'sending', taken: false, refused: false }]);
     inTurn(line, send);
 }

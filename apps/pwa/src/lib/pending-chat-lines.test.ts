@@ -178,6 +178,18 @@ describe('a line that fails', () => {
         expect(fresh.current.map((l) => l.id)).toEqual(['unknown', 'again']);
     });
 
+    it('a refused reply is replaced only by a line that answers the same thing: it alone may hold that reply', async () => {
+        const lines = held();
+        act(() => sendChatLine({ ...line('reply', 'chat-a', 'yes'), replyToId: 'the-question' }, async () => 'refused'));
+        await flush();
+        act(() => sendChatLine(line('plain', 'chat-a', 'yes'), never));
+        expect(lines.current.map((l) => l.id)).toEqual(['reply', 'plain']);
+        expect(lines.current[0].replyToId).toBe('the-question');
+
+        act(() => sendChatLine({ ...line('resent', 'chat-a', 'yes'), replyToId: 'the-question' }, never));
+        expect(lines.current.map((l) => l.id)).toEqual(['plain', 'resent']);
+    });
+
 });
 
 describe('what the next line is written after', () => {

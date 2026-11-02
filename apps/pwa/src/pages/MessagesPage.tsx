@@ -380,6 +380,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
+    const replyToRef = useRef(replyToMessage);
+    replyToRef.current = replyToMessage;
     const [editingMessage, setEditingMessage] = useState<ApiMessage | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [activeEditNoticeId, setActiveEditNoticeId] = useState<string | null>(null);
@@ -1294,9 +1296,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             });
             return 'taken';
         } catch (e) {
-            if (!saidGroupRefusal(e, conv.id, chat, chatErr)) throw e;
-            // A proxy's 5xx: said, but its answer doesn't say the line wasn't stored.
+            // A proxy's 5xx doesn't say the line wasn't stored: nothing is said until lineSender has asked the node.
             if (e instanceof GroupKeysRequestError && e.status >= 500) throw e;
+            if (!saidGroupRefusal(e, conv.id, chat, chatErr)) throw e;
             return 'refused';
         }
     }
@@ -1310,8 +1312,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     function lineSender(line: NewChatLine, conv: Conversation): SendChatLine {
         const mentionCandidates = (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign }));
+        // A refused line back in the composer: its words and what they answer, or a Send from there would seal them without
+        // it, past repair. Both or neither, so words written since never become a reply, nor these words someone else's. What
+        // it answers isn't loaded: the composer can't show it, so all of it stays on the line, whose Retry sends it whole.
         const wordsBack = () => {
-            if (activeConvIdRef.current === conv.id && isPendingChatLine(line.id)) setDraft(prev => prev || line.text);
+            if (activeConvIdRef.current !== conv.id || !isPendingChatLine(line.id)) return;
+            if (draftRef.current?.value || replyToRef.current) return;
+            const answered = line.replyToId ? messagesById.get(line.replyToId) : null;
+            if (answered === undefined) return;
+            setDraft(prev => prev || line.text);
+            if (answered) setReplyToMessage(prev => prev ?? answered);
         };
         return async () => {
             try {
@@ -1343,7 +1353,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     function handleRetryLine(line: NewChatLine) {
         if (!activeConv) return;
-        if (draft === line.text) setDraft('');
+        // Its words back in the composer go with the line now, and so does what they answer.
+        if (draft === line.text) {
+            setDraft('');
+            if (replyToMessage?.id === line.replyToId) setReplyToMessage(null);
+        }
         setChatRefusal(null);
         retryChatLine(line.id, lineSender(line, activeConv));
     }
@@ -3062,7 +3076,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 }}>
                                     {line.replyToId && (failed ? replyQuote(line.replyToId, false, 'var(--bp-chip-danger-ink)') : replyQuote(line.replyToId, true))}
                                     <div dir="auto" style={{ whiteSpace: 'pre-wrap' }}>
-                                        <FoldedChatText text={line.text} mine={!failed} />
+                                        <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} />
                                     </div>
                                     {failed && (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '4px 8px', marginTop: '4px' }}>

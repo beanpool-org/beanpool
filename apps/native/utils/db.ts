@@ -34,7 +34,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { eventCopyColumn, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags } from '@beanpool/core';
+import { eventCopyColumn, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -1349,6 +1349,7 @@ export async function getConversations(myPubkey: string) {
          WHERE msg.conversation_id = c.id 
          AND msg.author_pubkey != ?
          AND (msg.timestamp > IFNULL((SELECT last_read_at FROM conversation_participants WHERE conversation_id = c.id AND public_key = ?), '2000-01-01'))
+         AND ${countsAsUnreadSql('msg')}
         ) as unreadCount,
         mt.id as pendingTxId,
         mt.credits as pendingAmount,
@@ -1385,7 +1386,7 @@ export async function getConversations(myPubkey: string) {
           AND (c.type IS NULL OR c.type != 'enterprise_thread')
         GROUP BY c.id
         ORDER BY timestamp DESC
-    `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+    `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
     // Pre-load identity so encrypted DM previews can be decrypted below.
@@ -1612,7 +1613,8 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
         AND ${NOT_A_REQUEST_FOR_ME('c.request')}
-    `, [myPubkey, myPubkey, myPubkey]);
+        AND ${COUNTS_AS_UNREAD_SQL}
+    `, [myPubkey, myPubkey, myPubkey, myPubkey]);
     return result?.count || 0;
 }
 
@@ -1636,8 +1638,9 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
         AND ${NOT_A_REQUEST_FOR_ME('c.request')}
+        AND ${COUNTS_AS_UNREAD_SQL}
         GROUP BY c.id
-    `, [myPubkey, myPubkey, myPubkey, myPubkey]);
+    `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     return rows.map(r => ({
         id: r.id,
         type: r.type || 'dm',

@@ -8,6 +8,7 @@ import { getNodeFeatures, type NodeFeatures } from './node-profile.js';
 import { getDoor, type Door } from './door.js';
 import { db } from '../db/db.js';
 import { confirmationDialOn, knownFloor, readsAsMember } from '@beanpool/engine';
+import { healthSettings } from '../engine/community-health.js';
 
 export type ReaderFeatures = NodeFeatures & { door: Door };
 
@@ -17,6 +18,9 @@ export function featuresFor(actor: string | null | undefined): ReaderFeatures {
     const res: ReaderFeatures = { ...nodeFeatures, door: getDoor() };
     if (actor && nodeFeatures.beans && readsAsMember(db, actor) && confirmationDialOn(db)) {
         res.knownFloor = knownFloor(db);
+        const { debtLinePct, quietDays } = healthSettings();
+        res.debtLinePct = debtLinePct;
+        res.quietDays = quietDays;
     }
     return res;
 }

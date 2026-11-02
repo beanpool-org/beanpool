@@ -62,6 +62,7 @@ import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
 import { featuresFor } from '../config/features-for.js';
+import { confirmationOf } from '../engine/community-health.js';
 import { getStartCommunityUrl } from '../config/start-community.js';
 import { recoveryCopies } from '../config/recovery-copies.js';
 import { getGlobalCommunityUrl } from '../config/global-community.js';
@@ -892,6 +893,9 @@ router.get('/api/community/me', async (ctx) => {
     ctx.body = {
         publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor),
         features: featuresFor(actor),
+        // Whether the rule on what the admins can see applies to them, and since when: a new `confirmedAt` is a new
+        // confirmation, so the app shows its card again (engine/community-health.ts confirmationOf).
+        ...confirmationOf(actor),
         // The keys a re-key replaced with this one, newest first, and whether this key has confirmed each (engine/key-succession.ts):
         // the phone asks its member to confirm an unattested one (line-display design §5, §6).
         rekeyedFrom: rekeyedFromOf(actor),

@@ -226,11 +226,15 @@ async function main() {
     delete process.env.NODE_PROFILE;
 
     // One effective set per reader (W1, config/features-for.ts): /api/community/me and /api/home say the reader's own
-    // features: the node's, exactly, on both profiles, plus `knownFloor` (a number) for a member who reads as one where
-    // Beans and the confirmation dial are on (community shape S5). No other key may differ.
+    // features: the node's, exactly, on both profiles, plus `knownFloor` and the rule's two lines (numbers) for a member who
+    // reads as one where Beans and the confirmation dial are on (community shape S5). No other key may differ.
     const beyondNode = (f: Record<string, unknown> | undefined) => {
-        const { knownFloor, ...rest } = f ?? {};
-        return { rest, floorOk: knownFloor === undefined || typeof knownFloor === 'number' };
+        const { knownFloor, debtLinePct, quietDays, ...rest } = f ?? {};
+        // The rule's two lines come with the known floor, as numbers, and never without it.
+        const floorOk = knownFloor === undefined
+            ? debtLinePct === undefined && quietDays === undefined
+            : typeof knownFloor === 'number' && typeof debtLinePct === 'number' && typeof quietDays === 'number';
+        return { rest, floorOk };
     };
     for (const want of ['local', 'global'] as const) {
         if (want === 'global') process.env.NODE_PROFILE = 'global'; else delete process.env.NODE_PROFILE;

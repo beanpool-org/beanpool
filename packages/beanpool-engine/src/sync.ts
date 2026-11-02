@@ -522,6 +522,7 @@ export interface SyncCommunitySettings {
         credit_cap?: string | null;
         health_debt_line_pct?: string | null;
         health_quiet_days?: string | null;
+        balance_rule_from?: string | null;
         /** Where Start a community leads, or null for beanpool.org's page (apps/server config/start-community.ts). */
         startCommunityUrl?: string | null;
         /** The listing promise's ticked lines and closing day as JSON text, or null for none (apps/server engine/directory-promise.ts). */

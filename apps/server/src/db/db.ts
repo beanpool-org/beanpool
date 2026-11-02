@@ -10,6 +10,7 @@ import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isPastDeadline, isSe
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
+import { RULE_NOTICE_MS } from '../config/balance-rule.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
@@ -1103,6 +1104,44 @@ export function rebuildNamesAccessLogCheck(d: Database.Database): boolean {
 }
 
 /**
+ * Rebuilds confirmations when its CHECK lacks 'member' (the member's own step-back, engine/names-list.ts stepBack), adding
+ * `stepped_back_owing`, keeping every row with its stamp; true when it rebuilt. Idempotent. Its two live-row indexes and
+ * its watermark go with the old table, and schema.sql and stampPlainTables make them again, so this runs before them.
+ * An older image reads the rebuilt table as it is: none of its statements needs the new column to be absent.
+ */
+export function rebuildConfirmationsRevokeCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='confirmations'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes("'member'")) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS confirmations_migration;
+            CREATE TABLE confirmations_migration (
+                id             TEXT PRIMARY KEY,
+                member_pubkey  TEXT NOT NULL,
+                entry_id       TEXT NOT NULL,
+                confirmed_by   TEXT NOT NULL,
+                confirmed_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                needs_second   INTEGER NOT NULL DEFAULT 0 CHECK (needs_second IN (0, 1)),
+                seconded_by    TEXT,
+                seconded_at    DATETIME,
+                revoked_by     TEXT,
+                revoked_at     DATETIME,
+                revoke_reason  TEXT CHECK (revoke_reason IS NULL OR revoke_reason IN ('admin', 'removed', 'account_deleted', 'member')),
+                stepped_back_owing INTEGER NOT NULL DEFAULT 0 CHECK (stepped_back_owing IN (0, 1)),
+                updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO confirmations_migration (id, member_pubkey, entry_id, confirmed_by, confirmed_at, needs_second, seconded_by, seconded_at,
+                                                 revoked_by, revoked_at, revoke_reason, updated_at)
+                SELECT id, member_pubkey, entry_id, confirmed_by, confirmed_at, needs_second, seconded_by, seconded_at,
+                       revoked_by, revoked_at, revoke_reason, updated_at FROM confirmations;
+            DROP TABLE confirmations;
+            ALTER TABLE confirmations_migration RENAME TO confirmations;
+        `);
+    })();
+    return true;
+}
+
+/**
  * Rebuilds health_access_log when its CHECK lacks 'stranded_escrows_read' (a table #1599 made, or one from before the
  * stranded escrows had a look of their own), keeping every row, with its `detail` where it had one, and adding the
  * `detail` column the trade looks write; true when it rebuilt. Idempotent.
@@ -1956,6 +1995,20 @@ export function initSchema() {
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate names_access_log for copy_restored:', err?.message || err);
     }
+    // confirmations: its CHECK allows the member's own step-back, and it has `stepped_back_owing`. Before schema.sql, which
+    // makes its two live-row indexes; the watermark triggers come after, as for any table.
+    try {
+        if (rebuildConfirmationsRevokeCheck(db)) console.log("[DB] ✅ Migrated confirmations for a member's own step-back");
+    } catch (err: any) {
+        console.error("[DB] ❌ Failed to migrate confirmations for a member's own step-back:", err?.message || err);
+    }
+    // The live consents went with the rule on what the admins can see (scratch/fable-design/DESIGN-balance-rule-fable.md §5).
+    // An older image makes the table again, empty, and so lists nobody; known_consent_log stays as the record (Q-C).
+    try {
+        db.exec('DROP TABLE IF EXISTS known_consents');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to drop known_consents:', err?.message || err);
+    }
     // health_access_log: its CHECK allows the looks at disputes and alerts, and it has `detail` (a table #1599 made has
     // neither). Before schema.sql, as names_access_log above; the watermark triggers come after.
     try {
@@ -2485,6 +2538,24 @@ export function initSchema() {
     stampPlainTables();
     markLinkTreasuries();
     fillReleaseOwners();
+    stampBalanceRuleFrom();
+}
+
+/**
+ * The day the rule on what the admins can see starts here (config/balance-rule.ts), written once on a main server and
+ * never moved: INSERT OR IGNORE, so a restart or a later boot changes nothing. Writes node_config only and reads no
+ * balance (a read at boot, before the exemptions, destroys Beans: #2313). A standby writes none: its take-over brings its
+ * main server's (config/community-settings.ts), or, from a main server older than the rule, this runs as it takes over.
+ * A failure leaves no row, which lists nobody on the rule (engine/community-health.ts), and the next boot tries again.
+ */
+function stampBalanceRuleFrom(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        db.prepare(`INSERT OR IGNORE INTO node_config (key, value) VALUES ('balance_rule_from', ?)`)
+            .run(new Date(Date.now() + RULE_NOTICE_MS).toISOString());
+    } catch (e) {
+        console.error('[DB] ❌ Could not stamp when the rule on what the admins can see starts (nobody is listed on it until it does):', e);
+    }
 }
 
 /**
@@ -2518,7 +2589,7 @@ function seedPricingGuideOnMainServer(): void {
  * its database booted as a standby's (services/takeover.ts resumeTakeoverAtBoot, through state-engine.ts
  * becomeMainServerInPlace). The same passes, each idempotent and each its own guard: the visitors' marks, the members'
  * schema rules, the break-glass hashes of suspended members, the pricing guide, the plain tables' unstamped rows, the link
- * treasuries' markers and the recovery releases' owners. Nothing on a standby. Never throws.
+ * treasuries' markers, the recovery releases' owners and the rule's start. Nothing on a standby. Never throws.
  */
 export function runMainServerSchemaPasses(): void {
     if (getNodeRole() === 'backup') return;
@@ -2533,6 +2604,7 @@ export function runMainServerSchemaPasses(): void {
     for (const t of PLAIN_TABLES) stampUnstampedRows(t);
     markLinkTreasuries();
     fillReleaseOwners();
+    stampBalanceRuleFrom();
 }
 
 /** A plain table's rows the ALTER left with no stamp, stamped now, on a main server only (stampPlainTables). */

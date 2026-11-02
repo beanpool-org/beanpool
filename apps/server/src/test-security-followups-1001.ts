@@ -35,7 +35,8 @@ import { setTrustConfigForTests } from './client-ip.js';
 import { generateBreakGlassCode, verifyBreakGlassCode } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { SOURCE_FREE_FAILURES } from './password-brake.js';
+import { limiterKeyForIp } from './client-ip.js';
+import { SOURCE_FREE_FAILURES, sourceClosedUntil } from './password-brake.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { pairingMessage } from './settings-signin-pairing.js';
 
@@ -141,8 +142,12 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     const wrongPw = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-password': 'not-the-password', ...viaTunnel(freshIp()) } });
     assert(wrongPw.status === answers[0].status && wrongPw.text === answers[3].text, `the same answer as a wrong password (${show(wrongPw)})`);
     // The brake counts it: X has sent five, so one more is checked and then X waits.
-    const sixth = await req('/api/local/admin/node-roles', { headers: asCode('x-admin-password') });
+    // The sixth closes the address, and the server then holds its reply about as long as the closure lasts: a seventh sent after
+    // that reply can arrive once the closure is over (2.08 s after it opened, in run 41391269443). So it goes while the sixth is held.
+    const sixthSent = req('/api/local/admin/node-roles', { headers: asCode('x-admin-password') });
+    for (let i = 0; i < 500 && sourceClosedUntil(limiterKeyForIp(X)) <= Date.now(); i++) await new Promise((done) => setTimeout(done, 10));
     const seventh = await req('/api/local/admin/node-roles', { headers: asCode('x-admin-password') });
+    const sixth = await sixthSent;
     assert(SOURCE_FREE_FAILURES === 5 && sixth.status === 401 && seventh.status === 429 && seventh.json?.passwordBackoff === true,
         `the password brake counts each one: the ${SOURCE_FREE_FAILURES + 1}th is checked and then that address waits (${sixth.status}, ${seventh.status})`);
 

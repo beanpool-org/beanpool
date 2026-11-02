@@ -170,9 +170,10 @@ describe('post pinning: phone columns, sync, and db operations', () => {
             );
 
             // DB was updated
-            const row = sql.prepare("SELECT pinned_until, pinned_at FROM posts WHERE id = 'post-to-pin'").get() as any;
+            const row = sql.prepare("SELECT pinned_until, pinned_at, updated_at FROM posts WHERE id = 'post-to-pin'").get() as any;
             expect(row.pinned_until).toBe(until);
             expect(row.pinned_at).toBe(at);
+            expect(row.updated_at).toBe(at);
         } finally {
             vi.unstubAllGlobals();
         }

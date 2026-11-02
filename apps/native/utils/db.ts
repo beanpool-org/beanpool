@@ -2791,7 +2791,7 @@ export async function pinPostOnNode(postId: string, days: PinDays): Promise<{ su
         const database = await waitForInit();
         await database.runAsync(
             `UPDATE posts SET pinned_until = ?, pinned_at = ?, updated_at = ? WHERE id = ?`,
-            [json.pinnedUntil || null, json.pinnedAt || null, new Date().toISOString(), postId]
+            [json.pinnedUntil || null, json.pinnedAt || null, json.pinnedAt || new Date().toISOString(), postId]
         );
         emitAppEvent('sync_data_updated');
     } catch (e) {
@@ -2810,11 +2810,13 @@ export async function unpinPostOnNode(postId: string): Promise<{ success: boolea
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
 
+    const bodyString = '';
     const unpinUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/unpin`;
-    const headers = await buildSignedHeaders('POST', unpinUrl, '', identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', unpinUrl, bodyString, identity.privateKey, identity.publicKey);
     const res = await fetch(unpinUrl, {
         method: 'POST',
         headers,
+        body: bodyString,
     });
     if (!res.ok) {
         const txt = await res.text();

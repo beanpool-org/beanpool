@@ -3,7 +3,7 @@
 #
 # Touches no real model, PR, GitHub repo or node: the fakes in test/fake/ are first on PATH (and named explicitly
 # via LANE_AGY_BIN / LANE_CLAUDE_BIN), the git "origin" is a bare repo in a temp dir, and deploy.sh is a fake
-# committed to that temp repo. Timings are shrunk so the whole run takes about two minutes.
+# committed to that temp repo. Timings are shrunk so the whole run takes about four minutes.
 #
 #   zsh scripts/lanes/test/selftest.sh          (LANE_SELFTEST_KEEP=1 keeps the temp dir for inspection)
 HERE=${0:A:h}

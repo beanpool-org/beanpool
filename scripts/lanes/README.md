@@ -177,5 +177,5 @@ These scripts are macOS-only (`stat -f`, `find -mtime -Ns`, `caffeinate`), becau
 
 ```zsh
 for f in scripts/lanes/*.sh scripts/lanes/test/selftest.sh; do zsh -n "$f"; done
-zsh scripts/lanes/test/selftest.sh      # ~2 min; fakes only; prints each scenario's lane log and ✓/✗ checks
+zsh scripts/lanes/test/selftest.sh      # ~4 min; fakes only; prints each scenario's lane log and ✓/✗ checks
 ```

@@ -15,7 +15,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { listingFreeTags, postTagsOf, t, takeQuestionsHint, takeQuestionsLabel } from '@beanpool/core';
+import { listingCopyHint, listingFreeTags, postTagsOf, t, takeQuestionsHint, takeQuestionsLabel } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';

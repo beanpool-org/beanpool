@@ -988,14 +988,14 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                                     ? 'text-red-400'
                                     : 'text-nature-300';
                             return (
-                                <div key={idx} className="flex items-start gap-2 leading-relaxed break-all">
+                                <div key={idx} className="flex flex-wrap items-start gap-x-2 leading-relaxed break-all">
                                     <span className="text-nature-400 text-[10px] shrink-0">
                                         [{entry?.timestamp || '--:--:--'}]
                                     </span>
                                     <span className="text-blue-400 font-semibold text-[10px] shrink-0">
                                         [{entry?.step || 'info'}]
                                     </span>
-                                    <span className={colorClass}>
+                                    <span className={`${colorClass} basis-full lg:basis-0 lg:flex-1 min-w-0`}>
                                         {entry?.message || ''}
                                     </span>
                                 </div>

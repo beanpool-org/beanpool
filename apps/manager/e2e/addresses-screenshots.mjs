@@ -49,11 +49,10 @@ const OPEN = { width: 320, height: 780, textScale: 1.3, screen: { tab: 'applianc
 const problems = [];
 const noOverflow = async (page, what) => {
     const sideways = await horizontalOverflow(page);
-    if (sideways.overflow > 0) problems.push(`${what}: the page scrolls sideways by ${sideways.overflow}px (${JSON.stringify(sideways.culprits ?? []).slice(0, 200)})`);
+    if (sideways.scrollWidth > sideways.viewport) problems.push(`${what}: the page scrolls sideways by ${sideways.scrollWidth - sideways.viewport}px (${JSON.stringify(sideways.culprits).slice(0, 200)})`);
     for (const row of await page.locator('[data-testid^="address-row-"]').all()) {
-        const out = await boxOverflow(row, 'span, p, a, button');
-        const list = out.outside ?? out;
-        if (Array.isArray(list) && list.length) problems.push(`${what}: past the row's edge: ${JSON.stringify(list).slice(0, 200)}`);
+        const { outside } = await boxOverflow(row, 'span, p, a, button');
+        if (outside.length) problems.push(`${what}: past the row's edge: ${JSON.stringify(outside).slice(0, 200)}`);
     }
 };
 
@@ -102,13 +101,22 @@ try {
         await page.waitForSelector('[data-testid="addresses-panel"]', { timeout: 10000 });
         await settle(page);
         if (view.width === 320) await noOverflow(page, 'the whole screen at 320 px');
+        // An element's shot scrolls it under the sticky header, which then covers its top.
+        await page.addStyleTag({ content: 'header { position: static !important; }' });
+
+        // A log line's message beside its time and step was a column one letter wide, and each line a thousand pixels tall.
+        for (const line of await page.getByTestId('propagation-monitor-terminal').locator(':scope > div').all()) {
+            const { height } = await line.boundingBox();
+            if (height > 200) problems.push(`a log line at ${view.label} is ${Math.round(height)}px tall`);
+        }
 
         const panel = page.getByTestId('public-address-panel');
         await shoot(page.getByTestId('extra-name'), `control-spare-name-release-${view.label}`);
         await shoot(panel.getByRole('button', { name: /Restart tunnel/ }).locator('..'), `control-restart-newkey-offline-${view.label}`);
         await shoot(page.getByTestId('address-notices'), `control-notices-reply-link-${view.label}`);
         await shoot(page.getByTestId('own-address-card'), `control-certificates-try-again-${view.label}`);
-        await shoot(page.getByTestId('propagation-monitor-terminal'), `control-log-${view.label}`);
+        await page.getByTestId('propagation-monitor-terminal').getByText('Attestation retry succeeded').waitFor({ timeout: 5000 });
+        await shoot(page.getByTestId('propagation-monitor-terminal').locator('..'), `control-log-${view.label}`);
         await shoot(page.getByTestId('app-addresses'), `control-confirm-behind-tick-warnings-${view.label}`);
 
         for (const [button, name] of [[/Restart tunnel/, 'restart-tunnel'], [/New tunnel key/, 'new-tunnel-key'], [/Take offline/, 'take-offline']]) {

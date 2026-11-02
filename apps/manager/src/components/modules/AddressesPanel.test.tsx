@@ -488,7 +488,10 @@ describe('Addresses: every owner control is on the screen (#2738)', () => {
         expect(within(screen.getByTestId('extra-name')).getByRole('button', { name: 'Release' })).toBeInTheDocument();
         expect(await screen.findByTestId('own-address-error')).toHaveTextContent('port 80 is not reachable from the internet');
         expect(screen.getByRole('button', { name: 'Try again now' })).toBeInTheDocument();
-        expect(await screen.findByText('Tunnel started')).toBeInTheDocument();
+        const logLine = await screen.findByText('Tunnel started');
+        // At 320 px the time and step take the line, so the message wraps under them: beside them it was a column one letter wide.
+        expect(logLine.parentElement!.className).toMatch(/flex-wrap/);
+        expect(logLine.className).toMatch(/basis-full/);
         expect(screen.getByLabelText('Tunnel Token')).toBeInTheDocument();
         // One read of the address service for the whole screen: the panel's, which the list takes its tunnel from.
         await screen.findByText("Cloudflare, then this server's tunnel (connected)");
@@ -871,6 +874,8 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         expect(screen.queryByText(/Direct/)).not.toBeInTheDocument();
         expect(screen.getByText('https://cairns.beanpool.org')).toBeInTheDocument();
         expect(screen.getByLabelText(/Operator Contact/i)).toBeInTheDocument();
+        // Beside a long address the label keeps its width: "URL:" never breaks in two at 320 px.
+        expect(screen.getByText('URL:').className).toMatch(/shrink-0/);
     });
 
     it('the address service has no record of the kept name: the claim form stays (moved from PublicAddressPanel)', async () => {

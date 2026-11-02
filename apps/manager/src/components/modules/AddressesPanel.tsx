@@ -660,8 +660,8 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                                         <span className="text-nature-400 font-mono text-xs">.beanpool.org</span>
                                     </div>
                                     <div className="mt-1.5 p-2 rounded-lg bg-nature-900 border border-nature-800 text-[11px] font-mono text-bp-ink-success flex items-center gap-1 break-all">
-                                        <span>{t('URL:')}</span>
-                                        <strong className="font-bold">{`https://${cleanSubdomain(beanpoolSubdomain) || 'cairns'}.beanpool.org`}</strong>
+                                        <span className="shrink-0">{t('URL:')}</span>
+                                        <strong className="font-bold min-w-0">{`https://${cleanSubdomain(beanpoolSubdomain) || 'cairns'}.beanpool.org`}</strong>
                                     </div>
                                 </div>
 

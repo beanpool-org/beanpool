@@ -38,6 +38,7 @@ import { palette } from '../constants/colors';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../constants/categories';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { ShowOnGlobalTick, showEventOnGlobal } from '../components/ShowOnGlobalRow';
 import { getCachedNodeProfile } from '../utils/node-profile';
 import {
     marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules, composerNeedsProfilePhoto,
@@ -265,7 +266,10 @@ export default function NewListingScreen() {
     const [postCredits, setPostCredits] = useState('');
     const [postPriceType, setPostPriceType] = useState<string>('fixed');
     // Where the community has Beans off (the global one), the form has no price and the preview no amount.
-    const nodeFeatures = useNodeProfile()?.features;
+    const nodeProfile = useNodeProfile();
+    const nodeFeatures = nodeProfile?.features;
+    // "Also show this on the global community": off, every time; never kept in a draft.
+    const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
     const showsBeans = marketShowsBeans(nodeFeatures);
     const [postRepeatable, setPostRepeatable] = useState(false);
     const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
@@ -367,6 +371,7 @@ export default function NewListingScreen() {
 
     // --- New Post Functions ---
     const resetNewPost = () => {
+        setAlsoOnGlobal(false);
         setPostType('offer'); setPostCategory(''); setPostTags([]); setPostFreeTags([]); setPostTitle(''); setPostDescription('');
         setPostCredits(''); setPostPriceType('fixed'); setPostRepeatable(false); setPostPhotos([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
@@ -610,7 +615,7 @@ export default function NewListingScreen() {
 
         setPosting(true);
         try {
-            await createPost({
+            const made = await createPost({
                 id: Crypto.randomUUID(),
                 type: postType,
                 category: postCategory,
@@ -631,6 +636,7 @@ export default function NewListingScreen() {
                 ...(postTags.length > 0 ? { tags: postTags } : {}),
                 ...(postFreeTags.length > 0 ? { freeTags: postFreeTags } : {}),
             });
+            if (alsoOnGlobal && made?.post) void showEventOnGlobal(made.post, identity).catch(() => {});
             clearDraft();
             setTimeout(() => {
                 resetNewPost();
@@ -986,6 +992,8 @@ export default function NewListingScreen() {
                                     {t('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.')}
                                 </Text>
                             )}
+
+                            <ShowOnGlobalTick enabled={nodeProfile?.profile === 'local' && postLat !== null && postLng !== null} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} listing need={postType === 'need'} />
 
                             {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
                                 trading partners: a reach chooser on a node with no peers is a decision about nothing.

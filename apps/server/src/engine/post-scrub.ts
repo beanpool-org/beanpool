@@ -67,7 +67,7 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
            SET title = ?, description = '', search_keywords = ?, tags = '', free_tags = '',
                lat = NULL, lng = NULL, event_place_name = NULL, event_private_note = NULL, event_link = NULL,
                lend_terms = NULL, replacement_value = NULL, lend_max_days = NULL,
-               shown_from_host = CASE WHEN shown_from_host IS NULL THEN NULL ELSE '' END, shown_from_post_id = NULL,
+               shown_from_host = CASE WHEN shown_from_host IS NULL THEN NULL ELSE '' END, shown_from_post_id = NULL, shown_price = NULL,
                updated_at = ?
          WHERE id = ?`);
     const renameChat = db.prepare(`UPDATE conversations SET name = ? WHERE id = ? AND type = 'event_thread'`);

@@ -535,7 +535,7 @@ export function createPost(
         freeTags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
-        /** A member's copy of an event from their own community (engine/event-copy.ts copyOfRequest): no chat, no activity line. */
+        /** A member's copy from their own community (engine/event-copy.ts copyOfRequest): no chat, no activity line. */
         shownCopy?: CopyColumns | null;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
@@ -813,8 +813,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -838,6 +838,7 @@ export function createPost(
             storedFreeTags(freeTags),
             options?.shownCopy?.host ?? null,
             options?.shownCopy?.postId ?? null,
+            options?.shownCopy?.price ?? null,
         );
 
         if (photoColumns.length > 0) {
@@ -1489,6 +1490,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     }
     // Out of its shop, or into another, it is featured in none (engine/shops.ts featureOffer): the stamp goes with the shop.
     if (nextShop !== undefined) { fields.push('shop_id = ?', 'featured_at = NULL'); values.push(nextShop); }
+    // A copy's price at home, as engine/event-copy.ts copyUpdates held it. Nothing else holds one.
+    if (existingPost.shownFromHost !== undefined && typeof updates.shownPrice === 'string') { fields.push('shown_price = ?'); values.push(updates.shownPrice); }
 
     // The creator may still change the ballot while nobody has voted (refused above once anyone has). Only `true` opens it.
     if (existingPost.type === 'poll' && updates.pollOpenVote !== undefined) {

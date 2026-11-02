@@ -33,12 +33,12 @@ import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
-import { copyEventBody, copyEventUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
+import { copyBody, copyUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
 import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
-import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
+import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, LISTING_COPY_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE, ENTERPRISE_CLOSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
@@ -751,10 +751,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
+    // A member's copy holds only what a copy may (engine/event-copy.ts); every other post is the body as it came.
+    const requestBody = copyBody((ctx as any).requestBody || {});
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
     const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom } =
-        (ctx as any).requestBody || {};
+        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom } = requestBody;
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
@@ -809,10 +810,10 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
         const timeOut: EventTimeOut = {};
-        // A member's copy of an event from their own community (engine/event-copy.ts); null for every other post.
-        const copy = copyOfRequest(shownFrom, (ctx as any).requestBody);
+        // A member's copy from their own community (engine/event-copy.ts); null for every other post.
+        const copy = copyOfRequest(shownFrom, requestBody);
         const post = type === 'event'
-            ? createEventFromBody(copy ? copyEventBody((ctx as any).requestBody) : (ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut, undefined, copy)
+            ? createEventFromBody(requestBody, authorPublicKey, undefined, underDailyPosts, timeOut, undefined, copy)
             : createPost(
             // A listing put in a shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
             type, category || newListingCategory(shopId) || 'other', title, description || '',
@@ -840,6 +841,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
                 tags,
                 // The tags its author typed, raw: the engine holds them to the rule (engine/post-fields.ts assertFreeTags).
                 freeTags,
+                shownCopy: copy,
             }
         );
         if (!post) {
@@ -954,8 +956,8 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             const fresh = updates.photos.filter((p: unknown) => !(typeof p === 'string' && own.test(p))).length;
             assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
         }
-        // A member's copy keeps to the times and the rounded pin (engine/event-copy.ts).
-        if ((db.prepare('SELECT shown_from_host FROM posts WHERE id = ?').get(id) as { shown_from_host: string | null } | undefined)?.shown_from_host != null) copyEventUpdates(updates);
+        // A member's copy keeps to what a copy holds (engine/event-copy.ts). A home price is a copy's alone (engine updatePost).
+        if ((db.prepare('SELECT shown_from_host FROM posts WHERE id = ?').get(id) as { shown_from_host: string | null } | undefined)?.shown_from_host != null) copyUpdates(updates);
         const timeOut: EventTimeOut = {};
         const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor, timeOut);
         if (!post) {
@@ -1296,6 +1298,13 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
+function respondCopyNoDeal(ctx: any, err: any): boolean {
+    if (err?.code !== LISTING_COPY_CODE) return false;
+    ctx.status = 409;
+    ctx.body = { error: err.message, code: LISTING_COPY_CODE };
+    return true;
+}
+
 /**
  * The member already has a deal under way on this listing (engine/escrow.ts DEAL_OPEN_CODE): 409, its code, and the deal's id,
  * so an app says so and opens that deal. The deal is the caller's own (the buyer or requester this route was entitled to).
@@ -1330,6 +1339,7 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             ctx.body = { error: err.message, code: LEND_ASK_FIRST_CODE };
             return;
         }
+        if (respondCopyNoDeal(ctx, err)) return;
         // A post taken or changed since the app showed it: the 400 it always was, with its code (engine/escrow.ts).
         if (err?.code === POST_GONE_CODE) {
             ctx.status = 400;
@@ -1355,6 +1365,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
         if (!tx) throw Object.assign(new Error(word('Cannot request — post not found or unauthorized')), { code: POST_GONE_CODE });
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
+        if (respondCopyNoDeal(ctx, err)) return;
         // As accept: a post gone or changed since the app showed it, the 400 it always was, with its code.
         if (err?.code === POST_GONE_CODE) {
             ctx.status = 400;
@@ -1384,6 +1395,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
+        if (respondCopyNoDeal(ctx, err)) return;
         respondSettlementAware(ctx, err, 'Failed to approve request');
     }
 });

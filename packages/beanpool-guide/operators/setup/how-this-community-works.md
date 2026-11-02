@@ -36,7 +36,7 @@ Only an owner can change these settings. Admins can view every setting and its r
 - **Share member count, email, phone, health**: Choose which details are sent to the public directory.
 - **Visitors**: What non-members see when visiting this server.
 
-A member can show their own in-person event on the global community from their phone, by their own key: your server is not asked and is not told, and it sends nothing. While your community is shown in the directory, that event says **from** your community with **Ask to join** beside it; when it isn't, the event shows with no name and no door. Your community controls its own door and its own name; it does not control what its members say or hear in other communities.
+A member can show their own in-person event, Offer or Need on the global community from their phone, by their own key: your server is not asked and is not told, and it sends nothing. While your community is shown in the directory, it says **from** your community with **Ask to join** beside it, and an Offer or a Need says its price in Beans here and that it can't be bought until you welcome the buyer; when your community isn't shown, it appears with no name and no door. Your community controls its own door and its own name; it does not control what its members say or hear in other communities.
 
 ## Safety
 

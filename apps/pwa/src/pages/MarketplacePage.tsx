@@ -55,7 +55,7 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
     type ListFilter,
 } from '../lib/live-posts';
-import { TRANSACTION_FEE_RATE } from '@beanpool/core';
+import { TRANSACTION_FEE_RATE, eventCopyOf } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     getMemberProfile, createConversationApi, sendTransfer,
@@ -80,6 +80,7 @@ import { SAVE_SEARCH_BUTTON, saveSearchLabel, type HomeSearchSettings } from '@b
 import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
+import { ListingCopyFooter } from '../components/ListingCopyFooter';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
@@ -1480,6 +1481,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onBack={() => setSelectedPost(null)}
                 onJoin={visitor.onJoin}
                 pollsInformal={informalPolls}
+            />
+        );
+    }
+    // A member's copy of an Offer or a Need reads as a visitor reads it, for a member too: nothing of a deal or a person is
+    // drawn on it (@beanpool/core eventCopyOf), and the node refuses them all the same. Its door, and Report.
+    const listingCopy = selectedPost && selectedPost.type !== 'event' ? eventCopyOf(selectedPost) : null;
+    if (selectedPost && listingCopy) {
+        return (
+            <VisitorPostDetail
+                post={selectedPost}
+                beans={false}
+                distanceKm={distanceOf(selectedPost)}
+                onBack={() => setSelectedPost(null)}
+                onJoin={() => undefined}
+                footer={<ListingCopyFooter post={selectedPost} copy={listingCopy} reader={identity?.publicKey} />}
             />
         );
     }

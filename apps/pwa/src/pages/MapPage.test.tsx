@@ -405,6 +405,22 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         expect(view!.getByTestId('map-new-post-panel')).toBeVisible();
     });
 
+    it('a member\'s copy of a listing: its price at home in words, never "0B", and no author', async () => {
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([{
+            ...post, credits: 0, authorPublicKey: 'hidden', authorCallsign: '', shownCopy: true, shownPrice: '20 fixed',
+            shownFrom: { host: 'mullum.example.org', postId: 'h1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' },
+        }] as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} />);
+        });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
+        act(() => { mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!.listeners['click']?.(); });
+        const preview = await view!.findByTestId('map-preview-card');
+        expect(view!.getByTestId('map-copy-line')).toHaveTextContent("20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.");
+        expect(preview.textContent).not.toMatch(/0B/);
+    });
+
     // The panel is fixed to the VIEWPORT, so left-3/right-3 on its own stretched it across a desktop
     // screen and over the w-64 sidebar. jsdom lays nothing out, so the breakpoint classes are the
     // assertion: the phone gutters stay, and md+ gets a left edge past the sidebar and a capped width.

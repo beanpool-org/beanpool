@@ -92,7 +92,7 @@ Se você entrou na comunidade global com 12 palavras, elas são sua única forma
 ## Nomes e locais diferentes
 
 - **Entrar com um convite:** o botão da primeira etapa diz **Criar identidade e entrar →**. Se alguém aqui já tiver o nome escolhido, você o receberá com um número adicionado. **← Voltar** em **Sua foto** exibe seu nome sozinho, com **Próximo →**: altere-o (até 20 caracteres) ou mantenha-o, na mesma conta. Se alguém já tiver o novo nome, a página avisa e sugere outros.
-- **Abas:** o aplicativo web tem **Início**, **Mercado**, **Mapa**, **Bens comuns**, **Bate-papo**, **Pessoas** e **Registro**. O que o aplicativo para celular chama de **Conversas** é **Bate-papo** na web, e **Pessoas** tem sua própria aba.
+- **Abas:** o aplicativo web tem **Início**, **Mercado**, **Mapa**, **Bens comuns**, **Bate-papo**, **Pessoas** e **Registro**. Os dois aplicativos chamam esta aba de **Bate-papo**, e na web **Pessoas** tem sua própria aba.
 - **Configurações e seu perfil:** os pequenos botões no canto superior direito: seu perfil, o **?** e depois as Configurações. Em uma tela ampla, eles ficam na parte inferior do menu à esquerda.
 - **Publicar uma Oferta ou um Pedido:** use **Nova publicação** na página do **Mapa**.
 - **Aparência:** a opção chama-se **Igual ao dispositivo** em vez de "Igual ao telefone".

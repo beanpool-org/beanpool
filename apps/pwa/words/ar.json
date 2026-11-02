@@ -4200,6 +4200,9 @@
   "Offer": "عرض",
   "Need": "طلب",
   "Enterprise": "مؤسسة",
+  "! not delivered": "! لم يتم التسليم",
+  "Discard": "تجاهل",
+  "Message not delivered": "لم يتم تسليم الرسالة",
   "Stop taking questions": "إيقاف استقبال الأسئلة",
   "on the global community": "في المجتمع العالمي",
   "Open their requests there": "افتح طلباتهم هناك"

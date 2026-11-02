@@ -92,7 +92,7 @@ Jika kamu bergabung ke komunitas global dengan 12 kata, kata-kata tersebut adala
 ## Nama dan letak tombol yang berbeda
 
 - **Bergabung dengan undangan:** tombol langkah pertama berbunyi **Buat Identitas & Gabung →**. Jika seseorang di sini sudah memiliki nama yang kamu pilih, kamu mendapatkannya dengan tambahan angka. **← Kembali** pada **Fotomu** menampilkan namamu saja, dengan **Lanjut →**: ubah (hingga 20 karakter) atau pertahankan, pada akun yang sama. Jika seseorang sudah memiliki nama baru tersebut, halaman memberi tahu demikian dan menyarankan nama lain.
-- **Tab-tab:** web app memiliki **Beranda**, **Pasar**, **Peta**, **Sarana Bersama**, **Obrolan**, **Orang**, dan **Buku kas**. Apa yang disebut aplikasi ponsel sebagai **Obrolan** (Talk) adalah **Obrolan** (Chat) di web, dan **Orang** memiliki tab tersendiri.
+- **Tab-tab:** web app memiliki **Beranda**, **Pasar**, **Peta**, **Sarana Bersama**, **Obrolan**, **Orang**, dan **Buku kas**. Kedua aplikasi menyebut tab ini **Obrolan**, dan di web **Orang** memiliki tab tersendiri.
 - **Pengaturan dan profilmu:** tombol-tombol kecil di kanan atas: profilmu, tanda **?**, lalu Pengaturan. Pada layar lebar tombol-tombol ini berada di bagian bawah menu di sebelah kiri.
 - **Memposting Penawaran atau Permintaan:** gunakan **Postingan Baru** pada halaman **Peta**.
 - **Tampilan:** pilihannya bernama **Sama seperti perangkat**, bukan "Sama seperti ponsel".

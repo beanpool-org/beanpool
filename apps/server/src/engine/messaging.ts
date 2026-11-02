@@ -196,7 +196,7 @@ function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey
  * any other type with this, as a 410.
  */
 export const CHAT_GROUP_REMOVED_ERROR =
-    word('Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.');
+    word('Group chats made in Chat were removed. Create a group in Commons instead — every group has its own chat.');
 
 /**
  * A member's words in a direct conversation are stored only end-to-end encrypted: the privacy policy tells members

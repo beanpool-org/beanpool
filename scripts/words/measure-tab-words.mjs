@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = 'apps/native/utils/__tests__/tab-word-widths.json';
-const STRIP = ['Home', 'Market', 'Map', 'Talk', 'Commons', 'Ledger'];
+const STRIP = ['Home', 'Market', 'Map', 'Chat', 'Commons', 'Ledger'];
 const FAMILY = { hi: 'Devanagari', bn: 'Bengali', ta: 'Tamil', ml: 'Malayalam' };
 const PROBES = { ta: ['பேரேட்டுக்கணக்கு', 'பொதுச்சொத்து'], ml: ['കണക്കുപുസ്തകം'] };
 const CDN = 'https://cdn.jsdelivr.net/gh/notofonts';

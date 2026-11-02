@@ -92,7 +92,7 @@ Si te uniste a la comunidad global con 12 palabras, son tu única forma de volve
 ## Nombres y ubicaciones diferentes
 
 - **Unirse con una invitación:** el botón del primer paso dice **Crear identidad y unirme →**. Si alguien aquí ya tiene el nombre que elegiste, lo recibes con un número añadido. **← Volver** en **Tu foto** muestra tu nombre solo, con **Siguiente →**: cámbialo (hasta 20 caracteres) o consérvalo, en la misma cuenta. Si alguien ya tiene el nuevo nombre, la página lo indica y sugiere otros.
-- **Pestañas:** la app web tiene **Inicio**, **Mercado**, **Mapa**, **Bienes comunes**, **Chat**, **Personas** y **Registro**. Lo que la app del teléfono llama **Charlas** es **Chat** en la web, y **Personas** tiene su propia pestaña.
+- **Pestañas:** la app web tiene **Inicio**, **Mercado**, **Mapa**, **Bienes comunes**, **Chat**, **Personas** y **Registro**. Las dos apps llaman a esta pestaña **Chat**, y en la web **Personas** tiene su propia pestaña.
 - **Configuración y tu perfil:** los pequeños botones en la parte superior derecha: tu perfil, el **?**, luego Configuración. En una pantalla ancha están al final del menú a la izquierda.
 - **Publicar una Oferta o una Necesidad:** usa **Nueva publicación** en la página del **Mapa**.
 - **Apariencia:** la opción se llama **Igual que el dispositivo** en lugar de "Igual que el teléfono".

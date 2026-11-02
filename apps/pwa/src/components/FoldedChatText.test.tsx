@@ -18,6 +18,18 @@ const fortyLines = Array.from({ length: 40 }, (_, i) => `Line ${i + 1} of a long
 const text = () => screen.getByTestId('chat-text');
 
 describe('a long message folds with …more', () => {
+    it('takes its ink from the bubble: white on my own, the accent on someone else\'s, and what a bubble of another colour says', () => {
+        const inkOf = (props: { mine?: boolean; ink?: string }) => {
+            const { unmount } = render(<FoldedChatText text={fortyLines} {...props} />);
+            const color = screen.getByRole('button', { name: '…more' }).style.color;
+            unmount();
+            return color;
+        };
+        expect(inkOf({ mine: true })).toBe('rgb(255, 255, 255)');
+        expect(inkOf({})).toBe('var(--accent)');
+        expect(inkOf({ ink: 'var(--bp-chip-danger-ink)' })).toBe('var(--bp-chip-danger-ink)');
+    });
+
     it('a 40-line message folds under …more, opens in place, and folds again', () => {
         render(<FoldedChatText text={fortyLines} />);
         expect(text().dataset.fold).toBe('folded');

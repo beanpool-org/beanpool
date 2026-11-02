@@ -39,7 +39,7 @@ const TAB = {
     index: word('Home', 'tab'),
     market: word('Market', 'tab'),
     map: word('Map', 'tab'),
-    chats: word('Talk', 'tab'),
+    chats: word('Chat', 'tab'),
     people: word('People', 'tab'),
     pulse: word('Pulse', 'tab'),
     projects: word('Commons', 'tab'),

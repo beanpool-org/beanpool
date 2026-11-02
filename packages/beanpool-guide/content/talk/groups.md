@@ -14,7 +14,7 @@ The people who look after a chat group are its **convenors**; one of them is the
 
 ## Your groups
 
-Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the projects you lead or work on (🎯), the enterprises you keep (🥖) and the events you host or are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read. In an encrypted chat the row shows who wrote last and **🔒 Message**, not the words.
+Tap **Chat**, then **Groups**. Every group you are in is listed there, newest message first, with the projects you lead or work on (🎯), the enterprises you keep (🥖) and the events you host or are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read. In an encrypted chat the row shows who wrote last and **🔒 Message**, not the words.
 
 - The number on **Groups** at the top adds up your unread messages, except in chats you have muted.
 - Tap a group to open its chat. That marks it read.
@@ -28,7 +28,7 @@ On the global community, the app makes one kind of group by itself: a **place ci
 
 ## Starting a group
 
-- On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.
+- On the phone, in **Chat**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.
 - In the web app, open **Commons**, then **Groups**, and tap **Start something** and pick **Chat group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
 - Every group has a picture: the one for its kind is already chosen, and it follows the **Category** until you choose one yourself. To pick another, tap **Choose another**. On the phone it offers your camera, your photos and the ready-made pictures. In the web app it shows the ready-made pictures, and **Choose a photo** picks one of your own.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
@@ -47,7 +47,7 @@ You can invite people on the phone and in the web app. On the phone, a new group
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**). A short key prefix appears under each person's name so you can tell people with the same name apart.
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, "You were invited to join a group.", and a line in **Needs you** on their Home (on the phone and in the web app, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, "You were invited to join a group.", and a line in **Needs you** on their Home (on the phone and in the web app, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Chat**). When they join, the chat says so.
 
 If you take an invitation back and invite the same person again, they get no second alert within the hour. Someone who has blocked you still gets the invitation, with no alert.
 
@@ -63,7 +63,7 @@ A group's chat is end-to-end encrypted: only the group's members can read it, no
 
 - You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words or photos.
 - When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.
-- A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.
+- A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it; in the web app, use **Retry** or **Discard** on the message.
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
 - If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **An earlier message was removed when this chat was locked**, and several in a row show as one line, such as **11 earlier messages removed when this chat was locked**.
 
@@ -82,7 +82,7 @@ A group's chat works exactly like a chat with one person. Tap a message and smal
 
 Two or more messages in a row that their authors deleted show as one line, such as **3 messages were deleted**. Two or more that a convenor removed show as **3 messages removed by a convenor**.
 
-Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
+Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it, or in the web app use **Retry** or **Discard** on the message. There are no blue double ticks in a group: a group has no single reader.
 
 In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. It can be deleted like any message (the author; a convenor can remove it), on the phone and the web.
 
@@ -117,7 +117,7 @@ On the phone, a group you asked to join is in neither list until a convenor lets
 
 An **Invite Only** group is hidden from everyone who is not in it or invited to it.
 
-On the phone, a local community with no Beans and no Decisions has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**. If Decisions are on, the **Commons** tab stays for Decisions and groups. The global community has the **Commons** tab: its groups are there, under an example from a local community (see "Beans and the global community").
+On the phone, a local community with no Beans and no Decisions has no **Commons** tab. There, tap **Chat**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**. If Decisions are on, the **Commons** tab stays for Decisions and groups. The global community has the **Commons** tab: its groups are there, under an example from a local community (see "Beans and the global community").
 
 If a convenor removed you from a group, you cannot join it again by yourself.
 
@@ -127,7 +127,7 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone and in the web app, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
 
-A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
+A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Chat**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
 
 - Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.

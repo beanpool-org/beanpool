@@ -9,7 +9,7 @@ source-hash: 44b66169497e9909
 
 ## Encontrando pessoas
 
-Toque em **Conversas** e depois em **Pessoas**. No app web, toque em **Pessoas** na linha de abas. Existem três botões:
+Toque em **Bate-papo** e depois em **Pessoas**. No app web, toque em **Pessoas** na linha de abas. Existem três botões:
 
 - **Amigos:** pessoas que você adicionou.
 - **Comunidade:** todos os membros. Busque pelo nome. No celular, ordene por **Mais recentes**, **Nome**, **Amigos**, **Confiáveis** ou **Ativos**. Na comunidade global são exibidos os membros mais próximos da sua região: digite pelo menos 2 letras de um nome para encontrar qualquer outra pessoa.

@@ -30,7 +30,7 @@ Your phone can't tell these apart by itself. You can, with the key code.
 - Check it **in person, or on a phone or video call** where you know it's them. Don't check it by a message in BeanPool: if the key is wrong, so is whoever answers.
 - If every digit matches, tick **I checked with Ben: the key code in their Settings matches this one**, then tap **Continue with the new key**.
 
-From then on your messages go to the new key. The banner and the **key changed** tag on the chat in **Talk** go away, and your earlier messages still read.
+From then on your messages go to the new key. The banner and the **key changed** tag on the chat in **Chat** go away, and your earlier messages still read.
 
 The code isn't secret. It's safe to read out.
 
@@ -58,7 +58,7 @@ You can reset it for one community: open **Settings**, tap **Chat memory** under
 
 After a reset, your phone checks every chat in that community again from the start, from the messages it holds. A chat whose messages came from a different key than the one the community now gives shows the banner again, starting with **This community's chat memory was reset, so this phone is checking this chat from the start.** Check the code with the person as above.
 
-Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.
+Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.
 
 A reset doesn't help with a chat your phone can't match to one key: it is checked again and stops again. Check the code with the person instead (above).
 

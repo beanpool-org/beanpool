@@ -576,7 +576,7 @@ export default function HomeScreen() {
             storedRef.current = null;
             setStored(null);
             setOfflineNote(false);
-            if (why === 'pull') AccessibilityInfo.announceForAccessibility(t("This community's server needs an update before Home works. Market and Talk still work."));
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility(t("This community's server needs an update before Home works. Market and Chat still work."));
         } else {
             setStatus(storedRef.current ? 'ok' : 'offline');
             setOfflineNote(!!storedRef.current);
@@ -1115,11 +1115,11 @@ export default function HomeScreen() {
             empty = (
                 <View style={st.empty}>
                     <Text style={[st.emptyText, { color: colors.text.body }]} accessibilityLiveRegion="polite" testID="home-needs-update-note">
-                        {t("This community's server needs an update before Home works. Market and Talk still work.")}
+                        {t("This community's server needs an update before Home works. Market and Chat still work.")}
                     </Text>
                     <View style={s.buttonRow}>
                         <HomeButton colors={colors} text={t('Open the Market')} onPress={() => router.navigate('/(tabs)/market')} testID="home-open-market" />
-                        <HomeButton colors={colors} text={t('Open Talk')} onPress={() => router.navigate('/(tabs)/chats')} testID="home-open-talk" />
+                        <HomeButton colors={colors} text={t('Open Chat')} onPress={() => router.navigate('/(tabs)/chats')} testID="home-open-talk" />
                     </View>
                 </View>
             );

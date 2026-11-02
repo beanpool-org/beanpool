@@ -3555,6 +3555,9 @@
   "Offer": "제공",
   "Need": "요청",
   "Enterprise": "기업",
+  "! not delivered": "! 전송되지 않음",
+  "Discard": "삭제",
+  "Message not delivered": "메시지가 전송되지 않았어요",
   "Stop taking questions": "질문 받기 중단",
   "on the global community": "글로벌 커뮤니티에서",
   "Open their requests there": "거기서 요청 열기"

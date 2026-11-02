@@ -9,23 +9,23 @@ source-hash: dd41c095375671ac
 
 ## Suas conversas
 
-**Conversas** tem três botões no topo: **Mensagens**, **Grupos** e **Pessoas**.
+**Bate-papo** tem três botões no topo: **Mensagens**, **Grupos** e **Pessoas**.
 
-Toque em **Conversas** na barra de abas e depois em **Mensagens**. Suas conversas com pessoas estão listadas lá. Acordos que precisam da sua atenção ficam no topo, sob **Ação necessária**.
+Toque em **Bate-papo** na barra de abas e depois em **Mensagens**. Suas conversas com pessoas estão listadas lá. Acordos que precisam da sua atenção ficam no topo, sob **Ação necessária**.
 
 Conversas que pertencem a um grupo, empreendimento ou evento ficam em **Grupos**, não aqui. Veja "Grupos".
 
 - Busque com **Buscar conversas, publicações, parceiros...**.
 - O botão de filtro ordena por **Recentes** ou **Não lidas** (e, onde sua comunidade usa feijões, pelos feijões em cada acordo, do maior para o menor ou vice-versa) e pode mostrar **Apenas não lidas** ou **Apenas amigos**.
-- No celular, os botões de busca e de filtro deslizam para fora da tela conforme você rola para baixo. Role um pouco para cima e eles retornam. Toque em **Conversas** novamente para ir direto ao topo.
+- No celular, os botões de busca e de filtro deslizam para fora da tela conforme você rola para baixo. Role um pouco para cima e eles retornam. Toque em **Bate-papo** novamente para ir direto ao topo.
 
 No app web, essa é a aba **Bate-papo**. Ela lista todas as suas conversas, de grupos e eventos também, com **Todas**, **Transações**, **Diretas** e **Grupos** no topo, e não possui busca nem filtros.
 
 ## Iniciando uma conversa
 
 - A partir de um perfil: abra o perfil da pessoa e toque em **Mensagem**. Você também pode adicioná-la aos amigos ali.
-- A partir de **Conversas**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.
-- A partir da lista de membros: **Conversas**, depois **Pessoas**, e toque em 💬 ao lado do nome de um membro em **Comunidade** ou **Amigos**.
+- A partir de **Bate-papo**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.
+- A partir da lista de membros: **Bate-papo**, depois **Pessoas**, e toque em 💬 ao lado do nome de um membro em **Comunidade** ou **Amigos**.
 - A partir de uma publicação: toque em **Mensagem** e no nome da pessoa.
 
 No app web, use **Mensagem** no perfil da pessoa, 💬 na linha dela em **Pessoas**, **✉️ Nova mensagem direta** ou o botão **💬 Mensagem** em uma publicação.

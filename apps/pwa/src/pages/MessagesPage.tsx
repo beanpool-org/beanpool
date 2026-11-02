@@ -36,6 +36,10 @@ import {
     type OpenedGroupThread,
 } from '../lib/group-chat-lines';
 import { resizePhotoFile } from '../lib/photo-resize';
+import {
+    usePendingChatLines, sendChatLine, retryChatLine, discardChatLine, forgetLinesWithRows, noteChatRead, lineAfter, chatSettled,
+    noteChatOnScreen, isChatOnScreen, isPendingChatLine, type NewChatLine, type SendChatLine,
+} from '../lib/pending-chat-lines';
 import { searchShownLines, GROUP_LINE_UNVERIFIED_NAME, type DisplayRosterRow } from '../lib/group-line-display';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -102,6 +106,15 @@ const POST_STATUS_WORDS: Readonly<Record<string, WordKey>> = {
 
 function postStatusWords(status: string): string {
     return Object.prototype.hasOwnProperty.call(POST_STATUS_WORDS, status) ? t(POST_STATUS_WORDS[status]) : status.toUpperCase();
+}
+
+/**
+ * The node answered and said no, so it stored nothing. No answer at all, or a proxy's 5xx, doesn't say that: the line may
+ * be there.
+ */
+function nodeSaidNo(err: unknown): boolean {
+    const status = (err as { status?: unknown } | null)?.status;
+    return !!nodeRefusal(err) || !!requestPendingRefusal(err) || (typeof status === 'number' && status >= 400 && status < 500);
 }
 
 /** The one time under a bubble: core's time of day in the member's language ("9:05", as the phone's), empty for an unreadable stamp. */
@@ -367,6 +380,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const servedMissingRef = useRef<Set<string>>(new Set());
     const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
+    // The lines this tab is sending (lib/pending-chat-lines.ts): apart from `messages`, and from everything worked out of them.
+    const pendingChatLines = usePendingChatLines();
     const [showNewDm, setShowNewDm] = useState(false);
     // Who this page can name: the member directory, or on a community where people are asked for, not read whole
     // (lib/members-on-demand, the worldwide one), the cards asked for by key, as the page needs them (below).
@@ -397,6 +412,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
+    const replyToRef = useRef(replyToMessage);
+    replyToRef.current = replyToMessage;
     const [editingMessage, setEditingMessage] = useState<ApiMessage | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [activeEditNoticeId, setActiveEditNoticeId] = useState<string | null>(null);
@@ -513,6 +530,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (isGroupChat && !openGroup) return [];
         return messages;
     }, [messages, isDmThread, isGroupChat, openGroup]);
+    // The lines to draw after this chat's rows, last until a read brings each one's row: the member's own words, from this
+    // tab, and nothing a node sent.
+    const activeConvId = activeConv?.id;
+    const pendingHere = useMemo(
+        () => pendingChatLines.filter(l => l.conversationId === activeConvId && l.owner === identity.publicKey),
+        [pendingChatLines, activeConvId, identity.publicKey],
+    );
     // The open chat's message request mode (lib/dm-requests.ts): read from the node's `request` and, for the opener, the
     // loaded lines of this chat only (never the last chat's, still in `messages` until this one's arrive): until they do,
     // the opener's is not known, rather than taken for one with no line in it yet.
@@ -734,9 +758,25 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
     }, [activeConv?.id]);
 
+    // A new line, the member's own or anyone's, and a line that couldn't go, so its Retry is in view. Nothing else: a read
+    // that brings no new line leaves a member reading further up where they are.
+    const failedHere = pendingHere.filter(l => l.state === 'failed').length;
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages.length]);
+    }, [messages.length, pendingHere.length, failedHere]);
+
+    useEffect(() => {
+        const id = activeConv?.id ?? null;
+        noteChatOnScreen(id, id ? () => { void loadMessages(id); } : null);
+        return () => noteChatOnScreen(null);
+    }, [activeConv?.id]);
+
+    // A line whose row has come is that row now, as the chat's checks judge it: gone before the screen is painted, so
+    // it is never drawn twice, whichever came first, the echo or the send's answer.
+    useLayoutEffect(() => { forgetLinesWithRows(messages.map(m => m.id)); }, [messages]);
+
+    // A send outlives this page: what answers it after the page has gone (a read, a refusal) has no chat to land in.
+    useEffect(() => () => { activeConvIdRef.current = null; }, []);
 
     const [actionLoading, setActionLoading] = useState(false);
 
@@ -942,11 +982,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return read;
         const seen = new Set<string>();
-        setMessages((answer?.messages ?? []).filter((m) => {
+        const uniqueMessages = (answer?.messages ?? []).filter((m) => {
             if (!m.id || seen.has(m.id)) return false;
             seen.add(m.id);
             return true;
-        }));
+        });
+        if (answer) noteReadLines(convId, uniqueMessages);
+        setMessages(uniqueMessages);
         setGroupChat({ id: convId, answer, error, nodeSaysLocked, seenLocked, thread, roster });
         setChatMute(prev => chatMuteFromAnswer(answer, prev));
         if (answer) {
@@ -957,6 +999,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             ring.serveMissing().catch(() => 0);
         }
         return read;
+    }
+
+    /** A read of this chat landed: what a line written now comes after, as worked out from these rows. */
+    function noteReadLines(convId: string, rows: ApiMessage[]) {
+        noteChatRead(convId, rows.map(m => m.id), {
+            dm: dmAfterReference(dmThreadInShownOrder(rows)),
+            group: [...rows].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM')?.id ?? null,
+        });
     }
 
     /**
@@ -980,6 +1030,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 seen.add(m.id);
                 return true;
             });
+            noteReadLines(convId, uniqueMessages);
             setMessages(uniqueMessages);
             setLoadedDmId(convId);
             if (identity?.publicKey) {
@@ -1212,11 +1263,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     /**
-     * A line (or an edit) in a group's chat (lib/group-chat-lines.ts): the chat answer is read again first. Sealed when it
-     * is locked or this browser has seen it locked (the sticky lock); readable only to a node from before locked chats,
-     * from a browser that never saw this group locked; otherwise refused with a sentence, the words kept in the composer.
+     * An edit in a group's chat (lib/group-chat-lines.ts): the chat answer is read again first. Sealed when it is locked or
+     * this browser has seen it locked (the sticky lock); readable only to a node from before locked chats, from a browser
+     * that never saw this group locked; otherwise refused with a sentence, the words kept in the composer.
      */
-    async function sendInGroup(conv: Conversation, wasEditing: ApiMessage | null): Promise<void> {
+    async function editInGroup(conv: Conversation, wasEditing: ApiMessage): Promise<void> {
         const check = await groupSendCheck(conv);
         if (!check) return;
         const { plan, chat, chatErr } = check;
@@ -1224,22 +1275,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (plan === 'readable') {
             // A node from before locked chats, and a browser that never saw this group locked (§14.3): as it always was.
             const { ciphertext, nonce } = encodePlaintext(text);
-            if (wasEditing) await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
-            else await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined,
-                replyToMessage ? JSON.stringify({ replyToId: replyToMessage.id }) : undefined, newDmMessageId());
+            await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
         } else {
             try {
-                if (wasEditing) {
-                    await editSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, { groupId: groupIdKey(conv.id), messageId: wasEditing.id, metadata: wasEditing.metadata, text });
-                } else {
-                    const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
-                    await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
-                        groupId: groupIdKey(conv.id), text, clientId: newDmMessageId(), replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
-                        mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
-                    });
-                }
+                await editSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, { groupId: groupIdKey(conv.id), messageId: wasEditing.id, metadata: wasEditing.metadata, text });
             } catch (e) {
-                if (saidGroupRefusal(e, chat, chatErr)) return;
+                if (saidGroupRefusal(e, conv.id, chat, chatErr)) return;
                 throw e;
             }
         }
@@ -1248,6 +1289,109 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         setEditingMessage(null);
         setChatRefusal(null);
         await loadMessages(conv.id);
+    }
+
+    /**
+     * One new line, to its node. A group seen locked here, whatever the node now calls it, is sealed as a group's line or
+     * refused; with the lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts). What it comes
+     * after is worked out here, as it goes: the line before it may have just been taken. 'refused': nothing was stored,
+     * and the sentence why is said. Anything thrown, the node may or may not have the line.
+     */
+    async function sendLineNow(line: NewChatLine, conv: Conversation, mentionCandidates: { pubkey: string; callsign: string | null | undefined }[]): Promise<'taken' | 'refused'> {
+        const route = conv.type === 'group_thread' ? 'group' : await sendRouteOf(identity.publicKey, conv.id);
+        if (route === 'refuse') {
+            sayRefusal(conv.id, GROUP_HOLD_UNREAD_TEXT);
+            return 'refused';
+        }
+        if (route !== 'group') {
+            // Nothing is sent when a DM can't be locked (caught by lineSender). A DM line is sealed to its message id and
+            // to the line it was written after.
+            const seal: DmLineSeal = { messageId: line.id, after: lineAfter(conv.id).dm, replyToId: line.replyToId };
+            const { ciphertext, nonce, lineSig } = await payloadFor(line.text, conv, seal);
+            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, lineMetadata(line.replyToId ?? undefined, lineSig), line.id);
+            ownLineTaken(conv.id);
+            return 'taken';
+        }
+        const check = await groupSendCheck({ ...conv, type: 'group_thread' });
+        if (!check) return 'refused';
+        const { plan, chat, chatErr } = check;
+        if (plan === 'readable') {
+            // A node from before locked chats, and a browser that never saw this group locked (§14.3): as it always was.
+            const { ciphertext, nonce } = encodePlaintext(line.text);
+            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined,
+                line.replyToId ? JSON.stringify({ replyToId: line.replyToId }) : undefined, line.id);
+            return 'taken';
+        }
+        try {
+            await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
+                groupId: groupIdKey(conv.id), text: line.text, clientId: line.id, replyToId: line.replyToId, after: lineAfter(conv.id).group, mentionCandidates,
+            });
+            return 'taken';
+        } catch (e) {
+            // A proxy's 5xx doesn't say the line wasn't stored: nothing is said until lineSender has asked the node.
+            if (e instanceof GroupKeysRequestError && e.status >= 500) throw e;
+            if (!saidGroupRefusal(e, conv.id, chat, chatErr)) throw e;
+            return 'refused';
+        }
+    }
+
+    /**
+     * One attempt at a line, as the queue runs it. A refusal is as it always was: the sentence in place, the words back in
+     * the composer. A failure with no answer leaves the words on the line: the node may have it, and a second copy sent from
+     * the composer would go under a new id and reach the other person twice, where the line's Retry reuses its id. So the
+     * node is asked first, as only the answer may have been lost. The chat may have closed by now, and this page gone: both
+     * are looked at when an answer comes.
+     */
+    function lineSender(line: NewChatLine, conv: Conversation): SendChatLine {
+        const mentionCandidates = (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign }));
+        // A refused line back in the composer: its words and what they answer, or a Send from there would seal them without
+        // it, past repair. Both or neither, so words written since never become a reply, nor these words someone else's. What
+        // it answers isn't loaded: the composer can't show it, so all of it stays on the line, whose Retry sends it whole.
+        const wordsBack = () => {
+            if (activeConvIdRef.current !== conv.id || !isPendingChatLine(line.id)) return;
+            if (draftRef.current?.value || replyToRef.current) return;
+            const answered = line.replyToId ? messagesById.get(line.replyToId) : null;
+            if (answered === undefined) return;
+            setDraft(prev => prev || line.text);
+            if (answered) setReplyToMessage(prev => prev ?? answered);
+        };
+        return async () => {
+            try {
+                const answer = await sendLineNow(line, conv, mentionCandidates);
+                if (answer === 'refused') wordsBack();
+                else if (activeConvIdRef.current === conv.id) setChatRefusal(null);
+                return answer;
+            } catch (err: any) {
+                const refused = isDmNotLocked(err) || nodeSaidNo(err);
+                if (!refused && await nodeHasLine(line, conv)) return 'taken';
+                // No line here now: its row came, and that is the answer.
+                if (isChatOnScreen(conv.id) && isPendingChatLine(line.id)) {
+                    if (refused) wordsBack();
+                    if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
+                    else showChatError(err, t('Failed to send message'));
+                }
+                if (!refused) throw err;
+                return 'refused';
+            }
+        };
+    }
+
+    /** Whether the node's chat holds this line. No answer: not known, so no. */
+    async function nodeHasLine(line: NewChatLine, conv: Conversation): Promise<boolean> {
+        const read = conv.type === 'group_thread' ? getGroupChat(conv.id) : getConversationMessages(conv.id);
+        const answer = await read.catch(() => null);
+        return !!answer?.messages?.some((m: ApiMessage) => m.id === line.id);
+    }
+
+    function handleRetryLine(line: NewChatLine) {
+        if (!activeConv) return;
+        // Its words back in the composer go with the line now, and so does what they answer.
+        if (draft === line.text) {
+            setDraft('');
+            if (replyToMessage?.id === line.replyToId) setReplyToMessage(null);
+        }
+        setChatRefusal(null);
+        retryChatLine(line.id, lineSender(line, activeConv));
     }
 
     /**
@@ -1266,23 +1410,28 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         // A DM the node calls a group's chat (finding 1): nothing leaves by the group route; the page reopens it as the DM.
         if (holdConversation({ id: conv.id, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), chat?.messages).type === 'dm') {
-            setChatRefusal(GROUP_CHAT_IS_DM_TEXT);
+            sayRefusal(conv.id, GROUP_CHAT_IS_DM_TEXT);
             await loadMessages(conv.id);
             return null;
         }
         const plan = await groupChatSendPlan(ring, chat, chatErr);
-        if (plan.kind === 'refuse') { setChatRefusal(plan.sentence); return null; }
-        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? groupClosedShown({ kind: conv.groupKind }, t(GROUP_CHAT_WORDS.closed)) : t(GROUP_CHAT_WORDS.readOnly)); return null; }
+        if (plan.kind === 'refuse') { sayRefusal(conv.id, plan.sentence); return null; }
+        if (chat && chat.canPost === false) { sayRefusal(conv.id, chat.readOnly ? groupClosedShown({ kind: conv.groupKind }, t(GROUP_CHAT_WORDS.closed)) : t(GROUP_CHAT_WORDS.readOnly)); return null; }
         return { plan: plan.kind, chat, chatErr };
     }
 
     /** A sealed send's refusal said in place (true); false for anything else, which is the caller's to show. */
-    function saidGroupRefusal(e: unknown, chat: GroupChatAnswer | null, chatErr: unknown): boolean {
-        if (e instanceof GroupChatKeyError) { setChatRefusal(e.message); return true; }
+    function saidGroupRefusal(e: unknown, convId: string, chat: GroupChatAnswer | null, chatErr: unknown): boolean {
+        if (e instanceof GroupChatKeyError) { sayRefusal(convId, e.message); return true; }
         // The node refuses this member the keys (a removal, or a node that won't say): nothing readable went.
-        if (e instanceof GroupKeysRequestError && (e.status === 403 || e.status === 404)) { setChatRefusal(heldGroupRefusal(chat, chatErr)); return true; }
-        if (e instanceof GroupKeysRequestError) { setChatRefusal(e.message); return true; }
+        if (e instanceof GroupKeysRequestError && (e.status === 403 || e.status === 404)) { sayRefusal(convId, heldGroupRefusal(chat, chatErr)); return true; }
+        if (e instanceof GroupKeysRequestError) { sayRefusal(convId, e.message); return true; }
         return false;
+    }
+
+    /** Why a line of `convId` didn't go, said in that chat: a line can get its answer after the member has moved on. */
+    function sayRefusal(convId: string, sentence: string) {
+        if (activeConvIdRef.current === convId) setChatRefusal(sentence);
     }
 
     /**
@@ -1299,14 +1448,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (!check) return false;
             if (check.plan === 'readable') { setChatRefusal(GROUP_CHAT_OLD_NODE_NOTICE); return false; }
             const dataUri = await resizePhotoFile(file).catch(() => { throw new Error(t('Could not load image')); });
-            const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+            await chatSettled(conv.id);
             try {
                 await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
-                    groupId: groupIdKey(conv.id), text: caption, photo: dataUri, clientId, replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
+                    groupId: groupIdKey(conv.id), text: caption, photo: dataUri, clientId, replyToId: replyToMessage?.id ?? null, after: lineAfter(conv.id).group,
                     mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
                 });
             } catch (e) {
-                if (saidGroupRefusal(e, check.chat, check.chatErr)) return false;
+                if (saidGroupRefusal(e, conv.id, check.chat, check.chatErr)) return false;
                 throw e;
             }
             setReplyToMessage(null);
@@ -1335,34 +1484,33 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function handleSend() {
         if (!draft.trim() || !activeConv) return;
-        setSending(true);
 
         const wasEditing = editingMessage;
-        try {
-            if (activeConv.type === 'group_thread') {
-                await sendInGroup(activeConv, wasEditing);
-                return;
-            }
-            // A group seen locked here, whatever the node now calls it, is sealed as a group's line or refused; with the
-            // lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts).
-            const route = await sendRouteOf(identity.publicKey, activeConv.id);
-            if (route === 'group') {
-                await sendInGroup({ ...activeConv, type: 'group_thread' }, wasEditing);
-                return;
-            }
-            if (route === 'refuse') {
-                setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
-                return;
-            }
-            // Nothing is sent, and the draft stays, when a DM can't be locked (caught below). A DM line is sealed to its
-            // message id (a new one, sent with it; an edit's own) and to the line it was written after: the newest the
-            // node has given us, or for an edit the one its line was written after.
-            const line: DmLineSeal = wasEditing
-                ? { messageId: wasEditing.id, after: lineViews?.get(wasEditing.id)?.after ?? null, replyToId: dmReplyToOf(wasEditing.metadata) ?? null }
-                : { messageId: newDmMessageId(), after: dmAfterReference(shownMessages), replyToId: replyToMessage?.id ?? null };
-            const { ciphertext, nonce, lineSig } = await payloadFor(draft.trim(), activeConv, line);
+        if (wasEditing) {
+            setSending(true);
+            try {
+                if (activeConv.type === 'group_thread') {
+                    await editInGroup(activeConv, wasEditing);
+                    return;
+                }
+                // A group seen locked here, whatever the node now calls it, is sealed as a group's line or refused; with the
+                // lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts).
+                const route = await sendRouteOf(identity.publicKey, activeConv.id);
+                if (route === 'group') {
+                    await editInGroup({ ...activeConv, type: 'group_thread' }, wasEditing);
+                    return;
+                }
+                if (route === 'refuse') {
+                    setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+                    return;
+                }
+                const line: DmLineSeal = {
+                    messageId: wasEditing.id,
+                    after: lineViews?.get(wasEditing.id)?.after ?? null,
+                    replyToId: dmReplyToOf(wasEditing.metadata) ?? null,
+                };
+                const { ciphertext, nonce, lineSig } = await payloadFor(draft.trim(), activeConv, line);
 
-            if (wasEditing) {
                 const prevMessages = messages;
                 const nowIso = new Date().toISOString();
                 setMessages(prev => prev.map(m => m.id === wasEditing.id ? {
@@ -1382,23 +1530,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     setMessages(prevMessages);
                     throw err;
                 }
-            } else {
-                const metadata = lineMetadata(replyToMessage?.id, lineSig);
-                // 1. Store locally (Server will handle Libp2p federation relay automatically)
-                await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
-                ownLineTaken(activeConv.id);
-
-                setDraft('');
-                setReplyToMessage(null);
-                setChatRefusal(null);
-                await loadMessages(activeConv.id);
+            } catch (err: any) {
+                if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
+                else showChatError(err, t('Failed to edit message'));
+            } finally {
+                setSending(false);
             }
-        } catch (err: any) {
-            if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
-            else showChatError(err, wasEditing ? t('Failed to edit message') : t('Failed to send message'));
-        } finally {
-            setSending(false);
+            return;
         }
+
+        // A new line shows at once, and the composer is the member's again; what becomes of the line is the line's to say.
+        const line: NewChatLine = { id: newDmMessageId(), conversationId: activeConv.id, owner: identity.publicKey, text: draft.trim(), replyToId: replyToMessage?.id ?? null };
+        setDraft('');
+        setReplyToMessage(null);
+        setChatRefusal(null);
+        sendChatLine(line, lineSender(line, activeConv));
     }
 
     /**
@@ -1423,11 +1569,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const dataUri = await resizePhotoFile(file).catch(() => { throw new Error(t('Could not load image')); });
             // Locked or not sent, the picture and its caption alike; one more try with the node's copy of the chat.
             const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
+            await chatSettled(conv.id);
             // Both sealed to the message's own id, each as its own part, so neither can stand in for the other.
             const messageId = newDmMessageId();
             const replyToId = replyToMessage?.id ?? null;   // sealed into both parts, as the metadata below names it
             const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment', replyToId });       // big blob -> lazy attachment
-            const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: dmAfterReference(shownMessages), replyToId });   // caption (often empty) -> message body
+            const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: lineAfter(conv.id).dm, replyToId });   // caption (often empty) -> message body
             const metadata = lineMetadata(replyToMessage?.id, encCap.lineSig);
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
@@ -1635,6 +1782,49 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             note: chatLineWords(dmLineMarkText(view?.mark)) ?? null,
             named: true,
         };
+    }
+
+    /**
+     * The answered message drawn at the top of a reply's bubble, as the thread judged it (quoteOf), never its row's raw
+     * words and name: on a row, and on a line still going. `ink`: its words on this bubble's own colour.
+     */
+    function replyQuote(replyToId: string, isMe: boolean, ink = isMe ? '#fff' : 'var(--accent)') {
+        const quoted = quoteOf(messagesById.get(replyToId));
+        return (
+            <div
+                data-testid="dm-quote"
+                style={{
+                    background: isMe ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
+                    borderLeft: `3px solid ${ink}`,
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    marginBottom: '6px',
+                    fontSize: '0.8rem',
+                    opacity: ink === 'var(--bp-chip-danger-ink)' ? 1 : 0.85,
+                    cursor: 'pointer',
+                }}
+                onClick={() => {
+                    const el = document.getElementById(`msg-${replyToId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.style.transition = 'background-color 0.5s';
+                        const origBg = el.style.backgroundColor;
+                        el.style.backgroundColor = 'var(--bg-hover)';
+                        setTimeout(() => { el.style.backgroundColor = origBg; }, 1500);
+                    }
+                }}
+            >
+                <div style={{ fontWeight: 700, fontSize: '0.75rem', color: ink, marginBottom: '2px' }}>
+                    {quoted.author}
+                </div>
+                <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '280px' }}>
+                    {quoted.text}
+                </div>
+                {quoted.note && (
+                    <div data-testid="dm-quote-note" style={{ fontStyle: 'italic', fontSize: '0.7rem', whiteSpace: 'normal' }}>⚠️ {quoted.note}</div>
+                )}
+            </div>
+        );
     }
 
     function getConversationTitle(conv: Conversation): string {
@@ -2267,7 +2457,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     flex: 1, minHeight: 'min(120px, 100%)', overflowY: 'auto', padding: '1rem',
                     display: 'flex', flexDirection: 'column', gap: '0.3rem',
                 }}>
-                    {messages.length === 0 && (
+                    {messages.length === 0 && pendingHere.length === 0 && (
                         <p style={{ textAlign: 'center', color: 'var(--text-faint)', marginTop: '2rem' }}>
                             {t('No messages yet. Say hello! 👋')}
                         </p>
@@ -2542,47 +2732,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     border: isMe ? 'none' : '1px solid var(--border-primary)',
                                     wordBreak: 'break-word',
                                 }}>
-                                    {metaObj && metaObj.replyToId && (() => {
-                                        // The answered message as the thread judged it (quoteOf), never its row's raw words and name.
-                                        const quoted = quoteOf(messagesById.get(metaObj.replyToId));
-                                        const parentText = quoted.text;
-                                        const parentAuthor = quoted.author;
-                                        return (
-                                            <div 
-                                                data-testid="dm-quote"
-                                                style={{
-                                                    background: isMe ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
-                                                    borderLeft: `3px solid ${isMe ? '#fff' : 'var(--accent)'}`,
-                                                    padding: '4px 8px',
-                                                    borderRadius: '4px',
-                                                    marginBottom: '6px',
-                                                    fontSize: '0.8rem',
-                                                    opacity: 0.85,
-                                                    cursor: 'pointer',
-                                                }} 
-                                                onClick={() => {
-                                                    const el = document.getElementById(`msg-${metaObj.replyToId}`);
-                                                    if (el) {
-                                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                        el.style.transition = 'background-color 0.5s';
-                                                        const origBg = el.style.backgroundColor;
-                                                        el.style.backgroundColor = 'var(--bg-hover)';
-                                                        setTimeout(() => { el.style.backgroundColor = origBg; }, 1500);
-                                                    }
-                                                }}
-                                            >
-                                                <div style={{ fontWeight: 700, fontSize: '0.75rem', color: isMe ? '#fff' : 'var(--accent)', marginBottom: '2px' }}>
-                                                    {parentAuthor}
-                                                </div>
-                                                <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '280px' }}>
-                                                    {parentText}
-                                                </div>
-                                                {quoted.note && (
-                                                    <div data-testid="dm-quote-note" style={{ fontStyle: 'italic', fontSize: '0.7rem', whiteSpace: 'normal' }}>⚠️ {quoted.note}</div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
+                                    {metaObj && metaObj.replyToId && replyQuote(metaObj.replyToId, isMe)}
                                     <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
                                             if (groupLine && openGroup) {
@@ -2932,6 +3082,66 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </span>
                                         )}
                                     </button>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {!chatSearch?.trim() && pendingHere.map(line => {
+                        const failed = line.state === 'failed';
+                        return (
+                            <div
+                                key={line.id}
+                                data-testid="chat-line-pending"
+                                className="max-w-[85%] md:max-w-[70%]"
+                                style={{ alignSelf: 'flex-end', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}
+                            >
+                                <div style={{
+                                    // A line that hasn't gone is never drawn as one that has: on a failed one, the danger chip's own pair.
+                                    background: failed ? 'var(--bp-chip-danger-tint)' : 'var(--accent)',
+                                    color: failed ? 'var(--bp-chip-danger-ink)' : '#fff',
+                                    border: failed ? '1px solid var(--bp-ink-danger)' : 'none',
+                                    borderRadius: '12px 12px 4px 12px',
+                                    padding: '0.35rem 0.6rem',
+                                    fontSize: '0.95rem',
+                                    lineHeight: 1.3,
+                                    wordBreak: 'break-word',
+                                }}>
+                                    {line.replyToId && (failed ? replyQuote(line.replyToId, false, 'var(--bp-chip-danger-ink)') : replyQuote(line.replyToId, true))}
+                                    <div dir="auto" style={{ whiteSpace: 'pre-wrap' }}>
+                                        <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} />
+                                    </div>
+                                    {failed && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '4px 8px', marginTop: '4px' }}>
+                                            <span data-testid="chat-line-failed" role="status" style={{ fontSize: '0.8rem', fontWeight: 700 }}>{t('! not delivered')}</span>
+                                            <button
+                                                type="button"
+                                                data-testid="chat-line-discard"
+                                                onClick={(e) => { e.stopPropagation(); discardChatLine(line.id); }}
+                                                style={{
+                                                    minHeight: '44px', minWidth: '44px', padding: '0 8px', background: 'none', border: 'none', font: 'inherit',
+                                                    fontSize: '0.85rem', fontWeight: 600, color: 'inherit', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px',
+                                                }}
+                                            >
+                                                {t('Discard')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                data-testid="chat-line-retry"
+                                                onClick={(e) => { e.stopPropagation(); handleRetryLine(line); }}
+                                                style={{
+                                                    minHeight: '44px', minWidth: '44px', padding: '0 14px', border: 'none', borderRadius: '8px', font: 'inherit', fontSize: '0.85rem', fontWeight: 700,
+                                                    background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', cursor: 'pointer',
+                                                }}
+                                            >
+                                                {t('Retry')}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                {!failed && (
+                                    <div data-testid="chat-line-sending" role="status" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                        <span aria-hidden="true">◷ </span>{t('Sending…')}
+                                    </div>
                                 )}
                             </div>
                         );
@@ -3361,6 +3571,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // The rows the list shows (empty conversations are left out by the node), and the Groups chip's unread count from them.
     const listedConversations = conversations.filter(c => (c.unreadCount || 0) > 0 || c.createdAt);
+    // The chats holding a line that couldn't go, which may have failed after the member left them.
+    const chatsNotDelivered = new Set(pendingChatLines.filter(l => l.state === 'failed' && l.owner === identity.publicKey).map(l => l.conversationId));
     const groupsUnread = groupsUnreadCount(listedConversations);
     const hasGroups = listedConversations.some(isGroupLikeChat);
     const headerButtonStyle: CSSProperties = {
@@ -3661,6 +3873,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         </div>
                                     )}
                                     
+                                    {chatsNotDelivered.has(conv.id) && (
+                                        <div data-testid="chat-row-not-delivered" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--bp-ink-danger)', marginTop: '0.25rem' }}>
+                                            {t('! not delivered')}
+                                        </div>
+                                    )}
                                     {needsReview && (
                                         <div style={{ fontSize: '0.75rem', color: '#d97706', fontWeight: 700, marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                             <span style={{ fontSize: '0.8rem' }}>⭐</span> {t('Action Needed: Review Partner')}

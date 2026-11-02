@@ -210,7 +210,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "Điện thoại này không đọc được những đoạn chat nào ở đây là riêng tư, nên không có gì được gửi. Hãy thử lại; nếu vẫn thất bại, Cài đặt → Bộ nhớ đoạn chat có thể đặt lại cho cộng đồng này để kiểm tra lại mọi đoạn chat từ đầu.",
   "Who your chats are with, and which are private.": "Các đoạn chat của bạn là với ai, và đoạn nào là riêng tư.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "Điện thoại này ghi nhớ từng đoạn chat trong cộng đồng là với ai và đoạn nào là riêng tư, để cộng đồng không thể âm thầm hoán đổi người trò chuyện hoặc biến đoạn chat riêng tư thành nhóm. Nếu điện thoại không thể đọc bộ nhớ đó, các đoạn chat trong cộng đồng đó sẽ không gửi được tin nhắn. Đặt lại sẽ giúp kiểm tra lại mọi đoạn chat ở đó từ đầu.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Một đoạn chat bị tạm dừng do khóa thay đổi có thể mở lại bằng khóa mới. Đoạn chat riêng tư từng biến mất khỏi Trò chuyện có thể quay lại dưới dạng chat nhóm mà cộng đồng đọc được. Hãy kiểm tra mã khóa hoặc người trong đoạn chat trước khi gửi.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Một đoạn chat bị tạm dừng do khóa thay đổi có thể mở lại bằng khóa mới. Đoạn chat riêng tư từng biến mất khỏi Chat có thể quay lại dưới dạng chat nhóm mà cộng đồng đọc được. Hãy kiểm tra mã khóa hoặc người trong đoạn chat trước khi gửi.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "Điện thoại này đang kiểm tra đoạn chat này từ đầu, như thường làm sau khi bạn khôi phục hoặc cập nhật ứng dụng.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "Bộ nhớ đoạn chat của cộng đồng này đã được đặt lại, vì vậy điện thoại đang kiểm tra lại đoạn chat này từ đầu.",
   "The key behind \"{name}\" changed.": "Khóa của \"{name}\" đã thay đổi.",
@@ -305,14 +305,14 @@
   "Home\u0004tab": "Trang chủ",
   "Market\u0004tab": "Chợ",
   "Map\u0004tab": "Bản đồ",
-  "Talk\u0004tab": "Chat",
+  "Chat\u0004tab": "Chat",
   "People\u0004tab": "Mọi người",
   "Pulse\u0004tab": "Nhịp đập",
   "Commons\u0004tab": "Chung",
   "Ledger\u0004tab": "Sổ cái",
   "Settings\u0004tab": "Cài đặt",
   "Home updated": "Trang chủ đã cập nhật",
-  "This community's server needs an update before Home works. Market and Talk still work.": "Máy chủ của cộng đồng này cần cập nhật trước khi Trang chủ hoạt động. Chợ và Chat vẫn hoạt động bình thường.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "Máy chủ của cộng đồng này cần cập nhật trước khi Trang chủ hoạt động. Chợ và Chat vẫn hoạt động bình thường.",
   "Couldn't reach your community; showing what we had": "Không thể kết nối đến cộng đồng; đang hiển thị dữ liệu đã lưu",
   "That was the last tip. Add a card brings them back.": "Đó là mẹo cuối cùng. Thêm thẻ sẽ mang chúng trở lại.",
   "this community": "cộng đồng này",
@@ -321,7 +321,7 @@
   "Tune": "Tùy chỉnh",
   "Home shows once you're a member of this community.": "Trang chủ sẽ hiển thị khi bạn là thành viên của cộng đồng này.",
   "Open the Market": "Mở Chợ",
-  "Open Talk": "Mở Chat",
+  "Open Chat": "Mở Chat",
   "Connect to a community to see your Home.": "Kết nối với một cộng đồng để xem Trang chủ của bạn.",
   "Connect": "Kết nối",
   "Couldn't reach your community yet. Home fills in when it answers.": "Chưa thể kết nối tới cộng đồng của bạn. Trang chủ sẽ hiển thị khi có phản hồi.",
@@ -491,7 +491,7 @@
   "All {n} group|All {n} groups": {
     "other": "Tất cả {n} nhóm"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
     "other": "Tất cả {n} nhóm của bạn, trong Chat"
   },
   "{line} Opens People.": "{line} Mở mục Mọi người.",
@@ -1317,7 +1317,7 @@
   "✕ Close": "✕ Đóng",
   "No conversations yet.": "Chưa có cuộc trò chuyện nào.",
   "Browse Market": "Khám phá chợ",
-  "Talk": "Trò chuyện",
+  "Chat": "Chat",
   "Could not load your groups.": "Không thể tải các nhóm của bạn.",
   "Search chats, posts, partners": "Tìm cuộc trò chuyện, bài đăng, đối tác",
   "Search chats, posts, partners...": "Tìm cuộc trò chuyện, bài đăng, đối tác...",

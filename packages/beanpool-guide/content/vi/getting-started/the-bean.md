@@ -19,7 +19,7 @@ Trong ứng dụng web, mục này cũng nằm ở vị trí tương tự: **Cà
 
 - **Cộng đồng của bạn:** tên của cộng đồng (địa chỉ của cộng đồng trong ứng dụng web), và trạng thái máy chủ của nó có thể kết nối được lúc này hay không. Trên điện thoại, bên dưới mục đó là **Cộng đồng của bạn**: nhấn vào một cộng đồng để chuyển sang cộng đồng đó, hoặc nhấn **Thêm một cộng đồng**. **Cộng đồng toàn cầu** luôn là một trong các hàng, với dòng thứ hai cho biết bạn đã là thành viên, có thể tham gia, hoặc lý do tại sao hiện chưa thể sử dụng. Xem "Nhiều hơn một cộng đồng".
 - **Hướng dẫn:** cách BeanPool hoạt động, các quy tắc và cách đưa ra quyết định, cùng các câu hỏi thường gặp.
-- **Cách sử dụng ứng dụng:** một trang ngắn cho mỗi tác vụ, được phân nhóm theo cấu trúc của ứng dụng: Bắt đầu, Chợ, Bản đồ, Trò chuyện, Nhịp đập, Commons, Sổ cái và Cài đặt & an toàn.
+- **Cách sử dụng ứng dụng:** một trang ngắn cho mỗi tác vụ, được phân nhóm theo cấu trúc của ứng dụng: Bắt đầu, Chợ, Bản đồ, Chat, Nhịp đập, Commons, Sổ cái và Cài đặt & an toàn.
 - **Dự án BeanPool:** những điểm mới trong phiên bản này, và liên kết đến trang web beanpool.org (trên điện thoại có thêm nút **Chia sẻ** để gửi cho bạn bè).
 
 ## Tìm kiếm

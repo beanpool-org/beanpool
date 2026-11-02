@@ -183,6 +183,8 @@ async function main(): Promise<void> {
         "an 'on' row (an older version's, a restored copy's) reads off too: Beans off decides");
     const gTerms = await terms();
     assert(gTerms.status === 200 && gTerms.body?.known === false, `the join screen draws no rule (${show(gTerms)})`);
+    const gBack = await call('POST', gia, '/api/names/step-back', {});
+    assert(gBack.status === 404 && gBack.body?.code === 'feature_off', `and nobody steps back: the global community has no names list (${show(gBack)})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(CONFIRMATION_DIAL_KEY);
     db.prepare('DELETE FROM confirmations WHERE member_pubkey = ?').run(gia.pk);
     delete process.env.NODE_PROFILE;

@@ -49,7 +49,7 @@ function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; mad
         }
         if (url.endsWith('/api/local/admin/agent/grants') && method === 'POST') {
             if (state.makeStatus && state.makeStatus !== 201) return new Response(JSON.stringify(state.makeBody ?? { error: 'bad' }), { status: state.makeStatus });
-            const g = grant({ name: body.name, canPost: body.canPost === true, postsToday: 0 });
+            const g = grant({ name: body.name, canPost: body.canPost === true, canModerate: body.canModerate === true, postsToday: 0 });
             state.grants = [...state.grants, g];
             return new Response(JSON.stringify({ token: NEW_TOKEN, grant: g }), { status: 201 });
         }
@@ -160,6 +160,8 @@ describe('ConnectedAssistantsPanel', () => {
         fireEvent.click(tick);
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Reader', days: 30, canPost: false, canModerate: true }));
+        // What a leak of this token can do, said where the token is shown.
+        expect(await screen.findByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads, and can take posts down.');
     });
 
     it('"May post for me" is ticked or not at connect, each row says which, and an owner sets the posts a day (MCP-OWNER-POSTS)', async () => {

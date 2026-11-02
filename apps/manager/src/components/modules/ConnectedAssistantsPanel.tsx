@@ -134,6 +134,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     // "May take down posts for me": the same, its own tick.
     const [canModerate, setCanModerate] = useState(false);
     const [shownCanPost, setShownCanPost] = useState(false);
+    const [shownCanModerate, setShownCanModerate] = useState(false);
     const [perDayDraft, setPerDayDraft] = useState('');
     const [perDayMessage, setPerDayMessage] = useState('');
     // Changing the "Owner and admin limit" asks an owner's fresh proof each time (server agent/grants-route.ts).
@@ -235,6 +236,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
             if (res.ok && typeof json.token === 'string') {
                 setShownToken(json.token);
                 setShownCanPost(json.grant?.canPost === true);
+                setShownCanModerate(json.grant?.canModerate === true);
                 setCopied(null);
                 setName('');
                 setCanPost(false);
@@ -606,7 +608,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
                             <p className="text-[11px] text-amber-300 m-0 break-words">
-                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads{shownCanPost ? ', and can post as you' : ''}.
+                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads{shownCanPost ? ', and can post as you' : ''}{shownCanModerate ? ', and can take posts down' : ''}.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2">
                                 <button

@@ -17,7 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { act, createElement, forwardRef, useEffect, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 // @ts-expect-error -- supercluster (react-native-map-clustering's own clusterer) ships no type declarations.
@@ -756,6 +756,21 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             for (const m of pins) expect(m.zIndex).toBe(m.opacity === 0 ? MARKER_Z.hiddenPin : MARKER_Z.pin);
             expect(MARKER_Z.bubble).toBeGreaterThan(MARKER_Z.pin);
             expect(MARKER_Z.pin).toBeGreaterThan(MARKER_Z.hiddenPin);
+        });
+
+        // A render here cannot see this: the fault is in the library's Java, under a mock of the map (#2671 has the before and after shots).
+        it('android: a marker is inserted among the others, in the list the renderer means, on the map or off the window', () => {
+            const library = dirname(createRequire(__filename).resolve('react-native-maps/package.json'));
+            const java = readFileSync(join(library, 'android/src/main/java/com/rnmaps/maps/MapView.java'), 'utf8');
+            const adding = java.slice(java.indexOf('private void safeAddFeature'), java.indexOf('public void addFeature'));
+            // set() overwrote the marker beside it, which stayed on the map out of reach of every update.
+            expect(adding).toContain('list.add(index, mapFeature)');
+            expect(adding).not.toMatch(/\.set\(index/);
+            // Off the window, a remove that read the empty list missed, and the dead marker came back as a default pin.
+            const uses = (member: string) => java.slice(java.indexOf(member), java.indexOf(member) + 200);
+            expect(uses('public int getFeatureCount')).toContain('liveFeatures()');
+            expect(uses('public View getFeatureAt')).toContain('liveFeatures()');
+            expect(uses('public void removeFeatureAt')).toContain('liveFeatures()');
         });
 
         it('lifts a bubble tapped low on the map clear of where the list comes up', async () => {

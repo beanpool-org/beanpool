@@ -59,6 +59,20 @@ describe('the bubbles on the map when it stops, on the real library', () => {
     });
 });
 
+describe('a pin folded into a bubble, on the real library (#2671: on Android a copy stayed showing)', () => {
+    it('leaves the map, and comes back, at every zoom out and in', () => {
+        // Offers, Needs and events are all one group's markers here (MapPage), so one case is all of them.
+        // 50 m apart: all in view at 18 on this 640 px map, far enough apart to stand alone there, and one bubble at 11.
+        const { map, group, markers } = mapWith([AT, north(50), north(100), north(150)], 18);
+        const shown = () => markers.filter((m) => map.hasLayer(m)).length;
+        for (const zoom of [18, 11, 18, 11, 18]) {
+            map.setZoom(zoom);
+            for (const m of markers) expect(map.hasLayer(m)).toBe(group.getVisibleParent(m) === m);
+            expect(shown()).toBe(zoom === 18 ? markers.length : 0);
+        }
+    });
+});
+
 describe('clusterSplitZoom on the real library', () => {
     it('reads pins on one spot as never parting: one past the deepest zoom, past the cap', () => {
         const { markers } = mapWith([AT, AT, AT], 13);

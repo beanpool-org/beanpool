@@ -114,6 +114,12 @@ export interface TileRole {
     readonly ink: Themed;
 }
 
+/** A card caption band: `ink` words and "…" on a pale (light) or deep (dark) `tint`. */
+export interface CardRole {
+    readonly tint: Themed;
+    readonly ink: Themed;
+}
+
 /**
  * The roles. Keys are lowercase single words so the CSS names below are the path joined by dashes
  * (`chip.ok.ink` → `--bp-chip-ok-ink`).
@@ -190,6 +196,27 @@ export const BRAND_COLOURS = {
         event: { tint: themed('#ede9fe', '#2e1065'), ink: themed('#5b21b6', '#c4b5fd') },
         pulse: { tint: themed('#fef3c7', '#451a03'), ink: themed('#92400e', '#fcd34d') },
     },
+    /**
+     * Card caption bands: `tint` fill, `ink` caption words, "Tune" and "…".
+     */
+    card: {
+        sage: { tint: themed('#eef1ee', '#384038'), ink: themed('#5b6b5b', '#c0ccc0') },
+        sky: { tint: themed('#e0f2fe', '#082f49'), ink: themed('#075985', '#7dd3fc') },
+        blue: { tint: themed('#dbeafe', '#172554'), ink: themed('#1e40af', '#93c5fd') },
+        indigo: { tint: themed('#e0e7ff', '#1e1b4b'), ink: themed('#3730a3', '#a5b4fc') },
+        violet: { tint: themed('#ede9fe', '#2e1065'), ink: themed('#5b21b6', '#c4b5fd') },
+        plum: { tint: themed('#fae8ff', '#4a044e'), ink: themed('#86198f', '#f0abfc') },
+        pink: { tint: themed('#fce7f3', '#500724'), ink: themed('#9d174d', '#f9a8d4') },
+        rose: { tint: themed('#ffe4e6', '#4c0519'), ink: themed('#9f1239', '#fda4af') },
+        clay: { tint: themed('#fcedea', '#3c180e'), ink: themed('#863b28', '#f0bcab') },
+        orange: { tint: themed('#ffedd5', '#431407'), ink: themed('#9a3412', '#fdba74') },
+        yellow: { tint: themed('#fef9c3', '#422006'), ink: themed('#854d0e', '#fde047') },
+        lime: { tint: themed('#ecfccb', '#1a2e05'), ink: themed('#3f6212', '#bef264') },
+        green: { tint: themed('#d1fae5', '#022c22'), ink: themed('#065f46', '#6ee7b7') },
+        teal: { tint: themed('#ccfbf1', '#042f2e'), ink: themed('#115e59', '#5eead4') },
+        sand: { tint: themed('#ebe6df', '#5b5046'), ink: themed('#5b5046', '#ebe6df') },
+        amber: { tint: themed('#fef3c7', '#451a03'), ink: themed('#92400e', '#fcd34d') },
+    },
     /** Words and icons drawn straight on a page or card (never on one of the fills above). */
     ink: {
         /** The brand green as text, icons, links-in-green: the phone's `brand.primary`. */
@@ -214,6 +241,8 @@ export const BRAND_COLOURS = {
 };
 
 export type BrandColours = typeof BRAND_COLOURS;
+
+export type CardHue = keyof typeof BRAND_COLOURS.card;
 
 /** The same tree with each `{ light, dark }` replaced by one theme's hex. */
 export type BrandColoursFor<T = BrandColours> = {
@@ -371,6 +400,10 @@ export function brandContrastPairs(): BrandContrastPair[] {
             } else if (role === 'tile') {
                 for (const [name, tile] of Object.entries(node as BrandColours['tile'])) {
                     add(theme, `tile.${name}`, 'ink / tint', tile.ink[theme], tile.tint[theme]);
+                }
+            } else if (role === 'card') {
+                for (const [name, card] of Object.entries(node as BrandColours['card'])) {
+                    add(theme, `card.${name}`, 'ink / tint', card.ink[theme], card.tint[theme]);
                 }
             } else if (role === 'ink') {
                 for (const [name, ink] of Object.entries(node as BrandColours['ink'])) {

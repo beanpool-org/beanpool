@@ -4,7 +4,7 @@
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { HomeCard } from './HomeCard';
+import { CardMenu, HomeCard } from './HomeCard';
 
 describe('HomeCard menu', () => {
     it('the card frame: Settings… · Move up · Move down · Remove, labelled by the saved search\'s words; the caption stays fixed words', () => {
@@ -54,9 +54,91 @@ describe('HomeCard menu', () => {
         expect(heading.className).toContain('break-words');
         expect(heading.className).not.toContain('shrink-0');
         expect(heading.className).not.toContain('min-w-0');
-        const asideContainer = container.querySelector('.flex.items-start.justify-between > div:last-child');
+        const asideContainer = container.querySelector('.flex.items-center.justify-between > div:last-child');
         expect(asideContainer?.className).toContain('min-w-0');
         expect(asideContainer?.className).not.toContain('flex-1');
         expect(asideContainer?.className).not.toContain('shrink-0');
     });
+
+    it('CardMenu without ink preserves -mt-2 text-text-secondary hover:text-text-primary for the safety card', () => {
+        render(<CardMenu title="Your way back in" canMoveUp={false} canMoveDown={false} onMove={vi.fn()} />);
+        const button = screen.getByRole('button', { name: 'Card options for Your way back in' });
+        expect(button.className).toContain('-mt-2');
+        expect(button.className).toContain('text-text-secondary');
+        expect(button.className).toContain('hover:text-text-primary');
+        expect(button.style.color).toBe('');
+    });
+
+    it('CardMenu with ink takes its colour from the band and none of the safety card\'s classes', () => {
+        render(<CardMenu title="New in the Market" ink="var(--bp-card-orange-ink)" canMoveUp={false} canMoveDown={false} onMove={vi.fn()} />);
+        const button = screen.getByRole('button', { name: 'Card options for New in the Market' });
+        expect(button.className).not.toContain('-mt-2');
+        expect(button.className).toContain('-my-1');
+        expect(button.className).toContain('min-h-[44px]');
+        expect(button.className).not.toContain('text-text-secondary');
+        expect(button.className).not.toContain('hover:text-text-primary');
+        expect(button.getAttribute('style')).toContain('var(--bp-card-orange-ink)');
+    });
 });
+
+describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable.md §2.1, §5)', () => {
+    it('the band carries the hue and the "…" the ink', () => {
+        const { container } = render(
+            <HomeCard
+                id="market"
+                title="New in the Market"
+                hue="orange"
+                menu={{ label: 'Market', canMoveUp: false, canMoveDown: false, onMove: vi.fn() }}
+            >
+                <p>body</p>
+            </HomeCard>,
+        );
+        const band = container.querySelector('[data-testid="card-band-market"]') as HTMLElement;
+        expect(band).toBeInTheDocument();
+        expect(band.style.backgroundColor).toBe('var(--bp-card-orange-tint)');
+        expect(band.style.color).toBe('var(--bp-card-orange-ink)');
+        const menuBtn = screen.getByRole('button', { name: 'Card options for Market' });
+        expect(menuBtn.style.color).toBe('var(--bp-card-orange-ink)');
+    });
+
+    it('Needs you is amber only with an accent item (otherwise sage)', () => {
+        const { container: sageCard } = render(
+            <HomeCard id="needs" title="Needs you" hue="sage" accent={false}>
+                <p>body</p>
+            </HomeCard>,
+        );
+        const sageBand = sageCard.querySelector('[data-testid="card-band-needs"]') as HTMLElement;
+        expect(sageBand).toBeInTheDocument();
+        expect(sageBand.style.backgroundColor).toBe('var(--bp-card-sage-tint)');
+        expect(sageBand.style.color).toBe('var(--bp-card-sage-ink)');
+        const sageSection = sageCard.querySelector('section') as HTMLElement;
+        expect(sageSection.style.borderColor).not.toBe('var(--bp-card-amber-ink)');
+
+        const { container: amberCard } = render(
+            <HomeCard id="needs" title="Needs you" hue="amber" accent={true}>
+                <p>body</p>
+            </HomeCard>,
+        );
+        const amberBand = amberCard.querySelector('[data-testid="card-band-needs"]') as HTMLElement;
+        expect(amberBand).toBeInTheDocument();
+        expect(amberBand.style.backgroundColor).toBe('var(--bp-card-amber-tint)');
+        expect(amberBand.style.color).toBe('var(--bp-card-amber-ink)');
+        const amberSection = amberCard.querySelector('section') as HTMLElement;
+        expect(amberSection.style.borderColor).toBe('var(--bp-card-amber-ink)');
+    });
+
+    it('band and aside container are vertically centred (items-center)', () => {
+        const { container } = render(
+            <HomeCard id="market" title="New in the Market" hue="orange">
+                <p>body</p>
+            </HomeCard>,
+        );
+        const band = container.querySelector('[data-testid="card-band-market"]') as HTMLElement;
+        expect(band.className).toContain('items-center');
+        expect(band.className).not.toContain('items-start');
+        const aside = band.querySelector('div:last-child') as HTMLElement;
+        expect(aside.className).toContain('items-center');
+        expect(aside.className).not.toContain('items-start');
+    });
+});
+

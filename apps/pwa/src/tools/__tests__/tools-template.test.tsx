@@ -22,6 +22,7 @@ import { TOOLS, TOOL_PERMISSIONS, type AnyToolScreenProps, type ToolApp, type To
 import { ToolsPage, type ToolsPageProps } from '../../pages/ToolsPage';
 import { TOOL_APPS } from '../index';
 import { ToolHomeCard } from '../home-card';
+import { YourToolsCard } from '../your-tools-card';
 import { patchToolSettings, writeToolRecord, readToolRecord, readToolSettings, resetToolStoreForTest, type ToolSettings } from '../store';
 import type { ComposerDraft } from '../builder';
 import { memoryIndexedDB } from '../../lib/memory-indexeddb';
@@ -404,6 +405,28 @@ describe("a tool's card on Home (Home's default branch)", () => {
         const { container } = render(<ToolHomeCard id="c1" title="x" type="tool-garden" publicKey={OWNER} now={0} onNavigate={vi.fn()}
             tools={[scaffold.manifest]} apps={{ scaffold: scaffold.loader }} />);
         expect(container.innerHTML).toBe('');
+    });
+
+    it('forwards hue to HomeCard for the caption band', () => {
+        const { container } = render(
+            <ToolHomeCard id="c1" title="New tool" type="tool-scaffold" hue="sand" publicKey={OWNER} now={0} onNavigate={vi.fn()}
+                tools={[scaffold.manifest]} apps={{ scaffold: scaffold.loader }} />
+        );
+        const band = container.querySelector('[data-testid="card-band-c1"]') as HTMLElement;
+        expect(band).toBeInTheDocument();
+        expect(band.style.backgroundColor).toBe('var(--bp-card-sand-tint)');
+        expect(band.style.color).toBe('var(--bp-card-sand-ink)');
+    });
+
+    it('YourToolsCard forwards hue to HomeCard for the caption band', () => {
+        const { container } = render(
+            <YourToolsCard id="tools" title="Your tools" hue="sand" tools={['scaffold']} publicKey={OWNER} now={0}
+                onNavigate={vi.fn()} onChangeTools={vi.fn()} allTools={[scaffold.manifest]} apps={{ scaffold: scaffold.loader }} />
+        );
+        const band = container.querySelector('[data-testid="card-band-tools"]') as HTMLElement;
+        expect(band).toBeInTheDocument();
+        expect(band.style.backgroundColor).toBe('var(--bp-card-sand-tint)');
+        expect(band.style.color).toBe('var(--bp-card-sand-ink)');
     });
 });
 

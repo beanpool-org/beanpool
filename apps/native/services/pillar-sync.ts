@@ -546,8 +546,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // and we confirm the node actually stored the avatar before clearing the flag.
                 // Only the change waiting for THIS cycle's community (utils/pending-profile-sync.ts): one made in
                 // another waits for that one, and is never sent here.
-                const { pendingProfileChange } = await import('../utils/pending-profile-sync');
-                if (await pendingProfileChange(anchorUrl, pubKey)) {
+                const waiting = await import('../utils/pending-profile-sync');
+                if (await waiting.pendingProfileChange(anchorUrl, pubKey)) {
                     try {
                         // Delegate to the single publisher: it verifies the node actually
                         // stored the avatar before clearing the flag, and sends only what
@@ -562,6 +562,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     } catch (healErr) {
                         console.warn('[Pillar Sync] Profile heal attempt failed (will retry next sync):', healErr);
                     }
+                } else if (await waiting.waitingArchetype(anchorUrl, pubKey)) {
+                    // A quiz taken in another community: this one's turn, and only the result goes (utils/working-style.ts).
+                    const { pushWaitingArchetype } = await import('../utils/db');
+                    await pushWaitingArchetype({ community: anchorUrl }).catch((healErr: unknown) => {
+                        console.warn('[Pillar Sync] Working style heal failed (will retry next sync):', healErr);
+                    });
                 }
             } catch (e) {}
         }

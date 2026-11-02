@@ -1569,9 +1569,28 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             const { title, photo, price } = order();
             const photos = photo.parentElement as HTMLElement;
             expect(photos.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-2']));
+            // The placements do nothing unless the block around them is the grid.
+            expect(photos.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:grid', 'md:grid-cols-2', 'md:grid-rows-[auto_1fr]', 'md:gap-x-6']));
             expect(title.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1']));
             const priceColumn = price.parentElement!.parentElement as HTMLElement;
             expect(priceColumn.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
+        });
+
+        it('with no photos stays one column, with nothing placed', async () => {
+            await open(listing({ photos: [] }), []);
+            const title = screen.getByRole('heading', { name: 'Listing' });
+            expect(title.parentElement!.className).not.toMatch(/md:col-start/);
+            expect(title.parentElement!.parentElement!.className).not.toContain('md:grid');
+            const priceColumn = screen.getByText('Asking Price').parentElement!.parentElement as HTMLElement;
+            expect(priceColumn.className).not.toMatch(/md:col-start/);
+        });
+
+        it("keeps the phone's photo size and lets a wide photo scroll, as on main", async () => {
+            await open(listing({}), []);
+            const button = order().photo;
+            expect(button.className.split(/\s+/)).toContain('h-40');
+            expect(button.className).not.toContain('max-w-[85%]');
+            expect(button.querySelector('img')!.className.split(/\s+/)).toContain('h-40');
         });
 
         it('leaves the photo column at its full height on wide screens, with no inner scroll', async () => {

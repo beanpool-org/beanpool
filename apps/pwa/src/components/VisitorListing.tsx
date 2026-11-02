@@ -166,7 +166,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                                             key={i}
                                             src={photo}
                                             alt={t('Photo {current} of {total}: {title}', { current: i + 1, total: photos.length, title: post.title })}
-                                            className="h-44 sm:h-64 md:h-72 w-auto md:w-full max-w-[85%] md:max-w-none rounded-xl object-cover border border-nature-200 dark:border-nature-800 shrink-0 snap-start"
+                                            className="h-40 sm:h-64 md:h-72 w-auto md:w-full max-w-[85%] md:max-w-none rounded-xl object-cover border border-nature-200 dark:border-nature-800 shrink-0 snap-start"
                                         />
                                     ))}
                                 </div>

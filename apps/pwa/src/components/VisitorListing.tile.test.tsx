@@ -70,4 +70,11 @@ describe('VisitorListing category tile', () => {
         expect(classes).toContain('md:overflow-visible');
         expect(classes).not.toContain('md:overflow-y-auto');
     });
+
+    it("VisitorPostDetail keeps the phone's photo height", () => {
+        const postWithPhoto = { ...postWithoutPhoto, photos: ['/photo1.jpg'] };
+        render(<VisitorPostDetail post={postWithPhoto} beans={true} distanceKm={5} onBack={vi.fn()} onJoin={vi.fn()} />);
+        const img = screen.getByTestId('visitor-detail-photos').querySelector('img') as HTMLElement;
+        expect(img.className.split(/\s+/)).toContain('h-40');
+    });
 });

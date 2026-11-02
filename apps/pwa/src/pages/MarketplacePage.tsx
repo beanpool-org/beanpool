@@ -1912,7 +1912,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
-                        {/* Phone order, as in the DOM: words, photos, price. Wide: photos left, the rest right. No order-*: focus must follow what is seen. */}
+                        {/* DOM order is the phone's: words, photos, price. No order-*, so focus follows the screen there. Wide screens place the columns: photos left, the rest right, so Tab reads the right column's chips before the left column's photos. */}
                         <div className={hasPhotosColumn ? "flex flex-col md:grid md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-6 md:items-start" : ""}>
                             <div className={`${hasPhotosColumn ? "md:col-start-2 md:row-start-1" : ""} flex flex-col`}>
                                 <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
@@ -1960,12 +1960,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 })
                                             }
                                             aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: selectedPost.photos!.length, title: selectedPost.title })}
-                                            className="h-44 sm:h-64 md:h-72 w-auto md:w-full max-w-[85%] md:max-w-none rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
+                                            className="h-40 sm:h-64 md:h-72 w-auto md:w-full rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
                                         >
                                             <img
                                                 src={photo}
                                                 alt={t('photo {n}', { n: i + 1 })}
-                                                className="h-44 sm:h-64 md:h-72 w-auto md:w-full object-cover"
+                                                className="h-40 sm:h-64 md:h-72 w-auto md:w-full object-cover"
                                             />
                                         </button>
                                     ))}

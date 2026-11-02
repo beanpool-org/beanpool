@@ -145,6 +145,38 @@ matches the file.
 | `tile.event.ink` | `#5b21b6` | `#c4b5fd` |
 | `tile.pulse.tint` | `#fef3c7` | `#451a03` |
 | `tile.pulse.ink` | `#92400e` | `#fcd34d` |
+| `card.sage.tint` | `#eef1ee` | `#384038` |
+| `card.sage.ink` | `#5b6b5b` | `#c0ccc0` |
+| `card.sky.tint` | `#e0f2fe` | `#082f49` |
+| `card.sky.ink` | `#075985` | `#7dd3fc` |
+| `card.blue.tint` | `#dbeafe` | `#172554` |
+| `card.blue.ink` | `#1e40af` | `#93c5fd` |
+| `card.indigo.tint` | `#e0e7ff` | `#1e1b4b` |
+| `card.indigo.ink` | `#3730a3` | `#a5b4fc` |
+| `card.violet.tint` | `#ede9fe` | `#2e1065` |
+| `card.violet.ink` | `#5b21b6` | `#c4b5fd` |
+| `card.plum.tint` | `#fae8ff` | `#4a044e` |
+| `card.plum.ink` | `#86198f` | `#f0abfc` |
+| `card.pink.tint` | `#fce7f3` | `#500724` |
+| `card.pink.ink` | `#9d174d` | `#f9a8d4` |
+| `card.rose.tint` | `#ffe4e6` | `#4c0519` |
+| `card.rose.ink` | `#9f1239` | `#fda4af` |
+| `card.clay.tint` | `#fcedea` | `#3c180e` |
+| `card.clay.ink` | `#863b28` | `#f0bcab` |
+| `card.orange.tint` | `#ffedd5` | `#431407` |
+| `card.orange.ink` | `#9a3412` | `#fdba74` |
+| `card.yellow.tint` | `#fef9c3` | `#422006` |
+| `card.yellow.ink` | `#854d0e` | `#fde047` |
+| `card.lime.tint` | `#ecfccb` | `#1a2e05` |
+| `card.lime.ink` | `#3f6212` | `#bef264` |
+| `card.green.tint` | `#d1fae5` | `#022c22` |
+| `card.green.ink` | `#065f46` | `#6ee7b7` |
+| `card.teal.tint` | `#ccfbf1` | `#042f2e` |
+| `card.teal.ink` | `#115e59` | `#5eead4` |
+| `card.sand.tint` | `#ebe6df` | `#5b5046` |
+| `card.sand.ink` | `#5b5046` | `#ebe6df` |
+| `card.amber.tint` | `#fef3c7` | `#451a03` |
+| `card.amber.ink` | `#92400e` | `#fcd34d` |
 | `ink.brand` | `#047857` | `#34d399` |
 | `ink.success` | `#047857` | `#34d399` |
 | `ink.danger` | `#b91c1c` | `#fca5a5` |
@@ -170,6 +202,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `chip.accent` | a selected sage chip, the accent's pale ground | 4.99 | 6.45 |
 | `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`, drawn from the plain rgba variable `--bp-deal-<name>-wash`: no color-mix, which old Android WebViews drop), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
 | `tile.<cat>` | category tiles: listings, events, Pulse; sticker outline and word in ink on tint | 6.31 – 12.08 | 6.31 – 11.19 |
+| `card.<hue>` | card caption bands: caption words, "Tune" and "…" in ink on tint | 5.0 – 8.1 | 6.3 – 11.2 |
 | `ink.brand` | the brand green as words and icons | 4.77 | 5.58 |
 | `ink.success` | success messages, ticks | 4.77 | 5.58 |
 | `ink.danger` | errors, destructive links | 5.63 | 5.65 |

@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t } from '@beanpool/core';
+import { t, type CardHue } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 
 /**
@@ -57,7 +57,7 @@ export function FabAware({ id, children, style }: { id: string; children: React.
 
 // ── The card ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent }: {
+export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent, hue }: {
     /** For the floating button's band: the caption's own targets (the "…", "Tune") report where they rest. */
     id: string;
     caption: string;
@@ -74,13 +74,17 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
     testID?: string;
     /** The Needs you card: a warm edge (never red), with the words saying the same (§6.3). */
     accent?: boolean;
+    /** The card's hue from brand-colours (S1). */
+    hue?: CardHue;
 }) {
     const s = homeStyles(colors);
+    const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
+    const { tint, ink } = colors.card[cardHue];
     return (
         <View style={[s.card, accent && s.cardAccent]} testID={testID}>
-            <View style={s.captionRow}>
+            <View style={[s.captionRow, { backgroundColor: tint }]}>
                 {/* Drawn in capitals; read in its own words (a screen reader can spell an all-caps word out). */}
-                <Text style={s.caption} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
+                <Text style={[s.caption, { color: ink }]} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
                     {caption}
                 </Text>
                 {(right || onMenu) && (
@@ -96,7 +100,7 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                                 accessibilityLabel={t('Card options for {card}', { card: menuLabel ?? caption })}
                                 testID={testID ? `${testID}-menu` : undefined}
                             >
-                                <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.secondary} />
+                                <MaterialCommunityIcons name="dots-horizontal" size={22} color={ink} />
                             </Pressable>
                         )}
                     </FabAware>
@@ -219,8 +223,12 @@ function make(colors: AppColors) {
             marginHorizontal: HOME_GUTTER_DP, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default,
             backgroundColor: colors.surface.card, paddingHorizontal: HOME_CARD_PADDING_DP, paddingTop: 4, paddingBottom: 6,
         },
-        cardAccent: { borderColor: colors.feedback.warning.border, backgroundColor: colors.feedback.warning.bg },
-        captionRow: { flexDirection: 'row', alignItems: 'center', minHeight: HOME_TARGET_DP },
+        cardAccent: { borderColor: colors.card.amber.ink },
+        captionRow: {
+            flexDirection: 'row', alignItems: 'center', minHeight: HOME_TARGET_DP,
+            marginHorizontal: -HOME_CARD_PADDING_DP, marginTop: -4, marginBottom: 4,
+            paddingHorizontal: HOME_CARD_PADDING_DP, borderTopLeftRadius: 13, borderTopRightRadius: 13,
+        },
         caption: {
             flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', color: colors.text.secondary,
         },

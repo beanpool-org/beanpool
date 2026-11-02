@@ -283,31 +283,50 @@ export function expandEventSeries<T extends CalendarEventInput>(event: T, range:
         while (weekdayCodeOf(currDate) !== byDay) {
             currDate = addDays(currDate, 1);
         }
+        const stepDays = interval * 7;
+        if (range.start > currDate) {
+            const diffDays = daysBetween(currDate, range.start);
+            const steps = Math.floor(diffDays / stepDays);
+            currDate = addDays(currDate, steps * stepDays);
+            while (currDate < range.start) {
+                currDate = addDays(currDate, stepDays);
+            }
+        }
         for (let k = 0; k < MAX_SERIES_STEPS; k++) {
             if (currDate > range.end) break;
             if (until && currDate > until) break;
             if (currDate >= range.start && !skips.has(currDate)) {
                 candidateDates.push(currDate);
             }
-            currDate = addDays(currDate, interval * 7);
+            currDate = addDays(currDate, stepDays);
         }
     } else if (rule.freq === 'monthly' && 'byMonthDay' in rule) {
         const day = rule.byMonthDay;
         if (typeof day === 'number' && Number.isInteger(day) && day >= 1 && day <= 31) {
-            const anchorY = +anchorDate.slice(0, 4);
-            const anchorM0 = +anchorDate.slice(5, 7) - 1;
-            for (let k = 0; k < MAX_SERIES_STEPS; k++) {
-                const totalM = anchorM0 + k * interval;
-                const y = anchorY + Math.floor(totalM / 12);
-                const m0 = totalM % 12;
-                const dim = daysInMonth(y, m0 + 1);
-                if (day <= dim) {
-                    const cand = formatLocalDate(y, m0 + 1, day);
-                    if (cand >= anchorDate) {
-                        if (cand > range.end) break;
-                        if (until && cand > until) break;
-                        if (cand >= range.start && !skips.has(cand)) {
-                            candidateDates.push(cand);
+            const anchorParsed = parseLocalDate(anchorDate);
+            if (anchorParsed) {
+                const anchorY = anchorParsed.year;
+                const anchorM0 = anchorParsed.month - 1;
+                let kStart = 0;
+                const rangeStartParsed = parseLocalDate(range.start);
+                if (rangeStartParsed && range.start > anchorDate) {
+                    const rangeTotalM = (rangeStartParsed.year - anchorY) * 12 + (rangeStartParsed.month - 1);
+                    kStart = Math.max(0, Math.floor((rangeTotalM - anchorM0) / interval));
+                }
+                for (let step = 0; step < MAX_SERIES_STEPS; step++) {
+                    const k = kStart + step;
+                    const totalM = anchorM0 + k * interval;
+                    const y = anchorY + Math.floor(totalM / 12);
+                    const m0 = totalM % 12;
+                    const dim = daysInMonth(y, m0 + 1);
+                    if (day <= dim) {
+                        const cand = formatLocalDate(y, m0 + 1, day);
+                        if (cand >= anchorDate) {
+                            if (cand > range.end) break;
+                            if (until && cand > until) break;
+                            if (cand >= range.start && !skips.has(cand)) {
+                                candidateDates.push(cand);
+                            }
                         }
                     }
                 }
@@ -317,18 +336,28 @@ export function expandEventSeries<T extends CalendarEventInput>(event: T, range:
         const pos = rule.pos;
         const byDay = rule.byDay;
         if ([1, 2, 3, 4, -1].includes(pos) && (REPEAT_WEEKDAYS as readonly string[]).includes(byDay)) {
-            const anchorY = +anchorDate.slice(0, 4);
-            const anchorM0 = +anchorDate.slice(5, 7) - 1;
-            for (let k = 0; k < MAX_SERIES_STEPS; k++) {
-                const totalM = anchorM0 + k * interval;
-                const y = anchorY + Math.floor(totalM / 12);
-                const m0 = totalM % 12;
-                const cand = nthWeekdayOfMonth(y, m0, byDay, pos);
-                if (cand && cand >= anchorDate) {
-                    if (cand > range.end) break;
-                    if (until && cand > until) break;
-                    if (cand >= range.start && !skips.has(cand)) {
-                        candidateDates.push(cand);
+            const anchorParsed = parseLocalDate(anchorDate);
+            if (anchorParsed) {
+                const anchorY = anchorParsed.year;
+                const anchorM0 = anchorParsed.month - 1;
+                let kStart = 0;
+                const rangeStartParsed = parseLocalDate(range.start);
+                if (rangeStartParsed && range.start > anchorDate) {
+                    const rangeTotalM = (rangeStartParsed.year - anchorY) * 12 + (rangeStartParsed.month - 1);
+                    kStart = Math.max(0, Math.floor((rangeTotalM - anchorM0) / interval));
+                }
+                for (let step = 0; step < MAX_SERIES_STEPS; step++) {
+                    const k = kStart + step;
+                    const totalM = anchorM0 + k * interval;
+                    const y = anchorY + Math.floor(totalM / 12);
+                    const m0 = totalM % 12;
+                    const cand = nthWeekdayOfMonth(y, m0, byDay, pos);
+                    if (cand && cand >= anchorDate) {
+                        if (cand > range.end) break;
+                        if (until && cand > until) break;
+                        if (cand >= range.start && !skips.has(cand)) {
+                            candidateDates.push(cand);
+                        }
                     }
                 }
             }

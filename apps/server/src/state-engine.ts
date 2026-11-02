@@ -715,6 +715,9 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
+    // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
+    setTakedownRemoval(makeTakedownFinal);
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
     try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
@@ -8707,13 +8710,13 @@ function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundS
  * person's account. The takedown stamped the removal and told the author, so neither happens again here; an event is cancelled
  * and its goers told now. A report filed while it was hidden closes, and its reporter hears the post was removed.
  */
-setTakedownRemoval((postId) => {
+function makeTakedownFinal(postId: string): boolean {
     if (hasPendingDeal(postId)) return false;
     const before = postBeforeTakedown(postId);
     if (!before || !adminDeletePostEngine(broadcast, postId, undefined, undefined, dispatchPushNotification)) return false;
     notifyPostTakedown(moderationNoticeCb, { ...before, wasLive: false }, closeOpenReportsOnPost(postId));
     return true;
-});
+}
 
 /**
  * An admin removes a post. Its author is told, in words and without naming the admin; every still-open

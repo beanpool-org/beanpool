@@ -51,6 +51,7 @@ describe('no window confirm() for a destructive action', () => {
         expect(asking).toEqual([
             'App.tsx',
             'components/modules/ApplianceSection.tsx',
+            'components/modules/AssistantTakedownsPanel.tsx',
             'components/modules/AutomationTokensPanel.tsx',
             'components/modules/BulletinSection.tsx',
             'components/modules/ConnectedAssistantsPanel.tsx',

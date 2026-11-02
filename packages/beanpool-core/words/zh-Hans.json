@@ -829,5 +829,6 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} 还不是主地址：地址服务的回答是 {status}。此服务器已转到它并继续请求，因此下方面板现在显示它。",
   "No public address currently assigned. An owner of this community can add one.": "目前未分配公开地址。此社区的所有者可以添加一个。",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} 还不是主地址：地址服务的回答是 {status}。此服务器已转到它并继续请求，因此下方面板现在显示它。成员仍可通过 {current} 访问此社区。",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它现在是此社区的地址。此后，新成员会被引导到此社区的其他地址（如果有）。此社区不再公布 {address}，也不会放弃任何名称。只要其密钥持有 {address}，使用它的成员应用仍被接受。如果密钥不持有它，此后这些应用将被拒绝。"
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它现在是此社区的地址。此后，新成员会被引导到此社区的其他地址（如果有）。此社区不再公布 {address}，也不会放弃任何名称。只要其密钥持有 {address}，使用它的成员应用仍被接受。如果密钥不持有它，此后这些应用将被拒绝。",
+  "{n} at this spot": "此处有 {n} 项"
 }

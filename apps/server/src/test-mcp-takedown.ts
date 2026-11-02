@@ -43,7 +43,7 @@ import { ownerPhoneSessionHeaders, ownerSessionHeaders } from './admin-auth-test
 import { issueAutomationToken } from './automation-tokens.js';
 import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
-import { sweepTakedowns, takedownsToday, TAKEDOWN } from './engine/agent-takedowns.js';
+import { forgetTakedownsOf, sweepTakedowns, takedownsToday, TAKEDOWN } from './engine/agent-takedowns.js';
 import { muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
 import { setAgentPostsPerDay } from './agent/limits.js';
 import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
@@ -207,6 +207,18 @@ async function main(): Promise<void> {
         assert(many?.removed?.length === 0 && many?.kept?.length === 8, `nothing taken, all eight listed back (${many?.kept?.length})`);
         assert(/deal in escrow/.test(why(escrowed)) && !row(escrowed).hidden_by_reports_at, `a pending deal stays up: ${why(escrowed)}`);
         assert((db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(tx) as any).status === 'pending', 'its deal is untouched');
+        // A keeper's wage owed on a listing is money too: a removal would cancel the claim.
+        const wagePost = post('A wage still owed', mia.pub);
+        const claim = crypto.randomUUID();
+        db.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, amount, status) VALUES (?, ?, ?, ?, 3, 'pending')`).run(claim, bakery, mia.pub, wagePost);
+        const wageOut = structured(await a.callTool({ name: 'take_down', arguments: { post_id: wagePost, reason: 'spam', why: WHY } }));
+        assert(wageOut?.removed?.length === 0 && /wage still owed/.test(wageOut?.kept?.[0]?.why ?? '') && !row(wagePost).hidden_by_reports_at, `a wage still owed stays up (${wageOut?.kept?.[0]?.why})`);
+        // A deal only asked for is declined, as an author's own removal declines one, and holds no Bean.
+        const askedPost = post('Asked for, not agreed', mia.pub);
+        const asked = crypto.randomUUID();
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 2, 'requested')`).run(asked, askedPost, rae.pub, mia.pub);
+        const askedOut = structured(await a.callTool({ name: 'take_down', arguments: { post_id: askedPost, reason: 'spam', why: WHY } }));
+        assert(askedOut?.removed?.[0] === askedPost && (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(asked) as any).status === 'rejected', 'a deal only asked for is declined');
         for (const [name, id] of [['an owner', ownerPost], ['an admin', adminPost], ['a moderator', modPost], ['an enterprise an owner keeps', keptPost]] as const) {
             assert(/a person does that in Settings/.test(why(id)) && !row(id).hidden_by_reports_at, `${name}'s post stays up`);
         }
@@ -266,6 +278,9 @@ async function main(): Promise<void> {
         const tokenBack = noTokenRoute.ok ? await call('POST', `${PATH}/put-back`, { headers: bearer(noTokenRoute.token), body: { postId: spam } }) : null;
         const agentBack = await call('POST', `${PATH}/put-back`, { headers: bearer(ticked.body.token), body: { postId: spam } });
         assert(tokenList?.status === 403 && tokenBack?.status === 403 && agentBack.status === 403, `no token reaches the list or Put back (${tokenList?.status}, ${tokenBack?.status}, ${agentBack.status})`);
+        const modList = await call('GET', PATH, { headers: ownerSessionHeaders(moderator.pub) });
+        const nobody = await call('GET', PATH);
+        assert(modList.status === 403 && nobody.status !== 200, `a moderator and a stranger get neither (${modList.status}, ${nobody.status})`);
         const list = await call('GET', PATH, { headers: session });
         const line = list.body?.takedowns?.find((t: any) => t.posts.some((p: any) => p.id === spam));
         assert(list.status === 200 && line?.grantName === 'Spam sweeper' && line?.reason === 'spam' && line?.why === WHY && line?.posts[0].state === 'hidden', `Settings lists it with the assistant's name, reason and words (${show(list).slice(0, 140)})`);
@@ -404,6 +419,15 @@ async function main(): Promise<void> {
         assert(status.assistants.takedowns === takedownsToday() && status.assistants.takedowns >= 12, `the owners' daily line counts them (${status.assistants.takedowns})`);
         const alert = status.recent.find(r => r.key === 'sec.agent' && /took down/.test(r.detail));
         assert(!!alert && /An AI assistant took down \d+ posts? in the last day\./.test(alert.detail) && !alert.detail.includes('Stolen'), `the sec.agent alert counts them and names nobody (${alert?.detail})`);
+
+        // A member deleting their own account leaves the record, as they leave a burst's.
+        const leaving = keypair();
+        addMember(leaving, 'Lee Leaving');
+        const leavingPost = post('Leaving with it', leaving.pub);
+        await s.callTool({ name: 'take_down', arguments: { post_id: leavingPost, reason: 'spam', why: WHY } });
+        forgetTakedownsOf(leaving.pub);
+        forgetTakedownsOf(owner.pub);
+        assert(!(db.prepare('SELECT 1 FROM agent_takedown_posts WHERE post_id = ?').get(leavingPost)) && !(db.prepare('SELECT 1 FROM agent_takedowns WHERE member_pubkey = ?').get(owner.pub)), 'their posts and their key leave the record');
 
         // ── 10. No Bean moved ────────────────────────────────────────────────────────────────────────
         const auditAfter = runLedgerAudit();

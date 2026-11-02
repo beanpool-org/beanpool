@@ -14,7 +14,7 @@
  * ## What it refuses, and what it never does
  *
  * Refused, one by one and each with why (`kept`): a post with a pending deal (no assistant ever reaches a path that refunds
- * escrow), a post by a role-holder or by an enterprise a role-holder keeps (so an injected "take down the owner's post" does
+ * escrow) or a keeper's wage still owed on it (a removal cancels the claim), a post by a role-holder or by an enterprise a role-holder keeps (so an injected "take down the owner's post" does
  * nothing), a post that is another community's (`origin_node`), one already down, and one past the day's cap. The cap is this
  * table's rows of today (UTC), read in the transaction, so a restart keeps the day and nothing is counted twice.
  *
@@ -63,7 +63,7 @@ export const KEPT_WORDS = {
     notHere: 'There is no post with that id here.',
     alreadyRemoved: 'It is already removed.',
     alreadyDown: 'It is already taken down.',
-    deal: 'It has a deal in escrow, so it stays up: the deal is finished or cancelled first, or a person removes it in Settings.',
+    deal: 'It has a deal in escrow, or a wage still owed on it, so it stays up: that is finished or cancelled first, or a person removes it in Settings.',
     roleHolder: "It is by an owner, an admin or a moderator, or an enterprise one keeps: a person does that in Settings.",
     otherCommunity: "It is another community's listing, copied here: that community's own server takes it down.",
     overLimit: "Over today's limit: the rest wait for tomorrow (UTC), or an owner raises the Owner and admin limit.",
@@ -100,8 +100,15 @@ interface PostRow {
 const POST_COLS = 'id, title, author_pubkey, active, status, origin_node, hidden_by_reports_at, removed_by_moderator_at';
 const isLive = (p: { active: number; status: string }) => p.active === 1 && p.status !== 'cancelled';
 
+/**
+ * Money held on a post, by a row whose post is `postId`'s: a deal in escrow, or a keeper's wage owed (deferred_wage_claims), which a
+ * removal would cancel. Written once, because the tool, the sweep and Settings must all read the same thing.
+ */
+const moneyHeldOn = (post: string) => `(EXISTS (SELECT 1 FROM marketplace_transactions d WHERE d.post_id = ${post} AND d.status = 'pending')
+    OR EXISTS (SELECT 1 FROM deferred_wage_claims w WHERE w.post_id = ${post} AND w.status = 'pending'))`;
+
 export const hasPendingDeal = (postId: string): boolean =>
-    !!db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId);
+    !!(db.prepare(`SELECT ${moneyHeldOn('?')} AS held`).get(postId, postId) as { held: number }).held;
 
 /** A role-holder's, or an enterprise's with a role-holder among its keepers: the burst guard's rule, and its keepers'. */
 function roleHolderPost(author: string | null): boolean {
@@ -286,7 +293,7 @@ export function sweepTakedowns(now: number = Date.now()): number {
     if (!removeForGood || getNodeRole() === 'backup' || getReplacedInfo()) return 0;
     const due = db.prepare(`SELECT tp.post_id FROM agent_takedown_posts tp JOIN agent_takedowns t ON t.id = tp.takedown_id
                              WHERE tp.put_back_at IS NULL AND tp.final_at IS NULL AND t.at <= ?
-                               AND NOT EXISTS (SELECT 1 FROM marketplace_transactions m WHERE m.post_id = tp.post_id AND m.status = 'pending')
+                               AND NOT ${moneyHeldOn('tp.post_id')}
                              ORDER BY t.at LIMIT ?`).all(iso(now - TAKEDOWN.holdDays * DAY_MS), TAKEDOWN.sweepBatch) as { post_id: string }[];
     const { removed } = makeFinal(due, now);
     const cutoff = iso(now - TAKEDOWN.keepDays * DAY_MS);
@@ -335,7 +342,7 @@ export function listTakedowns(now: number = Date.now(), limit = 100): TakedownLi
                                ORDER BY t.at DESC, t.rowid DESC LIMIT ?`).all(limit) as
         { id: string; grant_id: string; grant_name: string; callsign: string | null; at: string; reason: string; why: string; via: 'ids' | 'reports' }[];
     const posts = db.prepare(`SELECT tp.post_id, tp.put_back_at, tp.final_at, p.title, p.type, m.callsign,
-                                     EXISTS (SELECT 1 FROM marketplace_transactions d WHERE d.post_id = tp.post_id AND d.status = 'pending') AS deal
+                                     ${moneyHeldOn('tp.post_id')} AS deal
                                 FROM agent_takedown_posts tp LEFT JOIN posts p ON p.id = tp.post_id LEFT JOIN members m ON m.public_key = p.author_pubkey
                                WHERE tp.takedown_id = ?`);
     return calls.map((c) => {
@@ -355,4 +362,5 @@ export function listTakedowns(now: number = Date.now(), limit = 100): TakedownLi
 /** A member deleting their own account leaves this record, as they leave a burst's: their posts, and their key as who it acted for. */
 export function forgetTakedownsOf(publicKey: string): void {
     db.prepare('DELETE FROM agent_takedown_posts WHERE post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)').run(publicKey);
+    db.prepare("UPDATE agent_takedowns SET member_pubkey = '' WHERE member_pubkey = ?").run(publicKey);
 }

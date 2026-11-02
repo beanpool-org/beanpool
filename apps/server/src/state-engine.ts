@@ -9194,6 +9194,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             // With their connection label goes every record of a burst action that names them (engine/burst-cleanup.ts).
             forgetBurstActionsOf(publicKey);
         }
+        // Their posts leave what an assistant took down, whatever else their leaving keeps (engine/agent-takedowns.ts).
         if (!closed) forgetTakedownsOf(publicKey);
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];

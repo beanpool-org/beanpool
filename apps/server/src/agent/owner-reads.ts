@@ -5,7 +5,9 @@
  *
  * - Redacted at the source, named fields only (agent/tools.ts): no key, no URL or address, no other member's name, no photo,
  *   no balance. A listing is "me", "enterprise:<ref>" (one the owner keeps, by owner-posts.ts enterpriseRef) or "another
- *   member"; its title only with include_text, fenced.
+ *   member"; its title only with include_text, fenced. So too whatever else on a listing is words someone chose: a category
+ *   off the list (owner-posts.ts categoryRead), and an id a member sent or a peer's listing carries with its link (listingId).
+ *   A peer's `createdAt` reads only as a time.
  * - listings_search reads through the Market's own read (getPosts with the owner as its viewer), so it sees what the owner's
  *   Market sees and no more: a group's post outside their groups, a direct post between others, a post hidden by reports, or
  *   another member's paused one is not there, as on their phone.
@@ -21,9 +23,9 @@ import { db } from '../db/db.js';
 import { getNodeConfig, getPosts } from '../state-engine.js';
 import { placeAs } from '../config/community-place.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { fence, MEMBER_TEXT_NOTICE } from './fence.js';
+import { fence, isMadeId, MEMBER_TEXT_NOTICE, timeCell, type Fenced } from './fence.js';
 import { AGENT_LIST_MAX } from './limits.js';
-import { enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS } from './owner-posts.js';
+import { categoryRead, enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS } from './owner-posts.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 const NOT_TICKED = 'This assistant was connected without "May post for me": it reads what the other tools read, and nothing for seeding.';
@@ -49,6 +51,17 @@ function keptKeys(member: string): Set<string> {
 
 const KINDS = ['offer', 'need', 'event', 'poll'] as const;
 
+/**
+ * A listing's id and link, and what a fence calls it. An id made here is neither words nor a stranger's, and comes back as it
+ * is; one that was chosen (fence.ts isMadeId) is words, so it is fenced, with its link, and only with include_text.
+ */
+function listingId(id: string, boundary: string, withText: boolean): { postId: string | Fenced | null; link: string | Fenced | null; called: string } {
+    const link = `/?post=${encodeURIComponent(id)}`;
+    if (isMadeId(id)) return { postId: id, link, called: `listing ${id}` };
+    const called = 'a listing whose id was chosen';
+    return { postId: withText ? fence(boundary, `${called}, its id`, id) : null, link: withText ? fence(boundary, `${called}, its link`, link) : null, called };
+}
+
 function listingsSearch(grant: AgentGrant, args: Record<string, unknown>, boundary: string): ToolResult {
     const q = typeof args.q === 'string' ? args.q.trim().slice(0, 100) : '';
     const kind = typeof args.kind === 'string' && (KINDS as readonly string[]).includes(args.kind) ? args.kind : undefined;
@@ -66,12 +79,13 @@ function listingsSearch(grant: AgentGrant, args: Record<string, unknown>, bounda
     const result: Record<string, unknown> = {
         q, returned: posts.length,
         listings: posts.map((p) => {
+            const { postId, link, called } = listingId(p.id, boundary, withText);
             const view: Record<string, unknown> = {
-                postId: p.id, kind: p.type, status: p.status, category: p.category, createdAt: p.createdAt,
+                postId, kind: p.type, status: p.status, category: categoryRead(p.category, boundary, `${called}, category`, withText), createdAt: timeCell(p.createdAt),
                 by: p.authorPublicKey === grant.member ? 'me' : kept.has(p.authorPublicKey) ? `enterprise:${enterpriseRef(p.authorPublicKey)}` : 'another member',
-                link: `/?post=${encodeURIComponent(p.id)}`,
+                link,
             };
-            if (withText) view.title = fence(boundary, `listing ${p.id}, title`, p.title);
+            if (withText) view.title = fence(boundary, `${called}, title`, p.title);
             return view;
         }),
     };
@@ -200,7 +214,8 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
         name: 'listings_search',
         title: 'Search the board',
         reads: `the live Offers, Needs, events and polls the owner's own Market shows them, newest first, at most ${AGENT_LIST_MAX}, matching q, a kind `
-            + "or a category: id, kind, status, category, when, by (me, an enterprise you keep, or another member) and its link; with include_text, the title, fenced",
+            + "or a category: id, kind, status, category, when, by (me, an enterprise you keep, or another member) and its link; with include_text, the title, fenced. "
+            + 'A category off the list, or an id someone chose with its link, is member text: fenced with include_text, null without it',
         never: "an author's key or name, a pin, a photo, a price, or a post the owner's Market does not show them",
         memberText: true,
         ownerOnly: true,
@@ -211,7 +226,7 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
                 q: { type: 'string', description: 'words to search for, as the Market search takes them' },
                 kind: { type: 'string', enum: [...KINDS] },
                 category: { type: 'string', enum: PRICING_CATEGORIES.map((c) => c.id) },
-                include_text: { type: 'boolean', description: 'add each listing\'s fenced title' },
+                include_text: { type: 'boolean', description: 'add each listing\'s fenced title, and any category or id that is member text' },
                 limit: { type: 'integer', minimum: 1, maximum: AGENT_LIST_MAX },
             },
             additionalProperties: false,

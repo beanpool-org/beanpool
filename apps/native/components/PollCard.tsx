@@ -223,7 +223,15 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                         try {
                             await unpinPostOnNode(livePost.id);
                             const updated = await getPost(livePost.id);
-                            if (updated) setLivePost(updated);
+                            if (updated) {
+                                setLivePost((prev: any) => ({
+                                    ...prev,
+                                    pinned_until: updated.pinned_until,
+                                    pinned_at: updated.pinned_at,
+                                    pinnedUntil: updated.pinnedUntil,
+                                    pinnedAt: updated.pinnedAt,
+                                }));
+                            }
                         } catch (e: any) {
                             Alert.alert(t('Error'), e?.message || t('Failed to unpin post'));
                         } finally {
@@ -503,7 +511,15 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                 onClose={() => setShowPinSheet(false)}
                 onPinned={async () => {
                     const updated = await getPost(livePost.id);
-                    if (updated) setLivePost(updated);
+                    if (updated) {
+                        setLivePost((prev: any) => ({
+                            ...prev,
+                            pinned_until: updated.pinned_until,
+                            pinned_at: updated.pinned_at,
+                            pinnedUntil: updated.pinnedUntil,
+                            pinnedAt: updated.pinnedAt,
+                        }));
+                    }
                 }}
             />
         </View>

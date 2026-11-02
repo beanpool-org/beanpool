@@ -115,6 +115,7 @@ describe('MonthGrid component', () => {
         // ‹ button is disabled on current month
         const prevBtn = container.querySelector('[data-testid="month-prev"]') as HTMLButtonElement;
         expect(prevBtn.disabled).toBe(true);
+        expect(prevBtn.getAttribute('aria-label')).toBe('Previous month');
 
         // › button is enabled
         const nextBtn = container.querySelector('[data-testid="month-next"]') as HTMLButtonElement;

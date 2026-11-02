@@ -183,7 +183,8 @@ export function MonthGrid({
                 <Pressable
                     testID="month-prev"
                     accessibilityRole="button"
-                    accessibilityLabel={t('Back')}
+                    accessibilityLabel={t('Previous month')}
+                    accessibilityState={{ disabled: month.isCurrentOrPastMonth }}
                     disabled={month.isCurrentOrPastMonth}
                     onPress={onPrevMonth}
                     style={styles.navBtn}

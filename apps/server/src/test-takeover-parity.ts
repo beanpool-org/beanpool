@@ -468,6 +468,14 @@ async function main(): Promise<void> {
         await offer(eve, 'Mending', 2);
         const deeCash = await offer(dee, 'Kindling', 3, { cashAlsoNeeded: true });
         await deal(cy, dee, deeCash.id, false); // held in escrow, and still there at the take-over
+        // An anonymous poll with a typed Other: its answers travel in the poll's row, with no voter and no time (schema.sql
+        // poll_answers), and the twin compares them like any table.
+        const otherPoll = built('Bo posts a poll with a typed Other', await S_(bo, '/api/marketplace/posts', {
+            type: 'poll', title: 'What is missing?', description: 'Tell us', authorPublicKey: bo.pk, credits: 0, pollOptions: ['Buses', 'Beans'], pollOther: true,
+        })).post;
+        built('Eve types an answer', await S_(eve, `/api/marketplace/posts/${otherPoll.id}/vote`, {
+            optionId: otherPoll.pollOptions.find((o: { other?: boolean }) => o.other).id, otherWords: 'A bus on Sundays',
+        }));
         const disputed = await deal(eve, cy, cyOffer.id, false);
         built('the admin resolves a dispute over it', await A(`/api/local/admin/disputes/${disputed}/resolve`, { action: 'release_to_seller', reason: 'The repair was done' }));
         built('Bo recategorises his listing', await S_(bo, '/api/marketplace/posts/update', { id: boOffer.id, authorPublicKey: bo.pk, category: 'garden' }));

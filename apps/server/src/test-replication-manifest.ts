@@ -460,8 +460,9 @@ async function main(): Promise<void> {
     // member_photos, written by its one writer (@beanpool/engine members.ts setMemberPhoto): every change moves the member's
     // updated_at, a photo whose version and size stay the same included (here, the same bytes with the blanks moved). And
     // group_pictures by its one writer (@beanpool/engine groups.ts setGroupPicture), the group's (#1486).
-    assert([...inParentRow].every((t) => t === 'member_photos' || t === 'group_pictures'),
-        `the only tables written in place that travel in their parent's row are member_photos and group_pictures, each held to it below (${list(inParentRow)})`);
+    // And poll_answers (schema.sql), whose writers stamp the poll: test-poll-other holds a vote and an owner's removal to it.
+    assert([...inParentRow].every((t) => t === 'member_photos' || t === 'group_pictures' || t === 'poll_answers'),
+        `the only tables written in place that travel in their parent's row are member_photos, group_pictures and poll_answers, each held to it (${list(inParentRow)})`);
     {
         const pk = 'manifest-photo-stamp';
         const old = '2000-01-01T00:00:00.000Z';

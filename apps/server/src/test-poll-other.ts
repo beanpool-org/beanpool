@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { setMemberPhoto, exportSyncState } from '@beanpool/engine';
+import { setMemberPhoto } from '@beanpool/engine';
 import { POLL_OTHER_WORDS_MAX } from '@beanpool/core';
 
 let BASE = '';
@@ -89,7 +89,7 @@ const WORDS_OPEN = 'Named-answer-on-an-open-vote';
 async function main() {
     console.log('A poll\'s typed Other...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, closePoll, getReports, actionReport, getMember } = await import('./state-engine.js');
+    const { initStateEngine, closePoll, getReports, actionReport, getMember, exportSyncState } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
@@ -292,7 +292,7 @@ async function main() {
         const list = await get(wordsPath, owner);
         assert(list.body.answers.find((a: any) => a.id === line.id).reported === true, 'the owner sees which line is reported');
         const beforeStatus = getMember(maker.pubKeyHex)?.status;
-        await actionReport(row.id, false, true, { actor: owner.pubKeyHex, reason: 'test' });
+        await actionReport(row.id, false, true);
         assert(getMember(maker.pubKeyHex)?.status === beforeStatus && getMember('SYSTEM')?.status !== 'disabled', 'actioning it with a suspension pauses nobody');
         db.prepare(`UPDATE abuse_reports SET status = 'pending' WHERE id = ?`).run(row.id);
     }
@@ -398,7 +398,7 @@ async function main() {
 
     console.log('── a standby\'s copy ──');
     {
-        const payload = exportSyncState(db as any, 'test-node', undefined) as any;
+        const payload = await exportSyncState('test-node') as any;
         const copied = payload.posts.find((p: any) => p.id === pollId);
         assert(Array.isArray(copied?.pollAnswers) && copied.pollAnswers.length === 3, 'a poll carries its answers to a standby');
         const raw = JSON.stringify(copied.pollAnswers);
@@ -409,8 +409,7 @@ async function main() {
         assert(raw.includes(WORDS_2), 'the rest of the words go, since a standby holds the whole node');
         const ballots = payload.pollVotes.filter((v: any) => v.postId === pollId);
         assert(ballots.length === 3 && ballots.every((b: any) => b.optionId === 'sealed' && !b.otherAnswerId && b.signature === ''), 'and its ballots go as they are: no choice');
-        const { importSyncState } = await import('./state-engine.js');
-        assert(typeof importSyncState === 'function' || true, 'the importer is checked by test-takeover-parity');
+        // The importer writes them back: test-takeover-parity, on a standby that takes over.
     }
 
     console.log('── the only code that reads the words ──');

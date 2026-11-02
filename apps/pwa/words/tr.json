@@ -3683,5 +3683,8 @@
   "🫘 Welcome to BeanPool": "🫘 BeanPool'a Hoş Geldiniz",
   "Offer": "Teklif",
   "Need": "İhtiyaç",
-  "Enterprise": "Girişim"
+  "Enterprise": "Girişim",
+  "! not delivered": "! iletilmedi",
+  "Discard": "Vazgeç",
+  "Message not delivered": "Mesaj iletilmedi"
 }

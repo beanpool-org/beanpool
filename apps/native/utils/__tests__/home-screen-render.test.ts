@@ -616,17 +616,17 @@ describe('the cached answer, the 304, and states that never block', () => {
         expect(cards()).toContain('market');
     });
 
-    it('a 404 from /api/home: an update message instead of unreachable, with Market and Talk links', async () => {
+    it('a 404 from /api/home: an update message instead of unreachable, with Market and Chat links', async () => {
         node.status = 404;
         await render();
-        expect(document.body.textContent).toContain("This community's server needs an update before Home works. Market and Talk still work.");
+        expect(document.body.textContent).toContain("This community's server needs an update before Home works. Market and Chat still work.");
         expect(document.body.textContent).not.toContain("Couldn't reach your community");
         expect(document.querySelector('[data-testid="home-retry"]')).toBeNull();
         expect(byLabel('Open the Market')).not.toBeNull();
-        expect(byLabel('Open Talk')).not.toBeNull();
+        expect(byLabel('Open Chat')).not.toBeNull();
         await act(async () => { byLabel('Open the Market')!.click(); });
         expect(nav.router.navigate).toHaveBeenCalledWith('/(tabs)/market');
-        await act(async () => { byLabel('Open Talk')!.click(); });
+        await act(async () => { byLabel('Open Chat')!.click(); });
         expect(nav.router.navigate).toHaveBeenCalledWith('/(tabs)/chats');
     });
 
@@ -636,11 +636,11 @@ describe('the cached answer, the 304, and states that never block', () => {
         node.status = 404;
         await act(async () => { nav.focus?.(); });
         await settle();
-        expect(document.body.textContent).toContain("This community's server needs an update before Home works. Market and Talk still work.");
+        expect(document.body.textContent).toContain("This community's server needs an update before Home works. Market and Chat still work.");
         expect(document.querySelector('[data-testid="home-offline-note"]')).toBeNull();
         expect(cards()).toHaveLength(0);
         expect(byLabel('Open the Market')).not.toBeNull();
-        expect(byLabel('Open Talk')).not.toBeNull();
+        expect(byLabel('Open Chat')).not.toBeNull();
     });
 });
 

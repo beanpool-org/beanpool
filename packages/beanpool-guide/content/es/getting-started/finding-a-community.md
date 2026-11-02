@@ -59,7 +59,7 @@ Sigues siendo miembro de la comunidad global y puedes cambiar entre ellas: consu
 
 ## Si eres miembro de una comunidad local
 
-Las personas pueden solicitar unirse a tu comunidad desde la comunidad global. Toca **Charlas**, luego **Personas**, luego **Invitaciones**: las solicitudes se listan bajo **Quiere unirse**, con su nombre, sus palabras y de dónde provienen. Las solicitudes se responden en la app para teléfono: la app web no las lista.
+Las personas pueden solicitar unirse a tu comunidad desde la comunidad global. Toca **Chat**, luego **Personas**, luego **Invitaciones**: las solicitudes se listan bajo **Quiere unirse**, con su nombre, sus palabras y de dónde provienen. Las solicitudes se responden en la app para teléfono: la app web no las lista.
 
 - **Invitar:** crea una invitación que solo su cuenta puede usar. Su app la encuentra por sí sola y se unen con un solo toque.
 - **Ahora no:** no se les avisa. Siguen viendo "sin respuesta todavía" y no pueden volver a preguntar durante 30 días.

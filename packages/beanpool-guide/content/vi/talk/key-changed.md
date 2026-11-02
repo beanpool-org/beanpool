@@ -31,7 +31,7 @@ Các tin nhắn trước đây của bạn với họ thường vẫn đọc đ�
 - Kiểm tra mã **trực tiếp, hoặc qua cuộc gọi thoại hay gọi video** nơi bạn biết chắc đó là họ. Đừng kiểm tra bằng tin nhắn trong BeanPool: nếu khóa bị sai, thì người trả lời tin nhắn cũng có thể là người khác.
 - Nếu từng chữ số đều khớp, hãy đánh dấu vào **Tôi đã kiểm tra với Ben: mã khóa trong Cài đặt của họ khớp với mã này**, sau đó nhấn **Tiếp tục với khóa mới**.
 
-Kể từ thời điểm đó, các tin nhắn của bạn sẽ được gửi tới khóa mới. Biểu ngữ và thẻ **khóa đã đổi** trên cuộc trò chuyện trong mục **Trò chuyện** sẽ biến mất, và các tin nhắn trước đây của bạn vẫn đọc được.
+Kể từ thời điểm đó, các tin nhắn của bạn sẽ được gửi tới khóa mới. Biểu ngữ và thẻ **khóa đã đổi** trên cuộc trò chuyện trong mục **Chat** sẽ biến mất, và các tin nhắn trước đây của bạn vẫn đọc được.
 
 Mã này không phải là bí mật. Bạn có thể đọc to một cách an toàn.
 
@@ -59,7 +59,7 @@ Bạn có thể đặt lại bộ nhớ cho một cộng đồng: mở **Cài đ
 
 Sau khi đặt lại, điện thoại của bạn sẽ kiểm tra lại mọi cuộc trò chuyện trong cộng đồng đó từ đầu, từ các tin nhắn mà nó lưu giữ. Một cuộc trò chuyện có tin nhắn đến từ một khóa khác với khóa mà cộng đồng hiện cung cấp sẽ hiển thị lại biểu ngữ, bắt đầu bằng **Bộ nhớ đoạn chat của cộng đồng này đã được đặt lại, vì vậy điện thoại đang kiểm tra lại đoạn chat này từ đầu.** Hãy kiểm tra mã với người đó như ở trên.
 
-Hai điều có thể thay đổi sau khi đặt lại, và lời cảnh báo sẽ nêu rõ điều đó trước khi bạn xác nhận: một cuộc trò chuyện bị tạm dừng vì khóa của nó đã thay đổi có thể mở ra với khóa mới, và một cuộc trò chuyện riêng tư từng biến mất khỏi Trò chuyện có thể quay trở lại dưới dạng một cuộc trò chuyện nhóm mà cộng đồng có thể đọc được. Hãy kiểm tra mã khóa, hoặc kiểm tra ai có mặt trong cuộc trò chuyện, trước khi bạn gửi tin nhắn.
+Hai điều có thể thay đổi sau khi đặt lại, và lời cảnh báo sẽ nêu rõ điều đó trước khi bạn xác nhận: một cuộc trò chuyện bị tạm dừng vì khóa của nó đã thay đổi có thể mở ra với khóa mới, và một cuộc trò chuyện riêng tư từng biến mất khỏi Chat có thể quay trở lại dưới dạng một cuộc trò chuyện nhóm mà cộng đồng có thể đọc được. Hãy kiểm tra mã khóa, hoặc kiểm tra ai có mặt trong cuộc trò chuyện, trước khi bạn gửi tin nhắn.
 
 Việc đặt lại không giải quyết được trường hợp cuộc trò chuyện mà điện thoại của bạn không thể khớp với một khóa: nó sẽ được kiểm tra lại và lại dừng lại. Thay vào đó hãy kiểm tra mã với người đó (ở trên).
 

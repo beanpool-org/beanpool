@@ -3554,5 +3554,8 @@
   "🫘 Welcome to BeanPool": "🫘 欢迎来到 BeanPool",
   "Offer": "提供",
   "Need": "需求",
-  "Enterprise": "企业"
+  "Enterprise": "企业",
+  "! not delivered": "! 未送达",
+  "Discard": "放弃",
+  "Message not delivered": "消息未送达"
 }

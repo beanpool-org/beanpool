@@ -115,7 +115,7 @@ describe('a card at 320dp × 1.3', () => {
         expect(s.button.flexShrink).toBe(0);
         expect(s.button.maxWidth).toBe('100%');
         const pad = 2 * num(s.button.paddingHorizontal) + 2 * num(s.button.borderWidth);
-        for (const label of ['Post an Offer', 'Invite someone', 'Open the Market', 'Open Talk', 'Try again', 'Connect']) {
+        for (const label of ['Post an Offer', 'Invite someone', 'Open the Market', 'Open Chat', 'Try again', 'Connect']) {
             expect(textWidth(label, num(s.buttonText.fontSize)) + pad, label).toBeLessThanOrEqual(CARD_INNER);
         }
     });
@@ -402,7 +402,7 @@ describe("the Decide card's settings sheet at 320dp × 1.3 (My votes)", () => {
     });
 });
 
-describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', () => {
+describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', () => {
     const layout = read('app/(tabs)/_layout.tsx');
     const screens = [...layout.matchAll(/<Tabs\.Screen\s+name="([^"]+)"([\s\S]*?)\/>\s*(?=<Tabs\.Screen|\{\/\*|<\/Tabs>)/g)].map(m => ({ name: m[1], body: m[2] }));
     const onStrip = screens.filter(x => !/href: null/.test(x.body) || /hiddenTabs\.includes/.test(x.body));
@@ -433,7 +433,7 @@ describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', ()
     it('"Home" is no wider than "Commons", the label measured to fit at 320dp under the strip\'s 1.1x cap', () => {
         expect(layout).toMatch(/const LABEL_MAX_SCALE = 1\.1;/);
         const labels = onStrip.map(x => labelOf(x.body));
-        expect(labels).toEqual(['Home', 'Market', 'Map', 'Talk', 'Commons', 'Ledger']);
+        expect(labels).toEqual(['Home', 'Market', 'Map', 'Chat', 'Commons', 'Ledger']);
         for (const l of labels) expect(textWidth(l!, 10, { scale: 1.1 })).toBeLessThanOrEqual(textWidth('Commons', 10, { scale: 1.1 }));
     });
 });

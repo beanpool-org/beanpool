@@ -59,7 +59,7 @@ Bạn vẫn là thành viên của cộng đồng toàn cầu, và có thể chu
 
 ## Nếu bạn là thành viên của một cộng đồng địa phương
 
-Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng đồng toàn cầu. Nhấn **Trò chuyện**, sau đó chọn **Mọi người**, rồi chọn **Invites**: các yêu cầu được liệt kê dưới mục **Wants to join**, kèm theo tên, lời nhắn và nơi họ đến. Các yêu cầu được trả lời trong ứng dụng điện thoại: ứng dụng web không liệt kê chúng.
+Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng đồng toàn cầu. Nhấn **Chat**, sau đó chọn **Mọi người**, rồi chọn **Invites**: các yêu cầu được liệt kê dưới mục **Wants to join**, kèm theo tên, lời nhắn và nơi họ đến. Các yêu cầu được trả lời trong ứng dụng điện thoại: ứng dụng web không liệt kê chúng.
 
 - **Mời:** tạo một lời mời mà chỉ tài khoản của họ mới có thể sử dụng. Ứng dụng của họ sẽ tự tìm thấy lời mời, và họ tham gia chỉ với một lần nhấn.
 - **Không phải bây giờ:** họ sẽ không được thông báo từ chối. Họ sẽ tiếp tục nhìn thấy thông báo "chưa có câu trả lời", và không thể yêu cầu lại trong vòng 30 ngày.

@@ -79,12 +79,12 @@ Algumas dessas alterações ficam no servidor da sua comunidade. Você as recebe
 
 ### Grupos
 
-- **Todo grupo tem uma conversa.** A aba Conversas agora tem três botões: **Mensagens**, **Grupos** e **Pessoas**. **Grupos** lista seus grupos, os empreendimentos que você administra e os eventos aos quais vai comparecer, cada um com sua mensagem mais recente e contagem de não lidas.
-- **Uma única forma de começar um grupo.** **Novo grupo** em Conversas e **+** em Bens comuns abrem o mesmo formulário, com **Círculo social** escolhido para você. Depois de criar, você cai na conversa do grupo, que pergunta quem você deseja convidar.
+- **Todo grupo tem uma conversa.** A aba Bate-papo agora tem três botões: **Mensagens**, **Grupos** e **Pessoas**. **Grupos** lista seus grupos, os empreendimentos que você administra e os eventos aos quais vai comparecer, cada um com sua mensagem mais recente e contagem de não lidas.
+- **Uma única forma de começar um grupo.** **Novo grupo** em Bate-papo e **+** em Bens comuns abrem o mesmo formulário, com **Círculo social** escolhido para você. Depois de criar, você cai na conversa do grupo, que pergunta quem você deseja convidar.
 - **Convites.** Coordenadores podem convidar pessoas pelo menu da conversa. Um convite mostra quem o enviou, e **Entrar no grupo** leva você direto para a conversa.
 - **Silenciar uma conversa**: Por 8 horas, Por uma semana ou Para sempre. Em um grupo, @menções continuam passando.
 - **Um cabeçalho para cada conversa**: o nome do grupo, empreendimento ou evento no topo. Toque nele para ver o grupo, empreendimento ou evento.
-- As antigas conversas de grupo em Conversas foram removidas, junto com suas mensagens.
+- As antigas conversas de grupo em Bate-papo foram removidas, junto com suas mensagens.
 - Todo grupo agora tem um **coordenador principal** — quem o criou, para começar. Qualquer coordenador continua cuidando de membros e publicações, mas apenas o principal pode remover ou rebaixar um coordenador, e ninguém pode remover o principal. O principal pode transferir a liderança para outra pessoa. Se o principal ficar inativo por 30 dias, o grupo pode escolher um novo, na tela do grupo acima da lista de membros. Consulte "Regras e decisões".
 - **Votações em um grupo.** Os membros de um grupo podem votar nas questões do próprio grupo, como um novo coordenador ou um novo coordenador principal: abra o grupo e veja em **Decisões**.
 - **Escolher um novo líder para um grupo inativo.** Apenas pessoas que estavam no grupo antes de o líder ficar inativo podem votar. Pessoas que entraram ou foram nomeadas coordenadoras depois disso não têm direito a voto, garantindo que contas novas não possam assumir um grupo cujo líder tenha ficado inativo.

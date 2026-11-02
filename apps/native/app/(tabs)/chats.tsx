@@ -795,7 +795,7 @@ export default function ChatsScreen() {
                     contentContainerStyle={{ paddingBottom: 100 }}
                     refreshControl={<RefreshControl refreshing={false} onRefresh={yourGroupsLive.refresh} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
                 >
-                    <PageTitle title={t('Talk')} />
+                    <PageTitle title={t('Chat')} />
                     {talkSwitch}
                     {/* The empty state has its own "Find a group to join". */}
                     {(hasAny || (findGroups && paneState !== 'empty')) && (
@@ -817,7 +817,7 @@ export default function ChatsScreen() {
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
-                <PageTitle title={t('Talk')} testID="page-title-talk" />
+                <PageTitle title={t('Chat')} testID="page-title-talk" />
                 {talkSwitch}
                 <PeopleScreen />
             </View>
@@ -830,7 +830,7 @@ export default function ChatsScreen() {
                 and the search row sit over the list and ride away with it (QuickReturnBlock); the
                 compose button lives in the search row, so it comes back with the first scroll up. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Talk')} testID="page-title-talk" />} below={optionsDrawer}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Chat')} testID="page-title-talk" />} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>

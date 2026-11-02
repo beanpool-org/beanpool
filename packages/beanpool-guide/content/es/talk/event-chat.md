@@ -13,7 +13,7 @@ Cada evento tiene su propio chat. El anfitrión y todas las personas que hayan t
 ## Abrirlo
 
 - Abre el evento y toca **Abrir chat del evento**.
-- O encuéntralo en **Charlas**, en **Grupos**, marcado como 📅 **Evento**. En la aplicación web está en la pestaña **Chat**, con tus otros chats.
+- O encuéntralo en **Chat**, en **Grupos**, marcado como 📅 **Evento**. En la aplicación web está en la pestaña **Chat**, con tus otros chats.
 
 En la parte superior, un cuadro fijado muestra la **Nota para quienes van a asistir** del anfitrión, como la dirección exacta. Toca el nombre del evento en la parte superior (en la aplicación web, **Ver evento**) para volver al evento.
 

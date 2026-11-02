@@ -3941,5 +3941,8 @@
   "🫘 Welcome to BeanPool": "🫘 Добро пожаловать в BeanPool",
   "Offer": "Предложение",
   "Need": "Спрос",
-  "Enterprise": "Предприятие"
+  "Enterprise": "Предприятие",
+  "! not delivered": "! не доставлено",
+  "Discard": "Отменить",
+  "Message not delivered": "Сообщение не доставлено"
 }

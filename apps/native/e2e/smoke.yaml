@@ -32,7 +32,7 @@ appId: org.beanpool.pillar
     id: "tab-talk"
 - assertVisible:
     id: "page-title-talk"
-    text: "Talk"
+    text: "Chat"
 
 - tapOn:
     id: "tab-commons"

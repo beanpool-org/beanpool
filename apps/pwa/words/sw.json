@@ -3683,5 +3683,8 @@
   "🫘 Welcome to BeanPool": "🫘 Karibu kwenye BeanPool",
   "Offer": "Ofa",
   "Need": "Hitaji",
-  "Enterprise": "Biashara"
+  "Enterprise": "Biashara",
+  "! not delivered": "! haijawasilishwa",
+  "Discard": "Tupa",
+  "Message not delivered": "Ujumbe haujawasilishwa"
 }

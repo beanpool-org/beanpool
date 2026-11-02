@@ -8,7 +8,7 @@ related: messages, your-profile, joining, blocking
 
 ## Finding people
 
-Tap **Talk**, then **People**. In the web app, tap **People** in the row of tabs. There are three buttons:
+Tap **Chat**, then **People**. In the web app, tap **People** in the row of tabs. There are three buttons:
 
 - **Friends:** people you have added.
 - **Community:** every member. Search by name. On the phone, sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**. On the global community it shows the members nearest your area: type at least 2 letters of a name to find anyone else.

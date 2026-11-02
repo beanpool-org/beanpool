@@ -26,7 +26,7 @@
     },
     {
       "id": "talk",
-      "title": "Talk",
+      "title": "Chat",
       "summary": "Messages, groups and their chats, people and friends, event chats, muting, mentions, and a key that changed.",
       "pages": ["messages", "groups", "people", "event-chat", "mute", "mentions", "key-changed"]
     },

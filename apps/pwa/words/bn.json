@@ -3683,5 +3683,8 @@
   "🫘 Welcome to BeanPool": "🫘 BeanPool-এ স্বাগতম",
   "Offer": "প্রস্তাব",
   "Need": "প্রয়োজন",
-  "Enterprise": "উদ্যোগ"
+  "Enterprise": "উদ্যোগ",
+  "! not delivered": "! পৌঁছায়নি",
+  "Discard": "বাতিল করুন",
+  "Message not delivered": "বার্তা পৌঁছায়নি"
 }

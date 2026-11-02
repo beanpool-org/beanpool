@@ -8,15 +8,15 @@ related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed, h
 
 ## Your chats
 
-**Talk** has three buttons at the top: **Messages**, **Groups** and **People**.
+**Chat** has three buttons at the top: **Messages**, **Groups** and **People**.
 
-Tap **Talk** in the row of tabs, then **Messages**. Your chats with people are listed there. Deals that need you are at the top, under **Action Required**.
+Tap **Chat** in the row of tabs, then **Messages**. Your chats with people are listed there. Deals that need you are at the top, under **Action Required**.
 
 Chats that belong to a group, an enterprise or an event are under **Groups**, not here. See "Groups".
 
 - Search with **Search chats, posts, partners...**.
 - The filter button sorts by **Recent** or **Unread** (and, where your community uses Beans, by the Beans in each deal, highest or lowest first), and can show **Unread Only** or **Friends Only**.
-- On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top.
+- On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Chat** again to jump to the top.
 - On the phone, a chat with a deal that needs you has the same tag under the name as in the web app (below): **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. A chat where you only have a finished deal to rate says **Review Needed**.
 
 In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter. A chat with a deal that needs you has a tag under the name, **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. It counts only the deals where the next step is yours: Beans of yours held in trust, or a request on your listing waiting for your answer. A deal where you are the one being paid adds nothing to it. A chat with a finished deal you haven't rated also says **Action Needed: Review Partner**.
@@ -37,8 +37,8 @@ When you are paying for just one deal in the chat, it is in the bar above the me
 ## Starting a chat
 
 - From a profile: open their profile and tap **Message**. You can also add them as a friend there.
-- From **Talk**: tap the pencil button, then find the person by name. On the worldwide community, New Message lists the people you've dealt with and your friends. To find anyone else, type at least 2 letters of their name.
-- From the members list: **Talk**, then **People**, and tap 💬 next to a member's name in **Community** or **Friends**.
+- From **Chat**: tap the pencil button, then find the person by name. On the worldwide community, New Message lists the people you've dealt with and your friends. To find anyone else, type at least 2 letters of their name.
+- From the members list: **Chat**, then **People**, and tap 💬 next to a member's name in **Community** or **Friends**.
 - From a post: tap **Message** and the person's name.
 
 In the web app, use **Message** on their profile, 💬 on their row under **People**, **✉️ New DM**, or the **💬 Message** button on a post.
@@ -52,10 +52,10 @@ The ticks under your message:
 
 - one tick: sent;
 - two blue ticks: read;
-- a clock: still sending;
-- **not delivered**: it failed. Tap it to **Resend** or **Discard** it.
+- a clock: still sending. The web app says **Sending…**;
+- **not delivered**: it failed. Tap it to **Resend** or **Discard** it. In the web app, use **Retry** or **Discard** on the message.
 
-The clock and **not delivered** are on the phone. In the web app a message that fails stays in the box, and the app says so.
+Use these rather than typing the message again: if it did reach your community's server, trying again won't send it twice. In the web app a message that didn't go stays until you close the tab, and its chat says **! not delivered** in your list.
 
 ## Reply, react, edit, delete
 
@@ -110,7 +110,7 @@ Where your community's owners have turned on message requests, a first message f
 
 If your community turns message requests off, every message arrives straight away, and any request still waiting becomes an ordinary chat. See "How this community works".
 
-- **On your phone**: in **Talk** under **Messages**, tap the **Message requests** row at the top. It is there while a request is waiting. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Decline** to dismiss it without letting them know. If you have several requests waiting, you can tap **Decline all**.
+- **On your phone**: in **Chat** under **Messages**, tap the **Message requests** row at the top. It is there while a request is waiting. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Decline** to dismiss it without letting them know. If you have several requests waiting, you can tap **Decline all**.
 - **In the web app**: the same **Message requests** row appears above your list of chats.
 - **Report**: tap **Report** on a request, choose a reason and send it. That reports the message to your community's moderators and blocks the sender. If they have deleted the message, your report of them goes without its words: the moderators see your reason and who you reported. They are still blocked. See "Reporting a problem".
 - **When you send a request**: your first message is sent as a request. While you wait for them to accept, you cannot send further messages or photos, and you see **Sent as a request. {name} will see it under Message requests. You can write more once they accept.**

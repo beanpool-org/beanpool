@@ -20,11 +20,13 @@ export function isPostPinned(post: any, now: number = Date.now()): boolean {
         ? (post.active === 1 || post.active === true)
         : (post.status ? post.status === 'active' : true);
 
+    const status = post.status || (isActive ? 'active' : 'inactive');
+
     const pinnable = {
         pinnedUntil,
         type: post.type,
         active: isActive,
-        status: post.status,
+        status,
         audienceScope: post.audienceScope || post.audience_scope || 'public',
         hiddenByReportsAt: post.hiddenByReportsAt || post.hidden_by_reports_at || null,
         removedByModeratorAt: post.removedByModeratorAt || post.removed_by_moderator_at || null,
@@ -55,9 +57,7 @@ export function pinnedDetailLine(post: any): string {
  * falling back to created_at DESC.
  */
 export function comparePinsNewestFirst(a: any, b: any): number {
-    const atA = a.pinnedAt || a.pinned_at || a.created_at || a.createdAt || '';
-    const atB = b.pinnedAt || b.pinned_at || b.created_at || b.createdAt || '';
-    if (atA > atB) return -1;
-    if (atA < atB) return 1;
-    return 0;
+    const timeA = new Date(a.pinnedAt || a.pinned_at || a.created_at || a.createdAt || 0).getTime();
+    const timeB = new Date(b.pinnedAt || b.pinned_at || b.created_at || b.createdAt || 0).getTime();
+    return timeB - timeA;
 }

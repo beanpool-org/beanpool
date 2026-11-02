@@ -28,6 +28,18 @@ describe('post-pinning-market (slice 2 pure rules and logic)', () => {
             expect(isPostPinned(post, now)).toBe(true);
         });
 
+        it('identifies live pinned post even when status column is undefined but active is 1', () => {
+            const post = {
+                id: 'p-no-status',
+                type: 'offer',
+                active: 1,
+                audience_scope: 'public',
+                pinned_until: future,
+                pinned_at: '2026-11-03T10:00:00Z',
+            };
+            expect(isPostPinned(post, now)).toBe(true);
+        });
+
         it('rejects post without pinned_until or with past pinned_until', () => {
             expect(isPostPinned({ id: 'p1', status: 'active', active: 1 }, now)).toBe(false);
             expect(isPostPinned({ id: 'p1', status: 'active', active: 1, pinned_until: past }, now)).toBe(false);
@@ -96,6 +108,14 @@ describe('post-pinning-market (slice 2 pure rules and logic)', () => {
         it('sorts newest pinned_at first', () => {
             const older = { id: 'p1', pinned_at: '2026-11-01T10:00:00Z' };
             const newer = { id: 'p2', pinned_at: '2026-11-02T10:00:00Z' };
+            const list = [older, newer];
+            list.sort(comparePinsNewestFirst);
+            expect(list.map(p => p.id)).toEqual(['p2', 'p1']);
+        });
+
+        it('sorts newest pinned_at first across mixed ISO strings and numeric timestamps', () => {
+            const older = { id: 'p1', pinned_at: '2026-11-01T10:00:00Z' };
+            const newer = { id: 'p2', pinned_at: new Date('2026-11-02T10:00:00Z').getTime() };
             const list = [older, newer];
             list.sort(comparePinsNewestFirst);
             expect(list.map(p => p.id)).toEqual(['p2', 'p1']);

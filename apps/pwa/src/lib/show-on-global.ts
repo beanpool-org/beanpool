@@ -31,13 +31,13 @@ const STANDING_KEY = 'beanpool_global_standing';
 const TENDED_KEY = 'beanpool_copies_tended';
 
 const homeAddress = () => getNodeApiUrl() || window.location.origin;
-const hostHere = () => audienceOf(homeAddress());
+/** This community's host, as a community's address is compared: a port is no part of it. */
+export const hostHere = () => audienceOf(homeAddress());
 
 /** The global community this web app's community names, or null: never a fixed name of ours. */
 export async function globalAddress(): Promise<string | null> {
     const info = await communityInfoOnce().catch(() => null);
-    if (info?.profile !== 'local') return null;
-    return globalCommunityLink(info, hostHere())?.href.replace(/\/+$/, '') ?? null;
+    return globalCommunityLink(info ?? null, hostHere())?.href.replace(/\/+$/, '') ?? null;
 }
 
 function dataUrlOf(blob: Blob): Promise<string> {

@@ -14,7 +14,7 @@ import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink } from '../lib/global-entry';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { MarketplacePost } from '../lib/api';
-import { askGlobalStanding, copyPairOf, readGlobalStanding, showPostOnGlobal, stopLaterLine, stopShowing, type GlobalStanding } from '../lib/show-on-global';
+import { askGlobalStanding, copyPairOf, hostHere, readGlobalStanding, showPostOnGlobal, stopLaterLine, stopShowing, type GlobalStanding } from '../lib/show-on-global';
 
 export const showOnGlobalLabel = () => t('Also show this on the global community');
 export const showOnGlobalHint = () => t("Anyone there can see it, with its times, its rough area and this community's name. Not your name, the place or your note. To go, they ask to join.");
@@ -45,7 +45,7 @@ interface Offer {
 /** What the row offers, from this browser's memory. `enabled`: what the form or the page knows; the community names the rest. */
 function useOffer(enabled: boolean, identity: BeanPoolIdentity | null | undefined): Offer {
     const info = useCommunityInfo(enabled);
-    const link = info?.profile === 'local' ? globalCommunityLink(info, window.location.host) : null;
+    const link = globalCommunityLink(info, hostHere());
     const publicKey = identity?.publicKey;
     const [kept, setKept] = useState<GlobalStanding>('unknown');
     useEffect(() => {

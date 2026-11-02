@@ -704,11 +704,11 @@ export default function MapScreen() {
                         <MaterialCommunityIcons name="crosshairs-gps" size={24} color={colors.text.body} />
                     </TouchableOpacity>
                     <View style={styles.pillDivider} />
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Zoom in')} style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta / 2, longitudeDelta: currentRegion.longitudeDelta / 2 }, 300)}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Zoom in')} style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta / 2, longitudeDelta: lngSpanOf(currentRegion) / 2 }, 300)}>
                         <Text style={styles.pillBtnIcon}>+</Text>
                     </TouchableOpacity>
                     <View style={styles.pillDivider} />
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Zoom out')} style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta * 2, longitudeDelta: currentRegion.longitudeDelta * 2 }, 300)}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Zoom out')} style={styles.pillBtn} onPress={() => mapRef.current?.animateToRegion({ ...currentRegion, latitudeDelta: currentRegion.latitudeDelta * 2, longitudeDelta: lngSpanOf(currentRegion) * 2 }, 300)}>
                         <Text style={styles.pillBtnIcon}>−</Text>
                     </TouchableOpacity>
                 </View>

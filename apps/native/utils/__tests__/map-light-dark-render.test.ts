@@ -195,6 +195,18 @@ describe('Android: the map\'s light and dark are the real thing', () => {
         expect(first.moves).toEqual([]);
     });
 
+    it('+ and − on a view across the 180° line stay on the same side of the world', async () => {
+        await open();
+        const there = { latitude: -28.64, longitude: 153.49, latitudeDelta: 40, longitudeDelta: -253 };
+        await act(async () => { theMap().now.onRegionChangeComplete(there); });
+        await act(async () => { byLabel('Zoom in')!.click(); });
+        await act(async () => { byLabel('Zoom out')!.click(); });
+        expect(theMap().moves).toEqual([
+            { ...there, latitudeDelta: 20, longitudeDelta: 53.5 },
+            { ...there, latitudeDelta: 80, longitudeDelta: 214 },
+        ]);
+    });
+
     it('a change of the app\'s theme is a new map too, and gives up the pill\'s pick', async () => {
         await open();
         await flip(); // dark by the pill, in a light app

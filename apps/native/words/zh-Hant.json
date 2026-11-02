@@ -5943,6 +5943,6 @@
   "{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.": "{name} 在你發布一個提供之後才接受需求。發布一個，我們會再次詢問你。",
   "Poll": "投票",
   "Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.|Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.": {
-    "other": "僅限已確認成員：超過其額度下限 {pct}%，或透支且 {n} 天無銷售記錄。其交易細節絕不公開。"
+    "other": "僅限已確認成員：所欠超過其額度下限的 {pct}%，或透支且 {n} 天沒有銷售記錄。其交易絕不會被顯示。"
   }
 }

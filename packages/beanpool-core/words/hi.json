@@ -895,8 +895,8 @@
   "**Confirmed members** can owe up to {amount} Beans (the known floor)": "**पुष्टि किए गए सदस्य** {amount} फलियाँ तक के कर्ज़दार हो सकते हैं (ज्ञात सीमा)",
   "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for {days}. Each look is logged.": "एडमिन किसी पुष्टि किए गए सदस्य का बैलेंस देख सकते हैं, अगर उस पर उसकी क्रेडिट लाइन के आधे से ज़्यादा कर्ज़ हो, या वह कर्ज़ में हो और उसने {days} से कोई बिक्री न की हो। हर बार देखना दर्ज होता है।",
   "The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or are in debit and haven't made a sale for {days}. Each look is logged.": "एडमिन किसी पुष्टि किए गए सदस्य का बैलेंस देख सकते हैं, अगर उस पर उसकी क्रेडिट लाइन के {pct}% से ज़्यादा कर्ज़ हो, या वह कर्ज़ में हो और उसने {days} से कोई बिक्री न की हो। हर बार देखना दर्ज होता है।",
-  "The line of {pct}% applies from {date}.": "{pct}% की सीमा {date} से लागू होगी।",
-  "The line of {days} applies from {date}.": "{days} की सीमा {date} से लागू होगी।",
+  "The line of {pct}% applies from {date}.": "{pct}% की सीमा {date} से लागू है।",
+  "The line of {days} applies from {date}.": "{days} की सीमा {date} से लागू है।",
   "The rule starts on {date}. Until then, only members confirmed since the notice began are listed.": "यह नियम {date} से शुरू होगा। तब तक सूची में केवल वे सदस्य हैं जिनकी पुष्टि सूचना शुरू होने के बाद हुई।",
   "{n} days|{n} days": {
     "one": "{n} दिन",

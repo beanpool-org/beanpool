@@ -45,6 +45,16 @@ describe('PinSheet', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('initializes focus on heading when transitioned from closed to open', () => {
+        const { rerender } = render(<PinSheet post={samplePost} isOpen={false} onClose={vi.fn()} onSuccess={vi.fn()} />);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        rerender(<PinSheet post={samplePost} isOpen={true} onClose={vi.fn()} onSuccess={vi.fn()} />);
+        const heading = screen.getByRole('heading', { name: 'Pin to the top…' });
+        expect(heading).toBeInTheDocument();
+        expect(document.activeElement).toBe(heading);
+    });
+
     it('pins the post for 3 days and notifies on success', async () => {
         const user = userEvent.setup();
         const onClose = vi.fn();

@@ -17,14 +17,17 @@ export interface PinSheetProps {
     onSuccess: (updated: MarketplacePost) => void;
 }
 
-export function PinSheet({ post, isOpen, onClose, onSuccess }: PinSheetProps) {
+export function PinSheet(props: PinSheetProps) {
+    if (!props.isOpen) return null;
+    return <PinSheetContent {...props} />;
+}
+
+function PinSheetContent({ post, onClose, onSuccess }: Omit<PinSheetProps, 'isOpen'>) {
     const dialogRef = useRef<HTMLDivElement>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useDialogFocus(dialogRef, onClose);
-
-    if (!isOpen) return null;
 
     const handlePin = async (days: PinDays) => {
         if (submitting) return;

@@ -58,6 +58,16 @@ vi.mock('expo-file-system/legacy', () => ({
     writeAsStringAsync: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
+vi.mock('react-native', () => ({
+    Platform: { OS: 'android' },
+    DeviceEventEmitter: { emit: () => {}, addListener: () => ({ remove: () => {} }) },
+}));
+vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: vi.fn(async () => null),
+    setItemAsync: vi.fn(async () => {}),
+    deleteItemAsync: vi.fn(async () => {}),
+}));
 const me = vi.hoisted(() => ({ identity: null as null | { publicKey: string; privateKey: string; callsign: string } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => me.identity) }));
 vi.mock('../nodes', async (importOriginal) => ({
@@ -78,12 +88,15 @@ afterAll(() => { (Module as any)._load = realLoad; });
 
 import { publicArchetype, type QuizResult } from '@beanpool/core';
 import { retireParkedPickAfterPublish } from '../avatar-value';
+import { blockSyncsEndedForTests, blockUser, syncBlocks } from '../blocklist';
 import { getCanonicalProfile, saveCanonicalProfile } from '../canonical-profile';
 import { closeDB, getDb, getMemberProfile, pushProfileToServer, pushWaitingArchetype, updateMemberProfile } from '../db';
 import { addSavedNode, clearGuestNode, isGuestNode, markGuestNode, removeSavedNode } from '../nodes';
 import {
-    carryPendingProfileChange, clearPendingProfileChange, clearWaitingArchetype, keepPendingProfileChange, keepWaitingArchetype, pendingProfileChange, waitingArchetype,
+    carryPendingProfileChange, clearPendingProfileChange, clearWaitingArchetype, keepCarriedArchetype, keepPendingProfileChange, keepWaitingArchetype,
+    pendingProfileChange, waitingArchetype,
 } from '../pending-profile-sync';
+import { askBeforeSwitch } from '../reconnect';
 import { firstRunWorkingStyle, keepQuizResult } from '../working-style';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from '../storage-keys';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
@@ -456,6 +469,204 @@ describe('nothing goes to a community the member isn\'t in', () => {
         await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x' });
         await pushProfileToServer();
         expect(sentTo(B)[0]?.archetype).toBe(publicOf(quiz('2026-11-03')));
+    });
+
+    describe('a guest with a row of their own on the phone: only the node says member', () => {
+        // Re-run Setup has no guest gate: on a visit its POST answers 404 and it writes the row all the same
+        // (app/profile-setup.tsx). A non-member can't read the directory, so no sync ever takes that row away.
+        const blocksSentTo = (origin: string) => fetchMock.mock.calls.filter(([url]) => String(url).startsWith(`${origin}/api/blocks`));
+        const guestWithARow = async () => {
+            await addSavedNode(A);
+            await addSavedNode(B);
+            await markGuestNode(B);
+            nodeAt(B).member = 'no';
+            await saveCanonicalProfile({ archetype: JSON.stringify(quiz('2026-11-03')) });
+            await openCommunity(B);
+            await updateMemberProfile(ME, { callsign: 'Marty', bio: 'Written on a visit' });
+            expect((await getMemberProfile(ME))?.bio).toBe('Written on a visit');
+        };
+
+        it('the first run leaves the mark, which is what keeps the phone off /node-mismatch and lets it switch back', async () => {
+            await guestWithARow();
+            await firstRunWorkingStyle();
+
+            // The very read the watcher in app/_layout.tsx makes of the open community before it sends a 'stranger' there.
+            expect(await isGuestNode(store.get('beanpool_anchor_url')!)).toBe(true);
+            const switchTo = vi.fn(async () => {});
+            const asked = await askBeforeSwitch(B, me.identity!, { switchTo, fetchProfile: async () => null, cachedProfile: async () => null });
+            expect(asked.kind).toBe('guest');
+            expect(switchTo).toHaveBeenCalledWith(B);
+        });
+
+        it('the first run asks no community and marks nothing there', async () => {
+            await guestWithARow();
+            await firstRunWorkingStyle();
+            expect(nodeAt(B).probes).toBe(0);
+            expect(await waitingArchetype(B, ME)).toBeNull();
+        });
+
+        it('nothing goes there after the first run: not the result, and not the block list', async () => {
+            await guestWithARow();
+            await blockUser(SOMEONE_ELSE, ME, 'Abusive user reported via Trust Profile');
+            await blockSyncsEndedForTests();
+            await firstRunWorkingStyle();
+
+            await syncBlocks();
+            await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x' });
+            await pushProfileToServer();
+
+            expect(blocksSentTo(B)).toEqual([]);
+            for (const body of sentTo(B)) expect(body).not.toHaveProperty('archetype');
+        });
+
+        it('a directory that lists a visitor\'s row is no answer either: a sync leaves the mark while the node says no', async () => {
+            // This stand-in lists the key whatever it says of membership, as a node with ENFORCE_READ_AUTH=false lists a
+            // visitor's row: /api/members holds them and doesn't filter them out.
+            await guestWithARow();
+            await performSync();
+            expect(nodeAt(B).probes).toBeGreaterThan(0);
+            expect(await isGuestNode(B)).toBe(true);
+            expect(sentTo(B)).toEqual([]);
+        });
+
+        it('no answer from the node leaves the mark too', async () => {
+            await guestWithARow();
+            nodeAt(B).member = 'silent';
+            await performSync();
+            expect(await isGuestNode(B)).toBe(true);
+        });
+
+        it('a member whose mark is stale heals once the node says so, in the spelling the visit wrote', async () => {
+            await guestWithARow();
+            await markGuestNode(`${B}/`);
+            nodeAt(B).member = 'yes';
+            await performSync();
+            expect(await isGuestNode(B)).toBe(false);
+            expect(await isGuestNode(`${B}/`)).toBe(false);
+        });
+
+        it('a member who is no guest anywhere: a sync asks the community nothing about it', async () => {
+            await memberOfBoth();
+            await performSync();
+            expect(nodeAt(A).probes).toBe(0);
+        });
+    });
+});
+
+describe('a result carried from another community\'s row is no retake: on a tie the row stands, and nothing is sent', () => {
+    // scratch/fable-design/DESIGN-archetype-across-fable.md §3: "Same day on two devices: the row stands, nothing is sent".
+    const adopted = quiz('2026-11-03', 'spark');
+    const sameDayThere = publicOf(quiz('2026-11-03', 'harmonizer'));
+
+    /** A's sync brings a newer row: the phone adopts it, and it waits for B, which holds `heldAtB`. */
+    const adoptedFromA = async (heldAtB: string | null) => {
+        await memberOfBoth();
+        await saveCanonicalProfile({ archetype: JSON.stringify(quiz('2026-11-01', 'guardian')) });
+        nodeAt(A).held.archetype = publicOf(adopted);
+        nodeAt(B).held.archetype = heldAtB;
+        await openCommunity(A);
+        await performSync();
+        expect((await getCanonicalProfile())?.archetype).toBe(publicOf(adopted));
+        expect(await waitingArchetype(B, ME)).toBe(publicOf(adopted));
+    };
+
+    it('a different result the same day at B: B\'s row stands, no write, and it stops waiting', async () => {
+        await adoptedFromA(sameDayThere);
+        await openCommunity(B);
+        await performSync();
+        expect(sentTo(B)).toEqual([]);
+        expect(nodeAt(B).held.archetype).toBe(sameDayThere);
+        expect(await waitingArchetype(B, ME)).toBeNull();
+
+        await performSync();
+        expect(sentTo(B)).toEqual([]);
+    });
+
+    it('the identical result at B: no POST', async () => {
+        await adoptedFromA(publicOf(adopted));
+        await openCommunity(B);
+        await performSync();
+        expect(sentTo(B)).toEqual([]);
+        expect(await waitingArchetype(B, ME)).toBeNull();
+    });
+
+    it('a Save at B leaves it out too', async () => {
+        await adoptedFromA(sameDayThere);
+        await openCommunity(B);
+        await updateMemberProfile(ME, { callsign: 'Marty', bio: 'Saved at B' });
+        await pushProfileToServer();
+        expect(sentTo(B)).toHaveLength(1);
+        expect(sentTo(B)[0]).not.toHaveProperty('archetype');
+        expect(nodeAt(B).held.archetype).toBe(sameDayThere);
+    });
+
+    it('an older result at B takes it', async () => {
+        await adoptedFromA(publicOf(quiz('2026-11-02', 'sage')));
+        await openCommunity(B);
+        await performSync();
+        expect(nodeAt(B).held.archetype).toBe(publicOf(adopted));
+        expect(await waitingArchetype(B, ME)).toBeNull();
+    });
+
+    it('a community holding none takes it', async () => {
+        await adoptedFromA(null);
+        await openCommunity(B);
+        await performSync();
+        expect(nodeAt(B).held.archetype).toBe(publicOf(adopted));
+    });
+
+    it('a retake made here after it was carried is a retake: it replaces what waits and goes over the same-day row', async () => {
+        await adoptedFromA(sameDayThere);
+        const retake = quiz('2026-11-03', 'sage');
+        await keepQuizResult(retake, ME, A);
+        await openCommunity(B);
+        await performSync();
+        expect(nodeAt(B).held.archetype).toBe(publicOf(retake));
+    });
+
+    it('a retake still waiting at a first run stays a retake: it goes over the same-day row', async () => {
+        await memberOfBoth();
+        await openCommunity(B);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(quiz('2026-11-01', 'guardian')) });
+        await openCommunity(A);
+        const retake = quiz('2026-11-03', 'sage');
+        await keepQuizResult(retake, ME, A);
+        nodeAt(B).held.archetype = sameDayThere;
+
+        await firstRunWorkingStyle();
+        await openCommunity(B);
+        await performSync();
+        expect(nodeAt(B).held.archetype).toBe(publicOf(retake));
+    });
+
+    it('the first run marks a result the same way: over a row the phone holds as older, but the node holds from the same day', async () => {
+        await memberOfBoth();
+        await openCommunity(A);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(adopted) });
+        await openCommunity(B);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(quiz('2026-11-01', 'guardian')) });
+        await saveCanonicalProfile({ archetype: null });
+        nodeAt(B).held.archetype = sameDayThere;
+
+        await firstRunWorkingStyle();
+        expect(await waitingArchetype(B, ME)).toBe(publicOf(adopted));
+
+        await performSync();
+        expect(sentTo(B)).toEqual([]);
+        expect(nodeAt(B).held.archetype).toBe(sameDayThere);
+        expect(await waitingArchetype(B, ME)).toBeNull();
+    });
+
+    it('stays carried when the community moves to a new address', async () => {
+        await addSavedNode(B);
+        await keepCarriedArchetype(A, ME, publicOf(adopted));
+        await carryPendingProfileChange(A, B);
+        nodeAt(B).held.archetype = sameDayThere;
+        await openCommunity(B);
+        await updateMemberProfile(ME, { callsign: 'Marty' });
+        await pushWaitingArchetype({ community: B });
+        expect(sentTo(B)).toEqual([]);
+        expect(await waitingArchetype(B, ME)).toBeNull();
     });
 });
 

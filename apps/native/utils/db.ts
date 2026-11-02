@@ -29,7 +29,7 @@ import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
 import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
-import { adoptNewerRowIntoDevice, archetypeToSend, firstRunWorkingStyle } from './working-style';
+import { adoptNewerRowIntoDevice, archetypeToSend, healGuestMark } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
@@ -4524,14 +4524,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
     } finally {
         releaseSyncLock();
     }
-    if (selfMemberFound && anchorUrl) {
-        try {
-            const plain = anchorUrl.replace(/\/+$/, '');
-            for (const u of new Set([anchorUrl, plain, `${plain}/`])) {
-                await clearGuestNode(u).catch(() => {});
-            }
-        } catch {}
-    }
+    if (selfMemberFound && anchorUrl && selfPubkey) await healGuestMark(anchorUrl, selfPubkey);
     if (ownSyncedArchetype && selfPubkey) {
         try {
             const canonical = await getCanonicalProfile().catch(() => null);

@@ -4,7 +4,7 @@ import { buildSignedHeaders } from './crypto';
 import { fetchMembership } from './membership-probe';
 import { plainOriginOf } from './node-url';
 import { clearGuestNode, getDatabaseFilenameForNode, getSavedNodes, isGuestNode } from './nodes';
-import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from './pending-profile-sync';
+import { clearWaitingArchetype, keepCarriedArchetype, keepWaitingArchetype, waitingArchetype, waitingEntry } from './pending-profile-sync';
 
 /**
  * The member's working style: taken once, on the device, and carried to each community by the device
@@ -34,7 +34,7 @@ export async function adoptNewerRowIntoDevice(publicKey: string, rowArchetype: s
     for (const node of await getSavedNodes()) {
         if (await onGuestVisit(node.url)) continue;
         if (openCommunity && plainOriginOf(node.url) === plainOriginOf(openCommunity)) continue;
-        await keepWaitingArchetype(node.url, publicKey, publicForm);
+        await keepCarriedArchetype(node.url, publicKey, publicForm);
     }
 }
 
@@ -43,7 +43,7 @@ export async function adoptNewerRowIntoDevice(publicKey: string, rowArchetype: s
  * - Reads each saved community's local members row for this key, plus the device copy.
  * - Orders results (including old millisecond stamps), adopting the newest into the device copy.
  * - Marks each older community's pending entry with core's publicArchetype (reducing any millisecond stamp to a date).
- * - Heals any guest mark on a community where the member has a row or the node says member.
+ * It reads the phone and asks no community, so it leaves guest marks alone: a row is no answer (healGuestMark).
  * Safe to run twice; a tie changes nothing.
  */
 export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> {
@@ -86,11 +86,6 @@ export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> 
             ) as { archetype?: string | null } | null;
 
             if (row) {
-                // The member is present in this community's directory: heal any stale guest mark
-                const plain = node.url.replace(/\/+$/, '');
-                for (const u of new Set([node.url, plain, `${plain}/`])) {
-                    await clearGuestNode(u).catch(() => {});
-                }
                 const arch = row.archetype ?? null;
                 rowsByCommunity.set(node.url, arch);
                 if (arch && archetypeIsNewer(arch, newestRaw)) {
@@ -122,15 +117,30 @@ export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> 
         if (await onGuestVisit(node.url)) continue;
         if (newestOrigin && plainOriginOf(node.url) === plainOriginOf(newestOrigin)) continue;
         const row = rowsByCommunity.get(node.url);
-        if (row === undefined) continue; // Not a member there
+        if (row === undefined) continue; // No row of theirs on the phone: only looked at
         if (archetypeIsNewer(newestRaw, row)) {
-            await keepWaitingArchetype(node.url, publicKey, publicForm);
+            await keepCarriedArchetype(node.url, publicKey, publicForm);
         }
     }
 }
 
 /** Whether the phone is only visiting `community`: no answer counts as a visit, so nothing goes on a guess. */
 export const onGuestVisit = (community: string): Promise<boolean> => isGuestNode(community).catch(() => true);
+
+/**
+ * A guest mark on `community` goes when the community says the key is a member, and on nothing less: a row is no answer.
+ * The phone writes one on a visit (Re-run Setup, after the 404) and a community open to reads lists its visitors', so a
+ * row standing in for the answer sent a guest to /node-mismatch and their block list to a community they aren't in. Only
+ * a community marked is asked. Never throws.
+ */
+export async function healGuestMark(community: string, publicKey: string): Promise<void> {
+    const plain = community.replace(/\/+$/, '');
+    // Marked as the visit wrote the address, with or without its trailing slash.
+    const spellings = [...new Set([community, plain, `${plain}/`])];
+    const marks = await Promise.all(spellings.map(onGuestVisit));
+    if (!marks.includes(true) || (await saysMember(community, publicKey)) !== true) return;
+    for (const url of spellings) await clearGuestNode(url);
+}
 
 /** How long a community is given to answer: as long as the delete's own ask (delete-here.ts). */
 const MEMBERSHIP_TIMEOUT_MS = 8000;
@@ -168,26 +178,28 @@ export async function keepQuizResult(result: QuizResult, publicKey: string, open
  * later join carries the result.
  *
  * Never over a newer result: that is judged against what the community holds now, because a second device may have put a
- * newer one there since the phone last synced. A result waiting there that it has overtaken goes. On a tie what waits is
- * sent: it is a retake made on this device. No answer to either question sends nothing, and the next publish asks again.
+ * newer one there since the phone last synced. A result waiting there that it has overtaken goes. On a tie a retake made
+ * on this device is sent; a result carried from another community's row is not, and goes (keepCarriedArchetype): the row
+ * stands. No answer to either question sends nothing, and the next publish asks again.
  */
 export async function archetypeToSend(community: string, identity: Signer, row: string | null | undefined): Promise<string | null> {
     const { publicKey } = identity;
-    const waiting = await waitingArchetype(community, publicKey);
+    const waiting = await waitingEntry(community, publicKey);
     const deviceCopy = (await getCanonicalProfile())?.archetype;
     if (!waiting && !archetypeToCarry(deviceCopy, row)) return null;
     if (await onGuestVisit(community)) return null;
     const member = await saysMember(community, publicKey);
-    if (member === false && waiting) await clearWaitingArchetype(community, waiting);
+    if (member === false && waiting) await clearWaitingArchetype(community, waiting.archetype);
     if (member !== true) return null;
     const held = await heldThere(community, identity);
     if (held === undefined) return null;
     if (!waiting) return archetypeToCarry(deviceCopy, held);
-    if (archetypeIsNewer(held, waiting)) {
-        await clearWaitingArchetype(community, waiting);
+    const stands = waiting.carried ? !archetypeIsNewer(waiting.archetype, held) : archetypeIsNewer(held, waiting.archetype);
+    if (stands) {
+        await clearWaitingArchetype(community, waiting.archetype);
         return null;
     }
-    return waiting;
+    return waiting.archetype;
 }
 
 /** `ask`, given up on at MEMBERSHIP_TIMEOUT_MS. Undefined for no answer. Never throws. */

@@ -796,6 +796,19 @@ describe('a rest goes by the listing too: a copy moved on is this device\'s to t
         expect(browser.pairs()[0].resting).toBeFalsy();
     });
 
+    it('an edit on the device that fell behind follows the copy, so a removal at home there still reaches it', async () => {
+        const w = world();
+        const { phone, browser } = await browserFellBehind(w);
+        w.home.title = 'Edited in the browser';
+        await browser.tendCopies(identity);
+        expect(browser.pairs()[0]?.copyId).toBe(phone.pairs()[0].copyId);
+        await browser.tendCopies(identity);
+        expect(w.up().map((r) => r.title)).toEqual(['Edited in the browser']);
+        Object.assign(w.home, { status: 'cancelled', active: false });
+        expect(await browser.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
     it('its own copy up, it rests as it did, one device or two', async () => {
         const w = world();
         const phone = w.device();

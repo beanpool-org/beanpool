@@ -28,7 +28,7 @@
  *   the device's own row can be behind, and has nothing of a hide by reports.
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
  *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
- *   pair goes only once global says the copy isn't up (`forgetIfGone`): it is the device's only way to that copy.
+ *   pair goes only once global says the copy isn't up (`followCopy`): it is the device's only way to that copy.
  * - **A phone and a browser on one account.** Each keeps its own pairs and neither knows the other, so the copy's id says which
  *   listing it is for, and only to the key itself ({@link copyIdOf}): both work out the same id, a first send reads what is
  *   there first and takes it up, and two first sends at once are one row. Each tends it; what they send is the same, and a
@@ -430,14 +430,18 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     }
 
     /**
-     * After a refusal, which doesn't say the copy has gone (a mute, a date that has ended, a tag one library lacks, a second
-     * send of the same id). The pair goes only if global says the copy isn't up. Otherwise it stays as it was, so a cancel at
-     * home can still take the copy down, and the next tend sees what wasn't sent and tries again.
+     * Global's word on the listing, where a device can't go by its own id: after a refusal, which doesn't say the copy has gone (a
+     * mute, a date that has ended, a tag one library lacks, a second send of the same id), and before a rest. The pair goes only
+     * if nothing is up. Otherwise it stays with the copy, moving on with it if the other device has, so a cancel at home can still
+     * take it down and the next tend sees what wasn't sent and tries again. Gives the pair as it stands now: null if it went or
+     * a Stop showing took it, `later` where global didn't say.
      */
-    async function forgetIfGone(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean | 'later'> {
-        const there = await copyIsThere(pair, identity, deps);
-        if (there === false) await dropPair(pair);
-        return there;
+    async function followCopy(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<CopyPair | null | 'later'> {
+        const place = await placeOf(pair, identity, deps);
+        if (place === 'later') return 'later';
+        if (place.up) return movedTo(pair, place);
+        await dropPair(pair);
+        return null;
     }
 
     /**
@@ -505,7 +509,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, `${POSTS_PATH}/update`, body, identity, signal)));
         if (answer === 'later') return 'later';
         if ('refused' in answer) {
-            await forgetIfGone(pair, identity, deps);
+            await followCopy(pair, identity, deps);
             return answer;
         }
         await recordSend({ ...pair, sent: JSON.stringify(fields), sentAt: Date.now(), photo: fetched?.photos.length ? firstPhoto(home) : pair.photo }, identity, deps);
@@ -736,15 +740,9 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                 // its return would post a new one. Moved on by the other device, it is this rest's: let go, it stays up with the listing
                 // off the board until that device next opens. Global not saying, the rest waits: it is the step that can't be taken back.
                 if (away && pair.sent && !pair.resting) {
-                    const place = await placeOf(pair, identity, deps);
-                    if (place === 'later') continue;
-                    if (!place.up) {
-                        await dropPair(pair);
-                        continue;
-                    }
-                    const moved = await movedTo(pair, place);
-                    if (!moved) continue;
-                    pair = moved;
+                    const followed = await followCopy(pair, identity, deps);
+                    if (!followed || followed === 'later') continue;
+                    pair = followed;
                 }
                 // Held by global's reports, or global didn't say: the copy stays as it is and the rest waits.
                 if (away && !pair.resting && await restMustWait(pair, identity, deps)) continue;

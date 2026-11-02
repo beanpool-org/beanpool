@@ -1844,6 +1844,20 @@ describe('Stop showing takes the copy down, whichever device stops it: a phone a
         expect(browser.pairs()).toEqual([]);
     }, START_MS);
 
+    it.each(kinds)('%s: an edit in the browser that fell behind follows the copy, so a removal at home there still reaches it', async (kind, make) => {
+        const { me, home, browser } = await bothTicked(`Edits ${kind}`, make);
+        await phoneMovesOn(me, home);
+        const later = await copyIdOf(home.id, me);
+        await editAtHome(me, home.id, { title: 'Edited in the browser' });
+        await browser.tendCopies(me, deps());
+        expect(browser.pairs()[0]?.copyId).toBe(later);
+        await browser.tendCopies(me, deps());
+        expect((await copyRow(later)).title).toBe('Edited in the browser');
+        expect((await signedPost(local.url, '/api/marketplace/posts/remove', { id: home.id, authorPublicKey: me.publicKey }, me)).ok).toBe(true);
+        expect(await browser.stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+    }, START_MS);
+
     it('an event: the browser missed a holiday and its end, then Stop on the browser', async () => {
         const { me, home, browser } = await bothTicked('Behind event', (who) => eventAtHome(who, 'Seed swap'));
         const [, away, back] = homeRests[3];

@@ -7,7 +7,7 @@
  * hook (utils/use-own-profile.ts) and switch notice (utils/community-switch.ts), through react-native-web in headless
  * Chromium, as e2e/peek-320.mjs draws its screens.
  *
- * The header is the tabs' own (app/(tabs)/_layout.tsx), the same over Home, Talk and Settings' Edit Profile; each is
+ * The header is the tabs' own (app/(tabs)/_layout.tsx), the same over Home, Chat and Settings' Edit Profile; each is
  * drawn under it with that tab's name as a stand-in body. My Profile is the real screen (app/public-profile.tsx), opened
  * for the member's own key with the phone-wide name as the door's name, its reads stood in for.
  *
@@ -267,7 +267,7 @@ try {
 
     const PRESET = /^data:image\/webp/;
     for (const scheme of ['light', 'dark']) {
-        for (const tab of ['Home', 'Talk', 'Edit Profile']) {
+        for (const tab of ['Home', 'Chat', 'Edit Profile']) {
             await open(`tab=${encodeURIComponent(tab)}&scheme=${scheme}`);
             await measure(`${scheme} ${tab} header on A`, async () => ((await headerPicture()) === PHOTO_A ? [] : ['the header is not A\'s photo']));
             await switchToB();

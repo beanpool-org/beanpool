@@ -335,6 +335,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const servedMissingRef = useRef<Set<string>>(new Set());
     const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
+    interface PendingWebMessage {
+        id: string;
+        conversationId: string;
+        text: string;
+        replyToId: string | null;
+        sendState: 'sending' | 'failed';
+        timestamp: string;
+        error?: string;
+        kind: 'dm' | 'group';
+    }
+    const [pendingMessages, setPendingMessages] = useState<PendingWebMessage[]>([]);
+    const sendQueueRef = useRef<Promise<void>>(Promise.resolve());
     const [showNewDm, setShowNewDm] = useState(false);
     // Who this page can name: the member directory, or on a community where people are asked for, not read whole
     // (lib/members-on-demand, the worldwide one), the cards asked for by key, as the page needs them (below).
@@ -475,12 +487,32 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const groupPhotoRefusal = openGroup && !groupLocked
         ? groupChatNotice({ nodeSaysLocked: false, seenLocked: false, chatError: openGroup.answer ? null : openGroup.error })
         : null;
+    const activePending = useMemo(() => {
+        if (!activeConv) return [];
+        const serverIds = new Set(messages.map(m => m.id));
+        return pendingMessages
+            .filter(p => p.conversationId === activeConv.id && !serverIds.has(p.id))
+            .map(p => ({
+                id: p.id,
+                conversationId: p.conversationId,
+                authorPubkey: identity.publicKey,
+                ciphertext: p.text,
+                nonce: '00000',
+                text: p.text,
+                type: 'text' as const,
+                metadata: p.replyToId ? JSON.stringify({ replyToId: p.replyToId }) : undefined,
+                timestamp: p.timestamp,
+                sendState: p.sendState,
+                error: p.error,
+            } as ApiMessage & { sendState: 'sending' | 'failed'; text: string; error?: string }));
+    }, [pendingMessages, activeConv, messages, identity.publicKey]);
     const shownMessages = useMemo(() => {
-        if (isDmThread) return dmThreadInShownOrder(messages);
+        const combined = [...messages, ...activePending];
+        if (isDmThread) return dmThreadInShownOrder(combined);
         // A group chat draws nothing until its own answer is in: never another chat's lines under its name.
         if (isGroupChat && !openGroup) return [];
-        return messages;
-    }, [messages, isDmThread, isGroupChat, openGroup]);
+        return combined;
+    }, [messages, activePending, isDmThread, isGroupChat, openGroup]);
     // The open chat's message request mode (lib/dm-requests.ts): read from the node's `request` and, for the opener, the
     // loaded lines of this chat only (never the last chat's, still in `messages` until this one's arrive): until they do,
     // the opener's is not known, rather than taken for one with no line in it yet.
@@ -491,6 +523,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (!openGroup || !groupLocked) return null;
         const m = new Map<string, GroupLineShown>();
         for (const msg of shownMessages) {
+            if ((msg as any).sendState) {
+                m.set(msg.id, {
+                    hidden: false,
+                    nodeLine: false,
+                    text: (msg as any).text ?? msg.ciphertext,
+                    name: null,
+                    nameHint: null,
+                    details: null,
+                    signer: identity.publicKey,
+                    mine: true,
+                    unattributed: false,
+                });
+                continue;
+            }
             const v = groupLineShown({ ...msg, type: msg.type ?? 'text' } as never, { locked: true, thread: openGroup.thread, me: identity.publicKey });
             if (v) m.set(msg.id, v);
         }
@@ -518,7 +564,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const lineViews = useMemo(() => {
         if (!activeConv || !isDmThread) return null;
         const ctx = dmKeyContext(activeConv, identity);
-        return checkDmThread(shownMessages.map(m => ({
+        return checkDmThread(shownMessages.filter(m => !(m as any).sendState).map(m => ({
             id: m.id, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp,
         })), ctx ? { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex } : null, ctx?.conversationId ?? activeConv.id);
     }, [shownMessages, activeConv, identity, isDmThread]);
@@ -704,7 +750,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages.length]);
+    }, [shownMessages.length, pendingMessages]);
+
+    useEffect(() => {
+        if (messages.length > 0) {
+            const serverIds = new Set(messages.map(m => m.id));
+            setPendingMessages(prev => prev.filter(p => !serverIds.has(p.id)));
+        }
+    }, [messages]);
 
     const [actionLoading, setActionLoading] = useState(false);
 
@@ -1218,6 +1271,95 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         await loadMessages(conv.id);
     }
 
+    async function performSendGroupItem(item: PendingWebMessage, conv: Conversation): Promise<void> {
+        const check = await groupSendCheck(conv);
+        if (!check) {
+            setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed', error: 'refused' } : p));
+            setDraft(prev => prev || item.text);
+            return;
+        }
+        const { plan, chat, chatErr } = check;
+        if (plan === 'readable') {
+            const { ciphertext, nonce } = encodePlaintext(item.text);
+            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined,
+                item.replyToId ? JSON.stringify({ replyToId: item.replyToId }) : undefined, item.id);
+        } else {
+            try {
+                const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+                await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
+                    groupId: groupIdKey(conv.id), text: item.text, clientId: item.id, replyToId: item.replyToId ?? null, after: newest?.id ?? null,
+                    mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
+                });
+            } catch (e) {
+                if (saidGroupRefusal(e, chat, chatErr)) {
+                    setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed', error: String(e) } : p));
+                    setDraft(prev => prev || item.text);
+                    return;
+                }
+                throw e;
+            }
+        }
+        setChatRefusal(null);
+        await loadMessages(conv.id);
+    }
+
+    async function performSendDmItem(item: PendingWebMessage, conv: Conversation): Promise<void> {
+        const route = await sendRouteOf(identity.publicKey, conv.id);
+        if (route === 'group') {
+            await performSendGroupItem(item, { ...conv, type: 'group_thread' });
+            return;
+        }
+        if (route === 'refuse') {
+            setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+            setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed' } : p));
+            setDraft(prev => prev || item.text);
+            return;
+        }
+        const line: DmLineSeal = {
+            messageId: item.id,
+            after: dmAfterReference(shownMessages),
+            replyToId: item.replyToId ?? null,
+        };
+        const { ciphertext, nonce, lineSig } = await payloadFor(item.text, conv, line);
+        const metadata = lineMetadata(item.replyToId ?? undefined, lineSig);
+        await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
+        ownLineTaken(conv.id);
+        setChatRefusal(null);
+        await loadMessages(conv.id);
+    }
+
+    async function performSendItem(item: PendingWebMessage, conv: Conversation) {
+        try {
+            if (item.kind === 'group' || conv.type === 'group_thread') {
+                await performSendGroupItem(item, conv);
+            } else {
+                await performSendDmItem(item, conv);
+            }
+        } catch (err: any) {
+            setPendingMessages(prev => prev.map(p => p.id === item.id ? { ...p, sendState: 'failed', error: err?.message } : p));
+            setDraft(prev => prev || item.text);
+            if (isDmNotLocked(err)) {
+                setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
+            } else {
+                showChatError(err, t('Failed to send message'));
+            }
+        }
+    }
+
+    function handleRetryPending(messageId: string) {
+        const item = pendingMessages.find(p => p.id === messageId);
+        if (!item || !activeConv) return;
+        setPendingMessages(prev => prev.map(p => p.id === messageId ? { ...p, sendState: 'sending', error: undefined } : p));
+        setChatRefusal(null);
+        sendQueueRef.current = sendQueueRef.current.then(async () => {
+            await performSendItem({ ...item, sendState: 'sending' }, activeConv);
+        }).catch(() => {});
+    }
+
+    function handleDiscardPending(messageId: string) {
+        setPendingMessages(prev => prev.filter(p => p.id !== messageId));
+    }
+
     /**
      * Before a line, an edit or a photo goes to a group's chat: its chat answer read again, and what may go
      * (lib/group-chat-lines.ts groupChatSendPlan). Null when nothing may, its sentence then said in place: a DM the node
@@ -1303,34 +1445,33 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function handleSend() {
         if (!draft.trim() || !activeConv) return;
-        setSending(true);
 
         const wasEditing = editingMessage;
-        try {
-            if (activeConv.type === 'group_thread') {
-                await sendInGroup(activeConv, wasEditing);
-                return;
-            }
-            // A group seen locked here, whatever the node now calls it, is sealed as a group's line or refused; with the
-            // lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts).
-            const route = await sendRouteOf(identity.publicKey, activeConv.id);
-            if (route === 'group') {
-                await sendInGroup({ ...activeConv, type: 'group_thread' }, wasEditing);
-                return;
-            }
-            if (route === 'refuse') {
-                setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
-                return;
-            }
-            // Nothing is sent, and the draft stays, when a DM can't be locked (caught below). A DM line is sealed to its
-            // message id (a new one, sent with it; an edit's own) and to the line it was written after: the newest the
-            // node has given us, or for an edit the one its line was written after.
-            const line: DmLineSeal = wasEditing
-                ? { messageId: wasEditing.id, after: lineViews?.get(wasEditing.id)?.after ?? null, replyToId: dmReplyToOf(wasEditing.metadata) ?? null }
-                : { messageId: newDmMessageId(), after: dmAfterReference(shownMessages), replyToId: replyToMessage?.id ?? null };
-            const { ciphertext, nonce, lineSig } = await payloadFor(draft.trim(), activeConv, line);
+        if (wasEditing) {
+            setSending(true);
+            try {
+                if (activeConv.type === 'group_thread') {
+                    await sendInGroup(activeConv, wasEditing);
+                    return;
+                }
+                // A group seen locked here, whatever the node now calls it, is sealed as a group's line or refused; with the
+                // lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts).
+                const route = await sendRouteOf(identity.publicKey, activeConv.id);
+                if (route === 'group') {
+                    await sendInGroup({ ...activeConv, type: 'group_thread' }, wasEditing);
+                    return;
+                }
+                if (route === 'refuse') {
+                    setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+                    return;
+                }
+                const line: DmLineSeal = {
+                    messageId: wasEditing.id,
+                    after: lineViews?.get(wasEditing.id)?.after ?? null,
+                    replyToId: dmReplyToOf(wasEditing.metadata) ?? null,
+                };
+                const { ciphertext, nonce, lineSig } = await payloadFor(draft.trim(), activeConv, line);
 
-            if (wasEditing) {
                 const prevMessages = messages;
                 const nowIso = new Date().toISOString();
                 setMessages(prev => prev.map(m => m.id === wasEditing.id ? {
@@ -1350,23 +1491,41 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     setMessages(prevMessages);
                     throw err;
                 }
-            } else {
-                const metadata = lineMetadata(replyToMessage?.id, lineSig);
-                // 1. Store locally (Server will handle Libp2p federation relay automatically)
-                await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
-                ownLineTaken(activeConv.id);
-
-                setDraft('');
-                setReplyToMessage(null);
-                setChatRefusal(null);
-                await loadMessages(activeConv.id);
+            } catch (err: any) {
+                if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
+                else showChatError(err, t('Failed to edit message'));
+            } finally {
+                setSending(false);
             }
-        } catch (err: any) {
-            if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
-            else showChatError(err, wasEditing ? t('Failed to edit message') : t('Failed to send message'));
-        } finally {
-            setSending(false);
+            return;
         }
+
+        // New typed message shows at once:
+        const text = draft.trim();
+        const replyTo = replyToMessage;
+        const conv = activeConv;
+        const messageId = newDmMessageId();
+        const timestamp = new Date().toISOString();
+
+        setDraft('');
+        setReplyToMessage(null);
+        setChatRefusal(null);
+
+        const pendingItem: PendingWebMessage = {
+            id: messageId,
+            conversationId: conv.id,
+            text,
+            replyToId: replyTo?.id ?? null,
+            sendState: 'sending',
+            timestamp,
+            kind: conv.type === 'group_thread' ? 'group' : 'dm',
+        };
+
+        setPendingMessages(prev => [...prev, pendingItem]);
+
+        sendQueueRef.current = sendQueueRef.current.then(async () => {
+            await performSendItem(pendingItem, conv);
+        }).catch(() => {});
     }
 
     /**
@@ -2403,16 +2562,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
                         const isTombstone = msg.type === 'removed' || metaObj?.removed === true;
                         const isConvenor = isGroupChat && !!openGroup?.answer?.isConvenor;
-                        const isTextEditable = isMe && !isTombstone && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
+                        const isPending = !!(msg as any).sendState;
+                        const sendState = (msg as any).sendState as 'sending' | 'failed' | undefined;
+                        const isTextEditable = !isPending && isMe && !isTombstone && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
                             (!isGroupChat || openGroup?.answer?.canPost !== false);
                         const elapsedMs = isTextEditable ? Date.now() - new Date(msg.timestamp).getTime() : 0;
                         const canEdit = isTextEditable && elapsedMs <= MESSAGE_EDIT_WINDOW_MS;
                         const editClosed = isTextEditable && elapsedMs > MESSAGE_EDIT_WINDOW_MS;
                         // Group chats and DMs, as on the phone: an enterprise chat refuses it (403). In a DM with a blocked peer the
                         // phone's canPost is false, so it offers no Delete either.
-                        const canDelete = ((isGroupChat && openGroup?.answer?.canPost !== false) || (activeConv.type === 'dm' && !isPeerBlocked)) &&
+                        const canDelete = !isPending && ((isGroupChat && openGroup?.answer?.canPost !== false) || (activeConv.type === 'dm' && !isPeerBlocked)) &&
                             isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
-                        const canRemove = isGroupChat && isConvenor && !isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
+                        const canRemove = !isPending && isGroupChat && isConvenor && !isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
 
                         const reactions: { emoji: string; author: string }[] = Array.isArray(metaObj?.reactions)
                             ? metaObj.reactions.filter((r: any) => r && typeof r === 'object' && typeof r.emoji === 'string')
@@ -2648,14 +2809,45 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     }}>
                                         {isEdited ? t('edited · {time}', { time: messageTime(msg.timestamp) }) : messageTime(msg.timestamp)}
                                         {isMe && (
-                                            <span style={{ marginLeft: '2px', color: readByPeer ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)' }} aria-label={readByPeer ? t('Read by recipient') : t('Sent', undefined, 'message status')}>
-                                                {readByPeer ? '✓✓' : '✓'}
-                                            </span>
+                                            sendState === 'sending' ? (
+                                                <span data-testid="chat-line-sending" style={{ marginLeft: '4px', opacity: 0.8 }} aria-label={t('Sending…')}>
+                                                    ◷
+                                                </span>
+                                            ) : sendState === 'failed' ? (
+                                                <span data-testid="chat-line-failed" style={{ marginLeft: '4px', color: 'var(--bp-ink-danger, #ef4444)', fontWeight: 800 }}>
+                                                    {t('! not delivered')}
+                                                </span>
+                                            ) : (
+                                                <span style={{ marginLeft: '2px', color: readByPeer ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)' }} aria-label={readByPeer ? t('Read by recipient') : t('Sent', undefined, 'message status')}>
+                                                    {readByPeer ? '✓✓' : '✓'}
+                                                </span>
+                                            )
+                                        )}
+                                        {sendState === 'failed' && (
+                                            <button
+                                                type="button"
+                                                data-testid="chat-line-retry"
+                                                onClick={(e) => { e.stopPropagation(); handleRetryPending(msg.id); }}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: isMe ? '#ffffff' : 'var(--accent)',
+                                                    textDecoration: 'underline',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 700,
+                                                    cursor: 'pointer',
+                                                    padding: '0 4px',
+                                                    marginLeft: '4px',
+                                                }}
+                                                aria-label={t('Retry')}
+                                            >
+                                                {t('Retry')}
+                                            </button>
                                         )}
                                         {/* No replies or reactions in a chat that is still a request: the opener's are
                                             refused until it is accepted, and the person it is for decides first. Nor on
                                             a deleted line: the node refuses a reaction to it (403), as the phone hides them. */}
-                                        {!inRequest && !isTombstone && <>
+                                        {!inRequest && !isTombstone && !isPending && <>
                                         <button
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); handleStartReply(msg); }}
@@ -3195,7 +3387,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 }
                             }}
                             placeholder={editingMessage ? t('Edit message...') : t('Message...')}
-                            disabled={sending}
+                            disabled={sending && !!editingMessage}
                             rows={1}
                             style={{
                                 ...inputStyle,
@@ -3211,7 +3403,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <button
                             type="button"
                             onClick={handleSend}
-                            disabled={sending || !draft.trim()}
+                            disabled={(sending && !!editingMessage) || !draft.trim()}
                             title={editingMessage ? t('Save edit') : t('Send message')}
                             style={{
                                 height: '40px',

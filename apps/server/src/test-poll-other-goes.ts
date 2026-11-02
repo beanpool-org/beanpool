@@ -166,15 +166,14 @@ async function main() {
                 `${how}: and the report never held the words or a voter`);
         }
     };
-    /** Not off: the words are where they were, its maker's or an owner's to read, and a report still waits. */
-    const wordsStay = async (p: Poll, maker: Id, how: string): Promise<void> => {
+    /** Not off: the words are where they were, an owner reads them, and a report still waits. */
+    const wordsStay = async (p: Poll, how: string): Promise<void> => {
         assert(rowOf(p.id).active === 1, `${how}: the poll is still on`);
         const lines = linesOf(p.id);
         assert(lines.length === 1 && lines[0].words === p.words && lines[0].words_removed === 0, `${how}: the words stay`);
         const byOwner = await get(`/api/marketplace/posts/${p.id}/other-answers`, owner);
         assert(byOwner.status === 200 && byOwner.body.answers?.[0]?.words === p.words && byOwner.body.answers?.[0]?.reported === true, `${how}: an owner reads the line, marked reported`);
         assert(reportsOn(p.id, 'pending') === 1, `${how}: and the report waits`);
-        void maker;
     };
 
     /** An admin removes a member only where the community doesn't vote (the operator's switch): state-engine removalVoteRefusal. */
@@ -290,42 +289,42 @@ async function main() {
         const maker = seed('MakerMoe');
         const a = await pollWithLine(maker);
         db.prepare('UPDATE posts SET active = 1 WHERE id = ?').run(a.id);
-        await wordsStay(a, maker, 'a statement that leaves it on');
+        await wordsStay(a, 'a statement that leaves it on');
         const closed = await post(`/api/marketplace/posts/${a.id}/close`, {}, maker);
         assert(closed.status === 200, `its maker closes it (${closed.status})`);
-        await wordsStay(a, maker, "a maker's close");
+        await wordsStay(a, "a maker's close");
         const b = await pollWithLine(maker);
         db.prepare('UPDATE posts SET poll_closes_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), b.id);
         closeExpiredPolls();
         assert(rowOf(b.id).status === 'completed', 'its time runs out');
-        await wordsStay(b, maker, 'a closing by time');
+        await wordsStay(b, 'a closing by time');
         const c = await pollWithLine(maker);
         const paused = await post('/api/marketplace/posts/pause', { postId: c.id, authorPublicKey: maker.pubKeyHex }, maker);
         assert(paused.status === 200 && rowOf(c.id).status === 'paused', `its maker pauses it (${paused.status})`);
-        await wordsStay(c, maker, 'a pause');
+        await wordsStay(c, 'a pause');
         const resumed = await post('/api/marketplace/posts/resume', { postId: c.id, authorPublicKey: maker.pubKeyHex }, maker);
         assert(resumed.status === 200 && rowOf(c.id).status === 'active', `and puts it back (${resumed.status})`);
-        await wordsStay(c, maker, 'a poll put back');
+        await wordsStay(c, 'a poll put back');
 
         const d = await pollWithLine(maker);
         db.prepare("UPDATE posts SET hidden_by_reports_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(d.id);
-        await wordsStay(d, maker, 'a poll hidden by reports');
+        await wordsStay(d, 'a poll hidden by reports');
         const restored = await send('POST', `/api/local/admin/posts/${d.id}/restore`, {}, adminSession);
         assert(restored.status === 200, `a moderator restores it (${restored.status} ${restored.text.slice(0, 80)})`);
-        await wordsStay(d, maker, 'a poll restored');
+        await wordsStay(d, 'a poll restored');
     }
     {
         const held = seed('HeldHal');
         const a = await pollWithLine(held);
         const suspended = await send('POST', `/api/local/admin/users/${held.pubKeyHex}/suspend`, { reason: 'Testing what a suspension leaves alone', reasonCategory: 'other' }, adminSession);
         assert(suspended.status === 200, `an admin suspends the maker (${suspended.status} ${suspended.text.slice(0, 80)})`);
-        await wordsStay(a, held, 'a suspended maker');
+        await wordsStay(a, 'a suspended maker');
 
         const done = seed('DoneDee');
         const b = await pollWithLine(done);
         await post(`/api/marketplace/posts/${b.id}/close`, {}, done);
         assert((await post('/api/member/purge', {}, done)).status === 200, 'a maker closes their poll, then deletes their account');
-        await wordsStay(b, done, "a closed poll's maker who leaves");
+        await wordsStay(b, "a closed poll's maker who leaves");
 
         const voter = seed('VoterVic');
         const maker = seed('MakerMel');

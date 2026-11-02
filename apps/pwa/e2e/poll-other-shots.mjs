@@ -172,8 +172,10 @@ async function run(browser, root, dark) {
         check((await m.page.getByTestId('poll-other-line').first().textContent()).includes('A bus on Sundays'), 'closed, the maker reads the words');
         await noSideScroll(m.page, "the maker's result");
         await shot(m.page, '5-maker-result');
+        await m.page.getByTestId('poll-other-line').first().getByRole('button', { name: 'Report' }).click({ timeout: 10000 });
+        await m.page.getByTestId('poll-other-line').first().getByText('Reported').waitFor({ timeout: 10000 });
 
-        // The owner.
+        // The owner sees which line was reported, beside Remove.
         await node.ask({ op: 'resetLimits' });
         const o = await open(browser, node.origin, owner, dark);
         await o.page.goto(`${node.origin}/app`, { waitUntil: 'load' });
@@ -181,6 +183,9 @@ async function run(browser, root, dark) {
         await o.page.getByRole('button', { name: /Read the typed answers/ }).first().click({ timeout: 10000 });
         await o.page.getByTestId('poll-other-line').first().waitFor({ timeout: 10000 });
         await o.page.getByTestId('poll-other-line').first().scrollIntoViewIfNeeded();
+        const ownerLine = await o.page.getByTestId('poll-other-line').first().textContent();
+        check(ownerLine.includes('Reported') && ownerLine.includes('Remove'), 'an owner sees which line was reported, beside Remove');
+        await noSideScroll(o.page, "the owner's panel");
         await shot(o.page, '6-owner-remove');
         for (const c of [m, t, r, o]) await c.context.close();
     } finally {

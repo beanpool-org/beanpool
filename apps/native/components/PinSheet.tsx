@@ -27,7 +27,7 @@ export function PinSheet({ visible, postId, onClose, onPinned }: PinSheetProps) 
         setSubmitting(true);
         try {
             await pinPostOnNode(postId, days);
-            onPinned?.();
+            await onPinned?.();
             onClose();
         } catch (err: any) {
             Alert.alert(t('Error'), err?.message || t('Failed to pin post'));
@@ -47,16 +47,18 @@ export function PinSheet({ visible, postId, onClose, onPinned }: PinSheetProps) 
             visible={visible}
             transparent
             animationType="fade"
-            onRequestClose={onClose}
+            onRequestClose={submitting ? undefined : onClose}
         >
-            <Pressable
-                style={styles.backdrop}
-                accessibilityRole="button"
-                accessibilityLabel={t('Close')}
-                onPress={onClose}
-            >
-                <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-                    <Text style={styles.title}>{t('Pin to the top')}</Text>
+            <View style={styles.backdrop}>
+                <Pressable
+                    style={StyleSheet.absoluteFill}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Close')}
+                    onPress={submitting ? undefined : onClose}
+                    disabled={submitting}
+                />
+                <View style={styles.sheet} accessibilityViewIsModal={true}>
+                    <Text style={styles.title} accessibilityRole="header">{t('Pin to the top')}</Text>
                     <Text style={styles.subtitle}>{t('Choose how long to pin this post to the top of the Market:')}</Text>
 
                     {submitting ? (
@@ -84,13 +86,14 @@ export function PinSheet({ visible, postId, onClose, onPinned }: PinSheetProps) 
                         style={styles.cancelBtn}
                         accessibilityRole="button"
                         accessibilityLabel={t('Cancel')}
-                        onPress={onClose}
+                        onPress={submitting ? undefined : onClose}
+                        disabled={submitting}
                         testID="pin-sheet-cancel"
                     >
                         <Text style={styles.cancelText}>{t('Cancel')}</Text>
                     </Pressable>
-                </Pressable>
-            </Pressable>
+                </View>
+            </View>
         </Modal>
     );
 }

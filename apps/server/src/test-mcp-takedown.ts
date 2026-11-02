@@ -15,13 +15,16 @@
  *      stays hidden on that stamp and its burst undo still works; the reports the takedown closed are open again in every scope, one
  *      closed another way stays closed, and reporters hear nothing. A burst undone during the hold: what its undo would have done,
  *      reports weighed. Whether a mute lifts doesn't depend on which call held the post or who made the third removal, and the count
- *      is the rule that muted them, from the last lift.
+ *      is the rule that muted them, from the last lift. Where reports hide posts, Put back weighs any stamp no standing burst holds: a
+ *      report dismissed during the hold brings its post up, one that still hides it keeps it, and a burst keeps what it hid, its
+ *      record gone or not.
  *   6. The sweep: nothing before 7 days; final at 7 days, event cancelled and its goers told, but no push for an event that ended
  *      during the hold; skips a deal; skips what was put back; a standby makes nothing final. A Child safety report waits for a
  *      person: first in the queue, its reporter told nothing, and the post left hidden past the 7 days until a person acts on it.
  *      What a person is told of a post on hold: the moderators' queue and an assistant's card carry the flag and don't promise "kept",
  *      a dismissal tells the reporter it is no longer up and doesn't count against them as kept, and Settings' line says an open
- *      Child safety report on the first days of the hold, not only past them.
+ *      Child safety report on the first days of the hold, not only past them. A Daily Pulse post a moderator removed and that was
+ *      revived is up, so it is not on hold.
  *   7. Caps: 200 a call, the owners' limit a day on its own count, and what is over comes back in `kept`, and a restart keeps the day.
  *   8. A stolen token's day undone in one call; an injected report's text changes nothing beyond one logged takedown.
  *   9. The record: an ADMIN line, an AGENT line, the owners' daily count and the sec.agent alert; `why` in no log line.
@@ -58,6 +61,7 @@ import { forgetTakedownsOf, sweepTakedowns, takedownsToday, TAKEDOWN } from './e
 import { hideTally, muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
 import { reportedPostGoneBody, reportedPostKeptBody } from './engine/moderation-notices.js';
 import { rollDueSeries } from './engine/event-series-roll.js';
+import { deactivatePulseMarketplacePost, ensurePulseMarketplacePost, rotateDailyPulse } from './daily-pulse.js';
 import { resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
 import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
 import type { AgentGrant, ToolResult } from './agent/tools.js';
@@ -165,6 +169,25 @@ async function main(): Promise<void> {
     try {
         resetAdminAuthTarpit();
         const session = ownerSessionHeaders(owner.pub), phone = ownerPhoneSessionHeaders(owner.pub);
+
+        // First, because the Daily Pulse only comes back to a quiet node (fewer than 2 listings). A moderator's removal stamps it, and its
+        // revival the same day leaves that stamp on a post everyone can see: that is not a takedown on hold, and nobody may be told it is.
+        {
+            const pulseHeaders = ownerSessionHeaders(moderator.pub);
+            const pulsePost = rotateDailyPulse().post.id as string;
+            const pulseBy = (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(pulsePost) as { author_pubkey: string }).author_pubkey;
+            const removedPulse = submitReport(rae.pub, pulseBy, 'Spam or scam', pulsePost)!.id;
+            const removal = await call('POST', `/api/local/admin/reports/${removedPulse}/action`, { headers: pulseHeaders, body: { deletePost: true } });
+            ensurePulseMarketplacePost();
+            assert(removal.status === 200 && row(pulsePost).active === 1 && !row(pulsePost).hidden_by_reports_at && !!row(pulsePost).removed_by_moderator_at,
+                `set up: a Pulse post removed by a moderator and revived the same day is up, with the stamp on (${show(removal)})`);
+            const lateReport = submitReport(goer.pub, pulseBy, 'Spam or scam', pulsePost)!.id;
+            const pulseEntry = (await call('GET', '/api/local/admin/reports?status=open&limit=500', { headers: pulseHeaders })).body?.reports?.find((r: any) => r.id === lateReport);
+            assert(pulseEntry?.postOnHold === false && pulseEntry?.postHiddenByReports === false, `a report on it doesn't say the post is on hold (${JSON.stringify([pulseEntry?.postOnHold, pulseEntry?.postHiddenByReports])})`);
+            const pulseDismissal = await call('POST', `/api/local/admin/reports/${lateReport}/dismiss`, { headers: pulseHeaders, body: {} });
+            assert(pulseDismissal.status === 200 && noticesOf(goer.pub).at(-1)?.body === reportedPostKeptBody(), `and its reporter is told it was kept, which is true (${noticesOf(goer.pub).at(-1)?.body})`);
+            deactivatePulseMarketplacePost();
+        }
 
         // ── 1. Off by default ────────────────────────────────────────────────────────────────────────
         const plain = await call('POST', '/api/local/admin/agent/grants', { headers: phone, body: { name: 'Reads only' } });
@@ -869,6 +892,92 @@ async function main(): Promise<void> {
         const nextTally = hideTally(nextPost);
         assert(nextTally.circles.length === 1, `a post on hold isn't a post kept: the reporter still counts (${JSON.stringify(nextTally)})`);
 
+        // ── 6d. A hide the hold stopped anyone weighing ───────────────────────────────────────────────
+        // A dismissal during the hold weighs nothing (recheckHiddenPost refuses), so Put back does: else the order of two people's taps decides.
+        resetAgentLimits();
+        db.prepare('DELETE FROM agent_takedown_posts').run();
+        db.prepare('DELETE FROM agent_takedowns').run();
+        process.env.NODE_PROFILE = 'global';
+        {
+            const dismissAs = (id: string) => call('POST', `/api/local/admin/reports/${id}/dismiss`, { headers: modSession, body: {} });
+            // A 12-words newcomer's post, which one report hides.
+            const hiddenByOneReport = (name: string) => {
+                const k = keypair();
+                addMember(k, name);
+                const at = new Date().toISOString();
+                db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(at, k.pub);
+                db.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)`).run(k.pub, `hash-${k.pub}`, at);
+                const id = post(`${name}, one report hid this`, k.pub);
+                const child = submitReport(circleOf(`${name}'s neighbour`).pub, k.pub, CHILD, id)!.id;
+                return { k, id, child, stamp: row(id).hidden_by_reports_at as string };
+            };
+            const openReportsOn = (id: string) => (db.prepare("SELECT COUNT(*) AS c FROM abuse_reports WHERE target_post_id = ? AND status = 'pending'").get(id) as { c: number }).c;
+
+            const first = hiddenByOneReport('Wes Words');
+            assert(!!first.stamp && !up(first.id) && statusOf(first.child) === 'pending', 'set up: one Child safety report hides a 12-words newcomer\'s post');
+            await takeDown(first.id);
+            const heldDismiss = await dismissAs(first.child);
+            assert(heldDismiss.status === 200 && row(first.id).hidden_by_reports_at === first.stamp && !up(first.id) && openReportsOn(first.id) === 0, 'a moderator dismisses it during the hold: the post stays hidden, with nothing in the queue');
+            const firstBefore = noticesOf(first.k.pub).length;
+            const firstOut = await putBack({ postId: first.id });
+            assert(firstOut.body?.back?.includes(first.id) && firstOut.body?.stillHidden?.length === 0 && !row(first.id).hidden_by_reports_at && !row(first.id).removed_by_moderator_at && up(first.id),
+                `then Put back brings it up: the reports no longer hide it (${show(firstOut)})`);
+            const firstTold = noticesOf(first.k.pub).slice(firstBefore);
+            assert(firstTold.length === 1 && firstTold[0].title === POST_BACK, `and its author hears it is back, not that it is hidden for review (${JSON.stringify(firstTold.map(n => n.title))})`);
+
+            // The two controls: the other order of the same taps, and no takedown at all.
+            const otherOrder = hiddenByOneReport('Wyn Words');
+            await takeDown(otherOrder.id);
+            const otherOut = await putBack({ postId: otherOrder.id });
+            assert(otherOut.body?.stillHidden?.includes(otherOrder.id) && row(otherOrder.id).hidden_by_reports_at === otherOrder.stamp && !up(otherOrder.id), `control: Put back first leaves it hidden, for the report still open (${show(otherOut)})`);
+            await dismissAs(otherOrder.child);
+            assert(!row(otherOrder.id).hidden_by_reports_at && up(otherOrder.id), 'and the dismissal then brings it up: both orders end the same');
+            const noTakedown = hiddenByOneReport('Wil Words');
+            await dismissAs(noTakedown.child);
+            assert(!row(noTakedown.id).hidden_by_reports_at && up(noTakedown.id), 'control: so does that dismissal with no takedown at all');
+
+            // A second report that still hides it: the takedown closed it, Put back opens it again, and it is weighed open.
+            const secondStays = hiddenByOneReport('Wren Words');
+            assert(!!secondStays.stamp, 'set up: its first report hid this one too');
+            const stillHiding = submitReport(reporters[1].pub, secondStays.k.pub, 'Spam or scam', secondStays.id)!.id;
+            await takeDown(secondStays.id);
+            await dismissAs(secondStays.child);
+            const secondBefore = noticesOf(secondStays.k.pub).length;
+            const secondOut = await putBack({ postId: secondStays.id });
+            assert(secondOut.body?.stillHidden?.includes(secondStays.id) && row(secondStays.id).hidden_by_reports_at === secondStays.stamp && !row(secondStays.id).removed_by_moderator_at && !up(secondStays.id),
+                `a second report that still hides it keeps it hidden, on its stamp (${show(secondOut)})`);
+            assert(statusOf(stillHiding) === 'pending' && statusOf(secondStays.child) === 'reviewed', 'with that report open in the queue, and the dismissed one still dismissed');
+            const secondTold = noticesOf(secondStays.k.pub).slice(secondBefore);
+            assert(secondTold.length === 1 && secondTold[0].title !== POST_BACK && /is hidden while the community's moderators look at it/.test(secondTold[0].body), `its author hears it is hidden for review, not back (${JSON.stringify(secondTold.map(n => n.title))})`);
+
+            // A burst that stands keeps what it hid, however the reports add up.
+            const standingAuthor = keypair();
+            addMember(standingAuthor, 'Bo Burst');
+            const burstKept = post('Hidden by a burst that stands', standingAuthor.pub);
+            const burstStands = hideBurst(standingAuthor.pub, [standingAuthor.pub], 'owner');
+            const burstKeptStamp = row(burstKept).hidden_by_reports_at;
+            const burstKeptReport = submitReport(reporters[2].pub, standingAuthor.pub, CHILD, burstKept)!.id;
+            await takeDown(burstKept);
+            await dismissAs(burstKeptReport);
+            const burstKeptOut = await putBack({ postId: burstKept });
+            assert(burstKeptOut.body?.stillHidden?.includes(burstKept) && row(burstKept).hidden_by_reports_at === burstKeptStamp && !up(burstKept), `a burst that stands keeps its post hidden, with no report left on it (${show(burstKeptOut)})`);
+            const burstKeptUndo = undoBurst(burstStands.id);
+            assert(burstKeptUndo.ok === true && burstKeptUndo.restored === 1 && up(burstKept), 'and its undo still brings the post up');
+
+            // Nor does a burst lose its post when its record goes (30 days on, or on a standby): no report ever hid this one, so none is weighed.
+            const pastAuthor = keypair();
+            addMember(pastAuthor, 'Bess Burst');
+            const pastBurst = post('Hidden by a burst whose record has gone', pastAuthor.pub);
+            const pastAction = hideBurst(pastAuthor.pub, [pastAuthor.pub], 'owner');
+            const pastStamp = row(pastBurst).hidden_by_reports_at;
+            db.prepare('DELETE FROM burst_action_posts WHERE action_id = ?').run(pastAction.id);
+            db.prepare('DELETE FROM burst_actions WHERE id = ?').run(pastAction.id);
+            await takeDown(pastBurst);
+            const pastOut = await putBack({ postId: pastBurst });
+            assert(pastOut.body?.stillHidden?.includes(pastBurst) && row(pastBurst).hidden_by_reports_at === pastStamp && !up(pastBurst), `a burst's post stays hidden after the burst's record has gone (${show(pastOut)})`);
+        }
+        delete process.env.NODE_PROFILE;
+
         // The pages say what happens, not what used to.
         const page = (rel: string) => fs.readFileSync(new URL(`../../../packages/beanpool-guide/operators/${rel}`, import.meta.url), 'utf8');
         const moderatorsPage = page('safety/reports-and-takedowns.md'), ownersPage = page('server/ai-assistant.md');
@@ -877,6 +986,7 @@ async function main(): Promise<void> {
         assert(/or an assistant's takedown has it on hold, they are told instead that it "is no longer up"/.test(moderatorsPage), "and the owners' Dismiss Flag line");
         assert(!ownersPage.includes('copies from other communities') && ownersPage.includes('a copy a member shows there from their home community') && ownersPage.includes("another community's listing copied here over a link between communities"), 'the owners\' page names which copies can go and which cannot');
         assert(/From the first day Settings marks that post and warns you before \*\*Remove now\*\*/.test(ownersPage), "the owners' page says the warning comes from the first day");
+        assert(/stays hidden, for the moderators, and that hide can still be undone\. The one exception is a post the reports no longer hide, because a moderator dismissed them during the 7 days: it comes up\./.test(ownersPage), "the owners' page says Put back can bring up what reports no longer hide");
         assert(!ownersPage.includes('restore a post from the reports') && /After a take-over by a standby .*nothing removes them after the 7 days, and dismissing a report doesn't bring one back\..*no screen does that by itself/.test(ownersPage), 'and says what is true after a take-over');
 
         // ── 7. Caps ──────────────────────────────────────────────────────────────────────────────────

@@ -108,11 +108,14 @@ const forNotice = (p: PostForModeration) => ({ id: p.id, title: p.title, authorP
 const isLive = (p: Pick<PostForModeration, 'active' | 'status'>) => p.active === 1 && p.status !== 'cancelled';
 
 /**
- * An assistant's takedown on hold (engine/agent-takedowns.ts): stamped removed by a moderator, and not removed yet. Read from the
- * row, not the record, because the record is this server's and the stamps travel: it holds on a standby that took over too.
- * Nobody has kept such a post: dismissing a report on it doesn't bring it back, so it is never told or counted as kept.
+ * An assistant's takedown on hold (engine/agent-takedowns.ts): hidden, stamped removed by a moderator, and not removed yet. Read from
+ * the row, not the record, because the record is this server's and the stamps travel: it holds on a standby that took over too.
+ * Nobody has kept such a post: dismissing a report on it doesn't bring it back, so it is never told or counted as kept. The hide is
+ * part of it: a takedown always sets one, and a Daily Pulse post a moderator removed can be revived the same day with its removal's
+ * stamp still on and everyone able to see it (daily-pulse.ts).
  */
-export const onHold = (p: Pick<PostForModeration, 'active' | 'status' | 'removed_by_moderator_at'>) => isLive(p) && !!p.removed_by_moderator_at;
+export const onHold = (p: Pick<PostForModeration, 'active' | 'status' | 'hidden_by_reports_at' | 'removed_by_moderator_at'>) =>
+    isLive(p) && !!p.hidden_by_reports_at && !!p.removed_by_moderator_at;
 
 export function isHiddenByReports(postId: string): boolean {
     return !!postRow(postId)?.hidden_by_reports_at;

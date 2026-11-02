@@ -7597,7 +7597,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         // Hidden by reports, waiting for a moderator (G3): restore it or remove it.
         postHiddenByReports: r.post_row_id ? !!r.post_hidden_at : null,
         // A takedown on hold: "kept" is no longer on offer, whatever a dismissal does.
-        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, removed_by_moderator_at: r.post_removed_by_moderator_at }) : null,
+        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, hidden_by_reports_at: r.post_hidden_at, removed_by_moderator_at: r.post_removed_by_moderator_at }) : null,
         // Made by an owner's AI assistant (agent/owner-posts.ts): moderators see it; members never do.
         postMadeByAssistant: r.post_row_id ? (typeof r.post_created_via === 'string' && r.post_created_via.startsWith('assistant:')) : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
@@ -7682,7 +7682,7 @@ export function dismissReport(reportId: string): boolean {
     // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed. If the
     // author had already taken it down, "kept" would be untrue: they hear it is no longer up. The same for a takedown on hold: a
     // dismissal doesn't bring it back (recheckHiddenPost refuses), here or on a standby that took over.
-    const post = report?.target_post_id ? db.prepare('SELECT active, status, removed_by_moderator_at FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
+    const post = report?.target_post_id ? db.prepare('SELECT active, status, hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
     // A hidden post whose remaining reports no longer add up to a hide is visible again (G3), before the reporter
     // is told it was kept.
     if (res.changes > 0 && report?.target_post_id) recheckHiddenPost(moderationNoticeCb, report.target_post_id);

@@ -391,7 +391,17 @@ async function main(): Promise<void> {
             assert(later?.step === 'no-dns-beanpool', `31 minutes on it no longer does (${later?.step})`);
             await P.send('registrarNames', { set: entry('pending') });
             const pending = (await P.send('reaches', {}))['gone.beanpool.org'];
-            assert(pending?.step === 'no-dns-beanpool', `a name still waiting for its record is no new name (${pending?.step})`);
+            assert(pending?.step === 'awaiting-approval', `a name waiting for approval has its own step (${pending?.step})`);
+            assert(pending?.nextStep === 'Awaiting approval by the BeanPool project. It moves over by itself once approved.',
+                `and words that say it moves over once approved (${pending?.nextStep})`);
+            await P.send('registrarNames', { set: entry('paused') });
+            const paused = (await P.send('reaches', {}))['gone.beanpool.org'];
+            assert(paused?.step === 'stopped' && paused?.nextStep === 'Stopped by the address service. Ask the BeanPool project.',
+                `paused by registrar: stopped (${paused?.step})`);
+            await P.send('registrarNames', { set: entry('blocked') });
+            const blocked = (await P.send('reaches', {}))['gone.beanpool.org'];
+            assert(blocked?.step === 'stopped' && blocked?.nextStep === 'Stopped by the address service. Ask the BeanPool project.',
+                `blocked by registrar: stopped (${blocked?.step})`);
             // An old node: the name stored as its address, not yet on the record, which stamps such a name as made now.
             await P.send('registrarNames', { set: [], publicAddress: { name: 'gone', hostname: 'gone.beanpool.org', status: 'live' } });
             const stored = (await P.send('reaches', {}))['gone.beanpool.org'];

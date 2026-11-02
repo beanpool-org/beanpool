@@ -3947,5 +3947,8 @@
   "Message not delivered": "Сообщение не доставлено",
   "Stop taking questions": "Больше не принимать вопросы",
   "on the global community": "в глобальном сообществе",
-  "Open their requests there": "Открыть их запросы там"
+  "Open their requests there": "Открыть их запросы там",
+  "Previous month": "Предыдущий месяц",
+  "Next month": "Следующий месяц",
+  "Event · {from}": "Событие · {from}"
 }

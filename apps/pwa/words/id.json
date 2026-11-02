@@ -3560,5 +3560,8 @@
   "Message not delivered": "Pesan tidak terkirim",
   "Stop taking questions": "Berhenti menerima pertanyaan",
   "on the global community": "di komunitas global",
-  "Open their requests there": "Buka permintaan mereka di sana"
+  "Open their requests there": "Buka permintaan mereka di sana",
+  "Previous month": "Bulan sebelumnya",
+  "Next month": "Bulan berikutnya",
+  "Event · {from}": "Acara · {from}"
 }

@@ -3688,5 +3688,8 @@
   "Message not delivered": "Το μήνυμα δεν παραδόθηκε",
   "Stop taking questions": "Σταμάτα να δέχεσαι ερωτήσεις",
   "on the global community": "στην παγκόσμια κοινότητα",
-  "Open their requests there": "Άνοιξε τα αιτήματά τους εκεί"
+  "Open their requests there": "Άνοιξε τα αιτήματά τους εκεί",
+  "Previous month": "Προηγούμενος μήνας",
+  "Next month": "Επόμενος μήνας",
+  "Event · {from}": "Εκδήλωση · {from}"
 }

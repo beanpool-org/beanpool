@@ -3689,5 +3689,8 @@
   "Message not delivered": "Mesaj iletilmedi",
   "Stop taking questions": "Soru kabul etmeyi durdur",
   "on the global community": "küresel toplulukta",
-  "Open their requests there": "İsteklerini orada aç"
+  "Open their requests there": "İsteklerini orada aç",
+  "Previous month": "Önceki ay",
+  "Next month": "Sonraki ay",
+  "Event · {from}": "Etkinlik · {from}"
 }

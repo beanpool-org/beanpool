@@ -3689,5 +3689,8 @@
   "Message not delivered": "Nachricht nicht zugestellt",
   "Stop taking questions": "Keine Fragen mehr annehmen",
   "on the global community": "in der globalen Community",
-  "Open their requests there": "Ihre Anfragen dort öffnen"
+  "Open their requests there": "Ihre Anfragen dort öffnen",
+  "Previous month": "Vorheriger Monat",
+  "Next month": "Nächster Monat",
+  "Event · {from}": "Veranstaltung · {from}"
 }

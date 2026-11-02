@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startServer, launch, openSettings, settle, horizontalOverflow, boxOverflow } from './harness.mjs';
+import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow } from './harness.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = process.argv[2] ? path.resolve(process.argv[2]) : path.join(SCRIPT_DIR, 'screenshots/addresses');
@@ -187,6 +187,27 @@ try {
         await said.waitFor({ timeout: 5000 });
         if (view.width === 320) await noOverflow(page, 'the paused answer at 320 px');
         await shoot(said, `control-make-main-paused-answer-${view.label}`);
+        await context.close();
+    }
+
+    // An admin on a node with no address: no word of a button only an owner has.
+    for (const view of VIEWS) {
+        const { context, page } = await openSettings(browser, origin, {
+            ...view, screen: OPEN.screen, colorScheme: 'dark', signedIn: false, handoffRole: 'admin', hash: `#handoff=${'ab'.repeat(16)}`,
+            overrides: {
+                '/api/local/admin/app-addresses': (orig) => ({ ...orig, primaryAddress: null, named: false, addresses: [], unconfirmed: [], heldBack: [] }),
+                '/api/local/admin/public-address/status': () => ({ success: true, status: 'none' }),
+            },
+        });
+        await page.waitForSelector('main', { timeout: 20000 });
+        await settle(page);
+        await selectSubTab(page, 'network');
+        await page.waitForSelector('[data-testid="addresses-panel"]', { timeout: 10000 });
+        await settle(page);
+        await page.addStyleTag({ content: 'header { position: static !important; }' });
+        const none = page.getByTestId('public-address-none');
+        if ((await none.textContent()).includes('Add an address')) problems.push(`an admin at ${view.label} is told to press Add an address`);
+        await shoot(none, `control-admin-no-address-${view.label}`);
         await context.close();
     }
 } finally {

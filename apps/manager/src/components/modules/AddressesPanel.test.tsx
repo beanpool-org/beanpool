@@ -943,8 +943,9 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
     it('a name that is main only through the owner list keeps Remove and says so; Release stays off while the community lives there', async () => {
         stubNode({ ...mockReport, primaryAddress: OLD_NAME.address, addresses: [OLD_NAME] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
+        const remove = await screen.findByTestId('remove-btn-old-byron.beanpool.org');
         expect(screen.queryByTestId('release-btn-old-byron.beanpool.org')).not.toBeInTheDocument();
-        fireEvent.click(await screen.findByTestId('remove-btn-old-byron.beanpool.org'));
+        fireEvent.click(remove);
         const dialog = await screen.findByRole('alertdialog');
         expect(dialog).toHaveTextContent("It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising");
     });

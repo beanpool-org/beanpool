@@ -209,6 +209,15 @@ export const BRAND_COLOURS = {
          */
         info: themed(BLUE_600, BLUE_300),
     },
+    /**
+     * Lines drawn on a map, never words. `ring` is a community's area (map-area-ring.ts): the two themes are picked apart
+     * (Marty, 2 Nov: "make sure its visible - but not overly visible on dark map"). In light a deep amber that is easy to
+     * find on land, parks and water, where the old amber-500 was 2:1. In dark a muted amber that shows on the land and stays
+     * under the map's own labels. A map's theme is its own, so read it with the map's, not the app's: areaRingColour.
+     */
+    map: {
+        ring: themed(AMBER_800, '#d4a24e'),
+    },
 } as const satisfies {
     readonly [role: string]: FillRole | { readonly [name: string]: ChipRole } | { readonly [name: string]: Themed };
 };
@@ -266,6 +275,16 @@ export const WEB_ONLY_INKS: readonly string[] = ['info'];
  * web draws it from the `--bp-deal-<name>-wash` variable brandCssVariableMap() writes.
  */
 export const DEAL_TINT_ALPHA = 0.4;
+
+/**
+ * What a line on a map is drawn over. Light: land, road, park and water on Google's light map, as near as its default style
+ * gives them, then OSM's land, water, forest and streets, the only map the web has. Dark: the phone's dark map, the land and
+ * water of apps/native/utils/map-scheme.ts, whose test holds these to it.
+ */
+export const MAP_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
+    light: ['#f5f5f5', '#ffffff', '#c8e6c9', '#aadaff', '#f2efe9', '#aad3df', '#add19e', '#e0dfdf'],
+    dark: ['#414e61', '#0f2f4d'],
+};
 
 /** Roles allowed 3.0 instead of 4.5 because their words are always 24 px or larger (WCAG "large text"). None today. */
 export const LARGE_TEXT_ROLES: readonly string[] = [];
@@ -377,7 +396,8 @@ export function brandContrastPairs(): BrandContrastPair[] {
                     const grounds = WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS[theme] : INK_GROUNDS[theme];
                     for (const ground of grounds) add(theme, `ink.${name}`, `ink / ${ground}`, ink[theme], ground);
                 }
-            } else {
+            } else if (role !== 'map') {
+                // A line on a map is not words: __tests__/map-area-ring.test.ts judges it on MAP_GROUNDS.
                 const fill = node as FillRole;
                 add(theme, role, 'on / fill', fill.on[theme], fill.fill[theme]);
                 add(theme, role, 'on / hover', fill.on[theme], fill.hover[theme]);

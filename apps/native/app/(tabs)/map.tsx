@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, useReducer } from 'react';
 import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, Pressable, Image as RNImage, Linking, DeviceEventEmitter, Animated, PixelRatio, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
+import MapView, { Marker, PROVIDER_DEFAULT } from '../../components/Map';
+import { MapAreaRing } from '../../components/MapAreaRing';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { STACK_LIST_CLOSED, settleStackList, stackDropped, stackRestWatch, stackShut, stackTapped, t, upperCase, type StackListState } from '@beanpool/core';
+import { STACK_LIST_CLOSED, settleMapStop, stackDropped, stackRestWatch, stackShut, stackTapped, t, upperCase, type StackListState } from '@beanpool/core';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts } from '../../utils/db';
@@ -397,13 +398,16 @@ export default function MapScreen() {
 
     /** The map as the list last needs it: the wait below reads what is true when it ends, not when it began. */
     const stackFrame = { width: CLUSTER_WINDOW.width, height: mapAreaH || CLUSTER_WINDOW.height };
-    const atRest = useRef({ region: currentRegion, frame: stackFrame, blocked: false });
-    atRest.current = { region: currentRegion, frame: stackFrame, blocked: !!selectedPostPreview || categoryPanel.open };
-    // The list opens and closes by itself only when the map has stopped (core's settleStackList).
+    const atRest = useRef({ region: currentRegion, frame: stackFrame, blocked: false, card: null as any, list: stackList });
+    atRest.current = { region: currentRegion, frame: stackFrame, blocked: categoryPanel.open, card: selectedPostPreview, list: stackList };
+    // The list opens and closes by itself only when the map has stopped, and a card left open from somewhere else gives way to it (core's settleMapStop).
     const stackRest = useMemo(() => stackRestWatch(() => {
-        const { region, frame, blocked } = atRest.current;
+        const { region, frame, blocked, card, list } = atRest.current;
         if (!clusterIndex.current) return;
-        setStackList((list) => settleStackList(list, mapRestOf(clusterIndex.current, region, CLUSTER_WINDOW, frame, blocked || !mapFocused.current)));
+        const pin = card ? { latitude: Number(card.lat), longitude: Number(card.lng) } : null;
+        const settled = settleMapStop(list, mapRestOf(clusterIndex.current, region, CLUSTER_WINDOW, frame, blocked || !mapFocused.current, pin));
+        setStackList(settled.list);
+        if (settled.closeCard) setSelectedPostPreview(null);
     }), []);
     useEffect(() => stackRest.moving, [stackRest]);
 
@@ -607,15 +611,9 @@ export default function MapScreen() {
                         );
                     })}
 
-                    {/* Service radius circle overlay */}
+                    {/* The community's area: a dashed line round its edge, no fill. */}
                     {nodeRadius && nodeRadius.radiusKm > 0 && (
-                        <Circle
-                            center={{ latitude: nodeRadius.lat, longitude: nodeRadius.lng }}
-                            radius={nodeRadius.radiusKm * 1000}
-                            strokeColor="#f59e0b"
-                            fillColor="rgba(245, 158, 11, 0.06)"
-                            strokeWidth={2}
-                        />
+                        <MapAreaRing area={nodeRadius} darkMap={isDarkMap} />
                     )}
                 </MapView>
             ) : (

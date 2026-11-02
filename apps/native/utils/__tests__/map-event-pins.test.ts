@@ -40,7 +40,10 @@ const maps = vi.hoisted(() => ({
     moving: () => {},
     /** A tap on the bare map, past any marker. */
     bareTap: (() => {}) as () => void,
+    /** What the community's area was drawn with, each time. */
+    rings: [] as Array<Record<string, any>>,
 }));
+vi.mock('react-native-maps', () => ({ Polyline: (props: Record<string, any>) => { maps.rings.push(props); return null; } }));
 /** The map's own `sync_data_updated` listener. */
 const sync = vi.hoisted(() => ({ fire: () => {} }));
 /** Every off-screen capture: the slot's own element, and the file it "wrote". */
@@ -179,7 +182,7 @@ vi.mock('../db', () => ({ getPosts: async () => posts.now }));
 import MapScreen from '../../app/(tabs)/map';
 import { buildVariantList, EVENT_PIN, PIN_ANCHOR, pinCacheKey } from '../../components/UnifiedMapPin';
 import { POST_CATEGORIES, categoryEmoji } from '../../constants/categories';
-import { MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS } from '@beanpool/core';
+import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS } from '@beanpool/core';
 import { CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
 import { CLUSTER_CAP_ZOOM, LANDING_MARGIN_ZOOM, MARKER_Z, clusterZoomAt, clusterZoomOf, planBubbleTap, type MapRegion } from '../map-stack';
 import { eventPinCard } from '../events';
@@ -857,6 +860,121 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             await settle(2);
             await stopAt({ ...CAP, latitude: AT.lat + 0.0001 });
             expect(heading()).toBeNull();
+        });
+
+        describe("with a pin's card up (Marty, 2 Nov, on 1.2.89)", () => {
+            const tapPin = async (p: { lat: number; lng: number }) => { await act(async () => { markerAt(p)!.click(); }); await settle(2); };
+            const cardOpen = () => (host.textContent ?? '').includes('View event');
+            /** About 1.1 km north of the stack: a long way off the view at the cap. */
+            const away = () => ev('away', metresNorth(1100), AT.lng);
+            /** About 60 m east of the stack: its own pin at the cap, and the stack still near the middle with this pin centred. */
+            const beside = () => ev('beside', AT.lat, AT.lng + 0.0006);
+
+            it.each(['android', 'ios'] as const)("%s: a card left open from somewhere else closes, and the list opens", async (platform) => {
+                os.now = platform;
+                const far = away();
+                posts.now = [...hall(), far];
+                await drawMap();
+                await pastFirstNudge();
+                await stopAt({ ...CAP, latitude: far.lat });
+                await tapPin(far);
+                expect(cardOpen()).toBe(true);
+                expect(heading()).toBeNull();
+                await stopAt(CAP);
+                expect(heading()).toBe('3 at this spot');
+                expect(cardOpen()).toBe(false);
+            });
+
+            it.each(['android', 'ios'] as const)('%s: a card opened at this spot stays when the map settles', async (platform) => {
+                os.now = platform;
+                const pin = beside();
+                posts.now = [...hall(), pin];
+                await drawMap();
+                await pastFirstNudge();
+                await stopAt(CAP);
+                expect(heading()).toBe('3 at this spot');
+                await tapPin(pin);
+                expect(cardOpen()).toBe(true);
+                // Google's map centres on a tapped marker, so the tap itself ends in a stop, with the stack still near the middle.
+                await stopAt(platform === 'android' ? { ...CAP, longitude: pin.lng } : CAP);
+                expect(cardOpen()).toBe(true);
+                expect(heading()).toBeNull();
+            });
+
+            it('a card left open stays while nothing here qualifies', async () => {
+                const far = away();
+                posts.now = [...hall(), far];
+                await drawMap();
+                await stopAt({ ...CAP, latitude: far.lat });
+                await tapPin(far);
+                await stopAt(zoomedOut);
+                expect(cardOpen()).toBe(true);
+                expect(heading()).toBeNull();
+            });
+
+            it("a ✕'d stack still wins over a card left open", async () => {
+                const far = away();
+                posts.now = [...hall(), far];
+                await drawMap();
+                await stopAt(CAP);
+                await closeList();
+                await stopAt({ ...CAP, latitude: AT.lat + 0.0001 });
+                await act(async () => { maps.regionChanged({ ...CAP, latitudeDelta: 0.05, longitudeDelta: 0.03 }); });
+                await settle(2);
+                await tapPin(far);
+                expect(cardOpen()).toBe(true);
+                await stopAt(CAP);
+                expect(cardOpen()).toBe(true);
+                expect(heading()).toBeNull();
+            });
+
+            it('a post open over the map still wins: nothing moves behind it', async () => {
+                const far = away();
+                posts.now = [...hall(), far];
+                await drawMap();
+                await stopAt({ ...CAP, latitude: far.lat });
+                await tapPin(far);
+                await act(async () => { for (const f of focus.effects) f.cleanup?.(); });
+                await stopAt(CAP);
+                expect(cardOpen()).toBe(true);
+                expect(heading()).toBeNull();
+                await act(async () => { for (const f of focus.effects) f.cleanup = f.cb(); });
+                await settle(2);
+            });
+        });
+
+        describe("the community's area (Marty, 2 Nov: no fill, a dashed line, on both map themes)", () => {
+            const ring = () => maps.rings[maps.rings.length - 1];
+            const drawWithArea = async () => {
+                focus.anchor = 'https://node.example';
+                vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ serviceRadius: { lat: AT.lat, lng: AT.lng, radiusKm: 5 } }) })));
+                posts.now = hall();
+                await drawMap();
+                await settle();
+                vi.unstubAllGlobals();
+            };
+
+            it('is a closed, dashed line that takes no tap, and the library leaves it out of the clustering', async () => {
+                await drawWithArea();
+                const { coordinates, lineDashPattern, lineCap, tappable, onPress, fillColor } = ring();
+                expect(coordinates[coordinates.length - 1]).toEqual(coordinates[0]);
+                expect(coordinates.length).toBeGreaterThan(300);
+                // Round caps turn every dash into a dot on Android.
+                expect(lineCap).toBe('butt');
+                expect(lineDashPattern.length).toBe(2);
+                expect(tappable).toBe(false);
+                expect(onPress).toBeUndefined();
+                expect(fillColor).toBeUndefined();
+                expect(bubbles().map((b) => b.count)).toEqual([3]);
+            });
+
+            it('wears the map\'s colour, not the app\'s: the moon darkens the map in a light app, and the ring with it', async () => {
+                await drawWithArea();
+                expect(ring().strokeColor).toBe(BRAND_COLOURS.map.ring.light);
+                await act(async () => { host.querySelector<HTMLElement>('[aria-label="Toggle dark mode"]')!.click(); });
+                await settle(2);
+                expect(ring().strokeColor).toBe(BRAND_COLOURS.map.ring.dark);
+            });
         });
 
         it('a tap on the bubble opens it after ✕, at any zoom', async () => {

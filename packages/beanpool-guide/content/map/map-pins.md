@@ -33,7 +33,7 @@ If the pins are on one spot, or too close together for that zoom to part them, t
 
 Tap a row to open that post. The list takes the bottom third of the map, with the circle still in view above it. Tap **✕** or the map to close it.
 
-You don't have to tap. If you zoom in as far as a tap would take you and a circle that can't part is near the middle of the map, its list opens by itself once the map stops moving. It closes by itself when you zoom out or move the circle away. If you closed it, it stays closed until you have moved away from that spot.
+You don't have to tap. If you zoom in as far as a tap would take you and a circle that can't part is near the middle of the map, its list opens by itself once the map stops moving. It closes by itself when you zoom out or move the circle away. If you closed it, it stays closed until you have moved away from that spot. A card left open from a pin that is no longer in view closes to make way for the list. A card from a pin you can still see stays.
 
 ## Filters
 
@@ -51,7 +51,7 @@ In the web app the map has only the event date chips: **Today**, **This weekend*
 - The target: show where you are. The first time, the app asks for permission to use your location.
 - **+** and **−**: zoom.
 
-The amber circle shows the area your community serves.
+The dashed line shows the area your community serves.
 
 ## Adding a post from the map
 

@@ -133,13 +133,16 @@ function pointIn(region: MapRegion, frame: MapFrame, longitude: number, latitude
     };
 }
 
-/** What core's settleStackList needs to know about a map that has stopped. */
-export function mapRestOf(index: ClusterIndex, region: MapRegion, win: WindowSize, frame: MapFrame, blocked: boolean): MapRest {
+/** What core's settleMapStop needs to know about a map that has stopped. `card` is the place of the pin whose card is open. */
+export function mapRestOf(index: ClusterIndex, region: MapRegion, win: WindowSize, frame: MapFrame, blocked: boolean, card: MapPoint | null = null): MapRest {
     const bubbles = bubblesOf(index, region, win).map(({ cluster, leaves }): StackBubble => ({
         keys: leaves.map((leaf) => leaf.properties.post.id),
         ...pointIn(region, frame, cluster.geometry.coordinates[0], cluster.geometry.coordinates[1]),
     }));
-    return { view: frame, bubbles, atCap: clusterZoomAt(region, win) >= CLUSTER_CAP_ZOOM, blocked };
+    return {
+        view: frame, bubbles, atCap: clusterZoomAt(region, win) >= CLUSTER_CAP_ZOOM, blocked,
+        card: card && pointIn(region, frame, card.longitude, card.latitude),
+    };
 }
 
 /** The region that lifts a tapped bubble clear of the list; null when it is already in view above it. */

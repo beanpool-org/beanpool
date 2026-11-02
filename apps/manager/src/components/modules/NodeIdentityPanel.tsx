@@ -5,7 +5,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, fetchDiagnostics, fetchNodePrivatePreview } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
-import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
+import { areaRingLeafletStyle, createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
@@ -279,11 +279,7 @@ export function NodeIdentityPanel({
                     try {
                         const c = L.circle(pos, {
                             radius: radiusKm * 1000,
-                            color: '#f59e0b',
-                            fillColor: '#f59e0b',
-                            fillOpacity: 0.1,
-                            weight: 2,
-                            dashArray: '6 4',
+                            ...areaRingLeafletStyle(),
                         }).addTo(map);
                         circleRef.current = c;
                     } catch {}

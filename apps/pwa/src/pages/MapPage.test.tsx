@@ -5,7 +5,7 @@ import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import L from 'leaflet';
-import { MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
+import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -761,12 +761,48 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
                 expect(listOpen()).toBeTruthy();
             });
 
-            it('does not open over a pin\'s card', async () => {
+            it('does not open over a pin\'s card opened at this spot: the tap\'s own stop leaves the card', async () => {
                 await drawMap();
                 await act(async () => { pinOf('Repair café').listeners.click(); });
                 await stop([stackAt()], MAP_TAP_CAP_ZOOM);
                 expect(listOpen()).toBeNull();
                 expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+            });
+
+            describe('with a card left open from somewhere else (Marty, 2 Nov)', () => {
+                /** The card's pin has gone past the top of the view; the bubble is near the middle. */
+                const leftBehind = () => mapMock().latLngToContainerPoint.mockImplementation((at: unknown) => (Array.isArray(at) ? { x: 160, y: -400 } : { x: 160, y: 300 }));
+                afterEach(() => { mapMock().latLngToContainerPoint.mockImplementation(() => ({ x: 160, y: 300 })); });
+
+                it('the card closes and the list opens', async () => {
+                    await drawMap();
+                    await act(async () => { pinOf('Repair café').listeners.click(); });
+                    expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+                    leftBehind();
+                    await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                    expect(screen.queryByTestId('map-preview-card')).toBeNull();
+                    expect(listOpen()).toBeTruthy();
+                });
+
+                it('the card stays while nothing here qualifies', async () => {
+                    await drawMap();
+                    await act(async () => { pinOf('Repair café').listeners.click(); });
+                    leftBehind();
+                    await stop([stackAt()], MAP_TAP_CAP_ZOOM - 1);
+                    expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+                    expect(listOpen()).toBeNull();
+                });
+
+                it("a ✕'d stack still wins", async () => {
+                    await drawMap();
+                    await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                    fireEvent.click(within(listOpen()!).getByRole('button', { name: 'Close' }));
+                    await act(async () => { pinOf('Repair café').listeners.click(); });
+                    leftBehind();
+                    await stop([stackAt()], MAP_TAP_CAP_ZOOM);
+                    expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+                    expect(listOpen()).toBeNull();
+                });
             });
 
             it('takes the stack nearest the middle when two qualify', async () => {
@@ -1414,6 +1450,11 @@ describe('MapPage: where the map opens (no hard-coded town)', () => {
         const { queryByTestId } = render(<MapPage identity={mockIdentity} />);
         await waitFor(() => expect(mapInstance().fitBounds).toHaveBeenCalledTimes(1));
         expect(L.circle).toHaveBeenCalledWith([-37.06, 144.22], expect.objectContaining({ radius: 10_000 }));
+        // The area is a dashed line and nothing else (Marty, 2 Nov: "no fill as it makes the map look yellow"), and takes no taps.
+        const ring = (L.circle as any).mock.calls[0][1];
+        expect(ring).toMatchObject({ fill: false, dashArray: '8 5', color: BRAND_COLOURS.map.ring.light, interactive: false });
+        expect(ring).not.toHaveProperty('fillColor');
+        expect(ring).not.toHaveProperty('fillOpacity');
         expect(mapInstance().fitBounds.mock.calls[0][0]).toEqual({ circleBoundsOf: [-37.06, 144.22], radius: 10_000 });
         await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalled());
         await act(async () => {});

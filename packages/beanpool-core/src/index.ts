@@ -97,6 +97,7 @@ export * from './enterprise-pledge.js';
 export * from './needs-you.js';
 export * from './market-fill.js';
 export * from './map-stack.js';
+export * from './map-area-ring.js';
 export * from './refresh-gate.js';
 export * from './dm-requests.js';
 export * from './community-shape-card.js';

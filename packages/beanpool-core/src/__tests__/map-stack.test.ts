@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-    MAP_TAP_CAP_ZOOM, STACK_CLEARANCE_PX, STACK_LIST_CLOSED, STACK_REST_MS, bubbleLandingZoom, bubbleTap, orderStack, settleStackList,
+    MAP_TAP_CAP_ZOOM, STACK_CLEARANCE_PX, STACK_LIST_CLOSED, STACK_REST_MS, bubbleLandingZoom, bubbleTap, orderStack, settleMapStop, settleStackList,
     stackDropped, stackHeading, stackLift, stackListTop, stackRestWatch, stackShut, stackTapped, type MapRest, type StackBubble, type StackListState,
 } from '../map-stack.js';
 
@@ -15,6 +15,63 @@ describe('the list opening by itself when the map stops', () => {
 
     it('opens for a stack near the middle at the cap, with no tap', () => {
         expect(open()).toEqual({ open: HALL, byTap: false, shut: null });
+    });
+
+    describe("with a pin's card open (Marty, 2 Nov: \"a card ... up from a pin somewhere else\")", () => {
+        const LEFT_BEHIND = { x: 2400, y: -900 };
+        const HERE = { x: 240, y: 300 };
+
+        it('a card left open from somewhere else closes, and the list opens', () => {
+            expect(settleMapStop(STACK_LIST_CLOSED, rest([stack(HALL)], { card: LEFT_BEHIND })))
+                .toEqual({ list: { open: HALL, byTap: false, shut: null }, closeCard: true });
+        });
+
+        it('a pin off any one edge of the view has left it', () => {
+            for (const card of [{ x: -1, y: 300 }, { x: 321, y: 300 }, { x: 160, y: -1 }, { x: 160, y: 601 }]) {
+                expect(settleMapStop(STACK_LIST_CLOSED, rest([stack(HALL)], { card })).closeCard, JSON.stringify(card)).toBe(true);
+            }
+        });
+
+        it('a card opened at this spot stays, wherever on the view its pin is', () => {
+            // The last two are under where the card comes up, and on the very edge: a member can tap either.
+            for (const card of [HERE, { x: 160, y: 300 }, { x: 160, y: 590 }, { x: 0, y: 600 }]) {
+                expect(settleMapStop(STACK_LIST_CLOSED, rest([stack(HALL)], { card })), JSON.stringify(card)).toEqual({ list: STACK_LIST_CLOSED, closeCard: false });
+            }
+        });
+
+        it('a card left open stays when nothing here qualifies: above the cap, off the middle, or no stack', () => {
+            for (const stopped of [rest([stack(HALL)], { atCap: false }), rest([stack(HALL, { x: 20, y: 300 })]), rest([])]) {
+                const { list, closeCard } = settleMapStop(STACK_LIST_CLOSED, { ...stopped, card: LEFT_BEHIND });
+                expect(closeCard).toBe(false);
+                expect(list.open).toBeNull();
+            }
+        });
+
+        it("a ✕'d stack still wins: the card stays and the list stays closed", () => {
+            const shut = stackShut(open());
+            const { list, closeCard } = settleMapStop(shut, rest([stack(HALL)], { card: LEFT_BEHIND }));
+            expect(closeCard).toBe(false);
+            expect(list).toEqual(shut);
+        });
+
+        it('leaving a ✕\'d stack with a card up ends the ✕, as it does with none', () => {
+            const away = settleMapStop(stackShut(open()), rest([], { card: LEFT_BEHIND }));
+            expect(away.list.shut).toBeNull();
+            expect(settleMapStop(away.list, rest([stack(HALL)], { card: LEFT_BEHIND })).list.open).toEqual(HALL);
+        });
+
+        it('an open post or the category panel still wins: nothing moves, card or list', () => {
+            for (const card of [LEFT_BEHIND, HERE]) {
+                expect(settleMapStop(STACK_LIST_CLOSED, rest([stack(HALL)], { card, blocked: true }))).toEqual({ list: STACK_LIST_CLOSED, closeCard: false });
+            }
+        });
+
+        it('with no card it is the rule it always was', () => {
+            for (const card of [undefined, null]) {
+                expect(settleMapStop(STACK_LIST_CLOSED, rest([stack(HALL)], { card }))).toEqual({ list: open(), closeCard: false });
+            }
+            expect(settleMapStop(open(), rest([stack(HALL)], { atCap: false })).list.open).toBeNull();
+        });
     });
 
     it('does not open above the cap: there a stack is a bubble among the town\'s, and a tap still opens it', () => {

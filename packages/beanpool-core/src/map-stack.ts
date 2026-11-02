@@ -102,8 +102,10 @@ export interface MapRest {
      * cap by definition. Above the cap a stack is a bubble among the town's, and stays one until it is tapped.
      */
     atCap: boolean;
-    /** A post, a pin's card, the category panel or the composer is open. They win: nothing opens or closes under them. */
+    /** A post, the category panel or the composer is open. They win: nothing opens or closes under them. */
     blocked: boolean;
+    /** The pin of the card that is open, in px from the view's top left, on the view or not. Null or absent with no card. */
+    card?: { x: number; y: number } | null;
 }
 
 export interface StackListState {
@@ -154,8 +156,8 @@ function aboveList(b: StackBubble, view: MapFrame): boolean {
     return b.x >= 0 && b.x <= view.width && b.y >= 0 && b.y <= stackListTop(view);
 }
 
-function onView(b: StackBubble, view: MapFrame): boolean {
-    return b.x >= 0 && b.x <= view.width && b.y >= 0 && b.y <= view.height;
+function onView(at: { x: number; y: number }, view: MapFrame): boolean {
+    return at.x >= 0 && at.x <= view.width && at.y >= 0 && at.y <= view.height;
 }
 
 /**
@@ -196,6 +198,23 @@ export function settleStackList(state: StackListState, rest: MapRest): StackList
         if (stays && (state.byTap || nearMiddle(mine!, view) || !nearest || sharesPin(nearest.keys, open))) return { ...state, shut };
     }
     return nearest ? { open: nearest.keys, byTap: false, shut } : { open: null, byTap: false, shut };
+}
+
+/**
+ * What the map stopping does to the list and to a pin's card. Marty, 2 Nov, on 1.2.89: "if a card is alrady up from a pin
+ * somewhere else and you move to and zoom in on the cluster it doesnt bring up the events list."
+ *
+ * A card whose pin has left the view was left open from somewhere else: when a list opens here, the card closes for it. A
+ * card whose pin is on the view belongs to this spot and stays. That has to be the pin's place and not whether the map moved,
+ * because a tap on a pin moves the map itself, Google's map on the phone and the web's setView alike, and a member can tap a
+ * pin under where the card comes up, so nothing narrower than the whole view keeps every card a member just opened.
+ *
+ * A card elsewhere stays when no list opens: a stack still has to qualify, and a ✕'d one still does not. `blocked` wins over all of it.
+ */
+export function settleMapStop(state: StackListState, rest: MapRest): { list: StackListState; closeCard: boolean } {
+    if (rest.card && !rest.blocked && onView(rest.card, rest.view)) return { list: state, closeCard: false };
+    const list = settleStackList(state, rest);
+    return { list, closeCard: !!rest.card && !rest.blocked && list.open !== null };
 }
 
 /**

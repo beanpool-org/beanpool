@@ -14,7 +14,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, Alert, ScrollView, TextInput, Pressable, Dimensions, Image as RNImage, Keyboard, Linking, Modal, FlatList, Platform } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import { MapAreaRing } from '../components/MapAreaRing';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -697,13 +698,7 @@ export default function NewListingScreen() {
                     onLongPress={handleMapPress}
                 >
                     {nodeRadius && nodeRadius.radiusKm > 0 && (
-                        <Circle
-                            center={{ latitude: nodeRadius.lat, longitude: nodeRadius.lng }}
-                            radius={nodeRadius.radiusKm * 1000}
-                            strokeColor={palette.amber500}
-                            fillColor="rgba(245, 158, 11, 0.06)"
-                            strokeWidth={2}
-                        />
+                        <MapAreaRing area={nodeRadius} darkMap={theme === 'dark'} />
                     )}
                     {postLat != null && postLng != null && (
                         <Marker coordinate={{ latitude: postLat, longitude: postLng }} pinColor={postType === 'offer' ? palette.emerald500 : palette.orange600} />

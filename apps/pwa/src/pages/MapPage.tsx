@@ -66,7 +66,7 @@ import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
-import { MAP_TAP_CAP_ZOOM, STACK_LIST_CLOSED, settleStackList, stackDropped, stackHeading, stackLift, stackRestWatch, stackShut, stackTapped, type MapFrame, type StackListState } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, STACK_LIST_CLOSED, areaRingLeafletStyle, settleMapStop, stackDropped, stackHeading, stackLift, stackRestWatch, stackShut, stackTapped, type MapFrame, type StackListState } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventRepeatCreate, parseCopyEventContext, withMovedFromLine,
@@ -399,9 +399,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         title?: string;
         triggerElement?: HTMLElement | null;
     } | null>(null);
-    // A post over the map, a pin's card, the composer or a photo wins: the list neither opens nor closes under them.
+    // A post over the map, the composer or a photo wins: the list neither opens nor closes under them.
     const stackBlocked = useRef(false);
-    stackBlocked.current = covered || !!previewPost || showNewPost || pinDropMode || !!lightboxState?.isOpen;
+    stackBlocked.current = covered || showNewPost || pinDropMode || !!lightboxState?.isOpen;
+    const previewRef = useRef(previewPost);
+    previewRef.current = previewPost;
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
     const [enterprises, setEnterprises] = useState<EnterpriseMapPin[]>([]);
@@ -680,11 +682,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         });
         markersRef.current = clusterGroup.addTo(map);
 
-        // The list opens and closes by itself only when the map has stopped (core's settleStackList).
+        // The list opens and closes by itself only when the map has stopped, and a card left open from somewhere else gives way to it (core's settleMapStop).
         const stackRest = stackRestWatch(() => {
             const bubbles = bubblesOnMap(pinKeysRef.current, (pin) => clusterGroup.getVisibleParent(pin as L.Marker), (at: L.LatLng) => map.latLngToContainerPoint(at));
-            const rest = { view: visibleMapFrame(map), bubbles, atCap: map.getZoom() >= MAP_TAP_CAP_ZOOM, blocked: stackBlocked.current };
-            setStackList((list) => settleStackList(list, rest));
+            const card = previewRef.current;
+            const placed = card?.lat != null && card.lng != null;
+            const settled = settleMapStop(stackListRef.current, {
+                view: visibleMapFrame(map), bubbles, atCap: map.getZoom() >= MAP_TAP_CAP_ZOOM,
+                // An online event's card, opened from its post, has no pin to have left: nothing moves it.
+                blocked: stackBlocked.current || (!!card && !placed),
+                card: placed ? map.latLngToContainerPoint([card.lat!, card.lng!]) : null,
+            });
+            setStackList(settled.list);
+            if (settled.closeCard) setPreviewPost(null);
         });
         map.on('movestart zoomstart', stackRest.moving);
         map.on('moveend', stackRest.stopped);
@@ -723,11 +733,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 if (radiusKm && radiusKm > 0) {
                     radiusCircleRef.current = L.circle([lat, lng], {
                         radius: radiusKm * 1000,
-                        color: '#f59e0b',
-                        fillColor: '#f59e0b',
-                        fillOpacity: 0.06,
-                        weight: 2,
-                        dashArray: '8 5',
+                        ...areaRingLeafletStyle(),
                         interactive: false,
                     }).addTo(mapRef.current);
                 }

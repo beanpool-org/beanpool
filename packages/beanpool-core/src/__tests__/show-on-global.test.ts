@@ -1716,6 +1716,28 @@ describe('the door on a copy', () => {
             expect(up(w).takesQuestions).toBe(false);
         });
 
+        for (const [name, status, body] of [
+            ['an Off that landed', 200, { success: true }],
+            ['an Off that was refused', 403, { error: 'Not yours' }],
+        ] as const) {
+            it(`a Retry-After on ${name} is not charged to the next Off`, async () => {
+                const w = world();
+                const phone = w.device();
+                await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+                w.doorAnswers(() => new Response(JSON.stringify(body), { status, headers: { 'Retry-After': '3000' } }));
+                await phone.takeQuestions('home-1', false, identity, w.deps);
+                w.doorAnswers(null);
+                await phone.takeQuestions('home-1', true, identity, w.deps);
+                w.doorAnswers(busy(503));
+                expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+                w.doorSends.length = 0;
+                w.doorAnswers(null);
+                const at = Date.now();
+                expect(await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_FIRST_MS)).toBeNull();
+                expect(w.doorSends).toHaveLength(1);
+            });
+        }
+
         it('a wait global asked for holds once: the next no-answer goes by the back-off', async () => {
             const w = world();
             const phone = w.device();

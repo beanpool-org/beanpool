@@ -450,6 +450,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                         {error}
                     </div>
                 )}
+
+                {/* Fresh Proof Dialog */}
+                <FreshProofBox proof={proof} testId="address-proof" />
             </div>
 
             {/* Folded Add Address Section */}
@@ -505,7 +508,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                         </button>
                     </div>
 
-                    <form onSubmit={handleAddSubmit} className="space-y-4">
+                    <form onSubmit={handleAddSubmit} className="space-y-4" data-testid="claim-form">
                         {addKind === 'beanpool' && (
                             <div className="space-y-3">
                                 <div>
@@ -833,8 +836,6 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                 </div>
             )}
 
-            {/* Fresh Proof Dialog */}
-            <FreshProofBox proof={proof} />
             {confirmation}
         </div>
     );

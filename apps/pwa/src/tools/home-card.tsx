@@ -9,7 +9,7 @@
  * is drawn only for a tool with both a Home card and a web half.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TOOLS, TOOL_LIMITS, t, toolLineText, type ToolLine, type ToolManifest } from '@beanpool/core';
+import { TOOLS, TOOL_LIMITS, t, toolLineText, type CardHue, type ToolLine, type ToolManifest } from '@beanpool/core';
 import { HomeCard, HomeLine } from '../components/HomeCard';
 import { TOOL_APPS } from './index';
 import { toolOfCard } from './cards';
@@ -28,9 +28,10 @@ interface Props {
     onNavigate: (tab: string, contextId?: string) => void;
     tools?: readonly ToolManifest[];
     apps?: Readonly<Record<string, unknown>>;
+    hue?: CardHue;
 }
 
-export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onNavigate, tools = TOOLS, apps = TOOL_APPS }: Props) {
+export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onNavigate, tools = TOOLS, apps = TOOL_APPS, hue }: Props) {
     const tool = toolOfCard(type, tools, apps);
     const [doc, setDoc] = useState<{ value: unknown } | null>(null);
     const toolId = tool?.id;
@@ -66,7 +67,7 @@ export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onN
     if (!tool) return null;
     const open = (screen?: string) => onNavigate('tool', toolTarget(tool.id, screen && tool.screens.includes(screen) ? screen : 'main'));
     return (
-        <HomeCard id={id} title={title} menu={menu} style={style}>
+        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue}>
             {lines && lines.length > 0
                 ? lines.map((l, i) => (
                     <HomeLine key={i} onClick={() => open(l.screen)} testId={`home-tool-line-${i}`}>

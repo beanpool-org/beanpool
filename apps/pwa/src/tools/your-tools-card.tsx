@@ -5,7 +5,7 @@
  * can be removed. Empty, it invites the member to add one.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TOOLS, t, toolLineText, type ToolLine, type ToolManifest } from '@beanpool/core';
+import { TOOLS, t, toolLineText, type CardHue, type ToolLine, type ToolManifest } from '@beanpool/core';
 import { HomeCard } from '../components/HomeCard';
 import { TOOL_APPS } from './index';
 import { readDoc } from './builder';
@@ -24,6 +24,7 @@ interface Props {
     onChangeTools: (tools: string[]) => void;
     allTools?: readonly ToolManifest[];
     apps?: Readonly<Record<string, unknown>>;
+    hue?: CardHue;
 }
 
 export function YourToolsCard({
@@ -38,6 +39,7 @@ export function YourToolsCard({
     onChangeTools,
     allTools = TOOLS,
     apps = TOOL_APPS,
+    hue,
 }: Props) {
     // Only tools with a Home card and a web half in this build are offered.
     const available = useMemo(
@@ -95,7 +97,7 @@ export function YourToolsCard({
     }, [publicKey, reload, chosen]);
 
     return (
-        <HomeCard id={id} title={title} menu={menu} style={style}>
+        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue}>
             {chosen.length === 0 ? (
                 <p data-testid="home-tools-empty" className="m-0 mb-3 text-sm text-text-secondary">
                     {t('Add a tool to keep it here.')}

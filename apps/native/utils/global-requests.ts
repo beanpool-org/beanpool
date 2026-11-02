@@ -7,7 +7,7 @@
  * - **Counts alone** (GET /api/me/unread): nothing of who wrote, and nothing of a line. Accept, Decline and Report are global's
  *   own list, one tap on: this phone's chats are kept per community, and a line is read where it is kept.
  * - **Nothing is asked of global until the member has asked for questions on this device**, by the director's ruling on #2741: a
- *   phone never tells global a key it holds unless the member ticked a door here. It keeps a mark from the first tick
+ *   phone never asks global what waits for a key unless the member ticked a door here. It keeps a mark from the first tick
  *   ({@link noteQuestionsOpened}), which stays after an Off or a Stop showing, since a request already sent is still theirs
  *   to answer. Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
  * - **So a door can be open with no row.** A door outlives the mark: after a new phone, a Sign Out, or a tick in the browser

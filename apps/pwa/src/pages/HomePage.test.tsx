@@ -3014,7 +3014,7 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
     let width = 0;
     let measured: { mockRestore(): void } | null = null;
     let heights: Record<string, number> = {};
-    let offsetSpy: { mockRestore(): void } | null = null;
+    let offsetSpy: ReturnType<typeof vi.spyOn> | null = null;
 
     beforeEach(() => {
         width = 0;
@@ -3185,6 +3185,32 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
         expect(tips.style.gridRow).toBe('34 / span 54');
         expect(events.style.gridColumn).toBe('2');
         expect(events.style.gridRow).toBe('34 / span 42');
+    });
+
+    it('useLayoutEffect does not re-query DOM card heights when card set is unchanged across re-renders', async () => {
+        width = 800;
+        heights = {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { needs: NEEDS })));
+        const { rerender } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const callsBefore = offsetSpy?.mock.calls.length ?? 0;
+        expect(callsBefore).toBeGreaterThan(0);
+
+        // Re-rendering HomePage without card list changes (e.g. parent render with new callback):
+        rerender(<HomePage identity={ME} onNavigate={vi.fn()} />);
+
+        const callsAfter = offsetSpy?.mock.calls.length ?? 0;
+        // With stable shownKey memoization, useLayoutEffect does not re-query DOM heights:
+        expect(callsAfter).toBe(callsBefore);
     });
 });
 

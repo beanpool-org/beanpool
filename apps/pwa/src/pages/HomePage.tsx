@@ -1651,6 +1651,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const startUp = shown.some(c => c.type === 'start');
     const isVisitor = !answer || !!answer.welcome || !answer.me;
     const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
+    const shownKey = shown.map(c => `${c.id}:${c.type}`).join(',');
 
     useLayoutEffect(() => {
         if (cols <= 1 || typeof ResizeObserver === 'undefined') return;
@@ -1682,7 +1683,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             cardHeightsRef.current = next;
             setCardHeights(next);
         }
-    }, [cols, shown, notesUnderFirst, fewerOpen, hintOpen, safetyDrawn]);
+    }, [cols, shownKey, notesUnderFirst, fewerOpen, hintOpen, safetyDrawn]);
 
     const packedList = useMemo(() => {
         if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
@@ -1715,7 +1716,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             }
         }
         return packHome(items, cols);
-    }, [cols, shown, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp, safetyDrawn]);
+    }, [cols, shownKey, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp, safetyDrawn]);
 
     const packedMap = useMemo(() => new Map(packedList.map(p => [p.id, p])), [packedList]);
     const isPacked = typeof ResizeObserver !== 'undefined' && cols > 1 && packedList.length > 0;

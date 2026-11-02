@@ -10,13 +10,10 @@ import { BRAND_COLOURS } from './brand-colours.js';
 export const AREA_RING_WIDTH = 1.5;
 /** Dash and gap, in the same units as the width. */
 export const AREA_RING_DASH: readonly number[] = [8, 5];
-/**
- * How many points a ring drawn as a line has. At 360 each corner turns one degree, which no eye finds at any zoom: deep in, a
- * ring fills the screen as a line that is straight anyway, and far out the points sit closer than the line is wide.
- */
+/** How many points a ring drawn as a line has. At 360 each corner turns one degree, whatever the zoom or the radius. */
 export const AREA_RING_POINTS = 360;
 
-/** The mean radius of the earth, which is what Google's own distances use. */
+/** The earth's mean radius. */
 const EARTH_RADIUS_M = 6_371_008.8;
 
 export interface RingPoint { latitude: number; longitude: number }

@@ -41,7 +41,7 @@ describe('the ring as a line', () => {
         for (const point of areaRingPoints(centre, km)) expect(haversineKm(centre, point) / km).toBeCloseTo(1, 6);
     });
 
-    it('is a circle on the ground, not in degrees: at 69° N it runs nearly three degrees wider east-west than north-south', () => {
+    it('is a circle on the ground, not in degrees: at 69° N it spans nearly three times the degrees east-west as north-south', () => {
         const centre = { latitude: 69.65, longitude: 18.96 };
         const ring = areaRingPoints(centre, 100);
         const lats = ring.map((p) => p.latitude);

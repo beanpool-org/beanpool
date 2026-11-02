@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { contrastRatio } from '@beanpool/core';
+import { MAP_GROUNDS, contrastRatio } from '@beanpool/core';
 import { DARK_MAP, darkMapStyle, hidePoisStyle, mapIsDark, mapSchemeKey } from '../map-scheme';
 
 describe('which scheme the map shows', () => {
@@ -79,6 +79,12 @@ describe('the dark map', () => {
 
     it('hides Google\'s POI markers as the light map does', () => {
         for (const rule of hidePoisStyle) expect(darkMapStyle).toContainEqual(rule);
+    });
+});
+
+describe("the grounds core judges the area's line on", () => {
+    it('are this dark map\'s own land and water, so a change of map cannot leave the line behind', () => {
+        expect(MAP_GROUNDS.dark).toEqual([DARK_MAP.land, DARK_MAP.water]);
     });
 });
 

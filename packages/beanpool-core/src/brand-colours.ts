@@ -376,6 +376,8 @@ export function brandContrastPairs(): BrandContrastPair[] {
         pairs.push({ theme, role, pair, ink, ground, ratio: contrastRatio(ink, ground), min: min(role) });
     for (const theme of ['light', 'dark'] as const) {
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
+            // A line on a map is not words: __tests__/map-area-ring.test.ts judges it on MAP_GROUNDS.
+            if (role === 'map') continue;
             if (role === 'deal') {
                 // Only the web draws these words, over the chat: judged on the web's grounds through the tint.
                 for (const [name, line] of Object.entries(node as BrandColours['deal'])) {
@@ -396,8 +398,7 @@ export function brandContrastPairs(): BrandContrastPair[] {
                     const grounds = WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS[theme] : INK_GROUNDS[theme];
                     for (const ground of grounds) add(theme, `ink.${name}`, `ink / ${ground}`, ink[theme], ground);
                 }
-            } else if (role !== 'map') {
-                // A line on a map is not words: __tests__/map-area-ring.test.ts judges it on MAP_GROUNDS.
+            } else {
                 const fill = node as FillRole;
                 add(theme, role, 'on / fill', fill.on[theme], fill.fill[theme]);
                 add(theme, role, 'on / hover', fill.on[theme], fill.hover[theme]);

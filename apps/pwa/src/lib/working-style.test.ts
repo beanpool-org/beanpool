@@ -103,6 +103,7 @@ describe('adopting a newer row into the browser copy', () => {
         const oldStamped = JSON.stringify({ primary: 'spark', secondary: 'weaver', mode: 'quick', updatedAt: '2026-11-04T12:00:00.000Z' });
         expect(adoptWorkingStyle(ME, oldStamped)).toBe(true);
         expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ primary: 'spark', takenOn: '2026-11-04' });
+        expect(readWorkingStyle(ME)).not.toContain('updatedAt');
     });
 
     it('never an older row, and a tie changes nothing', () => {

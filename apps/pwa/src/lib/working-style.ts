@@ -63,7 +63,9 @@ export function adoptWorkingStyle(publicKey: string, row: string | null | undefi
     const parsed = parseArchetype(row);
     if (!parsed) return false;
     try {
-        localStorage.setItem(storeKey(publicKey), JSON.stringify(parsed));
+        const sanitized = { ...parsed };
+        delete (sanitized as any).updatedAt;
+        localStorage.setItem(storeKey(publicKey), JSON.stringify(sanitized));
         return true;
     } catch {
         return false;

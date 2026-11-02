@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -809,5 +809,18 @@
   "This is {name}.": "{name} です。",
   "Server key {key}": "サーバー鍵 {key}",
   "Time {time}": "時刻 {time}",
-  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": ".beanpool.org 名はこのサーバーの鍵に属します。このサーバーが失われた場合でも新しいサーバーが名前を保持できるよう、バックアップにリカバリコードを保管してください。"
+  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": ".beanpool.org 名はこのサーバーの鍵に属します。このサーバーが失われた場合でも新しいサーバーが名前を保持できるよう、バックアップにリカバリコードを保管してください。",
+  "Former": "以前の",
+  "Lost": "失効",
+  "Release": "解放",
+  "Remove": "削除",
+  "Addresses checked from outside.": "外部からアドレスを確認しました。",
+  "Still checking, press again in a moment.": "確認中です。少し待ってからもう一度押してください。",
+  "Already checked at {time}. Press again in half a minute for a new check.": "{time} に確認済みです。新しい確認は 30 秒後にもう一度押してください。",
+  "Nothing could be checked from this server yet.": "このサーバーからはまだ何も確認できていません。",
+  "Answers as this server.": "このサーバーとして応答しています。",
+  "No longer this community's address.": "このコミュニティのアドレスではなくなりました。",
+  "{n} app today|{n} apps today": {
+    "other": "本日のアプリ {n} 件"
+  }
 }

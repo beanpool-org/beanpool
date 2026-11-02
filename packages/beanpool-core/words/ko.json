@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -809,5 +809,18 @@
   "This is {name}.": "{name}입니다.",
   "Server key {key}": "서버 키 {key}",
   "Time {time}": "시간 {time}",
-  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": ".beanpool.org 이름은 이 서버의 키에 속합니다. 이 서버를 분실할 경우 새 서버가 이름을 유지할 수 있도록 백업에 복구 코드를 보관하세요."
+  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": ".beanpool.org 이름은 이 서버의 키에 속합니다. 이 서버를 분실할 경우 새 서버가 이름을 유지할 수 있도록 백업에 복구 코드를 보관하세요.",
+  "Former": "이전",
+  "Lost": "잃음",
+  "Release": "해제",
+  "Remove": "제거",
+  "Addresses checked from outside.": "외부에서 주소를 확인했습니다.",
+  "Still checking, press again in a moment.": "아직 확인 중입니다. 잠시 후 다시 누르세요.",
+  "Already checked at {time}. Press again in half a minute for a new check.": "{time}에 이미 확인했습니다. 새로 확인하려면 30초 후에 다시 누르세요.",
+  "Nothing could be checked from this server yet.": "이 서버에서 아직 아무것도 확인할 수 없습니다.",
+  "Answers as this server.": "이 서버로 응답합니다.",
+  "No longer this community's address.": "더 이상 이 커뮤니티의 주소가 아닙니다.",
+  "{n} app today|{n} apps today": {
+    "other": "오늘 앱 {n}개"
+  }
 }

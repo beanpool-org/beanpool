@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -846,5 +846,19 @@
   "This is {name}.": "இது {name}.",
   "Server key {key}": "சேவையக விசை {key}",
   "Time {time}": "நேரம் {time}",
-  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": ".beanpool.org பெயர் இந்த சேவையகத்தின் விசைக்கு சொந்தமானது. காப்புப்பிரதிகளில் மீட்புக் குறியீட்டை வைத்திருப்பதை உறுதிப்படுத்திக் கொள்ளுங்கள்."
+  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": ".beanpool.org பெயர் இந்த சேவையகத்தின் விசைக்கு சொந்தமானது. காப்புப்பிரதிகளில் மீட்புக் குறியீட்டை வைத்திருப்பதை உறுதிப்படுத்திக் கொள்ளுங்கள்.",
+  "Former": "முந்தைய",
+  "Lost": "இழந்தது",
+  "Release": "விடுவி",
+  "Remove": "நீக்கு",
+  "Addresses checked from outside.": "முகவரிகள் வெளியிலிருந்து சரிபார்க்கப்பட்டன.",
+  "Still checking, press again in a moment.": "இன்னும் சரிபார்க்கிறது, சற்று நேரத்தில் மீண்டும் அழுத்தவும்.",
+  "Already checked at {time}. Press again in half a minute for a new check.": "{time} மணிக்கு ஏற்கெனவே சரிபார்க்கப்பட்டது. புதிய சரிபார்ப்புக்கு அரை நிமிடம் கழித்து மீண்டும் அழுத்தவும்.",
+  "Nothing could be checked from this server yet.": "இந்த சேவையகத்திலிருந்து இன்னும் எதையும் சரிபார்க்க முடியவில்லை.",
+  "Answers as this server.": "இந்த சேவையகமாக பதிலளிக்கிறது.",
+  "No longer this community's address.": "இனி இந்த சமூகத்தின் முகவரி அல்ல.",
+  "{n} app today|{n} apps today": {
+    "one": "இன்று {n} செயலி",
+    "other": "இன்று {n} செயலிகள்"
+  }
 }

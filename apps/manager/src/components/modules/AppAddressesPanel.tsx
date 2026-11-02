@@ -176,7 +176,7 @@ export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: 
 
     useEffect(() => { void load(); }, [load, refreshSignal]);
 
-    const confirm = async (address: string) => {
+    const confirmAddress = async (address: string) => {
         setBusy(address);
         setActionError(null);
         try {
@@ -239,7 +239,7 @@ export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: 
             {pageOffered && pageHost && (
                 <div className="p-3 rounded-xl bg-nature-950/60 border border-amber-700/60 space-y-2" data-testid="app-address-offer">
                     <p className="text-sm text-nature-200 m-0 break-words">{pageOfferText(pageHost, pageSighting)}</p>
-                    <button type="button" className={confirmButton} disabled={busy !== null} onClick={() => confirm(pageHost)}>
+                    <button type="button" className={confirmButton} disabled={busy !== null} onClick={() => confirmAddress(pageHost)}>
                         Yes, {pageHost} is its address
                     </button>
                 </div>
@@ -274,7 +274,7 @@ export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: 
                         />
                         <span className="min-w-0 [overflow-wrap:anywhere]">{h.directory?.name ? `${h.directory.name} is this community` : 'That community is this one'}</span>
                     </label>
-                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => confirm(h.address)}>
+                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => confirmAddress(h.address)}>
                         Yes, {h.address} is its address
                     </button>
                 </div>
@@ -298,7 +298,7 @@ export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: 
                         />
                         <span className="min-w-0 [overflow-wrap:anywhere]">This is this community&apos;s address</span>
                     </label>
-                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => confirm(h.address)}>
+                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => confirmAddress(h.address)}>
                         Yes, {h.address} is its address
                     </button>
                 </div>

@@ -1,6 +1,7 @@
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppAddressesPanel } from './AppAddressesPanel';
+import { AddressesPanel } from './AddressesPanel';
 import * as nodeClient from '../../lib/node-client';
 import type { NodeProfile } from '../../lib/profiles';
 
@@ -21,6 +22,13 @@ const report = (over: Partial<nodeClient.AppAddressesReport> = {}): nodeClient.A
     unboundSignaturesUntil: '2026-12-15', unboundSignaturesAccepted: true, ...over,
 });
 
+/** The whole Addresses screen, whose list draws each address since design §5.2; the panels below it ask nothing real. */
+function renderScreen(activeNode: NodeProfile = node) {
+    vi.spyOn(global, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ status: 'none', logs: [], names: [], notices: [] }), { status: 200 }));
+    return render(<div style={{ width: 320 }}><AddressesPanel activeNode={activeNode} /></div>);
+}
+const addressRow = (address: string) => screen.findByTestId(`address-row-${address}`);
+
 describe('AppAddressesPanel (Settings → Network)', () => {
     beforeEach(() => vi.clearAllMocks());
 
@@ -33,15 +41,21 @@ describe('AppAddressesPanel (Settings → Network)', () => {
             ],
             oldApps: { today: 3, busiestDay: 5 },
         }));
-        render(<AppAddressesPanel activeNode={node} />);
-        const rows = await screen.findAllByTestId('app-address');
-        expect(rows[0].textContent).toMatch(/^mullum\.beanpool\.org · this community's web addressused by 12 apps today · most in one day this week: 30$/);
+        renderScreen();
+        const rows = await screen.findAllByTestId(/^address-row-/);
+        expect(rows[0].textContent).toMatch(/^mullum\.beanpool\.org/);
+        expect(rows[0].textContent).toMatch(/this community's web address/);
+        expect(rows[0].textContent).toMatch(/12 apps today/);
+        expect(rows[0].textContent).toMatch(/most in one day this week: 30/);
         expect(rows[1].textContent).toMatch(/confirmed in Settings/);
-        expect(rows[2].textContent).toMatch(/^oldname\.beanpool\.org · a BeanPool name it had before, still acceptedused by 2 apps today/);
-        expect(rows[2].querySelector('button')).toBeNull();
-        // Only an owner-confirmed address can be removed here; the others are changed where they are set.
-        expect(rows[0].querySelector('button')).toBeNull();
-        expect(rows[1].querySelector('button')!.textContent).toBe('Remove community.example.org');
+        expect(rows[2].textContent).toMatch(/^oldname\.beanpool\.org/);
+        expect(rows[2].textContent).toMatch(/a BeanPool name it had before, still accepted/);
+        expect(rows[2].textContent).toMatch(/2 apps today/);
+        // Only an owner-confirmed address can be removed here; the others are changed where they are set. A name the
+        // community had before is released, by name, on its row.
+        expect(within(rows[2]).queryByRole('button', { name: /^Remove/ })).toBeNull();
+        expect(within(rows[0]).queryByRole('button', { name: /^(Remove|Release)/ })).toBeNull();
+        expect(within(rows[1]).getByRole('button', { name: 'Remove community.example.org' })).toBeInTheDocument();
         expect(screen.getByTestId('old-apps').textContent).toMatch(/^3 apps too old to name this community reached it today \(most in one day this week: 5\)\. From .*2026 this community refuses apps that old/);
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
         expect(nodeClient.getAppAddresses).toHaveBeenCalledWith('https://community.example.org', 'pw', undefined);
@@ -49,10 +63,12 @@ describe('AppAddressesPanel (Settings → Network)', () => {
 
     it("a node with no address: says so, offers this page's own address with one tap, and what apps reached it at once ticked", async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({ unconfirmed: [{ address: 'bp.example.net', today: 2, busiestDay: 4 }] }));
-        vi.mocked(nodeClient.confirmAppAddress).mockResolvedValue(report({
-            addresses: [{ address: 'bp.example.net', source: 'owner', today: 2, busiestDay: 4 }],
-        }));
-        render(<AppAddressesPanel activeNode={node} />);
+        const confirmed = report({ addresses: [{ address: 'bp.example.net', source: 'owner', today: 2, busiestDay: 4 }] });
+        vi.mocked(nodeClient.confirmAppAddress).mockImplementation(async () => {
+            vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(confirmed);
+            return confirmed;
+        });
+        renderScreen();
         expect((await screen.findByTestId('app-addresses-none')).textContent).toMatch(/accepts any address\. After that it refuses addresses it doesn't know/);
         // A server from before the guard offers bp.example.net: only this page's address is one tap here.
         const offers = screen.getAllByTestId('app-address-offer').map((o) => o.textContent);
@@ -67,7 +83,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         fireEvent.click(within(held).getByRole('checkbox'));
         fireEvent.click(confirm);
         await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://community.example.org', 'bp.example.net', 'pw', undefined));
-        expect((await screen.findByTestId('app-address')).textContent).toMatch(/^bp\.example\.net · confirmed in Settings/);
+        expect((await addressRow('bp.example.net')).textContent).toMatch(/confirmed in Settings/);
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
     });
 
@@ -77,9 +93,9 @@ describe('AppAddressesPanel (Settings → Network)', () => {
             named: false,
             unconfirmed: [{ address: 'bp.example.net', today: 2, busiestDay: 4 }],
         }));
-        render(<AppAddressesPanel activeNode={node} />);
+        renderScreen();
         expect((await screen.findByTestId('app-addresses-none')).textContent).toMatch(/accepts any address\. After that it refuses addresses it doesn't know/);
-        expect(screen.getByTestId('app-address').textContent).toMatch(/^localhost · set on the server \(BEANPOOL_ADDRESSES\)/);
+        expect((await addressRow('localhost')).textContent).toMatch(/set on the server \(BEANPOOL_ADDRESSES\)/);
         const offers = screen.getAllByTestId('app-address-offer').map((o) => o.textContent);
         expect(offers).toHaveLength(1);
         expect(offers[0]).toMatch(/^This page reached the community at community\.example\.org\./);
@@ -94,8 +110,9 @@ describe('AppAddressesPanel (Settings → Network)', () => {
             ],
             named: true,
         }));
-        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://elsewhere.example.org' }} />);
-        expect(await screen.findAllByTestId('app-address')).toHaveLength(2);
+        renderScreen({ ...node, url: 'https://elsewhere.example.org' });
+        expect(await screen.findAllByTestId(/^address-row-/)).toHaveLength(2);
+        await screen.findByTestId('app-addresses');
         expect(screen.queryByTestId('app-addresses-none')).toBeNull();
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
     });
@@ -204,10 +221,12 @@ describe('AppAddressesPanel (Settings → Network)', () => {
                 { address: 'nameless.example', today: 3, busiestDay: 3, ownerOrAdmin: false, reason: 'directory', directory: { name: null } },
             ],
         }));
-        vi.mocked(nodeClient.confirmAppAddress).mockResolvedValue(report({
-            addresses: [{ address: 'riverbend.example', source: 'owner', today: 4, busiestDay: 4 }], named: true,
-        }));
-        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);
+        const confirmed = report({ addresses: [{ address: 'riverbend.example', source: 'owner', today: 4, busiestDay: 4 }], named: true });
+        vi.mocked(nodeClient.confirmAppAddress).mockImplementation(async () => {
+            vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(confirmed);
+            return confirmed;
+        });
+        renderScreen({ ...node, url: 'https://192.168.1.20:8443' });
         const [river, nameless] = await screen.findAllByTestId('app-address-held');
         expect(river.textContent).toBe("4 members' apps reached this community at riverbend.example on the busiest day this week, an owner's or admin's among them."
             + 'The BeanPool directory lists riverbend.example as the address of Riverbend Commons. Confirm it only if that is this community: '
@@ -224,7 +243,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect((screen.getByText('Yes, nameless.example is its address') as HTMLButtonElement).disabled).toBe(true);
         fireEvent.click(confirm);
         await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://192.168.1.20:8443', 'riverbend.example', 'pw', undefined));
-        expect((await screen.findByTestId('app-address')).textContent).toMatch(/^riverbend\.example · confirmed in Settings/);
+        expect((await addressRow('riverbend.example')).textContent).toMatch(/confirmed in Settings/);
     });
 
     it("this page's own address: offered with one tap and the members' count, never when it is a beanpool.org name", async () => {
@@ -350,18 +369,19 @@ describe('AppAddressesPanel (Settings → Network)', () => {
             ],
         }));
         vi.mocked(nodeClient.confirmAppAddress).mockRejectedValue(new Error('Another community holds taken.beanpool.org and answers there, so this community refuses what apps sign for it.'));
-        render(<AppAddressesPanel activeNode={node} />);
-        const rows = await screen.findAllByTestId('app-address');
+        renderScreen();
+        const rows = await Promise.all(['now', 'taken', 'gaveup', 'mixed', 'risky', 'resting'].map((n) => addressRow(`${n}.beanpool.org`)));
         const standing = (i: number) => rows[i].querySelector('[data-testid="app-address-standing"]');
         expect(standing(0)).toBeNull();
         // Lost: never "still accepted", in red, since when, how many apps tried, and what to do.
-        expect(rows[1].textContent).toMatch(/^taken\.beanpool\.org · no longer accepted/);
+        expect(rows[1].textContent).toMatch(/^taken\.beanpool\.org/);
+        expect(rows[1].textContent).toMatch(/no longer accepted/);
         expect(standing(1)!.getAttribute('data-state')).toBe('lost');
-        expect(standing(1)!.className).toMatch(/text-red-300/);
+        expect(standing(1)!.className).toMatch(/text-bp-ink-danger/);
         expect(standing(1)!.textContent).toMatch(/^Since [^.]{1,20}2026 another community holds taken\.beanpool\.org and answers there\. Members' apps that still use taken\.beanpool\.org are talking to that community, so this one refuses what they sign for taken\.beanpool\.org\. 3 apps tried it today\. Ask them to add this community again at its current address, or choose a new name for it\.$/);
         expect(standing(2)!.textContent).toMatch(/^This community released gaveup\.beanpool\.org on [^.]{1,20}2026 and its hold is over, so it no longer accepts what apps sign for gaveup\.beanpool\.org\. 1 app tried it today\./);
         expect(standing(3)!.textContent).toBe('The address service says another community holds mixed.beanpool.org, but mixed.beanpool.org still leads to this server. It stays accepted.');
-        expect(standing(3)!.className).toMatch(/text-amber-300/);
+        expect(standing(3)!.className).toMatch(/text-bp-ink-warning/);
         expect(rows[3].textContent).toMatch(/still accepted/);
         expect(standing(4)!.textContent).toBe("The address service says another community holds risky.beanpool.org. Members' apps that use it are still accepted. This server checks what answers there before it stops accepting it.");
         expect(standing(5)!.textContent).toMatch(/^This community released resting\.beanpool\.org on [^.]{1,20}2026, and it is held for this community until [^.]{1,20}2026\. Members' apps that use it are accepted until then\.$/);
@@ -424,7 +444,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
             formerApps: { today: 0, busiestDay: 0 },
         }));
         const { unmount } = render(<AppAddressesPanel activeNode={node} />);
-        await screen.findByTestId('app-address');
+        await screen.findByTestId('app-addresses');
         expect(screen.queryByTestId('former-apps')).toBeNull();
         unmount();
 
@@ -432,7 +452,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
             addresses: [{ address: 'oldname.beanpool.org', source: 'registrar', former: true, today: 2, busiestDay: 2 }],
         }));
         render(<AppAddressesPanel activeNode={node} />);
-        await screen.findByTestId('app-address');
+        await screen.findByTestId('app-addresses');
         expect(screen.queryByTestId('former-apps')).toBeNull();
     });
 
@@ -456,16 +476,16 @@ describe('AppAddressesPanel (Settings → Network)', () => {
                 { address: `f${long}`, today: 1, busiestDay: 1, ownerOrAdmin: false, reason: 'not-this-page' },
             ],
         }));
-        render(<div style={{ width: 320 }}><AppAddressesPanel activeNode={node} /></div>);
-        const row = await screen.findByTestId('app-address');
-        expect(row.querySelector('strong')!.className).toMatch(/break-all/);
-        expect(row.querySelector('button')!.className).toMatch(/min-h-\[44px\]/);
-        const panel = screen.getByTestId('app-addresses');
+        renderScreen();
+        const row = await addressRow(long);
+        expect(within(row).getByText(long).className).toMatch(/break-all/);
+        expect(within(row).getByRole('button', { name: `Remove ${long}` }).className).toMatch(/min-h-\[44px\]/);
+        const panel = await screen.findByTestId('app-addresses');
         // Every paragraph and button that can hold an address or a directory name breaks inside it.
         const holders = panel.querySelectorAll('[data-testid="app-address-offer"] p, [data-testid="app-address-held"] p, button, label');
-        // The page offer's text; the red cards' two texts each and the tick card's one; Remove, the page's Yes and two
-        // Yeses behind a tick; two tick boxes.
-        expect(holders.length).toBe(12);
+        // The page offer's text; the red cards' two texts each and the tick card's one; the page's Yes and two Yeses behind
+        // a tick; two tick boxes. (Remove is on the address's row, above.)
+        expect(holders.length).toBe(11);
         for (const el of holders) expect(el.className).toMatch(/break-(words|all)/);
         // A tick box's words are a flex item: they shrink below their longest word only with min-w-0 (4114742330).
         const labels = panel.querySelectorAll('label');

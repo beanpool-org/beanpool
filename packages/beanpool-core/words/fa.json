@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -846,5 +846,19 @@
   "This is {name}.": "این {name} است.",
   "Server key {key}": "کلید سرور {key}",
   "Time {time}": "زمان {time}",
-  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": "یک نام .beanpool.org متعلق به کلید این سرور است. حتماً یک کد بازیابی در پشتیبان‌گیری نگه دارید تا در صورت گم شدن این سرور، سرور جدید بتواند نام را حفظ کند."
+  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": "یک نام .beanpool.org متعلق به کلید این سرور است. حتماً یک کد بازیابی در پشتیبان‌گیری نگه دارید تا در صورت گم شدن این سرور، سرور جدید بتواند نام را حفظ کند.",
+  "Former": "پیشین",
+  "Lost": "ازدست‌رفته",
+  "Release": "رها کردن",
+  "Remove": "حذف",
+  "Addresses checked from outside.": "نشانی‌ها از بیرون بررسی شدند.",
+  "Still checking, press again in a moment.": "هنوز در حال بررسی است، کمی بعد دوباره بزنید.",
+  "Already checked at {time}. Press again in half a minute for a new check.": "پیش‌تر در ساعت {time} بررسی شد. برای بررسی تازه نیم دقیقه دیگر دوباره بزنید.",
+  "Nothing could be checked from this server yet.": "هنوز چیزی از این سرور بررسی نشده است.",
+  "Answers as this server.": "به عنوان این سرور پاسخ می‌دهد.",
+  "No longer this community's address.": "دیگر آدرس این انجمن نیست.",
+  "{n} app today|{n} apps today": {
+    "one": "{n} برنامه امروز",
+    "other": "{n} برنامه امروز"
+  }
 }

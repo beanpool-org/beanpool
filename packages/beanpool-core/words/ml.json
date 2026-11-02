@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -846,5 +846,19 @@
   "This is {name}.": "ഇത് {name} ആണ്.",
   "Server key {key}": "സെർവർ കീ {key}",
   "Time {time}": "സമയം {time}",
-  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": "ഒരു .beanpool.org പേര് ഈ സെർവറിന്റെ കീയിൽ പെട്ടതാണ്. ബാക്കപ്പുകളിൽ ഒരു വീണ്ടെടുക്കൽ കോഡ് സൂക്ഷിക്കുന്നത് ഉറപ്പാക്കുക."
+  "A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost.": "ഒരു .beanpool.org പേര് ഈ സെർവറിന്റെ കീയിൽ പെട്ടതാണ്. ബാക്കപ്പുകളിൽ ഒരു വീണ്ടെടുക്കൽ കോഡ് സൂക്ഷിക്കുന്നത് ഉറപ്പാക്കുക.",
+  "Former": "മുൻപത്തെ",
+  "Lost": "നഷ്ടപ്പെട്ടത്",
+  "Release": "വിട്ടുകൊടുക്കുക",
+  "Remove": "നീക്കം ചെയ്യുക",
+  "Addresses checked from outside.": "വിലാസങ്ങൾ പുറത്തുനിന്ന് പരിശോധിച്ചു.",
+  "Still checking, press again in a moment.": "ഇപ്പോഴും പരിശോധിക്കുന്നു, അല്പം കഴിഞ്ഞ് വീണ്ടും അമർത്തുക.",
+  "Already checked at {time}. Press again in half a minute for a new check.": "{time}-ന് ഇതിനകം പരിശോധിച്ചു. പുതിയ പരിശോധനയ്ക്ക് അര മിനിറ്റ് കഴിഞ്ഞ് വീണ്ടും അമർത്തുക.",
+  "Nothing could be checked from this server yet.": "ഈ സെർവറിൽ നിന്ന് ഇതുവരെ ഒന്നും പരിശോധിക്കാനായില്ല.",
+  "Answers as this server.": "ഈ സെർവറായി മറുപടി നൽകുന്നു.",
+  "No longer this community's address.": "ഇനി ഈ കമ്മ്യൂണിറ്റിയുടെ വിലാസമല്ല.",
+  "{n} app today|{n} apps today": {
+    "one": "ഇന്ന് {n} ആപ്പ്",
+    "other": "ഇന്ന് {n} ആപ്പുകൾ"
+  }
 }

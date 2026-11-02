@@ -350,16 +350,13 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
         setActionMessage(null);
         const isBp = isBeanPoolName(a.address);
         if (code === undefined) {
-            const yes = await ask(isBp
-                ? { ...releaseQuestion(a), confirmLabel: t(W.release), cancelLabel: t('Keep it') }
-                : {
-                    title: t('Remove {address}?', { address: a.address }),
-                    body: a.address === report?.primaryAddress
-                        ? t("It is this community's address. Members' apps that use it are refused after this, and new members are sent to another of its addresses, if it has one.")
-                        : t("Members' apps that use it are refused after this."),
-                    confirmLabel: t(W.remove),
-                    cancelLabel: t('Keep it'),
-                });
+            const question = isBp ? releaseQuestion(a) : {
+                title: t('Remove {address}?', { address: a.address }),
+                body: a.address === report?.primaryAddress
+                    ? t("It is this community's address. Members' apps that use it are refused after this, and new members are sent to another of its addresses, if it has one.")
+                    : t("Members' apps that use it are refused after this."),
+            };
+            const yes = await ask({ ...question, confirmLabel: isBp ? t(W.release) : t(W.remove), cancelLabel: t('Keep it') });
             if (!yes) return;
         }
         setBusy(a.address);
@@ -708,7 +705,8 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                                         {t('Reachability Mode')}
                                     </span>
                                     <div aria-labelledby={modeLabelId} data-testid="pubaddr-mode" className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white min-h-[44px] flex items-center">
-                                        🛡️ {t('Tunnel')}
+                                        <span aria-hidden="true" className="mr-1">🛡️</span>
+                                        <span>{t('Tunnel')}</span>
                                     </div>
                                     <div className="text-[10px] text-nature-400 mt-1 leading-normal">
                                         {t('The server dials out to Cloudflare itself. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.')}
@@ -898,7 +896,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
 
                                 {/* Where it comes from, and the busiest day, as the panel this list replaces said */}
                                 <p className="m-0 text-xs text-nature-400 [overflow-wrap:anywhere]" data-testid="address-source">
-                                    {addressSourceText(a)} · {t('most in one day this week: {n}', { n: a.busiestDay })}
+                                    <span>{addressSourceText(a)}</span>
+                                    <span aria-hidden="true"> · </span>
+                                    <span>{t('most in one day this week: {n}', { n: a.busiestDay })}</span>
                                 </p>
 
                                 {/* Line 2: Points at + Answers from outside. Label above value on a narrow screen: a value's
@@ -929,7 +929,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                                     <div className="text-xs text-nature-300 min-w-0 pr-2 space-y-1">
                                         {standing && (
                                             <p
-                                                className={`m-0 leading-relaxed [overflow-wrap:anywhere] ${standing.lost ? 'text-bp-ink-danger' : 'text-bp-ink-warning'}`}
+                                                className={`m-0 leading-relaxed break-words [overflow-wrap:anywhere] ${standing.lost ? 'text-bp-ink-danger' : 'text-bp-ink-warning'}`}
                                                 data-testid="app-address-standing"
                                                 data-state={standing.lost ? 'lost' : a.standing?.state}
                                             >
@@ -965,7 +965,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                                                 type="button"
                                                 disabled={busy !== null}
                                                 aria-busy={busy === a.address}
-                                                aria-label={`${t(W.makeMain)} ${a.address}`}
+                                                aria-label={t('Make main {address}', { address: a.address })}
                                                 onClick={() => handleMakeMain(a)}
                                                 data-testid={`make-main-btn-${a.address}`}
                                                 className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white border border-nature-600 disabled:opacity-50 min-h-[44px] inline-flex items-center gap-1"
@@ -983,7 +983,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                                                 aria-busy={busy === a.address}
                                                 onClick={() => handleRemoveOrRelease(a)}
                                                 data-testid={`remove-release-btn-${a.address}`}
-                                                aria-label={`${isBeanPoolName(a.address) ? t(W.release) : t(W.remove)} ${a.address}`}
+                                                aria-label={isBeanPoolName(a.address) ? t('Release {address}', { address: a.address }) : t('Remove {address}', { address: a.address })}
                                                 className="px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-bp-danger-fill hover:text-bp-danger-on text-xs font-semibold text-bp-ink-danger border border-nature-800 disabled:opacity-50 min-h-[44px] inline-flex items-center gap-1"
                                             >
                                                 <span aria-hidden="true">{busy === a.address ? '⏳' : '🗑️'}</span>

@@ -1322,6 +1322,9 @@ describe('ApplianceSection Component', () => {
 
         expect(screen.getByTestId('addresses-panel')).toBeInTheDocument();
         expect(screen.getByRole('heading', { level: 2, name: /Addresses/i })).toBeInTheDocument();
+        // Under the list: what it doesn't replace, as it was.
+        expect(screen.getByTestId('public-address-panel')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 3, name: /Public Address & DNS Tunnel/i })).toBeInTheDocument();
     });
 
     it('renders ReplicationAccessPanel and hides StandbyReplicationPanel on primary nodes', async () => {

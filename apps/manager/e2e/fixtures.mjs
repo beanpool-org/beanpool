@@ -1611,7 +1611,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     // ---- AI assistants (admin MCP S3: Connected assistants, the owner switch, "What it sees", the alerts line) ----
     if (pathname === '/api/local/admin/agent/suggestions' && m === 'GET') return ok(agentSuggestions());
     if (pathname === '/api/local/admin/agent/takedowns' && m === 'GET') return ok(AGENT_TAKEDOWNS);
-    if (pathname === '/api/local/admin/agent/takedowns/put-back' && m === 'POST') return ok({ back: ['post-fx-td-1'], gone: 0 });
+    if (pathname === '/api/local/admin/agent/takedowns/put-back' && m === 'POST') return ok({ back: ['post-fx-td-1'], stillHidden: [], gone: 0 });
     if (/^\/api\/local\/admin\/agent\/suggestions\/[^/]+\/decline$/.test(pathname)) return ok({ declined: pathname.split('/')[6] });
     if (pathname === '/api/local/admin/agent/grants' && m === 'GET') return ok(AGENT_GRANTS);
     if (pathname === '/api/local/admin/agent/grants' && m === 'POST') {

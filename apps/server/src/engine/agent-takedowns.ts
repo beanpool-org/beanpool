@@ -4,9 +4,8 @@
  *
  * ## What a takedown is
  *
- * `takeDownPosts`, in one transaction, on each post it may take: `hidden_by_reports_at` (kept if the post was already hidden, and
- * noted on this record) and
- * `removed_by_moderator_at`, so the hidden state's whole reach applies (every list, search, map and count; no new deal) and the
+ * `takeDownPosts`, in one transaction, on each post it may take: `hidden_by_reports_at` (kept if the post was already hidden, and noted
+ * on this record) and `removed_by_moderator_at`, so the hidden state's whole reach applies (every list, search, map and count; no new deal) and the
  * removal counts as a moderator's for standing, probation and the mute. A live post with that second stamp is a takedown on hold:
  * nothing else sets it on a live post, and the stamps travel, so that holds on a standby that took over, where this record does
  * not (engine/auto-moderation.ts onHold reads it, so that a report dismissed later, or a burst's undo, can't bring it back).
@@ -28,7 +27,8 @@
  * same stamp, so its burst undo still works, and its author hears that and not that it is back. The reports the takedown closed go
  * back to the moderators' queue, a report filed in the hold stays there, and reporters hear nothing (design §3.5): dismissing a report
  * stays a person's act on that report. One case: a burst undone during the hold skipped this post (engine/burst-cleanup.ts), so its
- * stamp has no undo left and counts as no hide. engine/auto-moderation.ts restoreHiddenPost is the same undo for one post, except
+ * stamp has no undo left and counts as no hide. An undo from before the takedown skipped nothing: if the post still carries that
+ * stamp, reports held it back, and it stays. engine/auto-moderation.ts restoreHiddenPost is the same undo for one post, except
  * that a moderator there looks at that post and means it: it comes up, and the open reports they saw are dismissed.
  *
  * The sweep (`sweepTakedowns`, on the pulse scheduler's tick) makes a post 7 days old final through `setTakedownRemoval`'s function, which
@@ -225,10 +225,13 @@ export interface PutBackResult {
     gone: number;
 }
 
-/** A burst's undo skipped a post on hold, so that burst's stamp has nothing left to lift it: it can't be what a post goes back to. */
-const burstHideUndone = (postId: string, stamp: string): boolean =>
+/**
+ * A burst's undo run since this takedown skipped the post, so that burst's stamp has nothing left to lift it, and it can't be what a
+ * post goes back to. One run before the takedown is no such thing: it left the stamp on a post only because reports would hide it.
+ */
+const burstUndoneSince = (postId: string, stamp: string, takenAt: string): boolean =>
     !!db.prepare(`SELECT 1 FROM burst_action_posts bp JOIN burst_actions a ON a.id = bp.action_id
-                   WHERE bp.post_id = ? AND a.at = ? AND a.undone_at IS NOT NULL`).get(postId, stamp);
+                   WHERE bp.post_id = ? AND a.at = ? AND a.undone_at >= ?`).get(postId, stamp, takenAt);
 
 /** Put back, a person's (the file header): `postId`, one call, or everything one assistant took down since a time (a stolen token's day, in one call). */
 export function putBackTakedowns(cb: ModerationNoticeCallbacks, scope: PutBackScope, now: number = Date.now()): PutBackResult {
@@ -238,18 +241,18 @@ export function putBackTakedowns(cb: ModerationNoticeCallbacks, scope: PutBackSc
     const back: { id: string; title: string | null; author: string | null; up: boolean }[] = [];
     let gone = 0;
     db.transaction(() => {
-        const held = db.prepare(`SELECT tp.takedown_id, tp.post_id, tp.hidden_before, tp.reports_closed, p.title, p.author_pubkey, p.active, p.status
+        const held = db.prepare(`SELECT tp.takedown_id, tp.post_id, tp.hidden_before, tp.reports_closed, t.at, p.title, p.author_pubkey, p.active, p.status
                                    FROM agent_takedown_posts tp JOIN agent_takedowns t ON t.id = tp.takedown_id
                                    LEFT JOIN posts p ON p.id = tp.post_id
                                   WHERE tp.put_back_at IS NULL AND tp.final_at IS NULL AND ${where}`).all(...args) as
-            { takedown_id: string; post_id: string; hidden_before: string | null; reports_closed: string; title: string | null; author_pubkey: string | null; active: number | null; status: string | null }[];
+            { takedown_id: string; post_id: string; hidden_before: string | null; reports_closed: string; at: string; title: string | null; author_pubkey: string | null; active: number | null; status: string | null }[];
         for (const h of held) {
             if (h.active !== 1 || h.status === 'cancelled') {
                 db.prepare('UPDATE agent_takedown_posts SET final_at = ? WHERE takedown_id = ? AND post_id = ?').run(at, h.takedown_id, h.post_id);
                 gone++;
                 continue;
             }
-            const stamp = h.hidden_before && !burstHideUndone(h.post_id, h.hidden_before) ? h.hidden_before : null;
+            const stamp = h.hidden_before && !burstUndoneSince(h.post_id, h.hidden_before, h.at) ? h.hidden_before : null;
             db.prepare('UPDATE posts SET hidden_by_reports_at = ?, removed_by_moderator_at = NULL, updated_at = ? WHERE id = ?').run(stamp, at, h.post_id);
             db.prepare('UPDATE agent_takedown_posts SET put_back_at = ? WHERE takedown_id = ? AND post_id = ?').run(at, h.takedown_id, h.post_id);
             reopenClosedReports(JSON.parse(h.reports_closed) as string[]);

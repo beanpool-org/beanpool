@@ -447,6 +447,15 @@ async function main(): Promise<void> {
         assert(afterUndo.body?.stillHidden?.length === 0 && !row(undoneMeanwhile).hidden_by_reports_at && up(undoneMeanwhile) && noticesOf(bea.pub).at(-1)?.title === POST_BACK,
             `an undone burst's stamp counts as no hide: the post is up, and its author hears so (${show(afterUndo)})`);
 
+        // An undo from before the takedown skipped nothing: reports held this post back on the burst's own stamp, so it is hidden, undone or not.
+        const heldBack = post('Held back from an undo by reports', bea.pub);
+        const undoneBefore = hideBurst(bea.pub, [bea.pub], 'owner');
+        const heldStamp = row(heldBack).hidden_by_reports_at;
+        db.prepare('UPDATE burst_actions SET undone_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), undoneBefore.id);
+        await takeDown(heldBack);
+        const heldOut = await putBack({ postId: heldBack });
+        assert(heldOut.body?.stillHidden?.includes(heldBack) && row(heldBack).hidden_by_reports_at === heldStamp && !up(heldBack), `a post an earlier undo left hidden stays hidden (${show(heldOut)})`);
+
         // The reports had hidden it. Put back by call.
         const reportsHid = post('Hidden by reports, then taken down', bea.pub);
         const reportStamp = new Date(Date.now() - DAY).toISOString();
@@ -587,6 +596,8 @@ async function main(): Promise<void> {
             assert(row(stillAhead).status === 'cancelled' && row(overDuringHold).status === 'cancelled', 'both go when the takedown stands');
             assert(toPhones.length === 1 && toPhones[0].data?.postId === stillAhead, `its goers are told of the one still ahead, and nobody that one already over was cancelled (${JSON.stringify(toPhones.map(p => p.data?.postId))})`);
         } finally {
+            // The token goes first: with it, any later notice to this member would reach the real Expo.
+            db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(goer.pub);
             (globalThis as any).fetch = realFetch;
         }
 

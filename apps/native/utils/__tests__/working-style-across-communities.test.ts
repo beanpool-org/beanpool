@@ -539,7 +539,7 @@ describe('the device copy', () => {
         await saveCanonicalProfile({ archetype: null });
         nodeAt(A).held.archetype = publicOf(quiz('2026-11-01', 'guardian'));
         await performSync();
-        expect((await getMemberProfile(ME, A))?.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
+        expect((await getMemberProfile(ME))?.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
         expect((await getCanonicalProfile())?.archetype).toBeNull();
         expect(await waitingArchetype(B, ME)).toBeNull();
     });

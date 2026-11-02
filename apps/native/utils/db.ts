@@ -7395,7 +7395,7 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     const contactVisibility = profile?.contact_visibility ?? undefined;
     // What waits for this community, or a device copy newer than its row: never its own row sent back, and never to a
     // community that doesn't say this key is a member (utils/working-style.ts).
-    const publicArchetype = await archetypeToSend(anchorUrl, identity.publicKey, profile?.archetype);
+    const publicArchetype = await archetypeToSend(anchorUrl, identity, profile?.archetype);
 
     // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this
     // published. It now carries bio, contact and archetype too, so keying it on the avatar
@@ -7511,7 +7511,7 @@ export async function pushWaitingArchetype(opts: { community: string }): Promise
     if (!(await waitingArchetype(anchorUrl, identity.publicKey))) return false;
     const row = await getMemberProfile(identity.publicKey);
     if (!(await stillOnCommunity(anchorUrl))) return false;
-    const archetype = await archetypeToSend(anchorUrl, identity.publicKey, row?.archetype);
+    const archetype = await archetypeToSend(anchorUrl, identity, row?.archetype);
     if (!archetype) return false;
     const bodyString = JSON.stringify({ publicKey: identity.publicKey, archetype });
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);

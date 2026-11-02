@@ -76,7 +76,8 @@ const communityRow = vi.hoisted(() => ({ value: null as null | Record<string, un
 const calls = vi.hoisted(() => ({ updateMemberProfile: [] as Array<{ pubkey: string; data: Record<string, unknown> }> }));
 
 vi.mock('../db', () => ({
-    getMemberProfile: vi.fn(async () => communityRow.value),
+    // A row read fresh each time, as the copy gives it: what one reader changes on its row is no other reader's.
+    getMemberProfile: vi.fn(async () => (communityRow.value ? { ...communityRow.value } : null)),
     getMemberRatings: vi.fn(async () => ({ average: 5, count: 1, asProvider: { average: 5 }, asReceiver: { average: 5 }, ratings: [] })),
     getMemberPosts: vi.fn(async () => []),
     getBalance: vi.fn(async () => ({ balance: 100 })),

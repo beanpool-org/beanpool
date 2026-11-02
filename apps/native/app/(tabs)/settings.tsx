@@ -1282,7 +1282,7 @@ export default function SettingsScreen() {
                 // What waits for this community, or a device copy newer than its row: its own row is never sent back,
                 // and an older result never goes over a newer one (utils/working-style.ts).
                 const row = await getMemberProfile(identity.publicKey).catch(() => null);
-                archetypeSent = await archetypeToSend(url, identity.publicKey, row?.archetype);
+                archetypeSent = await archetypeToSend(url, identity, row?.archetype);
                 if (archetypeSent) payloadObj.archetype = archetypeSent;
                 const bodyString = JSON.stringify(payloadObj);
                 const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);

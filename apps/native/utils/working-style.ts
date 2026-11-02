@@ -1,5 +1,6 @@
-import { archetypeToCarry, publicArchetype, type QuizResult } from '@beanpool/core';
+import { archetypeIsNewer, archetypeToCarry, publicArchetype, type QuizResult } from '@beanpool/core';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
+import { buildSignedHeaders } from './crypto';
 import { fetchMembership } from './membership-probe';
 import { plainOriginOf } from './node-url';
 import { getSavedNodes, isGuestNode } from './nodes';
@@ -19,8 +20,11 @@ import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from '.
  *   - the heal at that community's own next sync, carrying only the result (db.ts pushWaitingArchetype).
  */
 
-/** How long a community is given to say who its members are: as long as the delete's own ask (delete-here.ts). */
+/** How long a community is given to answer: as long as the delete's own ask (delete-here.ts). */
 const MEMBERSHIP_TIMEOUT_MS = 8000;
+
+/** The key a publish is signed with. */
+type Signer = { publicKey: string; privateKey: string };
 
 /**
  * The quiz is done: its result is the device's now, and it waits for every other community saved on the phone. Not for
@@ -38,37 +42,67 @@ export async function keepQuizResult(result: QuizResult, publicKey: string, open
 
 /**
  * What of the working style a publish to `community` may carry: what waits there, or the device copy when it is newer
- * than `row`, the community's own row (core archetypeToCarry). Null for nothing, which is what a member who never took
- * the quiz always gets.
+ * than the community's row. Null for nothing, which is what a member who never took the quiz always gets. `row` is the
+ * phone's copy of that row: with nothing to carry over it, no community is asked anything.
  *
  * Only to a community that has just said this key is a member. The phone's saved list holds addresses it merely looked
- * at, and a row it holds may be older than a removal, so neither proves it. No answer sends nothing now, and the next
- * publish asks again. A plain no: what waited there goes, and a later join carries the result.
+ * at, and a row it holds may be older than a removal, so neither proves it. A plain no: what waited there goes, and a
+ * later join carries the result.
+ *
+ * Never over a newer result: that is judged against what the community holds now, because a second device may have put a
+ * newer one there since the phone last synced. A result waiting there that it has overtaken goes. On a tie what waits is
+ * sent: it is a retake made on this device. No answer to either question sends nothing, and the next publish asks again.
  */
-export async function archetypeToSend(community: string, publicKey: string, row: string | null | undefined): Promise<string | null> {
+export async function archetypeToSend(community: string, identity: Signer, row: string | null | undefined): Promise<string | null> {
+    const { publicKey } = identity;
     const waiting = await waitingArchetype(community, publicKey);
-    const canonical = await getCanonicalProfile();
-    const archetype = waiting ?? archetypeToCarry(canonical?.archetype, row);
-    if (!archetype) return null;
+    const deviceCopy = (await getCanonicalProfile())?.archetype;
+    if (!waiting && !archetypeToCarry(deviceCopy, row)) return null;
     if (await isGuestNode(community).catch(() => true)) return null;
     const member = await saysMember(community, publicKey);
     if (member === false && waiting) await clearWaitingArchetype(community, waiting);
-    return member === true ? archetype : null;
+    if (member !== true) return null;
+    const held = await heldThere(community, identity);
+    if (held === undefined) return null;
+    if (!waiting) return archetypeToCarry(deviceCopy, held);
+    if (archetypeIsNewer(held, waiting)) {
+        await clearWaitingArchetype(community, waiting);
+        return null;
+    }
+    return waiting;
 }
 
-/** What `community` says of the key, asked as every probe asks (membership-probe.ts): null for no answer. Never throws. */
-async function saysMember(community: string, publicKey: string): Promise<boolean | null> {
+/** `ask`, given up on at MEMBERSHIP_TIMEOUT_MS. Undefined for no answer. Never throws. */
+async function answerOf<T>(ask: (signal: AbortSignal) => Promise<T>): Promise<T | undefined> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), MEMBERSHIP_TIMEOUT_MS);
     try {
-        const res = await fetchMembership(community, publicKey, controller.signal);
-        if (!res.ok) return null;
-        const { isMember, isRecovering } = (await res.json()) as { isMember?: unknown; isRecovering?: unknown };
-        if (isMember === true || isRecovering === true) return true;
-        return isMember === false ? false : null;
+        return await ask(controller.signal);
     } catch {
-        return null;
+        return undefined;
     } finally {
         clearTimeout(timer);
     }
+}
+
+/** What `community` says of the key, asked as every probe asks (membership-probe.ts): null for no answer. */
+async function saysMember(community: string, publicKey: string): Promise<boolean | null> {
+    const answer = await answerOf(async (signal) => {
+        const res = await fetchMembership(community, publicKey, signal);
+        return res.ok ? (await res.json()) as { isMember?: unknown; isRecovering?: unknown } : undefined;
+    });
+    if (answer?.isMember === true || answer?.isRecovering === true) return true;
+    return answer?.isMember === false ? false : null;
+}
+
+/** The working style `community` holds for the key now: null for none, undefined for no answer. */
+async function heldThere(community: string, identity: Signer): Promise<string | null | undefined> {
+    const target = `${community.replace(/\/+$/, '')}/api/profile/${identity.publicKey}`;
+    return answerOf(async (signal) => {
+        const headers = await buildSignedHeaders('GET', target, '', identity.privateKey, identity.publicKey);
+        const res = await fetch(target, { headers: { ...headers, Accept: 'application/json' }, signal });
+        if (!res.ok) return undefined;
+        const profile = (await res.json()) as { archetype?: unknown };
+        return typeof profile?.archetype === 'string' ? profile.archetype : null;
+    });
 }

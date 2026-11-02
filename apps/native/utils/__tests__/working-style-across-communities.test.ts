@@ -82,10 +82,11 @@ import {
     carryPendingProfileChange, clearWaitingArchetype, keepPendingProfileChange, keepWaitingArchetype, pendingProfileChange, waitingArchetype,
 } from '../pending-profile-sync';
 import { keepQuizResult } from '../working-style';
+import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from '../storage-keys';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 type Member = 'yes' | 'no' | 'silent';
-type NodeState = { mode: 'ok' | 'offline' | 'busy'; member: Member; held: { callsign: string; bio: string | null; archetype: string | null }; updates: any[]; probes: number };
+type NodeState = { mode: 'ok' | 'offline' | 'busy'; member: Member; profileSilent?: boolean; held: { callsign: string; bio: string | null; archetype: string | null }; updates: any[]; probes: number };
 const nodes = new Map<string, NodeState>();
 function nodeAt(origin: string) {
     let n = nodes.get(origin);
@@ -117,6 +118,10 @@ const fetchMock = vi.fn(async (url: string, init?: { method?: string; body?: str
         if (body.bio !== undefined) node.held.bio = body.bio;
         if (body.archetype !== undefined) node.held.archetype = body.archetype;
         return answer(200, JSON.stringify({ success: true, profile: { ...node.held } }));
+    }
+    if (pathname === `/api/profile/${ME}`) {
+        if (node.member === 'silent' || node.profileSilent) return answer(503, '{}');
+        return answer(200, JSON.stringify({ publicKey: ME, ...node.held }));
     }
     if (pathname === '/api/marketplace/posts') return answer(200, '[]');
     if (pathname === '/api/members') {
@@ -261,9 +266,10 @@ describe('a quiz taken in one community reaches the others at their own next syn
         expect(await waitingArchetype(B, ME)).toBeNull();
     });
 
-    it('sent only from its own community: a switch away sends nothing', async () => {
+    it('sent only from its own community: a cycle for B with the phone moved to A sends nothing, though A has one waiting', async () => {
         await memberOfBoth();
         await keepQuizResult(quiz('2026-11-03'), ME, A);
+        await keepWaitingArchetype(A, ME, publicOf(quiz('2026-11-03')));
         expect(await pushWaitingArchetype({ community: B })).toBe(false);
         expect(sentTo(A)).toEqual([]);
         expect(sentTo(B)).toEqual([]);
@@ -291,7 +297,8 @@ describe('a quiz taken in one community reaches the others at their own next syn
 describe('a Save or a catch-up carries only a newer device copy', () => {
     it('the device copy goes over A\'s older row, and A\'s row takes it', async () => {
         await memberOfBoth();
-        await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x', archetype: publicOf(quiz('2026-11-01', 'guardian')) });
+        // With the node's own photo in the row, so the row is written for the result and not on the way past.
+        await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x', avatar_url: `/api/avatar/${ME}?size=thumb`, archetype: publicOf(quiz('2026-11-01', 'guardian')) });
         await saveCanonicalProfile({ archetype: JSON.stringify(quiz('2026-11-03', 'spark')) });
 
         await pushProfileToServer();
@@ -401,6 +408,50 @@ describe('nothing goes to a community the member isn\'t in', () => {
     });
 });
 
+describe('never over a newer result the community already holds', () => {
+    it('a second device put a newer result there since this phone last synced: what waits is not sent, and stops waiting', async () => {
+        await memberOfBoth();
+        await keepQuizResult(quiz('2026-11-02', 'sage'), ME, A);
+        // Taken on another device: the node has it, and this phone's copy of the row doesn't yet.
+        nodeAt(B).held.archetype = publicOf(quiz('2026-11-03', 'spark'));
+        await openCommunity(B);
+        await pushWaitingArchetype({ community: B });
+        expect(sentTo(B)).toEqual([]);
+        expect(nodeAt(B).held.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
+        expect(await waitingArchetype(B, ME)).toBeNull();
+    });
+
+    it('a catch-up too: a device copy newer than the phone\'s row but older than the node\'s stays here', async () => {
+        await memberOfBoth();
+        await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x', archetype: publicOf(quiz('2026-11-01', 'guardian')) });
+        await saveCanonicalProfile({ archetype: JSON.stringify(quiz('2026-11-02', 'sage')) });
+        nodeAt(A).held.archetype = publicOf(quiz('2026-11-03', 'spark'));
+        await pushProfileToServer();
+        expect(sentTo(A)[0]).not.toHaveProperty('archetype');
+        expect(nodeAt(A).held.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
+    });
+
+    it('a same-day result on the node does not stop a retake made here', async () => {
+        await memberOfBoth();
+        await keepQuizResult(quiz('2026-11-03', 'spark'), ME, A);
+        nodeAt(B).held.archetype = publicOf(quiz('2026-11-03', 'sage'));
+        await openCommunity(B);
+        await pushWaitingArchetype({ community: B });
+        expect(nodeAt(B).held.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
+    });
+
+    it('a community that says who is a member but won\'t show its row: nothing sent, and it still waits', async () => {
+        await memberOfBoth();
+        const taken = quiz('2026-11-03');
+        await keepQuizResult(taken, ME, A);
+        nodeAt(B).profileSilent = true;
+        await openCommunity(B);
+        await pushWaitingArchetype({ community: B });
+        expect(sentTo(B)).toEqual([]);
+        expect(await waitingArchetype(B, ME)).toBe(publicOf(taken));
+    });
+});
+
 describe('the device copy', () => {
     it('only the quiz writes it: a row written here never overwrites it', async () => {
         await memberOfBoth();
@@ -422,6 +473,10 @@ describe('the device copy', () => {
 });
 
 describe('what waits goes as an entry goes', () => {
+    it('Sign Out wipes it: its key is under the prefix the account\'s wipe takes', () => {
+        expect(PENDING_ARCHETYPE_STORE_PREFIX.startsWith(PENDING_PROFILE_STORE_PREFIX)).toBe(true);
+    });
+
     it('is read only for the account it was kept for', async () => {
         await keepWaitingArchetype(B, ME, 'x');
         expect(await waitingArchetype(B, SOMEONE_ELSE)).toBeNull();

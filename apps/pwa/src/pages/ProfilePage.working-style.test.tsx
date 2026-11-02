@@ -5,7 +5,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { ARCHETYPES, calculateSynergy, type QuizResult } from '@beanpool/core';
 import { ProfilePage } from './ProfilePage';
 import { PublicProfilePage } from './PublicProfilePage';
 import * as api from '../lib/api';
@@ -125,5 +125,22 @@ describe('the quiz on the web', () => {
         await openProfile(older);
         expect(await screen.findByText(ARCHETYPES.spark.name, { exact: false })).toBeTruthy();
         expect(screen.queryByText(ARCHETYPES.guardian.name, { exact: false })).toBeNull();
+    });
+
+    it('my own card on the member page does too', async () => {
+        localStorage.setItem(COPY_KEY, JSON.stringify(newer));
+        vi.mocked(api.getMemberProfile).mockResolvedValue(myProfile(older) as any);
+        render(<PublicProfilePage identity={ME} pubkey={ME.publicKey} onBack={() => {}} onMessage={() => {}} onNavigatePost={() => {}} />);
+        expect(await screen.findByText(ARCHETYPES.spark.name, { exact: false })).toBeTruthy();
+    });
+
+    it('another member\'s page reads the chemistry from my newest result, though this community\'s row has none', async () => {
+        localStorage.setItem(COPY_KEY, JSON.stringify(newer));
+        const PEER = 'peer-pubkey-123456789';
+        vi.mocked(api.getMemberProfile).mockImplementation(async (pk: string) => (pk === PEER
+            ? { ...myProfile(JSON.stringify({ primary: 'weaver', secondary: 'sage', mode: 'quick', takenOn: '2026-11-01' })), publicKey: PEER, callsign: 'Bob' }
+            : myProfile(null)) as any);
+        render(<PublicProfilePage identity={ME} pubkey={PEER} onBack={() => {}} onMessage={() => {}} onNavigatePost={() => {}} />);
+        expect(await screen.findByText(calculateSynergy('spark', 'weaver').headline)).toBeTruthy();
     });
 });

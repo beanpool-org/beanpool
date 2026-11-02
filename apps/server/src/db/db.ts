@@ -2589,7 +2589,7 @@ function seedPricingGuideOnMainServer(): void {
  * its database booted as a standby's (services/takeover.ts resumeTakeoverAtBoot, through state-engine.ts
  * becomeMainServerInPlace). The same passes, each idempotent and each its own guard: the visitors' marks, the members'
  * schema rules, the break-glass hashes of suspended members, the pricing guide, the plain tables' unstamped rows, the link
- * treasuries' markers and the recovery releases' owners. Nothing on a standby. Never throws.
+ * treasuries' markers, the recovery releases' owners and the rule's start. Nothing on a standby. Never throws.
  */
 export function runMainServerSchemaPasses(): void {
     if (getNodeRole() === 'backup') return;

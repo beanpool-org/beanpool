@@ -13,7 +13,7 @@
  *   over, it could lock the owners out of the Settings they need right then.
  * - node_config rows: the accepted audit baseline and its note, the pricing guide's source and seasonality, the snapshot
  *   schedule, the door (who may invite, config/door.ts), whether a confirmation against the names list needs two
- *   admins (engine/names-list.ts), the listing promise's ticked lines and closing day (engine/directory-promise.ts), and where members' copies go (config/recovery-copies.ts). The baseline travels only where the main server has one (every main server writes one at its first
+ *   admins (engine/names-list.ts), the listing promise's ticked lines and closing day (engine/directory-promise.ts), where members' copies go (config/recovery-copies.ts), and when the rule on what the admins can see starts (config/balance-rule.ts). The baseline travels only where the main server has one (every main server writes one at its first
  *   boot): installing "none" would make the next audit accept whatever the ledger sums to, and hide a drift.
  * - The `node_config` row's object: the service area and the town or area its card names, the four directory switches and
  *   how often the directory is told.

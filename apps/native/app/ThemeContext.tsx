@@ -19,6 +19,8 @@ export type { ThemePreference };
 export interface ThemeContextType {
     /** The theme being drawn — the preference resolved against the phone's setting. */
     theme: ThemeMode;
+    /** The stored choice is still being read, so `theme` may not be the member's yet. The Map waits this out: its first draw fixes its base. */
+    themeLoading: boolean;
     /** What the member chose in Settings: follow the phone, or always light/dark. */
     themePreference: ThemePreference;
     /** Whether the doodle background is drawn. Off = the flat colour, per device. */
@@ -45,6 +47,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // initialProp there), so a 'system' default made a dark-phone user's map dark even after the
     // stored 'light' arrived. See utils/theme-preference.ts.
     const [themePreference, setThemePreferenceState] = useState<ThemePreference>('light');
+    const [themeLoading, setThemeLoading] = useState(true);
     // On by default; 'plain' is the opt-out, stored per device like the theme choice.
     const [patternEnabled, setPatternEnabledState] = useState(true);
     const theme = resolveTheme(themePreference, systemScheme);
@@ -52,7 +55,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         loadThemePreference(AsyncStorage)
             .then(setThemePreferenceState)
-            .catch(() => { /* keep 'light' */ });
+            .catch(() => { /* keep 'light' */ })
+            // On a failed read too: nothing waits for ever on this.
+            .finally(() => setThemeLoading(false));
         AsyncStorage.removeItem(RETIRED_LIGHT_PALETTE_KEY).catch(() => { /* nothing reads it */ });
         AsyncStorage.getItem(PATTERN_KEY)
             .then((pref) => { if (pref === 'plain') setPatternEnabledState(false); })
@@ -97,12 +102,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     const value = useMemo(() => ({
         theme,
+        themeLoading,
         themePreference,
         patternEnabled,
         colors: resolvedColors,
         setThemePreference,
         setPatternEnabled,
-    }), [theme, themePreference, patternEnabled, resolvedColors]);
+    }), [theme, themeLoading, themePreference, patternEnabled, resolvedColors]);
 
     return (
         <ThemeContext.Provider value={value}>

@@ -77,7 +77,7 @@ const LEGACY_SUB_TAB_LABELS = {
     enterprises: /^Enterprises \(/, decisions: /^Proposals$/, pool: /^Commons Pool$/, disputes: /Escrow Disputes/,
     announcements: /^Announcements$/, pulse: /^Pulse Channels/,
     diagnostics: /^Diagnostics & Logs$/, backups: /^Backups & Restore$/, gateway: /^Gateway & Peers$/,
-    network: /^Public Address$/, identity: /^Node Identity$/, access: /^Access & Security$/,
+    network: /^(?:Public Address|Addresses)$/, identity: /^Node Identity$/, access: /^Access & Security$/,
 };
 
 export function screenName(s) {

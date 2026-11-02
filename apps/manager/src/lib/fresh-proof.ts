@@ -1,7 +1,7 @@
 import { word, wordsFor, type WordKey } from '@beanpool/core';
 
 /** Operators' Settings is English for launch (translation design M8); the sentences are marked so a catalog can come later. */
-export const { t } = wordsFor('en');
+export const { t, tn, timeAgo } = wordsFor('en');
 
 /**
  * An owner's fresh proof (apps/server admin-auth.ts requireFreshProof; design case 18 §5): the rare changes that can lose

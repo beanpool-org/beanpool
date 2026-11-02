@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PublicAddressPanel } from './PublicAddressPanel';
+import { AddressesPanel } from './AddressesPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
 /**
@@ -117,7 +118,8 @@ describe('PublicAddressPanel: an owner\'s fresh proof (S4a)', () => {
     it('Claim over a live name from a computer: says do this from your phone', async () => {
         const sent: Array<Record<string, unknown>> = [];
         mockNode([[403, PHONE]], sent, '/public-address/claim');
-        render(<PublicAddressPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'owner' }} />);
+        render(<AddressesPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'owner' }} />);
+        fireEvent.click(await screen.findByTestId('addresses-add-address-btn'));
         const input = await screen.findByPlaceholderText('e.g. cairns');
         fireEvent.change(input, { target: { value: 'newcairns' } });
         fireEvent.submit(input.closest('form')!);

@@ -341,6 +341,19 @@ describe('EventDetail', () => {
         expect(screen.queryByRole('button', { name: 'Cancel event' })).not.toBeInTheDocument();
     });
 
+    it('EventDetail with photos uses responsive two-column layout on wide screens with full-height photo', () => {
+        const withPhoto = { ...baseEvent, photos: ['/uploads/event.jpg'] };
+        render(<EventDetail post={withPhoto} identity={identity} />);
+        const detail = screen.getByTestId('event-detail');
+        const classes = detail.className.split(/\s+/);
+        expect(classes).toContain('md:flex');
+        expect(classes).toContain('md:flex-row');
+
+        const img = within(detail).getByRole('img');
+        const photoWrapper = img.parentElement as HTMLElement;
+        expect(photoWrapper.className.split(/\s+/)).toContain('md:w-1/2');
+    });
+
     it("gives the host who's going and Cancel event", async () => {
         const hosted = {
             ...baseEvent, myRsvp: null, eventPrivateNote: 'Gate code 1234',

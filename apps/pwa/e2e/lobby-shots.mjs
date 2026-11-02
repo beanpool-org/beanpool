@@ -64,7 +64,7 @@ const VISITOR_READS_EXACT = new Set([
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
     // The visitors' Home in one read (HOME_READ_EXACT, public with the visitors' view on, as here), and the consent a
     // known community asks for at joining, which screen 1 reads: both on the node's list since this copy was made.
-    '/api/home', '/api/community/consent-terms',
+    '/api/home', '/api/community/known-rule',
 ]);
 const VISITOR_READS_PATTERNS = [
     /^\/api\/community\/membership\/[^/]+$/, /^\/api\/members\/callsign-available\/[^/]+$/, /^\/api\/recovery\/lookup\/[^/]+$/,

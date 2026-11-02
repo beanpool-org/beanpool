@@ -174,7 +174,8 @@ vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ busy:
 
 // The node, the key vault and the phone's lock, as the cases set them.
 const node = vi.hoisted(() => ({
-    consent: null as Record<string, unknown> | null,
+    /** Whether this account is confirmed in a known community (GET /api/community/known-rule and /api/community/me). */
+    confirmed: false,
     sessions: [] as Array<{ collectionId: string; startedAt: string }>,
     role: null as null | 'owner' | 'admin' | 'moderator',
     /** Whether `GET /api/node-admin/me` answered at all (false: offline, a timeout, a 5xx). */
@@ -193,7 +194,6 @@ vi.mock('../db', () => ({
     updateMemberProfile: async () => {},
     signedRequest: async (route: string) => (route === '/api/recovery/collect/mine' ? { collections: node.sessions, count: node.sessions.length } : {}),
     signedGet: async (route: string) => {
-        if (route === '/api/names/consent') return node.consent ? new Response(JSON.stringify(node.consent), { status: 200 }) : new Response('{}', { status: 404 });
         return new Response(JSON.stringify({ show_as_connection_in_common: 'true' }), { status: 200 });
     },
     signedRequestWithMethod: async () => ({}),
@@ -209,6 +209,7 @@ vi.mock('../node-post', async (importOriginal) => {
     const { PURGE_NO_ANSWER, PURGE_TIMEOUT_MS } = await importOriginal<typeof import('../node-post')>();
     return {
         signedPost: async () => new Response(JSON.stringify({ keepers: [], enrolledSso: [], threshold: 1, recoverable: false, total: 0 }), { status: 200 }),
+        signedGet: async () => new Response(JSON.stringify({ confirmed: true, confirmedAt: '2026-10-01T00:00:00.000Z' }), { status: 200 }),
         anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
         // The node doesn't answer the delete in time: what purgeAccountOnNode throws then.
         purgeAccountOnNode: async () => { throw new Error(PURGE_NO_ANSWER); },
@@ -284,10 +285,8 @@ vi.mock('../use-global-guest-visit', () => ({
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider, DrawnInLanguage } from '../../components/LanguageProvider';
-import { CONSENT_LINES, consentLineWords } from '../../components/KnownConsentCard';
 import { ownerRowWords } from '../../components/OwnerWordsCard';
 import { holdEndsWords } from '../../components/RecoveryAlertBanner';
-import { consentHeading, saveKnownConsent } from '../known-consent';
 import { OWNER_WORDS_COPY } from '../owner-words';
 import { holdEndsText } from '../vault';
 import { copiesRuleNow } from '../copies-rule';
@@ -319,7 +318,7 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: { beans: true, escrow: true, nearbyListings: { radiusKm: 10, max: 500 } }, checkedAt: new Date().toISOString() } }));
     who.identity = { publicKey: KEY, privateKey: 'me-priv', callsign: 'Ana', mnemonic: WORDS };
-    node.consent = null;
+    node.confirmed = false;
     node.sessions = [];
     node.role = null;
     node.heard = true;
@@ -336,6 +335,7 @@ beforeEach(() => {
     globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
         const u = String(url);
         if (u.includes('/api/members/preferences')) return new Response(JSON.stringify({ holiday_mode: 'false' }), { status: 200 });
+        if (u.includes('/api/community/known-rule')) return node.confirmed ? new Response(JSON.stringify({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, ruleFrom: null, debtLineFrom: null, quietDaysFrom: null }), { status: 200 }) : new Response('{}', { status: 404 });
         if (u.includes('/api/community/info')) return new Response(JSON.stringify({ memberCount: 14, postCount: 30, transactionCount: 9, ...(node.rule ? { recoveryCopies: node.rule } : {}) }), { status: 200 });
         return new Response('{}', { status: 404 });
     }) as typeof fetch;
@@ -426,8 +426,8 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(bypassing()).toEqual([]);
     });
 
-    it('what only Settings draws: the consent card, a recovery underway, a restore at the key vault, the move card, Community Admin and Community Keys', async () => {
-        node.consent = { known: true, version: '2', text: 'Admins can see your balance.', consentedVersion: '1', consentedAt: new Date(Date.UTC(2026, 9, 5)).toISOString() };
+    it('what only Settings draws: the confirmed row, a recovery underway, a restore at the key vault, the move card, Community Admin and Community Keys', async () => {
+        node.confirmed = true;
         node.sessions = [{ collectionId: 'c1', startedAt: new Date(Date.now() - 3600_000).toISOString() }, { collectionId: 'c2', startedAt: new Date().toISOString() }];
         node.role = 'owner';
         node.ownerChecked = Date.UTC(2026, 9, 3);
@@ -435,8 +435,7 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         vault.holds = [{ holdId: 'h1', provider: 'google', openedAt: Date.now() - 3600_000, releaseAt: Date.now() + 5 * 3600_000 }];
         vault.offer = { kind: 'move', provider: 'google', communityUrl: NODE };
         await renderIn('xx');
-        OTHERS.push('Admins can see your balance.');
-        expect(host.textContent).toContain(pseudoLocalise('Your community changed what its admins can see'));
+        expect(host.textContent).toContain(pseudoLocalise('Confirmed by an admin · step back'));
         expect(host.textContent).toContain(pseudoLocalise('Someone is recovering your account'));
         expect(host.textContent).toContain(pseudoLocalise('Someone is getting back into your account'));
         expect(host.textContent).toContain(pseudoLocalise('COMMUNITY ADMIN'));
@@ -724,16 +723,7 @@ describe('Settings → COMMUNITY: "How this community works" for a member, and i
 });
 
 describe('the lower layers\' lines the cards translate where they show them, held to their sources', () => {
-    it('known-consent.ts\'s heading and refusals; owner-words.ts\'s row lines; vault.ts holdEndsText\'s shape', async () => {
-        for (const consentedVersion of ['1', undefined]) {
-            const heading = consentHeading({ known: true, version: '2', text: '', confirmed: false, consentedAt: null, consentedVersion: consentedVersion ?? null, withdrawnAt: null });
-            expect(consentLineWords(heading)).toBe(heading);
-            expect(Object.keys(CONSENT_LINES)).toContain(heading);
-        }
-        for (const failure of [new TypeError('offline'), new Error('Request failed: 500'), new SyntaxError('x')]) {
-            const out = await saveKnownConsent(async () => { throw failure; });
-            expect(Object.keys(CONSENT_LINES)).toContain((out as { error: string }).error);
-        }
+    it('owner-words.ts\'s row lines; vault.ts holdEndsText\'s shape', async () => {
         for (const line of [OWNER_WORDS_COPY.title, OWNER_WORDS_COPY.notChecked, OWNER_WORDS_COPY.unlockTitle, OWNER_WORDS_COPY.unlockSub]) {
             expect(ownerRowWords(line)).toBe(line);
             setLanguage('xx');

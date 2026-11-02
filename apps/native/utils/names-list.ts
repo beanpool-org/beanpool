@@ -109,7 +109,7 @@ export interface ConfirmationRow {
     secondedAt: string | null;
     revokedBy: string | null;
     revokedAt: string | null;
-    revokeReason: 'admin' | 'removed' | 'account_deleted' | null;
+    revokeReason: 'admin' | 'member' | 'removed' | 'account_deleted' | null;
     status: ConfirmationStatus;
 }
 

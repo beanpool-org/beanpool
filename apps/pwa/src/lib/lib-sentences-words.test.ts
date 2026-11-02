@@ -1,6 +1,6 @@
 /**
  * Sentences web lib files build that reached a screen in English, in the member's language (words: member-visible
- * sentences in shared code): paying the Commons (lib/debts.ts), the consent card's heading (lib/known-consent.ts), an
+ * sentences in shared code): paying the Commons (lib/debts.ts), an
  * online event's link (lib/event-zone.ts), the profile's chat prefills (lib/archetypes.ts) and a tier's name
  * (lib/trust-tier.ts). English exactly as before; Portuguese from a catalog that has the sentence; the pseudo-locale
  * bracketed.
@@ -8,7 +8,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLanguage } from '@beanpool/core';
 import { PAY_WORDS, REPAYMENT_WORDS, payFailureWords } from './debts';
-import { consentHeading, type KnownConsent } from './known-consent';
 import { eventLinkProblem } from './event-zone';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage } from './archetypes';
 import { tierWords } from './trust-tier';
@@ -35,12 +34,8 @@ describe('paying the Commons', () => {
     });
 });
 
-describe('the consent card, an event\'s link, the chat prefills and a tier', () => {
-    const consent = (v: number | null) => ({ version: 2, consentedVersion: v }) as unknown as KnownConsent;
-
+describe('an event\'s link, the chat prefills and a tier', () => {
     it('in English as before', () => {
-        expect(consentHeading(consent(null))).toBe("What this community's admins can see");
-        expect(consentHeading(consent(1))).toBe('Your community changed what its admins can see');
         expect(eventLinkProblem('zoom.example/abc')).toBe('The link to join must start with https:// or http://');
         expect(eventLinkProblem(`https://x.example/${'a'.repeat(600)}`)).toBe('The link to join can be at most 500 characters');
         expect(buildSynergyNudgeMessage('Ana')).toBe('Hey Ana! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡');
@@ -51,15 +46,13 @@ describe('the consent card, an event\'s link, the chat prefills and a tier', () 
 
     it('in Portuguese from a catalog; a tier this build doesn\'t know, as it came', () => {
         setLanguage('pt', [{
-            "What this community's admins can see": 'O que os administradores desta comunidade podem ver',
             'Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡': 'Olá {name}! Faz o questionário de 60 segundos no teu perfil para vermos como trabalhamos melhor juntos! ⚡',
             'Elder\u0004trust tier': 'Ancião',
         }]);
-        expect(consentHeading(consent(null))).toBe('O que os administradores desta comunidade podem ver');
         expect(buildSynergyNudgeMessage('Ana')).toBe('Olá Ana! Faz o questionário de 60 segundos no teu perfil para vermos como trabalhamos melhor juntos! ⚡');
         expect(tierWords('Elder')).toBe('Ancião');
         expect(tierWords('Sage')).toBe('Sage');
         setLanguage('xx');
-        for (const s of [consentHeading(consent(1)), eventLinkProblem('nope'), buildSynergyCollabMessage('Kofi'), tierWords('Steward')]) bracketed(s);
+        for (const s of [eventLinkProblem('nope'), buildSynergyCollabMessage('Kofi'), tierWords('Steward')]) bracketed(s);
     });
 });

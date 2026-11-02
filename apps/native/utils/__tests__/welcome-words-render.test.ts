@@ -3,7 +3,7 @@
  * The welcome screen and onboarding in the member's language (words slice S3, sweep B9): app/welcome.tsx rendered for
  * real inside the real LanguageProvider, step by step, with the components welcome draws that this sweep took drawn for
  * real too (KeeperProtectionPanel, SsoEnrolSheet, RecoveryKitButtons, WordsOnScreen's notes, and the ones S1 and P4 took:
- * WelcomeDoors, LanguageSwitch, RestoreCommunityChips, ConsentText). React Native's host components are plain tags
+ * WelcomeDoors, LanguageSwitch, RestoreCommunityChips). React Native's host components are plain tags
  * carrying their accessibility props and placeholders; the node, the key vault, the sign-ins and the phone's key store
  * are stubbed: nothing here is contacted.
  *

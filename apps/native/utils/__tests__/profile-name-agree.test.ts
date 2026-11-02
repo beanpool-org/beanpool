@@ -192,7 +192,7 @@ vi.mock('../../components/WordsOnScreen', () => ({
 vi.mock('../../components/NoWordsNotice', () => ({ NoWordsNotice: () => null }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ busy: false, start() {}, dialog: null }) }));
-vi.mock('../../components/KnownConsentCard', () => ({ KnownConsentCard: () => null }));
+vi.mock('../../components/ConfirmedSettingsRow', () => ({ ConfirmedSettingsRow: () => null }));
 vi.mock('../../components/RecoveryAlertBanner', () => ({ RecoveryAlertBanner: () => null }));
 vi.mock('../../components/VaultMoveCard', () => ({ VaultMoveCard: () => null }));
 vi.mock('../../components/NodeAdminEntry', () => ({ NodeAdminEntry: () => null }));

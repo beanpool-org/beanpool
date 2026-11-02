@@ -5,9 +5,10 @@
  * The screen also shows the community's totals and, as a list of its own, every look at trades and alerts (#1608), as
  * packages/beanpool-guide/content/settings/what-the-admins-can-see.md promises.
  */
+import type { WaitingLines } from '@beanpool/core';
 import type { OpenedEntry } from './names-list';
 
-export type HealthReason = 'past_debt_line' | 'quiet_in_debit';
+export type HealthReason = 'past_debt_line' | 'quiet_in_debit' | 'stepped_back_owing';
 
 export interface HealthException {
     memberPubkey: string;
@@ -28,8 +29,17 @@ export interface DepartedDebt {
     repaying: boolean;
 }
 
+/** When the rule starts here, and a tightened line's date while it waits. Absent from a node older than the rule. */
+export interface HealthRule {
+    from: string | null;
+    started: boolean;
+    debtLineFrom: string | null;
+    quietDaysFrom: string | null;
+}
+
 export interface HealthExceptionsBody {
     settings: { debtLinePct: number; quietDays: number };
+    rule?: HealthRule;
     exceptions: HealthException[];
     departed: DepartedDebt[];
 }
@@ -54,6 +64,8 @@ export interface HealthRow {
     key: string;
     name: string;
     detail: string;
+    /** A fixed sentence the screen says in the member's language: why a member who stepped back is here. */
+    note?: string;
 }
 
 /** A name only this phone can give: the entry it opened, or a plain word where it couldn't open that entry. */
@@ -64,18 +76,37 @@ export function nameFor(entryId: string | null, entries: Pick<OpenedEntry, 'id' 
 
 const beans = (n: number) => `${Math.round(n * 100) / 100} Beans`;
 
-export function reasonText(r: HealthReason, settings: HealthExceptionsBody['settings']): string {
+export function reasonText(r: Exclude<HealthReason, 'stepped_back_owing'>, settings: HealthExceptionsBody['settings']): string {
     return r === 'past_debt_line'
         ? `past ${settings.debtLinePct}% of their floor`
         : `in debit with no sale for ${settings.quietDays} days`;
 }
 
 export function exceptionRows(body: HealthExceptionsBody, entries: Pick<OpenedEntry, 'id' | 'text'>[]): HealthRow[] {
-    return body.exceptions.map((e) => ({
-        key: e.memberPubkey,
-        name: nameFor(e.entryId, entries),
-        detail: `${beans(e.balance)} of a ${beans(e.floor)} floor · ${e.reasons.map((r) => reasonText(r, body.settings)).join(', and ')}`,
-    }));
+    return body.exceptions.map((e) => {
+        const crossed = e.reasons.filter((r): r is Exclude<HealthReason, 'stepped_back_owing'> => r !== 'stepped_back_owing');
+        const base = `${beans(e.balance)} of a ${beans(e.floor)} floor`;
+        return {
+            key: e.memberPubkey,
+            name: nameFor(e.entryId, entries),
+            detail: crossed.length ? `${base} · ${crossed.map((r) => reasonText(r, body.settings)).join(', and ')}` : base,
+            ...(e.reasons.includes('stepped_back_owing') ? { note: HEALTH_COPY.steppedBackOwing } : {}),
+        };
+    });
+}
+
+/**
+ * What the node's summary says of a tightened line, for the dates the exceptions don't carry the owner's numbers for:
+ * `settings` there are the lines the list read. Null from a node older than the rule.
+ */
+export function readWaitingLines(v: unknown): WaitingLines | null {
+    const o = v as { settings?: { debtLinePct?: unknown; quietDays?: unknown }; rule?: { debtLineFrom?: unknown; quietDaysFrom?: unknown } } | null;
+    if (!o?.rule || !num(o.settings?.debtLinePct) || !num(o.settings?.quietDays)) return null;
+    return {
+        debtLinePct: o.settings.debtLinePct, quietDays: o.settings.quietDays,
+        debtLineFrom: typeof o.rule.debtLineFrom === 'string' ? o.rule.debtLineFrom : null,
+        quietDaysFrom: typeof o.rule.quietDaysFrom === 'string' ? o.rule.quietDaysFrom : null,
+    };
 }
 
 export function departedRows(body: HealthExceptionsBody, entries: Pick<OpenedEntry, 'id' | 'text'>[]): HealthRow[] {
@@ -214,6 +245,8 @@ export interface HealthLogSection {
 }
 
 export const HEALTH_COPY = {
+    /** A member who stepped back while owing past their ordinary line, listed until they are back within it. */
+    steppedBackOwing: 'Stepped back while owing past their ordinary line',
     totalsHeading: 'THE WHOLE COMMUNITY',
     totalsHint: 'Any member may know these. Nobody’s own balance or trades are in them.',
     totalsMissing: 'The totals couldn’t be read just now.',

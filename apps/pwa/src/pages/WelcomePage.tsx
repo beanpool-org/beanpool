@@ -33,8 +33,7 @@ import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { takeWelcomeDoor } from '../lib/community-card';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
-import { fetchConsentTerms, type ConsentTerms } from '../lib/known-consent';
-import { ConsentText } from '../components/ConsentText';
+import { fetchKnownRule } from '../lib/known-rule';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
 import { WebRekey } from '../components/WebRekey';
@@ -48,7 +47,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word, type CommunityCard } from '@beanpool/core';
+import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, joinRuleLines, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -867,14 +866,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     }, []);
 
 
-    // A known community's consent text, shown on the join step before joining (community modes slice 6), and the
-    // version of it the member ticked. Never required: unticked, the join goes on and the admins never see the balance.
-    const [joinTerms, setJoinTerms] = useState<ConsentTerms | null>(null);
-    const [joinTickedVersion, setJoinTickedVersion] = useState<string | null>(null);
-    const joinConsentTicked = !!joinTerms && joinTickedVersion === joinTerms.version;
+    // A known community's rule, stated on the join step in its own numbers. Nothing to tick, and no answer draws nothing.
+    const [joinRule, setJoinRule] = useState<KnownRule | null>(null);
     useEffect(() => {
         let cancelled = false;
-        void fetchConsentTerms().then((terms) => { if (!cancelled) setJoinTerms(terms); });
+        void fetchKnownRule().then((rule) => { if (!cancelled) setJoinRule(rule); });
         return () => { cancelled = true; };
     }, []);
 
@@ -997,12 +993,6 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // goes in the same transaction.
             await completeInviteSent(joined, sentJoinGuard());
             setSentInvite('none');
-            // The consent ticked on this step, recorded now the key is a member, signed by it. Never in the way: a refusal
-            // (the lines changed meanwhile) or no answer leaves Settings to offer it.
-            if (joinTerms && joinConsentTicked) {
-                await signedFetchWithKey('POST', '/api/names/consent', { version: joinTerms.version }, joined.privateKey, joined.publicKey)
-                    .catch(() => null);
-            }
             setPendingInviteCode(trimmedCode);
             enterAsInvited(joined, trimmedCallsign, joinedEarlier);
             setLoading(false);
@@ -2771,29 +2761,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={inputStyle}
                             />
 
-                            {joinTerms && (
-                                <div data-testid="join-consent" style={{ textAlign: 'left', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
+                            {joinRule && (
+                                <div data-testid="join-rule" style={{ textAlign: 'left', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
                                     <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 0.35rem' }}>
                                         {t("What this community's admins can see")}
                                     </p>
-                                    <ConsentText text={joinTerms.text} fontSize="0.85rem" />
-                                    <label htmlFor="joinConsent" style={{
-                                        display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 48,
-                                        fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
-                                    }}>
-                                        <input
-                                            id="joinConsent"
-                                            type="checkbox"
-                                            checked={joinConsentTicked}
-                                            onChange={(e) => setJoinTickedVersion(e.target.checked ? joinTerms.version : null)}
-                                            disabled={loading}
-                                            style={{ accentColor: 'var(--bp-ink-info)', width: 20, height: 20 }}
-                                        />
-                                        {t('I agree')}
-                                    </label>
-                                    <p style={{ fontSize: '0.8rem', lineHeight: 1.4, color: 'var(--text-muted)', margin: 0 }}>
-                                        {t("Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.")}
-                                    </p>
+                                    {joinRuleLines(joinRule).map((line) => (
+                                        <p key={line} style={{ fontSize: '0.85rem', lineHeight: 1.45, margin: '0 0 0.5rem' }}><BoldWords text={line} /></p>
+                                    ))}
                                 </div>
                             )}
 

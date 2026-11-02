@@ -20,6 +20,7 @@ import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressFollowCard } from '../../components/AddressFollowCard';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
+import { ConfirmedCard } from '../../components/ConfirmedCard';
 import { BringListingsSheet } from '../../components/BringListingsSheet';
 import { NotificationPermissionCard } from '../../components/NotificationPermissionCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
@@ -1173,6 +1174,8 @@ export default function HomeScreen() {
                     <AddressFollowCard colors={colors} />
                     {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
                     {!lookingAround && <CopiesRuleCard colors={colors} />}
+                    {/* The rule of being confirmed: once when it reaches this member, with the way out (balance rule S2). */}
+                    {!lookingAround && <ConfirmedCard />}
                     <NotificationPermissionCard colors={colors} />
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">

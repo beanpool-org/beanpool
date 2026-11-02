@@ -8,7 +8,7 @@ import { nodeCredential } from '../../lib/profiles';
 /**
  * People & Safety → "Community health" (community modes slice 6; apps/server engine/community-health.ts).
  *
- * The community's totals, which are public by rule; the two lines that make a confirmed, consenting member an exception
+ * The community's totals, which are public by rule; the two lines that make a confirmed member an exception
  * in a known community (an owner moves them); and who opened the exceptions, when. The exceptions themselves open on an
  * admin's phone, where the names list is: this page never shows a balance of one member, and there is no export. A node
  * older than the panel answers 404, and nothing is shown.
@@ -46,10 +46,22 @@ export function logDid(l: LogLine): string {
     if (l.action === 'alerts_read') return `read the alerts that named ${l.subjectCallsign ?? 'a member'} on`;
     return 'opened it on';
 }
-export type Health = { totals: Totals; settings: Lines; known: boolean; log: LogLine[]; tradeLog: LogLine[] };
+/** When the rule starts here, and a tightened line's date while it waits. Absent from a node older than the rule. */
+type Rule = { from: string | null; started: boolean; debtLineFrom: string | null; quietDaysFrom: string | null };
+export type Health = { totals: Totals; settings: Lines; known: boolean; rule: Rule | null; log: LogLine[]; tradeLog: LogLine[] };
 type Status = { kind: 'saved' | 'error'; text: string };
 
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+
+function readRule(v: unknown): Rule | null {
+    const r = v as Partial<Rule> | null | undefined;
+    if (!r || typeof r.started !== 'boolean') return null;
+    const when = (x: unknown) => (typeof x === 'string' && Number.isFinite(Date.parse(x)) ? x : null);
+    return { from: when(r.from), started: r.started, debtLineFrom: when(r.debtLineFrom), quietDaysFrom: when(r.quietDaysFrom) };
+}
+
+/** "16 November": the day a line or the rule applies from. */
+const dayOf = (iso: string) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'long' });
 
 export function readHealth(v: unknown): Health | null {
     const o = v as Partial<Health> | null;
@@ -63,6 +75,7 @@ export function readHealth(v: unknown): Health | null {
         },
         settings: { debtLinePct: s.debtLinePct!, quietDays: s.quietDays! },
         known: o.known === true,
+        rule: readRule(o.rule),
         log: Array.isArray(o.log) ? o.log.filter((l): l is LogLine => !!l && typeof (l as LogLine).at === 'string') : [],
         tradeLog: Array.isArray(o.tradeLog) ? o.tradeLog.filter((l): l is LogLine => !!l && typeof (l as LogLine).at === 'string') : [],
     };
@@ -134,7 +147,13 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
             const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown; debtLinePct?: unknown; quietDays?: unknown };
             if (res.ok && num(body.debtLinePct) && num(body.quietDays)) {
                 setHealth({ ...health, settings: { debtLinePct: body.debtLinePct as number, quietDays: body.quietDays as number } });
-                setStatus({ kind: 'saved', text: 'Saved. Members who join from now on agree to the new lines.' });
+                setStatus({ kind: 'saved', text: 'Saved. A looser line applies now; a tighter one reaches members 14 days from now.' });
+                // The answer has the lines, not their dates: "applies from" comes from a fresh read.
+                const again = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-health'), {
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                }).catch(() => null);
+                const fresh = again?.ok ? readHealth(await again.json().catch(() => null)) : null;
+                if (fresh) setHealth(fresh);
             } else {
                 setStatus({
                     kind: 'error',
@@ -181,19 +200,26 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
                 <h4 className="text-sm font-bold text-white m-0 break-words">When admins may see a member&apos;s balance</h4>
                 <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">
                     {health.known
-                        ? 'In this known community, a confirmed member who agreed when joining shows on an admin\'s phone if they pass either line. Admins never see anyone\'s trades. Every time an admin opens that list, it is written below.'
+                        ? 'In this known community, a confirmed member shows on an admin\'s phone if they pass either line, and so does a member who stepped back owing past their ordinary line, until they are back within it. Admins never see anyone\'s trades. Every time an admin opens that list, it is written below.'
                         : 'Only a community that confirms its members has these exceptions. Until confirmation is on, nobody\'s balance is shown to an admin.'}
                 </p>
+                {health.known && health.rule && !health.rule.started && health.rule.from && (
+                    <p data-testid="health-rule-starts" className="text-xs text-nature-300 m-0 leading-relaxed break-words">
+                        The rule starts on {dayOf(health.rule.from)}. Until then, only members confirmed since the notice began are listed.
+                    </p>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
                     <label htmlFor={`${ids}-pct`} className="block min-w-0">
                         <span className="block text-xs font-bold text-nature-300 mb-1">Past this % of their credit line</span>
                         <input id={`${ids}-pct`} inputMode="numeric" value={pct} readOnly={blocked}
                             onChange={(e) => { setPct(e.target.value.trim()); setStatus(null); }} className={input} />
+                        {health.rule?.debtLineFrom && <span data-testid="health-debt-line-from" className="block text-xs text-nature-300 mt-1 break-words">Applies from {dayOf(health.rule.debtLineFrom)}</span>}
                     </label>
                     <label htmlFor={`${ids}-days`} className="block min-w-0">
                         <span className="block text-xs font-bold text-nature-300 mb-1">In debit with no sale for (days)</span>
                         <input id={`${ids}-days`} inputMode="numeric" value={days} readOnly={blocked}
                             onChange={(e) => { setDays(e.target.value.trim()); setStatus(null); }} className={input} />
+                        {health.rule?.quietDaysFrom && <span data-testid="health-quiet-days-from" className="block text-xs text-nature-300 mt-1 break-words">Applies from {dayOf(health.rule.quietDaysFrom)}</span>}
                     </label>
                 </div>
                 {problem && !blocked && <p role="alert" className="text-xs text-amber-200 m-0 break-words">{problem}</p>}

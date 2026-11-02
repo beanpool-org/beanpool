@@ -129,3 +129,54 @@ describe('CommunityHealthPanel', () => {
         expect(f.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
     });
 });
+
+describe('CommunityHealthPanel: the rule of being confirmed (balance rule S2)', () => {
+    const FROM = '2026-11-16T04:00:00.000Z';
+    beforeEach(() => { vi.unstubAllGlobals(); });
+
+    it('says no member agreed to anything: being confirmed is enough', async () => {
+        mockNode({ ok: true, body: { ...HEALTH, rule: { from: FROM, started: true, debtLineFrom: null, quietDaysFrom: null } } });
+        render(<CommunityHealthPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        const panel = await screen.findByTestId('community-health-panel');
+        expect(panel.textContent).toMatch(/a confirmed member shows on an admin's phone if they pass either line/);
+        expect(panel.textContent).not.toMatch(/agreed/);
+        expect(screen.queryByTestId('health-rule-starts')).toBeNull();
+    });
+
+    it('during the 14 days, says when the rule starts, and doesn\'t say nobody is listed', async () => {
+        mockNode({ ok: true, body: { ...HEALTH, rule: { from: FROM, started: false, debtLineFrom: null, quietDaysFrom: null } } });
+        render(<CommunityHealthPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        expect((await screen.findByTestId('health-rule-starts')).textContent).toBe('The rule starts on 16 November. Until then, only members confirmed since the notice began are listed.');
+    });
+
+    it('shows "Applies from" beside a line that waits, and only that line', async () => {
+        mockNode({ ok: true, body: { ...HEALTH, rule: { from: FROM, started: true, debtLineFrom: FROM, quietDaysFrom: null } } });
+        render(<CommunityHealthPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        expect((await screen.findByTestId('health-debt-line-from')).textContent).toBe('Applies from 16 November');
+        expect(screen.queryByTestId('health-quiet-days-from')).toBeNull();
+    });
+
+    it('reads the date again after a save: the answer to a save carries no dates', async () => {
+        let reads = 0;
+        const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+            if (init?.method === 'POST') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ debtLinePct: 30, quietDays: 60 }) });
+            reads += 1;
+            const rule = { from: FROM, started: true, debtLineFrom: reads > 1 ? FROM : null, quietDaysFrom: null };
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ...HEALTH, settings: { debtLinePct: reads > 1 ? 30 : 50, quietDays: 60 }, rule }) });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        render(<CommunityHealthPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        const pct = await screen.findByLabelText('Past this % of their credit line');
+        fireEvent.change(pct, { target: { value: '30' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save the lines' }));
+        expect((await screen.findByTestId('health-debt-line-from')).textContent).toBe('Applies from 16 November');
+    });
+
+    it('an older node states no rule: the panel loads as before', async () => {
+        expect(readHealth(HEALTH)?.rule).toBeNull();
+        mockNode();
+        render(<CommunityHealthPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        await screen.findByTestId('community-health-panel');
+        expect(screen.queryByTestId('health-rule-starts')).toBeNull();
+    });
+});

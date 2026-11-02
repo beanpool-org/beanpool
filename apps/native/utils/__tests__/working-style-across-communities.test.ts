@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { readFileSync } from 'node:fs';
 import Module from 'node:module';
+import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
 
 // One working style across a member's communities (scratch/fable-design/DESIGN-archetype-across-fable.md, slice S1). The
 // quiz is taken once; the device carries the result; each community hears it from the device alone, a day and no clock.
@@ -79,7 +82,7 @@ import { getCanonicalProfile, saveCanonicalProfile } from '../canonical-profile'
 import { closeDB, getDb, getMemberProfile, pushProfileToServer, pushWaitingArchetype, updateMemberProfile } from '../db';
 import { addSavedNode, markGuestNode, removeSavedNode } from '../nodes';
 import {
-    carryPendingProfileChange, clearWaitingArchetype, keepPendingProfileChange, keepWaitingArchetype, pendingProfileChange, waitingArchetype,
+    carryPendingProfileChange, clearPendingProfileChange, clearWaitingArchetype, keepPendingProfileChange, keepWaitingArchetype, pendingProfileChange, waitingArchetype,
 } from '../pending-profile-sync';
 import { keepQuizResult } from '../working-style';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from '../storage-keys';
@@ -505,6 +508,21 @@ describe('what waits goes as an entry goes', () => {
         await keepPendingProfileChange(B, ME, { avatar: 'bundled://koala' });
         await keepWaitingArchetype(B, ME, 'x');
         await retireParkedPickAfterPublish({ avatar: 'bundled://koala', clearsParkedPick: true }, B);
+        expect(await pendingProfileChange(B, ME)).toBeNull();
+        expect(await waitingArchetype(B, ME)).toBe('x');
+    });
+
+    it('the join wizard\'s two photo publishes say nothing of the result, so they leave it waiting', async () => {
+        // An account already on the phone can join by invite at an address it saved: the wizard publishes the name and
+        // photo there, and no word of a result. Cleared bare, what waited would go until the next Save.
+        const wizard = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../app/welcome.tsx'), 'utf8');
+        expect(wizard).not.toMatch(/archetype/i);
+        expect(wizard.match(/clearPendingProfileChange\(url, undefined, undefined, true\)/g)).toHaveLength(2);
+        expect(wizard).not.toMatch(/clearPendingProfileChange\(url\)/);
+
+        await keepPendingProfileChange(B, ME, { avatar: 'bundled://koala' });
+        await keepWaitingArchetype(B, ME, 'x');
+        await clearPendingProfileChange(B, undefined, undefined, true);
         expect(await pendingProfileChange(B, ME)).toBeNull();
         expect(await waitingArchetype(B, ME)).toBe('x');
     });

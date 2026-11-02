@@ -3554,6 +3554,9 @@
   "Stop taking questions": "質問の受け付けをやめる",
   "on the global community": "グローバルコミュニティで",
   "Open their requests there": "そこでリクエストを開く",
+  "Previous month": "前の月",
+  "Next month": "次の月",
+  "Event · {from}": "イベント · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "ここがあなたのホームです。下からカードを追加するか、カードを長押しして並べ替えてください。",
   "Move {card} earlier": "{card} を前に移動",
   "Move {card} later": "{card} を後ろに移動"

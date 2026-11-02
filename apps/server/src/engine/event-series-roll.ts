@@ -261,13 +261,17 @@ function keptSkips(skips: string[], fromDate: string, rule: EventRepeatRule, tz:
     });
 }
 
-/** Writes a date onto the row as its current one: its four times, scheduled (UPDATED told of the date gone by), the skips kept. */
+/**
+ * Writes a date onto the row as its current one: its four times, scheduled (UPDATED told of the date gone by), the skips kept.
+ * A pin goes with the date it was made on: a pin on a series is a pin on one date, and a weekly event is pinned again only by
+ * hand (DESIGN-pinning-fable.md §2.5).
+ */
 function writeCurrentDate(row: SeriesRow, rule: EventRepeatRule, occ: ReturnType<typeof occurrenceOn> & object, skips: string[], nowIso: string): boolean {
     const kept = keptSkips(skips, occ.date, rule, row.event_tz!, Date.parse(nowIso));
     return db.prepare(`
         UPDATE posts
            SET event_start_at = ?, event_end_at = ?, event_start_local = ?, event_end_local = ?,
-               event_state = 'scheduled', event_repeat_skips = ?, updated_at = ?
+               event_state = 'scheduled', event_repeat_skips = ?, pinned_until = NULL, pinned_at = NULL, updated_at = ?
          WHERE id = ? AND event_start_at = ?`)
         .run(occ.startAt, occ.endAt, occ.startLocal, occ.endLocal, repeatSkipsCell(kept), nowIso, row.id, row.event_start_at)
         .changes > 0;

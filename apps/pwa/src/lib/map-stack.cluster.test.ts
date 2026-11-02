@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { MAP_TAP_CAP_ZOOM } from '@beanpool/core';
-import { bubblesOnMap, clusterSplitZoom, planBubbleTap, stackPins, type StackPin } from './map-stack';
+import { bubblesOnMap, clusterSplitZoom, planBubbleTap, stackPins, stackPinFromPost, type StackPin } from './map-stack';
 
 const AT: [number, number] = [-28.69, 153.56];
 const north = (m: number): [number, number] => [AT[0] + m / 111_000, AT[1]];
@@ -160,5 +160,35 @@ describe('stackPins', () => {
 
     it('lists only pins on the map now', () => {
         expect(stackPins(['soon', 'gone'], onMap).map((p) => p.key)).toEqual(['soon']);
+    });
+});
+
+describe('stackPinFromPost', () => {
+    it('sets type to "Event · from <Community>" for an event copy from another community', () => {
+        const post: any = {
+            id: 'ev-copy',
+            type: 'event',
+            title: 'Working bee',
+            shownCopy: true,
+            shownFrom: { host: 'mullum', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask', postId: 'ev-1' },
+            eventStartAt: '2026-11-07T09:00:00.000Z',
+            eventStartLocal: '2026-11-07T09:00',
+            createdAt: '2026-11-01T00:00:00.000Z',
+        };
+        const pin = stackPinFromPost(post);
+        expect(pin.type).toBe('Event · from Mullumbimby');
+    });
+
+    it('sets type to "Event" for a local event', () => {
+        const post: any = {
+            id: 'ev-local',
+            type: 'event',
+            title: 'Local workshop',
+            eventStartAt: '2026-11-07T09:00:00.000Z',
+            eventStartLocal: '2026-11-07T09:00',
+            createdAt: '2026-11-01T00:00:00.000Z',
+        };
+        const pin = stackPinFromPost(post);
+        expect(pin.type).toBe('Event');
     });
 });

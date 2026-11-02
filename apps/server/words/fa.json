@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "fa",
+    "name": "Persian",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "فقط مالک یا مدیر می‌تواند پستی را سنجاق کند.",
+  "Only an owner, an admin or the post's author can take a pin off.": "فقط مالک، مدیر یا نویسنده پست می‌تواند سنجاق را بردارد.",
+  "A pin lasts 1 day, 3 days or 1 week.": "سنجاق ۱ روز، ۳ روز یا ۱ هفته می‌ماند.",
+  "That post is no longer here.": "آن پست دیگر اینجا نیست.",
+  "Only a public post can be pinned.": "فقط پست عمومی را می‌توان سنجاق کرد.",
+  "Only this community's own posts can be pinned.": "فقط پست‌های خود این جامعه را می‌توان سنجاق کرد.",
+  "This post has ended, so it can't be pinned.": "این پست به پایان رسیده است، پس نمی‌توان آن را سنجاق کرد.",
+  "Three posts are pinned already. Take one off first.": "سه پست از قبل سنجاق شده‌اند. اول یکی را بردارید."
+}

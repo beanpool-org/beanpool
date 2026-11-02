@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "ta",
+    "name": "Tamil",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "உரிமையாளர் அல்லது நிர்வாகி மட்டுமே ஒரு இடுகையைப் பொருத்த முடியும்.",
+  "Only an owner, an admin or the post's author can take a pin off.": "உரிமையாளர், நிர்வாகி அல்லது இடுகையின் ஆசிரியர் மட்டுமே பொருத்தலை நீக்க முடியும்.",
+  "A pin lasts 1 day, 3 days or 1 week.": "ஒரு பொருத்தல் 1 நாள், 3 நாட்கள் அல்லது 1 வாரம் நீடிக்கும்.",
+  "That post is no longer here.": "அந்த இடுகை இப்போது இங்கே இல்லை.",
+  "Only a public post can be pinned.": "பொது இடுகையை மட்டுமே பொருத்த முடியும்.",
+  "Only this community's own posts can be pinned.": "இந்தச் சமூகத்தின் சொந்த இடுகைகளை மட்டுமே பொருத்த முடியும்.",
+  "This post has ended, so it can't be pinned.": "இந்த இடுகை முடிந்துவிட்டது, எனவே இதைப் பொருத்த முடியாது.",
+  "Three posts are pinned already. Take one off first.": "மூன்று இடுகைகள் ஏற்கெனவே பொருத்தப்பட்டுள்ளன. முதலில் ஒன்றை நீக்குங்கள்."
+}

@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "it",
+    "name": "Italian",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Solo un proprietario o un amministratore può fissare un post.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Solo un proprietario, un amministratore o chi ha scritto il post può togliere la fissazione.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Una fissazione dura 1 giorno, 3 giorni o 1 settimana.",
+  "That post is no longer here.": "Quel post non è più qui.",
+  "Only a public post can be pinned.": "Si può fissare solo un post pubblico.",
+  "Only this community's own posts can be pinned.": "Si possono fissare solo i post di questa comunità.",
+  "This post has ended, so it can't be pinned.": "Questo post è terminato, quindi non si può fissare.",
+  "Three posts are pinned already. Take one off first.": "Ci sono già tre post fissati. Togline prima uno."
+}

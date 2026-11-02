@@ -3554,6 +3554,9 @@
   "Stop taking questions": "停止接受提问",
   "on the global community": "在全球社区",
   "Open their requests there": "在那里打开他们的请求",
+  "Previous month": "上个月",
+  "Next month": "下个月",
+  "Event · {from}": "活动 · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "这是你的首页。在底部添加卡片，或长按卡片进行排列。",
   "Move {card} earlier": "将{card}前移",
   "Move {card} later": "将{card}后移"

@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "sw",
+    "name": "Swahili",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Mmiliki au msimamizi pekee ndiye anayeweza kubandika chapisho.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Mmiliki, msimamizi au mwandishi wa chapisho pekee ndiye anayeweza kuondoa ubandikaji.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Ubandikaji hudumu siku 1, siku 3 au wiki 1.",
+  "That post is no longer here.": "Chapisho hilo halipo hapa tena.",
+  "Only a public post can be pinned.": "Chapisho la umma pekee ndilo linaloweza kubandikwa.",
+  "Only this community's own posts can be pinned.": "Machapisho ya jumuiya hii pekee ndiyo yanayoweza kubandikwa.",
+  "This post has ended, so it can't be pinned.": "Chapisho hili limeisha, kwa hiyo haliwezi kubandikwa.",
+  "Three posts are pinned already. Take one off first.": "Machapisho matatu tayari yamebandikwa. Ondoa moja kwanza."
+}

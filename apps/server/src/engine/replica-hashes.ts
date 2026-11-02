@@ -83,7 +83,11 @@ export interface TableHashes {
 /**
  * 14: posts gains shown_takes_questions (DESIGN-reaching-across-fable.md §1 row 5, slice GD). Raised for the same reason as 8.
  */
-export const TABLE_HASHES_VERSION = 14;
+/**
+ * 15: posts gains pinned_until and pinned_at (DESIGN-pinning-fable.md §4, slice 1). Raised for the same reason as 8. REPLICA_FORMAT
+ * stays: what an older importer drops is a pin, a week at most, and it ages out by itself, so it is worth no re-seed.
+ */
+export const TABLE_HASHES_VERSION = 15;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

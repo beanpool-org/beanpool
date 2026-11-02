@@ -26,5 +26,13 @@
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Чтобы выбрать «Другое», напишите свой ответ. Если писать негде, обновите приложение.",
   "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Вы уже ответили на этот опрос, и ничто не связывает ваш ответ с вами, поэтому его нельзя изменить.",
   "Only an Offer or Need shown on the global community can take questions.": "Вопросы можно принимать только по Предложению или Запросу, показанному в глобальном сообществе.",
-  "This community isn't taking message requests right now, so this can't take questions.": "Это сообщество сейчас не принимает запросы на переписку, поэтому здесь нельзя принимать вопросы."
+  "This community isn't taking message requests right now, so this can't take questions.": "Это сообщество сейчас не принимает запросы на переписку, поэтому здесь нельзя принимать вопросы.",
+  "Only an owner or admin can pin a post.": "Закреплять публикации могут только владелец или администратор.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Снять закрепление могут только владелец, администратор или автор публикации.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Закрепление действует 1 день, 3 дня или 1 неделю.",
+  "That post is no longer here.": "Этой публикации здесь больше нет.",
+  "Only a public post can be pinned.": "Закрепить можно только открытую публикацию.",
+  "Only this community's own posts can be pinned.": "Закрепить можно только публикации этого сообщества.",
+  "This post has ended, so it can't be pinned.": "Эта публикация завершена, поэтому её нельзя закрепить.",
+  "Three posts are pinned already. Take one off first.": "Уже закреплены три публикации. Сначала снимите одну."
 }

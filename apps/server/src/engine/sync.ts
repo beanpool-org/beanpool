@@ -1195,6 +1195,17 @@ function postFeatured(rp: any): [string | null] {
 }
 
 /**
+ * pinned_until and pinned_at: a pin (engine/pins.ts), plain assignment, so one taken off, or ended, is off here too. A
+ * payload from a main server older than pins says nothing, and it pinned nothing.
+ */
+function postPinned(rp: any): [string | null, string | null] {
+    return [
+        typeof rp.pinnedUntil === 'string' && rp.pinnedUntil !== '' ? rp.pinnedUntil : null,
+        typeof rp.pinnedAt === 'string' && rp.pinnedAt !== '' ? rp.pinnedAt : null,
+    ];
+}
+
+/**
  * created_via: what made the post when its author's own app did not ('assistant:<grant id>', agent/owner-posts.ts), as the
  * main server holds it, so a standby's moderators read what the main server's do. Set once at create and never changed:
  * a payload from a main server older than it says nothing, and the row keeps what it has.
@@ -2025,8 +2036,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, pinned_until, pinned_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2070,6 +2081,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postLending(rp),
                         ...postShop(rp),
                         ...postFeatured(rp),
+                        ...postPinned(rp),
                         ...postCreatedVia(rp),
                         ...postTags(rp),
                         ...postFreeTags(rp),
@@ -2131,6 +2143,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         replacement_value = ?,
                         shop_id = ?,
                         featured_at = ?,
+                        pinned_until = ?,
+                        pinned_at = ?,
                         created_via = COALESCE(?, created_via),
                         tags = ?,
                         free_tags = ?,
@@ -2174,6 +2188,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postLending(rp),
                         ...postShop(rp),
                         ...postFeatured(rp),
+                        ...postPinned(rp),
                         ...postCreatedVia(rp),
                         ...postTags(rp),
                         ...postFreeTags(rp),

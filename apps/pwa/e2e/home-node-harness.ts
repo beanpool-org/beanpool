@@ -20,6 +20,7 @@
  *   { op: 'cors', origins }             the web addresses this node lets call it (Settings' CORS allowed origins), as for
  *                                       a web app on another community's address pointed here (Sovereign Node Connection)
  *   { op: 'joinGroup', groupId, member } a member joins a group as the node's own join does (e2e/group-chat-check.mjs)
+ *   { op: 'directory', url?, name? }    one community in the mirrored directory, as a mirror run writes it, or none (e2e/global-tick-check.mjs)
  *
  * Run by the check as: node --import tsx ../pwa/e2e/home-node-harness.ts (cwd apps/server).
  */
@@ -70,6 +71,7 @@ async function main(): Promise<void> {
     const { resetGatewayRateLimit } = await import('../../server/src/gateway-rate-limit.js');
     const { lockedDm } = await import('../../server/src/dm-test-payload.js');
     const { updateGatewayConfig } = await import('../../server/src/config/local-config.js');
+    const { normaliseRegistryRow, writeDirectoryRows } = await import('../../server/src/engine/directory-cache.js');
     // The engine the server runs (the same file through the workspace link): faces live in member_photos since #1475.
     const { setMemberPhoto } = await import('../../../packages/beanpool-engine/dist/index.js');
 
@@ -106,7 +108,7 @@ async function main(): Promise<void> {
     const beans = profile === 'local';
     const post = (author: string, type: 'offer' | 'need' | 'event', category: string, title: string, credits: number, extra: Record<string, unknown> = {}, at = BYRON) =>
         se.createPost(type, category, title, `${title}. Ask me anything.`, beans && type !== 'event' ? credits : 0, 'fixed', author,
-            at.lat + 0.01, at.lng + 0.01, type === 'event' ? undefined : [TINY_PNG], false, undefined, false, extra as any);
+            at.lat + 0.01, at.lng + 0.01, [TINY_PNG], false, undefined, false, extra as any);
     post(tama, 'offer', 'garden', 'Seedlings to give away', 0);
     // A Need comes after the member's own first Offer (the node's rule).
     post(tama, 'need', 'tools', 'Borrow a drill for an afternoon', 5);
@@ -169,6 +171,11 @@ async function main(): Promise<void> {
                 case 'cors':
                     updateGatewayConfig({ corsAllowedOrigins: (req.origins as unknown[]).map(String) });
                     break;
+                case 'directory': {
+                    const entry = req.url ? normaliseRegistryRow({ node_id: req.url, shown_name: req.name, node_url: req.url, last_seen_at: new Date().toISOString(), accepting_knocks: true }) : null;
+                    result = writeDirectoryRows(entry ? [entry] : [], new Date().toISOString());
+                    break;
+                }
                 case 'joinGroup':
                     result = se.joinGroup(String(req.groupId), String(req.member));
                     break;

@@ -11,7 +11,7 @@ import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
-    listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf,
+    listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf, eventRepeatOf, isOnlineEvent,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -541,21 +541,7 @@ export function eventCacheColumns(p: any): [string | null, string | null, string
     ];
 }
 
-/**
- * A repeating event's rule and last date, from the node's row (camelCase `eventRepeat`) or the cache's (snake_case
- * `event_repeat`, JSON text). The pattern only: the host's clock and each date's length are the node's.
- */
-export function eventRepeatOf(p: any): { rule: RepeatPattern | null; until: string | null } {
-    let raw = p?.eventRepeat ?? p?.event_repeat ?? null;
-    if (typeof raw === 'string') {
-        try { raw = JSON.parse(raw); } catch { raw = null; }
-    }
-    const until = (p?.eventRepeatUntil ?? p?.event_repeat_until ?? null) as string | null;
-    if (!raw || typeof raw !== 'object' || (raw.freq !== 'weekly' && raw.freq !== 'monthly')) return { rule: null, until: null };
-    const { freq, interval, byDay, byMonthDay, pos } = raw;
-    const rule = { freq, interval, ...(byDay ? { byDay } : {}), ...(byMonthDay != null ? { byMonthDay } : {}), ...(pos != null ? { pos } : {}) } as RepeatPattern;
-    return { rule, until: typeof until === 'string' && until ? until : null };
-}
+export { eventRepeatOf };
 
 /** The ↻ caption beside a repeating event's date ("Every Friday · until 18 Dec"); '' for a one-off. */
 export function eventRepeatCaption(p: any): string {
@@ -965,11 +951,7 @@ export interface EventZone {
 /** Where the form's zone came from: the pin's lookup, this phone, or the picker. */
 export type EventZoneSource = 'pin' | 'device' | 'picked';
 
-/** Online, from a node row (true) or the cached one (1). */
-export function isOnlineEvent(post: any): boolean {
-    const v = post?.eventOnline ?? post?.event_online;
-    return v === true || v === 1 || v === '1';
-}
+export { isOnlineEvent };
 
 /** The time fields of an event, from a server row (camelCase) or a cached one (snake_case). */
 function eventTimeFields(post: any) {

@@ -29,13 +29,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { t, tn } from '@beanpool/core';
+import { BRING_MOST_PHOTOS, photosOf, t, tn } from '@beanpool/core';
 import { BRING_LISTINGS_STORE_KEY } from './storage-keys';
 import { getCachedNodeProfile, GLOBAL_NODE_URL } from './node-profile';
 import { plainOriginOf } from './node-url';
 import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import type { FetchedPhoto } from './post-photo';
+
+export { BRING_MOST_PHOTOS, photosOf };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** How long an unanswered or unfinished offer is kept. The listings themselves are archived at 90 days. */
@@ -44,10 +46,6 @@ export const BRING_OFFER_KEEP_MS = 30 * DAY_MS;
 export const BRING_ASK_AGAIN_MS = DAY_MS;
 /** A photo the community couldn't give now is asked for on this many runs; on the last, the listing goes without it. */
 export const BRING_MOST_TRIES = 3;
-/** A listing carries at most this many photos (the node keeps five). */
-export const BRING_MOST_PHOTOS = 5;
-/** The node reads at most 2 MB of JSON (https-server.ts MAX_JSON_BODY_BYTES). Edits can build a listing past one body. */
-const BODY_ROOM_CHARS = 1_900_000;
 const POSTS_PATH = '/api/marketplace/posts';
 const PAGE_ROWS = 200;
 const MOST_PAGES = 25;
@@ -316,32 +314,6 @@ export async function planBring(offer: BringOffer, identity: BeanPoolIdentity, d
     // the rule the node applies (engine/posts.ts hasListedOffer), and a copy of one from home is no Offer to that rule.
     if (offer.waitsForOffer && bring[0]?.type === 'need' && !there.some((p) => p.type === 'offer' && !p.shownCopy)) return 'waiting';
     return { bring, gone };
-}
-
-/** A photo URL of this listing on this community, whole: anything else in the row is never fetched. */
-function photoUrlOf(photo: unknown, from: string): string | null {
-    if (typeof photo !== 'string' || !/^\/api\/marketplace\/posts\/[^/?#]+\/photos\/\d+(\?[^#]*)?$/.test(photo)) return null;
-    return `${from}${photo}`;
-}
-
-/** The listing's photos as the data URLs a new post sends; `missed` could not be fetched, `later` might yet be. */
-export async function photosOf(post: Pick<OwnListing, 'photos'>, from: string, deps: Pick<BringDeps, 'fetchPhoto'>): Promise<{ photos: string[]; missed: number; later: boolean }> {
-    const photos: string[] = [];
-    let missed = 0;
-    let later = false;
-    let room = BODY_ROOM_CHARS;
-    for (const photo of (post.photos ?? []).slice(0, BRING_MOST_PHOTOS)) {
-        const url = photoUrlOf(photo, from);
-        const got: FetchedPhoto = url ? await deps.fetchPhoto(url) : { failed: 'gone' };
-        if ('photo' in got && got.photo.length <= room) {
-            photos.push(got.photo);
-            room -= got.photo.length;
-        } else {
-            missed++;
-            later = later || ('failed' in got && got.failed === 'later');
-        }
-    }
-    return { photos, missed, later };
 }
 
 /** The new post: the listing's own words, place and terms. Its reach starts at the community, as any new post's. */

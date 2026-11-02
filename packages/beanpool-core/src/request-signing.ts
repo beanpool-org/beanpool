@@ -29,6 +29,7 @@
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
 
@@ -51,6 +52,8 @@ export const RE_ENROLL_TAG = 'beanpool-re-enroll/2';
 export const PUSH_LEAVE_TAG = 'beanpool-push-leave/2';
 export const CLAIM_TAG = 'beanpool-claim/2';
 export const CLAIM_PROOF_TAG = 'beanpool-claim-proof/1';
+/** Never sent: only the hash of what it signs leaves the device ({@link copyIdOf}). */
+export const COPY_ID_TAG = 'beanpool-copy-id/1';
 
 // ─── The host ───────────────────────────────────────────────────────────────────────────────
 
@@ -314,6 +317,21 @@ export function isPushLeaveStamp(leftAt: unknown): leftAt is number {
 
 /** Signs bytes with the member key. Given only to the builders below: the app never signs bytes a node chose. */
 export type Signer = (bytes: Uint8Array) => Uint8Array | Promise<Uint8Array>;
+
+/**
+ * The id of a member's copy of a listing on the global community (show-on-global.ts): number `generation` of the ids for
+ * `homeId`, the same on each of their devices, so a phone and a browser find one copy and can't post two. An Ed25519 signature
+ * is the same every time for one key and one message, and nobody without the key can make it: the id is the hash of one. Read
+ * as a plain hash of the key and the home id, anyone who sees a copy's `shownFrom.postId` could try every member's key against
+ * its id and find who wrote it, and a copy names nobody. It reads as any random UUID, and the signature itself goes nowhere.
+ */
+export async function copyIdOf(homeId: string, generation: number, sign: Signer): Promise<string> {
+    const hash = sha256(await sign(signedRequestBytes(`${COPY_ID_TAG}\n${homeId}\n${generation}`))).slice(0, 16);
+    hash[6] = (hash[6] & 0x0f) | 0x40;
+    hash[8] = (hash[8] & 0x3f) | 0x80;
+    const hex = bytesToHex(hash);
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 /** A {@link Signer} over an Ed25519 private key in either stored form (raw seed or PKCS8, see ed25519-key.ts). */
 export function ed25519Signer(privateKey: Uint8Array): Signer {

@@ -1532,6 +1532,8 @@ async function dragAcross(browser, root) {
                     const beforeDst = await boxOf(page, `home-card-${dst}`);
                     const p = await bandPoint(page, src);
                     const saves0 = h.saves.n;
+                    // Every slide the page asks for is a call to animate(): counted, so "no slides" is a number.
+                    await page.evaluate(() => { window.__slides = 0; const o = Element.prototype.animate; Element.prototype.animate = function (...a) { window.__slides++; return o.apply(this, a); }; });
                     await d.down(p.x, p.y);
                     await d.move(p.x + 2, p.y + 2);
                     check(!(await isLifted(page, src)), `${tag}: a press that has barely moved lifts nothing`);
@@ -1547,6 +1549,8 @@ async function dragAcross(browser, root) {
                     await d.up();
                     await saved;
                     await wait(calm ? 250 : 650);
+                    const slides = await page.evaluate(() => window.__slides);
+                    check(calm ? slides === 0 : slides > 0, `${tag}: ${calm ? 'no card slid' : 'the cards slid'} (${slides} slide${slides === 1 ? '' : 's'} asked for)`);
                     const got = await movableOrder(page);
                     check(JSON.stringify(got) === JSON.stringify(want), `${tag}: released, card ${was.indexOf(src) + 1} stands above card 2 (${got.join(' ')})`);
                     check(!(await isLifted(page, src)) && await page.evaluate((id) => !document.querySelector(`[data-testid="home-card-${id}"]`).style.transform, src), `${tag}: the ring and the lift are gone`);
@@ -1696,6 +1700,15 @@ async function dragAcross(browser, root) {
             check(top1 > top0 + 40, `held near the bottom edge, the page scrolls (${top0} → ${top1} px)`);
             const lifted = await boxOf(page, `home-card-${was[1]}`);
             check(lifted.y <= 405 && lifted.y + lifted.height >= 395, 'and the card stays under the pointer while it does');
+            // A wheel under a still pointer: the card stays under it.
+            await d.move(p.x + 12, 210, 8);
+            await wait(300);
+            const wheelFrom = await page.evaluate(() => document.querySelector('main').scrollTop);
+            await page.mouse.wheel(0, -120);
+            await wait(250);
+            const wheelTo = await page.evaluate(() => document.querySelector('main').scrollTop);
+            const afterWheel = await boxOf(page, `home-card-${was[1]}`);
+            check(wheelTo !== wheelFrom && afterWheel.y <= 210 && afterWheel.y + afterWheel.height >= 210, `a wheel turned the page (${wheelFrom} → ${wheelTo} px) and the card stayed under the pointer`);
             await page.keyboard.press('Escape');
             await d.up();
             await wait(300);

@@ -110,6 +110,7 @@ export function useArrangeDrag({ gridRef, ids, enabled, onDrop }: {
             window.removeEventListener('pointerup', onUp, true);
             window.removeEventListener('pointercancel', onCancel, true);
             window.removeEventListener('lostpointercapture', onCancel, true);
+            window.removeEventListener('scroll', onScroll, true);
             window.removeEventListener('keydown', onKey, true);
             window.removeEventListener('blur', onCancel);
             try { s.band.releasePointerCapture(s.pointerId); } catch { /* it had gone already */ }
@@ -152,6 +153,8 @@ export function useArrangeDrag({ gridRef, ids, enabled, onDrop }: {
             retarget(s);
         }
         function onUp(e: PointerEvent) { if (e.pointerId === g.current?.pointerId) end(true); }
+        // The page moved under a still pointer (a wheel, a key): the card goes back under it, and the place is read again.
+        function onScroll() { const s = g.current; if (s?.lifted) { follow(); retarget(s); } }
         function onCancel(e: Event) { if (!('pointerId' in e) || e.pointerId === g.current?.pointerId) end(false); }
         // Escape puts the card back, and only that: the Escape that ends Arrange waits for a press with nothing in the air.
         function onKey(e: KeyboardEvent) {
@@ -170,6 +173,7 @@ export function useArrangeDrag({ gridRef, ids, enabled, onDrop }: {
             window.addEventListener('pointerup', onUp, true);
             window.addEventListener('pointercancel', onCancel, true);
             window.addEventListener('lostpointercapture', onCancel, true);
+            window.addEventListener('scroll', onScroll, true);
             window.addEventListener('keydown', onKey, true);
             window.addEventListener('blur', onCancel);
         }

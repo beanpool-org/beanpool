@@ -163,7 +163,9 @@ async function main() {
     await new Promise<void>(r => server.listen(0, r));
     const adminBase = `http://localhost:${(server.address() as any).port}`;
     const admin = async (method: string, path: string, body?: any, as: 'pw' | 'warden' = 'pw') => {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        // Connection: close: making posts by the hundred holds the loop past the server's 5 s keep-alive on CI, and Node 22's
+        // fetch then reuses the socket the server just closed (ECONNRESET, main at 7621fcd3; #2508 fixed one call of this).
+        const headers: Record<string, string> = { 'Content-Type': 'application/json', connection: 'close' };
         if (as === 'pw') headers['x-admin-password'] = 'pw'; else headers['x-admin-session'] = 'warden';
         const res = await realFetch(`${adminBase}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
         return { status: res.status, body: await res.json().catch(() => null) as any };

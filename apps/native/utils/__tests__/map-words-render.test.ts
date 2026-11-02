@@ -99,6 +99,7 @@ vi.mock('../../components/UnifiedMapPin', () => ({
     PinVisual: () => null, MapMarkerManager: () => null, ClusterCaptureManager: () => null,
     getCachedMarkerImage: () => null, getCachedClusterImage: () => null, buildVariantList: () => [], pinCacheKey: () => '',
     PIN_ANCHOR: { x: 0.5, y: 1 }, PIN_RENDER_W: 40, PIN_RENDER_H: 50, CLUSTER_ANCHOR: { x: 0.5, y: 0.5 },
+    EVENT_PIN: { key: 'calendar|#7c3aed|0', emoji: '', bgColor: '#7c3aed', isElder: false, glyph: 'calendar' },
 }));
 const mapsKey = vi.hoisted(() => ({ on: true }));
 vi.mock('../maps', () => ({ get HAS_MAPS_KEY() { return mapsKey.on; } }));

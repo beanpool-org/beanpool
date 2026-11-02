@@ -2,10 +2,9 @@
  * Light/dark choice: LIGHT by default, with 'Same as phone' and Dark offered in Settings.
  *
  * The default was 'system' until 2026-09-20. It was changed because following the phone surprised
- * people whose phone is in night mode -- they opened a light-looking app and got a dark one -- and
- * because the map's base colours can't follow a late theme change on Android (see (tabs)/map.tsx),
- * so starting light keeps the map and the chrome agreeing. Anyone who wants the old behaviour picks
- * 'Same as phone'.
+ * people whose phone is in night mode -- they opened a light-looking app and got a dark one. Anyone
+ * who wants the old behaviour picks 'Same as phone'. (Starting light also kept the map and the chrome
+ * agreeing then, on Android; a change of theme now makes a new map, see utils/map-scheme.ts.)
  *
  * One stored preference — 'system' | 'light' | 'dark'. The old Settings → Dark Mode switch stored
  * 'light' | 'dark' under LEGACY_THEME_KEY; it is read once to seed the new key and then removed.

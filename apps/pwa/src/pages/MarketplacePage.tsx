@@ -1504,7 +1504,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 distanceKm={distanceOf(selectedPost)}
                 onBack={() => setSelectedPost(null)}
                 onJoin={() => undefined}
-                footer={<ListingCopyFooter post={selectedPost} copy={listingCopy} reader={identity?.publicKey} />}
+                footer={<ListingCopyFooter post={selectedPost} copy={listingCopy} reader={identity?.publicKey} onOpenChat={(id) => onNavigate?.('messages', id)} />}
             />
         );
     }

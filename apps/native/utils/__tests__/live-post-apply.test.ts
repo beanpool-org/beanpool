@@ -96,6 +96,22 @@ describe('applyDelta liveChanges: a pushed listing goes through the delta sync\'
         expect(row().title).toBe('Spare lemons');
     });
 
+    it('a copy whose member stops taking questions names nobody here once the next sync lands: no name, no key, no door', async () => {
+        const shownCopy = { shownCopy: true, shownFrom: { host: 'mullum.example.org', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' } };
+        await applyDelta({ posts: [offer({ ...shownCopy, takesQuestions: true })] });
+        expect(row()).toMatchObject({ author_pubkey: ANN, carried_callsign: 'Ann' });
+        expect(JSON.parse(row().shown_from).takesQuestions).toBe(true);
+        await applyDelta({ posts: [offer({ ...shownCopy, authorPublicKey: 'hidden', authorCallsign: '', updatedAt: '2026-09-24T02:00:00.000Z' })] });
+        expect(row()).toMatchObject({ author_pubkey: 'hidden', carried_callsign: '' });
+        expect(JSON.parse(row().shown_from).takesQuestions).toBeUndefined();
+    });
+
+    it('a listing with no name on a read keeps the name its row holds (the control)', async () => {
+        await applyDelta({ posts: [offer()] });
+        await applyDelta({ posts: [offer({ authorCallsign: undefined, updatedAt: '2026-09-24T02:00:00.000Z' })] });
+        expect(row().carried_callsign).toBe('Ann');
+    });
+
     it('a later delta sync that returns the same listing does not duplicate it', async () => {
         await applyDelta({ liveChanges: [upsert(offer(), true)] });
         await applyDelta({ posts: [offer({ description: 'A bag, from the tree out the back' })] });

@@ -38,6 +38,10 @@ vi.mock('../lib/blocklist', () => ({
 }));
 vi.mock('../lib/archetypes', () => ({ consumeChatPrefill: vi.fn(() => null) }));
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
+// What waits on the global community: the page's answer is the test's, and the file itself is real, so loading it under this
+// mock of the api (no copyIdFor) is part of what's tested: Chat loads it for every member (lib/show-on-global.ts).
+const waitingOnGlobal = vi.hoisted(() => ({ answer: vi.fn() }));
+vi.mock('../lib/show-on-global', async () => ({ ...(await vi.importActual('../lib/show-on-global')), requestsWaitingOnGlobal: waitingOnGlobal.answer }));
 
 /** The node: each member's list, and each conversation as GET /api/messages/:id reads it. */
 const node = vi.hoisted(() => ({ list: null as any, reads: {} as Record<string, { conversation: any; messages: any[] }>, gates: {} as Record<string, Promise<void> | undefined> }));
@@ -181,6 +185,7 @@ beforeEach(() => {
     vi.mocked(sendMessageApi).mockReset();
     vi.mocked(toggleMessageReactionApi).mockReset();
     vi.mocked(createConversationApi).mockReset();
+    waitingOnGlobal.answer.mockReset().mockResolvedValue(null);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -231,6 +236,199 @@ describe('the Message requests row', () => {
         await waitFor(() => expect(screen.queryByTestId('message-requests')).toBeNull());
         expect(within(bar).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
         expect(screen.queryByTestId('message-requests')).toBeNull();
+    });
+});
+
+describe('requests waiting on the global community, behind the same row', () => {
+    const THERE = { count: 2, href: 'https://global.test/' };
+    const NONE_WAITING = "No requests. A first message from someone you haven't added or talked to arrives here.";
+    const onGlobal = () => screen.findByTestId('message-requests-on-global');
+
+    it('with none waiting here: the row, and one way to them, with no line saying nothing waits', async () => {
+        node.list = annListWith([]);
+        waitingOnGlobal.answer.mockResolvedValue(THERE);
+        render(<MessagesPage identity={idOf(ann)} />);
+        const list = await openRequests();
+        const link = within(list).getByTestId('message-requests-on-global');
+        expect(link).toHaveAttribute('href', THERE.href);
+        expect(link).toHaveAttribute('target', '_blank');
+        expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+        expect(link.textContent).toContain('2 people want to message you');
+        expect(link.textContent).toContain('on the global community');
+        expect(within(list).queryByText(NONE_WAITING)).toBeNull();
+    });
+
+    it('sits above the cards of this community, in the one list', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Is the ladder still free?')]);
+        waitingOnGlobal.answer.mockResolvedValue({ ...THERE, count: 1 });
+        render(<MessagesPage identity={idOf(ann)} />);
+        const list = await openRequests();
+        const link = await onGlobal();
+        expect(link.textContent).toContain('1 person wants to message you');
+        const card = await within(list).findByTestId('request-card');
+        expect(link.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('where this community has requests off: the row still shows and still opens', async () => {
+        node.list = { conversations: [], totalUnread: 0, deletedAccounts: [] };
+        waitingOnGlobal.answer.mockResolvedValue(THERE);
+        render(<MessagesPage identity={idOf(ann)} />);
+        await openRequests();
+        expect(await onGlobal()).toHaveAttribute('href', THERE.href);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to chats' }));
+        expect(await screen.findByTestId('message-requests-row')).toBeInTheDocument();
+    });
+
+    it('stays open when this community turns its own requests off: global\'s still wait', async () => {
+        node.list = annListWith([]);
+        waitingOnGlobal.answer.mockResolvedValue(THERE);
+        render(<MessagesPage identity={idOf(ann)} />);
+        await openRequests();
+        node.list = { conversations: [], totalUnread: 0, deletedAccounts: [] };
+        await ringDoorbell();
+        expect(await onGlobal()).toBeInTheDocument();
+        expect(screen.getByTestId('message-requests')).toBeInTheDocument();
+    });
+
+    it('nothing waiting there: no row and no way to them', async () => {
+        node.list = annListWith([]);
+        render(<MessagesPage identity={idOf(ann)} />);
+        await chips();
+        await act(async () => {});
+        expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('message-requests-row')).toBeNull();
+        expect(screen.queryByTestId('message-requests-on-global')).toBeNull();
+    });
+
+    describe('when the tab comes back', () => {
+        const MINUTE = 60_000;
+        let clock = 0;
+        let seen: DocumentVisibilityState = 'visible';
+        const tab = async (state: DocumentVisibilityState) => {
+            seen = state;
+            await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+        };
+        const flick = async () => { await tab('hidden'); await tab('visible'); };
+        beforeEach(() => {
+            clock = 1_800_000_000_000;
+            seen = 'visible';
+            vi.spyOn(Date, 'now').mockImplementation(() => clock);
+            vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => seen);
+        });
+        afterEach(() => { vi.restoreAllMocks(); });
+
+        it('the trip to global: answered there, the row is gone when they come back, however quick it was', async () => {
+            node.list = { conversations: [], totalUnread: 0, deletedAccounts: [] };
+            waitingOnGlobal.answer.mockResolvedValue({ ...THERE, count: 1 });
+            render(<MessagesPage identity={idOf(ann)} />);
+            await openRequests();
+            fireEvent.click(await onGlobal());
+            await tab('hidden');
+            clock += 20_000;
+            waitingOnGlobal.answer.mockResolvedValue(null);
+            await tab('visible');
+            expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(2);
+            expect(screen.queryByTestId('message-requests-on-global')).toBeNull();
+            expect(screen.queryByTestId('message-requests-row')).toBeNull();
+        });
+
+        it('a tab flicked back and forth asks at most once in 5 minutes', async () => {
+            node.list = annListWith([]);
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            await act(async () => {});
+            expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(1);
+            for (let i = 0; i < 6; i++) {
+                clock += 45_000;
+                await flick();
+            }
+            expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(1);
+            clock += 30_000;
+            await flick();
+            expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(2);
+            for (let i = 0; i < 6; i++) {
+                clock += 45_000;
+                await flick();
+            }
+            expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(2);
+        });
+
+        it('going away asks nothing: only coming back does', async () => {
+            node.list = annListWith([]);
+            render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            clock += 6 * MINUTE;
+            await tab('hidden');
+            expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(1);
+        });
+
+        it('a request that came while they were away shows when they come back', async () => {
+            node.list = annListWith([]);
+            render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            await act(async () => {});
+            expect(screen.queryByTestId('message-requests-row')).toBeNull();
+            clock += 6 * MINUTE;
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            await flick();
+            expect(await screen.findByTestId('message-requests-row')).toBeInTheDocument();
+        });
+
+        it('what the page shows goes with the question, so no answer leaves it standing', async () => {
+            node.list = annListWith([]);
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            await act(async () => {});
+            expect(waitingOnGlobal.answer.mock.calls[0][1]).toBeNull();
+            clock += 6 * MINUTE;
+            await flick();
+            expect(waitingOnGlobal.answer.mock.calls[1][1]).toEqual(THERE);
+        });
+
+        it('an answer overtaken by a newer one is not drawn', async () => {
+            node.list = annListWith([]);
+            let first: (found: typeof THERE) => void = () => {};
+            waitingOnGlobal.answer.mockReturnValueOnce(new Promise((resolve) => { first = resolve; }));
+            render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            clock += 6 * MINUTE;
+            waitingOnGlobal.answer.mockResolvedValue(null);
+            await flick();
+            await act(async () => { first(THERE); });
+            expect(screen.queryByTestId('message-requests-row')).toBeNull();
+        });
+
+        it('stops listening with the page, and with the account', async () => {
+            node.list = annListWith([]);
+            const { rerender, unmount } = render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            rerender(<MessagesPage identity={idOf(bo)} />);
+            await act(async () => {});
+            const asked = waitingOnGlobal.answer.mock.calls.length;
+            clock += 6 * MINUTE;
+            await flick();
+            expect(waitingOnGlobal.answer.mock.calls.length).toBe(asked + 1);
+            unmount();
+            clock += 6 * MINUTE;
+            await flick();
+            expect(waitingOnGlobal.answer.mock.calls.length).toBe(asked + 1);
+        });
+    });
+
+    it('an answer that comes after the member has moved on is not drawn for the next one', async () => {
+        node.list = annListWith([]);
+        let answer: (found: typeof THERE) => void = () => {};
+        waitingOnGlobal.answer.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+        const { rerender } = render(<MessagesPage identity={idOf(ann)} />);
+        await chips();
+        rerender(<MessagesPage identity={idOf(bo)} />);
+        await act(async () => {});
+        await act(async () => { answer(THERE); });
+        expect(waitingOnGlobal.answer).toHaveBeenCalledTimes(2);
+        expect(screen.queryByTestId('message-requests-row')).toBeNull();
     });
 });
 

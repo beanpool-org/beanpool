@@ -1152,6 +1152,11 @@ export interface MessageAttachment {
     mime?: string;
 }
 
+/** Its author, on the copy's own page at the global community: the door shuts. An Off is never refused. */
+export async function stopTakingQuestions(id: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/marketplace/posts/takes-questions', { id, on: false });
+}
+
 export async function createConversationApi(
     type: 'dm',
     participants: string[],
@@ -1387,6 +1392,8 @@ export interface MarketplacePost {
     shownFrom?: ShownFromLine;
     /** Its price at home, for its words alone (core copyPriceLine). */
     shownPrice?: string;
+    /** Its member takes questions about it: a member's read has their name and key (@beanpool/core copyAsk). */
+    takesQuestions?: boolean;
     id: string;
     type: 'offer' | 'need' | 'poll' | 'event';
     category: string;

@@ -2,10 +2,11 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": null,
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
   "A typed answer is at most {n} characters": "Написанный ответ — не более {n} символов",
   "Add a photo first": "Сначала добавьте фото",
@@ -23,5 +24,7 @@
   "This community is also at {address}. The old address keeps working.": "Это сообщество теперь доступно и по адресу {address}. Старый адрес продолжает работать.",
   "This poll already offers Other: leave it out of the answers": "В этом опросе уже есть «Другое»: уберите его из ответов",
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Чтобы выбрать «Другое», напишите свой ответ. Если писать негде, обновите приложение.",
-  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Вы уже ответили на этот опрос, и ничто не связывает ваш ответ с вами, поэтому его нельзя изменить."
+  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Вы уже ответили на этот опрос, и ничто не связывает ваш ответ с вами, поэтому его нельзя изменить.",
+  "Only an Offer or Need shown on the global community can take questions.": "Вопросы можно принимать только по Предложению или Запросу, показанному в глобальном сообществе.",
+  "This community isn't taking message requests right now, so this can't take questions.": "Это сообщество сейчас не принимает запросы на переписку, поэтому здесь нельзя принимать вопросы."
 }

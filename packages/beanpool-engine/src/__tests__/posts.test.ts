@@ -228,6 +228,7 @@ const POSTS_FIXTURE_DDL = `
         hidden_by_reports_at TEXT,
         shown_from_host TEXT,
         shown_from_post_id TEXT,
+        shown_takes_questions INTEGER,
         removed_by_moderator_at TEXT
     );
 `;

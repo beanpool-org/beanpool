@@ -129,6 +129,7 @@ async function child(): Promise<void> {
             const { setSwitchOverride } = await import('./config/node-profile.js');
             const { writeDirectoryRows, normaliseRegistryRow } = await import('./engine/directory-cache.js');
             setSwitchOverride('directoryMirror', a.on);
+            setSwitchOverride('dmRequests', a.on);
             if (a.host) {
                 const url = `https://${a.host}`;
                 const now = new Date().toISOString();
@@ -384,8 +385,13 @@ async function main(): Promise<void> {
             type: 'event', title: WORDS.copyTitle, description: WORDS.copyText, authorPublicKey: rhea.pk,
             lat: -28.7, lng: 153.7, eventStartAt: startAt, photos: [TINY_PNG], shownFrom: COPY_FROM,
         })).post;
+        const askable = built('Cy shows an Offer and takes questions about it', await S_(cy, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title: 'Seed packets', description: 'From the home community', authorPublicKey: cy.pk,
+            lat: -28.7, lng: 153.7, photos: [TINY_PNG], shownPrice: { beans: 2, per: 'fixed' }, shownFrom: { host: 'not-in-the-directory.example.org', takesQuestions: true },
+        })).post;
         await main.send('directory', { on: false });
         require_(copy.shownCopy === true, 'M: it is a copy');
+        require_(askable.takesQuestions === true, 'M: its door is open');
         built('Cy reports the listing that is up', await S_(cy, '/api/reports', { reporterPubkey: cy.pk, targetPubkey: rhea.pk, targetPostId: up.id, reason: 'Testing the report view' }));
         built('the admin adds a pricing guide item', await A('/api/pricing-guide/admin/item', { category: 'food', emoji: '🏮', name: 'Lantern', priceBeans: 3 }));
         built('the pricing guide runs', await A('/api/pricing-guide/admin/aggregate'));
@@ -567,6 +573,7 @@ async function main(): Promise<void> {
         const mRows: Rows = await main.send('rows');
         let sRows: Rows = await standby.send('rows');
         assert(rowsDiff(mRows, sRows).length === 0, `S's posts, photos, replies and chats are M's, every column and stamp (differences ${first(rowsDiff(mRows, sRows))})`);
+        assert((sRows.posts as any[]).filter((p) => p.shown_takes_questions === 1).length === 1, 'S holds the one door that is open: a take-over must not close it, nor open another');
         const typedOnS4 = await standby.send('typed-lines', { postId: poll.id, words: TYPED_LINE });
         assert(!typedOnS4.onDisk && JSON.stringify(typedOnS4.lines) === JSON.stringify(typedOnM.lines),
             `S ends up the same: the same rows, and the words in neither its database nor its WAL (${JSON.stringify(typedOnS4)})`);

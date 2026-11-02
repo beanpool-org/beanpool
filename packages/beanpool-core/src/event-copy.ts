@@ -31,6 +31,8 @@ export interface EventCopy {
     price?: CopyPrice | null;
     /** A Need: nobody buys or takes one, so its line says so in its own words. */
     need?: boolean;
+    /** Its member takes questions about it (apps/server engine/event-copy.ts). A reader of this has their name and key on the row. */
+    takesQuestions?: boolean;
 }
 
 /** How a price is kept and sent: '20 fixed'. */
@@ -53,28 +55,28 @@ function fromLineOf(raw: unknown): ShownFromLine | null {
 }
 
 /** What a post row says of being a copy: the node's own read (`shownCopy`, `shownFrom`, `shownPrice`), or the phone's cached column. */
-export function eventCopyOf(post: { shownCopy?: unknown; shownFrom?: unknown; shownPrice?: unknown; shown_from?: unknown; type?: unknown } | null | undefined): EventCopy | null {
-    if (post?.shownCopy === true) return copyOf(post.shownFrom, post.shownPrice, post.type);
+export function eventCopyOf(post: { shownCopy?: unknown; shownFrom?: unknown; shownPrice?: unknown; shown_from?: unknown; type?: unknown; takesQuestions?: unknown } | null | undefined): EventCopy | null {
+    if (post?.shownCopy === true) return copyOf(post.shownFrom, post.shownPrice, post.type, post.takesQuestions);
     if (typeof post?.shown_from !== 'string' || !post.shown_from) return null;
     try {
         const kept = JSON.parse(post.shown_from);
-        return copyOf(kept, kept?.price, post.type);
+        return copyOf(kept, kept?.price, post.type, kept?.takesQuestions);
     } catch {
         return { from: null, ...(post.type === 'need' ? { need: true } : {}) };
     }
 }
 
 /** A copy from what a row holds. An event has no price, so an event's reads as it always did. */
-function copyOf(line: unknown, rawPrice: unknown, type: unknown): EventCopy {
+function copyOf(line: unknown, rawPrice: unknown, type: unknown, takes: unknown): EventCopy {
     const price = copyPriceOf(rawPrice);
-    return { from: fromLineOf(line), ...(price ? { price } : {}), ...(type === 'need' ? { need: true } : {}) };
+    return { from: fromLineOf(line), ...(price ? { price } : {}), ...(type === 'need' ? { need: true } : {}), ...(takes === true ? { takesQuestions: true } : {}) };
 }
 
 /** A phone's cached column for a post from the node: the line and the price, `{}` for a copy with neither, null for any other post. */
-export function eventCopyColumn(post: { shownCopy?: unknown; shownFrom?: unknown; shownPrice?: unknown; shown_from?: unknown }): string | null {
+export function eventCopyColumn(post: { shownCopy?: unknown; shownFrom?: unknown; shownPrice?: unknown; shown_from?: unknown; takesQuestions?: unknown }): string | null {
     if (typeof post.shown_from === 'string') return post.shown_from;
     if (post.shownCopy !== true) return null;
-    return JSON.stringify({ ...(post.shownFrom ?? {}), ...(typeof post.shownPrice === 'string' ? { price: post.shownPrice } : {}) });
+    return JSON.stringify({ ...(post.shownFrom ?? {}), ...(typeof post.shownPrice === 'string' ? { price: post.shownPrice } : {}), ...(post.takesQuestions === true ? { takesQuestions: true } : {}) });
 }
 
 /** A price in Beans, in words: 'Free' at nothing, as a listing with no price reads. */
@@ -115,6 +117,27 @@ export function copyPriceLine(copy: EventCopy): string {
         ? t("{price} in {community} · You can't buy or take this until {community} welcomes you.", { price: beansPriceWords(copy.price), community: copy.from.name })
         : t("You can't buy or take this until {community} welcomes you.", { community: copy.from.name });
 }
+
+/**
+ * Who a reader can ask about a copy: its member's name and key, where they take questions and the row names them. Null otherwise,
+ * so a row that says it takes questions and names nobody (an old cache, a visitor's read) draws no door.
+ */
+export function copyAsk(copy: EventCopy | null, name: unknown, key: unknown): { name: string; key: string } | null {
+    if (!copy?.takesQuestions || typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key) || typeof name !== 'string' || !name) return null;
+    return { name, key };
+}
+
+/**
+ * What of a listing shows on a copy. The door's tick sits right under this, so it holds with the tick on or off. `need`: a Need is
+ * answered, not bought ({@link copyPriceLine}).
+ */
+export const listingCopyHint = (need = false) => need
+    ? t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.")
+    : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.");
+export const takeQuestionsLabel = () => t('Take questions about this on the global community');
+export const takeQuestionsHint = () => t('Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.');
+export const askLine = (name: string) => t('{name} takes questions about this', { name });
+export const askButton = () => t('Ask a question');
 
 /** "from Mullumbimby", in place of who hosts it. */
 export function copyFromLine(from: ShownFromLine): string {

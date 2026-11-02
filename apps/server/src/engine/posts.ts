@@ -820,8 +820,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -846,6 +846,7 @@ export function createPost(
             options?.shownCopy?.host ?? null,
             options?.shownCopy?.postId ?? null,
             options?.shownCopy?.price ?? null,
+            options?.shownCopy?.takesQuestions ? 1 : null,
         );
 
         if (photoColumns.length > 0) {

@@ -526,6 +526,7 @@ export const SUITES = [
     'test-event-post',
     'test-event-copy',
     'test-offer-copy',
+    'test-copy-door',
     'test-copy-cors',
     'test-offer-copy-credit',
     'test-enterprise-event-http',

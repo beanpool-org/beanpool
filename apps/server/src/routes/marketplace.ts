@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    createPost, getPosts, removePost, updatePost,
+    createPost, getPosts, removePost, setCopyQuestions, updatePost,
     acceptPost, completePostTransaction, cancelPostTransaction,
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
@@ -928,6 +928,37 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         // A convenor whose account is suspended (engine/posts.ts removePost) is refused as a non-member is: 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
         ctx.body = { error: memberErrorText(e, word('Failed to remove post')) };
+    }
+});
+
+// "Take questions about this on the global community" (engine/event-copy.ts): an Offer's or Need's door, by its own author alone.
+// A route of its own, since an edit is refused to a muted member and closing a door never is.
+router.post('/api/marketplace/posts/takes-questions', async (ctx) => {
+    const { id, on } = (ctx as any).requestBody || {};
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    if (typeof id !== 'string' || typeof on !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: 'id and on are required' };
+        return;
+    }
+    if (!membersOnlyHere(ctx)) return;
+    try {
+        const now = setCopyQuestions(id, actor, on);
+        if (now === null) {
+            ctx.status = 404;
+            ctx.body = { error: word('Post not found or not owned by you') };
+            return;
+        }
+        ctx.body = { success: true, takesQuestions: now };
+    } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
+        ctx.status = typeof e?.status === 'number' ? e.status : 400;
+        ctx.body = { error: memberErrorText(e, word('Failed to update post')) };
     }
 });
 

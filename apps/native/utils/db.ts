@@ -31,7 +31,7 @@ import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-val
 import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
 import { archetypeToSend } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
-import { postsViewRefusal, viewOf } from './posts-view';
+import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
@@ -3946,6 +3946,9 @@ function carriesAuthorAvatar(p: any): boolean {
 
 /** The author's name a listing carries (the node's `authorCallsign`), or null for a copy without one. */
 function syncedAuthorCallsign(p: any): string | null {
+    // A read that names nobody says so: '' and not null, which keeps what the row holds. A copy whose member stopped taking
+    // questions must not go on naming them here (@beanpool/core eventCopyOf).
+    if ((p.authorPublicKey ?? p.author_pubkey) === HIDDEN_AUTHOR) return '';
     const name = p.authorCallsign ?? p.author_callsign;
     return typeof name === 'string' && name.trim() !== '' ? name : null;
 }

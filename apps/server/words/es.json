@@ -2,10 +2,11 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door)",
+    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
   "Add a photo first": "Añade una foto primero",
   "Only a pending message request can be cancelled.": "Solo se puede cancelar una solicitud de mensaje pendiente.",
@@ -26,5 +27,7 @@
   "Only an owner can remove a typed answer": "Solo un dueño puede quitar una respuesta escrita",
   "Failed to read the typed answers": "No se pudieron leer las respuestas escritas",
   "Failed to report the typed answer": "No se pudo denunciar la respuesta escrita",
-  "Failed to remove the typed answer": "No se pudo quitar la respuesta escrita"
+  "Failed to remove the typed answer": "No se pudo quitar la respuesta escrita",
+  "Only an Offer or Need shown on the global community can take questions.": "Solo una Oferta o Necesidad mostrada en la comunidad global puede recibir preguntas.",
+  "This community isn't taking message requests right now, so this can't take questions.": "Esta comunidad no acepta solicitudes de mensaje ahora mismo, así que esto no puede recibir preguntas."
 }

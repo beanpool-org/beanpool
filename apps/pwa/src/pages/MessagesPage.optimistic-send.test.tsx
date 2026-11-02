@@ -332,9 +332,10 @@ describe('Web instant chat message sending (optimistic)', () => {
         fireEvent.keyDown(composer, { key: 'Enter' });
 
         // Check both lines appear in the DOM
+        // Find, not get: a line comes through the pending store a tick after the key. Neither send has been answered yet.
         const thread = screen.getByTestId('chat-thread');
-        const firstEl = screen.getByText('First line');
-        const secondEl = screen.getByText('Second line');
+        const firstEl = await screen.findByText('First line');
+        const secondEl = await screen.findByText('Second line');
 
         expect(firstEl).toBeInTheDocument();
         expect(secondEl).toBeInTheDocument();

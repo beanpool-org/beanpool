@@ -2,10 +2,11 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": null,
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
   "A typed answer is at most {n} characters": "Une réponse écrite compte au plus {n} caractères",
   "Add a photo first": "Ajoutez d'abord une photo",
@@ -23,5 +24,7 @@
   "This community is also at {address}. The old address keeps working.": "Cette communauté est aussi à l'adresse {address}. L'ancienne adresse continue de fonctionner.",
   "This poll already offers Other: leave it out of the answers": "Ce sondage propose déjà Autre : retirez-le des réponses",
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Pour répondre Autre, écrivez votre réponse. S'il n'y a nulle part où écrire, mettez l'application à jour.",
-  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Vous avez déjà répondu à ce sondage, et rien ne relie votre réponse à vous : elle ne peut donc pas être modifiée."
+  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Vous avez déjà répondu à ce sondage, et rien ne relie votre réponse à vous : elle ne peut donc pas être modifiée.",
+  "Only an Offer or Need shown on the global community can take questions.": "Seule une Offre ou un Besoin affiché sur la communauté globale peut recevoir des questions.",
+  "This community isn't taking message requests right now, so this can't take questions.": "Cette communauté n'accepte pas les demandes de message pour le moment, donc ceci ne peut pas recevoir de questions."
 }

@@ -9,10 +9,13 @@
  * the app and leaving it would lose the event.
  *
  * The event screens open for everyone and this is for the few: what it runs on is loaded at the tap, or when the row shows.
+ *
+ * Under an Offer's or Need's tick, "Take questions about this on the global community" (slice GD): off every time, and only
+ * once the listing is to be shown. It asks global nothing until it is tapped either.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { listingFreeTags, postTagsOf, t } from '@beanpool/core';
+import { listingCopyHint, listingFreeTags, postTagsOf, t, takeQuestionsHint, takeQuestionsLabel } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
@@ -21,26 +24,28 @@ import type { HomeEvent } from '../utils/show-on-global';
 
 export const showOnGlobalLabel = () => t('Also show this on the global community');
 export const showOnGlobalHint = () => t("Anyone there can see it, with its times, its rough area and this community's name. Not your name, the place or your note. To go, they ask to join.");
-/** `need`: a Need is answered, not bought (its line on a copy, @beanpool/core copyPriceLine). */
-export const showListingOnGlobalHint = (need = false) => need
-    ? t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To answer it, they ask to join.")
-    : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To buy or take it, they ask to join.");
 const joinFirstWords = () => t('Join the global community to show this there');
 
-/** A listing as the phone's own row holds it, as show-on-global reads one. */
+/**
+ * A listing as the phone's own row holds it, as show-on-global reads one. The page's photos have the community's address in
+ * front for the carousel (utils/db.ts getPost), and a copy goes by the node's own paths: with the address on, it found no photo
+ * to send, and global answered "Add a photo first" to every show from a listing's page.
+ */
 export function listingForCopy(post: any, photos: string[]): HomeEvent {
     return {
         id: post.id, type: post.type, category: post.category, title: post.title, description: post.description, credits: post.credits, priceType: post.price_type ?? 'fixed',
         authorPublicKey: post.author_pubkey, audienceScope: post.audience_scope ?? 'public', originNode: post.origin_node ?? null,
-        lat: post.lat, lng: post.lng, photos, tags: postTagsOf(post.tags), freeTags: listingFreeTags(post), status: post.status,
+        lat: post.lat, lng: post.lng, photos: photos.map((p) => p.replace(/^https?:\/\/[^/]+(?=\/api\/)/, '')),
+        tags: postTagsOf(post.tags), freeTags: listingFreeTags(post), status: post.status,
     };
 }
 
 /** The member's own copy, sent from here: it holds up nothing, and what it owes them comes as its own line. */
-export async function showEventOnGlobal(event: HomeEvent, identity: BeanPoolIdentity): Promise<void> {
+export async function showEventOnGlobal(event: HomeEvent, identity: BeanPoolIdentity, takesQuestions = false): Promise<void> {
     const { copyResultLine, showOnGlobal } = await import('../utils/show-on-global');
     const here = await (await import('../utils/node-post')).anchorUrl();
-    const line = here ? copyResultLine(await showOnGlobal(event, here, identity)) : null;
+    if (takesQuestions) await (await import('../utils/global-requests')).noteQuestionsOpened(identity.publicKey);
+    const line = here ? copyResultLine(await showOnGlobal(event, here, identity, undefined, takesQuestions)) : null;
     if (line) Alert.alert(showOnGlobalLabel(), line);
 }
 
@@ -79,7 +84,7 @@ const unreachable = () => Alert.alert(showOnGlobalLabel(), t("The global communi
  */
 export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, listing = false, need = false }: { enabled: boolean; online?: boolean; checked: boolean; onChange: (next: boolean) => void; listing?: boolean; need?: boolean }) {
     const styles = useStyles(makeStyles);
-    const hint = listing ? showListingOnGlobalHint(need) : showOnGlobalHint();
+    const hint = listing ? listingCopyHint(need) : showOnGlobalHint();
     const { offer, ask } = useOffer(enabled);
     const [busy, setBusy] = useState(false);
     // The form outlives its sheet: an answer landing once this row has gone would tick the next event, against "off, every time".
@@ -141,6 +146,41 @@ export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, l
     );
 }
 
+/**
+ * The door's tick in a form: off every time, and off again whenever the listing is no longer to be shown, by a tap, a post
+ * made, or the form moving away from what the tick is for. It must never be found ticked on the next listing.
+ */
+export function useTakeQuestionsTick(shown: boolean): [boolean, (on: boolean) => void] {
+    const [on, setOn] = useState(false);
+    useEffect(() => {
+        if (!shown) setOn(false);
+    }, [shown]);
+    return [on, setOn];
+}
+
+/** The door's tick, under the tick that shows the listing. */
+export function TakeQuestionsTick({ checked, onChange, busy = false }: { checked: boolean; onChange: (next: boolean) => void; busy?: boolean }) {
+    const styles = useStyles(makeStyles);
+    return (
+        <Pressable
+            onPress={() => onChange(!checked)}
+            disabled={busy}
+            style={[styles.row, busy && styles.asking]}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked, busy }}
+            accessibilityLabel={takeQuestionsLabel()}
+            accessibilityHint={takeQuestionsHint()}
+            testID="take-questions-tick"
+        >
+            <Text style={styles.box}>{checked ? '☑' : '☐'}</Text>
+            <View style={styles.col}>
+                <Text style={styles.title}>{takeQuestionsLabel()}</Text>
+                <Text style={styles.hint}>{takeQuestionsHint()}</Text>
+            </View>
+        </Pressable>
+    );
+}
+
 /** The host's page: shown, with Stop showing; or the same offer as the composer, for an event made without it. */
 export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event: HomeEvent; enabled: boolean; listing?: boolean }) {
     const styles = useStyles(makeStyles);
@@ -148,12 +188,14 @@ export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event
     const { offer, ask } = useOffer(enabled);
     const [shown, setShown] = useState(false);
     const [resting, setResting] = useState(false);
+    const [questions, setQuestions] = useState(false);
     const [busy, setBusy] = useState(false);
     const read = useCallback(() => {
         if (!enabled || !identity) return;
         void import('../utils/show-on-global').then((c) => c.pairOf(event.id, identity.publicKey)).then((p) => {
             setShown(!!p);
             setResting(!!p?.resting);
+            setQuestions(!!p?.questions);
         });
     }, [enabled, event.id, identity]);
     useEffect(read, [read]);
@@ -187,24 +229,40 @@ export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event
             setBusy(false);
         }
     };
+    // An Off that didn't reach global stays owed, and the tick says what the member asked: they are told it is still to land.
+    const takeTheQuestions = async (on: boolean) => {
+        setBusy(true);
+        try {
+            const { questionsLaterLine, takeQuestions } = await import('../utils/show-on-global');
+            if (on) await (await import('../utils/global-requests')).noteQuestionsOpened(identity.publicKey);
+            const result = await takeQuestions(event.id, on, identity);
+            if (result === 'later') Alert.alert(takeQuestionsLabel(), on ? t('It will go up on the global community as soon as it can.') : questionsLaterLine());
+            else if (typeof result === 'object') Alert.alert(takeQuestionsLabel(), result.refused);
+        } finally {
+            read();
+            setBusy(false);
+        }
+    };
     return (
-        <View style={styles.row} testID="show-on-global-host">
+        <View style={styles.host} testID="show-on-global-host">
             <View style={styles.col}>
                 {shown
                     ? <Text style={styles.title}>{!resting ? t('Shown on the global community')
                         : listing ? t("It comes down while this is off the board here, and goes back up when it's on again.")
                         : t("It comes down while you're on holiday, and goes back up when you're back.")}</Text>
-                    : <Text style={styles.hint}>{listing ? showListingOnGlobalHint(event.type === 'need') : showOnGlobalHint()}</Text>}
+                    : <Text style={styles.hint}>{listing ? listingCopyHint(event.type === 'need') : showOnGlobalHint()}</Text>}
                 <Pressable onPress={act} disabled={busy} style={[styles.action, busy && styles.asking]} accessibilityRole="button" accessibilityState={{ busy }} testID="show-on-global-act">
                     <Text style={styles.link}>{shown ? t('Stop showing') : showOnGlobalLabel()}</Text>
                 </Pressable>
             </View>
+            {listing && shown && <TakeQuestionsTick checked={questions} onChange={takeTheQuestions} busy={busy} />}
         </View>
     );
 }
 
 const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     row: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, minHeight: 44, paddingVertical: 4 },
+    host: { minWidth: 0 },
     asking: { opacity: 0.6 },
     box: { fontSize: 22, color: colors.text.body, marginRight: 8, lineHeight: 26 },
     col: { flex: 1, minWidth: 0 },

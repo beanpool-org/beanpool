@@ -1424,7 +1424,7 @@ async function main(): Promise<void> {
             'POST /api/marketplace/posts/:id/close', 'GET /api/marketplace/posts/:id/other-answers', 'POST /api/marketplace/posts/:id/other-answers/:answerId/report', 'POST /api/marketplace/posts/:id/other-answers/:answerId/remove', 'GET /api/marketplace/posts/:id/photos/:orderNum', 'POST /api/marketplace/posts/:id/rsvp',
             'POST /api/marketplace/posts/:id/let-in',
             'POST /api/marketplace/posts/:id/vote', 'POST /api/marketplace/posts/accept', 'POST /api/marketplace/posts/pause',
-            'POST /api/marketplace/posts/remove', 'POST /api/marketplace/posts/request', 'POST /api/marketplace/posts/resume',
+            'POST /api/marketplace/posts/remove', 'POST /api/marketplace/posts/request', 'POST /api/marketplace/posts/resume', 'POST /api/marketplace/posts/takes-questions',
             'POST /api/marketplace/posts/update', 'GET /api/marketplace/transactions', 'POST /api/marketplace/transactions/approve',
             'POST /api/marketplace/transactions/cancel', 'POST /api/marketplace/transactions/cancel-request',
             'POST /api/marketplace/transactions/complete', 'POST /api/marketplace/transactions/reject',

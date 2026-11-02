@@ -11,7 +11,7 @@ import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
-    listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf, eventRepeatOf, isOnlineEvent,
+    listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf, eventRepeatOf, isOnlineEvent, isLocalDate,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -518,13 +518,20 @@ export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: numbe
 function eventRepeatSkipsColumn(p: any): string | null {
     const raw = p?.eventRepeatSkips ?? p?.event_repeat_skips;
     if (!raw) return null;
+    const filterDates = (arr: unknown[]) => arr.filter(isLocalDate);
+
     if (Array.isArray(raw)) {
-        return raw.length > 0 ? JSON.stringify(raw) : null;
+        const valid = filterDates(raw);
+        return valid.length > 0 ? JSON.stringify(valid) : null;
     }
     if (typeof raw === 'string') {
         try {
             const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) && parsed.length > 0 ? JSON.stringify(parsed) : null;
+            if (Array.isArray(parsed)) {
+                const valid = filterDates(parsed);
+                return valid.length > 0 ? JSON.stringify(valid) : null;
+            }
+            return null;
         } catch {
             return null;
         }
@@ -558,7 +565,7 @@ export function eventCacheColumns(p: any): [string | null, string | null, string
         // A repeating event's pattern and last date (DESIGN-event-times §8), so the cached card shows its ↻ caption.
         series.rule ? JSON.stringify(series.rule) : null,
         series.until,
-        eventRepeatSkipsColumn(p),
+        series.rule ? eventRepeatSkipsColumn(p) : null,
     ];
 }
 

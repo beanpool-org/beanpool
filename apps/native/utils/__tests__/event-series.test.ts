@@ -116,6 +116,26 @@ describe('the cache, the caption and Home', () => {
             '2026-12-18',
             '["2026-11-20","2026-12-04"]',
         ]);
+
+        // Residual skips are ignored when series.rule is null (one-off event)
+        const oneOffWithSkips = { type: 'event', eventRepeatSkips: ['2026-11-20'] };
+        expect(eventCacheColumns(oneOffWithSkips).slice(10)).toEqual([null, null, null]);
+
+        // Malformed non-date strings or invalid dates are filtered out
+        const invalidSkips = { ...node, eventRepeatSkips: ['', 'not-a-date', '2026-02-31', 123, null] };
+        expect(eventCacheColumns(invalidSkips).slice(10)).toEqual([
+            '{"freq":"weekly","interval":2,"byDay":"FR"}',
+            '2026-12-18',
+            null,
+        ]);
+
+        // Valid dates in stringified JSON are parsed and validated
+        const jsonSkips = { ...node, eventRepeatSkips: '["2026-11-20","invalid"]' };
+        expect(eventCacheColumns(jsonSkips).slice(10)).toEqual([
+            '{"freq":"weekly","interval":2,"byDay":"FR"}',
+            '2026-12-18',
+            '["2026-11-20"]',
+        ]);
     });
     it("Your events: the card's caption from the node's row (review of #1993, N5)", () => {
         const row = { postId: 'ev-s', title: 'Friday dinner', startAt: '2027-10-15T07:50:00.000Z', endAt: '2027-10-15T09:50:00.000Z', placeName: 'Hall',

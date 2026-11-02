@@ -322,8 +322,8 @@ describe('MarketplacePage order (pinning-s0)', () => {
 
     it('server search results order is preserved rather than overwritten by createdAt', async () => {
         // Two search results matching 'honey':
-        // postSearchOld: created earlier, ranked first by search
-        // postSearchNew: created later, ranked second by search
+        // postSearchOld: created earlier, ranked first by server search
+        // postSearchNew: created later, ranked second by server search
         const postSearchOld = {
             id: 'post-honey-1',
             type: 'offer',
@@ -356,10 +356,35 @@ describe('MarketplacePage order (pinning-s0)', () => {
             updatedAt: '2026-10-25T10:00:00.000Z',
         };
 
-        stubNode([postSearchOld, postSearchNew]);
+        const initialPost = {
+            id: 'post-other',
+            type: 'offer',
+            category: 'goods',
+            title: 'Unrelated Bicycle',
+            description: 'Bicycle repair',
+            credits: 10,
+            priceType: 'fixed',
+            status: 'active',
+            active: true,
+            authorPublicKey: 'author-david',
+            authorCallsign: 'David',
+            createdAt: '2026-10-05T10:00:00.000Z',
+            updatedAt: '2026-10-05T10:00:00.000Z',
+        };
+
+        stubNode([initialPost]);
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (f?: any) => {
+            if (f?.author) return [] as any;
+            if (f?.id) return [initialPost].filter(p => p.id === f.id) as any;
+            if (f?.q) return [postSearchOld, postSearchNew] as any;
+            return [initialPost] as any;
+        });
+
         render(<MarketplacePage identity={identity} isMember={true} openSearch="honey" onSearchOpened={vi.fn()} />);
 
+        // Wait until server search results resolve and replace the initial feed
         await waitFor(() => {
+            expect(screen.queryByText('Unrelated Bicycle')).toBeNull();
             const cards = screen.getAllByTestId('market-post-card');
             expect(cards.length).toBe(2);
         });

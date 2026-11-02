@@ -470,6 +470,20 @@ describe('a rest\'s return never steps: it can\'t tell who took a copy down', ()
         expect(browser.pairs()).toEqual([]);
     });
 
+    it('a copy up at a later id is taken up, not let go: the other device has been round a rest without it', async () => {
+        const { w, phone, browser } = await bothResting();
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0].generation).toBe(2);
+        expect(w.up()).toHaveLength(1);
+        await browser.tendCopies(identity);
+        expect(browser.pairs()[0].copyId).toBe(phone.pairs()[0].copyId);
+        expect(browser.pairs()[0].sent).not.toBe('');
+        expect(w.up()).toHaveLength(1);
+    });
+
     it('its own next id free, it comes back as ever', async () => {
         const w = world();
         const phone = w.device();

@@ -269,6 +269,7 @@ describe('coming back from the door', () => {
         fireEvent.click(door);
         drawn.unmount();
         await tabBack();
+        await act(async () => { window.dispatchEvent(new Event('focus')); });
         expect(copies.askGlobalStanding).not.toHaveBeenCalled();
     });
 });

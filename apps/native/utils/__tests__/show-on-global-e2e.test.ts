@@ -1705,6 +1705,7 @@ describe('a new tick after Stop showing: global keeps the removed row and reads 
 
     it('a Need does', async () => {
         const me = await memberOfBoth('Noor Again');
+        await listingAtHome(me, 'Spare jars'); // A member lists an Offer before they can post a Need.
         const home = await listingAtHome(me, 'A hand with fencing', { type: 'need' });
         expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
         await stopThenTick(home, me);

@@ -315,7 +315,9 @@ async function firstCases(ctx) {
 
     // A new tick after Stop showing. Global keeps a removed row and reads an Offer's as nothing, so the only word that the id is
     // held is the create's refusal, which has to reach the page: this is the one case a stand-in for global got wrong.
-    await global_.ask({ op: 'resetLimits' });
+    // Every request here comes from one address, and each step below is several: the allowance is reset as the walk spends it.
+    const fresh = () => Promise.all([ctx.local.ask({ op: 'resetLimits' }), global_.ask({ op: 'resetLimits' })]);
+    await fresh();
     const stopAndTick = async (post, what) => {
         const before = (await pairOf(page, post.id)).copyId;
         const stop = await page.evaluate(async (id) => window.tick.copies.stopShowing(id, await window.tick.loadIdentity()), post.id);
@@ -336,6 +338,7 @@ async function firstCases(ctx) {
     const eventAgain = await listing(page, 'Plum picking', { type: 'event', category: 'community', credits: 0, eventStartAt: startAt, eventEndAt: endAt, eventTz: 'UTC' });
     await tick(page, eventAgain);
     await stopAndTick(eventAgain, 'an event');
+    await fresh();
     const restedAgain = await listing(page, 'Damsons');
     await tick(page, restedAgain);
     await page.evaluate(async (id) => window.tick.api.pauseMarketplacePost(id, (await window.tick.loadIdentity()).publicKey), restedAgain.id);
@@ -346,6 +349,7 @@ async function firstCases(ctx) {
     check((await pairOf(page, restedAgain.id))?.generation === 1, 'an Offer back from a rest holds the next id');
     await stopAndTick(restedAgain, 'an Offer after a rest and its return');
     check((await pairOf(page, restedAgain.id))?.generation === 2, 'and the tick went past both ids');
+    await fresh();
 
     // The app's load brings a copy into step, as the phone's coming to the front does: a change made elsewhere.
     const stale = await listing(page, 'Pears');

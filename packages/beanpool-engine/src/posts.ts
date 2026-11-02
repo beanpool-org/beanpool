@@ -1151,8 +1151,17 @@ export function postsResentTo(db: Db, viewer: string, cursor: string): string[] 
     return offBoardPostsToResend(db, viewer, enterprisesKeptBy(db, viewer), cursor, new Date().toISOString());
 }
 
+/**
+ * An Offer of this member's, as the Offer-first gate and the offer covenant count one: never their copy of a listing from
+ * home (apps/server engine/event-copy.ts). A copy is an `offer` row nobody can take (engine/escrow.ts assertNoDealOnCopy),
+ * so it puts nothing on offer here: copies alone took a usable floor 0 → −1500 and passed the Need gate (review of #2718).
+ * The column holds for every state of a copy: NULL on every other row, and a host or '' on a copy for good, so one whose
+ * host has gone from the directory, or that kept nothing of where it came from (engine/post-scrub.ts), is still one.
+ */
+const OWN_OFFER_WHERE = "author_pubkey = ? AND type = 'offer' AND shown_from_host IS NULL";
+
 export function hasListedOffer(db: Db, publicKey: string): boolean {
-    const row = db.prepare("SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' LIMIT 1").get(publicKey);
+    const row = db.prepare(`SELECT 1 FROM posts WHERE ${OWN_OFFER_WHERE} LIMIT 1`).get(publicKey);
     return !!row;
 }
 
@@ -1161,7 +1170,7 @@ export function hasListedOffer(db: Db, publicKey: string): boolean {
  * listed Offer and comes back to the board when the loan ends (apps/server engine/escrow.ts). A loan, which any member
  * can start with a one-step accept, never takes away the lender's credit line.
  */
-const LIVE_OFFER_WHERE = "author_pubkey = ? AND type = 'offer' AND active = 1 AND (status = 'active' OR (status = 'pending' AND lendable = 1))";
+const LIVE_OFFER_WHERE = `${OWN_OFFER_WHERE} AND active = 1 AND (status = 'active' OR (status = 'pending' AND lendable = 1))`;
 
 export function hasLiveOffer(db: Db, publicKey: string): boolean {
     const row = db.prepare(`SELECT 1 FROM posts WHERE ${LIVE_OFFER_WHERE} LIMIT 1`).get(publicKey);

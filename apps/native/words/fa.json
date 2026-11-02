@@ -4795,7 +4795,7 @@
   "Assistant: “{name}” (the name it gave itself)": "دستیار: «{name}» (نامی که خودش انتخاب کرده)",
   "Assistant: no name given": "دستیار: بدون نام",
   "Sends what it reads to: {host}": "آنچه را می‌خواند می‌فرستد به: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "سلامت، نسخه‌های پشتیبان، مجموع مبالغ، گزارش‌ها و درخواست‌های پیوستن را از طرف شما می‌خواند. اگر مالک هستید، می‌تواند نسخهٔ پشتیبان هم بگیرد و پیشنهادها، نیازها و رویدادها را از طرف شما منتشر کند، فوراً و بدون تأیید. هر کار دیگری را فقط می‌تواند پیشنهاد دهد، و تا شما تأیید نکنید چیزی تغییر نمی‌کند.",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "سلامت، نسخه‌های پشتیبان، مجموع مبالغ، گزارش‌ها و درخواست‌های پیوستن را از طرف شما می‌خواند. اگر مالک هستید، می‌تواند نسخهٔ پشتیبان هم بگیرد و پیشنهادها، نیازها، رویدادها و نظرسنجی‌ها را از طرف شما منتشر کند، فوراً و بدون تأیید. هر کار دیگری را فقط می‌تواند پیشنهاد دهد، و تا شما تأیید نکنید چیزی تغییر نمی‌کند.",
   "{time} left": "{time} باقی‌مانده",
   "Computer: A browser": "رایانه: یک مرورگر",
   "Computer: {browser}": "رایانه: {browser}",

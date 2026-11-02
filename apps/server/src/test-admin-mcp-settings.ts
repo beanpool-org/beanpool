@@ -41,6 +41,7 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { submitKnock } from './engine/knocks.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { issueAutomationToken } from './automation-tokens.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import { db } from './db/db.js';
 import { resetAgentLimits, agentCallsToday } from './agent/limits.js';
 import { AGENT_TOOLS } from './agent/tools.js';
@@ -195,7 +196,7 @@ async function main(): Promise<void> {
         const tokens = [OWNER_TOKEN, m90.body.token];
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
-        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs and events as that owner, and suggest actions it cannot take\./.test(d)),
+        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs, events and polls as that owner, and suggest actions it cannot take\./.test(d)),
             `owners are told an owner connected one (${told.join(' | ').slice(0, 300)})`);
         assert(told.some(d => d === "An AI assistant (Olive's Cursor) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take.")
             && m90.body?.grant?.canPost === false && mOwner.body?.grant?.canPost === true,
@@ -359,7 +360,13 @@ async function main(): Promise<void> {
             'and each tool\'s description is the one /mcp gives');
 
         const reads = AGENT_TOOLS.filter(t => !t.write);
+        // poll_results reads a poll this assistant made, so one is there to read.
+        setMemberPhoto(db, owner.pub, 'data:image/png;base64,iVBORw0KGgo=');
+        const pollMade = await ownerClient.callTool({ name: 'create_poll', arguments: { question: 'Does the preview read this?', options: ['Yes', 'No'], days: 3 } });
+        const pollId = (pollMade.structuredContent as any)?.postId as string;
+        assert(!pollMade.isError && !!pollId, `an owner's assistant makes a poll for the preview to read (${JSON.stringify(pollMade).slice(0, 120)})`);
         const argsFor = (name: string): Record<string, unknown> => name === 'report_get' ? { report_id: r1!.id }
+            : name === 'poll_results' ? { post_id: pollId }
             : name === 'tags_search' ? { q: 'lemon' }
             : name === 'reports_list' ? { include_text: true, status: 'all' } : name === 'knocks_list' ? { include_text: true } : {};
         // Answers that move between two calls on their own: the clock, the process's memory, the disk (a CI runner's moved

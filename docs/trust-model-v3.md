@@ -49,7 +49,8 @@ turns an *earned limit* into a *reciprocal, discoverable line*.
   trades, plus optional welcome voucher / vouch gift / admin tier grant. Unchanged from v2 except
   activation is restored.
 - **Dial B — offer access** (how deep you *may* go right now): a step function of your live-offer
-  count. Offers **do not create** floor — they gate access to a limit you already earned. A sock
+  count. A copy of an Offer shown from another community is never a live offer here: nobody can
+  take it. Offers **do not create** floor — they gate access to a limit you already earned. A sock
   with 0 earned trust unlocks 0 floor no matter how many offers it posts.
 
 Because it's a `min()`, the offer burden **self-caps by tier**: a Steward whose earned limit is

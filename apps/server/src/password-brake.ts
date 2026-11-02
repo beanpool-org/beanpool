@@ -448,3 +448,8 @@ export function resetPasswordBrake(): void {
 export function passwordBrakeSizes(): { sources: number; prefixes: number; pending: number } {
     return { sources: sources.size, prefixes: prefixes.size, pending: pending.size };
 }
+
+/** Tests only: a source's closedUntil timestamp, or 0 if clean/unclosed. */
+export function sourceClosedUntil(key: string): number {
+    return sources.get(key)?.closedUntil ?? 0;
+}

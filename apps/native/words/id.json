@@ -4604,7 +4604,7 @@
   "Assistant: “{name}” (the name it gave itself)": "Asisten: “{name}” (nama yang diberikannya sendiri)",
   "Assistant: no name given": "Asisten: tidak ada nama yang diberikan",
   "Sends what it reads to: {host}": "Mengirimkan apa yang dibacanya ke: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Asisten membaca kesehatan, cadangan, total, laporan, dan permintaan bergabung sebagai kamu. Jika kamu pemilik, asisten juga dapat membuat cadangan dan memasang Penawaran, Permintaan, dan acara untukmu, saat itu juga dan tanpa persetujuan. Selain itu, asisten hanya dapat menyarankan, dan tidak ada yang berubah sampai kamu menyetujuinya.",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Asisten membaca kesehatan, cadangan, total, laporan, dan permintaan bergabung sebagai kamu. Jika kamu pemilik, asisten juga dapat membuat cadangan dan memasang Penawaran, Permintaan, acara, dan jajak pendapat untukmu, saat itu juga dan tanpa persetujuan. Selain itu, asisten hanya dapat menyarankan, dan tidak ada yang berubah sampai kamu menyetujuinya.",
   "{time} left": "tersisa {time}",
   "Computer: A browser": "Komputer: Sebuah browser",
   "Computer: {browser}": "Komputer: {browser}",

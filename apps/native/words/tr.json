@@ -4794,7 +4794,7 @@
   "Assistant: “{name}” (the name it gave itself)": "Asistan: “{name}” (kendine verdiği ad)",
   "Assistant: no name given": "Asistan: ad verilmedi",
   "Sends what it reads to: {host}": "Okuduklarını şuraya gönderir: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Durumu, yedekleri, toplamları, raporları ve katılma isteklerini sizin adınıza okur. Sahipseniz ayrıca yedek alabilir ve sizin adınıza Teklifler, İhtiyaçlar ve etkinlikler paylaşabilir; hemen ve onay olmadan. Bunun dışındaki her şeyi yalnızca önerebilir ve siz onaylayana kadar hiçbir şey değişmez.",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Durumu, yedekleri, toplamları, raporları ve katılma isteklerini sizin adınıza okur. Sahipseniz ayrıca yedek alabilir ve sizin adınıza Teklifler, İhtiyaçlar, etkinlikler ve anketler paylaşabilir; hemen ve onay olmadan. Bunun dışındaki her şeyi yalnızca önerebilir ve siz onaylayana kadar hiçbir şey değişmez.",
   "{time} left": "{time} kaldı",
   "Computer: A browser": "Bilgisayar: Bir tarayıcı",
   "Computer: {browser}": "Bilgisayar: {browser}",

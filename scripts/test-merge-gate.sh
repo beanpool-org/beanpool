@@ -764,6 +764,17 @@ OUT=$(SHADOW_LIMIT_SECS=1 SHADOW_RETRY_SECS=0 bash "$TRAIN" 90 --shadow 2>&1); R
 rm -f "$GH_STUB_DIR/dispatch-hangs"
 [ $RC = 0 ] && [ "$(merges)" = "90" ] && [ $((SECONDS - START)) -lt 25 ] && ok "shadow: a start that hangs is stopped, and the train goes on" || { bad "shadow: a hang held the train ($((SECONDS - START)) s, exit $RC, merged \"$(merges)\")"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
 
+# A child that inherits the train's cleanup trap must clean up nothing: a killed with_limit watcher removed the tree the train
+# was in (bash 5, run 41383310967). The race is rare, so this calls the real function from a child instead of waiting for one.
+CU="$T/cleanup-child"; mkdir -p "$CU/tree"
+{ echo 'ORIG_DIR=$PWD; WT=$1; KEEP=0; shadow_record() { :; }; git() { :; }'
+  awk '/^cleanup\(\) \{$/,/^}$/' "$TRAIN"
+  echo '( cleanup ); [ -d "$WT" ] && echo child-left-it'
+  echo 'cleanup; [ -d "$WT" ] || echo main-removed-it'; } > "$CU/run.sh"
+OUT=$(bash "$CU/run.sh" "$CU/tree" 2>&1)
+grep -qx "child-left-it" <<<"$OUT" && ok "train: a child that inherits cleanup removes nothing" || bad "train: a child ran cleanup ($OUT)"
+grep -qx "main-removed-it" <<<"$OUT" && ok "train: ...and the train's own shell still cleans up" || bad "train: its own shell did not clean up ($OUT)"
+
 # scripts/test-all-shadow.sh against a log and branches of each kind. It fills in results, lists disagreements, and deletes
 # only train/* branches whose run is finished or never started.
 SHADOWS="$REPO_ROOT/scripts/test-all-shadow.sh"

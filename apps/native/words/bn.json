@@ -4780,7 +4780,7 @@
   "Assistant: “{name}” (the name it gave itself)": "অ্যাসিস্ট্যান্ট: “{name}” (এটি নিজেকে যে নাম দিয়েছে)",
   "Assistant: no name given": "অ্যাসিস্ট্যান্ট: কোনো নাম দেওয়া হয়নি",
   "Sends what it reads to: {host}": "যা পড়ে তা পাঠায়: {host}-এ",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "এটি আপনার হিসেবে স্বাস্থ্য, ব্যাকআপ, মোট হিসাব, প্রতিবেদন এবং যোগদানের অনুরোধ পড়ে। আপনি মালিক হলে, এটি একটি ব্যাকআপও নিতে পারে এবং আপনার হয়ে প্রস্তাব, প্রয়োজন ও ইভেন্ট পোস্ট করতে পারে, সঙ্গে সঙ্গে, কোনো অনুমোদন ছাড়াই। অন্য যেকোনো কিছু এটি কেবল পরামর্শ দিতে পারে, এবং আপনি অনুমোদন না করা পর্যন্ত কিছুই বদলায় না।",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "এটি আপনার হিসেবে স্বাস্থ্য, ব্যাকআপ, মোট হিসাব, প্রতিবেদন এবং যোগদানের অনুরোধ পড়ে। আপনি মালিক হলে, এটি একটি ব্যাকআপও নিতে পারে এবং আপনার হয়ে প্রস্তাব, প্রয়োজন, ইভেন্ট ও পোল পোস্ট করতে পারে, সঙ্গে সঙ্গে, কোনো অনুমোদন ছাড়াই। অন্য যেকোনো কিছু এটি কেবল পরামর্শ দিতে পারে, এবং আপনি অনুমোদন না করা পর্যন্ত কিছুই বদলায় না।",
   "{time} left": "{time} বাকি",
   "Computer: A browser": "কম্পিউটার: একটি ব্রাউজার",
   "Computer: {browser}": "কম্পিউটার: {browser}",

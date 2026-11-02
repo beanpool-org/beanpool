@@ -4593,7 +4593,7 @@
   "Assistant: “{name}” (the name it gave itself)": "アシスタント: “{name}”（自身が名乗った名前）",
   "Assistant: no name given": "アシスタント: 名前なし",
   "Sends what it reads to: {host}": "読み取った情報の送信先: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "あなたに代わってヘルス状態、バックアップ、合計、レポート、参加リクエストを読み取ります。あなたがオーナーなら、バックアップを取ることや、あなたに代わって提供・求め・イベントを投稿することも、承認なしですぐにできます。それ以外は提案することのみ可能で、あなたが承認するまで何も変わりません。",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "あなたに代わってヘルス状態、バックアップ、合計、レポート、参加リクエストを読み取ります。あなたがオーナーなら、バックアップを取ることや、あなたに代わって提供・求め・イベント・投票を投稿することも、承認なしですぐにできます。それ以外は提案することのみ可能で、あなたが承認するまで何も変わりません。",
   "{time} left": "残り{time}",
   "Computer: A browser": "コンピューター: ブラウザ",
   "Computer: {browser}": "コンピューター: {browser}",

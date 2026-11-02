@@ -4794,7 +4794,7 @@
   "Assistant: “{name}” (the name it gave itself)": "Assistent: „{name}“ (der selbst gewählte Name)",
   "Assistant: no name given": "Assistent: kein Name angegeben",
   "Sends what it reads to: {host}": "Sendet Gelesenes an: {host}",
-  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Er liest Zustand, Sicherungen, Gesamtsummen, Berichte und Beitrittsanfragen als du. Bist du Eigentümer, kann er außerdem eine Sicherung erstellen und Angebote, Gesuche und Veranstaltungen für dich veröffentlichen, sofort und ohne Genehmigung. Alles andere kann er nur vorschlagen, und nichts ändert sich, bis du es genehmigst.",
+  "It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.": "Er liest Zustand, Sicherungen, Gesamtsummen, Berichte und Beitrittsanfragen als du. Bist du Eigentümer, kann er außerdem eine Sicherung erstellen und Angebote, Gesuche, Veranstaltungen und Umfragen für dich veröffentlichen, sofort und ohne Genehmigung. Alles andere kann er nur vorschlagen, und nichts ändert sich, bis du es genehmigst.",
   "{time} left": "noch {time}",
   "Computer: A browser": "Computer: Ein Browser",
   "Computer: {browser}": "Computer: {browser}",

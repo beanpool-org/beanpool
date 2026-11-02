@@ -288,4 +288,21 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
             expect(screen.getByTestId('take-pin-off-inline-btn')).toBeInTheDocument();
         });
     });
+
+    it('does not grant owner/admin pin controls to unauthenticated guest even if role cached', async () => {
+        vi.spyOn(api, 'myNodeRoleOnce').mockResolvedValue('owner');
+        const pin1 = makePost('pin-1', 'Pinned Post Title', {
+            pinnedAt: new Date(NOW - 1000).toISOString(),
+            pinnedUntil: FUTURE_3D,
+        });
+        stubNode([pin1]);
+
+        render(<MarketplacePage identity={null} isMember={false} openPostId="pin-1" />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('post-pinned-detail-banner')).toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('take-pin-off-inline-btn')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
+    });
 });

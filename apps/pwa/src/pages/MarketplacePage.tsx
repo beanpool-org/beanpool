@@ -436,10 +436,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [myNodeRole, setMyNodeRole] = useState<string | null>(null);
     useEffect(() => {
         let alive = true;
+        if (!identity?.publicKey) {
+            setMyNodeRole(null);
+            return;
+        }
         myNodeRoleOnce().then(r => { if (alive) setMyNodeRole(r); }).catch(() => {});
         return () => { alive = false; };
     }, [identity?.publicKey]);
-    const isOwnerOrAdmin = myNodeRole === 'owner' || myNodeRole === 'admin';
+    const isOwnerOrAdmin = Boolean(identity?.publicKey) && (myNodeRole === 'owner' || myNodeRole === 'admin');
 
     // Clock state for real-time pin expiration without reload (scratch/fable-design/DESIGN-pinning-fable.md §2.5)
     const [clockNow, setClockNow] = useState(() => Date.now());

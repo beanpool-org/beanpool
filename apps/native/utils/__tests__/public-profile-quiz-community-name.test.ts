@@ -325,8 +325,17 @@ describe('the quiz is one result, for every community on the phone (working styl
         communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
         await render();
         const { default: storage } = await import('@react-native-async-storage/async-storage');
-        vi.mocked(storage.setItem).mockRejectedValueOnce(new Error('disk full'));
-        await takeQuiz();
+        const setItem = vi.mocked(storage.setItem);
+        const writes = setItem.getMockImplementation()!;
+        setItem.mockImplementation(async (key, value) => {
+            if (key.startsWith('beanpool_pending_profile:archetype:')) throw new Error('disk full');
+            return writes(key, value);
+        });
+        try {
+            await takeQuiz();
+        } finally {
+            setItem.mockImplementation(writes);
+        }
         expect(published()).toHaveLength(1);
         expect(published()[0].archetype).toBe(SENT);
     });

@@ -209,8 +209,8 @@ export async function clearPendingProfileChange(
 
 /**
  * The member's working style waits to reach `community`, in its public form (core publicArchetype), over any that waited
- * there: the quiz was taken elsewhere, or its publish here didn't land. The community's next sync sends it. Nothing is
- * kept for an address that isn't plain, nor with no account.
+ * there: the quiz was taken elsewhere, or its publish here is out or didn't land. The community's next sync sends it.
+ * Nothing is kept for an address that isn't plain, nor with no account.
  */
 export async function keepWaitingArchetype(community: string | null | undefined, publicKey: string, archetype: string): Promise<void> {
     const key = archetypeKeyOf(community);

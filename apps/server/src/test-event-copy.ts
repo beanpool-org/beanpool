@@ -548,8 +548,18 @@ async function main() {
     const countBefore = await eventsSoon();
     se.setHolidayMode(writer.pubKeyHex, true);
     const countDuring = await eventsSoon();
+    // A copy whose member takes questions names them, so it goes by its author's rules as the board's list does: the count and
+    // the list leave it out together while they are on holiday.
+    const boardIds = async () => rows((await call('GET', '/api/marketplace/posts?type=event&limit=100', watcher)).body).map((p: any) => p.id as string);
+    assert((await boardIds()).includes(copyA), 'a copy on holiday, control: an unnamed copy is on the board');
+    db.prepare('UPDATE posts SET shown_takes_questions = 1 WHERE id = ?').run(copyA);
+    const namedDuring = await eventsSoon();
+    const namedBoard = await boardIds();
     se.setHolidayMode(writer.pubKeyHex, false);
+    db.prepare('UPDATE posts SET shown_takes_questions = NULL WHERE id = ?').run(copyA);
     assert(typeof countBefore === 'number' && countDuring === countBefore - 1, `the events-soon count loses the ordinary listing and not the copy (${countBefore} → ${countDuring})`);
+    assert(!namedBoard.includes(copyA) && namedDuring === countBefore - 2,
+        `a copy that takes questions, its author on holiday: left out of the board's list and of the events-soon count alike (${countBefore} → ${namedDuring}; on the board: ${namedBoard.includes(copyA)})`);
     setSwitch('guestListingsOnly', null);
 
     console.log(`\n${passed}/${run} passed`);

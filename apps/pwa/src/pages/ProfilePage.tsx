@@ -13,7 +13,7 @@ import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { parseArchetype, newestArchetype, ARCHETYPES, AVATAR_PICTURE, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
-import { keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from '../lib/working-style';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from '../lib/working-style';
 
 /** Who can see the contact details: the phone's Settings → Profile options and words (word() keys, shown through t()). */
 const CONTACT_VISIBILITY = [
@@ -67,6 +67,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 setRowRead(true);
                 if (profile.archetype) {
                     setArchetype(profile.archetype);
+                    adoptWorkingStyle(identity.publicKey, profile.archetype);
                 }
             }
         } catch { /* first time */ }

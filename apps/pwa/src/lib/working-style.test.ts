@@ -4,18 +4,22 @@
  * community says this key is a member.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { QuizResult } from '@beanpool/core';
 import { memoryIndexedDB } from './memory-indexeddb';
 import { clearAccountStorage } from './device-prefs';
 import { endAccountEpoch, resetAccountEpochForTest } from './account-epoch';
 import { resetGroupChatLockStoreForTest } from './group-chat-lock-store';
-import { keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from './working-style';
+import { PROFILE_SAVED_EVENT } from './profile-saved';
+import { useOwnAvatar } from './useOwnAvatar';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from './working-style';
 import * as api from './api';
 
 vi.mock('./api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./api')>()),
     checkMembership: vi.fn(async () => ({ isMember: true, callsign: 'Alice' })),
     updateMemberProfile: vi.fn(async () => ({ success: true, profile: { publicKey: ME } })),
+    getMemberProfile: vi.fn(async () => ({ publicKey: ME, avatar: null, bio: '', contact: null })),
 }));
 
 const ME = 'my-user-pubkey';
@@ -85,5 +89,54 @@ describe('a quiz\'s publish', () => {
         vi.mocked(api.checkMembership).mockResolvedValue({ isMember: false, callsign: null });
         expect(await publishQuizResult(ME, quiz('2026-11-03'))).toBeNull();
         expect(api.updateMemberProfile).not.toHaveBeenCalled();
+    });
+});
+
+describe('adopting a newer row into the browser copy', () => {
+    it('adopts a newer row into localStorage', () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        expect(adoptWorkingStyle(ME, row('2026-11-03'))).toBe(true);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ primary: 'guardian', takenOn: '2026-11-03' });
+    });
+
+    it('orders old millisecond stamps and adopts if newer', () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        const oldStamped = JSON.stringify({ primary: 'spark', secondary: 'weaver', mode: 'quick', updatedAt: '2026-11-04T12:00:00.000Z' });
+        expect(adoptWorkingStyle(ME, oldStamped)).toBe(true);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ primary: 'spark', takenOn: '2026-11-04' });
+        expect(readWorkingStyle(ME)).not.toContain('updatedAt');
+    });
+
+    it('never an older row, and a tie changes nothing', () => {
+        keepQuizResult(ME, quiz('2026-11-03'));
+        expect(adoptWorkingStyle(ME, row('2026-11-01'))).toBe(false);
+        expect(adoptWorkingStyle(ME, row('2026-11-03'))).toBe(false);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ takenOn: '2026-11-03' });
+    });
+});
+
+// The read at web open is the sidebar's (App.tsx useOwnAvatar): nothing else reads the row before a screen is opened.
+describe('at web open', () => {
+    const takenOn = () => JSON.parse(readWorkingStyle(ME)!).takenOn;
+    /** The node's row, with a picture: the hook shows it the moment before it adopts, so the read is known to be done. */
+    const answers = (archetype: string) => vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, avatar: '/api/avatar/me', archetype } as any);
+
+    it('adopts a newer row from the node into the browser copy', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        answers(row('2026-11-03'));
+        renderHook(() => useOwnAvatar(ME));
+        await waitFor(() => expect(takenOn()).toBe('2026-11-03'));
+    });
+
+    it('an older row from the node changes nothing, and the read after a Save still adopts a newer one', async () => {
+        keepQuizResult(ME, quiz('2026-11-03'));
+        answers(row('2026-11-01'));
+        const { result } = renderHook(() => useOwnAvatar(ME));
+        await waitFor(() => expect(result.current).not.toBeNull());
+        expect(takenOn()).toBe('2026-11-03');
+
+        answers(row('2026-11-04'));
+        act(() => { window.dispatchEvent(new Event(PROFILE_SAVED_EVENT)); });
+        await waitFor(() => expect(takenOn()).toBe('2026-11-04'));
     });
 });

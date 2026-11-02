@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -228,12 +228,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "설문은 사람들의 생각을 묻는 용도이며 그 자체로 어떤 변경을 일으키지는 않아요. 장터의 설문 메뉴에서 찾아보세요.",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "내 잔액과 거래 내역은 나만 볼 수 있어요. 다른 멤버에게는 내 이름, 사진, 등급, 후기만 보여요.",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "가입하지 않은 사람에게는 어떤 나눔이 대략 어디에 있는지만 보이며, 내 이름이나 얼굴, 정확한 위치는 절대 보이지 않아요.",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "마지막 도움말이에요. 전체 안내서는 설정의 도움말 및 이용 방법에서 오프라인으로도 볼 수 있어요. 하단의 홈 편집에서 카드를 정리할 수 있어요.",
   "Tips · {position} of {total}": "도움말 · {total}개 중 {position}",
   "Done with tips. The card goes.": "도움말을 다 읽었어요. 카드를 닫습니다.",
   "Next tip": "다음 도움말",
   "Don't show tips again": "도움말 다시 보지 않기",
-  "Don't show tips again. Edit home brings them back.": "도움말 다시 보지 않기. 홈 편집에서 언제든 다시 켤 수 있어요.",
   "All tips seen": "모든 도움말 확인 완료",
   "or type your town": "또는 동네 이름 입력",
   "Not here? Type your town": "목록에 없나요? 동네 이름을 입력해 보세요",
@@ -884,5 +882,15 @@
   "Ask a question": "질문하기",
   "It will stop taking questions as soon as the global community answers.": "글로벌 커뮤니티가 응답하는 대로 질문 받기가 중단됩니다.",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "그곳의 누구나 사진, 대략적인 지역, 가격, 이 커뮤니티 이름과 함께 볼 수 있습니다. 정확한 장소는 표시되지 않으며, 이에 대한 질문을 받지 않으면 이름도 표시되지 않습니다. 구매하거나 받으려면 가입을 요청합니다.",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "그곳의 누구나 사진, 대략적인 지역, 가격, 이 커뮤니티 이름과 함께 볼 수 있습니다. 정확한 장소는 표시되지 않으며, 이에 대한 질문을 받지 않으면 이름도 표시되지 않습니다. 응답하려면 가입을 요청합니다."
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "그곳의 누구나 사진, 대략적인 지역, 가격, 이 커뮤니티 이름과 함께 볼 수 있습니다. 정확한 장소는 표시되지 않으며, 이에 대한 질문을 받지 않으면 이름도 표시되지 않습니다. 응답하려면 가입을 요청합니다.",
+  "Arrange": "정렬",
+  "Arrange: move the cards on Home": "정렬: 홈의 카드 옮기기",
+  "Arrange Home: use the arrows. Done when you're happy.": "홈 정렬: 화살표를 사용하세요. 마음에 들면 완료를 누르세요.",
+  "Arrange Home. Use the arrows on each card.": "홈 정렬. 각 카드의 화살표를 사용하세요.",
+  "Stays here": "고정됨",
+  "Done arranging Home": "홈 정렬 완료",
+  "{card} moved to {n} of {m}": "{card}: 이제 {m}개 중 {n}번째",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "마지막 도움말이에요. 전체 안내서는 설정의 도움말 및 이용 방법에서 오프라인으로도 볼 수 있어요. 하단의 정렬에서 카드를 옮길 수 있어요.",
+  "Don't show tips again. Add a card brings them back.": "도움말 다시 보지 않기. 카드 추가에서 언제든 다시 켤 수 있어요.",
+  "Arrange ›": "정렬 ›"
 }

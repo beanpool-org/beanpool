@@ -31,7 +31,7 @@ vi.mock('react-native', () => {
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('../../components/useModalKeyboardLift', () => ({ useModalKeyboardLift: () => ({ maxHeight: 500, lift: 0 }) }));
 vi.mock('../../components/home/HomeParts', () => ({ HOME_TARGET_DP: 48, homeStyles: () => ({ chips: {}, chip: {}, chipOn: {}, chipText: {}, chipTextOn: {} }) }));
-vi.mock('../../components/home/EditHomeSheet', () => ({ editHomeStyles: { backdrop: {}, sheet: {}, head: {}, title: {}, done: {}, doneText: {}, list: {} } }));
+vi.mock('../../components/home/sheet-parts', () => ({ sheetStyles: { backdrop: {}, sheet: {}, head: {}, title: {}, done: {}, doneText: {}, list: {} } }));
 vi.mock('../../constants/categories', () => ({ POST_CATEGORIES: [{ id: 'food', emoji: '🥕' }], categoryLabel: (id: string) => id }));
 vi.mock('../home-cards', () => ({ SEARCH_KIND_CHIPS: [{ kind: 'any', label: 'Both' }, { kind: 'offer', label: 'Offers' }], SKY_PLACE_CHIPS: [], cardName: () => 'A saved search' }));
 

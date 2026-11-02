@@ -43,8 +43,8 @@ vi.mock('react-native', () => {
     };
 });
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
-vi.mock('../../components/home/EditHomeSheet', () => ({
-    editHomeStyles: { backdrop: {}, sheet: {}, head: {}, title: { fontSize: 18 }, done: { minHeight: 48, minWidth: 48 }, doneText: {} },
+vi.mock('../../components/home/sheet-parts', () => ({
+    sheetStyles: { backdrop: {}, sheet: {}, head: {}, title: { fontSize: 18 }, done: { minHeight: 48, minWidth: 48 }, doneText: {} },
 }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
 

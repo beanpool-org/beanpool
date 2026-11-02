@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -245,12 +245,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "പോളുകൾ ആളുകളുടെ അഭിപ്രായം ചോദിക്കുന്നു, തനിയെ ഒന്നും മാറ്റുന്നില്ല. മാർക്കറ്റിൽ പോളുകൾക്ക് കീഴിൽ അവ കണ്ടെത്തുക.",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "നിങ്ങൾക്ക് മാത്രമേ നിങ്ങളുടെ ബാലൻസും ഇടപാടുകളും കാണാൻ കഴിയൂ. മറ്റ് അംഗങ്ങൾ നിങ്ങളുടെ പേര്, ഫോട്ടോ, ലെവൽ, അവലോകനങ്ങൾ എന്നിവ കാണുന്നു.",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "ചേരാത്ത ആളുകൾക്ക് എന്താണ് ഓഫർ ചെയ്യുന്നത് എന്നും ഏകദേശം എവിടെയാണെന്നും കാണാം, നിങ്ങളുടെ പേരോ മുഖമോ കൃത്യമായ സ്ഥലമോ ഒരിക്കലും കാണില്ല.",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "ഇതാണ് അവസാനത്തെ നുറുങ്ങ്. മുഴുവൻ ഗൈഡും ക്രമീകരണങ്ങളിൽ ഉണ്ട്, ഇന്റർനെറ്റ് ഇല്ലാതെയും പ്രവർത്തിക്കുന്നു; താഴെയുള്ള 'ഹോം എഡിറ്റ് ചെയ്യുക' കാർഡുകൾ ക്രമീകരിക്കുന്നു.",
   "Tips · {position} of {total}": "നുറുങ്ങുകൾ · {total}-ൽ {position}",
   "Done with tips. The card goes.": "നുറുങ്ങുകൾ പൂർത്തിയായി. കാർഡ് ഒഴിവാക്കുന്നു.",
   "Next tip": "അടുത്ത നുറുങ്ങ്",
   "Don't show tips again": "ഇനി നുറുങ്ങുകൾ കാണിക്കരുത്",
-  "Don't show tips again. Edit home brings them back.": "ഇനി നുറുങ്ങുകൾ കാണിക്കരുത്. ഹോം എഡിറ്റ് ചെയ്യുക അവ തിരികെ കൊണ്ടുവരും.",
   "All tips seen": "എല്ലാ നുറുങ്ങുകളും കണ്ടുകഴിഞ്ഞു",
   "or type your town": "അല്ലെങ്കിൽ നിങ്ങളുടെ നഗരത്തിന്റെ പേര് ടൈപ്പ് ചെയ്യുക",
   "Not here? Type your town": "ഇവിടെയില്ലേ? നിങ്ങളുടെ നഗരം ടൈപ്പ് ചെയ്യുക",
@@ -924,5 +922,15 @@
   "Ask a question": "ഒരു ചോദ്യം ചോദിക്കുക",
   "It will stop taking questions as soon as the global community answers.": "ആഗോള കമ്മ്യൂണിറ്റി മറുപടി നൽകുമ്പോൾ തന്നെ ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നത് നിർത്തും.",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "അവിടെയുള്ള ആർക്കും ഇത് കാണാം, ഫോട്ടോകളും ഏകദേശ പ്രദേശവും വിലയും ഈ കമ്മ്യൂണിറ്റിയുടെ പേരും സഹിതം. കൃത്യമായ സ്ഥലം കാണില്ല, ഇതിനെക്കുറിച്ചുള്ള ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നില്ലെങ്കിൽ നിങ്ങളുടെ പേരും കാണില്ല. ഇത് വാങ്ങാനോ എടുക്കാനോ അവർ ചേരാൻ അഭ്യർത്ഥിക്കും.",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "അവിടെയുള്ള ആർക്കും ഇത് കാണാം, ഫോട്ടോകളും ഏകദേശ പ്രദേശവും വിലയും ഈ കമ്മ്യൂണിറ്റിയുടെ പേരും സഹിതം. കൃത്യമായ സ്ഥലം കാണില്ല, ഇതിനെക്കുറിച്ചുള്ള ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നില്ലെങ്കിൽ നിങ്ങളുടെ പേരും കാണില്ല. ഇതിന് മറുപടി നൽകാൻ അവർ ചേരാൻ അഭ്യർത്ഥിക്കും."
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "അവിടെയുള്ള ആർക്കും ഇത് കാണാം, ഫോട്ടോകളും ഏകദേശ പ്രദേശവും വിലയും ഈ കമ്മ്യൂണിറ്റിയുടെ പേരും സഹിതം. കൃത്യമായ സ്ഥലം കാണില്ല, ഇതിനെക്കുറിച്ചുള്ള ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നില്ലെങ്കിൽ നിങ്ങളുടെ പേരും കാണില്ല. ഇതിന് മറുപടി നൽകാൻ അവർ ചേരാൻ അഭ്യർത്ഥിക്കും.",
+  "Arrange": "ക്രമപ്പെടുത്തുക",
+  "Arrange: move the cards on Home": "ക്രമപ്പെടുത്തുക: ഹോമിലെ കാർഡുകൾ നീക്കുക",
+  "Arrange Home: use the arrows. Done when you're happy.": "ഹോം ക്രമപ്പെടുത്തുക: അമ്പടയാളങ്ങൾ ഉപയോഗിക്കുക. തൃപ്തിയായാൽ കഴിഞ്ഞു അമർത്തുക.",
+  "Arrange Home. Use the arrows on each card.": "ഹോം ക്രമപ്പെടുത്തുക. ഓരോ കാർഡിലെയും അമ്പടയാളങ്ങൾ ഉപയോഗിക്കുക.",
+  "Stays here": "ഇവിടെ തന്നെ നിൽക്കും",
+  "Done arranging Home": "ഹോം ക്രമപ്പെടുത്തൽ പൂർത്തിയാക്കുക",
+  "{card} moved to {n} of {m}": "{card} {m}-ൽ {n}-ലേക്ക് നീക്കി",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "ഇതാണ് അവസാനത്തെ നുറുങ്ങ്. മുഴുവൻ ഗൈഡും ക്രമീകരണങ്ങളിൽ ഉണ്ട്, ഇന്റർനെറ്റ് ഇല്ലാതെയും പ്രവർത്തിക്കുന്നു; താഴെയുള്ള 'ക്രമപ്പെടുത്തുക' നിങ്ങളുടെ കാർഡുകൾ നീക്കുന്നു.",
+  "Don't show tips again. Add a card brings them back.": "ഇനി നുറുങ്ങുകൾ കാണിക്കരുത്. «ഒരു കാർഡ് ചേർക്കുക» അവ തിരികെ കൊണ്ടുവരും.",
+  "Arrange ›": "ക്രമപ്പെടുത്തുക ›"
 }

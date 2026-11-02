@@ -1,17 +1,17 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet, AccessibilityInfo } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t } from '@beanpool/core';
+import { ARRANGE_WORDS, t } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP } from './HomeParts';
 
 /**
- * A Home card's "…" menu (CARD-FRAME §1.3, design §10): Settings… (only on a type that has them), Move up, Move down,
- * Remove. A small sheet with items big enough for a thumb and for TalkBack. Remove asks nothing: a card is one tap to put
+ * A Home card's "…" menu (CARD-FRAME §1.3, design §10): Settings… (only on a type that has them), Arrange, Remove.
+ * Moving a card happens in Arrange, on the card (DESIGN-home-layout-fable.md §3.2). A small sheet with items big enough for a thumb and for TalkBack. Remove asks nothing: a card is one tap to put
  * back from Add a card. The system Back button (and Escape on a keyboard) closes it, as Cancel does; a modal keeps the
  * screen reader inside it while open, and when it closes focus goes back to the "…" that opened it.
  */
-export function HomeCardMenu({ visible, name, label, colors, canRemove, canUp, canDown, onSettings, onRemove, onUp, onDown, onClose, returnTo }: {
+export function HomeCardMenu({ visible, name, label, colors, canRemove, onSettings, onArrange, onRemove, onClose, returnTo }: {
     visible: boolean;
     /** The menu's title: the card's name, drawn. */
     name: string;
@@ -19,13 +19,11 @@ export function HomeCardMenu({ visible, name, label, colors, canRemove, canUp, c
     label?: string;
     colors: AppColors;
     canRemove: boolean;
-    canUp: boolean;
-    canDown: boolean;
     /** Absent: the card's type has no settings, and the menu has no Settings… item. */
     onSettings?: () => void;
+    /** Arrange, from this card. */
+    onArrange: () => void;
     onRemove: () => void;
-    onUp: () => void;
-    onDown: () => void;
     onClose: () => void;
     /** The "…" that opened it. */
     returnTo?: React.RefObject<View | null>;
@@ -63,8 +61,7 @@ export function HomeCardMenu({ visible, name, label, colors, canRemove, canUp, c
                 <Pressable style={[s.sheet, { backgroundColor: colors.surface.card, paddingBottom: 16 + insets.bottom }]} onPress={() => {}} accessible={false}>
                     <Text style={[s.title, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel={t('Card options for {card}', { card: said })} numberOfLines={2}>{name}</Text>
                     {onSettings && item(t('Settings…'), t('Settings for {card}', { card: said }), true, onSettings, 'home-menu-settings')}
-                    {item(t('Move up'), t('Move {card} up', { card: said }), canUp, onUp, 'home-menu-up')}
-                    {item(t('Move down'), t('Move {card} down', { card: said }), canDown, onDown, 'home-menu-down')}
+                    {item(t(ARRANGE_WORDS.name), t(ARRANGE_WORDS.link), true, onArrange, 'home-menu-arrange')}
                     {item(t('Remove'), t('Remove {card} from Home', { card: said }), canRemove, onRemove, 'home-menu-remove')}
                     {item(t('Cancel'), t('Cancel'), true, () => {}, 'home-menu-cancel')}
                 </Pressable>

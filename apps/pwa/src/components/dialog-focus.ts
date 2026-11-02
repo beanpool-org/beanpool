@@ -1,12 +1,12 @@
 /**
- * Keys and focus for Home's dialogs (components/AddCardDialog.tsx, components/EditHomeDialog.tsx): focus into the
+ * Keys and focus for Home's dialogs (components/AddCardDialog.tsx): focus into the
  * dialog's heading, Tab and Shift+Tab kept inside, Escape closes it.
  *
- * - **Only the dialog in front has the keys.** A dialog drawn over another (a saved search's Settings… over Edit home) is
+ * - **Only the dialog in front has the keys.** A dialog drawn over another (a card's settings over the picker) is
  *   the last `[aria-modal]` on the page: the one under it leaves Escape and Tab alone, so Escape closes only the one in
  *   front and Tab goes round its own controls (review of #1701, finding 2).
  * - **Focus on close** goes back to what opened the dialog. When that went with the same step (a menu's Settings… item,
- *   Edit home's ＋ Add a card, the picker's row behind its settings), to `fallback`, never to the page's `<body>`
+ *   the picker's row behind its settings), to `fallback`, never to the page's `<body>`
  *   (finding 3). Nowhere while `keepFocus` is set: the page sends it on (after an add, to the new card).
  */
 import { useEffect, useRef, type RefObject } from 'react';

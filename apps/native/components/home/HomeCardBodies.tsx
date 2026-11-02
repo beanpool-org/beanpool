@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -656,10 +656,10 @@ export function InviteBody({ colors }: { colors: AppColors }) {
 }
 
 /**
- * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Edit home ›",
+ * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Arrange ›",
  * each its own 48 dp target in a row that wraps (at 320 dp with text at 1.3× they stand on two rows, right-aligned).
  */
-export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onEdit }: {
+export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onArrange, arrangeRef }: {
     card: HomeCards['community'] | undefined;
     profile: string;
     invitesOn: boolean;
@@ -668,7 +668,9 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
     onOpenShape?: () => void;
     /** Absent for a visitor, who tailors nothing here (utils/home-cards.ts `canTailor`). */
     onAdd?: () => void;
-    onEdit?: () => void;
+    onArrange?: () => void;
+    /** Arrange ›, where Done gives focus back. */
+    arrangeRef?: React.RefObject<View | null>;
 }) {
     const shapeSummary = communityShapeSummary(features);
     const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
@@ -711,10 +713,10 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
                 {row2Text && <HomeRow colors={colors} text={row2Text} a11y={row2Text} lines={2} testID="home-community-row-trades" />}
                 {row3Text && <HomeRow colors={colors} text={row3Text} a11y={row3Text} lines={2} testID="home-community-row-listings" />}
                 {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
-                {(onAdd || onEdit) && (
+                {(onAdd || onArrange) && (
                     <View style={communityLinksStyle}>
                         {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}
-                        {onEdit && <HomeLink id="community:edit" colors={colors} text={t('Edit home')} a11y={t('Edit home: move or remove cards')} onPress={onEdit} testID="home-edit" />}
+                        {onArrange && <HomeLink id="community:arrange" colors={colors} text={t(ARRANGE_WORDS.name)} a11y={t(ARRANGE_WORDS.link)} onPress={onArrange} testID="home-arrange-open" linkRef={arrangeRef} />}
                     </View>
                 )}
             </>
@@ -725,10 +727,10 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
             {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
-            {(onAdd || onEdit) && (
+            {(onAdd || onArrange) && (
                 <View style={communityLinksStyle}>
                     {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}
-                    {onEdit && <HomeLink id="community:edit" colors={colors} text={t('Edit home')} a11y={t('Edit home: move or remove cards')} onPress={onEdit} testID="home-edit" />}
+                    {onArrange && <HomeLink id="community:arrange" colors={colors} text={t(ARRANGE_WORDS.name)} a11y={t(ARRANGE_WORDS.link)} onPress={onArrange} testID="home-arrange-open" linkRef={arrangeRef} />}
                 </View>
             )}
         </>
@@ -824,7 +826,7 @@ export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore
 /**
  * Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1): a newcomer's Home until the tour ends. Its
  * words, Look around › (or "Pick up the tour at step 3 ›" while one is part way) and Skip. It blocks nothing: every tab,
- * Add a card and Edit home work with it sitting there. No "…": Skip is its remove.
+ * Add a card and Arrange work with it sitting there. No "…": Skip is its remove.
  */
 export function StartBody({ words, button, colors, onLookAround, onSkip }: {
     words: string;

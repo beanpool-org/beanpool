@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t, type CardHue } from '@beanpool/core';
+import { ARRANGE_WORDS, t, type CardHue } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 
 /**
@@ -57,14 +57,31 @@ export function FabAware({ id, children, style }: { id: string; children: React.
 
 // ── The card ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent, hue }: {
+/** A card in Arrange (DESIGN-home-layout-fable.md §3.2): its band's arrows, or "Stays here" on the fixed two and a pin. */
+export interface ArrangeBand {
+    /** The card's screen-reader name, for the arrows' labels. */
+    label: string;
+    /** It can't move: the band says so instead of offering arrows. */
+    stays?: boolean;
+    canUp?: boolean;
+    canDown?: boolean;
+    onMove?: (direction: 'up' | 'down') => void;
+    /** The arrows themselves, so focus stays on one after a move, or moves to its twin at an end. */
+    upRef?: React.RefObject<View | null>;
+    downRef?: React.RefObject<View | null>;
+}
+
+/** Holding a band this long enters Arrange. */
+export const HOLD_MS = 500;
+
+export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent, hue, onHold, arrange }: {
     /** For the floating button's band: the caption's own targets (the "…", "Tune") report where they rest. */
     id: string;
     caption: string;
     /** The card as its "…" says it (utils/home-cards.ts cardLabelName: a saved search by its words); the caption if absent. */
     menuLabel?: string;
     colors: AppColors;
-    /** The card's "…" (Hide, Move up, Move down); absent on the cards that can't be hidden or moved. */
+    /** The card's "…" (Settings…, Arrange, Remove); absent on the cards that can't be removed. */
     onMenu?: () => void;
     /** The "…" itself, so focus returns to it when the menu closes (§10). */
     menuRef?: React.RefObject<View | null>;
@@ -76,18 +93,55 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
     accent?: boolean;
     /** The card's hue from brand-colours (S1). */
     hue?: CardHue;
+    /** Holding the band enters Arrange; absent where it doesn't (a visitor's Home, Getting started). */
+    onHold?: () => void;
+    /** In Arrange: the band's controls stand in for "Tune" and the "…", and `children` is the card's one line. */
+    arrange?: ArrangeBand;
 }) {
     const s = homeStyles(colors);
     const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const { tint, ink } = colors.card[cardHue];
+    const arrow = (dir: 'up' | 'down', on: boolean, ref: React.RefObject<View | null> | undefined, a11y: string) => (
+        <Pressable
+            ref={ref}
+            disabled={!on}
+            onPress={() => arrange?.onMove?.(dir)}
+            style={({ pressed }) => [s.menuButton, dir === 'up' && s.arrowFirst, pressed && s.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={a11y}
+            accessibilityState={{ disabled: !on }}
+            testID={`home-arrange-${id}-${dir}`}
+        >
+            <MaterialCommunityIcons name={dir === 'up' ? 'arrow-up' : 'arrow-down'} size={22} color={ink} style={on ? undefined : s.arrowOff} />
+        </Pressable>
+    );
     return (
-        <View style={[s.card, accent && s.cardAccent]} testID={testID}>
-            <View style={[s.captionRow, { backgroundColor: tint }]}>
+        <View style={[s.card, accent && s.cardAccent, arrange && s.cardFolded]} testID={testID}>
+            <Pressable
+                onLongPress={arrange ? undefined : onHold}
+                delayLongPress={HOLD_MS}
+                // No target of its own for TalkBack or a keyboard: the caption stays a heading, and "…" → Arrange is their way in.
+                accessible={false}
+                focusable={false}
+                style={[s.captionRow, arrange && s.captionFolded, { backgroundColor: tint }]}
+                testID={`card-band-${id}`}
+            >
                 {/* Drawn in capitals; read in its own words (a screen reader can spell an all-caps word out). */}
                 <Text style={[s.caption, { color: ink }]} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
                     {caption}
                 </Text>
-                {(right || onMenu) && (
+                {arrange ? (
+                    <View style={s.captionTargets}>
+                        {arrange.stays ? (
+                            <Text style={[s.stays, { color: ink }]} maxFontSizeMultiplier={CAPTION_MAX_SCALE} testID={`home-arrange-${id}-stays`}>{t(ARRANGE_WORDS.stays)}</Text>
+                        ) : (
+                            <>
+                                {arrow('up', !!arrange.canUp, arrange.upRef, t('Move {card} up', { card: arrange.label }))}
+                                {arrow('down', !!arrange.canDown, arrange.downRef, t('Move {card} down', { card: arrange.label }))}
+                            </>
+                        )}
+                    </View>
+                ) : (right || onMenu) && (
                     // The "…" sits at the card's right edge, where "+ ADD POST" floats: it steps aside for it too.
                     <FabAware id={`${id}:caption`} style={s.captionTargets}>
                         {right}
@@ -105,7 +159,7 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                         )}
                     </FabAware>
                 )}
-            </View>
+            </Pressable>
             {children}
         </View>
     );
@@ -158,19 +212,21 @@ export function HomeRow({ text, sub, subBadge, a11y, onPress, left, right, color
     );
 }
 
-/** The trailing link ("See all ›", "All events ›", "Edit home ›"): the whole width is the target, the words at the end. */
-export function HomeLink({ id, text, a11y, onPress, colors, testID }: {
+/** The trailing link ("See all ›", "All events ›", "Arrange ›"): the whole width is the target, the words at the end. */
+export function HomeLink({ id, text, a11y, onPress, colors, testID, linkRef }: {
     id: string;
     text: string;
     a11y: string;
     onPress: () => void;
     colors: AppColors;
     testID?: string;
+    /** The link itself, for what gives focus back to it. */
+    linkRef?: React.RefObject<View | null>;
 }) {
     const s = homeStyles(colors);
     return (
         <FabAware id={id}>
-            <Pressable onPress={onPress} style={({ pressed }) => [s.link, pressed && s.pressed]} accessibilityRole="link" accessibilityLabel={a11y} testID={testID}>
+            <Pressable ref={linkRef} onPress={onPress} style={({ pressed }) => [s.link, pressed && s.pressed]} accessibilityRole="link" accessibilityLabel={a11y} testID={testID}>
                 <Text style={s.linkText} numberOfLines={1}>{text} ›</Text>
             </Pressable>
         </FabAware>
@@ -234,6 +290,13 @@ function make(colors: AppColors) {
         },
         captionTargets: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
         menuButton: { width: HOME_TARGET_DP, height: HOME_TARGET_DP, marginRight: -12, alignItems: 'center', justifyContent: 'center', borderRadius: HOME_TARGET_DP / 2, flexShrink: 0 },
+        // Folded, a card is its band and a line, and eight of them nearly fit a small screen.
+        cardFolded: { marginBottom: 6, paddingBottom: 4 },
+        captionFolded: { marginBottom: 2 },
+        // Only the last arrow reaches into the card's edge, as the "…" does.
+        arrowFirst: { marginRight: 0 },
+        arrowOff: { opacity: 0.4 },
+        stays: { fontSize: 12, fontWeight: '800', flexShrink: 0 },
         pressed: { backgroundColor: colors.surface.subtle },
         row: { flexDirection: 'row', alignItems: 'center', minHeight: HOME_TARGET_DP, paddingVertical: 6, gap: 10 },
         rowText: { flex: 1, minWidth: 0 },

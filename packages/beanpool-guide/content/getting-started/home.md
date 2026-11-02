@@ -2,7 +2,7 @@
 slug: home
 title: Home
 summary: What Home is, which cards it shows on the phone and in the web app, how to add, move or remove them, picking what you're into, and privacy when you sign out.
-help: This is your Home: a few cards on what needs you and what is on nearby. Add a card at the bottom, or tap … on one to move or remove it.
+help: This is your Home: a few cards on what needs you and what is on nearby. Add a card at the bottom, or hold a card to arrange.
 related: the-top-bar, browsing-the-market, your-profile, finding-a-community, beans-and-the-global-community
 ---
 
@@ -12,7 +12,7 @@ related: the-top-bar, browsing-the-market, your-profile, finding-a-community, be
 
 The phone and the web app show the same cards, with a few differences. This page says "on the phone" or "in the web app" where they differ.
 
-In the web app, on a wide screen, the cards stand side by side in two or three columns (or one if you prefer), in your order: across, then down. Cards that are wide enough (at least 480 px) show listings and posts in tiles rather than rows. **Needs you** and **Your community** run across the whole width, and so do the one-time tip and the "fewer cards" note (below): under **Needs you**, or above the cards when **Needs you** is not showing. The phone always shows one column.
+In the web app, on a wide screen, the cards stand in two or three columns, in your order: each card goes under the shortest column so far, so no gaps open up. Cards that are wide enough (at least 480 px) show listings and posts in tiles rather than rows. **Needs you** and **Your community** run across the whole width, and so do the one-time tip and the "fewer cards" note (below): under **Needs you**, or above the cards when **Needs you** is not showing. The phone always shows one column.
 
 ## Getting started
 
@@ -27,7 +27,7 @@ A new member's Home starts nearly empty: one card, **Getting started**, between 
 
 After you tap **Skip** on the tour, a one-line tip appears under the first card. Tap **✕** to put it away. After **Done** it does not show.
 
-- On the phone it says "This is your Home. Add a card at the bottom, or tap … on a card to move or remove it." It is shown once, and never again, whether or not you tap **✕**. Adding or removing a card also puts it away.
+- On the phone it says "This is your Home. Add a card at the bottom, or hold a card to arrange." It is shown once, and never again, whether or not you tap **✕**. Adding or removing a card also puts it away.
 - In the web app it says the same words. It comes back each time you open Home, until you tap **✕**.
 
 ## Your cards
@@ -40,7 +40,7 @@ On the phone and in the web app, your Home is a list of cards you choose. After 
 - **Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.
 - **Decide** asks what it shows before it is added: **Summary** (the usual choice), **All open** or **My votes**.
 - A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.
-- Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
+- Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Arrange** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
 - If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and the tour's **Skip** or **Done** gives you the five, or the cards you picked (above). If you joined more than a week ago, Home also tells you once, under **Getting started** the first time it opens: "Home now starts with fewer cards. Add a card brings the rest back."
 
 ## Save a search from the Market
@@ -62,17 +62,17 @@ Home shows only the cards that have something to tell you, in your own order. A 
 - **Your enterprise:** shows the enterprise's name and whether it is ongoing or a project, its balance and keepers, this month's trades and figures in and out, the latest line on its book, and requests waiting to be approved. It is called **Your project** when the one you keep is a project. Tap a request to open **Manage**, where you approve it. Not on the global community: there, **Commons** shows an example enterprise from a local community instead.
 - **Coming up:** upcoming events near you, with your RSVP.
 - **New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. If you typed your town in **Find your community**, the phone counts from that town. On wide cards (480 px and over in the web app), listings stand in a 2 × 2 grid of tiles with their photo, Offer or Need badge, title, price and distance. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.
-- **Decide:** open Decisions and open polls. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app, the card shows open counts at the top right, then up to 3 open Decisions (title, when it closes, and whether you voted or **Not yet**), the question and closing day of the first open poll, and **Decide ›** to open Commons. You choose what it shows: tap **…** then **Settings…** (or choose when you add it). **Summary** is the usual choice: the Decisions closing soonest (up to 3) and the first open poll. **All open** shows up to 5 open Decisions and the first open poll. **My votes** shows only the open Decisions you have voted in or proposed (up to 5), each saying whether you voted or **Not yet**, and no polls, and no open counts at the top right (they would count only your Decisions); when none are yours the card doesn't show, and **Edit home** says "Nothing to show now". The phone and the web app offer the same three choices. Not on the global community: polls there are in the Market's **Polls**, and **Commons** shows an example Decision from a local community.
+- **Decide:** open Decisions and open polls. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app, the card shows open counts at the top right, then up to 3 open Decisions (title, when it closes, and whether you voted or **Not yet**), the question and closing day of the first open poll, and **Decide ›** to open Commons. You choose what it shows: tap **…** then **Settings…** (or choose when you add it). **Summary** is the usual choice: the Decisions closing soonest (up to 3) and the first open poll. **All open** shows up to 5 open Decisions and the first open poll. **My votes** shows only the open Decisions you have voted in or proposed (up to 5), each saying whether you voted or **Not yet**, and no polls, and no open counts at the top right (they would count only your Decisions); when none are yours the card doesn't show, and **Arrange** says "Nothing to show now". The phone and the web app offer the same three choices. Not on the global community: polls there are in the Market's **Polls**, and **Commons** shows an example Decision from a local community.
 - **A saved search:** listings that match words you choose. You can have up to five. Its first line is your words and the distance, such as "eggs · within 5 km". Then come up to four listings (in rows or wide tiles, like the Market card), each opening the listing; **See more** opens the Market with your words already in its search. It finds what the Market's search finds, so "eggs" also finds listings with words that mean much the same. When nothing matches it says so, such as "No eggs within 5 km right now". A search you have just added or changed without a connection says "Shows when your community answers" until your community's server answers. To change the words, tap **…** then **Settings…**: the card stays where it is.
 - **Your groups:** your groups, enterprises and events, with unread message counts or quiet. In the web app, each also shows the latest message, with who sent it and how long ago (locked messages show 🔒 Message). Tap opens the chat.
 - **Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.
 - **The Pulse:** posts shared by neighbours from external channels like YouTube and blogs, with starred categories first. In the web app it shows up to four posts, with their thumbnail, title, who shared it and when; on wide cards (480 px and over), in a 2 × 2 grid of tiles. Tap **See all** to open the Pulse.
-- **Sun and moon:** tonight's moon and today's sunrise and sunset, in one line, such as "🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48". Your phone or browser works it out by itself: the card asks nothing of your community's server. It uses your community's place, rounded to about a kilometre, or your area where your community has no place (on the global community it is always your area). On the global community, the phone can also use where it last was, but only if you have already let the app use your location: it never asks. If you typed your town in **Find your community**, the phone uses that instead. To use your area even where your community has a place, tap **…** then **Settings…** and choose **Your area**. The times are on your own phone's or computer's clock, so when you travel you see them in your own time. The moon is drawn as it looks from that side of the equator. Where the sun doesn't rise or set today, it says so, such as "Sun up all day" or "No sunset today". If no place is known, the card doesn't show, and **Edit home** says "Nothing to show now: no place is known." A screen reader reads it in words, such as "Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm."
+- **Sun and moon:** tonight's moon and today's sunrise and sunset, in one line, such as "🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48". Your phone or browser works it out by itself: the card asks nothing of your community's server. It uses your community's place, rounded to about a kilometre, or your area where your community has no place (on the global community it is always your area). On the global community, the phone can also use where it last was, but only if you have already let the app use your location: it never asks. If you typed your town in **Find your community**, the phone uses that instead. To use your area even where your community has a place, tap **…** then **Settings…** and choose **Your area**. The times are on your own phone's or computer's clock, so when you travel you see them in your own time. The moon is drawn as it looks from that side of the equator. Where the sun doesn't rise or set today, it says so, such as "Sun up all day" or "No sunset today". If no place is known, the card doesn't show, and **Arrange** says "Nothing to show now: no place is known." A screen reader reads it in words, such as "Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm."
 - **Your Beans:** your balance, room to spend, this month's trades and figures in and out, and your trust badge. For a new member it says "0 Beans · nothing to repay" and how credit opens with your first trade. Not on the global community. There the phone shows an example card instead: what Beans do in a local community, and **See an example ledger**. It comes once the tour is done or skipped (while **Getting started** is up, the tour's Ledger step shows the example), and stays until you tap **Hide this card**, even after **First steps** has gone.
 - **From your community:** announcements and notices from your community's admins.
 - **Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin. In the web app it does not show there at all.
 - **Your tools:** a card you fill with the tools you use, each showing its icon, name and latest state, and opening that tool.
-- **Your community:** the last card, titled with your community's name (**The global community** on the global community). It runs across the full width. On wide screens in the web app, it shows a figure tile for each number your community shares: members, who joined this week, trades this month, Commons pot, listings and upcoming events (with Beans off, no trades or Commons pot; on the global community: members, communities listed and listings); on narrower screens, three lines. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed.
+- **Your community:** the last card, titled with your community's name (**The global community** on the global community). It runs across the full width. On wide screens in the web app, it shows a figure tile for each number your community shares: members, who joined this week, trades this month, Commons pot, listings and upcoming events (with Beans off, no trades or Commons pot; on the global community: members, communities listed and listings); on narrower screens, three lines. It has **Add a card** and **Arrange**. This card stays at the bottom and cannot be moved or removed.
 
 On the phone, when your community has moved to a new address, a card above all of these asks whether to use it: see "When your community moves to a new address" in "More than one community".
 
@@ -87,30 +87,32 @@ Most cards have a **…** button at the top right. These do not:
 Tap **…** to:
 
 - **Settings…:** only on a card that has settings, such as **A saved search**, **Decide** or **Sun and moon**. It changes the card where it stands.
-- **Move up:** swaps the card with the card above it.
-- **Move down:** swaps the card with the card below it.
+- **Arrange:** folds your cards so you can move them (below).
 - **Remove:** takes the card off Home, with its settings. **Add a card** puts it back. Nothing asks you to confirm. Removing **Tips** is the same as **Don't show tips again**.
 
-In the web app, on a wide screen, where the cards stand side by side, the two moves say **Move earlier** and **Move later**. They do the same thing: the card swaps with the one before it or after it in your order.
+In the web app, **Your way back in** has a **…** too, with **Arrange** and **Remove**.
 
-In the web app, **Your way back in** has a **…** too, with the two moves and **Remove**.
+## Arrange
 
-A move is greyed out when there is nowhere to go: at the top or bottom of the cards you can move. The first card under **Needs you** cannot move up, and the last card above **Your community** cannot move down.
+There is one way to move a card, and it is on the card. Start **Arrange** in any of three ways, on the phone and in the web app:
 
-## Edit home
+- Hold a card's coloured band for half a second.
+- Tap **…** on a card, then **Arrange**.
+- Tap **Arrange** at the bottom of Home, on your community's card.
 
-At the bottom of Home, on your community's card, tap **Edit home**.
+Your cards fold to their coloured band and one line, where they stand:
 
-- In the web app, on a screen wide enough (at least 656 px), **Edit home** shows **Columns on a wide screen** at the top with three choices: **Fill the width (up to three)**, **Two wide**, or **One**. Your choice is saved on your account and follows you to other computers.
-- **＋ Add a card** comes next. It opens the same list as **Add a card** on Home.
-- Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove). A saved search is listed by its words, and by **Offers** or **Needs** when it looks for only one, such as "eggs" or "Needs · eggs", so two searches are two different rows.
-- A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from.
-- Tap **Reset to defaults** to go back to the usual five cards.
+- Each card has an up and a down arrow on its band. Tap one and the card swaps with the one before it or after it in your order. Each move is saved at once.
+- An arrow is greyed out when there is nowhere to go: the first card under **Needs you** cannot move up, and the last card above **Your community** cannot move down.
+- **Needs you** and **Your community** say **Stays here**. So does **Find your community**, in your first 30 days on the global community, or after that while a request to join is waiting for an answer (or its card has not been put away with **Got it**) or you have a watch for a community near you.
+- A card with nothing to show right now is there too, and says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from. These cards have **Remove** on them, and **Settings…** if they have settings. To remove any other card, tap **Done** and use its **…**.
+- A saved search shows its words, and **Offers** or **Needs** when it looks for only one, such as "eggs" or "Needs · eggs", so two searches read differently.
+- **＋ Add a card** comes after the cards. It opens the same list as **Add a card** on Home.
+- **Reset to defaults**, under the last card, goes back to the usual five cards.
 - There are no switches and no hidden list: a card you removed is in **Add a card**.
-- Only the cards your community can show are listed, on the phone and in the web app. For example, the global community's list has no **Your Beans** or **Your deals**: there, the Ledger and **Your deals** show examples from a local community instead.
-- **Needs you** always stays at the top, and **Your community** always stays at the bottom.
-- **Find your community**, in your first 30 days on the global community, or after that while a request to join is waiting for an answer (or its card has not been put away with **Got it**) or you have a watch for a community near you, is not listed. It stays near the top for now.
-- **Your way back in** is listed, with its arrows and **…**, while it is on your Home.
+- Only the cards your community can show are there, on the phone and in the web app. For example, the global community has no **Your Beans** or **Your deals**: there, the Ledger and **Your deals** show examples from a local community instead.
+
+Tap **Done** to unfold your cards. On the phone, **Done** is where **+ ADD POST** usually is, and Android's back button does the same. In the web app, **Done** stays at the top while the page scrolls, and the Escape key does the same.
 
 ## What are you into?
 
@@ -127,7 +129,7 @@ On the global community's website, before you join or sign in, a visitor sees a 
 
 - A **Join** card at the top.
 - Only public cards: a card of communities near you, **Coming up**, **What people post** (listings with photos and categories but no member names or faces), and **Your community**.
-- Visitors have no **…** menu, no **Edit home**, and no private cards like **Needs you** or **Your Beans**.
+- Visitors have no **…** menu, no **Arrange**, and no private cards like **Needs you** or **Your Beans**.
 
 ## Privacy and signing out
 

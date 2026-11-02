@@ -10,7 +10,7 @@ import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
-import { registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { askOtherCommunitiesNow, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler, showBadgeSum } from '../services/push-notifications';
 import { registerWhenNotificationsAllowed } from '../utils/notification-permission';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
@@ -1107,6 +1107,11 @@ export default function RootLayout() {
             .then(() => registerPillarSync())
             // Trigger Immediate foreground sync
             .then(() => requestSync())
+            .then(() => {
+                void import('../utils/working-style')
+                    .then(({ firstRunWorkingStyle }) => firstRunWorkingStyle())
+                    .catch(() => {});
+            })
             .catch(err => {
                 console.error('[Init DB] Error:', err);
                 Alert.alert(t('DB Error'), String(err));
@@ -1122,6 +1127,9 @@ export default function RootLayout() {
         // A push registration that didn't land (no connection, no answer, an error), and any community on the phone that
         // was never asked, is tried on each return and with the 5-minute sync, until it lands (utils/push-registrations.ts
         // `registerWhereMissing`). At start, the account's own registrations go anyway (RootLayoutNav).
+        // What waits at the phone's other communities: asked now, on each return and with the 5-minute sync, at most every
+        // 5 minutes however often the member comes back (utils/other-communities-unread.ts).
+        void askOtherCommunitiesNow();
 
         // Set up foreground polling fallback every 5 minutes (safety net)
         const intervalId = setInterval(() => {
@@ -1131,6 +1139,7 @@ export default function RootLayout() {
                 retryPushRegistrations();
                 void syncBlocks();
                 void tendGlobalCopies();
+                void askOtherCommunitiesNow();
             }
         }, 300000);
 
@@ -1150,6 +1159,9 @@ export default function RootLayout() {
                         Notif.setBadgeCountAsync(0).catch(() => {});
                     } catch {}
                 }
+                // Then what waits at the other communities goes back on it, and the round brings that up to date.
+                void showBadgeSum();
+                void askOtherCommunitiesNow();
             }
             appState.current = nextAppState;
         });

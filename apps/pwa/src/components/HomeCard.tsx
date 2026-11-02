@@ -1,8 +1,8 @@
 /**
  * One card on Home (DESIGN-home-dashboard-fable.md §9, §10): a region with its own heading, so a screen reader jumps card
- * to card, and a small "…" with three items, Hide · Move up · Move down (§4.1). No dragging. On the card frame
- * (CARD-FRAME-DESIGN-fable.md §1.3, slice F3) the items are Settings… (a type that has them) · Move up · Move down ·
- * Remove, named by the card's screen-reader name (a saved search by its words), given `onRemove` in place of `onHide`.
+ * to card, and a small "…": Settings… (a type that has them) · Arrange · Remove, named by the card's screen-reader name
+ * (a saved search by its words), given `onRemove` in place of `onHide`. Moving a card happens in one place, Arrange
+ * (DESIGN-home-layout-fable.md §3.2): the card folds to its band and one line, and the band's arrows stand in for the "…".
  *
  * The menu is a labelled button ("Card options for Coming up") that opens a short list of buttons under it: the first
  * item takes focus, the arrow keys move between them, Escape or a tap elsewhere closes it, and focus goes back to the
@@ -10,7 +10,7 @@
  * item is a full-width button at least 44 px tall.
  */
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
-import { t, type CardHue } from '@beanpool/core';
+import { ARRANGE_WORDS, t, type CardHue } from '@beanpool/core';
 
 export interface CardContainerState {
     width: number;
@@ -20,29 +20,26 @@ export interface CardContainerState {
 export const CardContainerContext = createContext<CardContainerState>({ width: 0, wide: false });
 export const useCardContainer = () => useContext(CardContainerContext);
 
+/** core's sentences, shown through t(). */
+const WORDS = ARRANGE_WORDS;
+
 interface MenuProps {
     title: string;
     /** The card's screen-reader name for the menu's labels (lib/home-layout.ts `cardLabelName`); absent: its title. */
     label?: string;
-    canMoveUp: boolean;
-    canMoveDown: boolean;
     /** Version 1's Hide. */
     onHide?: () => void;
     /** The card frame's Remove: the card goes, with its settings (Add a card brings it back). */
     onRemove?: () => void;
     /** Settings…, on a type that has them. */
     onSettings?: () => void;
-    onMove: (direction: 'up' | 'down') => void;
-    /**
-     * The cards stand side by side (a wide screen's grid): the moves say Move earlier · Move later, the same action in
-     * honest words, since "up" can be "left" there (DESIGN-home-wide-and-content-fable.md §1).
-     */
-    across?: boolean;
+    /** Arrange, from this card: the moves are there, on the band. */
+    onArrange?: () => void;
     /** The card caption band's ink colour, for the "…" button. */
     ink?: string;
 }
 
-export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove, across, ink }: MenuProps) {
+export function CardMenu({ title, label, onHide, onRemove, onSettings, onArrange, ink }: MenuProps) {
     const said = label ?? title;
     const [open, setOpen] = useState(false);
     const button = useRef<HTMLButtonElement | null>(null);
@@ -106,12 +103,73 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
                     {/* The card goes with its "…": the page gives focus to the nearest card left (pages/HomePage.tsx). */}
                     {onSettings && <button type="button" className={item} data-testid="home-menu-settings" onClick={() => { close(false); onSettings(); }}>{t('Settings…')}</button>}
                     {onHide && !onRemove && <button type="button" className={item} onClick={() => { close(false); onHide(); }}>{t('Hide')}</button>}
-                    <button type="button" className={item} disabled={!canMoveUp} onClick={() => { close(true); onMove('up'); }}>{across ? t('Move earlier') : t('Move up')}</button>
-                    <button type="button" className={item} disabled={!canMoveDown} onClick={() => { close(true); onMove('down'); }}>{across ? t('Move later') : t('Move down')}</button>
+                    {onArrange && <button type="button" className={item} data-testid="home-menu-arrange" onClick={() => { close(false); onArrange(); }}>{t(WORDS.name)}</button>}
                     {onRemove && <button type="button" className={item} data-testid="home-menu-remove" aria-label={t('Remove {card} from Home', { card: said })} onClick={() => { close(false); onRemove(); }}>{t('Remove')}</button>}
                 </div>
             )}
         </div>
+    );
+}
+
+/** A card in Arrange (DESIGN-home-layout-fable.md §3.2): its band's arrows, or "Stays here" on the fixed two and a pin. */
+export interface ArrangeBand {
+    /** The card's screen-reader name, for the arrows' labels. */
+    label: string;
+    /** It can't move: the band says so instead of offering arrows. */
+    stays?: boolean;
+    canUp?: boolean;
+    canDown?: boolean;
+    /** The cards stand side by side: earlier and later, since "up" can be "left" there. */
+    across?: boolean;
+    onMove?: (direction: 'up' | 'down') => void;
+}
+
+/** Holding a band this long enters Arrange, on touch or with a mouse. */
+export const HOLD_MS = 500;
+/** A finger that travels this far is scrolling, not holding. */
+const HOLD_SLOP_PX = 10;
+
+/** A press held on the band, never one that starts on a button or a link in it. */
+function useHold(onHold?: () => void) {
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const from = useRef({ x: 0, y: 0 });
+    const clear = () => {
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
+    };
+    useEffect(() => clear, []);
+    if (!onHold) return undefined;
+    return {
+        onPointerDown: (e: React.PointerEvent) => {
+            if (e.button !== 0 || (e.target as Element).closest?.('button, a')) return;
+            clear();
+            from.current = { x: e.clientX, y: e.clientY };
+            timer.current = setTimeout(() => { timer.current = null; onHold(); }, HOLD_MS);
+        },
+        onPointerMove: (e: React.PointerEvent) => {
+            if (Math.hypot(e.clientX - from.current.x, e.clientY - from.current.y) > HOLD_SLOP_PX) clear();
+        },
+        onPointerUp: clear,
+        onPointerCancel: clear,
+        onPointerLeave: clear,
+    };
+}
+
+/** The band's two arrows, or "Stays here", in the card's ink. */
+function ArrangeControls({ id, band, ink }: { id: string; band: ArrangeBand; ink: string }) {
+    if (band.stays) return <span data-testid={`home-arrange-stays-${id}`} className="shrink-0 text-xs font-bold" style={{ color: ink }}>{t(WORDS.stays)}</span>;
+    const arrow = 'shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer disabled:opacity-40 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+    return (
+        <>
+            <button type="button" className={arrow} style={{ color: ink }} data-testid={`home-arrange-up-${id}`} disabled={!band.canUp} onClick={() => band.onMove?.('up')}
+                aria-label={band.across ? t('Move {card} earlier', { card: band.label }) : t('Move {card} up', { card: band.label })}>
+                <span aria-hidden="true">↑</span>
+            </button>
+            <button type="button" className={arrow} style={{ color: ink }} data-testid={`home-arrange-down-${id}`} disabled={!band.canDown} onClick={() => band.onMove?.('down')}
+                aria-label={band.across ? t('Move {card} later', { card: band.label }) : t('Move {card} down', { card: band.label })}>
+                <span aria-hidden="true">↓</span>
+            </button>
+        </>
     );
 }
 
@@ -131,6 +189,10 @@ interface CardProps {
     hue?: CardHue;
     /** Reports measured height for web grid packing (DESIGN-home-layout-fable.md §3.1, slice L1). */
     onHeight?: (height: number) => void;
+    /** Holding the band enters Arrange; absent where it doesn't (a visitor's Home, Getting started). */
+    onHold?: () => void;
+    /** In Arrange: the band's controls stand in for the "…" and the card is folded (`children` is its one line). */
+    arrange?: ArrangeBand;
 }
 
 /** A packed child's height: its border box, whatever its span (it stands `align-self: start`). */
@@ -161,12 +223,13 @@ export function PackedBlock({ tag: Tag = 'div', onHeight, ...rest }: { tag?: 'di
     return <Tag ref={ref as RefObject<never>} {...rest} />;
 }
 
-export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue, onHeight }: CardProps) {
+export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue, onHeight, onHold, arrange }: CardProps) {
     const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const headingId = `home-card-${id}-title`;
     const sectionRef = useRef<HTMLElement | null>(null);
     const [width, setWidth] = useState(0);
     useReportHeight(sectionRef, onHeight);
+    const hold = useHold(arrange ? undefined : onHold);
 
     useLayoutEffect(() => {
         const el = sectionRef.current;
@@ -193,23 +256,30 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                 data-card-wide={wide ? 'true' : 'false'}
                 data-container-width={width}
                 style={{ containerType: 'inline-size', ...(accent ? { borderColor: 'var(--bp-card-amber-ink)' } : {}), ...style }}
-                className={`bg-bg-card rounded-2xl shadow-sm border p-4 mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
+                className={`bg-bg-card rounded-2xl shadow-sm border p-4 ${arrange ? 'pb-2' : ''} mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
             >
                 <div
+                    {...hold}
                     data-testid={`card-band-${id}`}
-                    className="-mx-4 -mt-4 px-4 mb-3 py-1 rounded-t-2xl flex items-center justify-between min-h-[48px] gap-2 min-w-0"
+                    className={`-mx-4 -mt-4 px-4 ${arrange ? 'mb-2' : 'mb-3'} py-1 rounded-t-2xl flex items-center justify-between min-h-[48px] gap-2 min-w-0`}
                     style={{
                         backgroundColor: `var(--bp-card-${cardHue}-tint)`,
                         color: `var(--bp-card-${cardHue}-ink)`,
+                        // The hold is the band's own: no text selected or system menu under a thumb.
+                        ...(hold ? { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } as React.CSSProperties : {}),
                     }}
                 >
                     {/* Focusable from the page (never by Tab): where focus goes when the card above it is hidden. */}
                     <h2 id={headingId} tabIndex={-1} className="m-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider" style={{ color: `var(--bp-card-${cardHue}-ink)` }}>
                         {title}
                     </h2>
-                    <div className="flex items-center justify-end gap-1 min-w-0">
-                        {titleAside}
-                        {menu && <CardMenu title={title} ink={`var(--bp-card-${cardHue}-ink)`} {...menu} />}
+                    <div className={`flex items-center justify-end gap-1 min-w-0 ${arrange ? 'shrink-0' : ''}`}>
+                        {arrange ? <ArrangeControls id={id} band={arrange} ink={`var(--bp-card-${cardHue}-ink)`} /> : (
+                            <>
+                                {titleAside}
+                                {menu && <CardMenu title={title} ink={`var(--bp-card-${cardHue}-ink)`} {...menu} />}
+                            </>
+                        )}
                     </div>
                 </div>
                 {children}

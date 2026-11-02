@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t, toolLineText, type ToolLine, type ToolManifest } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, HomeLink, HomeRow, homeStyles } from '../components/home/HomeParts';
-import { editHomeStyles } from '../components/home/EditHomeSheet';
+import { sheetStyles } from '../components/home/sheet-parts';
 import { openUpdate } from '../utils/update-destination';
 import { reminderOn, readToolDoc, subscribeToolStore, type ToolSettings } from './store';
 import { keepsNodeCopy } from './node-copy';
@@ -155,10 +155,10 @@ export function ToolFrame({ manifest, state, settings, copyNote = null, ownerKin
             <View style={frame.body}>{children}</View>
             <Text style={[frame.backup, { color: colors.text.secondary, paddingBottom: 8 + insets.bottom }]} testID="tool-backup-line">{backupLine(manifest, settings, copyNote, ownerKind)}</Text>
             <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)} statusBarTranslucent>
-                <View style={editHomeStyles.backdrop}>
+                <View style={sheetStyles.backdrop}>
                     {/* The dimmed space above the sheet closes it, as a tap outside does. */}
                     <Pressable style={frame.dismiss} onPress={() => setMenu(false)} accessibilityRole="button" accessibilityLabel={t('Close')} testID="tool-menu-close" />
-                    <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom }]} testID="tool-menu-sheet">
+                    <View style={[sheetStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom }]} testID="tool-menu-sheet">
                         <MenuRow text={t('Settings')} icon="cog-outline" colors={colors} onPress={pick(onSettings)} testID="tool-menu-settings" />
                         <MenuRow text={t('About this tool')} icon="information-outline" colors={colors} onPress={pick(onAbout)} testID="tool-menu-about" />
                         <MenuRow text={t('Remove my data from this phone')} icon="delete-outline" colors={colors} danger onPress={pick(onRemove)} testID="tool-menu-remove" />
@@ -269,32 +269,32 @@ export function ToolSettingsSheet({ visible, manifest, settings, copyNote = null
     const nodeCopy = settings.nodeCopy !== false;
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
-            <View style={editHomeStyles.backdrop}>
-                <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24 }]} testID="tool-settings-sheet">
-                    <View style={editHomeStyles.head}>
-                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header" numberOfLines={2}>{t('Settings')}</Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Done')} testID="tool-settings-done">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Done')}</Text>
+            <View style={sheetStyles.backdrop}>
+                <View style={[sheetStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24 }]} testID="tool-settings-sheet">
+                    <View style={sheetStyles.head}>
+                        <Text style={[sheetStyles.title, { color: colors.text.heading }]} accessibilityRole="header" numberOfLines={2}>{t('Settings')}</Text>
+                        <Pressable onPress={onClose} style={sheetStyles.done} accessibilityRole="button" accessibilityLabel={t('Done')} testID="tool-settings-done">
+                            <Text style={[sheetStyles.doneText, { color: colors.text.link }]}>{t('Done')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView contentContainerStyle={editHomeStyles.list}>
-                        <Text style={[editHomeStyles.note, { color: colors.text.secondary }]} testID="tool-settings-kept">{backupLine(manifest, settings, copyNote, ownerKind)}</Text>
+                    <ScrollView contentContainerStyle={sheetStyles.list}>
+                        <Text style={[sheetStyles.note, { color: colors.text.secondary }]} testID="tool-settings-kept">{backupLine(manifest, settings, copyNote, ownerKind)}</Text>
                         {keepsNodeCopy(manifest) ? (
                             <>
                                 <SwitchRow text={t("Keep a private copy on your community's server")} value={nodeCopy} colors={colors} disabled={copy.busy}
                                     onChange={(on) => onNodeCopy?.(on)} testID="tool-settings-node-copy" />
-                                <Text style={[editHomeStyles.note, { color: colors.text.secondary }]} testID="tool-settings-node-copy-note">
+                                <Text style={[sheetStyles.note, { color: colors.text.secondary }]} testID="tool-settings-node-copy-note">
                                     {copyNote === 'older-node' || copy.failed === 'older-node'
                                         ? olderNodeLine()
                                         : t('One phone at a time: the copy you changed last is the one kept.')}
                                 </Text>
                                 {copy.failed === 'failed' ? (
-                                    <Text style={[editHomeStyles.note, { color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="tool-settings-node-copy-failed">
+                                    <Text style={[sheetStyles.note, { color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="tool-settings-node-copy-failed">
                                         {copyFailedLine()}
                                     </Text>
                                 ) : null}
                                 {copy.failed === 'too-big' ? (
-                                    <Text style={[editHomeStyles.note, { color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="tool-settings-node-copy-too-big">
+                                    <Text style={[sheetStyles.note, { color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="tool-settings-node-copy-too-big">
                                         {copy.tooBig ?? copyTooBigLine(manifest, undefined, undefined)}
                                     </Text>
                                 ) : null}
@@ -302,7 +302,7 @@ export function ToolSettingsSheet({ visible, manifest, settings, copyNote = null
                         ) : null}
                         {reminders.length > 0 ? (
                             <>
-                                <Text style={[editHomeStyles.section, { color: colors.text.secondary }]} accessibilityRole="header">{t('Reminders')}</Text>
+                                <Text style={[sheetStyles.section, { color: colors.text.secondary }]} accessibilityRole="header">{t('Reminders')}</Text>
                                 {reminders.map((r, i) => (
                                     <SwitchRow key={r.id} text={t(reminders[i].name)} value={reminderOn(settings, r)} colors={colors}
                                         onChange={(on) => onChange({ ...settings, reminders: { ...settings.reminders, [r.id]: on } })}
@@ -310,20 +310,20 @@ export function ToolSettingsSheet({ visible, manifest, settings, copyNote = null
                                 ))}
                                 {notificationsAllowed === false ? (
                                     <View testID="tool-settings-notifications-off">
-                                        <Text style={[editHomeStyles.note, { color: colors.text.secondary, marginTop: 8 }]}>
+                                        <Text style={[sheetStyles.note, { color: colors.text.secondary, marginTop: 8 }]}>
                                             {t("Notifications are off for BeanPool on this phone, so reminders can't show.")}
                                         </Text>
-                                        <Pressable onPress={onAllowNotifications} style={[editHomeStyles.addRow, { backgroundColor: colors.surface.subtle }]}
+                                        <Pressable onPress={onAllowNotifications} style={[sheetStyles.addRow, { backgroundColor: colors.surface.subtle }]}
                                             accessibilityRole="button" accessibilityLabel={t('Allow notifications')} testID="tool-settings-allow">
-                                            <Text style={[editHomeStyles.addText, { color: colors.text.link }]}>{t('Allow notifications')}</Text>
+                                            <Text style={[sheetStyles.addText, { color: colors.text.link }]}>{t('Allow notifications')}</Text>
                                         </Pressable>
                                     </View>
                                 ) : null}
                             </>
                         ) : null}
-                        <Pressable onPress={onRemove} style={[editHomeStyles.addRow, { backgroundColor: colors.feedback.danger.bg, marginTop: 16 }]}
+                        <Pressable onPress={onRemove} style={[sheetStyles.addRow, { backgroundColor: colors.feedback.danger.bg, marginTop: 16 }]}
                             accessibilityRole="button" accessibilityLabel={t('Remove my data from this phone')} testID="tool-settings-remove">
-                            <Text style={[editHomeStyles.addText, { color: colors.feedback.danger.fg }]}>{t('Remove my data from this phone')}</Text>
+                            <Text style={[sheetStyles.addText, { color: colors.feedback.danger.fg }]}>{t('Remove my data from this phone')}</Text>
                         </Pressable>
                     </ScrollView>
                 </View>
@@ -334,8 +334,8 @@ export function ToolSettingsSheet({ visible, manifest, settings, copyNote = null
 
 function SwitchRow({ text, value, colors, onChange, disabled, testID }: { text: string; value: boolean; colors: AppColors; onChange: (v: boolean) => void; disabled?: boolean; testID?: string }) {
     return (
-        <View style={[editHomeStyles.row, { borderBottomColor: colors.border.default }]}>
-            <Text style={[editHomeStyles.rowText, editHomeStyles.name, { color: colors.text.body }]}>{text}</Text>
+        <View style={[sheetStyles.row, { borderBottomColor: colors.border.default }]}>
+            <Text style={[sheetStyles.rowText, sheetStyles.name, { color: colors.text.body }]}>{text}</Text>
             <Switch value={value} onValueChange={onChange} disabled={disabled} accessibilityLabel={text} testID={testID}
                 trackColor={{ false: colors.border.strong, true: colors.brand.fill }} thumbColor={colors.surface.card} />
         </View>

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -313,12 +313,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "تستطلع الآراء ما يفكر فيه الناس ولا تغير شيئًا بمفردها. ابحث عنها في السوق تحت الاستطلاعات.",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "أنت فقط من يرى رصيدك وصفقاتك. يرى الأعضاء الآخرون اسمك وصورتك ومستواك وتقييماتك.",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "يمكن للأشخاص غير المنضمين رؤية ما هو معروض وأين تقريبًا، دون رؤية اسمك أو وجهك أو موقعك الدقيق أبدًا.",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "هذه هي النصيحة الأخيرة. الدليل الكامل موجود في الإعدادات تحت المساعدة وكيف يعمل، ويعمل دون اتصال؛ «تعديل الرئيسية» في الأسفل يرتب بطاقاتك.",
   "Tips · {position} of {total}": "نصائح · {position} من {total}",
   "Done with tips. The card goes.": "تم الاطلاع على النصائح. ستختفي البطاقة.",
   "Next tip": "النصيحة التالية",
   "Don't show tips again": "عدم إظهار النصائح مجددًا",
-  "Don't show tips again. Edit home brings them back.": "عدم إظهار النصائح مجددًا. تعديل الرئيسية يعيدها.",
   "All tips seen": "تمت رؤية جميع النصائح",
   "or type your town": "أو اكتب اسم بلدتك",
   "Not here? Type your town": "ليست هنا؟ اكتب اسم بلدتك",
@@ -1084,5 +1082,15 @@
   "Ask a question": "اطرح سؤالاً",
   "It will stop taking questions as soon as the global community answers.": "سيتوقف استقبال الأسئلة فور استجابة المجتمع العالمي.",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "يمكن لأي شخص هناك رؤيته، مع صوره ومنطقته التقريبية وسعره واسم هذا المجتمع. لا المكان الدقيق، ولا اسمك إلا إذا استقبلت الأسئلة عنه. لشرائه أو أخذه، يطلبون الانضمام.",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "يمكن لأي شخص هناك رؤيته، مع صوره ومنطقته التقريبية وسعره واسم هذا المجتمع. لا المكان الدقيق، ولا اسمك إلا إذا استقبلت الأسئلة عنه. للرد عليه، يطلبون الانضمام."
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "يمكن لأي شخص هناك رؤيته، مع صوره ومنطقته التقريبية وسعره واسم هذا المجتمع. لا المكان الدقيق، ولا اسمك إلا إذا استقبلت الأسئلة عنه. للرد عليه، يطلبون الانضمام.",
+  "Arrange": "ترتيب",
+  "Arrange: move the cards on Home": "ترتيب: نقل البطاقات في الرئيسية",
+  "Arrange Home: use the arrows. Done when you're happy.": "ترتيب الرئيسية: استخدم الأسهم. اضغط «تم» عند الانتهاء.",
+  "Arrange Home. Use the arrows on each card.": "ترتيب الرئيسية. استخدم الأسهم على كل بطاقة.",
+  "Stays here": "تبقى هنا",
+  "Done arranging Home": "إنهاء ترتيب الرئيسية",
+  "{card} moved to {n} of {m}": "نُقلت {card} إلى {n} من {m}",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "هذه هي النصيحة الأخيرة. الدليل الكامل موجود في الإعدادات تحت المساعدة وكيف يعمل، ويعمل دون اتصال؛ «ترتيب» في الأسفل ينقل بطاقاتك.",
+  "Don't show tips again. Add a card brings them back.": "عدم إظهار النصائح مجددًا. «إضافة بطاقة» يعيدها.",
+  "Arrange ›": "ترتيب ›"
 }

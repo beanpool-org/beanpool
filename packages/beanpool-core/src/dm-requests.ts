@@ -10,10 +10,16 @@ import { t } from './words.js';
  * and no chat. `unread` is the lines in the chats their list shows, so the number can always be opened and cleared.
  * `requests` is the message requests waiting for them: never in `unread`, and no badge or alert is made of it
  * (Marty, 1 Nov 2026: nothing until accepted). `asOf` is when the node counted (ISO 8601).
+ *
+ * `alerts` is how many lines of `unread` the node would have sent this member a push about: never those of a chat they muted
+ * (an @mention of them gets through, as it does a mute), none with their Direct Messages off, none of an event's chat, none
+ * of someone they blocked in a group's chat. It is what a phone with no push tells them of itself, so a mute holds there too
+ * (apps/native/utils/other-communities-unread.ts). The badge stays on `unread`. A node from before it doesn't send it.
  */
 export interface UnreadAnswer {
     unread: number;
     requests: number;
+    alerts?: number;
     asOf: string;
 }
 

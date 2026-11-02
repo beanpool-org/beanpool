@@ -16,7 +16,6 @@ import { GuestLobby } from '../../src/pages/GuestLobby';
 import { ProfileSetup } from '../../src/components/ProfileSetup';
 import { ArchetypeQuizModal } from '../../src/components/ArchetypeQuizModal';
 import { AddCardDialog, CardSettingsDialog } from '../../src/components/AddCardDialog';
-import { EditHomeDialog } from '../../src/components/EditHomeDialog';
 import { HomeCard } from '../../src/components/HomeCard';
 import { TourBar } from '../../src/components/TourBar';
 import { DesktopInstallSteps } from '../../src/components/InstallPrompt';
@@ -25,7 +24,7 @@ import { StartCommunityScreen } from '../../src/components/StartCommunityScreen'
 import { SuggestChangeForm } from '../../src/components/SuggestChangeForm';
 import { RadiusPickerPage } from '../../src/components/RadiusPickerPage';
 import { OnboardingGuide } from '../../src/components/OnboardingGuide';
-import { cardLabelName, cardName, cardRowName, pickerGroups } from '../../src/lib/home-layout';
+import { cardLine, cardName, pickerGroups } from '../../src/lib/home-layout';
 import { App } from '../../src/App';
 
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];
@@ -63,9 +62,8 @@ const SCREENS: Record<string, () => ReactNode> = {
     'quiz': () => <Quiz />,
     'add-card': () => <AddCardDialog groups={pickerGroups(LOCAL, LAYOUT, 'admin').groups} full={false} onAdd={noop} onClose={noop} />,
     'card-settings': () => <CardSettingsDialog type="search" name={cardName('search')} mode="add" hasPoint onSubmit={noop} onClose={noop} />,
-    'edit-home': () => <EditHomeDialog rows={LAYOUT.cards.map((c) => ({ id: c.id, name: cardRowName(c), label: cardLabelName(c), hasSettings: c.type === 'search' }))} notOnAccount
-        onAdd={noop} onMove={noop} onSettings={noop} onRemove={noop} onReset={noop} onClose={noop} />,
-    'home-card': () => <Page><div className="p-4"><HomeCard id="events" title={cardName('events')} menu={{ label: cardName('events'), canMoveUp: true, canMoveDown: true, onRemove: noop, onSettings: noop, onMove: noop }}><p className="m-0 text-sm">·</p></HomeCard></div></Page>,
+    'arrange-band': () => <Page><div className="p-4"><HomeCard id="events" title={cardName('events')} arrange={{ label: cardName('events'), canUp: true, canDown: true, across: true }}><p className="m-0 text-sm">{cardLine('events')}</p></HomeCard></div></Page>,
+    'home-card': () => <Page><div className="p-4"><HomeCard id="events" title={cardName('events')} menu={{ label: cardName('events'), onRemove: noop, onSettings: noop, onArrange: noop }}><p className="m-0 text-sm">·</p></HomeCard></div></Page>,
     'tour': () => {
         const steps = tourSteps('web', { global: false, beans: true });
         return <TourBar steps={steps} index={steps.length - 1} home={{ chips: ['steps', 'market', 'beans'], chipName: (c) => cardName(c), onHome: (c) => c === 'market', addChip: noop, moreCards: noop }} onNext={noop} onSkip={noop} onDone={noop} />;

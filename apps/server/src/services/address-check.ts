@@ -41,7 +41,7 @@ import { getNodeConfig, getNodeRole } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { configuredAddresses, isBeanPoolName, isLocalNetworkHost, isLoopbackHost } from '../engine/own-addresses.js';
 import { isIpLiteral, reachableFromInternet } from '../engine/host-kinds.js';
-import { parseRegistrarNames } from '../engine/registrar-names.js';
+import { parseRegistrarNames, type RegistrarName } from '../engine/registrar-names.js';
 import { PayloadTooLargeError, __ssrfSafeFetchWithResolverForTests, ssrfSafeFetch, type SsrfSafeFetchOptions } from '../engine/pulse-resolver.js';
 import { nodePubkeyHex } from './registrar-client.js';
 import { EDGE_ASKS, classify, edgeUrl, type Answer } from './registrar-name-watch.js';
@@ -252,9 +252,25 @@ function liveNamesMade(): Map<string, number> {
     return new Map(live.map((e) => [e.address, Date.parse(e.since)]));
 }
 
-function registrarStatusMap(): Map<string, string> {
+type RegistrarWord = Pick<RegistrarName, 'status' | 'reason'>;
+
+function registrarStatusMap(): Map<string, RegistrarWord> {
     const list = parseRegistrarNames((getNodeConfig() as any).registrarNames);
-    return new Map(list.map((e) => [e.address, e.status]));
+    return new Map(list.map((e) => [e.address, { status: e.status, reason: e.reason }]));
+}
+
+/**
+ * Blocked, or paused by the BeanPool project: only the project lifts either. Any other pause is the address service's own,
+ * which this server asks back with a heal (tunnel-connector.ts healPausedAddress).
+ */
+const stoppedByProject = (r?: RegistrarWord | null): boolean => r?.status === 'blocked' || (r?.status === 'paused' && r.reason === 'admin');
+
+/**
+ * The names stopped by the project, from the record alone. The step says so only of a name that isn't former and had no DNS
+ * answer at the last check; Settings must not offer to move the community to such a name in any of those states.
+ */
+export function namesStoppedByProject(): Set<string> {
+    return new Set([...registrarStatusMap()].filter(([, r]) => stoppedByProject(r)).map(([host]) => host));
 }
 
 /** `letGo`: a former or lost name. Only this server's own key answering there still matters. */
@@ -265,7 +281,7 @@ export function stepOf(
     certified: Set<string>,
     now: number,
     letGo: boolean,
-    registrarStatus?: string | null,
+    registrar?: RegistrarWord | null,
 ): { step: AddressStep; minutes: number | null } {
     const only = (step: AddressStep) => ({ step, minutes: null });
     if (letGo && c.answers !== 'own') return only('no-longer-ours');
@@ -278,8 +294,9 @@ export function stepOf(
     }
     if (c.dns?.outcome === 'no-such-name') {
         if (isBeanPoolName(host)) {
-            if (registrarStatus === 'pending') return only('awaiting-approval');
-            if (registrarStatus === 'blocked' || registrarStatus === 'paused') return only('stopped');
+            if (registrar?.status === 'pending') return only('awaiting-approval');
+            if (stoppedByProject(registrar)) return only('stopped');
+            if (registrar?.status === 'paused') return only('paused');
         }
         const age = made === undefined ? NaN : now - made;
         if (age >= 0 && age < NEW_NAME_MS) return { step: 'new-name', minutes: Math.max(1, Math.round(age / 60_000)) };

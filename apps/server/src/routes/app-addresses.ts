@@ -25,8 +25,9 @@
  *                                                 of its former names, today and on the busiest day of the last 7
  *                                                 (`formerApps`, lost-name L4: the members still to move); and for each
  *                                                 address the check round has reached, `reach`: what answered there, what
- *                                                 it pointed at and the one next step (services/address-check.ts). Reading
- *                                                 this asks nothing of the network.
+ *                                                 it pointed at and the one next step (services/address-check.ts);
+ *                                                 `stopped` on a name the project blocked or paused, from the record of
+ *                                                 names, checked or not. Reading this asks nothing of the network.
  *   POST /api/local/admin/app-addresses/check    Check now: a round, at most one every 30 seconds, and the report, with
  *                                                 `checking: true` when it hasn't finished within 20 seconds.
  *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
@@ -52,7 +53,7 @@ import {
 } from '../engine/own-addresses.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
-import { addressReaches, checkAddressesNow } from '../services/address-check.js';
+import { addressReaches, checkAddressesNow, namesStoppedByProject } from '../services/address-check.js';
 import {
     ownAddressesUsage, signatureUsage, staffSeenAddresses, unboundSignaturesAccepted, unboundSignaturesUntilDay,
 } from '../engine/member-signature.js';
@@ -77,6 +78,7 @@ export function appAddressesReport(pageHost?: unknown) {
     const count = (kind: string, address: string) => usageMap.get(`${kind}:${address}`);
     const standings = nameStandings();
     const reaches = addressReaches();
+    const stopped = namesStoppedByProject();
     const addresses = configuredAddresses().map((a) => {
         const u = count('own', a.address);
         const tried = a.lost ? count('lost', a.address) : undefined;
@@ -86,6 +88,7 @@ export function appAddressesReport(pageHost?: unknown) {
             address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0,
             ...(a.lost ? { lost: true, tried: { today: tried?.today ?? 0, busiestDay: tried?.busiestDay ?? 0 } } : {}),
             ...(standing ? { standing } : {}),
+            ...(stopped.has(a.address) ? { stopped: true } : {}),
             ...(reach ? { reach } : {}),
         };
     });

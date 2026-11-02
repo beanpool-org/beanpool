@@ -35,6 +35,15 @@ const STATES = [
     { name: 'another-server', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'moved.example.org', source: 'owner', today: 1, busiestDay: 2, reach: reachOf('other', 'another-server', "Another server answers here, with a key that isn't this server's. Check where this address points.", { outcome: 'answers', a: ['203.0.113.8'], aaaa: [], cname: [] }) }] },
     { name: 'former', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'old-byron.beanpool.org', source: 'registrar', former: true, today: 2, busiestDay: 4, reach: reachOf('silence', 'no-longer-ours', "No longer this community's address. Nothing to do.", NO_NAME) }] },
     { name: 'lost', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'taken-name.beanpool.org', source: 'registrar', former: true, lost: true, today: 0, busiestDay: 2, tried: { today: 3, busiestDay: 4 }, standing: LOST, reach: reachOf('other', 'no-longer-ours', "No longer this community's address. Nothing to do.") }] },
+    // What a rename leaves: the old name on the owner list, with Remove and Release.
+    { name: 'owner-beanpool-name', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'old-byron.beanpool.org', source: 'owner', today: 2, busiestDay: 4, reach: FINE }] },
+    { name: 'owner-beanpool-name-not-held', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'fleet-name.beanpool.org', source: 'owner', today: 1, busiestDay: 2, standing: { ...LOST, state: 'at-risk', lostSince: null, why: null }, reach: reachOf('other', 'another-server', "Another server answers here, with a key that isn't this server's. Check where this address points.", { outcome: 'answers', a: ['203.0.113.8'], aaaa: [], cname: [] }) }] },
+    // An automatic pause keeps Make main, the heal; the project's own stop doesn't have it.
+    { name: 'paused-automatic', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'paused-name.beanpool.org', source: 'registrar', today: 0, busiestDay: 0, reach: reachOf('silence', 'paused', 'Paused by the address service: something else answered at this name. Your server asks for it back by itself.', NO_NAME) }] },
+    // Released: the standing says so; Make main stays as the take-back, and Release is gone.
+    { name: 'released', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'let-go.beanpool.org', source: 'registrar', former: true, today: 1, busiestDay: 3, standing: { state: 'at-risk', registrarSays: 'released', releasedOn: '2026-10-20T10:00:00.000Z', acceptedUntil: '2026-11-19T10:00:00.000Z', leadsHere: false, lostSince: null, why: null, checkedAt: NOW }, reach: reachOf('silence', 'no-longer-ours', "No longer this community's address. Nothing to do.", NO_NAME) }] },
+    // Set by hand on the server: nothing to press.
+    { name: 'hard-coded', primary: 'byron.beanpool.org', rows: [MAIN, { address: 'mullum.beanpool.org', source: 'env', today: 9, busiestDay: 12, reach: FINE }] },
 ];
 
 const VIEWS = [
@@ -127,7 +136,7 @@ try {
             await dialog.getByRole('button', { name: 'Cancel' }).click();
         }
 
-        await page.getByTestId('remove-release-btn-old-byron.beanpool.org').click();
+        await page.getByTestId('release-btn-old-byron.beanpool.org').click();
         const ask = page.getByTestId('in-page-confirm');
         await ask.waitFor({ timeout: 5000 });
         await shoot(ask, `control-release-question-${view.label}`);
@@ -139,6 +148,45 @@ try {
         await shoot(page.getByTestId('add-address-section'), `control-add-number-${view.label}`);
         await page.getByRole('button', { name: 'your own domain' }).click();
         await shoot(page.getByTestId('add-address-section'), `control-add-domain-${view.label}`);
+        await context.close();
+    }
+
+    // Remove on a BeanPool name: what the owner reads before it, and what comes back once it is pressed.
+    for (const view of VIEWS) {
+        const state = STATES.find((s) => s.name === 'owner-beanpool-name');
+        const { context, page } = await openSettings(browser, origin, {
+            ...view, screen: OPEN.screen, colorScheme: 'dark',
+            overrides: { '/api/local/admin/app-addresses': reportFor(state), '/api/local/admin/public-address/status': statusFor },
+        });
+        await page.waitForSelector('[data-testid="addresses-panel"]', { timeout: 10000 });
+        await settle(page);
+        await page.addStyleTag({ content: 'header { position: static !important; }' });
+        await page.getByTestId('remove-btn-old-byron.beanpool.org').click();
+        const ask = page.getByTestId('in-page-confirm');
+        await ask.waitFor({ timeout: 5000 });
+        await shoot(ask, `control-remove-name-question-${view.label}`);
+        await ask.getByRole('button', { name: 'Keep it' }).click();
+        await context.close();
+    }
+
+    // Make main on a pause the address service keeps: the claim stores it, and the message says so.
+    for (const view of VIEWS) {
+        const state = STATES.find((s) => s.name === 'paused-automatic');
+        const { context, page } = await openSettings(browser, origin, {
+            ...view, screen: OPEN.screen, colorScheme: 'dark',
+            overrides: {
+                '/api/local/admin/app-addresses': reportFor(state), '/api/local/admin/public-address/status': statusFor,
+                '/api/local/admin/public-address/claim': () => ({ success: true, status: 'paused' }),
+            },
+        });
+        await page.waitForSelector('[data-testid="addresses-panel"]', { timeout: 10000 });
+        await settle(page);
+        await page.addStyleTag({ content: 'header { position: static !important; }' });
+        await page.getByTestId('make-main-btn-paused-name.beanpool.org').click();
+        const said = page.getByTestId('addresses-action-message');
+        await said.waitFor({ timeout: 5000 });
+        if (view.width === 320) await noOverflow(page, 'the paused answer at 320 px');
+        await shoot(said, `control-make-main-paused-answer-${view.label}`);
         await context.close();
     }
 } finally {

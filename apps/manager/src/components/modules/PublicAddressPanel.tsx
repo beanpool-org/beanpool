@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ADDRESS_SCREEN_WORDS } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
@@ -870,8 +871,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                             </p>
                         </div>
                     ) : isNone ? (
-                        <div className="text-xs text-nature-400">
-                            No public address currently assigned. Set <code className="text-bp-ink-terra font-mono">PUBLIC_ADDRESS_NAME</code> on your container, or press Add an address above.
+                        <div className="text-xs text-nature-400" data-testid="public-address-none">
+                            {isOwnerViewer
+                                ? <>No public address currently assigned. Set <code className="text-bp-ink-terra font-mono">PUBLIC_ADDRESS_NAME</code> on your container, or press Add an address above.</>
+                                : t(ADDRESS_SCREEN_WORDS.noAddressOwnerAdds)}
                         </div>
                     ) : (
                         <div className="text-xs text-red-400">

@@ -590,6 +590,17 @@ describe('PublicAddressPanel Component', () => {
             expect(screen.queryByText(/Couldn.t reach the registrar/i)).not.toBeInTheDocument();
         });
 
+        it('no address: an owner is told to press Add an address, and an admin, who has no such button, is not', async () => {
+            serve({ success: true, status: 'none' });
+            const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByTestId('public-address-none')).toHaveTextContent('or press Add an address above');
+            unmount();
+            render(<PublicAddressPanel activeNode={mockActiveNode} viewer={{ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }} />);
+            const none = await screen.findByTestId('public-address-none');
+            expect(none).toHaveTextContent('No public address currently assigned. An owner of this community can add one.');
+            expect(none).not.toHaveTextContent('Add an address');
+        });
+
         it('an own address: this server\'s own, its certificate, and no Take offline (the server refuses it for one)', async () => {
             serve({ success: true, status: 'live', hostname: '203.0.113.5', mode: 'ip', tls: { certificate: null, nextRenewalAt: null, lastError: 'the CA could not reach port 80' } });
             render(<PublicAddressPanel activeNode={mockActiveNode} />);

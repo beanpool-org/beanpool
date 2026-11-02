@@ -37,6 +37,9 @@ import { PublicAddressPanel, type PublicAddressStatus } from './PublicAddressPan
 
 const W = ADDRESS_SCREEN_WORDS;
 
+/** Remove and Release, on a row. */
+const LETTING_GO_BUTTON = 'px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-bp-danger-fill hover:text-bp-danger-on text-xs font-semibold text-bp-ink-danger border border-nature-800 disabled:opacity-50 min-h-[44px] inline-flex items-center gap-1';
+
 export function isBeanPoolName(host: string): boolean {
     return host === 'beanpool.org' || host.endsWith('.beanpool.org');
 }
@@ -152,6 +155,16 @@ export function canBecomeMain(host: string, primary: string | null | undefined):
     return !(isIpAddress(host) && !isIpAddress(primary));
 }
 
+/**
+ * Whether a row offers Make main. A hard-coded address is set by hand and no claim of it is held (design §6), and a name the
+ * project stopped is only refused, or, paused, stored and left dark. The record says so whatever the check found: `stopped`
+ * covers a former name and a stale check, which the step doesn't; the step covers a server before the record's flag.
+ * A pause that isn't the project's stays: there Make main is the heal.
+ */
+export function offersMakeMain(a: AppAddress, primary: string | null | undefined): boolean {
+    return a.source !== 'env' && !a.stopped && a.reach?.step !== 'stopped' && canBecomeMain(a.address, primary);
+}
+
 /** A name as typed or pasted (a whole host, capitals, spaces): the label the claim takes. */
 export function cleanSubdomain(typed: string): string {
     return typed.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/[^a-z0-9-]+/g, '');
@@ -171,7 +184,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
     const [error, setError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null);
     const messageRef = useRef<HTMLDivElement>(null);
-    // The address a Make main or Remove is running for: every row's buttons wait, so a double tap can't send two.
+    // The action running, as `make-main:<address>`: every row's buttons wait, so a double tap can't send two.
     const [busy, setBusy] = useState<string | null>(null);
     // A claim is running: the log below streams it, as it does a restart or Take offline.
     const [claiming, setClaiming] = useState(false);
@@ -270,7 +283,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
     // Handle "Make main"
     const handleMakeMain = async (a: AppAddress, code?: string) => {
         setActionMessage(null);
-        setBusy(a.address);
+        setBusy(`make-main:${a.address}`);
         try {
             let got: { communityAddress?: boolean } | undefined;
             if (isBeanPoolName(a.address)) {
@@ -292,13 +305,16 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                 if (!res.ok) {
                     throw new Error(body?.error || `HTTP ${res.status}`);
                 }
-                // Only a live answer moves the community: anything else says what the address service said.
+                // Only a live answer moves the community, but the claim stores any answer it gets: the panel below moves to a
+                // paused name (a heal refused, or a pause this row couldn't know of) while members stay where they are.
                 if (body?.status !== 'live') {
                     proof.close();
+                    const current = report?.primaryAddress;
+                    const notYet = t(W.notMainYet, { address: a.address, status: String(body?.status ?? 'nothing') });
                     setActionMessage({
                         text: body?.status === 'pending'
                             ? t('Requested {address}, awaiting approval by the BeanPool project.', { address: a.address })
-                            : t('{address} is not the main address: the address service says {status}.', { address: a.address, status: String(body?.status ?? 'nothing') }),
+                            : current ? `${notYet} ${t(W.membersStillAt, { current })}` : notYet,
                         type: 'warning',
                     });
                     await afterChange();
@@ -345,23 +361,37 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
         };
     };
 
-    // Handle "Remove" or "Release"
-    const handleRemoveOrRelease = async (a: AppAddress, code?: string) => {
+    /**
+     * What removing means. A BeanPool name stays this key's, as only Release gives one up: off the list, it reads as a former
+     * name and stays accepted (registrar-names.ts). One this key doesn't hold simply goes, and its apps with it.
+     */
+    const removeQuestion = (a: AppAddress) => {
+        const main = a.address === report?.primaryAddress;
+        const title = t('Remove {address}?', { address: a.address });
+        if (isBeanPoolName(a.address)) {
+            const body = t(W.removeNameQuestion, { address: a.address });
+            return { title, body: main ? `${t(W.removeNameMain)} ${body}` : body };
+        }
+        return {
+            title,
+            body: main
+                ? t("It is this community's address. Members' apps that use it are refused after this, and new members are sent to another of its addresses, if it has one.")
+                : t("Members' apps that use it are refused after this."),
+        };
+    };
+
+    // Handle "Remove" or "Release": whichever was pressed. A BeanPool name on the owner list offers both.
+    const handleRemoveOrRelease = async (a: AppAddress, how: 'remove' | 'release', code?: string) => {
         setActionMessage(null);
-        const isBp = isBeanPoolName(a.address);
+        const release = how === 'release';
         if (code === undefined) {
-            const question = isBp ? releaseQuestion(a) : {
-                title: t('Remove {address}?', { address: a.address }),
-                body: a.address === report?.primaryAddress
-                    ? t("It is this community's address. Members' apps that use it are refused after this, and new members are sent to another of its addresses, if it has one.")
-                    : t("Members' apps that use it are refused after this."),
-            };
-            const yes = await ask({ ...question, confirmLabel: isBp ? t(W.release) : t(W.remove), cancelLabel: t('Keep it') });
+            const question = release ? releaseQuestion(a) : removeQuestion(a);
+            const yes = await ask({ ...question, confirmLabel: release ? t(W.release) : t(W.remove), cancelLabel: t('Keep it') });
             if (!yes) return;
         }
-        setBusy(a.address);
+        setBusy(`${how}:${a.address}`);
         try {
-            if (isBp) {
+            if (release) {
                 const name = extractSubdomain(a.address);
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name'), {
                     method: 'POST',
@@ -372,7 +402,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                         ...proofField(code),
                     }),
                 });
-                if (await proof.check(res, (c) => handleRemoveOrRelease(a, c), code)) return;
+                if (await proof.check(res, (c) => handleRemoveOrRelease(a, how, c), code)) return;
                 if (!res.ok) {
                     const body = await res.json().catch(() => ({}));
                     throw new Error(body?.error || `HTTP ${res.status}`);
@@ -381,10 +411,13 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                 await removeAppAddress(activeNode.url, a.address, cred, getTfaSessionToken(activeNode.id), code);
             }
             proof.close();
-            setActionMessage({ text: isBp ? t("{address} released. This community's address is unchanged.", { address: a.address }) : t('{address} removed.', { address: a.address }), type: 'success' });
+            const done = release
+                ? t("{address} released. This community's address is unchanged.", { address: a.address })
+                : isBeanPoolName(a.address) ? t(W.removedName, { address: a.address }) : t('{address} removed.', { address: a.address });
+            setActionMessage({ text: done, type: 'success' });
             await afterChange();
         } catch (e: unknown) {
-            if (proof.checkError(e, (c) => handleRemoveOrRelease(a, c), code)) return;
+            if (proof.checkError(e, (c) => handleRemoveOrRelease(a, how, c), code)) return;
             setActionMessage({ text: e instanceof Error ? e.message : t('Could not remove address'), type: 'error' });
         } finally {
             setBusy(null);
@@ -435,7 +468,8 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                         // and PUBLIC_ADDRESS_IP themselves.
                         mode: 'tunnel',
                         communityName: communityName.trim() || undefined,
-                        contact: contact.trim() || undefined,
+                        // Blank, never left out: the claim keeps what it isn't sent, and a field the owner cleared means none.
+                        contact: contact.trim(),
                         ...proofField(code),
                     }),
                 });
@@ -834,9 +868,12 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                     // Standing first, whenever there is one: what a check found never hides what the name's state means.
                     const standing = standingText(a);
                     const nextStep = a.reach ? reachSentence(a.reach, !!standing) : null;
-                    // A BeanPool name is released, only by the community that isn't living at it now; anything else an owner
-                    // confirmed is removed, as the community's own address too.
-                    const canRemove = isOwner && !a.lost && (isBeanPoolName(a.address) ? !isMain && (a.former || a.source === 'owner') : a.source === 'owner');
+                    // Remove takes an address off the owner's list, whatever the host: a rename puts the old name there, so it
+                    // stops being advertised and stays this key's, and a name this key doesn't hold can come off at all.
+                    const canRemove = isOwner && a.source === 'owner';
+                    // Release gives a BeanPool name up: only where the community isn't living at it now, and where nothing says
+                    // this key has let it go already or doesn't hold it, as the node would refuse that once a code is spent.
+                    const canRelease = isOwner && isBeanPoolName(a.address) && !a.lost && !isMain && (a.former || a.source === 'owner') && !a.standing?.registrarSays;
                     // A lost name now leads to another community, and a home-network one leads nowhere from a phone.
                     const canCheckFromPhone = !a.lost && a.reach?.step !== 'home-network';
 
@@ -960,34 +997,48 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                                         )}
 
                                         {/* Make main (§5.2) */}
-                                        {!isMain && !a.lost && isOwner && canBecomeMain(a.address, primary) && (
+                                        {!isMain && !a.lost && isOwner && offersMakeMain(a, primary) && (
                                             <button
                                                 type="button"
                                                 disabled={busy !== null}
-                                                aria-busy={busy === a.address}
+                                                aria-busy={busy === `make-main:${a.address}`}
                                                 aria-label={t('Make main {address}', { address: a.address })}
                                                 onClick={() => handleMakeMain(a)}
                                                 data-testid={`make-main-btn-${a.address}`}
                                                 className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white border border-nature-600 disabled:opacity-50 min-h-[44px] inline-flex items-center gap-1"
                                             >
-                                                <span aria-hidden="true">{busy === a.address ? '⏳' : '★'}</span>
+                                                <span aria-hidden="true">{busy === `make-main:${a.address}` ? '⏳' : '★'}</span>
                                                 <span>{t(W.makeMain)}</span>
                                             </button>
                                         )}
 
-                                        {/* Remove / Release */}
+                                        {/* Remove and Release (§5.2: as today): a BeanPool name on the owner list has both */}
                                         {canRemove && (
                                             <button
                                                 type="button"
                                                 disabled={busy !== null}
-                                                aria-busy={busy === a.address}
-                                                onClick={() => handleRemoveOrRelease(a)}
-                                                data-testid={`remove-release-btn-${a.address}`}
-                                                aria-label={isBeanPoolName(a.address) ? t('Release {address}', { address: a.address }) : t('Remove {address}', { address: a.address })}
-                                                className="px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-bp-danger-fill hover:text-bp-danger-on text-xs font-semibold text-bp-ink-danger border border-nature-800 disabled:opacity-50 min-h-[44px] inline-flex items-center gap-1"
+                                                aria-busy={busy === `remove:${a.address}`}
+                                                onClick={() => handleRemoveOrRelease(a, 'remove')}
+                                                data-testid={`remove-btn-${a.address}`}
+                                                aria-label={t('Remove {address}', { address: a.address })}
+                                                className={LETTING_GO_BUTTON}
                                             >
-                                                <span aria-hidden="true">{busy === a.address ? '⏳' : '🗑️'}</span>
-                                                <span>{isBeanPoolName(a.address) ? t(W.release) : t(W.remove)}</span>
+                                                <span aria-hidden="true">{busy === `remove:${a.address}` ? '⏳' : '🗑️'}</span>
+                                                <span>{t(W.remove)}</span>
+                                            </button>
+                                        )}
+                                        {canRelease && (
+                                            <button
+                                                type="button"
+                                                disabled={busy !== null}
+                                                aria-busy={busy === `release:${a.address}`}
+                                                onClick={() => handleRemoveOrRelease(a, 'release')}
+                                                data-testid={`release-btn-${a.address}`}
+                                                aria-label={t('Release {address}', { address: a.address })}
+                                                className={LETTING_GO_BUTTON}
+                                            >
+                                                <span aria-hidden="true">{busy === `release:${a.address}` ? '⏳' : '↩️'}</span>
+                                                <span>{t(W.release)}</span>
                                             </button>
                                         )}
                                     </div>

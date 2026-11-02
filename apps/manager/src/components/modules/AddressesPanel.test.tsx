@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ADDRESS_SCREEN_WORDS } from '@beanpool/core';
 import {
-    AddressesPanel, answersText, appsTodayText, canBecomeMain, cleanSubdomain, formatRelativeTime, formatTime, pointsAtText, tunnelStateOf,
+    AddressesPanel, answersText, appsTodayText, canBecomeMain, cleanSubdomain, formatRelativeTime, formatTime, offersMakeMain, pointsAtText, tunnelStateOf,
 } from './AddressesPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
@@ -417,17 +417,21 @@ describe('AddressesPanel Component (S2)', () => {
         });
 
         // Main address must NOT have Remove/Release
-        expect(screen.queryByTestId('remove-release-btn-byron.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('remove-btn-byron.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('release-btn-byron.beanpool.org')).not.toBeInTheDocument();
 
         // Lost address must NOT have Remove/Release
-        expect(screen.queryByTestId('remove-release-btn-lost.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('remove-btn-lost.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('release-btn-lost.beanpool.org')).not.toBeInTheDocument();
 
         // Former BeanPool name (not lost) has Release button
-        expect(screen.getByTestId('remove-release-btn-mullum.beanpool.org')).toBeInTheDocument();
+        expect(screen.getByTestId('release-btn-mullum.beanpool.org')).toBeInTheDocument();
+        expect(screen.queryByTestId('remove-btn-mullum.beanpool.org')).not.toBeInTheDocument();
 
         // Configured owner IP has Remove button with accessible label
-        const removeIpBtn = screen.getByTestId('remove-release-btn-203.0.113.5');
+        const removeIpBtn = screen.getByTestId('remove-btn-203.0.113.5');
         expect(removeIpBtn).toBeInTheDocument();
+        expect(screen.queryByTestId('release-btn-203.0.113.5')).not.toBeInTheDocument();
         expect(removeIpBtn).toHaveAttribute('aria-label', 'Remove 203.0.113.5');
     });
 });
@@ -455,6 +459,8 @@ function stubNode(report: unknown, routes: Record<string, (body: Record<string, 
 
 const LIVE = { status: 'live', name: 'byron', hostname: 'byron.beanpool.org', mode: 'tunnel', tunnel: { state: 'connected', connections: 4 } };
 const checkedAt = '2026-11-02T05:02:00.000Z';
+/** What a rename leaves: the old name copied to the owner list (keepReplacedAddress), so `source: 'owner'` and not `former`. */
+const OLD_NAME = { address: 'old-byron.beanpool.org', source: 'owner' as const, today: 2, busiestDay: 4 };
 const later = '2026-11-02T05:40:00.000Z';
 const rowsAt = (iso: string) => ({ ...mockReport, addresses: mockReport.addresses.map((a) => ({ ...a, reach: { ...a.reach, checkedAt: iso } })) });
 const lostRow = (over: Record<string, unknown> = {}) => ({
@@ -770,12 +776,53 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         expect(await screen.findByText('mullum.beanpool.org is now the main address.')).toBeInTheDocument();
     });
 
-    it('Make main never says main for an answer that is not live', async () => {
+    // A claim stores what it is answered (routes/public-address.ts), so a heal refused has moved this server to the paused name
+    // and the panel below with it. Saying only "is not the main address" left that out (#2738 finding 2).
+    it('Make main never says main for an answer that is not live, and says this server has moved to it', async () => {
         stubNode(mockReport, { '/public-address/claim': () => [200, { success: true, status: 'paused' }] });
+        const { unmount } = render(<AddressesPanel activeNode={mockActiveNode} />);
+        fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
+        const said = await screen.findByTestId('addresses-action-message');
+        expect(said).toHaveTextContent('mullum.beanpool.org is not the main address yet: the address service says paused. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at byron.beanpool.org.');
+        expect(screen.queryByText(/is now the main address/)).toBeNull();
+        unmount();
+
+        // No main address to name: nothing is made up.
+        stubNode({ ...mockReport, primaryAddress: null, addresses: [mockReport.addresses[6]] }, { '/public-address/claim': () => [200, { success: true, status: 'paused' }] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
         fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
-        expect(await screen.findByText('mullum.beanpool.org is not the main address: the address service says paused.')).toBeInTheDocument();
-        expect(screen.queryByText(/is now the main address/)).toBeNull();
+        const alone = await screen.findByTestId('addresses-action-message');
+        expect(alone).toHaveTextContent('is not the main address yet');
+        expect(alone).not.toHaveTextContent('Members still reach');
+    });
+
+    it('Make main is not offered where it can only be refused, or would store a stopped name', async () => {
+        const row = (over: Record<string, unknown>) => ({ address: 'other.beanpool.org', source: 'registrar' as const, today: 0, busiestDay: 0, ...over }) as Parameters<typeof offersMakeMain>[0];
+        const reach = (step: string) => ({ ...mockReport.addresses[0].reach, step }) as NonNullable<Parameters<typeof offersMakeMain>[0]['reach']>;
+        expect(offersMakeMain(row({}), 'byron.beanpool.org')).toBe(true);
+        // A pause this server asks back by itself: there Make main is the heal.
+        expect(offersMakeMain(row({ reach: reach('paused') }), 'byron.beanpool.org')).toBe(true);
+        // Blocked or paused by the project, by the check's step or, for a former name or a stale check, by the record.
+        expect(offersMakeMain(row({ reach: reach('stopped') }), 'byron.beanpool.org')).toBe(false);
+        expect(offersMakeMain(row({ stopped: true, former: true, reach: reach('no-longer-ours') }), 'byron.beanpool.org')).toBe(false);
+        expect(offersMakeMain(row({ stopped: true }), 'byron.beanpool.org')).toBe(false);
+        // Hard-coded: held by nobody's key here, set by hand, a BeanPool name or not.
+        expect(offersMakeMain(row({ source: 'env' }), 'byron.beanpool.org')).toBe(false);
+        expect(offersMakeMain(row({ source: 'env', address: 'coop.example.net' }), 'beans.example.org')).toBe(false);
+        // What the server can't do stays out too.
+        expect(offersMakeMain(row({ address: '203.0.113.5', source: 'owner' }), 'byron.beanpool.org')).toBe(false);
+    });
+
+    it('on the screen: a stopped row and a hard-coded row have no Make main, an automatically paused row keeps it', async () => {
+        const paused = { ...mockReport.addresses[3], address: 'paused.beanpool.org', reach: { ...mockReport.addresses[3].reach, step: 'paused' as const, nextStep: '' } };
+        const env = { address: 'hard-coded.beanpool.org', source: 'env' as const, today: 1, busiestDay: 1 };
+        stubNode({ ...mockReport, addresses: [...mockReport.addresses, paused, env] });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        expect(await screen.findByTestId('make-main-btn-paused.beanpool.org')).toBeInTheDocument();
+        expect(screen.queryByTestId('make-main-btn-stopped.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('make-main-btn-hard-coded.beanpool.org')).not.toBeInTheDocument();
+        expect(within(screen.getByTestId('address-row-paused.beanpool.org')).getByTestId('next-step-text')).toHaveTextContent('Paused by the address service: something else answered at this name. Your server asks for it back by itself.');
+        expect(within(screen.getByTestId('address-row-stopped.beanpool.org')).getByTestId('next-step-text')).toHaveTextContent('Stopped by the address service. Ask the BeanPool project.');
     });
 
     it('offers Make main only where the server can do it', async () => {
@@ -808,8 +855,8 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         fireEvent.click(makeMain);
         await waitFor(() => expect(posts).toHaveLength(1));
         expect(makeMain).toBeDisabled();
-        expect(screen.getByTestId('remove-release-btn-203.0.113.5')).toBeDisabled();
-        fireEvent.click(screen.getByTestId('remove-release-btn-203.0.113.5'));
+        expect(screen.getByTestId('remove-btn-203.0.113.5')).toBeDisabled();
+        fireEvent.click(screen.getByTestId('remove-btn-203.0.113.5'));
         await new Promise((r) => setTimeout(r, 10));
         expect(posts).toHaveLength(1);
         finish();
@@ -819,7 +866,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
     it('Release says the name goes back to the pool, and whether it still works', async () => {
         const { posts } = stubNode(mockReport);
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        fireEvent.click(await screen.findByTestId('remove-release-btn-mullum.beanpool.org'));
+        fireEvent.click(await screen.findByTestId('release-btn-mullum.beanpool.org'));
         const dialog = await screen.findByRole('alertdialog');
         expect(dialog).toHaveTextContent('Release an address that still works');
         expect(dialog).toHaveTextContent('Phones still using this address lose the community.');
@@ -834,7 +881,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         const unused = { ...mockReport.addresses[6], address: 'quiet.beanpool.org', today: 0, busiestDay: 0 };
         stubNode({ ...mockReport, addresses: [mockReport.addresses[0], unused] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        fireEvent.click(await screen.findByTestId('remove-release-btn-quiet.beanpool.org'));
+        fireEvent.click(await screen.findByTestId('release-btn-quiet.beanpool.org'));
         const dialog = await screen.findByRole('alertdialog');
         expect(dialog).toHaveTextContent('Release a name this community does not use');
         expect(dialog).not.toHaveTextContent('Phones still using');
@@ -845,8 +892,72 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         const own = { ...mockReport.addresses[1], address: 'proxy.example.org' };
         stubNode({ ...mockReport, primaryAddress: 'proxy.example.org', addresses: [own] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        fireEvent.click(await screen.findByTestId('remove-release-btn-proxy.example.org'));
+        fireEvent.click(await screen.findByTestId('remove-btn-proxy.example.org'));
         expect(await screen.findByRole('alertdialog')).toHaveTextContent("It is this community's address.");
+    });
+
+    it('a BeanPool name on the owner list has Remove and Release, and each does its own (a rename makes this row)', async () => {
+        const report = { ...mockReport, addresses: [mockReport.addresses[0], OLD_NAME] };
+        const { posts } = stubNode(report, {
+            '/app-addresses/remove': () => [200, report],
+            '/public-address/release-name': () => [200, { success: true, status: 'released' }],
+        });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+
+        fireEvent.click(await screen.findByTestId('remove-btn-old-byron.beanpool.org'));
+        const remove = await screen.findByRole('alertdialog');
+        expect(remove).toHaveTextContent('Remove old-byron.beanpool.org?');
+        expect(remove).toHaveTextContent("This community stops advertising old-byron.beanpool.org, and no name is given up. While its key holds old-byron.beanpool.org, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.");
+        expect(remove).not.toHaveTextContent('Another community can claim');
+        fireEvent.click(within(remove).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect(posts[0].path).toBe('/app-addresses/remove');
+        expect(posts[0].body).toMatchObject({ address: 'old-byron.beanpool.org' });
+        expect(await screen.findByTestId('addresses-action-message')).toHaveTextContent('old-byron.beanpool.org is no longer advertised. No name was given up.');
+
+        fireEvent.click(await screen.findByTestId('release-btn-old-byron.beanpool.org'));
+        const release = await screen.findByRole('alertdialog');
+        expect(release).toHaveTextContent('Another community can claim old-byron.beanpool.org');
+        fireEvent.click(within(release).getByRole('button', { name: 'Release' }));
+        await waitFor(() => expect(posts).toHaveLength(2));
+        expect(posts[1].path).toBe('/public-address/release-name');
+        expect(posts[1].body).toMatchObject({ name: 'old-byron' });
+    });
+
+    it('a name on the owner list this key does not hold can come off, with no Release to be refused', async () => {
+        const other = { ...OLD_NAME, standing: { state: 'at-risk', registrarSays: 'other', releasedOn: null, acceptedUntil: null, leadsHere: false, lostSince: null, why: null, checkedAt } };
+        stubNode({ ...mockReport, addresses: [mockReport.addresses[0], other] });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        expect(await screen.findByTestId('remove-btn-old-byron.beanpool.org')).toBeInTheDocument();
+        expect(screen.queryByTestId('release-btn-old-byron.beanpool.org')).not.toBeInTheDocument();
+    });
+
+    it('a lost name on the owner list keeps Remove, as it had; Release stays off', async () => {
+        stubNode({ ...mockReport, addresses: [mockReport.addresses[0], lostRow({ source: 'owner', former: undefined })] });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        expect(await screen.findByTestId('remove-btn-taken.beanpool.org')).toBeInTheDocument();
+        expect(screen.queryByTestId('release-btn-taken.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('make-main-btn-taken.beanpool.org')).not.toBeInTheDocument();
+    });
+
+    it('a name that is main only through the owner list keeps Remove and says so; Release stays off while the community lives there', async () => {
+        stubNode({ ...mockReport, primaryAddress: OLD_NAME.address, addresses: [OLD_NAME] });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        expect(screen.queryByTestId('release-btn-old-byron.beanpool.org')).not.toBeInTheDocument();
+        fireEvent.click(await screen.findByTestId('remove-btn-old-byron.beanpool.org'));
+        const dialog = await screen.findByRole('alertdialog');
+        expect(dialog).toHaveTextContent("It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising");
+    });
+
+    it('a name already released has no Release to spend a code on; Make main stays, as the take-back', async () => {
+        const released = {
+            ...mockReport.addresses[6],
+            standing: { state: 'at-risk', registrarSays: 'released', releasedOn: '2026-10-20T10:00:00Z', acceptedUntil: '2026-11-19T10:00:00Z', leadsHere: false, lostSince: null, why: null, checkedAt },
+        };
+        stubNode({ ...mockReport, addresses: [mockReport.addresses[0], released] });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        expect(await screen.findByTestId('make-main-btn-mullum.beanpool.org')).toBeInTheDocument();
+        expect(screen.queryByTestId('release-btn-mullum.beanpool.org')).not.toBeInTheDocument();
     });
 
     it('a result is brought into view, and a failure is an alert', async () => {
@@ -935,6 +1046,21 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         expect(posts[0].body).toMatchObject({ name: 'newbyron', contact: 'held@example.org', communityName: 'Byron Shire' });
         // Pending is not live: no success words.
         expect(await screen.findByTestId('addresses-action-message')).toHaveTextContent('Claimed: awaiting registrar approval');
+    });
+
+    it('a contact the owner cleared goes as blank, not left out: the claim keeps what it is not sent', async () => {
+        const { posts } = stubNode(mockReport, {
+            '/public-address/status': () => [200, { ...LIVE, contact: 'held@example.org', community_name: 'Byron Shire' }],
+            '/public-address/claim': () => [200, { success: true, status: 'live' }],
+        });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        await screen.findByRole('button', { name: /Take offline/ });
+        fireEvent.click(screen.getByTestId('addresses-add-address-btn'));
+        fireEvent.change(screen.getByLabelText(/Operator Contact/i), { target: { value: '   ' } });
+        fireEvent.change(screen.getByLabelText(/Subdomain Prefix/i), { target: { value: 'newbyron' } });
+        fireEvent.click(screen.getByRole('button', { name: /Go public/ }));
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect(posts[0].body).toHaveProperty('contact', '');
     });
 
     it('the ✕ in Add an address has a name and a 44 px target; choices and the toggle say their state', async () => {

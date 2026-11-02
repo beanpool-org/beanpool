@@ -15,11 +15,13 @@ export type AddressAnswer = 'own' | 'other' | 'other-origin' | 'silence' | 'tls'
 /**
  * The one next step the check leads to. `home-network`: nothing outside can reach it, by its shape. `home-network-from-here`:
  * a name this server reads as a home-network address, which says nothing of what phones outside reach (split DNS).
- * `no-longer-ours`: a former or lost name that doesn't answer as this server, which nobody should chase.
+ * `no-longer-ours`: a former or lost name that doesn't answer as this server, which nobody should chase. `stopped`: blocked,
+ * or paused by the BeanPool project, which alone lifts either. `paused`: paused by the address service on its own, which this
+ * server asks back by itself.
  */
 export type AddressStep = 'fine' | 'new-name' | 'no-dns-beanpool' | 'no-dns-own' | 'no-answer' | 'from-inside' | 'another-server'
     | 'something-else' | 'certificate' | 'home-network' | 'home-network-from-here' | 'no-longer-ours'
-    | 'awaiting-approval' | 'stopped';
+    | 'awaiting-approval' | 'stopped' | 'paused';
 
 /** What a DNS lookup saw for a host name (node:dns A, AAAA, CNAME). */
 export interface DnsSeen {
@@ -61,6 +63,7 @@ export const ADDRESS_CHECK_WORDS = {
     noLongerOurs: word("No longer this community's address. Nothing to do."),
     awaitingApproval: word('Awaiting approval by the BeanPool project. It moves over by itself once approved.'),
     stopped: word('Stopped by the address service. Ask the BeanPool project.'),
+    paused: word('Paused by the address service: something else answered at this name. Your server asks for it back by itself.'),
     /** The `/check` page, opened from outside: who answered, where, by which key, and when. */
     pageHereAt: word('This is {name} at {host}.'),
     pageHere: word('This is {name}.'),
@@ -122,6 +125,15 @@ export const ADDRESS_SCREEN_WORDS = {
     /** Said in place of the full sentence beside a name's standing, which says what to do: never "Nothing to do" there. */
     reachFine: word('Answers as this server.'),
     reachNoLonger: word("No longer this community's address."),
+    /** Remove on a BeanPool name: it only leaves what this community advertises. Release is what gives a name up. */
+    removeNameQuestion: word("This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this."),
+    removeNameMain: word("It is this community's address now. After this, new members are sent to another of its addresses, if it has one."),
+    removedName: word('{address} is no longer advertised. No name was given up.'),
+    /** Make main answered with anything but live: a claim stores the answer (routes/public-address.ts), so this server has moved. */
+    notMainYet: word('{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.'),
+    membersStillAt: word('Members still reach this community at {current}.'),
+    /** What an admin reads where an owner is told to press Add an address, which is an owner's. */
+    noAddressOwnerAdds: word('No public address currently assigned. An owner of this community can add one.'),
 } as const;
 
 /** The next step's sentence. `minutes`: how long ago a `new-name` was made. */
@@ -142,5 +154,6 @@ export function addressNextStep(step: AddressStep, minutes: number | null, w: { 
         case 'no-longer-ours': return w.t(W.noLongerOurs);
         case 'awaiting-approval': return w.t(W.awaitingApproval);
         case 'stopped': return w.t(W.stopped);
+        case 'paused': return w.t(W.paused);
     }
 }

@@ -381,7 +381,7 @@ async function main(): Promise<void> {
             assert(failed?.step === 'no-answer' && !/A record/.test(failed?.nextStep), `so a DNS outage sends nobody to fix a record (${failed?.step}: ${failed?.nextStep})`);
 
             const made = new Date(Date.now() - 12 * MIN).toISOString();
-            const entry = (status: string) => [{ address: 'gone.beanpool.org', role: 'current', status, reason: null, since: made, formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null, lost: null }];
+            const entry = (status: string, reason: string | null = null, role = 'current') => [{ address: 'gone.beanpool.org', role, status, reason, since: made, formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null, lost: null }];
             await P.send('registrarNames', { set: entry('live') });
             const fresh = (await P.send('reaches', {}))['gone.beanpool.org'];
             assert(fresh?.step === 'new-name' && fresh?.minutes === 12
@@ -394,14 +394,31 @@ async function main(): Promise<void> {
             assert(pending?.step === 'awaiting-approval', `a name waiting for approval has its own step (${pending?.step})`);
             assert(pending?.nextStep === 'Awaiting approval by the BeanPool project. It moves over by itself once approved.',
                 `and words that say it moves over once approved (${pending?.nextStep})`);
-            await P.send('registrarNames', { set: entry('paused') });
-            const paused = (await P.send('reaches', {}))['gone.beanpool.org'];
-            assert(paused?.step === 'stopped' && paused?.nextStep === 'Stopped by the address service. Ask the BeanPool project.',
-                `paused by registrar: stopped (${paused?.step})`);
+            // The registrar's reason decides: only the project lifts its own pause or a block; any other pause this server asks
+            // back by itself, so nobody is sent to write to the project about it (design §5.2).
+            const STOPPED = 'Stopped by the address service. Ask the BeanPool project.';
+            const PAUSED = 'Paused by the address service: something else answered at this name. Your server asks for it back by itself.';
+            const stoppedFlag = async () => (await call(setup.https, 'GET', '/api/local/admin/app-addresses', pAdmin)).body?.addresses?.find((a: any) => a.address === 'gone.beanpool.org')?.stopped;
+            for (const reason of ['impostor', 'content-swap', 'unverified', null]) {
+                await P.send('registrarNames', { set: entry('paused', reason) });
+                const paused = (await P.send('reaches', {}))['gone.beanpool.org'];
+                assert(paused?.step === 'paused' && paused?.nextStep === PAUSED, `an automatic pause (${reason}): its own step, and the design's words (${paused?.step}: ${paused?.nextStep})`);
+                assert((await stoppedFlag()) === undefined, `(${reason}) and the report doesn't call it stopped: Make main is the heal there`);
+            }
+            await P.send('registrarNames', { set: entry('paused', 'admin') });
+            const held = (await P.send('reaches', {}))['gone.beanpool.org'];
+            assert(held?.step === 'stopped' && held?.nextStep === STOPPED, `paused by the project: stopped (${held?.step})`);
+            assert((await stoppedFlag()) === true, 'and the report says so');
             await P.send('registrarNames', { set: entry('blocked') });
             const blocked = (await P.send('reaches', {}))['gone.beanpool.org'];
-            assert(blocked?.step === 'stopped' && blocked?.nextStep === 'Stopped by the address service. Ask the BeanPool project.',
-                `blocked by registrar: stopped (${blocked?.step})`);
+            assert(blocked?.step === 'stopped' && blocked?.nextStep === STOPPED, `blocked: stopped (${blocked?.step})`);
+            assert((await stoppedFlag()) === true, 'and the report says so');
+            // A former name never reads `stopped` (nobody is sent after it), and the record says so all the same: Settings must
+            // not offer to move the community to it. The row stays a former one.
+            await P.send('registrarNames', { set: entry('paused', 'admin', 'former') });
+            const former = (await P.send('reaches', {}))['gone.beanpool.org'];
+            assert(former?.step === 'no-longer-ours', `a former name the project paused still reads as let go (${former?.step})`);
+            assert((await stoppedFlag()) === true, 'and the report still says it is stopped, whatever the step');
             // An old node: the name stored as its address, not yet on the record, which stamps such a name as made now.
             await P.send('registrarNames', { set: [], publicAddress: { name: 'gone', hostname: 'gone.beanpool.org', status: 'live' } });
             const stored = (await P.send('reaches', {}))['gone.beanpool.org'];

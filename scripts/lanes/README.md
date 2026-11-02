@@ -13,9 +13,9 @@ not repeat them; the code comments name the incident behind each rule.
 | File | What it is |
 |---|---|
 | `lib.sh` | The library. Source it from a run script. Stages for both backends, watchdog, gates, land, deploy, process-tree and worktree helpers. |
-| `decide.sh` | Deciding reviews: they wait for GitHub on the PR's head, then run one at a time behind a machine-wide lock, probing the model first. `lib.sh` sources it. |
+| `decide.sh` | Deciding reviews: one at a time behind a machine-wide lock, probing the model first. An AGY-built lane's waits for GitHub on the PR's head; a Claude-built lane's runs beside GitHub. `lib.sh` sources it. |
 | `start.sh` | Runs `run-<lane>.sh` in the foreground under `caffeinate -i`, logging to `scratch/lanes/log-<lane>.txt`. |
-| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, left a PR unreviewed because GitHub was not green, or finished (its run script's last line, `LANE <name> DONE (clean=… pr=…) — HELD for the director`), or when all lanes have stopped. |
+| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, left a PR unreviewed because GitHub was not green, brought a review and GitHub's answer back together, or finished (its run script's last line, `LANE <name> DONE (clean=… pr=…) — HELD for the director`), or when all lanes have stopped. |
 | `stop.sh` | Stops lanes now, killing each lane's whole process tree. |
 | `stop-at-boundary.sh` | Lets each lane finish its current stage, then stops it as a FIX, SYNC or deciding stage starts. |
 | `sweep-orphans.sh` | Lists (or `--kill`s) test runners reparented to launchd that are more than an hour old. |
@@ -36,8 +36,8 @@ sit beside them. Worktrees go in `.claude/worktrees/lane-<lane>`, which is also 
 source "$(git -C "${0:A:h}" rev-parse --show-toplevel)/scripts/lanes/lib.sh"
 LANE_BUILD_BACKEND=claude            # high-risk build: headless Opus 5. Omit for AGY Flash.
 log "lane S7 — keeper succession"
-item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 1 early pass → GitHub green → deciding pass
-[ "$CLEAN" = 1 ] && land "$PR"          # CI green, then HELD unless LANE_MERGE=1
+item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → deciding pass beside GitHub → both back together
+[ "$CLEAN" = 1 ] && land "$PR"          # clean and green, so HELD unless LANE_MERGE=1
 log "LANE S7 DONE (clean=$CLEAN pr=$PR) — HELD for the director"   # watch.sh wakes on this line
 ```
 
@@ -53,7 +53,7 @@ stage). Afterwards, run `scripts/lanes/sweep-orphans.sh` and, once a worktree is
 `scripts/lanes/remove-worktree.sh .claude/worktrees/lane-s7`.
 
 The building blocks are `stage NAME TIMEOUT BRIEF [ROLE]`, `cont`, `item`, `review`, `decide_review`,
-`decide_pass PR BRANCH`, `ci_gate PR BRANCH`, `sync_main`, `land PR [hold]`, `merge_if_clean`,
+`decide_pass PR BRANCH`, `ci_gate PR BRANCH`, `ci_beside PR SHA`, `lane_tier_a PR`, `sync_main`, `land PR [hold]`, `merge_if_clean`,
 `deploy_main NODE SYMBOL [LABEL]`, `count`, `prnum`, `pr_head`, `ci_head_state SHA` and `gh_try`. The comment above each
 function describes its contract.
 
@@ -63,8 +63,8 @@ build may still push early so work is not lost, and a run about to end must push
 
 ## Backends and models
 
-There are three roles. `build` covers builds, CONTINUE, FIX and SYNC stages. `review` covers the early CCR passes.
-`decide` covers the pass that gates a merge: `CCR-*-3`, `CCR-*-sync` and `decide_pass`. Each role picks a backend
+There are three roles. `build` covers builds, CONTINUE, FIX and SYNC stages. `review` covers the early CCR passes, which
+only AGY-built lanes have. `decide` covers the pass that gates a merge: `CCR-*-3`, `CCR-*-sync` and `decide_pass`. Each role picks a backend
 through `LANE_BUILD_BACKEND`, `LANE_REVIEW_BACKEND` and `LANE_DECIDE_BACKEND`:
 
 - **`agy`** runs `agy -p=… --model … --print-timeout … --output-format stream-json` inside the lane worktree.
@@ -88,14 +88,30 @@ gate counts it as clean.
 
 ## Gates
 
-- Early passes depend on who built the lane. **AGY-built:** two passes, with a `FIX-*` stage after each one that comments.
-  **Claude-built:** one pass, no `FIX-*` stage and no second pass. Its comments go to the deciding pass, whose brief tells it
-  to weigh each one. A real one it posts as a new inline comment, so the count sees it. A false one it lists in its summary
-  and does not reply to, because a reply is an inline comment too. Either way, early comments are counted before the
-  deciding pass starts, so only what that pass adds can read as a defect.
-- A deciding pass waits for the required check on the PR's exact head, outside the deciding slot; every path to one goes
-  through `decide_review`, so `land()`'s post-sync pass and a run script's own confirmation pass wait too. Early passes
-  do not wait.
+- Who built the lane decides the order. Every deciding pass goes through `decide_review`, so `review()`'s final pass,
+  `land()`'s post-sync pass and a run script's own confirmation pass all follow the same rule, and every one of them still
+  waits for the deciding slot and the quota probe.
+- **Claude-built** (`lane_backend build` = `claude`): no early pass, no Flash and no `FIX-*` stage. A cold deciding pass and
+  GitHub run together, and the lane waits for both. There is no `FIX-CI-*` stage: a red comes back beside the verdict, so a
+  red and the findings make one fix round, and that fix lane does the same again.
+  - Its PR gets the `tier-A` label, which `board.sh` reads to send it first. A failure logs a line and never stops the lane.
+    An AGY-built lane gets no label unless its run script calls `lane_tier_a`.
+  - The pass starts without reading CI. The head is read last thing before the stage, and the brief says CI may still be
+    running: don't wait for it, don't poll it, don't claim it passed.
+  - After the pass, outside the slot, `ci_beside` waits for the required check on exactly that head, with the same limits
+    as the AGY wait below. It waits even when the verdict is already NOT CLEAN.
+  - **`CLEAN=1` needs a clean verdict and green on that head.** The lane then holds it for the director, who boards it.
+  - **Anything else is one line**, `LEFT FOR THE DIRECTOR, review and CI back: verdict …; CI …`, and `watch.sh` wakes with
+    both results in its headline: red, cancelled, unknown, no run, pending past the limit, a pass that did not really run,
+    or findings.
+  - **A head that moves voids the verdict** (`VOID`), during the pass or during the wait, whatever the new head says: that
+    review is about a commit that has gone. The lane holds for the director rather than spend another review on it.
+  - **Only `.md` files:** no run to wait for, as below.
+  - The merge queue is untouched and still reruns everything. This changes when the review runs, not what must pass to land.
+- **AGY-built:** two early passes, with a `FIX-*` stage after each one that comments. They do not wait for GitHub. Then the
+  deciding pass waits for the required check on the PR's exact head, outside the deciding slot. A lane decided in session
+  (`LANE_DECIDE_BACKEND=director`) has this wait too, whoever built it: there is no stage to run beside GitHub, and "ready"
+  promises the director a green head.
   - **Green:** the pass runs, and its brief names the head. The head is checked again once the slot is held.
   - **Red:** no pass. Up to `LANE_GREEN_FIXES` (2) `FIX-CI-*` stages on the build backend, with each failing check and the
     command that prints its log, then back to the wait on the pushed head. A red the PR did not cause still counts.
@@ -161,5 +177,5 @@ These scripts are macOS-only (`stat -f`, `find -mtime -Ns`, `caffeinate`), becau
 
 ```zsh
 for f in scripts/lanes/*.sh scripts/lanes/test/selftest.sh; do zsh -n "$f"; done
-zsh scripts/lanes/test/selftest.sh      # ~2 min; fakes only; prints each scenario's lane log and ✓/✗ checks
+zsh scripts/lanes/test/selftest.sh      # ~4 min; fakes only; prints each scenario's lane log and ✓/✗ checks
 ```

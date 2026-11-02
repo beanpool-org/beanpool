@@ -53,7 +53,8 @@
  *   and re-create an event to move a pin, which lost its RSVPs and links): place, an event's times, end, repeat, online, link,
  *   note and who it lets in, a listing's terms, shop and lending. All of it goes to the route's own updatePost, which keeps the
  *   id, the RSVPs and the links and tells whoever a host's edit tells; a member's copy is held as the route holds one
- *   (copyUpdates). What the engine would leave out without a word (a term on an Offer that isn't lent, a link on an event
+ *   (copyUpdates), and it goes in as a keeper's own edit does, signed by the owner: an enterprise's listing is refused while the
+ *   enterprise is closed, and its new photos are the keeper's to pay for. What the engine would leave out without a word (a term on an Offer that isn't lent, a link on an event
  *   in person, a place on an online one) is refused here in words, because the answer's `changed` is what an assistant believes.
  * - Tags T4 (DESIGN-tags-free-entry-fable.md §8, §5; DESIGN-owner-seeding-tags-fable.md §2.6): every create and update_post takes
  *   `tags`, ids from the library in core (tags_search, agent/owner-reads.ts, finds them), and `free_tags`, the words the
@@ -78,7 +79,7 @@
  */
 import crypto from 'node:crypto';
 import {
-    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LISTING_DESCRIPTION_LIMIT, placelessListingNote, plainWords,
+    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LEGACY_CATEGORY_ALIASES, LISTING_DESCRIPTION_LIMIT, placelessListingNote, plainWords,
     POST_TAGS_MAX, postTagsOf, PRICING_CATEGORIES, singulars, TAG_LIBRARY, tagIndex,
 } from '@beanpool/core';
 import { EVENT_REPEAT_WEEKDAYS, readRepeatRule } from '@beanpool/engine';
@@ -102,7 +103,7 @@ import { loadSharp, PHOTO_MAX_SIDE, resizeToStoredPhoto } from '../storage/photo
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { memberErrorText } from '../routes/member-error-text.js';
-import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
+import { cleanMemberText, fence, MEMBER_TEXT_NOTICE, type Fenced } from './fence.js';
 import {
     admitAgentCreate, admitAgentEdit, admitAgentRemoveAll, agentCreatesToday, agentEditsToday, agentPhotosToday, agentPostsPerDay, returnAgentCreate,
     returnAgentEdit, AGENT_EDITS_PER_DAY, AGENT_LIST_MAX, agentPhotosPerDay,
@@ -139,6 +140,23 @@ export function enterpriseRef(enterpriseKey: string): string {
 
 /** The Market's categories, the ones both apps' composers pick from (@beanpool/core PRICING_CATEGORIES). */
 export const AGENT_POST_CATEGORIES: readonly string[] = PRICING_CATEGORIES.map((c) => c.id);
+
+/**
+ * A stored category that is the node's own word: the Market's, one it had before, what an event or a listing with none is
+ * given, or the Daily Pulse's `skills`, the one word its entries use that the Market doesn't list (daily-pulse-entries.ts).
+ */
+const OWN_CATEGORIES: ReadonlySet<string> = new Set([...AGENT_POST_CATEGORIES, ...Object.keys(LEGACY_CATEGORY_ALIASES), 'community', 'other', 'skills']);
+
+/**
+ * A post's category as an assistant reads it. Stored, it is any text of up to 50 characters (engine/post-fields.ts), and it
+ * can't be held to a list there: a peer's listing carries the peer's word past that check, and rows already hold what they
+ * hold. So the read decides. One of the node's own words comes back as it is; anything else is member text, fenced, and in a
+ * list only with include_text (`withText`), or null.
+ */
+export function categoryRead(category: unknown, boundary: string, what: string, withText = true): string | Fenced | null {
+    if (typeof category === 'string' && OWN_CATEGORIES.has(category)) return category;
+    return withText ? fence(boundary, what, category) : null;
+}
 
 /**
  * The fields each kind's composer will not post without, by the tools' own names. Each list is the tool's input schema
@@ -1462,12 +1480,14 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
         const owner = grant.member;
         try {
             // What POST /api/marketplace/posts/update runs after its signature check: the mute, the photo allowance, then the
-            // engine's own edit, which holds every field to the create's rules and lets a keeper edit their enterprise's.
+            // engine's own edit, which holds every field to the create's rules and lets a keeper edit their enterprise's. The
+            // owner signs it as a keeper's phone does, with their own key in both places, so an enterprise's Offer or Need
+            // meets the keeper's rules: refused while the enterprise is closed, and the photos charged to the keeper.
             assertNotMuted(owner);
             const photos = updates.photos as string[] | undefined;
             if (photos) assertMayEditPhotos(owner, row.id, Math.min(photos.length, 5), photos.length);
             const timeOut: EventTimeOut = {};
-            const post = updatePost(row.id, row.author_pubkey, updates as Parameters<typeof updatePost>[2], owner, timeOut);
+            const post = updatePost(row.id, owner, updates as Parameters<typeof updatePost>[2], owner, timeOut);
             if (!post) {
                 returnAgentEdit(grant.id);
                 return { ok: false, error: 'The post could not be changed now: try again later.' };
@@ -1620,7 +1640,7 @@ export function grantIdsWithMadePosts(): string[] {
 /** What update_post can change on an Offer or a Need, for an assistant to read first; words typed are fenced. */
 function listingFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
     return {
-        category: r.category, beans: r.credits, priceType: r.price_type ?? 'fixed', repeatable: r.repeatable === 1, cashAlsoNeeded: r.cash_also_needed === 1,
+        category: categoryRead(r.category, boundary, `post ${r.id}, category`), beans: r.credits, priceType: r.price_type ?? 'fixed', repeatable: r.repeatable === 1, cashAlsoNeeded: r.cash_also_needed === 1,
         shopId: r.shop_id, lendable: r.lendable === 1, lendMaxDays: r.lend_max_days,
         lendTerms: fence(boundary, `post ${r.id}, lending terms`, r.lend_terms), replacementValue: fence(boundary, `post ${r.id}, replacement value`, r.replacement_value),
     };
@@ -1708,8 +1728,8 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         name: 'my_posts',
         title: 'Posts this assistant made',
         reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
-            + "its link, its library tags, its pin and how many photos, and fenced its title, description and its own tags; a listing's category, price, shop and "
-            + "lending terms; an event's start and end, its clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule; a poll's "
+            + "its link, its library tags, its pin and how many photos, and fenced its title, description and its own tags; a listing's category (its id, or fenced "
+            + "where it is off the list), price, shop and lending terms; an event's start and end, its clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule; a poll's "
             + 'answers, whether it is an open vote, when it closes, how many have voted and whether its answers are fixed yet: what '
             + 'update_post can change, to read before it edits. A poll\'s title is its question, and one that has closed reads status completed. An enterprise\'s post you no longer keep lists only its id, kind, status, when, whose it is, its link, title and tags. '
             + 'The live ones (the default), the removed ones, or all',

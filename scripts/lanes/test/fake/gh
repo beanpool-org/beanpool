@@ -1,8 +1,9 @@
 #!/bin/zsh
 # Fake gh for selftest.sh — never talks to GitHub. Every call is appended to $FAKE_STATE/gh.calls.
 #   FAKE_GH_DOWN=1            every `gh api` call fails (GitHub not answering)
-#   FAKE_GH_COMMENTS_DOWN=1   only the PR comments call fails
+#   FAKE_GH_COMMENTS_DOWN=1   only the PR comments call fails (so does $FAKE_STATE/comments-down, which a fake review can create)
 #   FAKE_GH_RUNS_DOWN=1       only `gh run list --commit` fails
+#   FAKE_GH_LABEL_DOWN=1      `gh pr edit` fails
 #   FAKE_GH_PR=N     what `gh pr list --head` returns (empty = no PR)
 #   $FAKE_STATE/comments   the PR's inline comment count
 #   $FAKE_STATE/head       the PR's head commit (no file: fakehead; empty: GitHub does not say)
@@ -48,7 +49,7 @@ case "$1 $2" in
                 */pulls/*/files*)
                   { [ -s "$S/files" ] && cat "$S/files" || print src/a.ts; } | jq -Rs 'split("\n") | map(select(length > 0) | {filename: .})' | jq -r "$jqf";;
                 *)
-                  [ "$FAKE_GH_COMMENTS_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
+                  { [ "$FAKE_GH_COMMENTS_DOWN" = 1 ] || [ -e "$S/comments-down" ]; } && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
                   cat "$S/comments" 2>/dev/null || print 0;;
               esac;;
   "pr list")  print -r -- "$FAKE_GH_PR";;
@@ -58,6 +59,8 @@ case "$1 $2" in
                 *mergeable*) print MERGEABLE;; *title*) print "Fake title";;
               esac;;
   "pr ready") ;;
+  "pr edit")  [ "$FAKE_GH_LABEL_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
+              print -r -- "https://github.com/example/fake/pull/$3";;   # the real one prints the URL, and gh_try reads empty as no answer
   "pr merge") print -r -- "$*" >> "$S/merges";;
   "run list") if [[ "$*" == *--commit* ]]; then
                 [ "$FAKE_GH_RUNS_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }

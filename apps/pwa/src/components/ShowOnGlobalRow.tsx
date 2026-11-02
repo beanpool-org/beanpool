@@ -149,6 +149,18 @@ export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, i
     );
 }
 
+/**
+ * The door's tick in a form: off every time, and off again whenever the listing is no longer to be shown, by a tap, a post
+ * made, or the form moving away from what the tick is for. It must never be found ticked on the next listing.
+ */
+export function useTakeQuestionsTick(shown: boolean): [boolean, (on: boolean) => void] {
+    const [on, setOn] = useState(false);
+    useEffect(() => {
+        if (!shown) setOn(false);
+    }, [shown]);
+    return [on, setOn];
+}
+
 /** The door's tick, under the tick that shows the listing. */
 export function TakeQuestionsTick({ checked, onChange, busy = false }: { checked: boolean; onChange: (next: boolean) => void; busy?: boolean }) {
     return (

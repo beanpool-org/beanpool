@@ -15,6 +15,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('../node-post', () => ({ signedGet: net.get }));
+const landing = vi.hoisted(() => ({ order: [] as string[], asked: [] as unknown[][], switched: [] as string[], busy: false }));
+vi.mock('../use-communities', () => ({
+    communitySwitchUnderWay: () => landing.busy,
+    switchCommunity: async (url: string, before: () => Promise<void>) => { landing.switched.push(url); await before(); },
+}));
+vi.mock('../member-landing', () => ({ openAfterLanding: (...a: unknown[]) => { landing.order.push('open'); landing.asked.push(a); } }));
 
 const me = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32) } as any;
 const HOME = 'https://mullum.example.org';
@@ -87,3 +93,33 @@ describe('what waits on global', () => {
         expect(await requestsWaitingOnGlobal({ publicKey: me.publicKey } as any)).toBe(0);
     });
 });
+
+describe('the tap on the row', () => {
+    beforeEach(() => {
+        Object.assign(landing, { order: [], asked: [], switched: [], busy: false });
+    });
+    const recheck = async () => { landing.order.push('recheck'); };
+
+    it('moves the phone to global and asks for its Message requests, once the guard knows where the phone is', async () => {
+        const { openGlobalRequests } = await fresh();
+        await openGlobalRequests(me.publicKey, recheck);
+        expect(landing.switched).toEqual(['https://global.beanpool.org']);
+        expect(landing.order).toEqual(['recheck', 'open']);
+        expect(landing.asked[0]).toEqual(['/(tabs)/chats?filter=requests', 'https://global.beanpool.org', me.publicKey]);
+    });
+
+    it('a recognition that fails still asks: the guard then holds it, as a notice\'s', async () => {
+        const { openGlobalRequests } = await fresh();
+        await openGlobalRequests(me.publicKey, async () => { throw new Error('no answer'); });
+        expect(landing.order).toEqual(['open']);
+    });
+
+    it('a switch under way starts no second one, and no key starts none', async () => {
+        const { openGlobalRequests } = await fresh();
+        await openGlobalRequests(null, recheck);
+        landing.busy = true;
+        await openGlobalRequests(me.publicKey, recheck);
+        expect(landing.switched).toEqual([]);
+    });
+});
+

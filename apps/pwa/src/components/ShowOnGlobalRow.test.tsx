@@ -4,7 +4,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal } from './ShowOnGlobalRow';
+import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestionsTick } from './ShowOnGlobalRow';
 import { useCommunityInfo } from '../lib/features';
 import * as copies from '../lib/show-on-global';
 
@@ -351,6 +351,24 @@ describe('the door\'s tick (slice GD)', () => {
         expect(vi.mocked(copies.showPostOnGlobal).mock.calls[0][2]).toBe(false);
         await showEventOnGlobal(listing, me, true);
         expect(vi.mocked(copies.showPostOnGlobal).mock.calls[1][2]).toBe(true);
+    });
+});
+
+describe('the door\'s tick in a form', () => {
+    function Form({ shown }: { shown: boolean }) {
+        const [on, setOn] = useTakeQuestionsTick(shown);
+        return <button type="button" data-testid="flip" onClick={() => setOn(!on)}>{on ? 'on' : 'off'}</button>;
+    }
+
+    it('starts off, and is never found ticked on the next listing: a post made, or the form moved away, clears it', () => {
+        const { rerender } = render(<Form shown />);
+        expect(screen.getByTestId('flip').textContent).toBe('off');
+        fireEvent.click(screen.getByTestId('flip'));
+        expect(screen.getByTestId('flip').textContent).toBe('on');
+        rerender(<Form shown={false} />);
+        expect(screen.getByTestId('flip').textContent).toBe('off');
+        rerender(<Form shown />);
+        expect(screen.getByTestId('flip').textContent).toBe('off');
     });
 });
 

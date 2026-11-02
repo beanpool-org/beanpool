@@ -209,6 +209,8 @@ async function main() {
     }
     assert((await call('POST', TAKES, null, { id: plainCopy, on: true })).status === 401 && stored(plainCopy)?.shown_takes_questions === null, 'it needs a signature');
     assert((await call('POST', TAKES, stranger, { id: plainCopy, on: true })).status === 403, 'a signed stranger is no member');
+    const edited = await call('POST', '/api/marketplace/posts/update', robin, { id: plainCopy, authorPublicKey: robin.pubKeyHex, title: 'Sourdough loaves', takesQuestions: true, shownTakesQuestions: 1 });
+    assert(edited.status === 200 && stored(plainCopy)?.shown_takes_questions === null, `an edit can't open a door, whatever it sends: only the tick does (${edited.status})`);
     const stamp = stored(plainCopy)?.updated_at;
     const twice = await tick(robin, plainCopy, false);
     assert(twice.status === 200 && stored(plainCopy)?.updated_at === stamp, 'an Off on a shut door writes nothing');

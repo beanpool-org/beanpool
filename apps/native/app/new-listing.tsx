@@ -38,7 +38,7 @@ import { palette } from '../constants/colors';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../constants/categories';
 import { useNodeProfile } from '../utils/use-node-profile';
-import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal } from '../components/ShowOnGlobalRow';
+import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestionsTick } from '../components/ShowOnGlobalRow';
 import { getCachedNodeProfile } from '../utils/node-profile';
 import {
     marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules, composerNeedsProfilePhoto,
@@ -270,7 +270,7 @@ export default function NewListingScreen() {
     const nodeFeatures = nodeProfile?.features;
     // "Also show this on the global community": off, every time; never kept in a draft.
     const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
-    const [takesQuestions, setTakesQuestions] = useState(false);
+    const [takesQuestions, setTakesQuestions] = useTakeQuestionsTick(alsoOnGlobal);
     const showsBeans = marketShowsBeans(nodeFeatures);
     const [postRepeatable, setPostRepeatable] = useState(false);
     const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
@@ -994,7 +994,7 @@ export default function NewListingScreen() {
                                 </Text>
                             )}
 
-                            <ShowOnGlobalTick enabled={nodeProfile?.profile === 'local' && postLat !== null && postLng !== null} checked={alsoOnGlobal} onChange={(on) => { setAlsoOnGlobal(on); if (!on) setTakesQuestions(false); }} listing need={postType === 'need'} />
+                            <ShowOnGlobalTick enabled={nodeProfile?.profile === 'local' && postLat !== null && postLng !== null} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} listing need={postType === 'need'} />
                             {alsoOnGlobal && <TakeQuestionsTick checked={takesQuestions} onChange={setTakesQuestions} />}
 
                             {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has

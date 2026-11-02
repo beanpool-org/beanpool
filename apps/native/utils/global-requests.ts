@@ -28,13 +28,20 @@ export async function noteQuestionsOpened(publicKey: string): Promise<void> {
     await AsyncStorage.setItem(QUESTIONS_OPENED_STORE_KEY, publicKey).catch(() => {});
 }
 
-/** The tap on the row: the phone moves to global, as a tapped notice does, and its Message requests open there. */
-export async function openGlobalRequests(publicKey: string | null | undefined): Promise<void> {
+/**
+ * The tap on the row: the phone moves to global, as a tapped notice does, and its Message requests open there. `recheck` is the
+ * root layout's recognition (app/NodeStatusContext.tsx), asked again before the bounce: the guard opens a screen only for the
+ * community it knows the phone is on (member-landing.ts), and without this it still reads the one just left.
+ */
+export async function openGlobalRequests(publicKey: string | null | undefined, recheck: () => Promise<unknown>): Promise<void> {
     if (!publicKey) return;
     const { communitySwitchUnderWay, switchCommunity } = await import('./use-communities');
     const { openAfterLanding } = await import('./member-landing');
     if (communitySwitchUnderWay()) return;
-    await switchCommunity(GLOBAL_NODE_URL, async () => openAfterLanding('/(tabs)/chats?filter=requests', GLOBAL_NODE_URL, publicKey)).catch((e) => console.warn('[Requests] Could not move to the global community', e));
+    await switchCommunity(GLOBAL_NODE_URL, async () => {
+        await recheck().catch(() => 'unknown');
+        openAfterLanding('/(tabs)/chats?filter=requests', GLOBAL_NODE_URL, publicKey);
+    }).catch((e) => console.warn('[Requests] Could not move to the global community', e));
 }
 
 /** How many wait on global for this key. 0 on a phone that has opened no door, and on global itself, whose own list has them. */

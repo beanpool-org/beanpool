@@ -67,7 +67,7 @@ vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.
 import { EventCopyDoor } from '../../components/EventCopyDoor';
 import { ListingCopyDetail } from '../../components/ListingCopy';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
-import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, listingForCopy, showEventOnGlobal, showListingOnGlobalHint, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
+import { ShowOnGlobalHostRow, ShowOnGlobalTick, TakeQuestionsTick, listingForCopy, showEventOnGlobal, showListingOnGlobalHint, showOnGlobalHint, useTakeQuestionsTick } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
 import { deletePost } from '../db';
 
@@ -603,6 +603,32 @@ describe('a listing from the phone\'s own row', () => {
 
     it('leaves what is already a path, and a phone\'s own file, as they are', () => {
         expect(listingForCopy(ROW, [PATH, 'file:///data/a.jpg']).photos).toEqual([PATH, 'file:///data/a.jpg']);
+    });
+});
+
+describe('the door\'s tick in a form', () => {
+    let flip: (on: boolean) => void = () => {};
+    let seen: boolean[] = [];
+    function Form({ shown }: { shown: boolean }) {
+        const [on, setOn] = useTakeQuestionsTick(shown);
+        flip = setOn;
+        seen.push(on);
+        return null;
+    }
+    const last = () => seen[seen.length - 1];
+
+    it('starts off, and is never found ticked on the next listing: a post made, or the form moved away, clears it', async () => {
+        seen = [];
+        await draw(createElement(Form, { shown: true }));
+        expect(last()).toBe(false);
+        await act(async () => { flip(true); });
+        expect(last()).toBe(true);
+        await act(async () => { root?.render(createElement(Form, { shown: false }) as any); });
+        await settle();
+        expect(last()).toBe(false);
+        await act(async () => { root?.render(createElement(Form, { shown: true }) as any); });
+        await settle();
+        expect(last()).toBe(false);
     });
 });
 

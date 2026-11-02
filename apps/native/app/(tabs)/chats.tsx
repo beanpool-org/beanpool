@@ -5,7 +5,8 @@ import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { requestsWaitingOnGlobal } from '../../utils/global-requests';
+import { openGlobalRequests, requestsWaitingOnGlobal } from '../../utils/global-requests';
+import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
@@ -88,6 +89,7 @@ export default function ChatsScreen() {
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
     // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
     const [onGlobal, setOnGlobal] = useState(0);
+    const { recheck } = useNodeStatus();
     const requestsHere = requests ?? (onGlobal > 0 ? { count: 0, conversations: [] } : null);
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
@@ -903,6 +905,7 @@ export default function ChatsScreen() {
                     entries={requestsHere.conversations}
                     count={requestsHere.count}
                     onGlobal={onGlobal}
+                    onOpenGlobal={() => void openGlobalRequests(identity?.publicKey, recheck)}
                     identity={identity}
                     qr={qr}
                     onOpen={(entry) => router.push(`/chat/${entry.id}`)}

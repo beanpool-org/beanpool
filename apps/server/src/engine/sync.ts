@@ -1524,17 +1524,20 @@ function replaceMemberPreferences(publicKey: string, preferences: Record<string,
 
 /**
  * A poll's answers as the main server holds them (`pollAnswers` in its row, @beanpool/engine sync.ts postsWithAnswers): the
- * copy names all of them, so they replace what is here. A copy that doesn't carry the field (a main server from before
- * them, or a poll with none) leaves them. A malformed entry is left out.
+ * copy names all of them, none included, so they replace what is here. A copy that doesn't carry the field (a main server
+ * from before them, or a poll with no Other) leaves them. A malformed entry is left out. True when words went from here.
  */
-function replacePollAnswers(postId: string, answers: unknown): void {
-    if (!Array.isArray(answers)) return;
+function replacePollAnswers(postId: string, answers: unknown): boolean {
+    if (!Array.isArray(answers)) return false;
+    const typedLines = () => (db.prepare('SELECT COUNT(*) AS c FROM poll_answers WHERE post_id = ? AND words IS NOT NULL').get(postId) as { c: number }).c;
+    const held = typedLines();
     db.prepare('DELETE FROM poll_answers WHERE post_id = ?').run(postId);
     const insert = db.prepare('INSERT OR IGNORE INTO poll_answers (post_id, id, option_id, words, words_removed) VALUES (?, ?, ?, ?, ?)');
     for (const a of answers as Array<{ id?: unknown; optionId?: unknown; words?: unknown; wordsRemoved?: unknown }>) {
         if (typeof a?.id !== 'string' || !a.id || typeof a.optionId !== 'string' || !a.optionId) continue;
         insert.run(postId, a.id, a.optionId, typeof a.words === 'string' ? a.words : null, a.wordsRemoved === 1 ? 1 : 0);
     }
+    return typedLines() < held;
 }
 
 /**
@@ -2755,7 +2758,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
 
             // A poll's answers travel in its row, and go in once its row is here (schema.sql poll_answers).
             for (const rp of remote.posts ?? []) {
-                if (rp.type === 'poll') replacePollAnswers(rp.id, (rp as { pollAnswers?: unknown }).pollAnswers);
+                if (rp.type === 'poll' && replacePollAnswers(rp.id, (rp as { pollAnswers?: unknown }).pollAnswers)) blankedLines++;
             }
 
             if (remote.pollVotes) {
@@ -3021,9 +3024,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     } finally {
         currentImportOrigin = null;
     }
-    // A line this copy blanked is zeroed in state.db, but state.db-wal still holds it as it was, on this standby as on its
+    // A line this copy blanked (a chat's, or a poll's typed answer) is zeroed in state.db, but state.db-wal still holds it as it was, on this standby as on its
     // main server after a delete account (data-at-rest report F2, db/wal-truncate.ts): emptied now the import has committed.
-    if (blankedLines > 0) truncateWalAfterDelete('a copy blanked chat lines');
+    if (blankedLines > 0) truncateWalAfterDelete('a copy blanked lines members wrote');
 
     // Updates and tombstones count, not just inserts. This was guarded on `newMembers > 0 ||
     // newPosts > 0`, which was fine when the broadcast only woke up sockets — but it now also

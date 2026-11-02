@@ -89,7 +89,7 @@ const WORDS_OPEN = 'Named-answer-on-an-open-vote';
 async function main() {
     console.log('A poll\'s typed Other...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, closePoll, getReports, actionReport, getMember, exportSyncState } = await import('./state-engine.js');
+    const { initStateEngine, closePoll, getReports, actionReport, getMember, exportSyncState, adminDeletePost, purgeMemberSelf } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
@@ -420,6 +420,104 @@ async function main() {
         assert(read.status === 404 && !read.text.includes(WORDS), 'a removed poll has no words to read');
     }
 
+    console.log('── a removed poll takes its words ──');
+    {
+        // Nothing hard-deletes a poll and foreign keys are off (db/db.ts), so its rows outlive it: the words have to be taken.
+        const wordsLeft = (id: string) => (db.prepare('SELECT COUNT(*) AS c FROM poll_answers WHERE post_id = ? AND words IS NOT NULL').get(id) as any).c;
+        const openWithLine = async (by: Id) => {
+            const p = await makePoll({ pollOther: true, pollOpenVote: true }, by);
+            const id = p.body.post.id as string;
+            await vote(id, p.body.post.pollOptions.find((o: any) => o.other).id, typist, WORDS);
+            assert(wordsLeft(id) === 1, 'a line is there to start with');
+            return id;
+        };
+
+        const byMaker = await openWithLine(maker);
+        const list = await get(`/api/marketplace/posts/${byMaker}/other-answers`, maker);
+        await post(`/api/marketplace/posts/${byMaker}/other-answers/${list.body.answers[0].id}/report`, {}, maker);
+        const before = (db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(byMaker) as any).updated_at;
+        await sleep(5);
+        const removed = await post('/api/marketplace/posts/remove', { id: byMaker, authorPublicKey: maker.pubKeyHex }, maker);
+        assert(removed.status === 200 && removed.body?.success === true, `its maker removes the poll (${removed.status})`);
+        assert(wordsLeft(byMaker) === 0, 'and the words go from the table');
+        assert(!JSON.stringify((await exportSyncState('test-node') as any).posts.find((p: any) => p.id === byMaker)).includes(WORDS), 'and from what a standby is sent');
+        assert((db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(byMaker) as any).updated_at > before, 'and the poll moves, so a standby hears');
+        const pendingReports = (db.prepare(`SELECT COUNT(*) AS c FROM abuse_reports WHERE json_extract(disclosure, '$.postId') = ? AND status = 'pending'`).get(byMaker) as any).c;
+        assert(pendingReports === 0, 'and a report of its line waits for nobody');
+
+        const byAdmin = await openWithLine(maker);
+        adminDeletePost(byAdmin);
+        assert(wordsLeft(byAdmin) === 0, "an admin's removal takes them too");
+    }
+
+    console.log('── gone for good: from the disk too ──');
+    {
+        // The WAL holds a row as it was until a checkpoint, on a quiet node for days (db/wal-truncate.ts).
+        const onDisk = (s: string) => ['', '-wal'].some(end => { try { return fs.readFileSync(db.name + end).includes(s); } catch { return false; } });
+        const lineOf = async (words: string) => {
+            const p = await makePoll({ pollOther: true, pollOpenVote: true });
+            const id = p.body.post.id as string;
+            await vote(id, p.body.post.pollOptions.find((o: any) => o.other).id, typist, words);
+            assert(onDisk(words), 'a line is on the disk to start with');
+            return { id, plain: p.body.post.pollOptions.find((o: any) => !o.other).id as string };
+        };
+        const byOwner = await lineOf('Removed-by-an-owner-so-gone');
+        const listed = await get(`/api/marketplace/posts/${byOwner.id}/other-answers`, owner);
+        await post(`/api/marketplace/posts/${byOwner.id}/other-answers/${listed.body.answers[0].id}/remove`, {}, owner);
+        assert(!onDisk('Removed-by-an-owner-so-gone'), "an owner's Remove leaves no copy in the database or its WAL");
+        const takenBack = await lineOf('Taken-back-by-changing-the-vote');
+        await vote(takenBack.id, takenBack.plain, typist);
+        assert(!onDisk('Taken-back-by-changing-the-vote'), 'nor does a changed vote');
+        const withPoll = await lineOf('Went-with-the-poll-it-was-on');
+        await post('/api/marketplace/posts/remove', { id: withPoll.id, authorPublicKey: maker.pubKeyHex }, maker);
+        assert(!onDisk('Went-with-the-poll-it-was-on'), 'nor does removing the poll');
+    }
+
+    console.log('── an account deleted ──');
+    {
+        const leaver = seed('LeaverLou');
+        const open = await makePoll({ pollOther: true, pollOpenVote: true });
+        const openId = open.body.post.id as string;
+        const openOther = open.body.post.pollOptions.find((o: any) => o.other);
+        await vote(openId, openOther.id, leaver, 'Named-by-the-vote-row');
+        await vote(openId, openOther.id, typist, WORDS_OPEN);
+        const sealed = await makePoll({ pollOther: true }, typist2);
+        const sealedId = sealed.body.post.id as string;
+        await vote(sealedId, sealed.body.post.pollOptions.find((o: any) => o.other).id, leaver, 'Nothing-says-whose');
+        const leaverLine = (await get(`/api/marketplace/posts/${openId}/other-answers`, maker)).body.answers.find((a: any) => a.words === 'Named-by-the-vote-row');
+        await post(`/api/marketplace/posts/${openId}/other-answers/${leaverLine.id}/report`, {}, maker);
+        const keptLine = (await get(`/api/marketplace/posts/${openId}/other-answers`, maker)).body.answers.find((a: any) => a.words === WORDS_OPEN);
+        await post(`/api/marketplace/posts/${openId}/other-answers/${keptLine.id}/report`, {}, maker);
+        const before = (db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(openId) as any).updated_at;
+        await sleep(5);
+        purgeMemberSelf(leaver.pubKeyHex);
+        const openWords = (db.prepare('SELECT words FROM poll_answers WHERE post_id = ?').all(openId) as any[]).map(r => r.words);
+        assert(!openWords.includes('Named-by-the-vote-row') && openWords.includes(WORDS_OPEN), "an open vote's row says which line was theirs: only that line goes");
+        const read = await get(`/api/marketplace/posts/${openId}/other-answers`, maker);
+        assert(read.body.count === 2 && read.body.answers.length === 1 && read.body.removed === 1, 'their vote still counts, and the panel says one was removed');
+        assert((db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(openId) as any).updated_at > before, 'and the poll moves, so a standby hears');
+        const leaverReports = (db.prepare(`SELECT COUNT(*) AS c FROM abuse_reports WHERE json_extract(disclosure, '$.answerId') = ? AND status = 'pending'`).get(leaverLine.id) as any).c;
+        const keptReports = (db.prepare(`SELECT COUNT(*) AS c FROM abuse_reports WHERE json_extract(disclosure, '$.answerId') = ? AND status = 'pending'`).get(keptLine.id) as any).c;
+        assert(leaverReports === 0 && keptReports === 1, "and a report of that line waits for nobody, while another line's still does");
+        const sealedWords = (db.prepare('SELECT words FROM poll_answers WHERE post_id = ?').all(sealedId) as any[]).map(r => r.words);
+        assert(sealedWords.includes('Nothing-says-whose'), 'a sealed line stays: nothing says it was theirs, as the guide tells them');
+    }
+
+    console.log("── a line keeps the letters it is written in ──");
+    {
+        const p = await makePoll({ pollOther: true, pollOpenVote: true });
+        const id = p.body.post.id as string;
+        const other = p.body.post.pollOptions.find((o: any) => o.other);
+        const persian = 'می\u200cخواهم';
+        const farmer = '\u{1F469}\u200d\u{1F33E}';
+        await vote(id, other.id, typist, `${persian} ${farmer}`);
+        const kept = (await get(`/api/marketplace/posts/${id}/other-answers`, maker)).body.answers[0]?.words;
+        assert(kept === `${persian} ${farmer}`, 'a joiner stays: Persian words and emoji are written with them');
+        await vote(id, other.id, typist, 'left\u202Eright\u2066\u200Band\u061Cmore\nnext');
+        const cleaned = (await get(`/api/marketplace/posts/${id}/other-answers`, maker)).body.answers[0]?.words as string;
+        assert(!/[\u202E\u2066\u200B\u061C\n]/.test(cleaned), 'what changes how a line reads without showing still goes');
+    }
+
     console.log('── a standby\'s copy ──');
     {
         const openOne = await makePoll({ pollOther: true, pollOpenVote: true });
@@ -440,6 +538,13 @@ async function main() {
         const openBallot = payload.pollVotes.find((v: any) => v.postId === standbyOpenPoll);
         assert(typeof openBallot?.otherAnswerId === 'string' && openBallot.otherAnswerId.length === 32, 'an open vote carries its link to its words');
         // The importer writes them back: test-takeover-parity, on a standby that takes over.
+        const plainAnswer = openOne.body.post.pollOptions.find((o: any) => !o.other).id;
+        await vote(standbyOpenPoll, plainAnswer, typist);
+        const emptied = (await exportSyncState('test-node') as any).posts.find((p: any) => p.id === standbyOpenPoll);
+        assert(Array.isArray(emptied?.pollAnswers) && emptied.pollAnswers.length === 0, 'with its last line gone a poll says it holds none, so a standby drops it too');
+        const noOther = await makePoll({});
+        const noOtherCopy = (await exportSyncState('test-node') as any).posts.find((p: any) => p.id === noOther.body.post.id);
+        assert(noOtherCopy && !('pollAnswers' in noOtherCopy), 'a poll with no Other carries no such field');
     }
 
     console.log('── the only code that reads the words ──');

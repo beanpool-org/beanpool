@@ -56,9 +56,9 @@ Everyone who can see the poll sees how many chose **Other**. Only the person who
 
 On an anonymous poll the words stay hidden until the poll closes, then show with no name, no time and in no order, so nobody can match a line to who was around when it came in. The server keeps them apart from who answered: it holds that you answered, and separately what was answered, with nothing that leads from one to the other. If only one person answers, that one answer is still theirs, so keep names and details out of it. If you delete your account, a typed answer stays, because nothing says it was yours. An owner can remove it.
 
-On an open vote the words can be read at once, and changing your vote takes them away.
+On an open vote the words can be read at once. Changing your vote takes them away, and so does deleting your account.
 
-If you started the poll and a line is abusive, tap **Report** beside it. The report goes to the owners and names nobody. An owner can tap **Remove**: the words go for good, and the vote still counts.
+If you started the poll and a line is abusive, tap **Report** beside it. The report goes to the owners and names nobody. An owner can tap **Remove**: the words go for good, and the vote still counts. If the poll itself is removed, its typed answers go with it.
 
 ## Closing a poll early
 

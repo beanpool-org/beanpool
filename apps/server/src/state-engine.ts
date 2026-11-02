@@ -22,7 +22,7 @@ import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
 import { readOfCopy, type CopyColumns } from './engine/event-copy.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
-import { POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
+import { dropOpenVoteWordsOf, POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
@@ -9105,6 +9105,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
         // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
         scrubPostsOf(publicKey, now);
+        // And what they typed on an open vote, where the vote says which line it was. An anonymous poll's can't be found.
+        dropOpenVoteWordsOf(publicKey, now);
         // And every line they wrote, in a group's, an enterprise's or an event's chat and their half of each DM, reads
         // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
         // Not in a try either, for the same reason.

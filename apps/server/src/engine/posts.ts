@@ -4,6 +4,8 @@
 
 import { isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
+import { truncateWalAfterDelete } from '../db/wal-truncate.js';
+import { dropPollOtherWords } from './poll-other.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
@@ -984,6 +986,7 @@ function cancelPostFollowOns(id: string): void {
     db.prepare(`UPDATE posts SET event_state = 'cancelled' WHERE id = ? AND type = 'event'`).run(id);
     db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
     db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`).run(id);
+    dropPollOtherWords(id);
 }
 
 type CancelledPostRow = { id: string; type: string; title: string; author_pubkey: string; target_group_id: string | null; audience_scope: string | null; target_pubkey: string | null; assigned_to: string | null };
@@ -2155,7 +2158,10 @@ export function votePoll(
         const earlier = pollOtherOption(options)
             ? db.prepare('SELECT other_answer_id FROM poll_votes WHERE post_id = ? AND voter_pubkey = ?').get(postId, voterPublicKey) as { other_answer_id: string | null } | undefined
             : undefined;
-        if (earlier?.other_answer_id) db.prepare('DELETE FROM poll_answers WHERE post_id = ? AND id = ?').run(postId, earlier.other_answer_id);
+        if (earlier?.other_answer_id) {
+            db.prepare('DELETE FROM poll_answers WHERE post_id = ? AND id = ?').run(postId, earlier.other_answer_id);
+            truncateWalAfterDelete('a typed answer was taken back');
+        }
         const otherAnswerId = chosen.other === true ? addPollAnswer(postId, optionId, typed) : null;
 
         // Whether the voter is a new or 12-word account now, kept with the vote (engine/probation.ts pollVoterNewOrWords).
@@ -2367,6 +2373,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
             deleted = true;
             db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'").run(postId);
             if (eventRow) db.prepare("UPDATE posts SET event_state = 'cancelled' WHERE id = ?").run(postId);
+            dropPollOtherWords(postId);
         }
     });
     if (!deleted) return false;

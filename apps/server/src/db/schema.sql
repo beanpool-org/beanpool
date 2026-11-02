@@ -401,7 +401,8 @@ CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubke
 -- that a member has answered (option_id 'sealed', no signature), and the choice and any typed words are here. There is no
 -- voter column and no time, the id is random, and WITHOUT ROWID keeps no insertion order, so nothing here leads to a
 -- person or says who came first. On an open vote this holds only the typed words, reached from poll_votes.other_answer_id.
--- words is NULL on a plain answer, and once an owner removes it (words_removed 1: the vote still counts).
+-- words is NULL on a plain answer, and once it is removed (words_removed 1: the vote still counts): by an owner, with its
+-- poll, or with an open vote's voter's account.
 CREATE TABLE IF NOT EXISTS poll_answers (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     id TEXT NOT NULL,

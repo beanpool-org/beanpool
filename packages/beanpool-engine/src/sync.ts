@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { freeTagsOf, parseReachPeers } from '@beanpool/core';
+import { freeTagsOf, parseReachPeers, pollOtherOption } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -1041,7 +1041,8 @@ function postsWithAnswers(db: Db, rows: any[]): MarketplacePost[] {
     }
     return rows.map((row) => {
         const post = postOfRow(row);
-        return answersOf.has(row.id) ? { ...post, pollAnswers: answersOf.get(row.id) } as MarketplacePost : post;
+        // Said even when it is none: the importer replaces a poll's rows with this list, so a last line taken back goes there too.
+        return pollOtherOption(post.pollOptions) ? { ...post, pollAnswers: answersOf.get(row.id) ?? [] } as MarketplacePost : post;
     });
 }
 

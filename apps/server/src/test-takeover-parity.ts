@@ -143,6 +143,12 @@ async function child(): Promise<void> {
             stopPricingAggregatorWorker();
             return port;
         },
+        /** Which of `needles` this node's database or its WAL holds, byte for byte. Checkpoints nothing. */
+        'on-disk': async (a: { needles: string[] }) => {
+            const read = (f: string) => { try { return fs.readFileSync(path.join(process.env.BEANPOOL_DATA_DIR!, f)); } catch { return Buffer.alloc(0); } };
+            const files = [read('state.db'), read('state.db-wal')];
+            return a.needles.filter((n) => files.some((bytes) => bytes.includes(Buffer.from(n, 'utf8'))));
+        },
         /** One cycle of the pricing guide's hourly worker: it prices each item from the listings this server counts. */
         'pricing-cycle': async () => {
             const { runPricingAggregationCycle } = await import('./pricing-aggregator.js');
@@ -476,6 +482,17 @@ async function main(): Promise<void> {
         built('Eve types an answer', await S_(eve, `/api/marketplace/posts/${otherPoll.id}/vote`, {
             optionId: otherPoll.pollOptions.find((o: { other?: boolean }) => o.other).id, otherWords: 'A bus on Sundays',
         }));
+        // An open vote's only typed line, and a poll with a line, both on the standby by the next delta: the last delta takes
+        // the one back and removes the other, and the standby must lose them as the main server did.
+        const isOther = (o: { other?: boolean }) => o.other === true;
+        const takenBack = built('Cy posts an open vote with a typed Other', await S_(cy, '/api/marketplace/posts', {
+            type: 'poll', title: 'Which Saturday?', description: 'Tell us', authorPublicKey: cy.pk, credits: 0, pollOptions: ['First', 'Second'], pollOther: true, pollOpenVote: true,
+        })).post;
+        built('Eve types an answer on it', await S_(eve, `/api/marketplace/posts/${takenBack.id}/vote`, { optionId: takenBack.pollOptions.find(isOther).id, otherWords: 'The one after' }));
+        const removedPoll = built('Dee posts a poll with a typed Other', await S_(dee, '/api/marketplace/posts', {
+            type: 'poll', title: 'Which hall?', description: 'Tell us', authorPublicKey: dee.pk, credits: 0, pollOptions: ['Old', 'New'], pollOther: true, pollOpenVote: true,
+        })).post;
+        built('Eve types an answer on that', await S_(eve, `/api/marketplace/posts/${removedPoll.id}/vote`, { optionId: removedPoll.pollOptions.find(isOther).id, otherWords: 'The barn' }));
         const disputed = await deal(eve, cy, cyOffer.id, false);
         built('the admin resolves a dispute over it', await A(`/api/local/admin/disputes/${disputed}/resolve`, { action: 'release_to_seller', reason: 'The repair was done' }));
         built('Bo recategorises his listing', await S_(bo, '/api/marketplace/posts/update', { id: boOffer.id, authorPublicKey: bo.pk, category: 'garden' }));
@@ -562,6 +579,8 @@ async function main(): Promise<void> {
         built('Bo answers, with the empty metadata a hand-made request can send', await S_(bo, '/api/messages/send', {
             conversationId: convoId, authorPubkey: bo.pk, ...lockedDm(), metadata: '',
         }));
+        built('Eve changes her vote, and her typed line goes with it', await S_(eve, `/api/marketplace/posts/${takenBack.id}/vote`, { optionId: takenBack.pollOptions.find((o: { other?: boolean }) => !o.other).id }));
+        built('Dee removes her poll, and its typed lines go with it', await S_(dee, '/api/marketplace/posts/remove', { id: removedPoll.id, authorPublicKey: dee.pk }));
         await offer(hal, 'Dog walking', 2);
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;
         built('Cy rates Kip for the tune-up, with no comment', await S_(cy, '/api/ratings', { targetPubkey: kip.pk, stars: 5, transactionId: tuneUpDeal }));
@@ -583,6 +602,9 @@ async function main(): Promise<void> {
         const priced = await main.send('pricing-cycle');
         require_(priced.updatedCount > 0, `M: the pricing guide's hourly cycle prices items from the community's listings (${JSON.stringify(priced)})`);
         await pull('the last delta');
+        const typedLeft = await standby.send('on-disk', { needles: ['The one after', 'The barn', 'A bus on Sundays'] }) as string[];
+        assert(typedLeft.length === 1 && typedLeft[0] === 'A bus on Sundays',
+            `the standby keeps the line still standing, and neither its database nor its WAL holds the two the last delta took (${typedLeft.join(', ')})`);
 
         // ── 6. M dies; its twin T starts from its data directory ──
         console.log('\n— 6. the main server is killed; its twin starts from a copy of its data —');

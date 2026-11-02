@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { getPosts, readsAsMember, type MarketplacePost } from '@beanpool/engine';
 import { pollOtherOption, wordsFor, word } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { bumpPostsVersion } from './versions.js';
 import { isNodeOwner } from './node-roles.js';
 import { marketplacePostOutOfSight } from './post-sight.js';
@@ -105,11 +106,46 @@ export function removePollOtherAnswer(postId: string, answerId: string, actor: s
         db.prepare('UPDATE poll_answers SET words = NULL, words_removed = 1 WHERE post_id = ? AND id = ?').run(postId, answerId);
         // A standby finds it by the poll (replication-manifest poll_answers), and a read's cached copy goes with this.
         db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(nowIso, postId);
-        db.prepare(`UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-            WHERE json_valid(disclosure) AND json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.postId') = ?
-              AND json_extract(disclosure, '$.answerId') = ? AND (status = 'pending' OR status IS NULL)`).run(POLL_ANSWER_DISCLOSURE_KIND, postId, answerId);
+        closeLineReports(postId, answerId);
     })();
     bumpPostsVersion();
+    truncateWalAfterDelete('a typed answer was removed');
+}
+
+/** What waits on a poll's lines, done with: one line's reports, or with none named every line's. */
+function closeLineReports(postId: string, answerId: string | null = null): void {
+    db.prepare(`UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE json_valid(disclosure) AND json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.postId') = ?
+          AND (? IS NULL OR json_extract(disclosure, '$.answerId') = ?) AND (status = 'pending' OR status IS NULL)`).run(POLL_ANSWER_DISCLOSURE_KIND, postId, answerId, answerId);
+}
+
+/**
+ * A poll taken down takes its words, in the caller's transaction. Nothing hard-deletes a poll and foreign keys are off (db/db.ts),
+ * so they would otherwise stay in this table and on every standby, for nobody to read. The rows stay, as its ballots and its
+ * counts do. The removal moves the poll, so a standby hears.
+ */
+export function dropPollOtherWords(postId: string): void {
+    const gone = db.prepare('UPDATE poll_answers SET words = NULL, words_removed = 1 WHERE post_id = ? AND words IS NOT NULL').run(postId);
+    if (gone.changes === 0) return;
+    closeLineReports(postId);
+    truncateWalAfterDelete('a poll went, with its typed answers');
+}
+
+/**
+ * A deleted account's lines, where a row says which they are: an open vote names its voter, so it leads to their words, and
+ * those go as every line they wrote does (engine/message-tombstone.ts). A sealed answer can't be found, which the guide tells
+ * them. The vote still counts. In the caller's transaction, stamped `at` so a standby hears.
+ */
+export function dropOpenVoteWordsOf(publicKey: string, at: string): void {
+    const lines = db.prepare('SELECT post_id, other_answer_id FROM poll_votes WHERE voter_pubkey = ? AND other_answer_id IS NOT NULL')
+        .all(publicKey) as { post_id: string; other_answer_id: string }[];
+    const blank = db.prepare('UPDATE poll_answers SET words = NULL, words_removed = 1 WHERE post_id = ? AND id = ? AND words IS NOT NULL');
+    const move = db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?');
+    for (const line of lines) {
+        blank.run(line.post_id, line.other_answer_id);
+        move.run(at, line.post_id);
+        closeLineReports(line.post_id, line.other_answer_id);
+    }
 }
 
 /**

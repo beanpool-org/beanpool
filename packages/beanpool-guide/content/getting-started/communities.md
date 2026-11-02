@@ -83,7 +83,7 @@ Your other communities work as before.
 - Tap the bean at the top left. The **BeanPool** sheet opens, with **Your communities** near the top.
 - Tap the one you want.
 
-A small number beside a community shows how many alerts it has sent you since you last had it open. Tapping an alert from one of your other communities switches to that community and opens the alert there. See "Notifications".
+A small number beside a community shows how many unread messages wait there, as far as your phone has heard. Tapping an alert from one of your other communities switches to that community and opens the alert there. See "Notifications".
 
 You can also switch in **Settings**, under **System**, then **Saved communities**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to this community** on another one to move to it.
 

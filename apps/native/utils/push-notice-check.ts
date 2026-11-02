@@ -65,7 +65,7 @@ import {
 } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
-import { readPushPins, type PushPin, type PushPins } from './push-pins';
+import { communityAddress, readKeptCommunities, readPushPins, type PushPin, type PushPins } from './push-pins';
 import { vaultPushTokenStoreKey } from './storage-keys';
 
 /** What a tap on a notice the phone can't trust shows, once (a word() key: components/PushNoticeWarning.tsx t()s it). */
@@ -77,6 +77,9 @@ export const UNSIGNED_NOTICE_WORDS = { title: PUSH_NOTICE_TITLE, body: word('The
 
 /** `data` of a notice the app posts itself: one shown in a push's place, and the sync's (sync-notices.ts). */
 export const LOCAL_NOTICE_DATA = { bpLocal: 1 } as const;
+
+/** `data.type` of the app's own notice that messages wait at another community (other-communities-unread.ts): `data.url` is it. */
+export const UNREAD_NOTICE_TYPE = 'unread-elsewhere';
 
 /** Which notice ids this phone has shown while open, and which it has opened from a tap: id → the notice's time. */
 export const NOTICE_LEDGER_STORE_KEY = 'beanpool_push_notice_ledger';
@@ -168,6 +171,8 @@ export type TapDecision =
     | { kind: 'settings' }
     /** The app's own notice of a request to join, or of the answer to one: where it is answered ({@link LOCAL_NOTICE_ROUTES}). */
     | { kind: 'route'; route: NoticeRoute }
+    /** The app's own notice that messages wait at a community this phone keeps: its Chat. `active`: the phone is set to it. */
+    | { kind: 'unread'; community: string; active: boolean }
     /** Open the app where it was. */
     | { kind: 'nothing'; reason: DropReason | 'local' }
     /** Go nowhere, and show {@link FORGED_NOTICE_LINE}. */
@@ -250,6 +255,19 @@ function localNoticeRoute(data: unknown): NoticeRoute | null {
     const type = asObject(data)?.type;
     return typeof type === 'string' && Object.prototype.hasOwnProperty.call(LOCAL_NOTICE_ROUTES, type)
         ? LOCAL_NOTICE_ROUTES[type as keyof typeof LOCAL_NOTICE_ROUTES] : null;
+}
+
+/**
+ * The app's own notice that messages wait at a community, as a tap's decision; null for any other notice. A community the
+ * phone no longer keeps opens nothing, as a forgotten community's alerts don't.
+ */
+async function unreadTap(data: unknown, storage: Storage): Promise<TapDecision | null> {
+    const d = asObject(data);
+    if (d?.type !== UNREAD_NOTICE_TYPE) return null;
+    const community = communityAddress(d.url);
+    const { anchor, kept } = await readKeptCommunities(storage);
+    if (!community || !kept.includes(community)) return { kind: 'nothing', reason: 'local' };
+    return { kind: 'unread', community, active: community === anchor };
 }
 
 async function vaultHasToken(ctx: NoticeContext): Promise<boolean> {
@@ -452,10 +470,13 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
             if (checked.reason !== 'other-community') return refuse(checked.reason);
         }
         // The app's own notices carry no target: it opens where it was. The copy it showed of the vault's notice opens
-        // Settings, as the vault's own push does, and the sync's notices of requests to join open where they are
-        // answered; nothing from outside can post a notice of the app's own.
+        // Settings, as the vault's own push does, the sync's notices of requests to join open where they are answered, and
+        // its notice that messages wait at another community opens that community's Chat; nothing from outside can post a
+        // notice of the app's own.
         if (!n.remote) {
             if (vaultNoticeType(n.data)) return { kind: 'settings' };
+            const unread = await unreadTap(n.data, ctx.storage);
+            if (unread) return unread;
             const route = localNoticeRoute(n.data);
             return route ? { kind: 'route', route } : { kind: 'nothing', reason: 'local' };
         }
@@ -577,14 +598,15 @@ export async function noticeDetails(community: string, id: string, account: Acco
  * from the community the phone is set to opens here (`navigate`). One from another community the phone keeps goes to
  * `openIn` (push-notice-switch.ts `openNoticeIn`), which moves the phone there unless something holds it, and opens it
  * there: the screens show the community the phone is set to. `openIn` asks for the route only once it is going, so a
- * switch that is held asks that community nothing. Returns what was decided. Never throws.
+ * switch that is held asks that community nothing. The app's own notice that messages wait at a community goes the same
+ * way, to that community's Chat, with no id: it is no notice of that community's. Returns what was decided. Never throws.
  */
 export async function followTap(
     n: IncomingNotice,
     ctx: Omit<NoticeContext, 'recipient'> & {
         account: Account | null;
         detailsTimeoutMs?: number;
-        openIn: (community: string, id: string, route: () => Promise<NoticeRoute>) => Promise<unknown>;
+        openIn: (community: string, id: string | null, route: () => Promise<NoticeRoute>) => Promise<unknown>;
     },
     navigate: (route: NoticeRoute) => void,
 ): Promise<TapDecision> {
@@ -600,6 +622,9 @@ export async function followTap(
             navigate('/(tabs)/settings');
         } else if (decision.kind === 'route') {
             navigate(decision.route);
+        } else if (decision.kind === 'unread' && ctx.account) {
+            if (decision.active) navigate('/(tabs)/chats');
+            else await ctx.openIn(decision.community, null, async () => '/(tabs)/chats');
         } else if (decision.kind === 'warn') {
             warnAboutNotice();
         }

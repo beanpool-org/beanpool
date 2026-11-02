@@ -27,7 +27,7 @@ vi.mock('expo-crypto', async () => {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { markNoticeShown, postNoticesFromSync, KNOCK_ROLE_RECHECK_MS, SYNC_NOTICE_MAX_AGE_MS, type LocalNotice } from '../sync-notices';
+import { markNoticeShown, postNoticesFromSync, KNOCK_ROLE_RECHECK_MS, SYNC_NOTICE_MAX_AGE_MS, SYNC_NOTICES_TIMEOUT_MS, type LocalNotice } from '../sync-notices';
 import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY } from '../storage-keys';
 import { pushNoticeWords } from '@beanpool/core';
 import { checkTap, checkWhileOpen, LOCAL_NOTICE_DATA } from '../push-notice-check';
@@ -423,5 +423,36 @@ describe('requests to join, from the background sync', () => {
         // The unseen notices, three answers and the role: asked side by side, so the whole waits one deadline, not five.
         expect(requests).toHaveLength(5);
         expect(took).toBeLessThan(900);
+    });
+
+    it('the deadline is still 8 seconds in total with the round of the other communities beside them, and it is the same deadline', async () => {
+        expect(SYNC_NOTICES_TIMEOUT_MS).toBe(8000);
+        vi.useFakeTimers();
+        try {
+            // Every read hangs until it is aborted.
+            vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            })));
+            const { postAllNoticesFromSync } = await import('../sync-notices');
+            let roundCut = false;
+            const round = vi.fn((signal: AbortSignal) => new Promise<number>((resolve) => {
+                signal.addEventListener('abort', () => { roundCut = true; resolve(0); });
+            }));
+            const settled = vi.fn();
+            void postAllNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (x) => { posted.push(x); } }, round).then(settled);
+            await vi.advanceTimersByTimeAsync(7999);
+            expect(round).toHaveBeenCalledTimes(1);
+            expect(settled).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(roundCut).toBe(true);
+            expect(settled).toHaveBeenCalledWith(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('what the round posted counts with the rest', async () => {
+        const { postAllNoticesFromSync } = await import('../sync-notices');
+        expect(await postAllNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (x) => { posted.push(x); } }, async () => 2)).toBe(2);
     });
 });

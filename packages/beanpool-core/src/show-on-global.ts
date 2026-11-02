@@ -32,9 +32,11 @@
  * - **A phone and a browser on one account.** Each keeps its own pairs and neither knows the other, so the copy's id says which
  *   listing it is for, and only to the key itself ({@link copyIdOf}): both work out the same id, a first send reads what is
  *   there first and takes it up, and two first sends at once are one row. Each tends it; what they send is the same, and a
- *   copy taken down by one is left down by the other at its next look. The one thing that can't cross: a Stop showing on one
- *   device while the listing is off the board and the other holds the rest. Nothing is up on global to say so, and the other
- *   device brings it back once, where it reads Shown with Stop showing beside it.
+ *   copy taken down by one is left down by the other at its next look. A device that fell behind holds an id the other has moved
+ *   on from, so a Stop showing goes after the listing, not one id, and never says it is done while a read can find the copy up
+ *   ({@link CopyKeeper.stopShowing}). The one thing that can't cross: a Stop showing on one device while the listing is off the
+ *   board and the other holds the rest. Nothing is up on global to say so, and the other device brings it back once, where it
+ *   reads Shown with Stop showing beside it.
  */
 import { roundToArea } from './geo.js';
 import type { RepeatPattern } from './event-repeat.js';
@@ -108,7 +110,7 @@ export interface CopyPair {
     /** The first photo URL last sent: a new one is a new photo. */
     photo: string;
     skips: string[];
-    /** The event left the board, and global hasn't heard yet. */
+    /** The copy is coming down, and global hasn't said it is: `tendCopies` asks again. */
     leaving?: boolean;
     /**
      * The member is on holiday at home: the copy comes down, and goes back up when they're back. With `leaving`, global hasn't
@@ -599,18 +601,44 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         if (now) await repeatDates(now, home, identity, deps).catch(() => {});
     }
 
+    /** Asks global to take one copy down. `later` when it didn't answer. */
+    function askRemove(id: string, identity: I, deps: CopyDeps<I>): ReturnType<typeof answerOf> {
+        return withTimeout(async (signal) => answerOf(await deps.post(deps.global, `${POSTS_PATH}/remove`, { id, authorPublicKey: identity.publicKey }, identity, signal)))
+            .catch(() => 'later' as const);
+    }
+
     /** Asks global to take the copy down, the pair marked first. False when global didn't answer, and it stays marked. */
     async function askDown(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean> {
         await savePair({ ...pair, leaving: true });
-        const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, `${POSTS_PATH}/remove`, { id: pair.copyId, authorPublicKey: identity.publicKey }, identity, signal)))
-            .catch(() => 'later' as const);
-        return answer !== 'later';
+        return (await askRemove(pair.copyId, identity, deps)) !== 'later';
     }
 
-    /** The copy comes down and the pair goes. Global not answering, `tendCopies` tries again. A resting pair has nothing up. */
+    /**
+     * Is nothing of this listing left up, from this pair's id on? A copy found up comes down. False where global didn't say, or
+     * wouldn't take it down. One read, of at most {@link COPY_IDS_LOOKED_AT} ids. A new tick on this device is left alone: what is
+     * up past a pair on its way out is what the member has asked for since.
+     */
+    async function nothingLeftUp(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean> {
+        const ticked = (await readPairs()).some((p) => p.homeId === pair.homeId && p.publicKey === pair.publicKey && p.copyId !== pair.copyId && !p.leaving);
+        if (ticked) return true;
+        const place = await placeOf(pair, identity, deps).catch(() => 'later' as const);
+        if (place === 'later') return false;
+        if (!place.up) return true;
+        const answer = await askRemove(place.id, identity, deps);
+        return answer !== 'later' && !('refused' in answer);
+    }
+
+    /**
+     * The copy comes down and the pair goes. It goes after the listing, not one id: the member's other device may have moved the
+     * copy on (a rest and its return, a new tick), and global answers a remove of the id left behind as it does the first. False
+     * when global didn't answer or the read can't say the copy is down: the pair stays `leaving` and `tendCopies` tries again.
+     * A resting pair has nothing of its own up, so global is only read, for the other device having come back.
+     */
     async function takeDown(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean> {
         const nothingUp = pair.resting && !pair.leaving;
-        if (!nothingUp && !(await askDown({ ...pair, resting: false }, identity, deps))) return false;
+        if (nothingUp) await savePair({ ...pair, resting: false, leaving: true });
+        else if (!(await askDown({ ...pair, resting: false }, identity, deps))) return false;
+        if (!(await nothingLeftUp(pair, identity, deps))) return false;
         await dropPair(pair);
         return true;
     }
@@ -634,11 +662,13 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     /**
      * Stop showing, and a cancel at home: the copy goes, and the pair with it, or the next rest brings the copy back. False when
      * global didn't answer, and it is tried again. `id` is the home event's from the host's page and the copy's from its own
-     * (a deletion hands on whichever it was given), which may be an id from before a rest.
+     * (a deletion hands on whichever it was given), which may be an id from before a rest. A pair already on its way out is
+     * asked after again: its copy may still be up, so it can't answer true by being out of sight.
      */
     async function stopShowing(id: string, identity: I, deps: CopyDeps<I> = liveDeps): Promise<boolean> {
-        const pair = (await readPairs()).find((p) => p.publicKey === identity.publicKey && stillTheirs(p)
+        const named = (await readPairs()).filter((p) => p.publicKey === identity.publicKey
             && (p.homeId === id || p.copyId === id || p.earlierIds?.includes(id)));
+        const pair = named.find(stillTheirs) ?? named[0];
         return pair ? takeDown(pair, identity, deps) : true;
     }
 
@@ -678,7 +708,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         const holidays = new Map<string, Promise<boolean | 'later'>>();
         for (const { copyId } of (await readPairs()).filter((p) => p.publicKey === identity.publicKey)) {
             try {
-                const pair = await storedPair(copyId);
+                let pair = await storedPair(copyId);
                 if (!pair) continue;
                 if (pair.leaving) {
                     // The rest's retry asks again: reports may have held the copy since the first remove went unanswered.
@@ -700,13 +730,25 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                 if (!rests && !holidays.has(pair.home)) holidays.set(pair.home, onHoliday(pair, identity, deps));
                 const away = rests || await holidays.get(pair.home);
                 if (away === 'later') continue;
-                // About to rest a copy that has landed: taken down behind this device (the member's other one, a moderator), it stays
-                // down. A rest can't tell, since global answers a second remove as it does the first, and its return would post a new one.
-                if (away && pair.sent && !pair.resting && (await forgetIfGone(pair, identity, deps).catch(() => null)) === false) continue;
+                // About to rest a copy that has landed, by global's word on the listing. Taken down behind this device (the member's other
+                // one, a moderator), it stays down: a rest can't tell, since global answers a second remove as it does the first, and
+                // its return would post a new one. Moved on by the other device, it is this rest's: let go, it stays up with the listing
+                // off the board until that device next opens. Global not saying, the rest waits: it is the step that can't be taken back.
+                if (away && pair.sent && !pair.resting) {
+                    const place = await placeOf(pair, identity, deps).catch(() => 'later' as const);
+                    if (place === 'later') continue;
+                    if (!place.up) {
+                        await dropPair(pair);
+                        continue;
+                    }
+                    const moved = await movedTo(pair, place);
+                    if (!moved) continue;
+                    pair = moved;
+                }
                 // Held by global's reports, or global didn't say: the copy stays as it is and the rest waits.
                 if (away && !pair.resting && await restMustWait(pair, identity, deps)) continue;
                 // Home may have taken a minute to say: only what is still stored, and not on its way out, goes on from here.
-                const still = await storedPair(copyId);
+                const still = await storedPair(pair.copyId);
                 if (!still || still.leaving) continue;
                 if (away) {
                     if (!still.resting) await restCopy(still, identity, deps);

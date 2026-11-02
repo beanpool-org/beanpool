@@ -53,7 +53,8 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 
-import { copyPriceLine, eventCopyOf, repeatPatternFor, roundToArea } from '@beanpool/core';
+import { copyIdOf as copyIdByKey, copyPriceLine, eventCopyOf, makeCopyKeeper, repeatPatternFor, roundToArea, type CopyPair, type CopyStore } from '@beanpool/core';
+import { memberSigner } from '../crypto';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
 import { fetchedPostPhoto } from '../post-photo';
@@ -150,6 +151,8 @@ const phoneToLocal: string[] = [];
 let globalDown = false;
 /** The next POST to global's posts route reaches it, and its answer is lost. */
 let loseNextCreate = false;
+/** Global answers everything but a read of several ids at once: a look along a listing's ids. */
+let globalHidesIdsRead = false;
 /** Where the home community says it lives now, as a community that moved to a new main name does. */
 let mainAddress: string | null = null;
 /** The home community answers everything but what the member's preferences are. */
@@ -171,6 +174,7 @@ beforeAll(async () => {
             throw new TypeError(`Network request failed: the phone contacted ${href}`);
         }
         if (toGlobal && globalDown) throw new TypeError('Network request failed');
+        if (toGlobal && globalHidesIdsRead && url.searchParams.has('ids')) return new Response('{}', { status: 503 });
         if (toLocal) phoneToLocal.push(`${String(init?.method ?? 'GET')} ${url.pathname}${url.search}`);
         if (toLocal && homeHidesPreferences && url.pathname === '/api/members/preferences') return new Response('{}', { status: 503 });
         if (toLocal && homeHidesListings && url.pathname === '/api/marketplace/posts') return new Response('{}', { status: 503 });
@@ -197,6 +201,7 @@ beforeEach(async () => {
     mem.async.clear();
     globalDown = false;
     loseNextCreate = false;
+    globalHidesIdsRead = false;
     mainAddress = null;
     homeHidesPreferences = false;
     homeHidesListings = false;
@@ -1730,4 +1735,161 @@ describe('a new tick after Stop showing: global keeps the removed row and reads 
         await stopThenTick(home, me);
         expect((await pairOf(home.id, me.publicKey))?.generation).toBe(2);
     }, START_MS);
+});
+
+describe('Stop showing takes the copy down, whichever device stops it: a phone and a browser on one account, each with its own store', () => {
+    /** The other device: the file both apps run, with its own pairs. The phone is this suite's own keeper, whose pairs are in mem. */
+    const otherDevice = () => {
+        let pairs: CopyPair[] = [];
+        const store: CopyStore = { read: async () => pairs, change: async (edit) => { pairs = edit(pairs); } };
+        return {
+            pairs: () => pairs,
+            ...makeCopyKeeper<BeanPoolIdentity>({
+                store, deps: deps(), copyId: (homeId, generation, identity) => copyIdByKey(homeId, generation, memberSigner(identity.privateKey)),
+                plainOrigin: (url) => url, isEventEnded: () => false,
+            }),
+        };
+    };
+    const kinds: Array<[string, (me: BeanPoolIdentity) => Promise<HomeEvent>]> = [
+        ['an Offer', (me) => listingAtHome(me, 'Seed potatoes')],
+        ['a Need', async (me) => {
+            await listingAtHome(me, 'Spare jars'); // A member lists an Offer before they can post a Need.
+            return listingAtHome(me, 'A hand with fencing', { type: 'need' });
+        }],
+    ];
+    const [, pause, resume] = homeRests[0];
+    const bothTicked = async (name: string, make: (me: BeanPoolIdentity) => Promise<HomeEvent>) => {
+        const me = await memberOfBoth(name);
+        const home = await make(me);
+        const browser = otherDevice();
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        expect(await browser.showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        expect(await liveCopies(me)).toHaveLength(1);
+        return { me, home, browser };
+    };
+    /** The phone goes round a rest and its return, and the browser isn't opened: the phone holds id 1, the browser still id 0. */
+    const phoneMovesOn = async (me: BeanPoolIdentity, home: HomeEvent) => {
+        await pause(me, home);
+        await tendCopies(me, deps());
+        await resume(me, home);
+        await tendCopies(me, deps());
+        expect((await pairOf(home.id, me.publicKey))?.generation).toBe(1);
+        expect(await liveCopies(me)).toHaveLength(1);
+    };
+
+    it.each(kinds)('%s: the browser missed a rest and its return, then Stop on the browser', async (kind, make) => {
+        const { me, home, browser } = await bothTicked(`Behind ${kind}`, make);
+        await phoneMovesOn(me, home);
+        const later = await copyIdOf(home.id, me);
+        expect(await browser.stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+        expect((await copyRow(later)).status).toBe('cancelled');
+        expect(browser.pairs()).toEqual([]);
+    }, START_MS);
+
+    it.each(kinds)('%s: Stop and a new tick on the browser, then Stop on the phone', async (kind, make) => {
+        const { me, home, browser } = await bothTicked(`Twice ${kind}`, make);
+        expect(await browser.stopShowing(home.id, me, deps())).toBe(true);
+        expect(await browser.showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        expect(browser.pairs()[0].generation).toBe(1);
+        expect(await stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+    }, START_MS);
+
+    it.each(kinds)('%s: the listing removed at home in the browser', async (kind, make) => {
+        const { me, home, browser } = await bothTicked(`Gone ${kind}`, make);
+        await phoneMovesOn(me, home);
+        expect((await signedPost(local.url, '/api/marketplace/posts/remove', { id: home.id, authorPublicKey: me.publicKey }, me)).ok).toBe(true);
+        expect(await browser.stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+    }, START_MS);
+
+    it.each(kinds)('%s: the phone holds the copy and sleeps, the listing is paused, and the browser takes it up and rests it', async (kind, make) => {
+        const { me, home, browser } = await bothTicked(`Sleeps ${kind}`, make);
+        await phoneMovesOn(me, home);
+        await pause(me, home);
+        await browser.tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(browser.pairs()[0]).toMatchObject({ resting: true, generation: 2 });
+        await resume(me, home);
+        await browser.tendCopies(me, deps());
+        expect(await liveCopies(me)).toHaveLength(1);
+        expect(await stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+    }, START_MS);
+
+    it.each(kinds)('%s: the browser resting at the id the phone came back on, then Stop on the browser', async (kind, make) => {
+        const { me, home, browser } = await bothTicked(`Waits ${kind}`, make);
+        await pause(me, home);
+        await Promise.all([tendCopies(me, deps()), browser.tendCopies(me, deps())]);
+        await resume(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toHaveLength(1);
+        expect(browser.pairs()[0].resting).toBe(true);
+        expect(await browser.stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+    }, START_MS);
+
+    it.each(kinds)('%s: global gives the read no answer, so the Stop says it will come down, and the tend brings it down', async (kind, make) => {
+        const { me, home, browser } = await bothTicked(`Unread ${kind}`, make);
+        await phoneMovesOn(me, home);
+        globalHidesIdsRead = true;
+        expect(await browser.stopShowing(home.id, me, deps())).toBe(false);
+        expect(browser.pairs()[0].leaving).toBe(true);
+        expect(await liveCopies(me)).toHaveLength(1);
+        globalHidesIdsRead = false;
+        await browser.tendCopies(me, deps());
+        expect(await liveCopies(me)).toEqual([]);
+        expect(browser.pairs()).toEqual([]);
+    }, START_MS);
+
+    it('an event: the browser missed a holiday and its end, then Stop on the browser', async () => {
+        const { me, home, browser } = await bothTicked('Behind event', (who) => eventAtHome(who, 'Seed swap'));
+        const [, away, back] = homeRests[3];
+        await away(me, home);
+        await tendCopies(me, deps());
+        await back(me, home);
+        await tendCopies(me, deps());
+        expect(await liveCopies(me)).toHaveLength(1);
+        expect(await browser.stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toEqual([]);
+    }, START_MS);
+
+    describe('the control: one device on its own', () => {
+        const stopCost = async (me: BeanPoolIdentity, home: HomeEvent) => {
+            const before = (await global_.control<string[]>('requests')).length;
+            expect(await stopShowing(home.id, me, deps())).toBe(true);
+            return (await global_.control<string[]>('requests')).slice(before).map((r) => r.replace(/\?.*$/, ''));
+        };
+
+        it.each(kinds)('%s: Stop is the remove and one read', async (kind, make) => {
+            const me = await memberOfBoth(`Alone ${kind}`);
+            const home = await make(me);
+            await showOnGlobal(home, local.url, me, deps());
+            expect(await stopCost(me, home)).toEqual(['POST /api/marketplace/posts/remove', 'GET /api/marketplace/posts']);
+            expect(await liveCopies(me)).toEqual([]);
+        }, START_MS);
+
+        it.each(kinds)('%s: Stop after a rest and its return', async (kind, make) => {
+            const me = await memberOfBoth(`Alone again ${kind}`);
+            const home = await make(me);
+            await showOnGlobal(home, local.url, me, deps());
+            await phoneMovesOn(me, home);
+            expect(await stopCost(me, home)).toEqual(['POST /api/marketplace/posts/remove', 'GET /api/marketplace/posts']);
+            expect(await liveCopies(me)).toEqual([]);
+        }, START_MS);
+
+        it('Stop while resting is one read, and tells global nothing', async () => {
+            const me = await memberOfBoth('Alone resting');
+            const home = await listingAtHome(me, 'Pumpkins');
+            await showOnGlobal(home, local.url, me, deps());
+            await pause(me, home);
+            await tendCopies(me, deps());
+            expect(await stopCost(me, home)).toEqual(['GET /api/marketplace/posts']);
+            await resume(me, home);
+            await tendCopies(me, deps());
+            expect(await liveCopies(me)).toEqual([]);
+        }, START_MS);
+    });
 });

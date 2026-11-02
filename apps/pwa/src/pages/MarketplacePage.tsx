@@ -4199,7 +4199,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <span className="text-xs font-bold text-orange-950 dark:text-orange-400 break-words">
                                             {tn(freshTodayCount, '{n} fresh listing posted today!', '{n} fresh listings posted today!')}
                                         </span>
-                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-300 font-medium break-words">
+                                        <span className="text-[10px] text-orange-800 dark:text-orange-300 font-medium break-words">
                                             {t('Tap to dismiss • Scroll down to explore')}
                                         </span>
                                     </div>

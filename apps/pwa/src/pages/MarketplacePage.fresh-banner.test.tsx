@@ -90,6 +90,8 @@ describe('MarketplacePage fresh listings banner on web', () => {
         expect(bannerTitle).toBeInTheDocument();
         const bannerSub = screen.getByText('Tap to dismiss • Scroll down to explore');
         expect(bannerSub).toBeInTheDocument();
+        // The instruction has to be read: orange-600 at 80% was 2.44:1 on the banner's light tint.
+        expect(bannerSub.className.split(/\s+/)).toContain('text-orange-800');
 
         // The banner is an interactive button with keyboard focus support
         const bannerBtn = bannerSub.closest('button');

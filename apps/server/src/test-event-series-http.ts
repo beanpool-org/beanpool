@@ -34,6 +34,9 @@
  *     on this date and after the roll; a let-in carries to the next date (the series' note, link and chat, and Going again
  *     is in at once); the waiting count and "let everyone in" go by this date's Going, as the host's list does; "take back
  *     everyone" reaches every let-in, any date (a let-in from last week not Going this date too), and they then read none.
+ * 14. A pin moved into another zone, on what an old client sends and a form whose zone lookup failed: the event keeps its
+ *     clock with its rule, either way across the country and coming back to a place from online, its RSVPs go with it, and
+ *     the roll takes the next date; an instant kept in a new zone takes the rule to the new clock; a nudge changes nothing.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-event-series-http.ts
  */
@@ -659,6 +662,66 @@ async function main(): Promise<void> {
         assert(seen?.eventPrivateNote === undefined && seen?.eventLink === undefined && chat === 403,
             `then ${name} reads no note, no link, the chat refused (got ${JSON.stringify({ note: seen?.eventPrivateNote ?? null, link: seen?.eventLink ?? null, chat })})`);
     }
+
+    // ── 14. A pin moved into another zone ───────────────────────────────────────────────────────
+    console.log('\n── 14. A pin moved into another zone: the clock and the rule stay together ──');
+    // Fri 5 Nov 2027. Neither city has daylight saving: Brisbane is +10, Perth +8.
+    const BRISBANE = { lat: -27.47, lng: 153.03 };
+    const PERTH = { lat: -31.95, lng: 115.86 };
+    const moverMeg = makeIdentity('MoverMeg');
+    const goerGus = makeIdentity('GoerGus');
+    const edit = (id: string, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts/update', { id, authorPublicKey: moverMeg.pubKeyHex, ...body }, moverMeg);
+    const ruleTime = (id: string) => JSON.parse(row(id).event_repeat ?? '{}') as { time?: string; minutes?: number };
+    const moving = await create(moverMeg, { ...BRISBANE, eventPlaceName: 'The hall', eventStartLocal: '2027-11-05T09:28', eventEndLocal: '2027-11-05T11:28', eventTz: 'Australia/Brisbane', eventRepeat: weeklyFri });
+    const movingId = moving.body?.post?.id as string;
+    rsvpEvent(() => {}, movingId, goerGus.pubKeyHex, 'going');
+    // What an old client sends, and a form whose lookup of the pin's zone failed: the pin alone.
+    const west = await edit(movingId, PERTH);
+    const w = row(movingId);
+    assert(west.status === 200 && w.event_tz === 'Australia/Perth' && w.event_start_local === '2027-11-05T09:28' && w.event_end_local === '2027-11-05T11:28',
+        `moved west with no zone or time sent, it takes the pin's zone and keeps 09:28-11:28 (got ${west.status} ${west.error ?? ''} ${w.event_tz} ${w.event_start_local}-${w.event_end_local})`);
+    assert(ruleTime(movingId).time === '09:28' && ruleTime(movingId).minutes === 120 && w.event_start_at === '2027-11-05T01:28:00.000Z',
+        `so the rule and the start say the same clock, and the moment is that clock in Perth (got rule ${ruleTime(movingId).time}, ${w.event_start_at})`);
+    const gusDate = () => (db.prepare('SELECT occurrence_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(movingId, goerGus.pubKeyHex) as any)?.occurrence_at;
+    assert(gusDate() === w.event_start_at && w.event_state === 'updated', `the RSVP goes with the date, and the event reads UPDATED (got ${gusDate()} ${w.event_state})`);
+    rollDueSeries(undefined, Date.parse(w.event_end_at) + 1000);
+    const afterWest = row(movingId);
+    assert(afterWest.event_start_local === '2027-11-12T09:28' && afterWest.event_tz === 'Australia/Perth',
+        `the roll takes the next Friday, never the same date again (got ${afterWest.event_start_local})`);
+    const east = await edit(movingId, BRISBANE);
+    const e = row(movingId);
+    assert(east.status === 200 && e.event_tz === 'Australia/Brisbane' && e.event_start_local === '2027-11-12T09:28' && ruleTime(movingId).time === '09:28' && e.event_start_at === '2027-11-11T23:28:00.000Z',
+        `moved back east it keeps the clock too (got ${east.status} ${east.error ?? ''} ${e.event_start_local}, rule ${ruleTime(movingId).time}, ${e.event_start_at})`);
+    const nudge = await edit(movingId, { lat: BRISBANE.lat + 0.001, lng: BRISBANE.lng });
+    assert(nudge.status === 200 && row(movingId).event_start_at === e.event_start_at && row(movingId).event_start_local === e.event_start_local && row(movingId).event_repeat === e.event_repeat,
+        `a nudge within the zone moves neither the clock nor the rule (got ${nudge.status} ${row(movingId).event_start_local})`);
+    // The moment kept on purpose, by the instant sent with the new zone or the new pin: the rule goes to the new clock.
+    const zoneKept = await edit(movingId, { eventTz: 'Australia/Perth', eventStartAt: e.event_start_at });
+    const z = row(movingId);
+    assert(zoneKept.status === 200 && z.event_start_at === e.event_start_at && z.event_start_local === '2027-11-12T07:28' && ruleTime(movingId).time === '07:28' && ruleTime(movingId).minutes === 120,
+        `a new zone with the instant kept: 07:28 there, and the rule says 07:28 too (got ${zoneKept.status} ${zoneKept.error ?? ''} ${z.event_start_local}, rule ${ruleTime(movingId).time})`);
+    // Darwin is +9:30, with no daylight saving: a third zone, so this is a real move and not a nudge that keeps the zone picked above.
+    const pinKept = await edit(movingId, { lat: -12.46, lng: 130.84, eventStartAt: e.event_start_at });
+    const k = row(movingId);
+    assert(pinKept.status === 200 && k.event_tz === 'Australia/Darwin' && k.event_start_at === e.event_start_at && k.event_start_local === '2027-11-12T08:58' && ruleTime(movingId).time === '08:58',
+        `a new pin's zone with the instant kept, the same (got ${pinKept.status} ${pinKept.error ?? ''} ${k.event_tz} ${k.event_start_local}, rule ${ruleTime(movingId).time})`);
+    const onlineFirst = await create(moverMeg, { lat: undefined, lng: undefined, eventOnline: true, eventStartLocal: '2027-11-19T19:00', eventEndLocal: '2027-11-19T20:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const onlineFirstId = onlineFirst.body?.post?.id as string;
+    const atPlace = await edit(onlineFirstId, { eventOnline: false, ...PERTH, eventPlaceName: 'The hall' });
+    const p = row(onlineFirstId);
+    assert(atPlace.status === 200 && p.event_tz === 'Australia/Perth' && p.event_start_local === '2027-11-19T19:00' && ruleTime(onlineFirstId).time === '19:00',
+        `an online series coming to a pin in another zone keeps its clock and its rule (got ${atPlace.status} ${atPlace.error ?? ''} ${p.event_tz} ${p.event_start_local}, rule ${ruleTime(onlineFirstId).time})`);
+    // A one-off keeps the moment when its pin moves (test-event-times-http), so a rule sent with the pin is read off the clock it lands on.
+    const oneOff = await create(moverMeg, { ...BRISBANE, eventPlaceName: 'The hall', eventStartLocal: '2027-12-03T09:28', eventEndLocal: '2027-12-03T11:28', eventTz: 'Australia/Brisbane' });
+    const oneOffId = oneOff.body?.post?.id as string;
+    const nowWeekly = await edit(oneOffId, { ...PERTH, eventRepeat: weeklyFri });
+    const o = row(oneOffId);
+    assert(nowWeekly.status === 200 && o.event_start_local === '2027-12-03T07:28' && ruleTime(oneOffId).time === '07:28',
+        `a one-off made repeating as its pin moves: the rule takes the clock it now has (got ${nowWeekly.status} ${nowWeekly.error ?? ''} ${o.event_start_local}, rule ${ruleTime(oneOffId).time})`);
+    const nowOnce = await edit(oneOffId, { ...BRISBANE, eventRepeat: null });
+    const once = row(oneOffId);
+    assert(nowOnce.status === 200 && once.event_repeat === null && once.event_tz === 'Australia/Brisbane' && once.event_start_local === '2027-12-03T07:28',
+        `a series made a one-off as its pin moves keeps the clock it had, with no rule left (got ${nowOnce.status} ${nowOnce.error ?? ''} ${once.event_tz} ${once.event_start_local} ${once.event_repeat})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

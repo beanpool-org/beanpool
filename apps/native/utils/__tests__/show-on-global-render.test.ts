@@ -21,18 +21,19 @@ const WIDTH = 320;
 vi.mock('react-native', () => {
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, testID, style, accessibilityState, accessibilityHint, disabled } = props;
+        const { children, onPress, testID, style, accessibilityState, accessibilityHint, disabled, keyboardShouldPersistTaps } = props;
         const attrs: Record<string, unknown> = { 'data-style': JSON.stringify(flat(style)) };
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityState?.checked !== undefined) attrs['aria-checked'] = String(accessibilityState.checked);
         if (accessibilityState?.busy !== undefined) attrs['aria-busy'] = String(accessibilityState.busy);
         if (accessibilityHint) attrs['data-a11y-hint'] = accessibilityHint;
+        if (keyboardShouldPersistTaps) attrs['data-taps'] = keyboardShouldPersistTaps;
         return createElement(tag, attrs, children);
     };
     return {
         Platform: { OS: 'android' }, StyleSheet: { create: <T,>(s: T) => s, hairlineWidth: 1 },
-        View: el('div'), Text: el('span'), Pressable: el('div'),
+        View: el('div'), Text: el('span'), Pressable: el('div'), ScrollView: el('div'),
         Alert: { alert: (...args: unknown[]) => (globalThis as any).__alerts.push(args) },
     };
 });
@@ -52,11 +53,22 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: wo
 vi.mock('expo-router', () => ({ router: { push: (r: string) => world.pushed.push(r) } }));
 vi.mock('../node-post', () => ({ anchorUrl: async () => 'https://mullum.example.org' }));
 vi.mock('../global-entry', () => ({ readGlobalStanding: async () => world.kept, askGlobalStanding: calls.ask }));
+vi.mock('../db', () => ({ deletePost: vi.fn(), reportAbuse: vi.fn() }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('react-native-keyboard-controller', () => ({
+    KeyboardAvoidingView: ({ children, behavior }: { children?: unknown; behavior?: string }) => createElement('div', { 'data-kav': behavior }, children as any),
+}));
+vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
+vi.mock('../../components/PostTagChips', () => ({ PostTagChips: () => null }));
+vi.mock('../../components/ReportReasonBox', () => ({ ReportReasonBox: () => null }));
 vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: calls.stop, stopLaterLine: () => 'It comes down later' }));
 
 import { EventCopyDoor } from '../../components/EventCopyDoor';
-import { ShowOnGlobalHostRow, ShowOnGlobalTick, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
+import { ListingCopyDetail } from '../../components/ListingCopy';
+import { ListingCopyLine } from '../../components/ListingCopyLine';
+import { ShowOnGlobalHostRow, ShowOnGlobalTick, listingForCopy, showListingOnGlobalHint, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
+import { deletePost } from '../db';
 
 const LONG_NAME = 'Mullumbimby and the Brunswick Valley Community Exchange';
 const FROM = { host: 'mullum.example.org', postId: 'p1', name: LONG_NAME, url: 'https://mullum.example.org', door: 'ask' as const };
@@ -311,5 +323,134 @@ describe('the door', () => {
         expect(byId('event-copy-ask')).toBeNull();
         await draw(createElement(EventCopyDoor, { copy: { from: null } }));
         expect(byId('event-copy-ask')).toBeNull();
+    });
+});
+
+describe('a copy of an Offer or a Need', () => {
+    const POST = { id: 'c1', type: 'offer', title: 'Sourdough loaves', description: 'Fresh', author_pubkey: 'hidden', photos: '[]', tags: '', shownCopy: true, shownFrom: FROM, shownPrice: '20 fixed' };
+    const LINE = `20 Beans in ${LONG_NAME} · You can't buy or take this until ${LONG_NAME} welcomes you.`;
+
+    it.each([['light', lightColors], ['dark', darkColors]])('the card\'s line stays inside 320 dp at 1.3× text, %s', async (scheme, colors) => {
+        theme.scheme = scheme;
+        theme.colors = colors;
+        await draw(createElement(ListingCopyLine, { copy: { from: FROM, price: { beans: 20, per: 'fixed' } } }));
+        const line = byId('listing-copy-line')!;
+        expect(line.textContent).toBe(LINE);
+        const box = layOut(byId('floor')!, { width: WIDTH, height: 568 }, { fontScale: 1.3 }).box(line);
+        expect(box.left + box.width).toBeLessThanOrEqual(WIDTH);
+        expect(box.height).toBeGreaterThan(0);
+    });
+
+    it('the page: the line and the door, and no price card, no author, no Message, no Accept', async () => {
+        await draw(createElement(ListingCopyDetail, { post: POST }));
+        const page = byId('listing-copy')!;
+        expect(byId('event-copy-door')!.textContent).toContain(LINE);
+        expect(byId('event-copy-ask')!.textContent).toContain(`Ask to join ${LONG_NAME}`);
+        await press('event-copy-ask');
+        expect(world.pushed).toHaveLength(1);
+        expect(world.pushed[0]).toContain('community-card');
+        expect(page.textContent).not.toMatch(/Accept|Message|Offer to Fulfill|Ask to borrow|POSTED BY|ASKING PRICE|hidden/);
+        expect(byId('listing-copy-report')).not.toBeNull();
+    });
+
+    it('a Need\'s page says it can\'t be answered yet, not bought', async () => {
+        await draw(createElement(ListingCopyDetail, { post: { ...POST, type: 'need' } }));
+        expect(byId('event-copy-door')!.textContent).toContain(`20 Beans in ${LONG_NAME} · You can't answer this until ${LONG_NAME} welcomes you.`);
+        expect(byId('event-copy-door')!.textContent).not.toContain('buy or take');
+    });
+
+    it('the report box stays above the keyboard, and with the keyboard up the first tap on Send lands: the same as EventDetail', async () => {
+        await draw(createElement(ListingCopyDetail, { post: POST }));
+        const kav = host.querySelector('[data-kav]')!;
+        expect(kav).not.toBeNull();
+        expect(kav.getAttribute('data-kav')).toBe('padding');
+        expect(kav.contains(byId('listing-copy-report'))).toBe(true);
+        expect(kav.querySelector('[data-taps]')?.getAttribute('data-taps')).toBe('handled');
+        expect(kav.querySelector('[data-taps]')?.contains(byId('listing-copy-report'))).toBe(true);
+    });
+
+    it('by invite: the line, the door\'s words, and no button that goes nowhere', async () => {
+        await draw(createElement(ListingCopyDetail, { post: { ...POST, shownFrom: { ...FROM, door: 'invite' } } }));
+        expect(byId('event-copy-ask')).toBeNull();
+        expect(byId('listing-copy-from')!.textContent).toContain(`from ${LONG_NAME}`);
+    });
+
+    it('its own author reads it as theirs: what they can do is take it down, and nothing offers them a door', async () => {
+        await draw(createElement(ListingCopyDetail, { post: { ...POST, author_pubkey: world.identity.publicKey } }));
+        expect(byId('listing-copy-own')).not.toBeNull();
+        expect(byId('event-copy-door')).toBeNull();
+        expect(byId('listing-copy-report')).toBeNull();
+    });
+
+    it('a double tap on Stop showing asks once', async () => {
+        const remove = vi.mocked(deletePost);
+        remove.mockReset();
+        remove.mockImplementation(() => new Promise(() => {}) as any);
+        await draw(createElement(ListingCopyDetail, { post: { ...POST, author_pubkey: world.identity.publicKey } }));
+        await press('listing-copy-remove');
+        await press('listing-copy-remove');
+        expect(remove).toHaveBeenCalledTimes(1);
+        remove.mockReset();
+    });
+
+    it('the tick says what goes of a listing, not of an event', async () => {
+        await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: () => {}, listing: true }));
+        expect(byId('show-on-global-tick')!.textContent).toContain(showListingOnGlobalHint());
+        expect(byId('show-on-global-tick')!.textContent).not.toContain('your note');
+    });
+
+    it('a Need\'s tick says it is answered, on the composer and on its page; an Offer\'s is as it was (the control)', async () => {
+        await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: () => {}, listing: true, need: true }));
+        expect(byId('show-on-global-tick')!.textContent).toContain('To answer it, they ask to join.');
+        expect(byId('show-on-global-tick')!.textContent).not.toContain('buy or take');
+        calls.pair.mockImplementation(async () => null);
+        await draw(createElement(ShowOnGlobalHostRow, { event: { id: 'h', title: 'T', type: 'need', status: 'active' }, enabled: true, listing: true }));
+        expect(byId('show-on-global-host')!.textContent).toContain('To answer it, they ask to join.');
+        await draw(createElement(ShowOnGlobalHostRow, { event: { id: 'h', title: 'T', type: 'offer', status: 'active' }, enabled: true, listing: true }));
+        expect(byId('show-on-global-host')!.textContent).toContain('To buy or take it, they ask to join.');
+    });
+
+    it('a member not yet on global hears of the listing\'s page on an Offer or Need, and of the event\'s on an event', async () => {
+        world.kept = 'stranger';
+        await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: () => {}, listing: true }));
+        expect(byId('show-on-global-join')!.textContent).toContain("You can show it from the listing's page once you have.");
+        expect(byId('show-on-global-join')!.textContent).not.toContain('event');
+        await draw(createElement(ShowOnGlobalTick, { enabled: true, checked: false, onChange: () => {} }));
+        expect(byId('show-on-global-join')!.textContent).toContain("You can show it from the event's page once you have.");
+    });
+
+    describe('off the board here, the host\'s page offers nothing', () => {
+        const row = (status: string) => draw(createElement(ShowOnGlobalHostRow, { event: { id: 'h', title: 'T', type: 'offer', status }, enabled: true, listing: true }));
+
+        it.each(['paused', 'pending'])('%s: no offer, and nothing to tap', async (status) => {
+            calls.pair.mockImplementation(async () => null);
+            await row(status);
+            expect(byId('show-on-global-host')).toBeNull();
+            expect(byId('show-on-global-act')).toBeNull();
+        });
+
+        it.each(['paused', 'pending'])('%s with a copy resting: it says so, and Stop showing stays', async (status) => {
+            calls.pair.mockImplementation(async () => ({ copyId: 'c1', resting: true }));
+            await row(status);
+            expect(host.textContent).toContain("It comes down while this is off the board here, and goes back up when it's on again.");
+            expect(host.textContent).toContain('Stop showing');
+        });
+
+        it('on the board, the offer (the control)', async () => {
+            calls.pair.mockImplementation(async () => null);
+            await row('active');
+            expect(byId('show-on-global-act')!.textContent).toContain('Also show this on the global community');
+        });
+
+        it('an event isn\'t held to a listing\'s status (the control)', async () => {
+            calls.pair.mockImplementation(async () => null);
+            await draw(createElement(ShowOnGlobalHostRow, { event: { id: 'e', title: 'T', status: 'pending' }, enabled: true }));
+            expect(byId('show-on-global-act')).not.toBeNull();
+        });
+    });
+
+    it('the row the phone holds reads as show-on-global reads a listing', () => {
+        expect(listingForCopy({ id: 'h', type: 'need', category: 'food', title: 'T', description: 'D', credits: 5, price_type: 'hourly', author_pubkey: 'k', lat: 1, lng: 2, tags: 'food.eggs', free_tags: '', status: 'paused' }, ['/p/0']))
+            .toMatchObject({ id: 'h', type: 'need', credits: 5, priceType: 'hourly', authorPublicKey: 'k', audienceScope: 'public', lat: 1, lng: 2, photos: ['/p/0'], tags: ['food.eggs'], status: 'paused' });
     });
 });

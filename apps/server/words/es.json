@@ -14,5 +14,6 @@
   "This community has a new address": "Esta comunidad tiene una nueva dirección",
   "This community is also at {address}. The old address keeps working.": "Esta comunidad también está en {address}. La dirección anterior sigue funcionando.",
   "To go, ask to join {community}": "Para ir, pide unirte a {community}",
-  "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir."
+  "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir.",
+  "This is shown from another community, so it can't be bought or taken here.": "Esto se muestra desde otra comunidad, así que aquí no se puede comprar ni tomar."
 }

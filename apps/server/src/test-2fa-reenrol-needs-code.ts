@@ -30,7 +30,7 @@ import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
-import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt } from './password-brake.js';
+import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt, sourceClosedUntil } from './password-brake.js';
 import { limiterKeyForIp } from './client-ip.js';
 
 let run = 0, passed = 0;
@@ -240,19 +240,65 @@ async function main() {
         async function measureBackoff(label: string, send: () => Promise<{ status: number; body: any; retryAfter: number }>): Promise<void> {
             resetAdminAuthTarpit();
             set2fa(true);
+            const key = limiterKeyForIp('127.0.0.1');
             const statuses: number[] = [];
             const waits: number[] = [];
             const took401: number[] = [];
             const started = Date.now();
+            let lastClosedUntil = 0;
+            const waitOutClosure = async () => {
+                const remaining = sourceClosedUntil(key) - Date.now();
+                if (remaining > 0) {
+                    assert(remaining <= 10_000, `${label}: sourceClosedUntil wait exceeds safety ceiling (${remaining} ms)`);
+                    await sleep(remaining + 20);
+                }
+            };
+            const handle429 = async (res: { status: number; body: any; retryAfter: number }): Promise<boolean> => {
+                if (!/from your network/.test(res.body.error || '')) return false;
+                waits.push(res.retryAfter);
+                await waitOutClosure();
+                return true;
+            };
             while (waits.length < 2 && statuses.length < 20) {
                 const t0 = Date.now();
-                const r = await send();
+                const reqPromise = send();
+                let probeResult: { status: number; body: any; retryAfter: number } | null = null;
+                let reqSettled = false;
+                reqPromise.finally(() => { reqSettled = true; });
+
+                // When a wrong code engages or extends closure, the server tarpit sleeps (up to 5s)
+                // before returning 401. To avoid racing the closure expiration under heavy CI load or scheduling
+                // delays, dispatch the HTTP probe concurrently while the request is held in the tarpit,
+                // asserting the server returns real HTTP 429 over the wire.
+                while (!reqSettled) {
+                    const closedUntil = sourceClosedUntil(key);
+                    if (closedUntil > Date.now() && closedUntil > lastClosedUntil) {
+                        lastClosedUntil = closedUntil;
+                        probeResult = await send();
+                        break;
+                    }
+                    await sleep(10);
+                }
+
+                const r = await reqPromise;
                 statuses.push(r.status);
                 if (r.status === 401) took401.push(Date.now() - t0);
-                if (r.status === 429) {
-                    if (!/from your network/.test(r.body.error || '')) break;
-                    waits.push(r.retryAfter);
-                    await sleep(r.retryAfter * 1000 + 100);
+
+                if (!probeResult) {
+                    const closedUntil = sourceClosedUntil(key);
+                    if (closedUntil > Date.now() && closedUntil > lastClosedUntil) {
+                        lastClosedUntil = closedUntil;
+                        probeResult = await send();
+                    }
+                }
+
+                const brakedResponse = probeResult ?? (r.status === 429 ? r : null);
+                if (probeResult) {
+                    statuses.push(probeResult.status);
+                    assert(probeResult.status === 429, `${label}: concurrent probe during closure returned ${probeResult.status}, expected 429`);
+                }
+                if (brakedResponse && brakedResponse.status === 429) {
+                    if (!await handle429(brakedResponse)) break;
                 }
             }
             const checkedBeforeBrake = statuses.indexOf(429);

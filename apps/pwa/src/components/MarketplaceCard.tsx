@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { formatNumber, listPhotoUrl, listingChipWords, t, type ListingChip } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, listPhotoUrl, listingChipWords, t, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 
@@ -92,8 +92,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const onPictureError = firstPhoto ? undefined : () => setFailedBanner(bannerUrl);
     // Only actual listing photos should open the zoom lightbox; shop banner is card branding fallback
     const photosToZoom = firstPhoto ? post.photos! : [];
-    // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`).
-    const showPrice = !isPulse && !beansMarked;
+    // A member's copy on the global community: where it is from and its price there, in words, where its author would be.
+    const copy = eventCopyOf(post);
+    // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`). A copy's `credits`
+    // is 0 and no price: its line says what it is at home.
+    const showPrice = !isPulse && !beansMarked && !copy;
     const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
 
     // On the photo: at most ONE status chip, by precedence PENDING > YOU.
@@ -150,6 +153,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const targetGroupName = post.targetGroupName || t('Group');
     const groupScopeBadge = isGroupScope ? t('🔒 Only {group} can see this', { group: targetGroupName }) : null;
     const authorName = post.authorCallsign || t('Anonymous');
+    const copyLine = copy && <p data-testid="listing-copy-line" className="m-0 mt-0.5 text-xs font-semibold text-nature-700 dark:text-nature-300 break-words">{copyPriceLine(copy)}</p>;
     const elderStyleGrid = isPulse
         ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.18)] bg-gradient-to-b from-amber-50/30 to-transparent dark:from-amber-950/20'
         : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
@@ -180,8 +184,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </h3>
                         <span className="text-[10px] text-nature-500 flex items-center gap-1 flex-wrap min-w-0 break-words">
                             {/* One sentence per variant, as the phone's byLine: the name is the member's, the Elder mark
-                                and the blue "(You)" are parts of it wherever the language puts them. */}
-                            {isOwnPost ? (
+                                and the blue "(You)" are parts of it wherever the language puts them. A copy has no name:
+                                its line, as on the full card, and as a span since this row is one. */}
+                            {copy ? (
+                                <span data-testid="listing-copy-line" className="min-w-0 max-w-full text-xs font-semibold text-nature-700 dark:text-nature-300 break-words">{copyPriceLine(copy)}</span>
+                            ) : isOwnPost ? (
                                 <Sentence
                                     text={elderCard ? t('by {name} ⛰️ {you}', { name: authorName }) : t('by {name} {you}', { name: authorName })}
                                     parts={{ you: <span className="text-blue-600 dark:text-blue-400 font-bold">{t('👤 (You)')}</span> }}
@@ -337,7 +344,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         {post.title}
                     </h3>
 
-                    <PostAuthorTrust
+                    {copyLine || <PostAuthorTrust
                         callsign={authorName}
                         energyCycled={authorEnergy}
                         rating={authorRating}
@@ -347,7 +354,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         showTier={!beansMarked}
                         isFounding={!beansMarked && !!post.authorFoundingNeeded}
                         onOpenProfile={onOpenProfile}
-                    />
+                    />}
                 </div>
                 
                 {/* Node Overlays - Top Right floating if remote */}
@@ -457,7 +464,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 </h3>
 
                 {/* Author line with PostAuthorTrust */}
-                <PostAuthorTrust
+                {copyLine || <PostAuthorTrust
                     callsign={authorName}
                     energyCycled={authorEnergy}
                     rating={authorRating}
@@ -467,7 +474,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     showTier={!beansMarked}
                     isFounding={!beansMarked && !!post.authorFoundingNeeded}
                     onOpenProfile={onOpenProfile}
-                />
+                />}
 
                 {/* Recurring pill under the photo (market-card-43) */}
                 {post.repeatable && !isOwnPost && post.status !== 'pending' && (

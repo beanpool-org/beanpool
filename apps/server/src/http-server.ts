@@ -42,6 +42,7 @@ export async function startHttpServer(port: number): Promise<number> {
         const koaApp = getKoaApp();
         if (koaApp && (
             ctx.get('cf-connecting-ip') || 
+            ctx.path === '/check' ||
             ctx.path.startsWith('/api') || 
             ctx.path.startsWith('/settings') || 
             ctx.path.startsWith('/app') || 

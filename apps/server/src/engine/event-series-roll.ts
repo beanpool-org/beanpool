@@ -144,7 +144,9 @@ export function seriesOnEdit(
     const kept = existing.eventRepeat ?? null;
     const pattern = repeatSent ? parseRepeatPattern(rawRepeat) : kept;
     if (!pattern) return kept ? NO_SERIES : undefined;
-    if (!repeatSent && !untilSent && !next.timeChanged) return undefined;
+    // A new zone with the instant kept changes no time and every clock: the rule goes to the clock the edit set.
+    const zoneMoved = !!existing.eventTz && next.tz !== existing.eventTz;
+    if (!repeatSent && !untilSent && !next.timeChanged && !zoneMoved) return undefined;
     const firstDate = next.startLocal.slice(0, 10);
     // A clock sent back as the row holds it is no new clock: on a DST gap day the row reads 03:30 where the host set 02:30,
     // and a form that re-saves it (a title fix) must not move every later date to 03:30. The rule keeps its own then.

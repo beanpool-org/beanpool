@@ -532,6 +532,18 @@ describe('the device copy', () => {
         expect(await waitingArchetype(B, ME)).toBe(publicOf(quiz('2026-11-03', 'spark')));
     });
 
+    it('survives an incoming older archetype from sync without overwriting local newer row or adopting into canonical copy', async () => {
+        await memberOfBoth();
+        await openCommunity(A);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(quiz('2026-11-03', 'spark')) });
+        await saveCanonicalProfile({ archetype: null });
+        nodeAt(A).held.archetype = publicOf(quiz('2026-11-01', 'guardian'));
+        await performSync();
+        expect((await getMemberProfile(ME, A))?.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
+        expect((await getCanonicalProfile())?.archetype).toBeNull();
+        expect(await waitingArchetype(B, ME)).toBeNull();
+    });
+
     it('two rows, two days: the device copy is the newer, the older community\'s entry is marked', async () => {
         await memberOfBoth();
         await openCommunity(A);

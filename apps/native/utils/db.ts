@@ -4172,6 +4172,12 @@ export async function localPostTies(postId: string): Promise<{ authorPubkey: str
  * writes nothing and answers false, as for a switch.
  */
 export async function applyDelta(delta: any, expectedDbName?: string, generation?: number): Promise<boolean> {
+    let anchorUrl: string | null = null;
+    let selfPubkey: string | null = null;
+    let ownRowChanged = false;
+    let ownSyncedArchetype: string | null = null;
+    let selfMemberFound = false;
+
     await acquireSyncLock();
     try {
         const database = await getDb();
@@ -4195,11 +4201,8 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         // and awaiting it between SQLite statements would hold the write transaction open on
         // unrelated I/O. `ownRowChanged` is declared out here so it survives to after the
         // commit, which is the only point at which it is safe to tell the UI to re-read.
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
-        let ownRowChanged = false;
-        let ownSyncedArchetype: string | null = null;
-        let selfMemberFound = false;
+        anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth
@@ -4253,13 +4256,17 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             let finalArch = arch;
             if (pk === selfPubkey) {
                 selfMemberFound = true;
-                if (arch) ownSyncedArchetype = arch;
                 const localRow = await txn.getFirstAsync<{ archetype?: string | null }>(
                     'SELECT archetype FROM members WHERE public_key = ?',
                     [pk]
                 );
                 if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
                     finalArch = localRow.archetype;
+                } else if (arch) {
+                    ownSyncedArchetype = arch;
+                    if (!localRow?.archetype || archetypeIsNewer(arch, localRow.archetype)) {
+                        ownRowChanged = true;
+                    }
                 }
             }
             if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
@@ -4514,22 +4521,29 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         });
         // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
         if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
-        if (selfMemberFound && anchorUrl) {
+    } finally {
+        releaseSyncLock();
+    }
+    if (selfMemberFound && anchorUrl) {
+        try {
             const plain = anchorUrl.replace(/\/+$/, '');
             for (const u of new Set([anchorUrl, plain, `${plain}/`])) {
                 await clearGuestNode(u).catch(() => {});
             }
-        }
-        if (ownSyncedArchetype && selfPubkey) {
-            const deviceCopy = (await getCanonicalProfile())?.archetype ?? null;
+        } catch {}
+    }
+    if (ownSyncedArchetype && selfPubkey) {
+        try {
+            const canonical = await getCanonicalProfile().catch(() => null);
+            const deviceCopy = canonical?.archetype ?? null;
             if (archetypeIsNewer(ownSyncedArchetype, deviceCopy)) {
                 await adoptNewerRowIntoDevice(selfPubkey, ownSyncedArchetype, anchorUrl);
             }
+        } catch (e) {
+            console.warn('[DB] Failed to adopt newer archetype row:', e);
         }
-        return true;
-    } finally {
-        releaseSyncLock();
     }
+    return true;
 }
 
 // Returns only the fetched messages that would actually change a local row: new ids

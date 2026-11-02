@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, shop and tool shed top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, shop and tool shed top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -830,5 +830,26 @@
   "No public address currently assigned. An owner of this community can add one.": "Belum ada alamat publik yang ditetapkan. Pemilik komunitas ini dapat menambahkannya.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} belum menjadi alamat utama: layanan alamat mengatakan {status}. Server ini telah berpindah ke sana dan terus memintanya, sehingga panel di bawah kini menampilkannya. Anggota masih menjangkau komunitas ini di {current}.",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ini sekarang alamat komunitas ini. Setelah ini, anggota baru dikirim ke alamat lainnya, jika ada. Komunitas ini berhenti mengiklankan {address}, dan tidak ada nama yang dilepaskan. Selama kuncinya memegang {address}, aplikasi anggota yang memakainya tetap diterima. Jika kunci tidak memegangnya, aplikasi itu akan ditolak setelah ini.",
+  "From joining to a first trade": "Dari bergabung hingga transaksi pertama",
+  "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Sejauh mana anggota baru melangkah, hanya untuk pemilik dan admin komunitas ini. Angka seluruh komunitas: tanpa nama, dan tidak ada apa pun tentang satu orang.",
+  "Last 90 days": "90 hari terakhir",
+  "All time": "Sepanjang waktu",
+  "Joined": "Bergabung",
+  "Made a first listing": "Memasang iklan pertama",
+  "Completed a first trade": "Menyelesaikan transaksi pertama",
+  "At least {n}": "Setidaknya {n}",
+  "Typical time from joining to a first listing": "Waktu umum dari bergabung hingga iklan pertama",
+  "Typical time from a first listing to a first trade": "Waktu umum dari iklan pertama hingga transaksi pertama",
+  "Held back": "Disembunyikan",
+  "No trades yet": "Belum ada transaksi",
+  "Under a day": "Kurang dari sehari",
+  "This community has no Beans, so there are no trades to measure.": "Komunitas ini tidak memakai kacang, jadi tidak ada transaksi untuk diukur.",
+  "{n} day|{n} days": {
+    "other": "{n} hari"
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Tipikal berarti orang di tengah: separuh lebih cepat, separuh lebih lambat.",
+  "The wait for a first trade counts only people who listed before they traded.": "Waktu tunggu transaksi pertama hanya menghitung orang yang memasang iklan sebelum bertransaksi.",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Angka disembunyikan jika di baliknya ada kurang dari {n} orang, atau jika selisih kedua kolom kurang dari {n} orang.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Transaksi pertama naik per {n}, sehingga angkanya tidak pernah menunjuk satu orang.",
   "{n} at this spot": "{n} di tempat ini"
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -830,5 +830,26 @@
   "No public address currently assigned. An owner of this community can add one.": "目前未分配公开地址。此社区的所有者可以添加一个。",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} 还不是主地址：地址服务的回答是 {status}。此服务器已转到它并继续请求，因此下方面板现在显示它。成员仍可通过 {current} 访问此社区。",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它现在是此社区的地址。此后，新成员会被引导到此社区的其他地址（如果有）。此社区不再公布 {address}，也不会放弃任何名称。只要其密钥持有 {address}，使用它的成员应用仍被接受。如果密钥不持有它，此后这些应用将被拒绝。",
+  "From joining to a first trade": "从加入到首次交易",
+  "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "新成员走到了哪一步，仅本社区的所有者和管理员可见。这些是整个社区的数字：没有姓名，也没有关于任何一个人的内容。",
+  "Last 90 days": "最近 90 天",
+  "All time": "全部时间",
+  "Joined": "已加入",
+  "Made a first listing": "已发布首条信息",
+  "Completed a first trade": "已完成首次交易",
+  "At least {n}": "至少 {n}",
+  "Typical time from joining to a first listing": "从加入到首条信息的通常时间",
+  "Typical time from a first listing to a first trade": "从首条信息到首次交易的通常时间",
+  "Held back": "暂不显示",
+  "No trades yet": "尚无交易",
+  "Under a day": "不到一天",
+  "This community has no Beans, so there are no trades to measure.": "本社区没有豆子，因此没有可衡量的交易。",
+  "{n} day|{n} days": {
+    "other": "{n} 天"
+  },
+  "Typical means the middle person: half were quicker, half slower.": "“通常”指排在中间的那个人：一半人更快，一半人更慢。",
+  "The wait for a first trade counts only people who listed before they traded.": "等待首次交易的时间只计算在交易前已发布信息的人。",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "当一个数字背后不足 {n} 人，或两列相差不足 {n} 人时，该数字不显示。",
+  "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 递增，因此这个数字绝不会指向某一个人。",
   "{n} at this spot": "此处有 {n} 项"
 }

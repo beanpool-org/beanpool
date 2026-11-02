@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -830,5 +830,26 @@
   "No public address currently assigned. An owner of this community can add one.": "Hiện chưa có địa chỉ công khai nào được gán. Chủ sở hữu của cộng đồng này có thể thêm một địa chỉ.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} chưa phải là địa chỉ chính: dịch vụ địa chỉ cho biết {status}. Máy chủ này đã chuyển sang địa chỉ đó và tiếp tục xin, vì vậy bảng bên dưới hiện hiển thị nó. Thành viên vẫn đến được cộng đồng này tại {current}.",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Đây hiện là địa chỉ của cộng đồng này. Sau thao tác này, thành viên mới được chuyển đến một địa chỉ khác của cộng đồng, nếu có. Cộng đồng này ngừng quảng bá {address} và không từ bỏ tên nào. Chừng nào khóa của cộng đồng còn giữ {address}, ứng dụng của thành viên dùng địa chỉ này vẫn được chấp nhận. Nếu khóa không giữ nó, chúng sẽ bị từ chối sau thao tác này.",
+  "From joining to a first trade": "Từ lúc tham gia đến giao dịch đầu tiên",
+  "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Thành viên mới đi được bao xa, chỉ dành cho chủ sở hữu và quản trị viên của cộng đồng này. Số liệu của cả cộng đồng: không có tên và không có gì về một người cụ thể.",
+  "Last 90 days": "90 ngày qua",
+  "All time": "Toàn bộ thời gian",
+  "Joined": "Đã tham gia",
+  "Made a first listing": "Đã đăng tin đầu tiên",
+  "Completed a first trade": "Đã hoàn thành giao dịch đầu tiên",
+  "At least {n}": "Ít nhất {n}",
+  "Typical time from joining to a first listing": "Thời gian thông thường từ lúc tham gia đến tin đăng đầu tiên",
+  "Typical time from a first listing to a first trade": "Thời gian thông thường từ tin đăng đầu tiên đến giao dịch đầu tiên",
+  "Held back": "Đã ẩn",
+  "No trades yet": "Chưa có giao dịch",
+  "Under a day": "Dưới một ngày",
+  "This community has no Beans, so there are no trades to measure.": "Cộng đồng này không có đậu, nên không có giao dịch nào để đo.",
+  "{n} day|{n} days": {
+    "other": "{n} ngày"
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Thông thường nghĩa là người ở giữa: một nửa nhanh hơn, một nửa chậm hơn.",
+  "The wait for a first trade counts only people who listed before they traded.": "Thời gian chờ giao dịch đầu tiên chỉ tính những người đã đăng tin trước khi giao dịch.",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Một con số được ẩn khi có dưới {n} người đứng sau nó, hoặc khi hai cột chênh nhau dưới {n} người.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Giao dịch đầu tiên tăng theo từng bước {n}, nên con số không bao giờ chỉ ra một người.",
   "{n} at this spot": "{n} tại địa điểm này"
 }

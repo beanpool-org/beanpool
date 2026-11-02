@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -868,5 +868,27 @@
   "No public address currently assigned. An owner of this community can add one.": "Nenhum endereço público atribuído de momento. Um proprietário desta comunidade pode adicionar um.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} ainda não é o endereço principal: o serviço de endereços diz {status}. Este servidor passou para ele e continua a pedi-lo, por isso o painel abaixo já o mostra. Os membros continuam a chegar a esta comunidade em {current}.",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "É agora o endereço desta comunidade. Depois disto, os novos membros são enviados para outro dos seus endereços, se tiver algum. Esta comunidade deixa de anunciar {address}, e nenhum nome é abandonado. Enquanto a sua chave detiver {address}, as apps dos membros que o usam continuam a ser aceites. Se a chave não o detiver, serão recusadas depois disto.",
+  "From joining to a first trade": "Da entrada à primeira troca",
+  "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Até onde os novos membros chegam, só para os donos e administradores desta comunidade. Números de toda a comunidade: sem nomes e nada sobre uma pessoa só.",
+  "Last 90 days": "Últimos 90 dias",
+  "All time": "Todo o período",
+  "Joined": "Entraram",
+  "Made a first listing": "Fizeram uma primeira publicação",
+  "Completed a first trade": "Concluíram uma primeira troca",
+  "At least {n}": "Pelo menos {n}",
+  "Typical time from joining to a first listing": "Tempo típico da entrada à primeira publicação",
+  "Typical time from a first listing to a first trade": "Tempo típico da primeira publicação à primeira troca",
+  "Held back": "Retido",
+  "No trades yet": "Ainda sem trocas",
+  "Under a day": "Menos de um dia",
+  "This community has no Beans, so there are no trades to measure.": "Esta comunidade não tem feijões, então não há trocas para medir.",
+  "{n} day|{n} days": {
+    "one": "{n} dia",
+    "other": "{n} dias"
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Típico significa a pessoa do meio: metade foi mais rápida, metade mais lenta.",
+  "The wait for a first trade counts only people who listed before they traded.": "A espera pela primeira troca conta só quem publicou antes de trocar.",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Um número fica retido quando há menos de {n} pessoas por trás dele, ou quando menos de {n} pessoas separam as duas colunas.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "As primeiras trocas sobem de {n} em {n}, então o número nunca aponta para uma pessoa.",
   "{n} at this spot": "{n} neste local"
 }

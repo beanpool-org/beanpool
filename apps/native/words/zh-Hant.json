@@ -210,7 +210,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "此手機無法讀取這裡哪些聊天是私人的，因此未傳送任何內容。請重試；如果持續失敗，可透過「設定 → 聊天記憶」重設此社群的記憶，以從頭重新檢查這裡的每個聊天。",
   "Who your chats are with, and which are private.": "你的聊天對象是誰，以及哪些聊天是私人的。",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "此手機會記住你在社群中每個聊天的對象是誰，以及哪些聊天是私人的，這樣社群就無法暗中調換聊天對象或將私聊變成群組聊天。如果手機無法讀取該記憶，該社群中的聊天就無法傳送訊息。重設會從頭重新檢查那裡的每個聊天。",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "因金鑰變更而暫停的聊天可能會以新金鑰開啟。從聊天中消失的私聊可能會重新顯示為社群可閱讀的群組聊天。在傳送前，請先核對金鑰代碼或確認聊天中的成員。",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "因金鑰變更而暫停的聊天可能會以新金鑰開啟。從聊天中消失的私聊可能會重新顯示為社群可閱讀的群組聊天。在傳送前，請先核對金鑰代碼或確認聊天中的成員。",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "此手機正在從頭開始檢查此聊天，就如同還原或更新應用程式後所做的一樣。",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "此社群的聊天記憶已重設，因此手機正在從頭檢查此聊天。",
   "The key behind \"{name}\" changed.": "「{name}」背後的金鑰已變更。",
@@ -312,7 +312,7 @@
   "Ledger\u0004tab": "帳本",
   "Settings\u0004tab": "設定",
   "Home updated": "首頁已更新",
-  "This community's server needs an update before Home works. Market and Talk still work.": "本社群的伺服器需要更新後首頁才能運作。市集與聊天功能仍可正常使用。",
+  "This community's server needs an update before Home works. Market and Chat still work.": "本社群的伺服器需要更新後首頁才能運作。市集與聊天功能仍可正常使用。",
   "Couldn't reach your community; showing what we had": "無法連線至你的社群；顯示已快取內容",
   "That was the last tip. Add a card brings them back.": "這是最後一則提示。可透過「新增卡片」重新找回。",
   "this community": "本社群",
@@ -321,7 +321,7 @@
   "Tune": "自訂",
   "Home shows once you're a member of this community.": "成為本社群成員後即可瀏覽首頁。",
   "Open the Market": "開啟市集",
-  "Open Talk": "開啟聊天",
+  "Open Chat": "開啟聊天",
   "Connect to a community to see your Home.": "連線至社群以查看你的首頁。",
   "Connect": "連線",
   "Couldn't reach your community yet. Home fills in when it answers.": "暫時無法連線至你的社群。收到回應後首頁將自動顯示。",
@@ -491,7 +491,7 @@
   "All {n} group|All {n} groups": {
     "other": "全部 {n} 個群組"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
     "other": "「聊天」中的全部 {n} 個群組"
   },
   "{line} Opens People.": "{line} 開啟成員列表。",

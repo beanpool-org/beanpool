@@ -213,7 +213,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "இங்கே எந்த அரட்டைகள் தனிப்பட்டவை என்பதை இந்தத் தொலைபேசியால் படிக்க முடியவில்லை, எனவே எதுவும் அனுப்பப்படவில்லை. மீண்டும் முயற்சிக்கவும்; தொடர்ந்து தோல்வியடைந்தால், அமைப்புகள் → அரட்டை நினைவகம் என்பது இந்தச் சமூகத்தின் நினைவகத்தை மீட்டமைக்கலாம், இது இங்கே உள்ள ஒவ்வொரு அரட்டையையும் தொடக்கத்திலிருந்தே மீண்டும் சரிபார்க்கும்.",
   "Who your chats are with, and which are private.": "உங்கள் அரட்டைகள் யாருடன் உள்ளன, எவை தனிப்பட்டவை.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "ஒரு சமூகத்தில் உங்கள் ஒவ்வொரு அரட்டையும் யாருடன் உள்ளது, எவை தனிப்பட்டவை என்பதை இந்தத் தொலைபேசி நினைவில் வைத்திருக்கிறது, இதனால் சமூகத்தால் ஒரு அரட்டைக்குப் பின்னால் உள்ள நபரை மாற்றவோ அல்லது தனிப்பட்ட அரட்டையைக் குழு அரட்டையாக மாற்றவோ முடியாது. இந்தத் தொலைபேசியால் அந்த நினைவகத்தைப் படிக்க முடியாவிட்டால், அந்தச் சமூகத்தில் உள்ள அரட்டைகளால் செய்திகளை அனுப்ப முடியாது. அதை மீட்டமைப்பது அங்கே உள்ள ஒவ்வொரு அரட்டையையும் தொடக்கத்திலிருந்தே மீண்டும் சரிபார்க்கும்.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "சாவி மாறியதால் இடைநிறுத்தப்பட்ட அரட்டை புதிய சாவியுடன் திறக்கப்படலாம். உரையாடலிலிருந்து மறைந்துவிட்ட ஒரு தனிப்பட்ட அரட்டை சமூகம் படிக்கக்கூடிய குழு அரட்டையாக மீண்டும் வரலாம். நீங்கள் அனுப்புவதற்கு முன் சாவிக் குறியீட்டை அல்லது அரட்டையில் யார் இருக்கிறார்கள் என்பதைச் சரிபார்க்கவும்.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "சாவி மாறியதால் இடைநிறுத்தப்பட்ட அரட்டை புதிய சாவியுடன் திறக்கப்படலாம். அரட்டையிலிருந்து மறைந்துவிட்ட ஒரு தனிப்பட்ட அரட்டை சமூகம் படிக்கக்கூடிய குழு அரட்டையாக மீண்டும் வரலாம். நீங்கள் அனுப்புவதற்கு முன் சாவிக் குறியீட்டை அல்லது அரட்டையில் யார் இருக்கிறார்கள் என்பதைச் சரிபார்க்கவும்.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "நீங்கள் கணக்கை மீட்டெடுத்த பிறகு அல்லது செயலியைப் புதுப்பித்த பிறகு செய்வது போல, இந்தத் தொலைபேசி இந்த அரட்டையைத் தொடக்கத்திலிருந்தே சரிபார்க்கிறது.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "இந்தச் சமூகத்தின் அரட்டை நினைவகம் மீட்டமைக்கப்பட்டது, எனவே இந்தத் தொலைபேசி இந்த அரட்டையைத் தொடக்கத்திலிருந்தே சரிபார்க்கிறது.",
   "The key behind \"{name}\" changed.": "\"{name}\"-க்குப் பின்னால் உள்ள சாவி மாறியது.",
@@ -317,7 +317,7 @@
   "Ledger\u0004tab": "பேரேடு",
   "Settings\u0004tab": "அமைப்புகள்",
   "Home updated": "முகப்பு புதுப்பிக்கப்பட்டது",
-  "This community's server needs an update before Home works. Market and Talk still work.": "முகப்பு செயல்படுவதற்கு முன் இந்தச் சமூகத்தின் சேவையகத்திற்கு ஒரு புதுப்பிப்பு தேவை. சந்தையும் அரட்டையும் தொடர்ந்து செயல்படுகின்றன.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "முகப்பு செயல்படுவதற்கு முன் இந்தச் சமூகத்தின் சேவையகத்திற்கு ஒரு புதுப்பிப்பு தேவை. சந்தையும் அரட்டையும் தொடர்ந்து செயல்படுகின்றன.",
   "Couldn't reach your community; showing what we had": "உங்கள் சமூகத்தை அணுக முடியவில்லை; ஏற்கனவே உள்ளவை காட்டப்படுகின்றன",
   "That was the last tip. Add a card brings them back.": "அதுவே கடைசி குறிப்பு. அட்டை சேர் அவற்றை மீண்டும் கொண்டு வரும்.",
   "this community": "இந்தச் சமூகம்",
@@ -326,7 +326,7 @@
   "Tune": "விருப்பத்தேர்வு",
   "Home shows once you're a member of this community.": "இந்தச் சமூகத்தின் உறுப்பினரானதும் முகப்பு தோன்றும்.",
   "Open the Market": "சந்தையைத் திறக்கவும்",
-  "Open Talk": "அரட்டையைத் திறக்கவும்",
+  "Open Chat": "அரட்டையைத் திறக்கவும்",
   "Connect to a community to see your Home.": "உங்கள் முகப்பைப் பார்க்க ஒரு சமூகத்துடன் இணையுங்கள்.",
   "Connect": "இணை",
   "Couldn't reach your community yet. Home fills in when it answers.": "உங்கள் சமூகத்தை இன்னும் அணுக முடியவில்லை. அது பதிலளிக்கும் போது முகப்பு தோன்றும்.",
@@ -498,7 +498,7 @@
     "one": "{n} குழுவும்",
     "other": "அனைத்து {n} குழுக்களும்"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
     "one": "அரட்டையில் உங்கள் {n} குழு",
     "other": "அரட்டையில் உங்கள் அனைத்து {n} குழுக்களும்"
   },

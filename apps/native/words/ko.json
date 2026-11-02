@@ -210,7 +210,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "비공개 대화방 목록을 확인하지 못해 아무것도 전송되지 않았어요. 다시 시도해 주세요. 계속 실패하면 '설정' → '대화 기억'에서 이 커뮤니티의 기억을 초기화하여 모든 대화를 처음부터 다시 확인할 수 있어요.",
   "Who your chats are with, and which are private.": "대화 상대가 누구인지, 어떤 대화가 비공개인지에 대한 정보예요.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "이 휴대폰은 커뮤니티 내 대화 상대와 비공개 대화 여부를 기억하여, 커뮤니티가 몰래 대화 상대를 바꾸거나 비공개 대화를 그룹 대화로 전환하지 못하도록 막아줘요. 이 기억을 읽지 못하면 메시지를 보낼 수 없어요. 초기화하면 처음부터 모든 대화를 다시 확인해요.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "열쇠가 바뀌어 일시 정지된 대화방이 새 열쇠로 열릴 수 있어요. '대화'에서 사라졌던 1:1 대화가 커뮤니티 전체가 볼 수 있는 그룹 대화로 다시 나타날 수도 있어요. 메시지를 보내기 전에 키 코드나 대화방 참여자를 꼭 확인하세요.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "열쇠가 바뀌어 일시 정지된 대화방이 새 열쇠로 열릴 수 있어요. '대화'에서 사라졌던 1:1 대화가 커뮤니티 전체가 볼 수 있는 그룹 대화로 다시 나타날 수도 있어요. 메시지를 보내기 전에 키 코드나 대화방 참여자를 꼭 확인하세요.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "앱 복원 후나 업데이트 때처럼 이 휴대폰이 대화를 처음부터 확인하고 있어요.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "커뮤니티 대화 기억이 초기화되어 휴대폰이 대화를 처음부터 확인하고 있어요.",
   "The key behind \"{name}\" changed.": "\"{name}\" 님의 열쇠가 변경되었어요.",
@@ -312,7 +312,7 @@
   "Ledger\u0004tab": "장부",
   "Settings\u0004tab": "설정",
   "Home updated": "홈 업데이트됨",
-  "This community's server needs an update before Home works. Market and Talk still work.": "홈을 사용하려면 이 커뮤니티 서버의 업데이트가 필요해요. 장터와 대화는 계속 이용할 수 있어요.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "홈을 사용하려면 이 커뮤니티 서버의 업데이트가 필요해요. 장터와 대화는 계속 이용할 수 있어요.",
   "Couldn't reach your community; showing what we had": "커뮤니티에 연결할 수 없어 저장된 내용을 보여 드려요",
   "That was the last tip. Add a card brings them back.": "마지막 도움말이었어요. 카드 추가에서 다시 가져올 수 있어요.",
   "this community": "이 커뮤니티",
@@ -321,7 +321,7 @@
   "Tune": "맞춤 설정",
   "Home shows once you're a member of this community.": "이 커뮤니티의 멤버가 되면 홈이 표시돼요.",
   "Open the Market": "장터 열기",
-  "Open Talk": "대화 열기",
+  "Open Chat": "대화 열기",
   "Connect to a community to see your Home.": "홈을 보려면 커뮤니티에 연결하세요.",
   "Connect": "연결",
   "Couldn't reach your community yet. Home fills in when it answers.": "아직 커뮤니티에 연결하지 못했어요. 응답이 오면 홈이 채워져요.",
@@ -491,7 +491,7 @@
   "All {n} group|All {n} groups": {
     "other": "모임 전체 {n}개"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
     "other": "대화의 내 모임 {n}개 전체"
   },
   "{line} Opens People.": "{line} 사람 목록을 엽니다.",

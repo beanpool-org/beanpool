@@ -13,7 +13,7 @@ Todo evento tem sua própria conversa. O anfitrião e todos que tocaram em **Vou
 ## Abrindo a conversa
 
 - Abra o evento e toque em **Abrir conversa do evento**.
-- Ou encontre-o em **Conversas**, sob **Grupos**, marcado como 📅 **Evento**. No app web, ele fica na aba **Bate-papo**, junto com suas outras conversas.
+- Ou encontre-o em **Bate-papo**, sob **Grupos**, marcado como 📅 **Evento**. No app web, ele fica na aba **Bate-papo**, junto com suas outras conversas.
 
 No topo, uma caixa fixada mostra o **Aviso para quem vai** escrito pelo anfitrião, como o endereço exato. Toque no nome do evento bem no topo (no app web, **Ver evento**) para voltar ao evento.
 

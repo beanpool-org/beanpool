@@ -58,7 +58,7 @@ You can reset it for one community: open **Settings**, tap **Chat memory** under
 
 After a reset, your phone checks every chat in that community again from the start, from the messages it holds. A chat whose messages came from a different key than the one the community now gives shows the banner again, starting with **This community's chat memory was reset, so this phone is checking this chat from the start.** Check the code with the person as above.
 
-Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.
+Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.
 
 A reset doesn't help with a chat your phone can't match to one key: it is checked again and stops again. Check the code with the person instead (above).
 

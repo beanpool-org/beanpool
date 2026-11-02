@@ -212,7 +212,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "এখানে কোন চ্যাটগুলো ব্যক্তিগত তা এই ফোন পড়তে পারেনি, তাই কিছুই পাঠানো হয়নি। আবার চেষ্টা করুন; ব্যর্থ হতে থাকলে সেটিংস → চ্যাট মেমরি থেকে রিসেট করতে পারেন, যা প্রতিটি চ্যাট শুরু থেকে পরীক্ষা করবে।",
   "Who your chats are with, and which are private.": "আপনার চ্যাট কার সঙ্গে এবং কোনগুলো ব্যক্তিগত।",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "কমিউনিটিতে আপনার চ্যাট কার সঙ্গে এবং কোনগুলো ব্যক্তিগত তা এই ফোন মনে রাখে, যাতে কমিউনিটি গোপনে কোনো চ্যাটের ব্যক্তি বদলাতে না পারে বা ব্যক্তিগত চ্যাটকে গ্রুপ চ্যাটে পরিণত না করতে পারে। এই ফোন মেমরি পড়তে না পারলে চ্যাটে বার্তা পাঠানো যাবে না। রিসেট করলে প্রতিটি চ্যাট শুরু থেকে আবার পরীক্ষা করা হবে।",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "চাবি পরিবর্তনের কারণে স্থগিত হওয়া চ্যাট নতুন চাবি দিয়ে খুলতে পারে। টক থেকে হারিয়ে যাওয়া ব্যক্তিগত চ্যাট কমিউনিটির সবাই পড়তে পারে এমন গ্রুপ চ্যাট হিসেবে ফিরতে পারে। পাঠানোর আগে চাবি কোড বা চ্যাটে কারা আছেন তা দেখে নিন।",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "চাবি পরিবর্তনের কারণে স্থগিত হওয়া চ্যাট নতুন চাবি দিয়ে খুলতে পারে। আলাপ থেকে হারিয়ে যাওয়া ব্যক্তিগত চ্যাট কমিউনিটির সবাই পড়তে পারে এমন গ্রুপ চ্যাট হিসেবে ফিরতে পারে। পাঠানোর আগে চাবি কোড বা চ্যাটে কারা আছেন তা দেখে নিন।",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "অ্যাকাউন্ট রিস্টোর বা অ্যাপ আপডেটের পর যেমন হয়, এই ফোনটি শুরু থেকে এই চ্যাটটি পরীক্ষা করছে।",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "এই কমিউনিটির চ্যাট মেমরি রিসেট করা হয়েছে, তাই এই ফোন শুরু থেকে এই চ্যাট পরীক্ষা করছে।",
   "The key behind \"{name}\" changed.": "\"{name}\"-এর চাবি পরিবর্তিত হয়েছে।",
@@ -316,7 +316,7 @@
   "Ledger\u0004tab": "খতিয়ান",
   "Settings\u0004tab": "সেটিংস",
   "Home updated": "হোম আপডেট করা হয়েছে",
-  "This community's server needs an update before Home works. Market and Talk still work.": "হোম কাজ করার আগে এই সম্প্রদায়ের সার্ভারটি আপডেট করা প্রয়োজন। বাজার এবং কথা এখনও কাজ করছে।",
+  "This community's server needs an update before Home works. Market and Chat still work.": "হোম কাজ করার আগে এই সম্প্রদায়ের সার্ভারটি আপডেট করা প্রয়োজন। বাজার এবং আলাপ এখনও কাজ করছে।",
   "Couldn't reach your community; showing what we had": "আপনার সম্প্রদায়ে সংযোগ করা যায়নি; সংরক্ষিত তথ্য দেখানো হচ্ছে",
   "That was the last tip. Add a card brings them back.": "এটি শেষ পরামর্শ ছিল। কার্ড যোগ করুন সেগুলোকে ফিরিয়ে আনে।",
   "this community": "এই সম্প্রদায়",
@@ -325,7 +325,7 @@
   "Tune": "টিউন",
   "Home shows once you're a member of this community.": "আপনি এই সম্প্রদায়ের সদস্য হলে হোম প্রদর্শিত হবে।",
   "Open the Market": "বাজার খুলুন",
-  "Open Talk": "কথা খুলুন",
+  "Open Chat": "আলাপ খুলুন",
   "Connect to a community to see your Home.": "আপনার হোম দেখতে একটি সম্প্রদায়ের সাথে সংযুক্ত হন।",
   "Connect": "সংযুক্ত হন",
   "Couldn't reach your community yet. Home fills in when it answers.": "এখনও আপনার সম্প্রদায়ের সাথে সংযোগ করা যায়নি। সাড়া দিলে হোম লোড হবে।",
@@ -497,9 +497,9 @@
     "one": "সকল {n}টি দল",
     "other": "সকল {n}টি দল"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
-    "one": "আপনার {n}টি দল, কথায়",
-    "other": "আপনার সকল {n}টি দল, কথায়"
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
+    "one": "আপনার {n}টি দল, আলাপে",
+    "other": "আপনার সকল {n}টি দল, আলাপে"
   },
   "{line} Opens People.": "{line} সদস্য খোলে।",
   "by {name}": "{name} দ্বারা",

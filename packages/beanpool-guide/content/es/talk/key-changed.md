@@ -31,7 +31,7 @@ Tu teléfono no puede distinguir estas situaciones por sí solo. Tú sí puedes,
 - Comprueba el código **en persona, o en una llamada telefónica o de video** donde sepas con certeza que es esa persona. No lo compruebes mediante un mensaje en BeanPool: si la clave es incorrecta, quien responda también lo será.
 - Si cada dígito coincide, marca **Lo comprobé con Ben: el código de clave en su Configuración coincide con este**, luego toca **Continuar con la nueva clave**.
 
-A partir de entonces, tus mensajes irán a la nueva clave. El banner y la etiqueta de **clave modificada** en el chat en **Charlas** desaparecerán, y tus mensajes anteriores seguirán siendo legibles.
+A partir de entonces, tus mensajes irán a la nueva clave. El banner y la etiqueta de **clave modificada** en el chat en **Chat** desaparecerán, y tus mensajes anteriores seguirán siendo legibles.
 
 El código no es secreto. Es seguro leerlo en voz alta.
 
@@ -59,7 +59,7 @@ Puedes restablecerla para una comunidad: abre **Ajustes**, toca **Memoria de cha
 
 Tras un restablecimiento, tu teléfono comprueba cada chat de esa comunidad nuevamente desde el principio, a partir de los mensajes que conserva. Un chat cuyos mensajes provinieron de una clave distinta a la que la comunidad proporciona ahora vuelve a mostrar el aviso, comenzando con **Se restableció la memoria de chats de esta comunidad, por lo que este teléfono está comprobando este chat desde el principio.** Comprueba el código con la persona como se indicó arriba.
 
-Dos cosas pueden cambiar tras un restablecimiento, y la advertencia lo aclara antes de que confirmes: un chat que estaba pausado porque su clave cambió puede abrirse con la nueva clave, y un chat privado que había desaparecido de Charlas puede regresar como un chat grupal que la comunidad puede leer. Comprueba el código de clave, o quién está en el chat, antes de enviar nada.
+Dos cosas pueden cambiar tras un restablecimiento, y la advertencia lo aclara antes de que confirmes: un chat que estaba pausado porque su clave cambió puede abrirse con la nueva clave, y un chat privado que había desaparecido de Chat puede regresar como un chat grupal que la comunidad puede leer. Comprueba el código de clave, o quién está en el chat, antes de enviar nada.
 
 Un restablecimiento no soluciona el caso de un chat que tu teléfono no puede asociar a una sola clave: se comprueba de nuevo y se detiene otra vez. Comprueba el código con la persona en su lugar (arriba).
 

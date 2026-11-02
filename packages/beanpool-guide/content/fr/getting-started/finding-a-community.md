@@ -59,7 +59,7 @@ Vous restez membre de la communauté globale, et pouvez basculer de l'une à l'a
 
 ## Si vous êtes membre d'une communauté locale
 
-Des personnes peuvent demander à rejoindre votre communauté depuis la communauté globale. Touchez **Échanges**, puis **Membres**, puis **Invitations** : les demandes sont listées sous **Demande à rejoindre**, avec leur nom, leurs mots et d'où elles viennent. Les demandes sont traitées dans l'application mobile : l'application web ne les liste pas.
+Des personnes peuvent demander à rejoindre votre communauté depuis la communauté globale. Touchez **Chat**, puis **Membres**, puis **Invitations** : les demandes sont listées sous **Demande à rejoindre**, avec leur nom, leurs mots et d'où elles viennent. Les demandes sont traitées dans l'application mobile : l'application web ne les liste pas.
 
 - **Inviter :** crée une invitation que seul leur compte peut utiliser. Leur application la trouve d'elle-même, et ils rejoignent en un geste.
 - **Pas maintenant :** ils n'en sont pas informés. Ils continuent de voir « pas encore de réponse », et ne peuvent pas refaire de demande avant 30 jours.

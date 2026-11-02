@@ -15,7 +15,7 @@ Les personnes qui veillent sur un groupe de discussion sont ses **coordinateurs*
 
 ## Vos groupes
 
-Touchez **Échanges**, puis **Groupes**. Tous les groupes dont vous faites partie y sont listés, le message le plus récent en premier, avec les projets que vous menez ou auxquels vous collaborez (🎯), les entreprises que vous gérez (🥖) et les événements que vous organisez ou auxquels vous participez (📅). La discussion d'une entreprise est son fil public : chaque membre de votre communauté peut le lire. Voir «Messages». Chaque groupe affiche son dernier message et le nombre de messages non lus. Dans une discussion chiffrée, la ligne indique qui a écrit en dernier et **🔒 Message**, et non le contenu textuel.
+Touchez **Chat**, puis **Groupes**. Tous les groupes dont vous faites partie y sont listés, le message le plus récent en premier, avec les projets que vous menez ou auxquels vous collaborez (🎯), les entreprises que vous gérez (🥖) et les événements que vous organisez ou auxquels vous participez (📅). La discussion d'une entreprise est son fil public : chaque membre de votre communauté peut le lire. Voir «Messages». Chaque groupe affiche son dernier message et le nombre de messages non lus. Dans une discussion chiffrée, la ligne indique qui a écrit en dernier et **🔒 Message**, et non le contenu textuel.
 
 - Le chiffre sur **Groupes** en haut cumule vos messages non lus, à l'exception des discussions mises en sourdine.
 - Touchez un groupe pour ouvrir sa discussion. Cela le marque comme lu.
@@ -25,7 +25,7 @@ Sur le téléphone, cette même liste figure dans **Communs**, sous **Groupes**,
 
 ## Créer un groupe
 
-- Sur le téléphone, dans **Échanges**, sous **Groupes**, touchez **Nouveau groupe**. Ou dans **Communs**, sous **Groupes**, touchez le bouton rond **+**. Les deux ouvrent le même formulaire **Créer un groupe**. (Sur l'onglet **Projets** ou **Entreprises**, le **+** permet plutôt de créer un projet ou une entreprise.)
+- Sur le téléphone, dans **Chat**, sous **Groupes**, touchez **Nouveau groupe**. Ou dans **Communs**, sous **Groupes**, touchez le bouton rond **+**. Les deux ouvrent le même formulaire **Créer un groupe**. (Sur l'onglet **Projets** ou **Entreprises**, le **+** permet plutôt de créer un projet ou une entreprise.)
 - Dans l'application web, ouvrez **Communs**, puis **Groupes**, et touchez **+ Créer un groupe**. Vous restez ensuite sur **Communs**. Pour inviter du monde, ouvrez le groupe et touchez **Inviter des personnes**. Vous pouvez également ouvrir **Discussion**, toucher **Groupes**, puis **Nouveau groupe** : cela vous conduit directement dans la discussion du nouveau groupe.
 - Donnez-lui un **Nom du groupe**, jusqu'à 60 caractères, et si vous le souhaitez, un champ **Objectif / Description**, jusqu'à 300 caractères : l'utilité du groupe et à qui il s'adresse.
 - Choisissez une **Catégorie** : **Cercle social**, **Général**, **Groupe de travail** ou **Guilde**. Sur le téléphone, **Cercle social** est sélectionné d'office. Dans l'application web, c'est **Groupe de travail**.
@@ -43,7 +43,7 @@ Vous pouvez inviter des personnes sur le téléphone et dans l'application web. 
 - Touchez **Inviter des personnes**, cochez les personnes souhaitées, et touchez le bouton en bas (par exemple **Inviter 2 personnes**).
 - Ou touchez **Pas maintenant** pour passer cette étape.
 
-Plus tard, un coordinateur peut inviter des personnes depuis le menu **⋮** de la discussion, via **Inviter des personnes**. Dans l'application web, un coordinateur ouvre le groupe, clique sur **Inviter des personnes**, coche les personnes et clique sur le bouton en bas de la même façon. Chaque personne invitée voit le groupe dans **Communs**, sous **Groupes**, avec la mention **INVITÉ** dans l'application mobile (sur le téléphone, dans une communauté sans onglet **Communs**, sous **Trouver des groupes** dans **Échanges**). L'application web n'affiche pas encore de badge d'invitation : la personne ouvre le groupe et clique sur **Accepter l'invitation**. Lorsqu'elle rejoint, la discussion l'indique.
+Plus tard, un coordinateur peut inviter des personnes depuis le menu **⋮** de la discussion, via **Inviter des personnes**. Dans l'application web, un coordinateur ouvre le groupe, clique sur **Inviter des personnes**, coche les personnes et clique sur le bouton en bas de la même façon. Chaque personne invitée voit le groupe dans **Communs**, sous **Groupes**, avec la mention **INVITÉ** dans l'application mobile (sur le téléphone, dans une communauté sans onglet **Communs**, sous **Trouver des groupes** dans **Chat**). L'application web n'affiche pas encore de badge d'invitation : la personne ouvre le groupe et clique sur **Accepter l'invitation**. Lorsqu'elle rejoint, la discussion l'indique.
 
 ## La discussion du groupe
 
@@ -108,7 +108,7 @@ Sur le téléphone, un groupe que vous avez demandé à rejoindre n'apparaît da
 
 Un groupe **Sur invitation seulement** est masqué pour toute personne qui n'en est pas membre ou qui n'y est pas invitée.
 
-Sur le téléphone, une communauté locale sans haricots n'a pas d'onglet **Communs**. Touchez alors **Échanges**, puis **Groupes**, puis **Trouver des groupes** : cela ouvre la même liste. Avant de faire partie du moindre groupe, le lien s'intitule **Trouver un groupe à rejoindre**. La communauté globale dispose de l'onglet **Communs** : ses groupes s'y trouvent, sous un exemple issu d'une communauté locale (voir « Haricots et communauté globale »).
+Sur le téléphone, une communauté locale sans haricots n'a pas d'onglet **Communs**. Touchez alors **Chat**, puis **Groupes**, puis **Trouver des groupes** : cela ouvre la même liste. Avant de faire partie du moindre groupe, le lien s'intitule **Trouver un groupe à rejoindre**. La communauté globale dispose de l'onglet **Communs** : ses groupes s'y trouvent, sous un exemple issu d'une communauté locale (voir « Haricots et communauté globale »).
 
 Si un coordinateur vous a retiré d'un groupe, vous ne pouvez pas le rejoindre à nouveau par vous-même.
 
@@ -116,7 +116,7 @@ Tant que votre compte est suspendu, vous ne pouvez pas créer de groupe, en rejo
 
 ## Rejoindre sur invitation
 
-Un groupe où vous êtes invité apparaît dans **Communs**, sous **Groupes**, marqué **INVITÉ** dans l'application mobile. Sur le téléphone, dans une communauté sans onglet **Communs**, il figure sous **Trouver des groupes** dans **Échanges**. Touchez-le pour consulter l'invitation : qui vous a invité, quel est l'objet du groupe, qui y participe (pour un groupe sur invitation, combien de membres) et qui peut lire sa discussion. Sur le téléphone :
+Un groupe où vous êtes invité apparaît dans **Communs**, sous **Groupes**, marqué **INVITÉ** dans l'application mobile. Sur le téléphone, dans une communauté sans onglet **Communs**, il figure sous **Trouver des groupes** dans **Chat**. Touchez-le pour consulter l'invitation : qui vous a invité, quel est l'objet du groupe, qui y participe (pour un groupe sur invitation, combien de membres) et qui peut lire sa discussion. Sur le téléphone :
 
 - Touchez **Rejoindre le groupe**. Vous arrivez dans sa discussion.
 - Touchez **Pas maintenant** pour décider plus tard. L'invitation reste en attente.

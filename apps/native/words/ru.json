@@ -216,7 +216,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "Телефон не смог определить, какие чаты здесь личные, поэтому ничего не отправлено. Попробуйте снова; если ошибка повторяется, Настройки → Память чатов поможет сбросить память этого сообщества, и все чаты здесь будут заново проверены с самого начала.",
   "Who your chats are with, and which are private.": "С кем ваши чаты и какие из них личные.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "Этот телефон помнит, с кем ведётся каждый чат в сообществе и какие чаты являются личными, чтобы сообщество не могло незаметно подменить собеседника или сделать личный чат групповым. Если телефон не может прочесть эту память, отправка в сообществе блокируется. Сброс проверяет все чаты заново с начала.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Чат, приостановленный из-за смены ключа, может открыться с новым ключом. Личный чат, пропавший из «Бесед», может вернуться как групповой чат, доступный сообществу. Сверьте код ключа или состав участников перед отправкой.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Чат, приостановленный из-за смены ключа, может открыться с новым ключом. Личный чат, пропавший из «Чата», может вернуться как групповой чат, доступный сообществу. Сверьте код ключа или состав участников перед отправкой.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "Этот телефон проверяет этот чат с начала, как при восстановлении или обновлении приложения.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "Память чатов этого сообщества была сброшена, поэтому телефон проверяет этот чат с самого начала.",
   "The key behind \"{name}\" changed.": "Ключ «{name}» изменился.",
@@ -324,7 +324,7 @@
   "Ledger\u0004tab": "Реестр",
   "Settings\u0004tab": "Настройки",
   "Home updated": "Главная обновлена",
-  "This community's server needs an update before Home works. Market and Talk still work.": "Серверу сообщества требуется обновление для работы Главной. Рынок и Беседы работают.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "Серверу сообщества требуется обновление для работы Главной. Рынок и Чат работают.",
   "Couldn't reach your community; showing what we had": "Не удалось связаться с сообществом; показано сохранённое",
   "That was the last tip. Add a card brings them back.": "Это был последний совет. «Добавить карточку» вернёт их.",
   "this community": "это сообщество",
@@ -333,7 +333,7 @@
   "Tune": "Настроить",
   "Home shows once you're a member of this community.": "Главная появится, как только вы станете участником этого сообщества.",
   "Open the Market": "Открыть Рынок",
-  "Open Talk": "Открыть Беседы",
+  "Open Chat": "Открыть Чат",
   "Connect to a community to see your Home.": "Подключитесь к сообществу, чтобы увидеть Главную.",
   "Connect": "Подключиться",
   "Couldn't reach your community yet. Home fills in when it answers.": "Пока не удалось связаться с сообществом. Главная заполнится, когда оно ответит.",
@@ -509,11 +509,11 @@
     "many": "Все {n} групп",
     "other": "Все {n} группы"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
-    "one": "Ваша {n} группа в Беседах",
-    "few": "Все ваши {n} группы в Беседах",
-    "many": "Все ваши {n} групп в Беседах",
-    "other": "Все ваши {n} группы в Беседах"
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
+    "one": "Ваша {n} группа в Чате",
+    "few": "Все ваши {n} группы в Чате",
+    "many": "Все ваши {n} групп в Чате",
+    "other": "Все ваши {n} группы в Чате"
   },
   "{line} Opens People.": "{line} Открывает «Люди».",
   "by {name}": "автор: {name}",

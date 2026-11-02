@@ -212,7 +212,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "Ce téléphone n'a pas pu déterminer quelles discussions sont privées, rien n'a été envoyé. Réessayez ; si le problème persiste, Paramètres → Mémoire des discussions permet de réinitialiser celle de cette communauté, ce qui revérifie chaque discussion ici depuis le début.",
   "Who your chats are with, and which are private.": "Vos correspondants et le statut privé de vos discussions.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "Ce téléphone retient avec qui est chacune de vos discussions dans une communauté, et lesquelles y sont privées, pour que la communauté ne puisse pas remplacer discrètement la personne derrière une discussion ni transformer une discussion privée en discussion de groupe. Si ce téléphone ne peut pas lire cette mémoire, les discussions de cette communauté ne peuvent pas envoyer de messages. La réinitialiser revérifie depuis le début chaque discussion de cette communauté.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Une discussion mise en pause parce que sa clé a changé peut s'ouvrir avec la nouvelle clé. Une discussion privée qui avait disparu de Talk peut revenir sous forme de discussion de groupe que la communauté peut lire. Vérifiez le code de clé, ou qui participe à la discussion, avant d'envoyer.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Une discussion mise en pause parce que sa clé a changé peut s'ouvrir avec la nouvelle clé. Une discussion privée qui avait disparu de Chat peut revenir sous forme de discussion de groupe que la communauté peut lire. Vérifiez le code de clé, ou qui participe à la discussion, avant d'envoyer.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "Ce téléphone vérifie cette discussion depuis le début, comme après une restauration ou une mise à jour.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "La mémoire des discussions de cette communauté a été réinitialisée, le téléphone revérifie cette discussion depuis le début.",
   "The key behind \"{name}\" changed.": "La clé de « {name} » a changé.",
@@ -316,7 +316,7 @@
   "Ledger\u0004tab": "Registre",
   "Settings\u0004tab": "Réglages",
   "Home updated": "Accueil mis à jour",
-  "This community's server needs an update before Home works. Market and Talk still work.": "Le serveur de cette communauté a besoin d'une mise à jour avant que l'Accueil fonctionne. Le Marché et Échanges fonctionnent toujours.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "Le serveur de cette communauté a besoin d'une mise à jour avant que l'Accueil fonctionne. Le Marché et Chat fonctionnent toujours.",
   "Couldn't reach your community; showing what we had": "Impossible de joindre votre communauté ; affichage des données en mémoire",
   "That was the last tip. Add a card brings them back.": "C'était la dernière astuce. Ajouter une carte permet de les réafficher.",
   "this community": "cette communauté",
@@ -325,7 +325,7 @@
   "Tune": "Personnaliser",
   "Home shows once you're a member of this community.": "L'Accueil s'affiche dès que vous êtes membre de cette communauté.",
   "Open the Market": "Ouvrir le Marché",
-  "Open Talk": "Ouvrir Échanges",
+  "Open Chat": "Ouvrir Chat",
   "Connect to a community to see your Home.": "Connectez-vous à une communauté pour voir votre Accueil.",
   "Connect": "Se connecter",
   "Couldn't reach your community yet. Home fills in when it answers.": "Impossible de joindre votre communauté pour l'instant. L'Accueil se complétera dès sa réponse.",
@@ -497,9 +497,9 @@
     "one": "Le {n} groupe",
     "other": "Les {n} groupes"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
-    "one": "Votre {n} groupe, dans Échanges",
-    "other": "Vos {n} groupes, dans Échanges"
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
+    "one": "Votre {n} groupe, dans Chat",
+    "other": "Vos {n} groupes, dans Chat"
   },
   "{line} Opens People.": "{line} Ouvre Membres.",
   "by {name}": "par {name}",

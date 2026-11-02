@@ -9,7 +9,7 @@ source-hash: 44b66169497e9909
 
 ## Tìm kiếm mọi người
 
-Nhấn vào **Trò chuyện**, sau đó chọn **Mọi người**. Trong ứng dụng web, hãy nhấn vào **Mọi người** trong hàng thẻ. Có ba nút:
+Nhấn vào **Chat**, sau đó chọn **Mọi người**. Trong ứng dụng web, hãy nhấn vào **Mọi người** trong hàng thẻ. Có ba nút:
 
 - **Bạn bè:** những người bạn đã thêm.
 - **Cộng đồng:** mọi thành viên. Tìm kiếm theo tên. Trên điện thoại, sắp xếp theo **Mới nhất**, **Tên**, **Bạn bè**, **Được tin cậy** hoặc **Hoạt động**. Trên cộng đồng toàn cầu, ứng dụng hiển thị các thành viên ở gần khu vực của bạn nhất: nhập ít nhất 2 chữ cái trong tên để tìm bất kỳ ai khác.

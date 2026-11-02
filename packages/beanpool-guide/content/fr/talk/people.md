@@ -9,7 +9,7 @@ source-hash: 44b66169497e9909
 
 ## Trouver des personnes
 
-Touchez **Échanges**, puis **Membres**. Dans l'application web, touchez **Membres** dans la rangée d'onglets. Il y a trois boutons :
+Touchez **Chat**, puis **Membres**. Dans l'application web, touchez **Membres** dans la rangée d'onglets. Il y a trois boutons :
 
 - **Amis :** les personnes que vous avez ajoutées.
 - **Communauté :** chaque membre. Recherchez par nom. Sur le téléphone, triez par **Récents**, **Nom**, **Amis**, **De confiance** ou **Actifs**. Sur la communauté globale, cela affiche les membres les plus proches de votre zone : saisissez au moins 2 lettres d'un nom pour trouver n'importe qui d'autre.

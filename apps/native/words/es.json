@@ -212,7 +212,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "Este teléfono no pudo leer qué chats son privados aquí, así que no se envió nada. Inténtalo de nuevo; si sigue fallando, en Configuración → Memoria de chats puedes restablecerla para revisar todo desde el principio.",
   "Who your chats are with, and which are private.": "Con quién son tus chats y cuáles son privados.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "Este teléfono recuerda con quién es cada chat en una comunidad y cuáles son privados, para que la comunidad no pueda cambiar silenciosamente a la persona detrás de un chat ni convertir un chat privado en uno grupal. Si no puede leer esa memoria, no se pueden enviar mensajes. Restablecerla vuelve a verificar cada chat desde el inicio.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Un chat pausado porque cambió su clave puede abrirse con la nueva clave. Un chat privado que había desaparecido puede volver como chat grupal que la comunidad puede leer. Verifica el código de clave o quién está en el chat antes de enviar.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Un chat pausado porque cambió su clave puede abrirse con la nueva clave. Un chat privado que había desaparecido puede volver como chat grupal que la comunidad puede leer. Verifica el código de clave o quién está en el chat antes de enviar.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "Este teléfono está comprobando este chat desde el principio, tal como hace al restaurarlo o actualizar la app.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "Se restableció la memoria de chats de esta comunidad, por lo que este teléfono está comprobando este chat desde el principio.",
   "The key behind \"{name}\" changed.": "La clave detrás de «{name}» cambió.",
@@ -316,7 +316,7 @@
   "Ledger\u0004tab": "Registro",
   "Settings\u0004tab": "Ajustes",
   "Home updated": "Inicio actualizado",
-  "This community's server needs an update before Home works. Market and Talk still work.": "El servidor de esta comunidad necesita una actualización antes de que Inicio funcione. Mercado y Charlas siguen funcionando.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "El servidor de esta comunidad necesita una actualización antes de que Inicio funcione. Mercado y Chat siguen funcionando.",
   "Couldn't reach your community; showing what we had": "No se pudo contactar a tu comunidad; mostrando lo que teníamos",
   "That was the last tip. Add a card brings them back.": "Ese fue el último consejo. Añadir tarjeta los trae de vuelta.",
   "this community": "esta comunidad",
@@ -325,7 +325,7 @@
   "Tune": "Ajustar",
   "Home shows once you're a member of this community.": "Inicio se muestra una vez que seas miembro de esta comunidad.",
   "Open the Market": "Abrir el Mercado",
-  "Open Talk": "Abrir Charlas",
+  "Open Chat": "Abrir Chat",
   "Connect to a community to see your Home.": "Conéctate a una comunidad para ver tu Inicio.",
   "Connect": "Conectar",
   "Couldn't reach your community yet. Home fills in when it answers.": "Aún no se pudo contactar a tu comunidad. Inicio se llenará cuando responda.",
@@ -497,9 +497,9 @@
     "one": "El {n} grupo",
     "other": "Los {n} grupos"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
-    "one": "Tu {n} grupo, en Charlas",
-    "other": "Tus {n} grupos, en Charlas"
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
+    "one": "Tu {n} grupo, en Chat",
+    "other": "Tus {n} grupos, en Chat"
   },
   "{line} Opens People.": "{line} Abre Personas.",
   "by {name}": "por {name}",

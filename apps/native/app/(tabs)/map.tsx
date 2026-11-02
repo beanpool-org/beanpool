@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, useReducer } from 'react';
-import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, Pressable, Image as RNImage, Linking, DeviceEventEmitter, Animated, PixelRatio } from 'react-native';
+import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, Pressable, Image as RNImage, Linking, DeviceEventEmitter, Animated, PixelRatio, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
+import MapView, { Marker, PROVIDER_DEFAULT } from '../../components/Map';
+import { MapAreaRing } from '../../components/MapAreaRing';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { t, upperCase } from '@beanpool/core';
+import { STACK_LIST_CLOSED, settleMapStop, stackDropped, stackRestWatch, stackShut, stackTapped, t, upperCase, type StackListState } from '@beanpool/core';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts } from '../../utils/db';
@@ -13,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FilterChipRow } from '../../components/FilterChipRow';
 import { FilterChipPicker } from '../../components/FilterChipPicker';
-import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
+import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR, EVENT_PIN } from '../../components/UnifiedMapPin';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EVENT_ACCENT } from '../../components/EventCard';
 import { eventPinCard, type EventWindow } from '../../utils/events';
@@ -27,37 +28,16 @@ import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans } from '../../utils/market-global';
+import { MapStackList } from '../../components/MapStackList';
+import { MARKER_Z, bubbleHolding, mapRestOf, planBubbleTap, regionClearOfList, stackPosts } from '../../utils/map-stack';
+import { darkMapStyle, hidePoisStyle, mapIsDark, mapSchemeKey, type MapSchemePick } from '../../utils/map-scheme';
+
+// The window as the clustering library read it: once, when the app loaded (its helpers.js). A bubble's zoom is worked out in its units.
+const CLUSTER_WINDOW = Dimensions.get('window');
 
 const CATEGORIES = POST_CATEGORIES;
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
 const CATEGORIES_BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
-
-// Hide Google Maps POI markers
-const hidePoisStyle = [
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.park", elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-];
-
-const darkMapStyle = [
-  ...hidePoisStyle,
-  { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
-  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
-];
 
 const ClusterMarker = ({ cluster, clustersReady }: any) => {
     const { geometry, onPress, properties } = cluster;
@@ -89,6 +69,7 @@ const ClusterMarker = ({ cluster, clustersReady }: any) => {
                     onPress={onPress}
                     tracksViewChanges={tracksViewChanges}
                     anchor={CLUSTER_ANCHOR}
+                    zIndex={MARKER_Z.bubble}
                 >
                     <View style={{ width: glow + 8, height: glow + 8, justifyContent: 'center', alignItems: 'center' }}>
                         <RNImage 
@@ -108,6 +89,7 @@ const ClusterMarker = ({ cluster, clustersReady }: any) => {
                 onPress={onPress}
                 tracksViewChanges={tracksViewChanges}
                 anchor={CLUSTER_ANCHOR}
+                zIndex={MARKER_Z.bubble}
                 image={{ uri: cachedImage }}
             />
         );
@@ -123,6 +105,7 @@ const ClusterMarker = ({ cluster, clustersReady }: any) => {
             tracksViewChanges={true}
             style={{ zIndex: points + 1 }}
             anchor={CLUSTER_ANCHOR}
+            zIndex={MARKER_Z.bubble}
         >
             <View collapsable={false} style={{ width: glow, height: glow, justifyContent: 'center', alignItems: 'center' }}>
                 <View collapsable={false} style={{ position: 'absolute', width: glow, height: glow, borderRadius: glow / 2, backgroundColor: 'rgba(59, 130, 246, 0.25)' }} />
@@ -138,10 +121,17 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
 
     const postType = (post.type || '').toLowerCase();
     const isOffer = postType === 'offer';
-    const bgColor = isOffer ? '#10b981' : '#ea580c';
-    const markerEmoji = catObj?.emoji || (isOffer ? '📦' : '❤️');
-    const isElder = (post.author_energy_cycled || 0) >= 10000;
-    const cachedImage = markersReady ? getCachedMarkerImage(markerEmoji, bgColor, isElder) : null;
+    // An event wears the one event pin (UnifiedMapPin's EVENT_PIN): the event violet, a calendar, no elder ring.
+    const isEvent = postType === 'event';
+    const bgColor = isEvent ? EVENT_PIN.bgColor : isOffer ? '#10b981' : '#ea580c';
+    const markerEmoji = isEvent ? EVENT_PIN.emoji : catObj?.emoji || (isOffer ? '📦' : '❤️');
+    const isElder = !isEvent && (post.author_energy_cycled || 0) >= 10000;
+    const glyph = isEvent ? EVENT_PIN.glyph : undefined;
+    const cachedImage = markersReady ? getCachedMarkerImage(markerEmoji, bgColor, isElder, glyph) : null;
+    // Opacity 0 is the library hiding this pin behind a bubble, and on Android such a pin still takes taps.
+    const hidden = opacity === 0;
+    const onMarkerPress = (e: any) => { e.stopPropagation(); onPress(post, hidden); };
+    const zIndex = hidden ? MARKER_Z.hiddenPin : MARKER_Z.pin;
 
     // Platform fix: We start tracksViewChanges=true on Android.
     // It will be set to false ONLY when the RNImage's onLoad fires.
@@ -161,7 +151,8 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
                     tracksViewChanges={tracksViewChanges}
                     opacity={opacity}
                     anchor={PIN_ANCHOR}
-                    onPress={(e) => { e.stopPropagation(); onPress(post); }}
+                    zIndex={zIndex}
+                    onPress={onMarkerPress}
                 >
                     <View style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, justifyContent: 'center', alignItems: 'center' }}>
                         <RNImage 
@@ -182,8 +173,9 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
                 tracksViewChanges={tracksViewChanges}
                 opacity={opacity}
                 anchor={PIN_ANCHOR}
+                zIndex={zIndex}
                 image={{ uri: cachedImage }}
-                onPress={(e) => { e.stopPropagation(); onPress(post); }}
+                onPress={onMarkerPress}
             />
         );
     }
@@ -195,80 +187,28 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
             tracksViewChanges={false}
             opacity={opacity}
             anchor={PIN_ANCHOR}
-            onPress={(e) => { e.stopPropagation(); onPress(post); }}
+            zIndex={zIndex}
+            onPress={onMarkerPress}
         >
             <View collapsable={false} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H }}>
                 <PinVisual
                     emoji={markerEmoji}
                     bgColor={bgColor}
                     isElder={isElder}
+                    glyph={glyph}
                 />
             </View>
         </Marker>
     );
 });
 
-/**
- * The event pin's glyph: a calendar drawn from Views, with no date on it. The 📅 emoji it replaces is drawn by
- * Android with a date printed on the page ("JUL 17"), which read as the event's date (events round 2, B7). Plain
- * Views rather than an icon font, because the marker is rasterised once (tracksViewChanges={false}) and a font
- * glyph that had not loaded yet would come out blank.
- */
-const EventPinGlyph = () => (
-    <View style={{ width: 18, height: 18, alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: 10, height: 4, zIndex: 1 }}>
-            <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: '#ffffff' }} />
-            <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: '#ffffff' }} />
-        </View>
-        <View style={{ width: 17, height: 14, marginTop: -2, borderRadius: 3, borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden' }}>
-            <View style={{ height: 3.5, backgroundColor: '#ffffff' }} />
-        </View>
-    </View>
-);
-
-/**
- * An event's pin, in the deep violet the event card and the web map's pin already use. Drawn here rather
- * than through UnifiedMapPin, which knows only Offer (green) and Need (orange) and is off-limits — an event
- * routed through it came out as a Need.
- *
- * Rendered with `cluster={false}` (on this element: react-native-map-clustering reads the prop off the map's
- * direct children): an event is never folded into a bubble of listings, where nobody looking for events would
- * find it (events round 2, B2). There are few — five upcoming per host.
- */
-const EventMapMarker = React.memo(({ coordinate, post, isSelected, onPress }: any) => (
-    <Marker
-        coordinate={coordinate}
-        tracksViewChanges={false}
-        anchor={PIN_ANCHOR}
-        zIndex={10}
-        onPress={(e) => { e.stopPropagation(); onPress(post); }}
-    >
-        <View collapsable={false} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, alignItems: 'center', justifyContent: 'flex-start' }}>
-            <View style={{
-                width: 34, height: 34, borderRadius: 17, backgroundColor: EVENT_ACCENT,
-                borderWidth: isSelected ? 3.5 : 2.5, borderColor: '#ffffff',
-                alignItems: 'center', justifyContent: 'center',
-            }}>
-                <EventPinGlyph />
-            </View>
-            {/* The stem, so an event pin points at its spot the way every other pin does. */}
-            <View style={{
-                width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 8,
-                borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: EVENT_ACCENT,
-                marginTop: -1,
-            }} />
-        </View>
-    </Marker>
-));
-
 export default function MapScreen() {
     const currencyStr = useCurrencyString();
-    const { theme, colors } = useTheme();
-    const [isDarkMap, setIsDarkMap] = useState(theme === 'dark');
-
-    useEffect(() => {
-        setIsDarkMap(theme === 'dark');
-    }, [theme]);
+    const { theme, themeLoading, colors } = useTheme();
+    const [pillPick, setPillPick] = useState<MapSchemePick | null>(null);
+    // A change of theme ends the pill's pick for good: back on the old theme, the pick does not return.
+    if (pillPick && pillPick.theme !== theme) setPillPick(null);
+    const isDarkMap = mapIsDark(theme, pillPick);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -362,13 +302,21 @@ export default function MapScreen() {
 
     // Map UI State
     const [selectedPostPreview, setSelectedPostPreview] = useState<any>(null);
+    // The bubble open as a list (MapStackList), by a tap or by itself: its pins' ids, read against what the map shows on every draw.
+    const [stackList, setStackList] = useState<StackListState>(STACK_LIST_CLOSED);
+    const stackIds = stackList.open;
+    const clusterIndex = useRef<any>(null);
+    // A row opened a post: coming back keeps the list open and the map where it was (the focus effect re-centres otherwise).
+    const keepMapOnReturn = useRef(false);
+    // Leaving for a post: the map may still report a stop, and the list neither opens nor closes behind it.
+    const mapFocused = useRef(true);
     const [markersReady, setMarkersReady] = useState(false);
     const [clustersReady, setClustersReady] = useState(false);
 
-    // Pre-compute unique marker variants for off-screen capture. Events are left out: they draw their own
-    // violet pin, so feeding them here would only capture offer/need images nothing renders.
+    // Pre-compute unique marker variants for off-screen capture. The list holds the one event pin (EVENT_PIN) too,
+    // captured with the listings' pins so it is ready before any pin shows.
     const markerVariants = useMemo(
-        () => buildVariantList(posts.filter(p => (p.type || '').toLowerCase() !== 'event'), CATEGORIES),
+        () => buildVariantList(posts, CATEGORIES),
         [posts]
     );
 
@@ -414,13 +362,27 @@ export default function MapScreen() {
     };
     // The filter bar hides behind a pin preview; the panel does not come back with it.
     useEffect(() => {
-        if (selectedPostPreview) closeCategoryPanel();
+        if (selectedPostPreview) { closeCategoryPanel(); setStackList(stackDropped); }
     }, [selectedPostPreview]);
     // Leaving the tab closes it too, so coming back to the Map shows the map, not the panel.
-    useFocusEffect(useCallback(() => () => dispatchCategoryPanel({ kind: 'dismiss' }), []));
+    useFocusEffect(useCallback(() => {
+        mapFocused.current = true;
+        return () => {
+            mapFocused.current = false;
+            dispatchCategoryPanel({ kind: 'dismiss' });
+            if (!keepMapOnReturn.current) setStackList(stackDropped);
+        };
+    }, []));
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
     const mapFilterState = { type: mapTypeFilter, category: mapCategoryFilter, eventWindow };
     const secondRow = mapSecondRow(mapTypeFilter);
+    const visiblePins = [...visibleMarketPins(posts, mapFilterState), ...visibleEventPins(posts, mapFilterState)];
+    const stack = stackIds ? stackPosts(stackIds, visiblePins) : [];
+    const stackOpen = stack.length > 0;
+    // Every row gone is the list gone: it does not come back by itself if those pins do.
+    useEffect(() => {
+        if (stackIds && !stackOpen) setStackList(stackDropped);
+    }, [stackIds, stackOpen]);
     /**
      * The zoom pill sits at bottom 120, which on a 320dp phone at 1.3x text runs up under the two filter
      * rows. Measure the screen, the rows and the pill, and drop the pill just far enough to clear them —
@@ -433,6 +395,21 @@ export default function MapScreen() {
         ? Math.max(36, Math.min(120, mapAreaH - filterBottom - 8 - fabPillH))
         : 120;
     const [nodeRadius, setNodeRadius] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
+
+    /** The map as the list last needs it: the wait below reads what is true when it ends, not when it began. */
+    const stackFrame = { width: CLUSTER_WINDOW.width, height: mapAreaH || CLUSTER_WINDOW.height };
+    const atRest = useRef({ region: currentRegion, frame: stackFrame, blocked: false, card: null as any, list: stackList });
+    atRest.current = { region: currentRegion, frame: stackFrame, blocked: categoryPanel.open, card: selectedPostPreview, list: stackList };
+    // The list opens and closes by itself only when the map has stopped, and a card left open from somewhere else gives way to it (core's settleMapStop).
+    const stackRest = useMemo(() => stackRestWatch(() => {
+        const { region, frame, blocked, card, list } = atRest.current;
+        if (!clusterIndex.current) return;
+        const pin = card ? { latitude: Number(card.lat), longitude: Number(card.lng) } : null;
+        const settled = settleMapStop(list, mapRestOf(clusterIndex.current, region, CLUSTER_WINDOW, frame, blocked || !mapFocused.current, pin));
+        setStackList(settled.list);
+        if (settled.closeCard) setSelectedPostPreview(null);
+    }), []);
+    useEffect(() => stackRest.moving, [stackRest]);
 
     const fetchNodeLocation = async () => {
         try {
@@ -460,7 +437,8 @@ export default function MapScreen() {
     useFocusEffect(
         React.useCallback(() => { 
             loadPosts();
-            fetchNodeLocation();
+            if (keepMapOnReturn.current) keepMapOnReturn.current = false;
+            else fetchNodeLocation();
         }, [])
     );
 
@@ -524,8 +502,34 @@ export default function MapScreen() {
         } catch (err) { console.log("Failed to fetch current location", err); }
     };
 
+    /** A bubble's tap: the zoom stops at a cap, and a bubble the cap could not part opens as a list (utils/map-stack.ts). */
+    const onClusterPress = (cluster: any, leaves: any[]) => {
+        closeCategoryPanel();
+        setSelectedPostPreview(null);
+        const splitsAt = clusterIndex.current?.getClusterExpansionZoom(cluster.id) ?? Infinity;
+        const points = leaves.map(({ geometry }) => ({ latitude: geometry.coordinates[1], longitude: geometry.coordinates[0] }));
+        const plan = planBubbleTap(splitsAt, points, currentRegion, CLUSTER_WINDOW);
+        if (plan.kind === 'zoom') {
+            setStackList(stackDropped);
+            mapRef.current?.animateToRegion(plan.region, 350);
+            return;
+        }
+        setStackList(stackTapped(leaves.map((leaf) => leaf.properties.post.id)));
+        const clear = regionClearOfList(currentRegion, stackFrame, points[0]);
+        if (clear) mapRef.current?.animateToRegion(clear, 250);
+    };
+
+    /** A hidden pin that took a tap (MARKER_Z) is its bubble taking it: the same plan, and no card first. */
+    const onPinPress = (post: any, hidden: boolean) => {
+        if (!hidden) return setSelectedPostPreview(post);
+        const bubble = clusterIndex.current && bubbleHolding(clusterIndex.current, post.id, currentRegion, CLUSTER_WINDOW);
+        if (bubble) onClusterPress(bubble.cluster, bubble.leaves);
+    };
+
     const renderCluster = (cluster: any) => {
-        return <ClusterMarker key={`cluster-${cluster.id}-${clustersReady}`} cluster={cluster} clustersReady={clustersReady} />;
+        // On iOS a marker's press bubbles to the map's own onPress, as the pins' stopPropagation says, and that closes the list.
+        const onPress = (e: any) => { e?.stopPropagation?.(); cluster.onPress(); };
+        return <ClusterMarker key={`cluster-${cluster.id}-${clustersReady}`} cluster={{ ...cluster, onPress }} clustersReady={clustersReady} />;
     };
 
     return (
@@ -550,8 +554,11 @@ export default function MapScreen() {
                     }}
                 />
             )}
-            {HAS_MAPS_KEY ? (
+            {/* Android fixes the map's base when it is created (utils/map-scheme.ts): the first one waits for the stored
+                theme, and a new scheme is a new map, which opens where the tracked region left the last one. */}
+            {themeLoading ? null : HAS_MAPS_KEY ? (
                 <MapView
+                    key={mapSchemeKey(Platform.OS, isDarkMap)}
                     ref={mapRef}
                     style={styles.map}
                     provider={PROVIDER_DEFAULT}
@@ -560,21 +567,33 @@ export default function MapScreen() {
                     showsUserLocation={true}
                     // Google's own locate button (top right, Android) doubled the one in the left pill. The pill's is the only one.
                     showsMyLocationButton={false}
+                    onRegionChange={stackRest.moving}
                     onRegionChangeComplete={(r: any) => {
                         setCurrentRegion(r);
+                        stackRest.stopped();
                     }}
                     onPress={() => {
                         if (selectedPostPreview) setSelectedPostPreview(null);
+                        setStackList(stackShut);
                         // A tap on the map closes the category panel without changing the filter.
                         closeCategoryPanel();
                     }}
                     initialRegion={currentRegion}
                     renderCluster={renderCluster}
-                    spiralEnabled={true}
+                    superClusterRef={clusterIndex}
+                    preserveClusterPressBehavior
+                    onClusterPress={onClusterPress}
+                    spiralEnabled={false}
                     animationEnabled={false}
                     radius={15}
                 >
-                    {visibleMarketPins(posts, mapFilterState).map(post => {
+                    {/* Offer, Need and event pins, one marker for all three. Events are clustered with the
+                        listings and counted in their bubbles (Marty, 31 Oct: an event is part of what the map
+                        already has, not a layer of its own). They show under All and under the Events pill,
+                        filtered by the date chips; `eventInWindow` applies the slice-1 feed rule first, so an
+                        event that has ended or been cancelled never pins — the sync pull is a replica of the
+                        list, not the list, and carries both. */}
+                    {visiblePins.map(post => {
                         const catObj = CATEGORIES_BY_ID.get(post.category) || { id: normalizeCategory(post.category), emoji: categoryEmoji(post.category), label: categoryLabel(post.category) };
                         const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
                         const isSelected = selectedPostPreview?.id === post.id;
@@ -586,36 +605,15 @@ export default function MapScreen() {
                                 catObj={catObj}
 
                                 isSelected={isSelected}
-                                onPress={setSelectedPostPreview}
+                                onPress={onPinPress}
                                 markersReady={markersReady}
                             />
                         );
                     })}
 
-                    {/* Event pins. Their own layer in the event violet, shown under All and under the
-                        Events pill, and filtered by the date chips. `eventInWindow` applies the slice-1
-                        feed rule first, so an event that has ended or been cancelled never pins — the
-                        sync pull is a replica of the list, not the list, and carries both. */}
-                    {visibleEventPins(posts, mapFilterState).map(post => (
-                        <EventMapMarker
-                            key={`event-${post.id}-${selectedPostPreview?.id === post.id}`}
-                            cluster={false}
-                            coordinate={{ latitude: Number(post.lat), longitude: Number(post.lng) }}
-                            post={{ ...post, lat: Number(post.lat), lng: Number(post.lng) }}
-                            isSelected={selectedPostPreview?.id === post.id}
-                            onPress={setSelectedPostPreview}
-                        />
-                    ))}
-
-                    {/* Service radius circle overlay */}
+                    {/* The community's area: a dashed line round its edge, no fill. */}
                     {nodeRadius && nodeRadius.radiusKm > 0 && (
-                        <Circle
-                            center={{ latitude: nodeRadius.lat, longitude: nodeRadius.lng }}
-                            radius={nodeRadius.radiusKm * 1000}
-                            strokeColor="#f59e0b"
-                            fillColor="rgba(245, 158, 11, 0.06)"
-                            strokeWidth={2}
-                        />
+                        <MapAreaRing area={nodeRadius} darkMap={isDarkMap} />
                     )}
                 </MapView>
             ) : (
@@ -628,7 +626,7 @@ export default function MapScreen() {
 
             {/* Floating Filter Bar — the type pills, and under them one contextual row that stays in
                 the same place: category chips for All / Offers / Needs, date chips for Events. */}
-            {!selectedPostPreview && (
+            {!selectedPostPreview && !stackOpen && (
                 <View
                     style={styles.filterBarWrapper}
                     pointerEvents="box-none"
@@ -692,9 +690,9 @@ export default function MapScreen() {
             )}
 
             {/* Map Action FABs - Left Pill */}
-            {!selectedPostPreview && !categoryPanel.open && (
+            {!selectedPostPreview && !stackOpen && !categoryPanel.open && (
                 <View style={[styles.fabPill, { bottom: fabPillBottom, left: 16 }]} pointerEvents="box-none" onLayout={e => setFabPillH(e.nativeEvent.layout.height)}>
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Toggle dark mode')} style={styles.pillBtn} onPress={() => setIsDarkMap(!isDarkMap)}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('Toggle dark mode')} style={styles.pillBtn} onPress={() => setPillPick({ theme, dark: !isDarkMap })}>
                         <Text style={styles.pillBtnEmoji}>{isDarkMap ? '☀️' : '🌙'}</Text>
                     </TouchableOpacity>
                     <View style={styles.pillDivider} />
@@ -815,8 +813,17 @@ export default function MapScreen() {
             )}
 
 
+            {stackOpen && (
+                <MapStackList
+                    key={stackIds?.join()}
+                    posts={stack}
+                    onOpen={(id) => { keepMapOnReturn.current = true; router.push(`/post/${id}`); }}
+                    onClose={() => setStackList(stackShut)}
+                />
+            )}
+
             {/* FAB — New Post Button */}
-            {!selectedPostPreview && (
+            {!selectedPostPreview && !stackOpen && (
                 <SafeAreaView style={StyleSheet.absoluteFill} pointerEvents="box-none">
                     <TouchableOpacity
                         accessibilityRole="button"

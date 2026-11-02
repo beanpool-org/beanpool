@@ -152,6 +152,7 @@ matches the file.
 | `ink.accent` | `#5b6b5b` | `#c0ccc0` |
 | `ink.terra` | `#a3472e` | `#e5967f` |
 | `ink.info` | `#2563eb` | `#93c5fd` |
+| `map.ring` | `#92400e` | `#d4a24e` |
 
 What each is for, and its ratios (the same in both themes for fills; lowest page or card for inks):
 
@@ -177,6 +178,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `ink.accent` | the sage accent as words and icons | 4.94 | 6.45 |
 | `ink.terra` | terracotta as words: the manager's links, labels, hovered titles | 5.22 | 4.60 |
 | `ink.info` | the onboarding blue as words, outlines, rings, progress (web only, judged on the web's grounds: `WEB_ONLY_INKS`) | 4.71 | 5.95 |
+| `map.ring` | a community's area on a map, a thin dashed line and never words: judged at 3:1 on the map's own grounds (`MAP_GROUNDS`), and read with the map's theme, not the app's (`areaRingColour`); the web and the manager only have OSM's light map, so they draw the light one in both themes | 4.18 | 3.65 |
 
 ## Not covered (they keep their own hex)
 

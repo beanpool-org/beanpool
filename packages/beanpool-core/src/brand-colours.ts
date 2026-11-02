@@ -209,6 +209,15 @@ export const BRAND_COLOURS = {
          */
         info: themed(BLUE_600, BLUE_300),
     },
+    /**
+     * Lines drawn on a map, never words. `ring` is a community's area (map-area-ring.ts): the two themes are picked apart
+     * (Marty, 2 Nov: "make sure its visible - but not overly visible on dark map"). In light a deep amber that is easy to
+     * find on land, parks and water, where the old amber-500 was 2:1. In dark a muted amber that shows on the land and stays
+     * under the map's own labels. A map's theme is its own, so read it with the map's, not the app's: areaRingColour.
+     */
+    map: {
+        ring: themed(AMBER_800, '#d4a24e'),
+    },
 } as const satisfies {
     readonly [role: string]: FillRole | { readonly [name: string]: ChipRole } | { readonly [name: string]: Themed };
 };
@@ -266,6 +275,16 @@ export const WEB_ONLY_INKS: readonly string[] = ['info'];
  * web draws it from the `--bp-deal-<name>-wash` variable brandCssVariableMap() writes.
  */
 export const DEAL_TINT_ALPHA = 0.4;
+
+/**
+ * What a line on a map is drawn over. Light: Google's rural land, town, buildings and water, read off the emulator's map on
+ * 2 Nov 2026, then OSM's land, water, forest and streets, the only map the web has. Dark: the phone's dark map, the land and
+ * water of apps/native/utils/map-scheme.ts, whose test holds these to it.
+ */
+export const MAP_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
+    light: ['#d3f8e2', '#f7f6f6', '#e9eaef', '#8fd8ec', '#f2efe9', '#aad3df', '#add19e', '#e0dfdf'],
+    dark: ['#414e61', '#0f2f4d'],
+};
 
 /** Roles allowed 3.0 instead of 4.5 because their words are always 24 px or larger (WCAG "large text"). None today. */
 export const LARGE_TEXT_ROLES: readonly string[] = [];
@@ -357,6 +376,8 @@ export function brandContrastPairs(): BrandContrastPair[] {
         pairs.push({ theme, role, pair, ink, ground, ratio: contrastRatio(ink, ground), min: min(role) });
     for (const theme of ['light', 'dark'] as const) {
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
+            // A line on a map is not words: __tests__/map-area-ring.test.ts judges it on MAP_GROUNDS.
+            if (role === 'map') continue;
             if (role === 'deal') {
                 // Only the web draws these words, over the chat: judged on the web's grounds through the tint.
                 for (const [name, line] of Object.entries(node as BrandColours['deal'])) {

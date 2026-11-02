@@ -12,9 +12,10 @@
  * Leaving it (✕, the chooser closed, a poll or event done, "Not now", Back) takes the member back to where they were.
  */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, Alert, ScrollView, TextInput, Pressable, Dimensions, Image as RNImage, Keyboard, Linking, Modal, FlatList } from 'react-native';
+import { StyleSheet, View, Text, Alert, ScrollView, TextInput, Pressable, Dimensions, Image as RNImage, Keyboard, Linking, Modal, FlatList, Platform } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import { MapAreaRing } from '../components/MapAreaRing';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -36,6 +37,7 @@ import { TagPicker } from '../components/TagPicker';
 import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType, clearDraftToolMarker, decideDraftOpen } from '../utils/compose-options';
 import { palette } from '../constants/colors';
 import { HAS_MAPS_KEY } from '../utils/maps';
+import { darkMapStyle, mapSchemeKey } from '../utils/map-scheme';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../constants/categories';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { getCachedNodeProfile } from '../utils/node-profile';
@@ -682,10 +684,12 @@ export default function NewListingScreen() {
             {/* The pin map: "Drop a pin" hides the form and shows the community's map to tap, with the pin as it lands. */}
             {pinDropMode && showNewPost && (HAS_MAPS_KEY ? (
                 <MapView
+                    key={mapSchemeKey(Platform.OS, theme === 'dark')}
                     ref={mapRef}
                     style={styles.map}
                     provider={PROVIDER_DEFAULT}
                     userInterfaceStyle={theme === 'dark' ? 'dark' : 'light'}
+                    customMapStyle={theme === 'dark' ? darkMapStyle : undefined}
                     showsUserLocation={true}
                     showsMyLocationButton={false}
                     toolbarEnabled={false}
@@ -694,13 +698,7 @@ export default function NewListingScreen() {
                     onLongPress={handleMapPress}
                 >
                     {nodeRadius && nodeRadius.radiusKm > 0 && (
-                        <Circle
-                            center={{ latitude: nodeRadius.lat, longitude: nodeRadius.lng }}
-                            radius={nodeRadius.radiusKm * 1000}
-                            strokeColor={palette.amber500}
-                            fillColor="rgba(245, 158, 11, 0.06)"
-                            strokeWidth={2}
-                        />
+                        <MapAreaRing area={nodeRadius} darkMap={theme === 'dark'} />
                     )}
                     {postLat != null && postLng != null && (
                         <Marker coordinate={{ latitude: postLat, longitude: postLng }} pinColor={postType === 'offer' ? palette.emerald500 : palette.orange600} />

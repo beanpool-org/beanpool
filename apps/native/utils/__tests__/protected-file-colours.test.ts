@@ -114,6 +114,7 @@ const GROUNDS_AND_LINES: Record<string, string> = {
 const PALETTE_ON_MAIN: Record<string, string> = {
     amber700: '#b45309', // map.tsx:1496 "Contributions First" on a pale amber box
     blue600: '#2563eb', // map.tsx:146 and UnifiedMapPin.tsx:253 the cluster circle, under its white count (pair above)
+    violet600: '#7c3aed', // UnifiedMapPin.tsx EVENT_PIN: the event pin and its calendar (EventCard.tsx EVENT_ACCENT); no words
 };
 
 /**

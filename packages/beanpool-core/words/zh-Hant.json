@@ -830,6 +830,7 @@
   "No public address currently assigned. An owner of this community can add one.": "目前未指派公開地址。此社群的擁有者可以新增一個。",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} 還不是主要地址：地址服務的回答是 {status}。此伺服器已轉到它並繼續請求，因此下方面板現在顯示它。成員仍可透過 {current} 存取此社群。",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它現在是此社群的地址。此後，新成員會被引導到此社群的其他地址（如果有）。此社群不再公布 {address}，也不會放棄任何名稱。只要其金鑰持有 {address}，使用它的成員應用程式仍被接受。如果金鑰不持有它，此後這些應用程式將被拒絕。",
+  "{n} at this spot": "此處有 {n} 項",
   "**Confirmed members** can owe up to {amount} Beans (the known floor)": "**已確認成員**最多可欠 {amount} 顆豆子（已知下限）",
   "The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for {days} without a sale. Each look is logged.": "如果已確認成員所欠超過其信用額度的一半，或連續 {days} 沒有銷售且仍處於透支，管理員就能看到其餘額。每次查看都會被記錄。",
   "The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or stay in debit for {days} without a sale. Each look is logged.": "如果已確認成員所欠超過其信用額度的 {pct}%，或連續 {days} 沒有銷售且仍處於透支，管理員就能看到其餘額。每次查看都會被記錄。",

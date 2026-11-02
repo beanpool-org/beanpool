@@ -154,10 +154,10 @@ describe('dark mode: themed screens draw with the theme', () => {
         'components/NeedsYouIcons.tsx': ["'#1f2937'"],                     // the count on its white or accent dot
     };
     const PROTECTED = new Set(['components/GlobalHeader.tsx']); // off-limits
-    // map.tsx is judged since Marty's colour edit of 14 Oct (#1904), except values that are not words: Google's dark map
-    // style (its `color` paints the map itself, :59-73) and the colour emoji's fallback on a photo-less pin card (:1341).
+    // map.tsx is judged since Marty's colour edit of 14 Oct (#1904), except the colour emoji's fallback on a photo-less pin
+    // card, which is not words. Google's dark map style, which paints the map itself, lives in utils/map-scheme.ts now.
     const NOT_WORDS: Record<string, string[]> = {
-        'app/(tabs)/map.tsx': ['"#242f3e"', '"#746855"', '"#263c3f"', '"#38414e"', '"#212a37"', '"#1f2835"', '"#2f3948"', '"#17263c"', '"#515c6d"', "'#000'"],
+        'app/(tabs)/map.tsx': ["'#000'"],
     };
     // A fill token given to `color`: since #1904 a fill is the same deep value in both themes (emerald-700, red-700,
     // orange-700, indigo-600), so as words on the dark card it reads 2.7–3.2:1. Words take the ink tokens (brand.primary,
@@ -203,7 +203,6 @@ describe('dark mode: themed screens draw with the theme', () => {
 
     // White grounds that are right in both schemes: brand buttons, ticks and glyphs on coloured marks, dev-only probes.
     const WHITE_OK = new Set([
-        'app/(tabs)/map.tsx',          // the pin glyph's white strokes (and the file is protected)
         'app/apple-probe.tsx',         // dev-only probe screen
         'app/google-probe.tsx',        // dev-only probe screen
         'components/CreditBar.tsx',    // ticks and the thumb on the coloured bar

@@ -175,12 +175,17 @@ test('the home page\'s web note and /global\'s "No Google Play?" line lead to th
         const note = notes.find((n) => n.includes('android'));
         assert.ok(note, `${lang}/index.html: the web note names the download`);
         assert.match(note, /<a href="android\.html">beanpool\.org\/android<\/a>/, `${lang}/index.html: it links this language's page`);
+        assert.ok(note.includes('APK'), `${lang}/index.html: the web note says APK`);
         if (lang === 'en') assert.doesNotMatch(note, /home screen/i, 'no "add them to your home screen": that makes a second icon');
 
         const global = markup(lang, 'global.html');
         const door = global.match(/<div class="hero-door" id="door-play">([\s\S]*?)<\/div>/)?.[1];
         assert.ok(door, `${lang}/global.html: the Google Play door`);
         assert.match(door, /<p class="global-apk"><a href="android\.html">[^<]+<\/a><\/p>/, `${lang}/global.html: the line is in the Google Play door, so an iPhone never sees it`);
+        assert.match(door, /<p class="global-apk">.*APK.*<\/p>/, `${lang}/global.html: the line says APK`);
+
+        const download = markup(lang, 'android.html').match(/<span class="apk-label">([\s\S]*?)<\/a>/)?.[1] ?? '';
+        assert.ok(download.includes('APK'), `${lang}/android.html: the button says APK`);
     }
 });
 

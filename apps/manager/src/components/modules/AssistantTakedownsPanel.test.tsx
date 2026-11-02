@@ -107,7 +107,7 @@ describe('Taken down by assistants', () => {
     });
 
     it('says when a Child safety report is what left a post hidden, and that removing it closes that report', async () => {
-        const left = { ...CALL, posts: [{ id: 'p4', title: 'Waiting for a person', author: 'Sam', type: 'offer', state: 'left_hidden', leftFor: 'child_safety' }] };
+        const left = { ...CALL, posts: [{ id: 'p4', title: 'Waiting for a person', author: 'Sam', type: 'offer', state: 'left_hidden', leftFor: 'child_safety', childSafetyOpen: true }] };
         const calls = serve({ canActOnMany: true, takedowns: [left] });
         render(<AssistantTakedownsPanel activeNode={NODE} />);
         fireEvent.click(await screen.findByText('Show its posts'));
@@ -117,6 +117,37 @@ describe('Taken down by assistants', () => {
         expect(await screen.findByText(/A Child safety report on it is still open.*Removing the post closes that report/)).toBeTruthy();
         expect(screen.queryByText(/refunds the buyer/)).toBeNull();
         expect(calls).toHaveLength(0);
+    });
+
+    it('warns from the first day of the hold: a Child safety report open on a post still only hidden', async () => {
+        const held = { ...CALL, posts: [{ id: 'p5', title: 'Day two', author: 'Sam', type: 'offer', state: 'hidden', leftFor: null, childSafetyOpen: true }] };
+        const calls = serve({ canActOnMany: true, takedowns: [held] });
+        render(<AssistantTakedownsPanel activeNode={NODE} />);
+        fireEvent.click(await screen.findByText('Show its posts'));
+        expect(screen.getByText(/Hidden: a Child safety report is open/)).toBeTruthy();
+        fireEvent.click(screen.getByTestId('agent-takedown-remove'));
+        expect(await screen.findByText(/A Child safety report on it is still open.*Removing the post closes that report and tells whoever filed it/)).toBeTruthy();
+        expect(screen.queryByText(/It goes for good/)).toBeNull();
+        expect(calls).toHaveLength(0);
+    });
+
+    it('a hidden post with no such report keeps the plain words', async () => {
+        serve({ canActOnMany: true, takedowns: [{ ...CALL, posts: [{ id: 'p6', title: 'Plain', author: 'Sam', type: 'offer', state: 'hidden', leftFor: null, childSafetyOpen: false }] }] });
+        render(<AssistantTakedownsPanel activeNode={NODE} />);
+        fireEvent.click(await screen.findByText('Show its posts'));
+        expect(screen.queryByText(/Child safety report is open/)).toBeNull();
+        fireEvent.click(screen.getByTestId('agent-takedown-remove'));
+        expect(await screen.findByText(/It goes for good, without waiting for the 7 days/)).toBeTruthy();
+        expect(screen.queryByText(/still open/)).toBeNull();
+    });
+
+    it('a post held for a deal with a Child safety report open says both, because the removal does both', async () => {
+        serve({ canActOnMany: true, takedowns: [{ ...CALL, posts: [{ id: 'p7', title: 'Both', author: 'Sam', type: 'offer', state: 'left_hidden', leftFor: 'deal', childSafetyOpen: true }] }] });
+        render(<AssistantTakedownsPanel activeNode={NODE} />);
+        fireEvent.click(await screen.findByText('Show its posts'));
+        expect(screen.getByText(/Left hidden: a deal in escrow, and a Child safety report is open/)).toBeTruthy();
+        fireEvent.click(screen.getByTestId('agent-takedown-remove'));
+        expect(await screen.findByText(/removing it refunds the buyer.*A Child safety report on it is still open/)).toBeTruthy();
     });
 
     it('says what a whole call left behind, and why, before and after', async () => {

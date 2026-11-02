@@ -269,14 +269,15 @@ const LISTED_REPORTS = [
         createdAt: '2026-09-17T08:30:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[3], targetCallsign: MEMBER_NAMES[6],
         postId: 'post-2003', postTitle: 'Need a hand moving a fridge up two flights of stairs, Saturday morning, Riverbend-Upper-Esplanade',
         postDescription: 'Saturday morning, will feed you afterwards.',
-        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, pulseItem: null,
+        // An assistant's takedown on hold (this post's two reports): the moderator's card says so, and phone-width.mjs measures that at 320px.
+        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, postOnHold: true, pulseItem: null,
     },
     {
         id: 'report-2001', reason: 'Listed the same secondhand generator in both the free and for-sale categories at once, twice this week',
         createdAt: '2026-09-18T09:12:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[1], targetCallsign: MEMBER_NAMES[6],
         postId: 'post-2003', postTitle: 'Need a hand moving a fridge up two flights of stairs, Saturday morning, Riverbend-Upper-Esplanade',
         postDescription: 'Saturday morning, will feed you afterwards. Contact via https://www.example.org/a-very-long-unbroken-link-that-should-wrap-inside-its-card',
-        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, pulseItem: null,
+        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, postOnHold: true, pulseItem: null,
     },
     {
         id: 'report-2002', reason: 'Cross-posted the same "urgent free firewood, gate code 4482, ask for Dave" listing to the Pulse feed every day for a week',

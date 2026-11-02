@@ -82,7 +82,7 @@ import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledge
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
-    evaluateAutoMute, liftMute as liftMuteEngine,
+    evaluateAutoMute, liftMute as liftMuteEngine, onHold,
 } from './engine/auto-moderation.js';
 import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
 import {
@@ -609,6 +609,11 @@ export interface AbuseReport {
     postRemoved?: boolean | null;
     /** The reported post is hidden by reports, waiting for a moderator (global profile, G3). */
     postHiddenByReports?: boolean | null;
+    /**
+     * The reported post is a takedown on hold (engine/auto-moderation.ts onHold): hidden, and going for good unless an owner or admin
+     * puts it back. Dismissing a report doesn't keep it, so no screen may say so. A flag only, beside the report. Null when no post is reported.
+     */
+    postOnHold?: boolean | null;
     /** The reported post was made by an owner's AI assistant (posts.created_via, agent/owner-posts.ts); null when no post is reported. */
     postMadeByAssistant?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
@@ -7527,7 +7532,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mt.callsign as target_callsign,
                p.title as post_title, substr(p.description, 1, 500) as post_description,
                p.id as post_row_id, p.active as post_active, p.status as post_status,
-               p.hidden_by_reports_at as post_hidden_at, p.created_via as post_created_via,
+               p.hidden_by_reports_at as post_hidden_at, p.removed_by_moderator_at as post_removed_by_moderator_at, p.created_via as post_created_via,
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
@@ -7591,6 +7596,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         // Hidden by reports, waiting for a moderator (G3): restore it or remove it.
         postHiddenByReports: r.post_row_id ? !!r.post_hidden_at : null,
+        // A takedown on hold: "kept" is no longer on offer, whatever a dismissal does.
+        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, removed_by_moderator_at: r.post_removed_by_moderator_at }) : null,
         // Made by an owner's AI assistant (agent/owner-posts.ts): moderators see it; members never do.
         postMadeByAssistant: r.post_row_id ? (typeof r.post_created_via === 'string' && r.post_created_via.startsWith('assistant:')) : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
@@ -7673,13 +7680,14 @@ export function dismissReport(reportId: string): boolean {
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
     // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed. If the
-    // author had already taken it down, "kept" would be untrue: they hear it is no longer up.
-    const post = report?.target_post_id ? db.prepare('SELECT active, status FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
+    // author had already taken it down, "kept" would be untrue: they hear it is no longer up. The same for a takedown on hold: a
+    // dismissal doesn't bring it back (recheckHiddenPost refuses), here or on a standby that took over.
+    const post = report?.target_post_id ? db.prepare('SELECT active, status, removed_by_moderator_at FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
     // A hidden post whose remaining reports no longer add up to a hide is visible again (G3), before the reporter
     // is told it was kept.
     if (res.changes > 0 && report?.target_post_id) recheckHiddenPost(moderationNoticeCb, report.target_post_id);
     if (res.changes > 0 && post && (report.status === 'pending' || report.status == null)) {
-        notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id, post.active === 1 && post.status !== 'cancelled');
+        notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id, post.active === 1 && post.status !== 'cancelled' && !onHold(post));
     }
     return res.changes > 0;
 }

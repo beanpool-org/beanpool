@@ -16,7 +16,7 @@ import { requireAdminRole } from '../admin-auth.js';
 import { getMember, getReports, type AbuseReport } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { cleanMemberText } from './fence.js';
-import { approveCall, declineSuggestion, openSuggestions, SUGGESTION_WORDS } from './suggestions.js';
+import { approveCall, declineSuggestion, openSuggestions, suggestionAsks } from './suggestions.js';
 
 export const AGENT_SUGGESTIONS_PATH = '/api/local/admin/agent/suggestions';
 
@@ -61,6 +61,7 @@ function originalReport(r: AbuseReport | null) {
         author: cleanMemberText(kind === 'member' ? r.targetCallsign : r.postAuthorCallsign, 60) || null,
         postRemoved: r.postRemoved === true || r.pulseItem?.removed === true,
         hiddenByReports: r.postHiddenByReports === true,
+        postOnHold: r.postOnHold === true,
     };
 }
 
@@ -77,16 +78,17 @@ export function createAgentSuggestionRoutes(deps: RouteDeps): Router {
         ctx.body = {
             suggestions: list.map((x) => {
                 const mine = same(me, x.grant.member);
+                const report = findReport(x.target);
                 return {
                     id: x.id,
                     kind: x.kind,
-                    asks: SUGGESTION_WORDS[x.kind],
+                    asks: suggestionAsks(x.kind, report),
                     at: x.at,
                     expiresAt: x.expiresAt,
                     agent: { id: x.grant.id, name: x.grant.name, member: cleanMemberText(getMember(x.grant.member)?.callsign ?? '', 60) || null },
                     /** The assistant's words: text from outside, shown as text beside the original, never as markup. */
                     reason: { untrusted: true, text: x.reason },
-                    report: originalReport(findReport(x.target)),
+                    report: originalReport(report),
                     mine,
                     approve: mine ? approveCall(x) : null,
                 };

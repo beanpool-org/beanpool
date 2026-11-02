@@ -197,7 +197,7 @@ export function notifyPostTakedown(
 
 /**
  * An admin dismissed a report on a post: its reporter hears the post was reviewed and kept — or, when its
- * author had already taken it down, only that it is no longer up.
+ * author had already taken it down or a takedown has it on hold, only that it is no longer up.
  */
 export function notifyReportDismissed(cb: ModerationNoticeCallbacks, reporterPubkey: string, postId: string, postIsLive = true): void {
     if (postIsLive) {

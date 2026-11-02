@@ -18,7 +18,8 @@
  *   - a moderator has not already answered them on this post (a dismissed report, 'reviewed', means "looked at, and
  *     kept", so after a moderator keeps a post only NEW reporters can hide it again);
  *   - a moderator has not kept 3 or more of the posts they reported in the last 30 days (dismissed their report on a
- *     post that is still up): a reporter the moderators keep overruling stops counting, everywhere, for a while.
+ *     post that is still up, which a takedown on hold is not): a reporter the moderators keep overruling stops counting,
+ *     everywhere, for a while.
  * Reporters who count are then grouped into circles, and each circle counts once, however many of them reported:
  *   - the same connection: they joined through the open door from one internet address (an IPv6 /64) within 24 hours
  *     of each other (`open_joins.join_cohort`, a random label given at the join: engine/open-join.ts JOIN_COHORT_HOURS).
@@ -104,13 +105,14 @@ function postRow(postId: string): PostForModeration | undefined {
 const forNotice = (p: PostForModeration) => ({ id: p.id, title: p.title, authorPubkey: p.author_pubkey });
 
 /** Still up: not taken down by its author or a moderator. Only then is "your post is back" true. */
-const isLive = (p: PostForModeration) => p.active === 1 && p.status !== 'cancelled';
+const isLive = (p: Pick<PostForModeration, 'active' | 'status'>) => p.active === 1 && p.status !== 'cancelled';
 
 /**
  * An assistant's takedown on hold (engine/agent-takedowns.ts): stamped removed by a moderator, and not removed yet. Read from the
  * row, not the record, because the record is this server's and the stamps travel: it holds on a standby that took over too.
+ * Nobody has kept such a post: dismissing a report on it doesn't bring it back, so it is never told or counted as kept.
  */
-const onHold = (p: PostForModeration) => isLive(p) && !!p.removed_by_moderator_at;
+export const onHold = (p: Pick<PostForModeration, 'active' | 'status' | 'removed_by_moderator_at'>) => isLive(p) && !!p.removed_by_moderator_at;
 
 export function isHiddenByReports(postId: string): boolean {
     return !!postRow(postId)?.hidden_by_reports_at;
@@ -185,7 +187,7 @@ function keptReportsTooMany(pubkey: string, now: number): boolean {
         `SELECT COUNT(*) AS c FROM (SELECT DISTINCT ar.target_post_id FROM abuse_reports ar
            JOIN posts p ON p.id = ar.target_post_id
           WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ? AND ar.target_pulse_item_id IS NULL
-            AND p.active = 1 AND p.status != 'cancelled'
+            AND p.active = 1 AND p.status != 'cancelled' AND p.removed_by_moderator_at IS NULL
           LIMIT ?)`
     ).get(pubkey, since, AUTO_HIDE.keptReportsToStopCounting) as { c: number };
     return row.c >= AUTO_HIDE.keptReportsToStopCounting;

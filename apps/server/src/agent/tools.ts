@@ -50,7 +50,7 @@ import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
 import { OWNER_TAKEDOWN_TOOLS, takedownsSummary } from './owner-takedowns.js';
 import {
-    fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
+    fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, suggestionAsks, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
 } from './suggestions.js';
 
@@ -655,7 +655,7 @@ AGENT_TOOLS.push({
         return {
             ok: true, rows: 1,
             result: {
-                id: filed.suggestion.id, kind, reportId: r.id, asks: SUGGESTION_WORDS[kind],
+                id: filed.suggestion.id, kind, reportId: r.id, asks: suggestionAsks(kind, r),
                 expiresAt: new Date(filed.suggestion.expiresAt).toISOString(),
                 waitingFor: `Waiting for ${callsign} to approve on their phone. Nothing has changed: say you suggested it, never that it is done.`,
                 changed: false,

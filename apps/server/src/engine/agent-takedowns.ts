@@ -38,7 +38,8 @@
  * has no way to move a Bean: an event is cancelled then and its goers told, unless it has ended, and the author hears nothing more.
  * A post that somehow holds a pending deal by then is left hidden, and so is one with a Child safety report open: this closes what
  * is open, and that report waits for a person. Each shows so in Settings; it goes final once the deal is over or a person has
- * closed the report, or a person removes it, through that report or by itself.
+ * closed the report, or a person removes it, through that report or by itself. A Child safety report shows from the first day
+ * (`childSafetyOpen`, on every held line), because one post's Remove now closes it whichever day that is.
  *
  * The record is this server's (a standby never copies it). Records go after `TAKEDOWN.keepDays`, once nothing waits on them.
  */
@@ -361,6 +362,8 @@ export interface TakedownPostLine {
     state: 'hidden' | 'left_hidden' | 'put_back' | 'final';
     /** Why it is left hidden. A deal first, because its removal moves Beans; the Child safety report stays first in the queue either way. */
     leftFor: 'deal' | 'child_safety' | null;
+    /** A Child safety report is open on a post still held, on any day of the hold: removing this one post closes it. A flag only. */
+    childSafetyOpen: boolean;
     putBackAt: string | null;
     finalAt: string | null;
 }
@@ -400,12 +403,13 @@ export function listTakedowns(now: number = Date.now(), limit = 100): TakedownLi
             id: c.id, grantId: c.grant_id, grantName: c.grant_name, member: c.callsign, at: c.at, reason: c.reason,
             reasonLabel: REMOVAL_REASON_LABELS[c.reason] ?? c.reason, why: c.why, via: c.via, finalAfter,
             posts: (posts.all(c.id) as { post_id: string; put_back_at: string | null; final_at: string | null; title: string | null; type: string | null; callsign: string | null; deal: number; child_safety: number }[]).map((p) => {
-                const waiting = !p.put_back_at && !p.final_at && Date.parse(finalAfter) <= now;
+                const held = !p.put_back_at && !p.final_at;
+                const waiting = held && Date.parse(finalAfter) <= now;
                 const leftFor = !waiting ? null : p.deal ? 'deal' as const : p.child_safety ? 'child_safety' as const : null;
                 return {
                     id: p.post_id, title: p.title, author: p.callsign, type: p.type,
                     state: p.put_back_at ? 'put_back' as const : p.final_at ? 'final' as const : leftFor ? 'left_hidden' as const : 'hidden' as const,
-                    leftFor, putBackAt: p.put_back_at, finalAt: p.final_at,
+                    leftFor, childSafetyOpen: held && !!p.child_safety, putBackAt: p.put_back_at, finalAt: p.final_at,
                 };
             }),
         };

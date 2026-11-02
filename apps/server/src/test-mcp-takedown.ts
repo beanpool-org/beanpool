@@ -19,6 +19,9 @@
  *   6. The sweep: nothing before 7 days; final at 7 days, event cancelled and its goers told, but no push for an event that ended
  *      during the hold; skips a deal; skips what was put back; a standby makes nothing final. A Child safety report waits for a
  *      person: first in the queue, its reporter told nothing, and the post left hidden past the 7 days until a person acts on it.
+ *      What a person is told of a post on hold: the moderators' queue and an assistant's card carry the flag and don't promise "kept",
+ *      a dismissal tells the reporter it is no longer up and doesn't count against them as kept, and Settings' line says an open
+ *      Child safety report on the first days of the hold, not only past them.
  *   7. Caps: 200 a call, the owners' limit a day on its own count, and what is over comes back in `kept`, and a restart keeps the day.
  *   8. A stolen token's day undone in one call; an injected report's text changes nothing beyond one logged takedown.
  *   9. The record: an ADMIN line, an AGENT line, the owners' daily count and the sec.agent alert; `why` in no log line.
@@ -52,7 +55,8 @@ import { issueAutomationToken } from './automation-tokens.js';
 import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { forgetTakedownsOf, sweepTakedowns, takedownsToday, TAKEDOWN } from './engine/agent-takedowns.js';
-import { muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
+import { hideTally, muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
+import { reportedPostGoneBody, reportedPostKeptBody } from './engine/moderation-notices.js';
 import { rollDueSeries } from './engine/event-series-roll.js';
 import { resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
 import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
@@ -795,6 +799,85 @@ async function main(): Promise<void> {
         assert(modAction.status === 200 && row(byReportId.id).status === 'cancelled' && statusOf(byReportId.child) === 'actioned' && (await lineOf(byReportId.id))?.state === 'final', `past the 7 days a moderator still removes it, through that report (${show(modAction)})`);
         const modDismiss = await call('POST', `/api/local/admin/reports/${lateReport}/dismiss`, { headers: modSession, body: {} });
         assert(modDismiss.status === 200 && sweepTakedowns() === 1 && row(filedLate).status === 'cancelled', `a report a person closed holds nothing: the takedown goes ahead (${show(modDismiss)})`);
+
+        // ── 6c. What a person is told of a post on hold ──────────────────────────────────────────────
+        // A false alarm's normal path now: the report stays open, so a moderator is the one who closes it, and "kept" would be untrue.
+        resetAgentLimits();
+        db.prepare('DELETE FROM agent_takedown_posts').run();
+        db.prepare('DELETE FROM agent_takedowns').run();
+        const modEntry = async (id: string) => (await call('GET', '/api/local/admin/reports?status=all&limit=500', { headers: modSession })).body?.reports?.find((r: any) => r.id === id);
+        const falseAlarm = fileBoth('A false alarm, on hold');
+        const stillUp = post('Reported, and still up', sam.pub);
+        const stillUpReport = submitReport(cara.pub, sam.pub, 'Spam or scam', stillUp)!.id;
+        const onlyAMember = submitReport(cara.pub, sam.pub, 'Rude', undefined)!.id;
+        assert((await modEntry(falseAlarm.child))?.postOnHold === false && (await modEntry(onlyAMember))?.postOnHold === null, 'nothing on hold yet: the flag is false, and null on a report about no post');
+        await takeDown(falseAlarm.id);
+        const onHoldEntry = await modEntry(falseAlarm.child);
+        assert(onHoldEntry?.postOnHold === true && onHoldEntry?.postRemoved === false && onHoldEntry?.postHiddenByReports === true, `a moderator's list says the post is on hold (${JSON.stringify(onHoldEntry?.postOnHold)})`);
+        assert((await modEntry(stillUpReport))?.postOnHold === false, 'and not of a post that is up');
+
+        // Settings' line, on day 2: Remove now on this post would close that report, and the line says so long before the 7 days are up.
+        const plainHeld = post('Taken down, no Child safety report', sam.pub);
+        await takeDown(plainHeld);
+        const backOnDayTwo = fileBoth('Put back on day 2');
+        await takeDown(backOnDayTwo.id);
+        await putBack({ postId: backOnDayTwo.id });
+        backdate(2);
+        const dayTwo = await lineOf(falseAlarm.id);
+        assert(dayTwo?.state === 'hidden' && dayTwo?.leftFor === null && dayTwo?.childSafetyOpen === true, `day 2: still 'hidden', and the line carries the open report (${JSON.stringify(dayTwo)})`);
+        assert((await lineOf(plainHeld))?.childSafetyOpen === false, 'a held line with no such report says nothing');
+        assert(statusOf(backOnDayTwo.child) === 'pending' && (await lineOf(backOnDayTwo.id))?.childSafetyOpen === false, 'a line put back is no longer held, so its open report is the queue\'s alone');
+        const childFlagRead = await call('GET', PATH, { headers: modSession });
+        const childFlagToken = await call('GET', PATH, { headers: bearer(ticked.body.token) });
+        assert(childFlagRead.status === 403 && childFlagToken.status === 403, `Settings' line reaches neither a moderator nor a token (${childFlagRead.status}, ${childFlagToken.status})`);
+
+        // A card about a post on hold asks for no more than is true, and the tool's answer says the same.
+        const cardCase = fileBoth('A card about a post on hold');
+        await takeDown(cardCase.id);
+        const cardSuggestion = structured(await a.callTool({ name: 'suggest_action', arguments: { kind: 'dismiss_report', report_id: cardCase.child, reason: 'A false alarm' } }));
+        const upSuggestion = structured(await a.callTool({ name: 'suggest_action', arguments: { kind: 'dismiss_report', report_id: stillUpReport, reason: 'Nothing wrong with it' } }));
+        const cardsNow: any[] = (await call('GET', '/api/local/admin/agent/suggestions', { headers: session })).body?.suggestions ?? [];
+        const cardOf = (report: string) => cardsNow.find(c => c.report?.id === report);
+        assert(cardSuggestion?.asks === 'Dismiss this report' && cardOf(cardCase.child)?.asks === 'Dismiss this report' && cardOf(cardCase.child)?.report?.postOnHold === true,
+            `a card on a post on hold doesn't say "keep the post" (${JSON.stringify([cardSuggestion?.asks, cardOf(cardCase.child)?.asks])})`);
+        assert(upSuggestion?.asks === 'Dismiss this report (keep the post)' && cardOf(stillUpReport)?.asks === 'Dismiss this report (keep the post)' && cardOf(stillUpReport)?.report?.postOnHold === false,
+            'and one on a post that is up still does');
+        const toolReport = structured(await a.callTool({ name: 'report_get', arguments: { report_id: cardCase.child } }));
+        assert(toolReport !== null && !JSON.stringify(toolReport).includes('postOnHold'), `the assistant's own read of a report is as it was (${JSON.stringify(toolReport)?.slice(0, 120)})`);
+
+        // Dismissed through the moderator's route: the post stays hidden, its removal goes ahead, and the reporter hears what is true.
+        const caraBefore = noticesOf(cara.pub).length;
+        const heldDismissal = await call('POST', `/api/local/admin/reports/${falseAlarm.child}/dismiss`, { headers: modSession, body: {} });
+        const toldCara = noticesOf(cara.pub).slice(caraBefore);
+        assert(heldDismissal.status === 200 && toldCara.length === 1 && toldCara[0].body === reportedPostGoneBody() && JSON.parse(toldCara[0].data).outcome === 'gone',
+            `its reporter hears it is no longer up (${JSON.stringify(toldCara.map(n => n.body))})`);
+        assert(!toldCara.some(n => n.body === reportedPostKeptBody()), 'and is not told it was kept');
+        assert(!!row(falseAlarm.id).hidden_by_reports_at && row(falseAlarm.id).active === 1 && !up(falseAlarm.id), 'the post stays hidden: a dismissal doesn\'t bring it back');
+        assert((await modEntry(falseAlarm.child))?.postOnHold === true, 'the closed report still says so in the list');
+        const upDismissal = await call('POST', `/api/local/admin/reports/${stillUpReport}/dismiss`, { headers: modSession, body: {} });
+        assert(upDismissal.status === 200 && noticesOf(cara.pub).at(-1)?.body === reportedPostKeptBody(), 'a report on a post that is up is still kept, and said so');
+
+        // Nor does it count against them. Three dismissed on posts on hold are not three posts "moderators kept", so this reporter still counts.
+        const overruled = circleOf('Olive Overruled');
+        const heldThree = [1, 2, 3].map(n => post(`On hold, dismissed ${n}`, sam.pub));
+        await a.callTool({ name: 'take_down_many', arguments: { post_ids: heldThree, reason: 'spam', why: WHY } });
+        for (const id of heldThree) dismissReport(submitReport(overruled.pub, sam.pub, CHILD, id)!.id);
+        const nextAuthor = keypair();
+        addMember(nextAuthor, 'Norm Newcomer');
+        const nextPost = post('Reported next', nextAuthor.pub);
+        submitReport(overruled.pub, nextAuthor.pub, 'Spam or scam', nextPost);
+        const nextTally = hideTally(nextPost);
+        assert(nextTally.circles.length === 1, `a post on hold isn't a post kept: the reporter still counts (${JSON.stringify(nextTally)})`);
+
+        // The pages say what happens, not what used to.
+        const page = (rel: string) => fs.readFileSync(new URL(`../../../packages/beanpool-guide/operators/${rel}`, import.meta.url), 'utf8');
+        const moderatorsPage = page('safety/reports-and-takedowns.md'), ownersPage = page('server/ai-assistant.md');
+        assert(/marked \*\*on hold\*\*.*The button then reads \*\*Dismiss\*\*\..*told it is no longer up\. Only an owner or admin can bring it back, with \*\*Put back\*\*/.test(moderatorsPage), "the moderators' Dismiss line has the exception, and says who can put the post back");
+        assert(/brings it back once too few circles count to hide it; .* A post on hold is the exception: no dismissal brings it back, only an owner or admin with \*\*Put back\*\*/.test(moderatorsPage), "and so does the page's line on what brings a hidden post back");
+        assert(/or an assistant's takedown has it on hold, they are told instead that it "is no longer up"/.test(moderatorsPage), "and the owners' Dismiss Flag line");
+        assert(!ownersPage.includes('copies from other communities') && ownersPage.includes('a copy a member shows there from their home community') && ownersPage.includes("another community's listing copied here over a link between communities"), 'the owners\' page names which copies can go and which cannot');
+        assert(/From the first day Settings marks that post and warns you before \*\*Remove now\*\*/.test(ownersPage), "the owners' page says the warning comes from the first day");
+        assert(!ownersPage.includes('restore a post from the reports') && /After a take-over by a standby .*nothing removes them after the 7 days, and dismissing a report doesn't bring one back\..*no screen does that by itself/.test(ownersPage), 'and says what is true after a take-over');
 
         // ── 7. Caps ──────────────────────────────────────────────────────────────────────────────────
         resetAgentLimits();

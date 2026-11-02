@@ -46,6 +46,14 @@ export const SUGGESTION_WORDS: Record<SuggestionKind, string> = {
     restore_post: 'Restore the post hidden by reports',
 };
 
+/**
+ * What a card asks about this report, read when it is shown. Dismissing a report on a takedown on hold keeps nothing (state-engine.ts
+ * dismissReport), so that card doesn't promise it.
+ */
+export function suggestionAsks(kind: SuggestionKind, report: { postOnHold?: boolean | null } | null | undefined): string {
+    return kind === 'dismiss_report' && report?.postOnHold ? 'Dismiss this report' : SUGGESTION_WORDS[kind];
+}
+
 export interface Suggestion {
     id: string;
     grantId: string;

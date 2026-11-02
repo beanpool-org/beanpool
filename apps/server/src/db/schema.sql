@@ -1111,8 +1111,9 @@ CREATE INDEX IF NOT EXISTS idx_burst_action_posts_post ON burst_action_posts(pos
 -- `why`: the assistant's own words, cleaned, read only in Settings, never by an author or a reporter. Foreign keys are off on
 -- this database: the posts go with their call by hand. What Put back needs to return a post to where it stood: `hidden_before`, its
 -- hide from before the takedown (NULL: it was up); `reports_closed`, the ids (JSON) of the reports this takedown closed.
--- `muted_author`: this takedown was the one that muted its author; `last_lift`: then, the last lift of a mute before that, which the
--- new mute wrote over and which the count needs (engine/auto-moderation.ts liftMuteATakedownBrought).
+-- `muted_author`: this takedown was on hold when a mute was written for its author, whoever made the third removal (every one on hold
+-- then is marked, by evaluateAutoMute); `last_lift`: then, the last lift of a mute before that, which the new mute wrote over and which
+-- the count needs (engine/auto-moderation.ts liftMuteATakedownBrought).
 CREATE TABLE IF NOT EXISTS agent_takedowns (
     id TEXT PRIMARY KEY,
     grant_id TEXT NOT NULL,

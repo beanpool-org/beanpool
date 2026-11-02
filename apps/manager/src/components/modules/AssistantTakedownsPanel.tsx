@@ -30,6 +30,8 @@ interface PostLine {
     type: string | null;
     state: 'hidden' | 'left_hidden' | 'put_back' | 'final';
     leftFor?: 'deal' | 'child_safety' | null;
+    /** A Child safety report is open on it, on any day of the hold: Remove now closes that report. */
+    childSafetyOpen?: boolean;
 }
 
 export interface TakedownCall {
@@ -59,9 +61,21 @@ const count = (n: number) => `${n} post${n === 1 ? '' : 's'}`;
 const STATE_WORDS: Record<PostLine['state'], string> = {
     hidden: 'Hidden', left_hidden: 'Left hidden: a deal in escrow', put_back: 'Put back', final: 'Removed',
 };
-const leftForChildSafety = (p: PostLine) => p.state === 'left_hidden' && p.leftFor === 'child_safety';
-const stateWords = (p: PostLine) => (leftForChildSafety(p) ? 'Left hidden: a Child safety report is open' : STATE_WORDS[p.state]);
 const isHeld = (p: PostLine) => p.state === 'hidden' || p.state === 'left_hidden';
+const childSafetyOpen = (p: PostLine) => isHeld(p) && p.childSafetyOpen === true;
+const leftForDeal = (p: PostLine) => p.state === 'left_hidden' && p.leftFor !== 'child_safety';
+const stateWords = (p: PostLine) => {
+    if (!childSafetyOpen(p)) return STATE_WORDS[p.state];
+    if (leftForDeal(p)) return `${STATE_WORDS.left_hidden}, and a Child safety report is open`;
+    return `${p.state === 'hidden' ? 'Hidden' : 'Left hidden'}: a Child safety report is open`;
+};
+const DEAL_WARNING = 'It has a deal in escrow: removing it refunds the buyer, as any removal does.';
+const CHILD_SAFETY_WARNING = 'A Child safety report on it is still open, for a person to read. Removing the post closes that report and tells whoever filed it.';
+/** What Remove now does to this post, whichever day of the hold it is: each of a deal and a Child safety report is said on its own. */
+const removeWarning = (p: PostLine) => {
+    const said = [leftForDeal(p) ? DEAL_WARNING : '', childSafetyOpen(p) ? CHILD_SAFETY_WARNING : ''].filter(Boolean).join(' ');
+    return `${said || 'It goes for good, without waiting for the 7 days.'} This cannot be undone.`;
+};
 const SINCE_CHOICES = [{ days: 1, label: 'the last day' }, { days: 2, label: 'the last 2 days' }, { days: 7, label: 'the last 7 days' }];
 
 export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password' }, onChanged }: AssistantTakedownsPanelProps) {
@@ -129,11 +143,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
     const removeOne = async (p: PostLine) => {
         const ok = await ask({
             title: `Remove "${p.title ?? 'this post'}" now?`,
-            body: leftForChildSafety(p)
-                ? 'A Child safety report on it is still open, for a person to read. Removing the post closes that report and tells whoever filed it. This cannot be undone.'
-                : p.state === 'left_hidden'
-                    ? 'It has a deal in escrow: removing it refunds the buyer, as any removal does. This cannot be undone.'
-                    : 'It goes for good, without waiting for the 7 days. This cannot be undone.',
+            body: removeWarning(p),
             confirmLabel: 'Remove now',
         });
         if (!ok) return;

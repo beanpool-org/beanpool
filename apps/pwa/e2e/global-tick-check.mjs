@@ -9,8 +9,9 @@
  *      language, no name. What is stored is the rounded pin, no place, no note, 0 Beans.
  *   3. G1's cases: an unlisted community; an edit follows; a rest and its return; a rest waits for reports' hold; a rest waits for
  *      an unread answer; a lost first answer posts nothing twice; a remove nobody answered is tried again; a moderator's
- *      takedown stands; a new tick after Stop showing lands, on an Offer, an event and an Offer back from a rest; two tabs;
- *      sign-out leaves nothing; a phone and a browser on one account post one copy.
+ *      takedown stands; a new tick after Stop showing lands, on an Offer, an event and an Offer back from a rest; a Stop on a device
+ *      that fell behind takes down the copy at the later id, and one whose read goes unanswered says so; two tabs; sign-out leaves
+ *      nothing; a phone and a browser on one account post one copy.
  *   4. The screens at 320 px with 1.3x text, light and dark: the tick, the join door, the row in each state. Shots to
  *      GLOBAL_TICK_SHOTS. Fails on sideways scroll, a tap target under 44 px, a policy violation, or a host but this machine.
  *
@@ -349,6 +350,38 @@ async function firstCases(ctx) {
     check((await pairOf(page, restedAgain.id))?.generation === 1, 'an Offer back from a rest holds the next id');
     await stopAndTick(restedAgain, 'an Offer after a rest and its return');
     check((await pairOf(page, restedAgain.id))?.generation === 2, 'and the tick went past both ids');
+    await fresh();
+
+    // A device that fell behind: the copy has gone round a rest and its return, and this device still holds the id from before, as
+    // one that wasn't opened meanwhile does. Its Stop goes after the listing: a read of its ids and a second remove, both cross-origin.
+    const stopHere = (id) => page.evaluate(async (i) => window.tick.copies.stopShowing(i, await window.tick.loadIdentity()), id);
+    const behind = await listing(page, 'Medlars');
+    await tick(page, behind);
+    const heldBefore = await pairOf(page, behind.id);
+    await page.evaluate(async (id) => window.tick.api.pauseMarketplacePost(id, (await window.tick.loadIdentity()).publicKey), behind.id);
+    await page.waitForTimeout(800);
+    await page.evaluate(async (id) => window.tick.api.resumeMarketplacePost(id, (await window.tick.loadIdentity()).publicKey), behind.id);
+    await page.waitForTimeout(800);
+    await tend(page);
+    const movedOn = await pairOf(page, behind.id);
+    check(movedOn?.generation === 1 && (await upOf(global_, behind.id)).length === 1, 'fell behind: the copy is up at the later id');
+    await page.evaluate((held) => window.tick.copyPairs.change((all) => [...all.filter((p) => p.homeId !== held.homeId), held]), heldBefore);
+    check((await stopHere(behind.id)) === true, 'fell behind: Stop showing says it is done');
+    check((await row(global_, movedOn.copyId))?.status === 'cancelled' && (await upOf(global_, behind.id)).length === 0, 'and the copy at the later id is down');
+    check(!(await pairOf(page, behind.id)), 'and the pair goes');
+    await fresh();
+
+    // Its read goes unanswered: it can't say the copy is down, so it says it will come down, and the next tend finishes it.
+    const unreadStop = await listing(page, 'Loquats');
+    await tick(page, unreadStop);
+    const readByIds = (url) => url.pathname === '/api/marketplace/posts' && url.searchParams.has('ids');
+    await page.route(readByIds, (route) => route.abort());
+    const unreadAnswer = await stopHere(unreadStop.id);
+    await page.unroute(readByIds);
+    check(unreadAnswer === false, 'a Stop showing whose read nobody answered says so');
+    check((await pairOf(page, unreadStop.id))?.leaving === true, 'and the pair stays on its way out');
+    await tend(page);
+    check(!(await pairOf(page, unreadStop.id)) && (await upOf(global_, unreadStop.id)).length === 0, 'the next tend finishes it');
     await fresh();
 
     // The app's load brings a copy into step, as the phone's coming to the front does: a change made elsewhere.

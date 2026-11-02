@@ -291,7 +291,7 @@ function rollsOn(home: HomeEvent): boolean {
     return !!rule && !!date && !!home.eventTz && (!until || until > date);
 }
 
-/** What a Stop showing owes the member when `stopShowing` answers false: the copy is still up, and the row can't say so. */
+/** What a Stop showing owes the member when `stopShowing` answers false: the copy may still be up, and the row can't say so. */
 export const stopLaterLine = () => t('It will come down from the global community as soon as it can.');
 
 /** The one line a run owes the member, or none. */
@@ -631,8 +631,9 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     /**
      * The copy comes down and the pair goes. It goes after the listing, not one id: the member's other device may have moved the
      * copy on (a rest and its return, a new tick), and global answers a remove of the id left behind as it does the first. False
-     * when global didn't answer or the read can't say the copy is down: the pair stays `leaving` and `tendCopies` tries again.
-     * A resting pair has nothing of its own up, so global is only read, for the other device having come back.
+     * when global didn't answer, or can't be read to say the copy is down, or wouldn't take it down: the pair stays `leaving` and
+     * `tendCopies` tries again. A resting pair has nothing of its own up, so global is only read, for the other device having
+     * come back.
      */
     async function takeDown(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean> {
         const nothingUp = pair.resting && !pair.leaving;
@@ -735,7 +736,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                 // its return would post a new one. Moved on by the other device, it is this rest's: let go, it stays up with the listing
                 // off the board until that device next opens. Global not saying, the rest waits: it is the step that can't be taken back.
                 if (away && pair.sent && !pair.resting) {
-                    const place = await placeOf(pair, identity, deps).catch(() => 'later' as const);
+                    const place = await placeOf(pair, identity, deps);
                     if (place === 'later') continue;
                     if (!place.up) {
                         await dropPair(pair);

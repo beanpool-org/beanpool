@@ -35,6 +35,7 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
     let holiday = false;
     let onRefused: (() => Promise<unknown>) | null = null;
     let silentRead: ((q: URLSearchParams) => boolean) | null = null;
+    let lostRead = false;
     let removeAnswer: ((id: string) => Response | null) | null = null;
     const reads: string[][] = [];
     const removes: string[] = [];
@@ -50,6 +51,7 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
             if (url === HOME) return path.startsWith('/api/members/preferences') ? json({ holiday_mode: String(holiday) }) : json([home]);
             const ids = q.get('ids')?.split(',') ?? [q.get('id') as string];
             reads.push(ids);
+            if (lostRead) throw new TypeError('Network request failed');
             if (silentRead?.(q)) return json({ error: 'Busy' }, 503);
             return json(ids.flatMap((id) => { const row = rows.get(id); return row && readable(row) ? [row] : []; }));
         },
@@ -100,6 +102,8 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
         onRefused: (run: () => Promise<unknown>) => { onRefused = run; },
         /** Global gives no answer to the reads this picks out; null, it answers them all. */
         silentOn: (pick: ((q: URLSearchParams) => boolean) | null) => { silentRead = pick; },
+        /** Reads of global fail on the way, as with no network: what a phone's fetch throws. */
+        loseReads: (lost: boolean) => { lostRead = lost; },
         /** Global answers a remove with this instead of doing it; null, it does them all. */
         removeAnswers: (answer: ((id: string) => Response | null) | null) => { removeAnswer = answer; },
         /** The ids of each read of global, and of each remove, in order. */
@@ -547,7 +551,7 @@ async function eventFellBehind(w: ReturnType<typeof world>) {
 }
 
 describe('Stop showing goes after the listing, whichever device stops it', () => {
-    it.each(['offer', 'need'])('a %s: the device that missed a rest and its return takes down the copy at the later id', async (type) => {
+    it.each([['An Offer', 'offer'], ['A Need', 'need']])('%s: the device that missed a rest and its return takes down the copy at the later id', async (_kind, type) => {
         const w = world();
         w.home.type = type;
         const { phone, browser } = await browserFellBehind(w);
@@ -630,6 +634,17 @@ describe('Stop showing goes after the listing, whichever device stops it', () =>
         expect(browser.pairs()).toEqual([]);
     });
 
+    it('a read lost on the way is the same: it answers false, never a throw', async () => {
+        const w = world();
+        const { browser } = await browserFellBehind(w);
+        w.loseReads(true);
+        await expect(browser.stopShowing('home-1', identity)).resolves.toBe(false);
+        expect(browser.pairs()[0].leaving).toBe(true);
+        w.loseReads(false);
+        await browser.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+    });
+
     it('a resting pair whose read gets no answer can\'t tell either: it says it will come down, and the tend finishes it', async () => {
         const w = world();
         const phone = w.device();
@@ -702,6 +717,25 @@ describe('Stop showing goes after the listing, whichever device stops it', () =>
         await phone.tendCopies(identity);
         expect(w.up().map((r) => r.id)).toEqual([live.copyId]);
         expect(phone.pairs().map((p) => p.copyId)).toEqual([live.copyId]);
+    });
+
+    it('only a live pair counts as that tick: another on its way out doesn\'t stop a Stop going after the listing', async () => {
+        const w = world();
+        const { phone } = await eventFellBehind(w);
+        w.silentOn(() => true);
+        await phone.stopShowing('home-1', identity);
+        w.silentOn(null);
+        await phone.showOnGlobal(w.home, HOME, identity);
+        // A third device moves the copy on past both of the phone's pairs.
+        const tablet = w.device();
+        expect(await tablet.showOnGlobal(w.home, HOME, identity)).toBe('shown');
+        w.setHoliday(true);
+        await tablet.tendCopies(identity);
+        w.setHoliday(false);
+        await tablet.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
     });
 });
 
@@ -809,6 +843,13 @@ describe('what a Stop and a tend cost: the look is bounded, and only where somet
         await phone.stopShowing('home-1', identity);
         expect(w.removes).toEqual([]);
         expect(w.reads).toHaveLength(1);
+    });
+
+    it('no pair on this device: a Stop or a removal at home asks global nothing', async () => {
+        const w = world();
+        expect(await w.device().stopShowing('home-1', identity)).toBe(true);
+        expect(w.reads).toEqual([]);
+        expect(w.removes).toEqual([]);
     });
 
     it('a tend reads global for no landed pair that has nothing to do', async () => {

@@ -821,6 +821,70 @@ describe('a rest goes by the listing too: a copy moved on is this device\'s to t
     });
 });
 
+describe('what stays, each pinned so a change to it is seen', () => {
+    it('a Stop still leaving on one device takes down a tick the other made since: that Stop came first, and the other reads Shown', async () => {
+        const w = world();
+        const phone = w.device();
+        const browser = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        w.silentOn(() => true);
+        expect(await phone.stopShowing('home-1', identity)).toBe(false);
+        w.silentOn(null);
+        expect(await browser.showOnGlobal(w.home, HOME, identity)).toBe('shown');
+        expect(w.up()).toHaveLength(1);
+        await phone.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+        expect(await browser.pairOf('home-1', publicKey)).not.toBeNull();
+    });
+
+    it('a device with no pair asks nothing, so a removal at home there leaves the copy the other holds until that one opens', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        Object.assign(w.home, { status: 'cancelled', active: false });
+        expect(await w.device().stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toHaveLength(1);
+        await phone.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('a resting device reads nothing at a tend: a copy the other brought back, and paused again here, waits for that device', async () => {
+        const w = world();
+        const phone = w.device();
+        const browser = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        await browser.showOnGlobal(w.home, HOME, identity);
+        w.home.status = 'paused';
+        await Promise.all([phone.tendCopies(identity), browser.tendCopies(identity)]);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        w.home.status = 'paused';
+        await browser.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        await phone.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('a tick on a row left stale rests by its own id, with no look: only a tend goes by the listing', async () => {
+        const w = world();
+        const { browser } = await browserFellBehind(w);
+        w.home.status = 'paused';
+        expect(await browser.showOnGlobal(w.home, HOME, identity)).toBe('later');
+        expect(browser.pairs()[0].resting).toBe(true);
+        expect(w.up()).toHaveLength(1);
+    });
+
+    it('a copy past the ids looked at isn\'t seen: a Stop there says done', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        const past = await copyIdOf('home-1', COPY_IDS_LOOKED_AT, sign);
+        w.rows.set(past, { id: past, type: 'offer', status: 'active', title: 'Far on' });
+        expect(await phone.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up().map((r) => r.id)).toEqual([past]);
+    });
+});
+
 describe('what a Stop and a tend cost: the look is bounded, and only where something is on its way down', () => {
     it('one device, one Stop: the remove and one read of COPY_IDS_LOOKED_AT ids', async () => {
         const w = world();

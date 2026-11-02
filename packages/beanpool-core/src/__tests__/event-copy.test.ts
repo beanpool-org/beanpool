@@ -72,7 +72,7 @@ describe('the door\'s words', () => {
         const langs = readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'en.sources.json');
         expect(langs).toHaveLength(24);
         for (const file of langs) {
-            setLanguage(file.slice(0, -5), [JSON.parse(readFileSync(`${dir}${file}`, 'utf8'))]);
+            setLanguage(file.slice(0, -5) as Parameters<typeof setLanguage>[0], [JSON.parse(readFileSync(`${dir}${file}`, 'utf8'))]);
             expect(listingCopyHint(), file).not.toContain('Anyone there');
             expect(listingCopyHint(true), file).not.toContain('Anyone there');
             expect(listingCopyHint(true), file).not.toBe(listingCopyHint());

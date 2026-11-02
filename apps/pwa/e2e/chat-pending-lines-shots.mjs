@@ -37,7 +37,7 @@ const NOW = Date.now();
 const ago = (days) => new Date(NOW - days * 86_400_000).toISOString();
 const VIEWPORTS = [{ w: 320, h: 568, scale: 1.3 }, { w: 1280, h: 800, scale: 1 }];
 const TYPED = 'Can you bring the long ladder on Saturday morning?';
-const TYPED_LONG = Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of a long note`).join(' ');
+const TYPED_LONG = Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of a long note`).join('\n');
 
 const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 }, logLevel: 'error' });
 await server.listen();

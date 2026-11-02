@@ -158,7 +158,7 @@ async function onGlobal(member: Id, db: any): Promise<void> {
         [`${POSTS}?author=${member.pk}`, 'GET'], [`${POSTS}?q=tomatoes`, 'GET'], [`${POSTS}?id=x&author=y`, 'GET'], [POSTS, 'GET'],
         [`${POSTS}/accept`, 'POST'], [`${POSTS}/request`, 'POST'], [`${POSTS}/pause`, 'POST'], ['/api/marketplace/transactions/approve', 'POST'],
         ['/api/community/members', 'GET'], ['/api/messages', 'POST'], ['/api/events/x/rsvp', 'POST'], ['/api/join/open', 'POST'], ['/api/community/membership/x/y', 'GET'],
-        [`${POSTS}/${id}`, 'GET'], ['/api/community/me', 'GET'],
+        [`${POSTS}/${id}`, 'GET'], ['/api/community/me', 'GET'], [`${POSTS}?id=${id}&id=${plainId}`, 'GET'], [`${POSTS}?ids=${id}&ids=${plainId}`, 'GET'],
     ] as const) {
         const closed = await preflight(path, method);
         assert(acao(closed) === null && closed.headers.get('access-control-allow-headers') === null, `${method} ${path}: no allowance (${acao(closed)})`);

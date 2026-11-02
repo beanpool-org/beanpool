@@ -312,6 +312,24 @@ async function firstCases(ctx) {
     await tend(page);
     check((await upOf(global_, moderated.id)).length === 0, "a moderator's takedown stands: no rest and no return brings it back");
 
+    // The app's load brings a copy into step, as the phone's coming to the front does: a change made elsewhere.
+    const stale = await listing(page, 'Pears');
+    await tick(page, stale);
+    const staleId = (await pairOf(page, stale.id)).copyId;
+    await ctx.local.ask({ op: 'sql', sql: 'UPDATE posts SET title = ? WHERE id = ?', params: ['Ripe pears', stale.id] });
+    await page.evaluate(() => localStorage.removeItem('beanpool_copies_tended'));
+    await ctx.local.ask({ op: 'resetLimits' });
+    await global_.ask({ op: 'resetLimits' });
+    const app = await context.newPage();
+    await app.goto(`${ctx.local.origin}/app`, { waitUntil: 'load' });
+    let caughtUp = false;
+    for (let i = 0; i < 40 && !caughtUp; i++) {
+        caughtUp = (await row(global_, staleId))?.title === 'Ripe pears';
+        if (!caughtUp) await app.waitForTimeout(250);
+    }
+    check(caughtUp, "opening the app brings a copy into step");
+    await app.close();
+
     // Two tabs share the store, and each change is whole.
     const other = await harness(context, ctx.local.origin);
     const a = await listing(page, 'Quinces');

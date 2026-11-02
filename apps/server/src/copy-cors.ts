@@ -45,7 +45,8 @@ function methodsAt(path: string): readonly string[] | null {
 /** The listings' read is open by id alone: nothing that searches, lists a member or reaches a place. */
 function readsById(query: Record<string, unknown>): boolean {
     const asked = Object.keys(query);
-    return asked.length === 1 && (asked[0] === 'id' || asked[0] === 'ids');
+    // One value: a repeated `id` is an array, which the guard below couldn't look up.
+    return asked.length === 1 && (asked[0] === 'id' || asked[0] === 'ids') && typeof query[asked[0]] === 'string';
 }
 
 function saysItIsSigned(ctx: Koa.Context): boolean {

@@ -1,7 +1,7 @@
 /**
  * A member's copy of an in-person event, an Offer or a Need from their own community, on the global community
  * (DESIGN-list-on-global-fable.md §3, reworked by DESIGN-reaching-across-fable.md; slices G2′ and G1′). A signed post by the
- * member's own key, made by their phone (apps/native utils/show-on-global.ts): their home server does nothing and learns
+ * member's own key, made by their phone or browser (@beanpool/core show-on-global.ts): their home server does nothing and learns
  * nothing, and this node calls nobody.
  *
  * - **Marked by `posts.shown_from_host`**, set on every copy and on nothing else. It holds the host while that was a shown

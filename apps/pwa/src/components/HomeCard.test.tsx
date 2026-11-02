@@ -73,6 +73,8 @@ describe('HomeCard menu', () => {
         render(<CardMenu title="New in the Market" ink="var(--bp-card-orange-ink)" canMoveUp={false} canMoveDown={false} onMove={vi.fn()} />);
         const button = screen.getByRole('button', { name: 'Card options for New in the Market' });
         expect(button.className).not.toContain('-mt-2');
+        expect(button.className).toContain('-my-1');
+        expect(button.className).toContain('min-h-[44px]');
         expect(button.className).not.toContain('text-text-secondary');
         expect(button.className).not.toContain('hover:text-text-primary');
         expect(button.getAttribute('style')).toContain('var(--bp-card-orange-ink)');

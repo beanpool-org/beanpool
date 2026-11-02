@@ -97,7 +97,7 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
                 aria-controls={open ? menuId : undefined} data-testid="home-card-menu"
                 onClick={() => setOpen(o => !o)}
                 style={ink ? { color: ink } : undefined}
-                className={`min-w-[44px] min-h-[44px] -mr-2 ${ink ? '' : '-mt-2 text-text-secondary hover:text-text-primary'} flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}>
+                className={`min-w-[44px] min-h-[44px] -mr-2 ${ink ? '-my-1' : '-mt-2 text-text-secondary hover:text-text-primary'} flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}>
                 <span aria-hidden="true">…</span>
             </button>
             {open && (

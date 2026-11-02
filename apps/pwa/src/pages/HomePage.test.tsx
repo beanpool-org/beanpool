@@ -426,6 +426,8 @@ describe('interests (§4.3, §6.2)', () => {
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
         expect(screen.queryByTestId('home-card-interests')).toBeNull();
+        expect(screen.getByTestId('home-tune').className).toContain('-my-1');
+        expect(screen.getByTestId('home-tune').className).toContain('hover:opacity-80');
         fireEvent.click(screen.getByTestId('home-tune'));
         expect(await screen.findByTestId('home-card-interests')).toBeInTheDocument();
         expect(screen.getByTestId('home-interest-arts')).toHaveAttribute('aria-pressed', 'true');

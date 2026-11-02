@@ -2471,7 +2471,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard key={id} {...common} titleAside={!isVisitor && (
                         <button type="button" onClick={openTune} aria-label={t('Tune: pick what comes first')} data-testid="home-tune"
                             style={{ color: 'var(--bp-card-orange-ink)' }}
-                            className="min-h-[44px] px-2 bg-transparent border-0 text-xs font-bold cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            className="min-h-[44px] -my-1 px-2 bg-transparent border-0 text-xs font-bold cursor-pointer rounded-lg hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                             {t('Tune')}
                         </button>
                     )}>

@@ -577,6 +577,10 @@ async function main(): Promise<void> {
     console.log('\n── 10. A standby ──');
     const copied = await post(author);
     const copied2 = await post(author);
+    const unchanged = await post(author);
+    db.prepare(`UPDATE posts SET updated_at = '2001-01-01T00:00:00.000Z' WHERE id = ?`).run(unchanged);
+    // The cursor a standby holds: everything before this it has, so what it reads next is the delta from here.
+    const cursor = new Date(Date.now() - 1000).toISOString();
     await pin(copied, owner);
     await pin(copied2, owner);
     await unpin(copied2, owner);
@@ -588,9 +592,11 @@ async function main(): Promise<void> {
     assert(onStandby.status === 409 && onStandby.code === 'standby' && stamps(a).pinned_until === null, `a standby takes no pin (got ${onStandby.status} ${onStandby.code})`);
     assert(offStandby.status === 409 && stamps(copied).pinned_until === held.pinned_until, `and takes none off (got ${offStandby.status})`);
 
-    const payload = await exportSyncState(nodeId);
+    const payload = await exportSyncState(nodeId, cursor);
     const exported = (payload.posts ?? []).find((p: any) => p.id === copied) as any;
-    assert(exported?.pinnedUntil === held.pinned_until && exported?.pinnedAt === held.pinned_at, `a copy carries the stamps (got ${JSON.stringify([exported?.pinnedUntil, exported?.pinnedAt])})`);
+    assert(!(payload.posts ?? []).some((p: any) => p.id === unchanged), 'this is a delta: a post unchanged since the cursor is not in it');
+    assert(exported?.pinnedUntil === held.pinned_until && exported?.pinnedAt === held.pinned_at, `a delta carries the stamps, from the bump a pin makes (got ${JSON.stringify([exported?.pinnedUntil, exported?.pinnedAt])})`);
+    assert((payload.posts ?? []).some((p: any) => p.id === copied2 && p.pinnedUntil === undefined), 'and one taken off, with no stamp');
     db.prepare(`UPDATE posts SET pinned_until = NULL, pinned_at = NULL, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?`).run(copied);
     const newer = new Date(Date.now() + 60_000).toISOString();
     db.prepare(`UPDATE posts SET pinned_until = ?, pinned_at = ?, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?`).run(newer, newer, copied2);

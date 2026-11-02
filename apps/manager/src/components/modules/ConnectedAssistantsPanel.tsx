@@ -21,7 +21,7 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  * in one place only, and is dropped the moment Done is pressed or the card goes away. "Copy command" builds the
  * command line with it at the moment of copying; the line on screen shows a placeholder.
  *
- * An owner's assistant posts Offers, Needs and events for them only if "May post for me" was ticked when it was connected
+ * An owner's assistant posts Offers, Needs, events and polls for them only if "May post for me" was ticked when it was connected
  * (here on the token form, or on the consent page; default off), and each row says whether it was. The "Owner and admin
  * limit" (first "Assistant posts a day"; Marty, 31 Oct: owners' and admins' own content limits in the apps too, server
  * engine/owner-admin-limit.ts) is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed
@@ -459,7 +459,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-0.5 break-words">
                     Your own AI assistant (Claude, ChatGPT, Cursor) can read this server&rsquo;s health, backups, totals, reports and join
-                    requests{isOwner ? ', take a backup, and, if you tick “May post for me” when you connect it, post Offers, Needs and events for you at once, with no approval' : ''}. It never sees messages, balances, keys, photos, addresses or logs, never
+                    requests{isOwner ? ', take a backup, and, if you tick “May post for me” when you connect it, post Offers, Needs, events and polls for you at once, with no approval' : ''}. It never sees messages, balances, keys, photos, addresses or logs, never
                     learns who reported, and changes no setting, role or member. Everything it reads goes to the company that runs it.
                 </p>
             </div>
@@ -674,7 +674,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                     className="w-5 h-5 mt-0.5 shrink-0"
                                 />
                                 <span className="min-w-0">
-                                    May post for me: it posts Offers, Needs and events as you (or an enterprise you keep), at once, with no
+                                    May post for me: it posts Offers, Needs and events as you (or an enterprise you keep) and polls as you, at once, with no
                                     approval, up to the posts a day set here. Leave it off and it never posts: it still reads, takes a backup when
                                     asked, and suggests moderation steps for you to approve.
                                 </span>

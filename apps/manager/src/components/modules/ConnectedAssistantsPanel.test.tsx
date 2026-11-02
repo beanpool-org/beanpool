@@ -124,7 +124,7 @@ describe('ConnectedAssistantsPanel', () => {
         const { container } = render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
         // Before an owner connects one, the card says it can post as them at once, with no approval, if they tick it (MCP-OWNER-POSTS).
         expect(await screen.findByTestId('connected-assistants-card')).toHaveTextContent(
-            'take a backup, and, if you tick “May post for me” when you connect it, post Offers, Needs and events for you at once, with no approval.');
+            'take a backup, and, if you tick “May post for me” when you connect it, post Offers, Needs, events and polls for you at once, with no approval.');
         fireEvent.change(await screen.findByLabelText('Assistant’s name'), { target: { value: 'Claude on my laptop' } });
         fireEvent.change(screen.getByLabelText('For how long'), { target: { value: '7' } });
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));

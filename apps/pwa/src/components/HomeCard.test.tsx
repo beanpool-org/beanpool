@@ -68,6 +68,15 @@ describe('HomeCard menu', () => {
         expect(button.className).toContain('hover:text-text-primary');
         expect(button.style.color).toBe('');
     });
+
+    it('CardMenu with ink takes its colour from the band and none of the safety card\'s classes', () => {
+        render(<CardMenu title="New in the Market" ink="var(--bp-card-orange-ink)" canMoveUp={false} canMoveDown={false} onMove={vi.fn()} />);
+        const button = screen.getByRole('button', { name: 'Card options for New in the Market' });
+        expect(button.className).not.toContain('-mt-2');
+        expect(button.className).not.toContain('text-text-secondary');
+        expect(button.className).not.toContain('hover:text-text-primary');
+        expect(button.getAttribute('style')).toContain('var(--bp-card-orange-ink)');
+    });
 });
 
 describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable.md §2.1, §5)', () => {

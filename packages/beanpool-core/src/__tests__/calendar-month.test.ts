@@ -73,6 +73,15 @@ describe('calendar-month: pure (no Intl, no clock read, now passed in)', () => {
         const jan = buildCalendarMonth({ year: 2026, month: 1, now: '2026-11-10' });
         expect(jan.prevMonth).toEqual({ year: 2025, month: 12 });
     });
+
+    it('eventLocalDate validates dates strictly with isLocalDate (rejects invalid days/months)', () => {
+        expect(eventLocalDate({ id: 'bad-1', eventStartLocal: '2026-02-30T10:00' })).toBeNull();
+        expect(eventLocalDate({ id: 'bad-2', eventStartLocal: '2026-00-00T10:00' })).toBeNull();
+        expect(eventLocalDate({ id: 'bad-3', eventStartLocal: '2026-13-01T10:00' })).toBeNull();
+        expect(eventLocalDate({ id: 'bad-4', eventStartAt: '2026-04-31T10:00:00.000Z' })).toBeNull();
+        expect(eventLocalDate({ id: 'good-1', eventStartLocal: '2026-02-28T10:00' })).toBe('2026-02-28');
+        expect(eventLocalDate({ id: 'good-2', event_start_local: '2026-11-10T14:00' })).toBe('2026-11-10');
+    });
 });
 
 describe('calendar-month: dates by local day', () => {

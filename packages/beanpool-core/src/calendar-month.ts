@@ -205,11 +205,11 @@ export interface CalendarMonth<T extends CalendarEventInput = CalendarEventInput
 /** Extract the local date ("YYYY-MM-DD") from an event. */
 export function eventLocalDate(event: CalendarEventInput): string | null {
     const local = event.eventStartLocal ?? event.event_start_local;
-    if (typeof local === 'string' && local.length >= 10 && DATE_RE.test(local.slice(0, 10))) {
+    if (typeof local === 'string' && local.length >= 10 && isLocalDate(local.slice(0, 10))) {
         return local.slice(0, 10);
     }
     const iso = event.eventStartAt ?? event.event_start_at;
-    if (typeof iso === 'string' && iso.length >= 10 && DATE_RE.test(iso.slice(0, 10))) {
+    if (typeof iso === 'string' && iso.length >= 10 && isLocalDate(iso.slice(0, 10))) {
         return iso.slice(0, 10);
     }
     return null;

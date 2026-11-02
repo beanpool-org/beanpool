@@ -318,6 +318,7 @@ const notGlobal = (a: HomeNodeFacts) => a.profile !== 'global';
  */
 export const ARRANGE_WORDS = {
     name: word('Arrange'),
+    more: word('Arrange ›'),
     link: word('Arrange: move the cards on Home'),
     bar: word("Arrange Home: use the arrows. Done when you're happy."),
     opened: word('Arrange Home. Use the arrows on each card.'),

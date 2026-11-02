@@ -1,6 +1,6 @@
 /**
  * The web Home page (DESIGN-home-dashboard-fable.md, slice H3): one request, the cached answer drawn first, the "…" menu
- * and Edit home, interests that reorder the Market card in place, the doorbell's single re-read, offline, and the
+ * and Arrange, interests that reorder the Market card in place, the doorbell's single re-read, offline, and the
  * visitor's Home. The node is lib/api.ts mocked; IndexedDB is the in-memory stand-in.
  */
 import { Profiler } from 'react';
@@ -38,9 +38,10 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
+import { HOLD_MS } from '../components/HomeCard';
 import { FEWER_CARDS_LINE, removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
@@ -87,6 +88,9 @@ function answer(over: Partial<HomeAnswer> = {}, cards: HomeAnswer['cards'] = {})
 /** A 200 from the node: the answer and its tag. */
 const fresh = (a: HomeAnswer, etag = 'W/"home-test"'): HomeRead => ({ notModified: false, answer: a, etag });
 
+/** Arrange, from the community card's link, and Done. */
+const openArrange = () => fireEvent.click(screen.getByTestId('home-arrange-open'));
+const doneArrange = () => fireEvent.click(screen.getByTestId('home-arrange-done'));
 const cardIds = () => Array.from(document.querySelectorAll('[data-testid^="home-card-"]')).map(e => e.getAttribute('data-testid')!.replace('home-card-', '')).filter(id => id !== 'menu');
 /** The Market card's rows, as a screen reader names them. */
 const marketTitles = () => within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item').map(e => e.getAttribute('aria-label') ?? '');
@@ -288,8 +292,9 @@ describe('tailoring (§4)', () => {
         expect(dots).toHaveAttribute('aria-expanded', 'false');
         fireEvent.click(dots);
         expect(dots).toHaveAttribute('aria-expanded', 'true');
-        // The first item takes focus: Move up (the Pulse has no settings).
-        expect(within(pulse).getByRole('button', { name: 'Move up' })).toHaveFocus();
+        // The first item takes focus: Arrange (the Pulse has no settings). Moves are on the card, never here.
+        expect(within(pulse).getByRole('button', { name: 'Arrange' })).toHaveFocus();
+        expect(within(pulse).queryByRole('button', { name: /^Move/ })).toBeNull();
         fireEvent.click(within(pulse).getByTestId('home-menu-remove'));
         await waitFor(() => expect(screen.queryByTestId('home-card-pulse')).toBeNull());
         const saved = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)!;
@@ -300,65 +305,34 @@ describe('tailoring (§4)', () => {
         expect(Date.parse(l.updatedAt!)).toBeGreaterThan(0);
     });
 
-    it('the menu closes on Escape and gives focus back to its "…"; Move up is off for the first movable card', async () => {
+    it('the menu closes on Escape and gives focus back to its "…"', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         // A new member's first movable card is Tips (after First steps, which this member has done).
         const first = await screen.findByTestId('home-card-tips');
         const dots = within(first).getByRole('button', { name: 'Card options for Tips · 1 of 15' });
         fireEvent.click(dots);
-        expect(within(first).getByRole('button', { name: 'Move up' })).toBeDisabled();
         // The frame's menu ends with Remove where version 1 had Hide.
         fireEvent.keyDown(within(first).getByTestId('home-menu-remove'), { key: 'Escape' });
         expect(within(first).queryByTestId('home-menu-remove')).toBeNull();
         await waitFor(() => expect(dots).toHaveFocus());
     });
 
-    it('Move down swaps a card with the next one, and the community card stays last with no "…"', async () => {
+    it('↓ in Arrange swaps a card with the next one on the list, and the community card stays last with no "…"', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const market = await screen.findByTestId('home-card-market');
-        fireEvent.click(within(market).getByRole('button', { name: 'Card options for New in the Market' }));
-        fireEvent.click(within(market).getByRole('button', { name: 'Move down' }));
-        await waitFor(() => expect(cardIds()).toEqual(['tips', 'events', 'pulse', 'market', 'beans', 'community']));
+        await screen.findByTestId('home-card-market');
+        // Decide, Your groups and Who joined have nothing to show here: they are on the list, so Arrange shows them.
+        const before = (await screen.findByTestId('home-card-market'), cardIds());
+        openArrange();
+        const folded = cardIds();
+        const next = folded[folded.indexOf('market') + 1];
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
+        await waitFor(() => expect(cardIds().indexOf(next)).toBeLessThan(cardIds().indexOf('market')));
+        doneArrange();
+        expect(cardIds().at(-1)).toBe('community');
+        expect(before.at(-1)).toBe('community');
         expect(within(screen.getByTestId('home-card-community')).queryByTestId('home-card-menu')).toBeNull();
-    });
-
-    it('Edit home is a real dialog: labelled, focus inside, ＋ Add a card first, ↑ ↓ … per card, no switches, no Hidden, Reset, Escape back to Edit home', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const open = await screen.findByTestId('home-edit-open');
-        open.focus();
-        fireEvent.click(open);
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        expect(dialog).toHaveAttribute('aria-modal', 'true');
-        expect(dialog.contains(document.activeElement)).toBe(true);
-        expect(within(dialog).getAllByRole('button')[0]).toBe(within(dialog).getByTestId('home-edit-add'));
-        expect(within(dialog).queryAllByRole('switch')).toHaveLength(0);
-        expect(within(dialog).queryByRole('list', { name: 'Hidden' })).toBeNull();
-        // Its "…" removes the card: the row goes, focus to the nearest row's "…", never to the page.
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Options for The Pulse' }));
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove The Pulse from Home' }));
-        expect(within(dialog).queryByRole('button', { name: 'Options for The Pulse' })).toBeNull();
-        await waitFor(() => expect(dialog.contains(document.activeElement) && document.activeElement !== dialog).toBe(true));
-        expect(screen.queryByTestId('home-card-pulse')).toBeNull();
-        // Needs you and the community card are never in the list: they always stay.
-        expect(within(dialog).queryByText('Your community')).toBeNull();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Move Coming up down' }));
-        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
-        // Reset gives the newcomer's list: no Pulse until added.
-        expect(within(dialog).queryByRole('button', { name: 'Options for The Pulse' })).toBeNull();
-        const last = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as ReturnType<typeof v2>;
-        expect(last.v).toBe(2);
-        expect(last.cards.map(c => c.type)).toEqual(newcomerTypes());
-        // Tab stays inside.
-        const done = within(dialog).getByTestId('home-edit-done');
-        done.focus();
-        fireEvent.keyDown(done, { key: 'Tab' });
-        expect(dialog.contains(document.activeElement)).toBe(true);
-        fireEvent.keyDown(dialog, { key: 'Escape' });
-        expect(screen.queryByRole('dialog')).toBeNull();
-        await waitFor(() => expect(open).toHaveFocus());
     });
 
     it('a newer layout from another device wins over this browser\'s older copy', async () => {
@@ -775,14 +749,15 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
         return node;
     }
 
-    it('Add a card (from Edit home) reads Home again with the Pulse in cards= once the save is answered, and the card is drawn, no timer waited for', async () => {
+    it('Add a card (from Arrange) reads Home again with the Pulse in cards= once the save is answered, and the card is drawn, no timer waited for', async () => {
         const node = await removePulseThenComeBack();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-add'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
         fireEvent.click(screen.getByTestId('home-add-pulse'));
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
         expect(node.reads()[2]).toContain('pulse');
         expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
+        doneArrange();
         expect(await screen.findByTestId('home-card-pulse')).toHaveTextContent('How our LETS started');
         // Removing it again reads nothing: the answer in hand has it.
         fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByRole('button', { name: 'Card options for The Pulse' }));
@@ -801,8 +776,8 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
 
     it("Reset to defaults gives the newcomer's list and reads Home again for it once the save is answered", async () => {
         const node = await removePulseThenComeBack();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-reset'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
         expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(newcomerTypes());
         expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
@@ -810,14 +785,15 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
         expect(node.reads()[2]).not.toContain('pulse');
         expect(node.reads()[2]).not.toContain('beans');
         await waitFor(() => expect(screen.queryByTestId('home-card-beans')).toBeNull());
+        doneArrange();
         expect(screen.getByTestId('home-card-market')).toBeInTheDocument();
     });
 
     it('a Move, or a Remove of another card, after coming back reads nothing', async () => {
         await removePulseThenComeBack();
-        const market = screen.getByTestId('home-card-market');
-        fireEvent.click(within(market).getByRole('button', { name: 'Card options for New in the Market' }));
-        fireEvent.click(within(market).getByRole('button', { name: 'Move up' }));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-up-market'));
+        doneArrange();
         const beans = screen.getByTestId('home-card-beans');
         fireEvent.click(within(beans).getByRole('button', { name: 'Card options for Your Beans' }));
         fireEvent.click(within(beans).getByTestId('home-menu-remove'));
@@ -838,7 +814,7 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
 });
 
 describe('after Remove, focus goes to the nearest card left, and the page says where the card went (PR #1479 review)', () => {
-    it("the next card's \"…\"; Edit home when the removed card was the last above the community card", async () => {
+    it("the next card's \"…\"; Arrange › when the removed card was the last above the community card", async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const pulse = await screen.findByTestId('home-card-pulse');
@@ -851,7 +827,7 @@ describe('after Remove, focus goes to the nearest card left, and the page says w
         const beans = screen.getByTestId('home-card-beans');
         fireEvent.click(within(beans).getByRole('button', { name: 'Card options for Your Beans' }));
         fireEvent.click(within(beans).getByTestId('home-menu-remove'));
-        await waitFor(() => expect(screen.getByTestId('home-edit-open')).toHaveFocus());
+        await waitFor(() => expect(screen.getByTestId('home-arrange-open')).toHaveFocus());
         expect(screen.getByTestId('home-live')).toHaveTextContent(removedLine('Your Beans'));
     });
 });
@@ -1297,7 +1273,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(within(tipsCard()).getByRole('heading', { name: 'Tips · 2 of 15' })).toBeInTheDocument();
     });
 
-    it('Done on the last tip takes the card away, says so, moves focus on; Edit home then says All tips seen; Remove and Add a card again starts over', async () => {
+    it('Done on the last tip takes the card away, says so, moves focus on; Arrange then says All tips seen; Remove and Add a card again starts over', async () => {
         localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: LOCAL.slice(0, -1).map(t => t.id), current: null, currentShownOn: null, dismissedAt: null }));
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -1309,15 +1285,14 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
         expect(screen.getByTestId('home-live')).toHaveTextContent(TIPS_DONE_WORDS);
         await waitFor(() => expect(screen.getByRole('button', { name: 'Card options for Coming up' })).toHaveFocus());
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        expect(within(within(dialog).getByTestId('home-edit-row-tips')).getByText('All tips seen')).toBeInTheDocument();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-tips')).toHaveTextContent('All tips seen');
         // Removed and added again, it starts over from the first tip.
-        fireEvent.click(within(dialog).getByTestId('home-edit-menu-tips'));
-        fireEvent.click(within(dialog).getByTestId('home-edit-remove-tips'));
-        expect(within(dialog).queryByTestId('home-edit-row-tips')).toBeNull();
-        fireEvent.click(within(dialog).getByTestId('home-edit-add'));
+        fireEvent.click(screen.getByTestId('home-arrange-remove-tips'));
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
         fireEvent.click(screen.getByTestId('home-add-tips'));
+        doneArrange();
         expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
     });
 
@@ -1329,7 +1304,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         // runner the card was found before that effect ran, the click's dismiss was written first and the landing's
         // record (dismissedAt null) then overwrote it (15 Oct).
         await waitFor(() => expect(record()).toMatchObject({ current: LOCAL[0].id, dismissedAt: null }));
-        fireEvent.click(within(card).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
+        fireEvent.click(within(card).getByRole('button', { name: "Don't show tips again. Add a card brings them back." }));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
         expect(record().dismissedAt).toEqual(expect.any(String));
         const saved = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as ReturnType<typeof v2>;
@@ -1355,8 +1330,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         fireEvent.click(within(card).getByTestId('home-menu-remove'));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
         expect(record().dismissedAt).toEqual(expect.any(String));
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-add'));
+        fireEvent.click(screen.getByTestId('home-add-open'));
         fireEvent.click(screen.getByTestId('home-add-tips'));
         expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
         expect(record()).toMatchObject({ seen: [], dismissedAt: null });
@@ -1369,8 +1343,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-community');
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-add'));
+        fireEvent.click(screen.getByTestId('home-add-open'));
         fireEvent.click(screen.getByTestId('home-add-tips'));
         expect(within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text')).toHaveTextContent(LOCAL[0].text);
         expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
@@ -1382,15 +1355,14 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
         fireEvent.click(within(card).getByRole('button', { name: 'Next tip' }));
-        fireEvent.click(within(tipsCard()).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
+        fireEvent.click(within(tipsCard()).getByRole('button', { name: "Don't show tips again. Add a card brings them back." }));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        expect(within(dialog).queryByTestId('home-edit-row-tips')).toBeNull();
-        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
+        openArrange();
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
         // The newcomer's list holds Tips.
-        expect(within(dialog).getAllByRole('listitem').filter(li => li.textContent?.startsWith('Tips'))).toHaveLength(1);
-        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(screen.getByTestId('home-card-tips')).toBeInTheDocument();
+        doneArrange();
         expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
         expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
     });
@@ -1436,8 +1408,9 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
         // Move it, so the layout names it, and read again.
-        fireEvent.click(within(card).getByRole('button', { name: /^Card options for Tips/ }));
-        fireEvent.click(within(card).getByRole('button', { name: 'Move down' }));
+        expect(card).toBeInTheDocument();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-down-tips'));
         await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
         await waitFor(() => expect(vi.mocked(api.getHome).mock.calls.length).toBeGreaterThan(1));
         for (const [q] of vi.mocked(api.getHome).mock.calls) expect((q as { cards?: string[] }).cards ?? []).not.toContain('tips');
@@ -1452,12 +1425,219 @@ describe('Home tips: Reset keeps a member part-way through on their tip (PR #169
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
         const before = within(card).getByTestId('home-tip-text').textContent;
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
-        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        doneArrange();
         const after = within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text').textContent;
         expect(after).toBe(before);
+    });
+});
+
+// ── Arrange (DESIGN-home-layout-fable.md §3.2, slice L2): one way to move a card, on the card ─────────────────────────
+
+describe('Arrange', () => {
+    const layout3 = () => vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['market', 'events', 'pulse']) as never })));
+    const land = async () => {
+        layout3();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+    };
+    const savedTypes = () => (vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as ReturnType<typeof v2>).cards.map(c => c.type);
+    const body = () => within(screen.getByTestId('home-card-market')).queryAllByTestId('home-market-item');
+
+    it('Arrange › folds the cards to their bands and one line: no bodies, no "…", the type\'s own line, said on entering', async () => {
+        await land();
+        expect(body().length).toBeGreaterThan(0);
+        openArrange();
+        expect(body()).toHaveLength(0);
+        expect(screen.queryByTestId('home-card-menu')).toBeNull();
+        expect(screen.getByTestId('home-arrange-line-events')).toHaveTextContent('Events coming up soon.');
+        expect(screen.getByTestId('home-live')).toHaveTextContent('Arrange Home. Use the arrows on each card.');
+        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent("Arrange Home: use the arrows. Done when you're happy.");
+        // Nothing here promises a drag until L3 and L4 land.
+        expect(screen.getByTestId('home-arrange-bar').textContent).not.toMatch(/drag/i);
+    });
+
+    it('every control has a name, and Tab meets them in the member\'s order: Done, then each card\'s arrows, then Add a card, then Reset', async () => {
+        await land();
+        openArrange();
+        const page = screen.getByTestId('home-page');
+        const names = Array.from(page.querySelectorAll<HTMLElement>('button:not([disabled])')).map(b => b.getAttribute('aria-label') ?? b.textContent)
+            .filter(name => name !== 'Dismiss'); // The "Use the phone app" card, above Arrange and no part of it.
+        expect(names).toEqual([
+            'Done arranging Home', 'Move New in the Market down', 'Move Coming up up', 'Move Coming up down', 'Move The Pulse up',
+            'Add a card to Home', 'Reset to defaults',
+        ]);
+    });
+
+    it('↑ and ↓ move the card and save through the one write, focus stays on the arrow or goes to its twin at an end, and the place is said', async () => {
+        await land();
+        openArrange();
+        const before = vi.mocked(api.saveHomePreferences).mock.calls.length;
+        const down = screen.getByTestId('home-arrange-down-events');
+        down.focus();
+        fireEvent.click(down);
+        await waitFor(() => expect(savedTypes()).toEqual(['market', 'pulse', 'events']));
+        expect(vi.mocked(api.saveHomePreferences).mock.calls.length).toBe(before + 1);
+        expect(screen.getByTestId('home-live')).toHaveTextContent('Coming up moved to 3 of 3');
+        // Now last: its ↓ is off, so focus goes to its ↑.
+        expect(screen.getByTestId('home-arrange-down-events')).toBeDisabled();
+        expect(screen.getByTestId('home-arrange-up-events')).toHaveFocus();
+        fireEvent.click(screen.getByTestId('home-arrange-up-events'));
+        await waitFor(() => expect(savedTypes()).toEqual(['market', 'events', 'pulse']));
+        expect(screen.getByTestId('home-arrange-up-events')).toHaveFocus();
+        expect(cardIds()).toEqual(['market', 'events', 'pulse', 'community']);
+    });
+
+    it('the first card can\'t go up and the last can\'t go down', async () => {
+        await land();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-up-market')).toBeDisabled();
+        expect(screen.getByTestId('home-arrange-down-pulse')).toBeDisabled();
+    });
+
+    it('Stays here on Needs you, the community card and a pinned Find: no arrows, and neither is in the saved order', async () => {
+        const find = { point: null, communities: [], communityCount: 38, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null } as unknown as HomeAnswer['cards']['find'];
+        const needs = { items: [{ kind: 'unread', label: '1 unread message', accent: false, count: 1, target: { to: 'unread-messages' } }] } as unknown as HomeAnswer['cards']['needs'];
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global', me: { ...answer().me!, joinedAt: new Date().toISOString() }, layout: v2(['market', 'events']) as never }, { needs, find })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        openArrange();
+        for (const id of ['needs', 'find', 'community']) {
+            expect(screen.getByTestId(`home-arrange-stays-${id}`)).toHaveTextContent('Stays here');
+            expect(screen.queryByTestId(`home-arrange-up-${id}`)).toBeNull();
+        }
+        expect(cardIds()).toEqual(['needs', 'find', 'market', 'events', 'community']);
+    });
+
+    it('a card with nothing to show folds too, with Remove: it goes, is said, is saved without it, and focus goes to the nearest card', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['market', 'decide', 'pulse']) as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        expect(screen.queryByTestId('home-card-decide')).toBeNull();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-decide')).toHaveTextContent('Nothing to show now');
+        // A drawn card has no Remove here: it is one tap away in its "…".
+        expect(screen.queryByTestId('home-arrange-remove-market')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-arrange-remove-decide'));
+        await waitFor(() => expect(savedTypes()).toEqual(['market', 'pulse']));
+        expect(screen.queryByTestId('home-card-decide')).toBeNull();
+        expect(screen.getByTestId('home-live').textContent).toMatch(/removed\. Add a card brings it back\.$/);
+        await waitFor(() => expect(screen.getByTestId('home-arrange-up-pulse')).toHaveFocus());
+    });
+
+    it('+ Add a card opens the picker over Arrange; the new card folds in first, focus on its arrow; Escape in the picker closes only the picker', async () => {
+        await land();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await pause();
+        expect(screen.queryByTestId('home-add-pulse')).toBeNull();
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
+        fireEvent.click(screen.getByTestId('home-add-beans'));
+        await waitFor(() => expect(savedTypes()).toEqual(['beans', 'market', 'events', 'pulse']));
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        expect(cardIds()).toEqual(['beans', 'market', 'events', 'pulse', 'community']);
+        await waitFor(() => expect(screen.getByTestId('home-arrange-down-beans')).toHaveFocus());
+    });
+
+    it('Reset to defaults gives the newcomer\'s list, folded, and Arrange stands', async () => {
+        await land();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        await waitFor(() => expect(savedTypes()).toEqual(newcomerTypes()));
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+    });
+
+    it('Done unfolds the cards, saves nothing more, and gives focus back to Arrange ›', async () => {
+        await land();
+        const open = screen.getByTestId('home-arrange-open');
+        open.focus();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-done')).toHaveFocus();
+        const saves = vi.mocked(api.saveHomePreferences).mock.calls.length;
+        doneArrange();
+        expect(screen.queryByTestId('home-arrange-bar')).toBeNull();
+        expect(body().length).toBeGreaterThan(0);
+        expect(vi.mocked(api.saveHomePreferences).mock.calls.length).toBe(saves);
+        await waitFor(() => expect(screen.getByTestId('home-arrange-open')).toHaveFocus());
+    });
+
+    it('"…" → Arrange starts on that card\'s arrow; Escape ends it, back on that card\'s "…"', async () => {
+        await land();
+        const events = screen.getByTestId('home-card-events');
+        fireEvent.click(within(events).getByTestId('home-card-menu'));
+        fireEvent.click(within(events).getByTestId('home-menu-arrange'));
+        await waitFor(() => expect(screen.getByTestId('home-arrange-up-events')).toHaveFocus());
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByTestId('home-arrange-bar')).toBeNull();
+        await waitFor(() => expect(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu')).toHaveFocus());
+    });
+
+    it('holding a band for half a second enters; a short press, a slide or a press on its "…" doesn\'t', async () => {
+        await land();
+        vi.useFakeTimers();
+        const band = screen.getByTestId('card-band-events');
+        const inArrange = () => !!screen.queryByTestId('home-arrange-bar');
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS - 1); });
+        fireEvent.pointerUp(band);
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(false);
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(band, { clientX: 10, clientY: 40 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(false);
+        fireEvent.pointerDown(within(band).getByTestId('home-card-menu'), { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(false);
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(true);
+    });
+
+    it('a visitor has no Arrange: no link, no "…", and a band held does nothing', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global', welcome: true, me: null, layout: null })));
+        render(<HomePage identity={null} onNavigate={vi.fn()} visitor={{ joinCard: <div>Join</div>, beans: false }} />);
+        await screen.findByText('Join');
+        const band = await screen.findByTestId('card-band-community');
+        expect(screen.queryByTestId('home-arrange-open')).toBeNull();
+        vi.useFakeTimers();
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(screen.queryByTestId('home-arrange-bar')).toBeNull();
+    });
+
+    it('the order is what comes back: a reload draws the moved order from the saved list, in the same shape, with nothing new in it', async () => {
+        await land();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
+        await waitFor(() => expect(savedTypes()).toEqual(['events', 'market', 'pulse']));
+        doneArrange();
+        const saved = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as Record<string, unknown>;
+        expect(Object.keys(saved).sort()).toEqual(['cards', 'dismissed', 'updatedAt', 'v']);
+        expect(Object.keys((saved.cards as Record<string, unknown>[])[0]).sort()).toEqual(['id', 'type']);
+        cleanup();
+        // A new browser: nothing kept here, the account's list alone.
+        resetHomeCacheForTest();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: saved as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        expect(cardIds()).toEqual(['events', 'market', 'pulse', 'community']);
+    });
+
+    it('in the pseudo-locale, every line and label of Arrange goes through the words layer', async () => {
+        await showIn('xx');
+        await land();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent(xx(ARRANGE_WORDS.bar));
+        expect(screen.getByTestId('home-arrange-done')).toHaveAccessibleName(xx(ARRANGE_WORDS.done));
+        expect(screen.getByTestId('home-arrange-stays-community')).toHaveTextContent(xx(ARRANGE_WORDS.stays));
+        expect(bypassing(screen.getByTestId('home-arrange-bar'))).toEqual([]);
+        expect(bypassing(screen.getByTestId('home-arrange-tile'))).toEqual([]);
+        backToEnglish();
     });
 });
 
@@ -1546,9 +1726,10 @@ describe('the card frame (F3)', () => {
         nodeV2(answer(), v2(['market', 'events', 'pulse']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByText('Move down'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
         await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'market', 'pulse']));
+        doneArrange();
         fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByTestId('home-card-menu'));
         fireEvent.click(screen.getByTestId('home-menu-remove'));
         await waitFor(() => expect(cardIds()).not.toContain('pulse'));
@@ -1583,7 +1764,7 @@ describe('the card frame (F3)', () => {
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
     });
 
-    it('a node from before the frame refuses the list: kept here, Edit home says so, sent again once per landing only', async () => {
+    it('a node from before the frame refuses the list: kept here, Arrange says so, sent again once per landing only', async () => {
         const v1Answer = answer({ layout: { v: 1, order: ['market', 'events', 'pulse'], hidden: [], dismissed: {}, updatedAt: AT } as never });
         vi.mocked(api.getHome).mockResolvedValue(fresh(v1Answer));
         vi.mocked(api.saveHomePreferences).mockImplementation(async () => { throw Object.assign(new Error('bad layout'), { status: 400 }); });
@@ -1593,9 +1774,9 @@ describe('the card frame (F3)', () => {
         fireEvent.click(screen.getByTestId('home-menu-remove'));
         await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(1));
         await waitFor(() => expect(cardIds()).not.toContain('pulse'));
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(screen.getByTestId('home-edit-not-on-account')).toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('home-edit-done'));
+        openArrange();
+        expect(screen.getByTestId('home-arrange-not-on-account')).toBeInTheDocument();
+        doneArrange();
         // More reads on this landing send nothing.
         await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
@@ -2051,20 +2232,20 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         expect(card).not.toHaveTextContent('Fresh eggs');
     });
 
-    it('Edit home names the row by its words, so two searches are two rows', async () => {
+    it('Arrange names the band by its words, so two searches read as two cards', async () => {
         nodeKeeping(answer(), v2(['market'], AT, [
             { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'duck eggs', kind: 'any' } },
         ]));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('eggs');
-        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('duck eggs');
-        expect(screen.getByTestId('home-edit-row-search-k7mq')).not.toHaveTextContent('A saved search');
+        openArrange();
+        expect(screen.getByTestId('card-band-search-k7mq')).toHaveTextContent('eggs');
+        expect(screen.getByTestId('card-band-search-m4p9')).toHaveTextContent('duck eggs');
+        expect(screen.getByTestId('card-band-search-k7mq')).not.toHaveTextContent('A saved search');
     });
 
-    it('Edit home: two searches with the same words and another kind read differently, rows and labels (review of #1716)', async () => {
+    it('Arrange: two searches with the same words and another kind read differently, bands and labels (review of #1716)', async () => {
         nodeKeeping(answer(), v2(['market'], AT, [
             { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'offer' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'need' } },
@@ -2072,53 +2253,53 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         ]));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('Offers · eggs');
-        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('Needs · eggs');
-        expect(screen.getByTestId('home-edit-row-search-r8t2')).toHaveTextContent('eggs');
-        expect(screen.getByTestId('home-edit-row-search-r8t2')).not.toHaveTextContent(/Offers|Needs|Both/);
-        expect(screen.getByTestId('home-edit-up-search-k7mq')).toHaveAccessibleName('Move "eggs" (Offers) up');
-        expect(screen.getByTestId('home-edit-up-search-m4p9')).toHaveAccessibleName('Move "eggs" (Needs) up');
-        expect(screen.getByTestId('home-edit-up-search-r8t2')).toHaveAccessibleName('Move "eggs" up');
+        openArrange();
+        expect(screen.getByTestId('card-band-search-k7mq')).toHaveTextContent('Offers · eggs');
+        expect(screen.getByTestId('card-band-search-m4p9')).toHaveTextContent('Needs · eggs');
+        expect(screen.getByTestId('card-band-search-r8t2')).toHaveTextContent('eggs');
+        expect(screen.getByTestId('card-band-search-r8t2')).not.toHaveTextContent(/Offers|Needs|Both/);
+        expect(screen.getByTestId('home-arrange-up-search-k7mq')).toHaveAccessibleName('Move "eggs" (Offers) up');
+        expect(screen.getByTestId('home-arrange-up-search-m4p9')).toHaveAccessibleName('Move "eggs" (Needs) up');
+        expect(screen.getByTestId('home-arrange-up-search-r8t2')).toHaveAccessibleName('Move "eggs" up');
     });
 });
 
 describe('Home\'s dialogs: only the one in front has the keys, and focus never drops to the page (review of #1701, findings 2 and 3)', () => {
     const withSearch = () => v2(['market', 'events'], AT, [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }]);
     const focused = () => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName;
-    const openSearchSettingsFromEditHome = async () => {
-        nodeKeeping(answer(), withSearch());
+    // Over Arrange, from its word on a card with nothing to show: Sun and moon with no place to work from.
+    const openSkySettingsFromArrange = async () => {
+        nodeKeeping(answer(), v2(['market', 'sky']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-search-k7mq');
+        await screen.findByTestId('home-card-market');
         // As a keyboard user does: each control has focus as it is pressed (a click in jsdom moves none).
         const press = (id: string) => { const el = screen.getByTestId(id); el.focus(); fireEvent.click(el); };
-        press('home-edit-open');
-        press('home-edit-menu-search-k7mq');
-        press('home-edit-settings-search-k7mq');
+        press('home-arrange-open');
+        await pause();
+        press('home-arrange-settings-sky');
         return screen.getByTestId('home-settings-dialog');
     };
 
-    it('D1: Escape in a saved search\'s Settings… opened from Edit home closes only the settings; focus to the row\'s "…"', async () => {
-        await openSearchSettingsFromEditHome();
+    it('D1: Escape in a card\'s Settings… opened from Arrange closes only the settings; Arrange stands, focus to its word', async () => {
+        await openSkySettingsFromArrange();
         fireEvent.keyDown(document, { key: 'Escape' });
         await pause();
         expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
-        expect(screen.getByTestId('home-edit-dialog')).toBeInTheDocument();
-        expect(focused()).toBe('home-edit-menu-search-k7mq');
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        expect(focused()).toBe('home-arrange-settings-sky');
     });
 
-    it('D2: Tab in that sheet goes round its own controls: Edit home underneath leaves the key alone', async () => {
-        const sheet = await openSearchSettingsFromEditHome();
+    it('D2: Tab in that sheet goes round its own controls', async () => {
+        const sheet = await openSkySettingsFromArrange();
         const tab = (from: HTMLElement) => {
             from.focus();
             const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
             document.dispatchEvent(ev);
             return ev.defaultPrevented;
         };
-        // Neither is the sheet's last control: the browser moves on to the next one.
-        expect(tab(within(sheet).getByTestId('home-settings-q'))).toBe(false);
+        // Its first control isn't its last: the browser moves on to the next one.
         expect(tab(within(sheet).getByTestId('home-settings-dialog-done'))).toBe(false);
-        // From its last control, round to its first (never out to Edit home's).
+        // From its last control, round to its first (never out to the page).
         const submit = within(sheet).getByTestId('home-settings-submit');
         submit.focus();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
@@ -2137,16 +2318,19 @@ describe('Home\'s dialogs: only the one in front has the keys, and focus never d
         expect(document.activeElement).toBe(within(screen.getByTestId('home-card-search-k7mq')).getByTestId('home-card-menu'));
     });
 
-    it('D4: the picker opened from Edit home, closed with Done: focus to the community card\'s Add a card', async () => {
+    it('D4: the picker opened from Arrange, closed with Done: Arrange stands, focus to its Add a card', async () => {
         nodeKeeping(answer(), withSearch());
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(screen.getByTestId('home-edit-add'));
+        openArrange();
+        // As a keyboard user does: the tile has focus as it is pressed (a click in jsdom moves none).
+        screen.getByTestId('home-arrange-add').focus();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
         await pause();
         fireEvent.click(screen.getByTestId('home-add-dialog-done'));
         await pause();
-        expect(focused()).toBe('home-add-open');
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        expect(focused()).toBe('home-arrange-add');
     });
 
     it('D5: a card added with nothing to show yet: focus to Add a card, and it stays there once the add\'s read is in', async () => {
@@ -2223,13 +2407,13 @@ describe('sun and moon: worked out in the browser, from the place the answer hol
         expect(sunPart(visible())).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
     });
 
-    it('with no place at all, it is not drawn, and Edit home says why', async () => {
+    it('with no place at all, it is not drawn, and Arrange says why', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(placed({})));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
         expect(screen.queryByTestId('home-card-sky')).toBeNull();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(within(screen.getByTestId('home-edit-row-sky')).getByText(SKY_NO_PLACE_LINE)).toBeInTheDocument();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-sky')).toHaveTextContent(SKY_NO_PLACE_LINE);
     });
 
     it('makes no request of its own: a landing with it asks exactly what a landing without it asks', async () => {
@@ -2804,22 +2988,8 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
     });
 
-    // A card that is not drawn is not a place to move to: counted, the first press on the card after it swapped the two
-    // in the saved list, moved nothing on screen, and was saved to the account all the same (PR #2411 review).
-    it('"Your way back in" with nothing to show is passed over by the moves: the first card under Needs you cannot move earlier', async () => {
-        wordsOnly();
-        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
-        await landAt(1400, SAFETY);
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
-        await pause();
-        expect(screen.queryByTestId('home-card-safety')).toBeNull();
-        expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
-        fireEvent.click(within(screen.getByTestId('home-card-tips')).getByTestId('home-card-menu'));
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
-        expect(screen.getByRole('button', { name: 'Move later' })).toBeEnabled();
-    });
-
-    it('"Your way back in" with nothing to show: Move later on the card before it swaps with the next card on screen', async () => {
+    // Arrange shows it with nothing to say, so a move past it shows too: no press moves something a member can't see.
+    it('"Your way back in" with nothing to show folds in Arrange, says so, and the card under it moves past it', async () => {
         wordsOnly();
         localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
         width = 1400;
@@ -2829,25 +2999,12 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
         await pause();
         expect(cardIds()).toEqual(['needs', 'market', 'events', 'pulse', 'community']);
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByRole('button', { name: 'Move later' }));
-        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'safety', 'market', 'pulse']));
-        expect(cardIds()).toEqual(['needs', 'events', 'market', 'pulse', 'community']);
-    });
-
-    it('"Your way back in" drawn is a place to move to; put away, it no longer is', async () => {
-        wordsOnly();
-        await landAt(1400, SAFETY);
-        const card = await screen.findByTestId('one-way-back-landing');
-        const tipsMenu = () => within(screen.getByTestId('home-card-tips')).getByTestId('home-card-menu');
-        fireEvent.click(tipsMenu());
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeEnabled();
-        fireEvent.click(tipsMenu());
-        expect(screen.queryByRole('button', { name: 'Move earlier' })).toBeNull();
-        fireEvent.click(within(card).getByRole('button', { name: 'Hide this for now' }));
-        expect(screen.queryByTestId('home-card-safety')).toBeNull();
-        fireEvent.click(tipsMenu());
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
+        openArrange();
+        expect(cardIds()).toEqual(['needs', 'market', 'safety', 'events', 'pulse', 'community']);
+        expect(screen.getByTestId('home-arrange-line-safety')).toHaveTextContent('Nothing to show now');
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
+        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['safety', 'market', 'events', 'pulse']));
+        expect(cardIds()).toEqual(['needs', 'safety', 'market', 'events', 'pulse', 'community']);
     });
 
     // The answer's `safety` is the node's word that the member has only their 12 words, so a card not yet put away is
@@ -2942,28 +3099,30 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(bypassing(hint)).toEqual([]);
     });
 
-    it('side by side, the "…" says Move earlier · Move later (up can be left), and moves the card in the saved list', async () => {
+    it('side by side, the arrows say earlier and later (up can be left), and move the card in the saved list; the DOM stays in that order', async () => {
         width = 1400;
         nodeV2(answer(), v2(['market', 'events', 'pulse']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        expect(screen.queryByText('Move up')).toBeNull();
-        expect(screen.queryByText('Move down')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
-        fireEvent.click(screen.getByRole('button', { name: 'Move later' }));
+        openArrange();
+        expect(screen.getByTestId('home-arrange-up-market')).toHaveAccessibleName('Move New in the Market earlier');
+        expect(screen.getByTestId('home-arrange-up-market')).toBeDisabled();
+        expect(screen.getByTestId('home-arrange-down-market')).toHaveAccessibleName('Move New in the Market later');
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
         await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'market', 'pulse']));
-        expect(cardIds().indexOf('events')).toBeLessThan(cardIds().indexOf('market'));
+        expect(cardIds()).toEqual(['events', 'market', 'pulse', 'community']);
+        expect(screen.getByTestId('home-live')).toHaveTextContent('New in the Market moved to 2 of 3');
+        doneArrange();
+        expect(cardIds()).toEqual(['events', 'market', 'pulse', 'community']);
     });
 
-    it('in one column the "…" still says Move up · Move down', async () => {
+    it('in one column the arrows say up and down', async () => {
         width = 360;
         nodeV2(answer(), v2(['market', 'events', 'pulse']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        expect(screen.getByRole('button', { name: 'Move down' })).toBeEnabled();
-        expect(screen.queryByText('Move later')).toBeNull();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-down-market')).toHaveAccessibleName('Move New in the Market down');
     });
 
     it('the columns follow the page as it changes width (the window, the sidebar), with no new request', async () => {

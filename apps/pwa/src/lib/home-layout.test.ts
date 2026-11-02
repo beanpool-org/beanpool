@@ -14,6 +14,7 @@ import {
     moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
+import { arrangeCards, cardLine } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
 const H = 3_600_000;
@@ -350,7 +351,7 @@ describe('this browser\'s own marked save, read back (review of #1701 confirmati
     });
 });
 
-describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {
+describe("a saved search's words on its card and in Arrange (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {
     it('the first line is the words and the distance, the words alone with no point', () => {
         expect(searchFirstLine('eggs', 5)).toBe('eggs · within 5 km');
         expect(searchFirstLine('  duck   eggs ', 25)).toBe('duck eggs · within 25 km');
@@ -363,7 +364,7 @@ describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, �
         expect(SEARCH_OFFLINE_LINE).toBe('Shows when your community answers');
     });
 
-    it("Edit home names a search's row by its words (bounded), any other card by its name", () => {
+    it("Arrange names a search's band by its words (bounded), any other card by its name", () => {
         expect(cardRowName({ type: 'search', settings: { q: 'eggs' } })).toBe('eggs');
         expect(cardRowName({ type: 'search', settings: { q: 'x'.repeat(40) } })).toBe(`${'x'.repeat(24)}…`);
         expect(cardRowName({ type: 'search', settings: {} })).toBe('A saved search');
@@ -615,5 +616,25 @@ describe('settleHeights: a height that keeps turning back stops moving the cards
         const now = settleHeights(was, { tips: 100, market: 150 }, 21 * 16);
         expect(now.tips.height).toBe(140);
         expect(now.market.height).toBe(150);
+    });
+});
+
+describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
+    const order = [{ id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }, { id: 'sky', type: 'sky' }, { id: 'chat', type: 'chat' }, { id: 'community', type: 'community' }];
+    const onNode = (type: string) => type !== 'chat';
+
+    it('what is drawn, and every other card on the list this node can show, in the list\'s order', () => {
+        expect(arrangeCards(order, [{ id: 'market' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['market', 'sky', 'community']);
+    });
+
+    it('a fixed card or a pin only while it is drawn: nothing to show there means no band to say it stays', () => {
+        expect(arrangeCards(order, [{ id: 'needs' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['needs', 'market', 'sky', 'community']);
+        const find = { id: 'find', type: 'find' };
+        expect(arrangeCards([find, ...order], [], () => true, ['find']).map(c => c.id)).toEqual(['market', 'sky', 'chat']);
+    });
+
+    it("a folded card's line is the catalogue's; a type nobody knows has none", () => {
+        expect(cardLine('events')).toBe('Events coming up soon.');
+        expect(cardLine('future-card')).toBe('');
     });
 });

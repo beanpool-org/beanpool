@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -228,12 +228,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "投票はみんなの意見を尋ねるもので、それ自体で何かが決まるわけではありません。「市場」の「投票」から確認できます。",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "残高と取引履歴を見られるのはあなただけです。他のメンバーには名前、写真、レベル、評価が表示されます。",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "参加していない人に見えるのは、出品内容とおおよその場所だけであり、名前、顔、正確な住所は公開されません。",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "ヒントは以上です。全体のガイドは「設定」＞「ヘルプと仕組み」にあり、オフラインでも閲覧できます。画面下部の「ホームを編集」でカードを並べ替えられます。",
   "Tips · {position} of {total}": "ヒント · {position} / {total}",
   "Done with tips. The card goes.": "ヒントを読み終えました。カードを閉じます。",
   "Next tip": "次のヒント",
   "Don't show tips again": "ヒントを再表示しない",
-  "Don't show tips again. Edit home brings them back.": "ヒントを再表示しない。「ホームを編集」からいつでも再表示できます。",
   "All tips seen": "すべてのヒントを確認済み",
   "or type your town": "または市区町村を入力",
   "Not here? Type your town": "見つかりませんか？市区町村を入力",
@@ -884,5 +882,15 @@
   "Ask a question": "質問する",
   "It will stop taking questions as soon as the global community answers.": "グローバルコミュニティが応答し次第、質問の受け付けを停止します。",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "そこにいる誰でも、写真、おおよその地域、価格、このコミュニティの名前とともに見ることができます。正確な場所は表示されません。あなたの名前も、これについての質問を受け付けない限り表示されません。購入したり受け取ったりするには、参加を申請します。",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "そこにいる誰でも、写真、おおよその地域、価格、このコミュニティの名前とともに見ることができます。正確な場所は表示されません。あなたの名前も、これについての質問を受け付けない限り表示されません。これに応えるには、参加を申請します。"
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "そこにいる誰でも、写真、おおよその地域、価格、このコミュニティの名前とともに見ることができます。正確な場所は表示されません。あなたの名前も、これについての質問を受け付けない限り表示されません。これに応えるには、参加を申請します。",
+  "Arrange": "並べ替え",
+  "Arrange: move the cards on Home": "並べ替え：ホームのカードを移動",
+  "Arrange Home: use the arrows. Done when you're happy.": "ホームの並べ替え：矢印を使います。よければ「完了」を押してください。",
+  "Arrange Home. Use the arrows on each card.": "ホームの並べ替え。各カードの矢印を使います。",
+  "Stays here": "固定",
+  "Done arranging Home": "ホームの並べ替えを完了",
+  "{card} moved to {n} of {m}": "{card} を {m} 件中 {n} 番目に移動しました",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "ヒントは以上です。全体のガイドは「設定」＞「ヘルプと仕組み」にあり、オフラインでも閲覧できます。画面下部の「並べ替え」でカードを移動できます。",
+  "Don't show tips again. Add a card brings them back.": "ヒントを再表示しない。「カードを追加」からいつでも再表示できます。",
+  "Arrange ›": "並べ替え ›"
 }

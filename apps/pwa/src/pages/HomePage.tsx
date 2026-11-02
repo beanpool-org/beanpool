@@ -984,7 +984,7 @@ function CommunityBody({
             {!isVisitor && (
                 <div className="flex flex-wrap justify-end gap-x-4">
                     <HomeMore onClick={onAddCard} testId="home-add-open" label={t('Add a card to Home')}>{t('Add a card ›')}</HomeMore>
-                    <HomeMore onClick={onArrange} testId="home-arrange-open" label={t(ARRANGE_WORDS.link)}>{t(ARRANGE_WORDS.name)} ›</HomeMore>
+                    <HomeMore onClick={onArrange} testId="home-arrange-open" label={t(ARRANGE_WORDS.link)}>{t(ARRANGE_WORDS.more)}</HomeMore>
                 </div>
             )}
         </div>
@@ -2925,18 +2925,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     </p>
                 )}
                 {!notesUnderFirst && !inArrange && firstNotes(false)}
-                {inArrange && (
-                    <div data-testid="home-arrange-bar" className="sticky top-0 z-20 mb-3 pl-3 pr-1 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary shadow-sm">
-                        <p className="m-0 min-w-0 flex-1 break-words text-sm text-text-primary">{t(ARRANGE_WORDS.bar)}</p>
-                        <button type="button" data-testid="home-arrange-done" aria-label={t(ARRANGE_WORDS.done)} onClick={(e) => endArrange(e.detail > 0)}
-                            className="shrink-0 min-w-[64px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Done')}
-                        </button>
-                    </div>
-                )}
-                {inArrange && notOnAccount && (
-                    <p data-testid="home-arrange-not-on-account" className="m-0 mb-3 text-sm text-text-primary break-words">{t(LIB_LINES.notOnAccount)}</p>
-                )}
                 {/* The "Use the phone app" card (front doors S4): after the first post or a week */}
                 {(() => {
                     const p = a.me?.probation;
@@ -2959,6 +2947,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     only for a global member's first 30 days, and a member may take it off (PR #2551 review). */}
                 {askedCommunity && identity && answer && !shown.some(c => c.type === 'find') && (
                     <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />
+                )}
+                {inArrange && (
+                    <div data-testid="home-arrange-bar" className="sticky top-0 z-20 mb-3 pl-3 pr-1 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary shadow-sm">
+                        <p className="m-0 min-w-0 flex-1 break-words text-sm text-text-primary">{t(ARRANGE_WORDS.bar)}</p>
+                        <button type="button" data-testid="home-arrange-done" aria-label={t(ARRANGE_WORDS.done)} onClick={(e) => endArrange(e.detail > 0)}
+                            className="shrink-0 min-w-[64px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                            {t('Done')}
+                        </button>
+                    </div>
+                )}
+                {inArrange && notOnAccount && (
+                    <p data-testid="home-arrange-not-on-account" className="m-0 mb-3 text-sm text-text-primary break-words">{t(LIB_LINES.notOnAccount)}</p>
                 )}
                 {/* The cards (D1): columns 320–576 px wide, packed shortest column first in the saved order (slice L1).
                     When packed: 4 px row tracks, 0 row gap, with cards positioned by gridColumn/gridRow and self-aligned.

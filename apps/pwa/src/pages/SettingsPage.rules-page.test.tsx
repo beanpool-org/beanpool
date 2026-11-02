@@ -63,7 +63,7 @@ describe('Settings → "How this community works" (review of #2746)', () => {
     it('a line of its own, and a tightened line\'s date from the public route', async () => {
         stubRule({ known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 90, ruleFrom: '2026-11-01T04:00:00.000Z', debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
         const modal = await openRulesPage({ ...WIRE, debtLinePct: 30, quietDays: 90 });
-        await waitFor(() => expect(modal.textContent).toContain('more than 30% of their credit line, or are in debit and haven't made a sale for 90 days'));
+        await waitFor(() => expect(modal.textContent).toContain("more than 30% of their credit line, or are in debit and haven't made a sale for 90 days"));
         await waitFor(() => expect(modal.textContent).toContain('The line of 30% applies from 16 November.'));
     });
 

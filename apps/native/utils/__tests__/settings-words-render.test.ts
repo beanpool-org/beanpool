@@ -758,7 +758,7 @@ describe('Settings → "How this community works": the floor and the rule throug
         node.knownRule = { known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 90, ruleFrom: '2026-11-01T04:00:00.000Z', debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null };
         await renderIn('en');
         await open();
-        expect(shapeSheet()).toContain('more than 30% of their credit line, or are in debit and haven't made a sale for 90 days');
+        expect(shapeSheet()).toContain("more than 30% of their credit line, or are in debit and haven't made a sale for 90 days");
         expect(shapeSheet()).toContain('The line of 30% applies from 16 November.');
     });
 

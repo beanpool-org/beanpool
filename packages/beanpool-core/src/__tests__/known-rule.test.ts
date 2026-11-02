@@ -236,6 +236,7 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
     it('the guard knows the claim however it was said, and leaves what stays true with the rule on', () => {
         for (const sentence of [
             'Only you can see your balance and your trades.',
+            'Only you can read your balance.',
             'Nobody else in your community can read them.',
             'Your posts are shared within your community. Your balance and trades are not: a trade shows only its two people.',
             "Your balance isn't shared with anyone.",
@@ -266,15 +267,27 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
         expect(saying(text => WAIT.test(text))).toEqual(S3_WAITS);
     });
 
-    it('in every language both rule lines stand, with their numbers', () => {
+    it('in every language both rule lines stand, with their numbers, and no draft kept the wait', () => {
+        /** Each language's old words for it: an old draft moved under the new key keeps them, and no key sweep sees that. */
+        const OLD_WAIT: Record<string, string> = {
+            ar: 'بقي مدينًا', bn: 'ছাড়াই দেনায় থাকেন', de: 'im Minus bleibt', el: 'μένει σε χρέος', es: 'sigue en débito', fa: 'بدهکار بماند',
+            fil: 'nananatili', fr: 'reste en débit', hi: 'कर्ज़ में रहे', id: 'tetap dalam saldo debet', it: 'resta in debito', ja: 'マイナスが続いて',
+            ko: '마이너스 잔액이 계속', ml: 'കടത്തിൽ തുടർന്നാലോ', pt: 'continuar em débito', ru: 'остаётся в минусе', sw: 'akibaki na deni',
+            ta: 'கடனில் தொடர்ந்தால்', tr: 'borçta kalırsa', uk: 'залишається в мінусі', ur: 'قرض میں رہے', vi: 'vẫn đang nợ',
+            'zh-Hans': '仍处于负债', 'zh-Hant': '仍處於透支',
+        };
         expect(coreCatalogs().length).toBe(24);
+        expect(Object.keys(OLD_WAIT).sort()).toEqual(coreCatalogs().map(f => f.replace('.json', '')).sort());
         for (const file of coreCatalogs()) {
             const catalog = read('packages/beanpool-core/words', file);
             const half = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf)];
             const pct = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.ruleLinePct)];
+            const wait = OLD_WAIT[file.replace('.json', '')]!;
             expect(half, `${file}: the half line`).toContain('{days}');
             expect(pct, `${file}: the percentage line`).toContain('{days}');
             expect(pct, `${file}: the percentage line`).toContain('{pct}');
+            expect(half, `${file}: the half line's wait`).not.toContain(wait);
+            expect(pct, `${file}: the percentage line's wait`).not.toContain(wait);
         }
     });
 

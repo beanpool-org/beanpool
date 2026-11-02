@@ -114,7 +114,7 @@ const typedNoAnswer = async (composer: HTMLElement, text: string) => {
 const ringDoorbell = async () => { for (const ring of [...doorbell.listeners]) await act(async () => { await ring(); }); };
 async function openDm() {
     const page = render(<MessagesPage identity={me} openConversationId={DM} />);
-    const composer = await screen.findByPlaceholderText('Message...');
+    const composer = await composerOpen();
     await act(async () => {});
     return { ...page, composer: composer as HTMLTextAreaElement };
 }
@@ -177,6 +177,13 @@ function photoStubs() {
 }
 const picture = () => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'gate.jpg', { type: 'image/jpeg' });
 const clipboardWith = (file: File) => ({ files: [file], items: [{ kind: 'file', type: file.type, getAsFile: () => file }], types: ['Files'] });
+
+/** The composer is up a beat before the chat's opening clears the draft: words typed in that beat are wiped, and no line goes. */
+async function composerOpen() {
+    const composer = await screen.findByPlaceholderText('Message...');
+    await act(async () => {});
+    return composer;
+}
 
 describe('a row from the node can never pass for a pending line', () => {
     it('in a DM: readable words in Ben\'s name stay hidden, whatever fields the row carries, exactly as the same row without them', async () => {
@@ -548,7 +555,7 @@ describe('a line that couldn\'t go', () => {
         await typed(composer, 'Goes on without me');
         fireEvent.click(screen.getByRole('button', { name: 'Back to messages' }));
         fireEvent.click(await screen.findByText('Ben'));
-        await screen.findByPlaceholderText('Message...');
+        await composerOpen();
         await act(async () => {});
         await act(async () => { answer({ conversation: groupConv(), messages: groupRows(), canPost: false, encryption: { current: node.current(), stale: false, fromEpoch: 1 } }); });
         await act(async () => { await new Promise((r) => setTimeout(r, 30)); });

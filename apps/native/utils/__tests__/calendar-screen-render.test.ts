@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
+import { act, createElement, forwardRef, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+const mockScrollTo = vi.fn();
 
 const mockRouter = {
     back: vi.fn(),
@@ -52,7 +54,10 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        ScrollView: ({ children, testID, contentContainerStyle }: any) => createElement('div', { 'data-testid': testID, 'data-pad-bottom': contentContainerStyle?.paddingBottom ?? 0 }, children),
+        ScrollView: forwardRef(({ children, testID, contentContainerStyle }: any, ref: any) => {
+            useImperativeHandle(ref, () => ({ scrollTo: mockScrollTo }));
+            return createElement('div', { 'data-testid': testID, 'data-pad-bottom': contentContainerStyle?.paddingBottom ?? 0 }, children);
+        }),
         useWindowDimensions: () => ({ width: 320, height: 568 }),
         FlatList: ({ data, renderItem, keyExtractor }: any) => createElement('div', { 'data-testid': 'flat-list' },
             (data || []).map((item: any, idx: number) => {
@@ -328,5 +333,54 @@ describe('CalendarScreen route component', () => {
 
         // Panel should be closed immediately during transition
         expect(container.querySelector('[data-testid="map-stack-list"]')).toBeNull();
+    });
+
+    it('scrolls a tapped last-week day clear of the list', async () => {
+        vi.useFakeTimers();
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        const d1 = now.getDate() + 1 <= 20 ? now.getDate() + 1 : now.getDate();
+        const futureEventDay = `${y}-${pad(m)}-${pad(d1)}`;
+        const lastDay = `${y}-${pad(m)}-${pad(dim)}`;
+
+        fakeDb.events = [
+            {
+                id: 'ev-1',
+                type: 'event',
+                title: 'An Event',
+                status: 'active',
+                active: 1,
+                event_start_local: `${futureEventDay}T09:00`,
+                event_end_local: `${futureEventDay}T11:00`,
+                event_start_at: `${futureEventDay}T09:00:00.000Z`,
+                event_end_at: `${futureEventDay}T11:00:00.000Z`,
+            },
+        ];
+
+        await act(async () => {
+            root.render(createElement(CalendarScreen) as any);
+        });
+
+        mockScrollTo.mockClear();
+
+        const dayBtn = container.querySelector(`[data-testid="month-day-${lastDay}"]`) as HTMLButtonElement;
+        expect(dayBtn).toBeTruthy();
+
+        await act(async () => {
+            dayBtn.click();
+            vi.advanceTimersByTime(50);
+        });
+
+        // The tapped last-week day should have triggered scrollTo clear of the bottom list
+        expect(mockScrollTo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                y: expect.any(Number),
+                animated: true,
+            })
+        );
+        vi.useRealTimers();
     });
 });

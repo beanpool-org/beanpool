@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -35,6 +35,18 @@ export default function CalendarScreen() {
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [dismissedMonthKey, setDismissedMonthKey] = useState<string | null>(null);
     const [events, setEvents] = useState<any[]>([]);
+    const scrollRef = useRef<ScrollView>(null);
+    const reduceMotionRef = useRef(false);
+
+    useEffect(() => {
+        void AccessibilityInfo.isReduceMotionEnabled?.()
+            ?.then(calm => { reduceMotionRef.current = calm; })
+            ?.catch?.(() => {});
+        const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', calm => {
+            reduceMotionRef.current = calm;
+        });
+        return () => sub?.remove?.();
+    }, []);
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         container: {
@@ -125,9 +137,26 @@ export default function CalendarScreen() {
         }
     }, [monthModel.monthKey, monthModel.firstActiveDate, dismissedMonthKey, selectedDate]);
 
+    const scrollDayClear = useCallback((date: string) => {
+        const weekIndex = monthModel.weeks.findIndex(w => w.some(c => c.date === date));
+        if (weekIndex < 0) return;
+        // In MonthGrid: navHeader (minHeight 48) + weekdayRow (minHeight 28) + weekRows (minHeight 44-48dp each with scaling).
+        const dayBottom = 48 + 28 + (weekIndex + 1) * 48;
+        const listHeight = Math.ceil(screenHeight * STACK_LIST_SHARE);
+        const visibleHeight = screenHeight - listHeight - 52;
+        const clearBottom = dayBottom + 24;
+        if (clearBottom > visibleHeight) {
+            const targetY = clearBottom - visibleHeight;
+            requestAnimationFrame(() => {
+                scrollRef.current?.scrollTo({ y: targetY, animated: !reduceMotionRef.current });
+            });
+        }
+    }, [monthModel.weeks, screenHeight]);
+
     const handleSelectDate = (date: string) => {
         setSelectedDate(date);
         setDismissedMonthKey(null);
+        scrollDayClear(date);
     };
 
     const handlePrevMonth = () => {
@@ -152,6 +181,7 @@ export default function CalendarScreen() {
             setMonth(parsed.month);
             setSelectedDate(targetDate);
             setDismissedMonthKey(null);
+            scrollDayClear(targetDate);
         }
     };
 
@@ -189,6 +219,7 @@ export default function CalendarScreen() {
 
             {/* The day's list lies over the bottom of the screen: the month scrolls clear of it, last week included. */}
             <ScrollView
+                ref={scrollRef}
                 testID="calendar-month-scroll"
                 style={styles.content}
                 contentContainerStyle={selectedDate ? { paddingBottom: Math.ceil(screenHeight * STACK_LIST_SHARE) } : undefined}

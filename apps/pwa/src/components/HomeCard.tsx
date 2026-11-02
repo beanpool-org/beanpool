@@ -97,7 +97,7 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
                 aria-controls={open ? menuId : undefined} data-testid="home-card-menu"
                 onClick={() => setOpen(o => !o)}
                 style={ink ? { color: ink } : undefined}
-                className="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                className={`min-w-[44px] min-h-[44px] -mr-2 ${ink ? '' : '-mt-2 text-text-secondary hover:text-text-primary'} flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}>
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
@@ -166,7 +166,7 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
             >
                 <div
                     data-testid={`card-band-${id}`}
-                    className="-mx-4 -mt-4 px-4 mb-3 py-1 rounded-t-2xl flex items-start justify-between min-h-[48px] gap-2 min-w-0"
+                    className="-mx-4 -mt-4 px-4 mb-3 py-1 rounded-t-2xl flex items-center justify-between min-h-[48px] gap-2 min-w-0"
                     style={{
                         backgroundColor: `var(--bp-card-${cardHue}-tint)`,
                         color: `var(--bp-card-${cardHue}-ink)`,
@@ -176,7 +176,7 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                     <h2 id={headingId} tabIndex={-1} className="m-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider" style={{ color: `var(--bp-card-${cardHue}-ink)` }}>
                         {title}
                     </h2>
-                    <div className="flex items-start justify-end gap-1 min-w-0">
+                    <div className="flex items-center justify-end gap-1 min-w-0">
                         {titleAside}
                         {menu && <CardMenu title={title} ink={`var(--bp-card-${cardHue}-ink)`} {...menu} />}
                     </div>

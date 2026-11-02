@@ -4,7 +4,7 @@
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { HomeCard } from './HomeCard';
+import { CardMenu, HomeCard } from './HomeCard';
 
 describe('HomeCard menu', () => {
     it('the card frame: Settings… · Move up · Move down · Remove, labelled by the saved search\'s words; the caption stays fixed words', () => {
@@ -54,10 +54,19 @@ describe('HomeCard menu', () => {
         expect(heading.className).toContain('break-words');
         expect(heading.className).not.toContain('shrink-0');
         expect(heading.className).not.toContain('min-w-0');
-        const asideContainer = container.querySelector('.flex.items-start.justify-between > div:last-child');
+        const asideContainer = container.querySelector('.flex.items-center.justify-between > div:last-child');
         expect(asideContainer?.className).toContain('min-w-0');
         expect(asideContainer?.className).not.toContain('flex-1');
         expect(asideContainer?.className).not.toContain('shrink-0');
+    });
+
+    it('CardMenu without ink preserves -mt-2 text-text-secondary hover:text-text-primary for the safety card', () => {
+        render(<CardMenu title="Your way back in" canMoveUp={false} canMoveDown={false} onMove={vi.fn()} />);
+        const button = screen.getByRole('button', { name: 'Card options for Your way back in' });
+        expect(button.className).toContain('-mt-2');
+        expect(button.className).toContain('text-text-secondary');
+        expect(button.className).toContain('hover:text-text-primary');
+        expect(button.style.color).toBe('');
     });
 });
 
@@ -105,6 +114,20 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
         expect(amberBand.style.color).toBe('var(--bp-card-amber-ink)');
         const amberSection = amberCard.querySelector('section') as HTMLElement;
         expect(amberSection.style.borderColor).toBe('var(--bp-card-amber-ink)');
+    });
+
+    it('band and aside container are vertically centred (items-center)', () => {
+        const { container } = render(
+            <HomeCard id="market" title="New in the Market" hue="orange">
+                <p>body</p>
+            </HomeCard>,
+        );
+        const band = container.querySelector('[data-testid="card-band-market"]') as HTMLElement;
+        expect(band.className).toContain('items-center');
+        expect(band.className).not.toContain('items-start');
+        const aside = band.querySelector('div:last-child') as HTMLElement;
+        expect(aside.className).toContain('items-center');
+        expect(aside.className).not.toContain('items-start');
     });
 });
 

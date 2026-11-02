@@ -85,7 +85,7 @@ async function withScreens<T>(fn: () => Promise<T>): Promise<T> {
     }
 }
 
-let bo:Person;
+let bo: Person;
 let kai: Person;
 let serial = 0;
 let clock = Date.parse('2026-10-01T10:00:00.000Z');

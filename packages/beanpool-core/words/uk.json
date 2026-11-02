@@ -968,5 +968,17 @@
   "The wait for a first trade counts only people who listed before they traded.": "Очікування першого обміну враховує лише тих, хто розмістив оголошення до обміну.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Число приховується, якщо за ним стоїть менше {n} людей або якщо дві колонки різняться менш ніж на {n} людей.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Перші обміни зростають кроками по {n}, тож число ніколи не вказує на одну людину.",
-  "{n} at this spot": "У цьому місці: {n}"
+  "{n} at this spot": "У цьому місці: {n}",
+  "Calendar": "Календар",
+  "Nothing on {date}": "Нічого немає на {date}",
+  "Nothing on in {month}.": "У {month} нічого немає.",
+  "Next: {date} ›": "Наступна: {date} ›",
+  "No events coming up yet.": "Майбутніх подій поки немає.",
+  "Start one ›": "Створити ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} подія",
+    "few": "{date}: {n} події",
+    "many": "{date}: {n} подій",
+    "other": "{date}: {n} події"
+  }
 }

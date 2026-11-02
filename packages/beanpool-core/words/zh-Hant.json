@@ -851,5 +851,14 @@
   "The wait for a first trade counts only people who listed before they traded.": "等待首次交易的時間只計算在交易前已刊登的人。",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "當一個數字背後不足 {n} 人，或兩欄相差不足 {n} 人時，該數字不顯示。",
   "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 遞增，因此這個數字絕不會指向某一個人。",
-  "{n} at this spot": "此處有 {n} 項"
+  "{n} at this spot": "此處有 {n} 項",
+  "Calendar": "日曆",
+  "Nothing on {date}": "{date}無活動",
+  "Nothing on in {month}.": "{month}無活動。",
+  "Next: {date} ›": "下一個：{date} ›",
+  "No events coming up yet.": "尚無即將舉行的活動。",
+  "Start one ›": "發起一個 ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "other": "{date}：{n} 場活動"
+  }
 }

@@ -890,5 +890,15 @@
   "The wait for a first trade counts only people who listed before they traded.": "Ang paghihintay sa unang palitan ay binibilang lang ang mga nag-listing bago nakipagpalitan.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Hindi ipinapakita ang isang bilang kapag wala pang {n} tao ang nasa likod nito, o kapag wala pang {n} tao ang pagitan ng dalawang hanay.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Tumataas ang mga unang palitan nang tig-{n}, kaya hindi kailanman tumuturo ang bilang sa iisang tao.",
-  "{n} at this spot": "{n} sa lugar na ito"
+  "{n} at this spot": "{n} sa lugar na ito",
+  "Calendar": "Kalendaryo",
+  "Nothing on {date}": "Walang kaganapan sa {date}",
+  "Nothing on in {month}.": "Walang kaganapan sa {month}.",
+  "Next: {date} ›": "Susunod: {date} ›",
+  "No events coming up yet.": "Wala pang paparating na mga kaganapan.",
+  "Start one ›": "Magsimula ng isa ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} kaganapan",
+    "other": "{date}: {n} kaganapan"
+  }
 }

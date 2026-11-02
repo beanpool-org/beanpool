@@ -890,5 +890,15 @@
   "The wait for a first trade counts only people who listed before they traded.": "প্রথম লেনদেনের অপেক্ষায় শুধু তাঁদেরই ধরা হয় যাঁরা লেনদেনের আগে তালিকা দিয়েছিলেন।",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "কোনো সংখ্যার পেছনে {n} জনের কম মানুষ থাকলে, অথবা দুই কলামের মধ্যে পার্থক্য {n} জনের কম হলে, সেটি আটকে রাখা হয়।",
   "First trades go up in steps of {n}, so the number never points at one person.": "প্রথম লেনদেন {n}-এর ধাপে বাড়ে, তাই সংখ্যাটি কখনও একজন মানুষকে চিহ্নিত করে না।",
-  "{n} at this spot": "এই জায়গায় {n}টি"
+  "{n} at this spot": "এই জায়গায় {n}টি",
+  "Calendar": "ক্যালেন্ডার",
+  "Nothing on {date}": "{date}-এ কিছু নেই",
+  "Nothing on in {month}.": "{month}-এ কিছু নেই।",
+  "Next: {date} ›": "পরবর্তী: {date} ›",
+  "No events coming up yet.": "এখনও কোনো আসন্ন ইভেন্ট নেই।",
+  "Start one ›": "একটি শুরু করুন ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n}টি ইভেন্ট",
+    "other": "{date}: {n}টি ইভেন্ট"
+  }
 }

@@ -968,5 +968,17 @@
   "The wait for a first trade counts only people who listed before they traded.": "Ожидание первой сделки учитывает только тех, кто разместил объявление до сделки.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Число скрывается, если за ним стоит меньше {n} человек или если две колонки различаются меньше чем на {n} человек.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Первые сделки растут шагами по {n}, поэтому число никогда не указывает на одного человека.",
-  "{n} at this spot": "В этом месте: {n}"
+  "{n} at this spot": "В этом месте: {n}",
+  "Calendar": "Календарь",
+  "Nothing on {date}": "Ничего нет на {date}",
+  "Nothing on in {month}.": "В {month} ничего нет.",
+  "Next: {date} ›": "Следующее: {date} ›",
+  "No events coming up yet.": "Предстоящих мероприятий пока нет.",
+  "Start one ›": "Создать ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} мероприятие",
+    "few": "{date}: {n} мероприятия",
+    "many": "{date}: {n} мероприятий",
+    "other": "{date}: {n} мероприятия"
+  }
 }

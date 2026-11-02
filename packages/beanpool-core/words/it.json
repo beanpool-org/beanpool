@@ -890,5 +890,15 @@
   "The wait for a first trade counts only people who listed before they traded.": "L'attesa del primo scambio conta solo chi ha pubblicato prima di scambiare.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Un dato viene nascosto quando dietro ci sono meno di {n} persone, o quando meno di {n} persone separano le due colonne.",
   "First trades go up in steps of {n}, so the number never points at one person.": "I primi scambi salgono a gruppi di {n}, così il numero non indica mai una persona.",
-  "{n} at this spot": "{n} in questo punto"
+  "{n} at this spot": "{n} in questo punto",
+  "Calendar": "Calendario",
+  "Nothing on {date}": "Niente il {date}",
+  "Nothing on in {month}.": "Niente in programma a {month}.",
+  "Next: {date} ›": "Prossimo: {date} ›",
+  "No events coming up yet.": "Nessun evento in programma al momento.",
+  "Start one ›": "Creane uno ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} evento",
+    "other": "{date}: {n} eventi"
+  }
 }

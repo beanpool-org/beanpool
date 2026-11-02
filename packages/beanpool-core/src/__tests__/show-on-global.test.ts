@@ -32,6 +32,7 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
     let sends = 0;
     let photoFetches = 0;
     let busyOn = 0;
+    let holiday = false;
     let onRefused: (() => Promise<unknown>) | null = null;
     const home: HomeEvent = {
         id: 'home-1', type: 'offer', category: 'food', title: 'Tomatoes', credits: 20, priceType: 'fixed', authorPublicKey: publicKey, audienceScope: 'public',
@@ -42,7 +43,7 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
         global: GLOBAL,
         async get(url, path) {
             const q = new URL(`${url}${path}`).searchParams;
-            if (url === HOME) return path.startsWith('/api/members/preferences') ? json({}) : json([home]);
+            if (url === HOME) return path.startsWith('/api/members/preferences') ? json({ holiday_mode: String(holiday) }) : json([home]);
             const ids = q.get('ids')?.split(',') ?? [q.get('id') as string];
             return json(ids.flatMap((id) => { const row = rows.get(id); return row && readable(row) ? [row] : []; }));
         },
@@ -83,6 +84,8 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
         rows, home, deps, device, creates: () => creates, sends: () => sends, photoFetches: () => photoFetches,
         /** The nth create from now answers 503. */
         busyOn: (n: number) => { busyOn = n; },
+        /** The member's holiday at home, which is what rests an event. */
+        setHoliday: (on: boolean) => { holiday = on; },
         /** Runs as a create is refused, before its answer lands. */
         onRefused: (run: () => Promise<unknown>) => { onRefused = run; },
         up: () => [...rows.values()].filter((r) => r.status === 'active'),
@@ -446,5 +449,36 @@ describe('a rest\'s return never steps: it can\'t tell who took a copy down', ()
         await browser.tendCopies(identity);
         expect(w.up()).toHaveLength(0);
         expect(browser.pairs()).toEqual([]);
+    });
+
+    it('an event\'s neither, though its cancelled copy reads and an id past it looks free', async () => {
+        const w = world();
+        Object.assign(w.home, { type: 'event', category: 'community', eventStartAt: '2030-01-01T10:00:00Z', eventEndAt: '2030-01-01T11:00:00Z' });
+        const phone = w.device();
+        const browser = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        await browser.showOnGlobal(w.home, HOME, identity);
+        w.setHoliday(true);
+        await Promise.all([phone.tendCopies(identity), browser.tendCopies(identity)]);
+        expect(browser.pairs()[0].resting).toBe(true);
+        w.setHoliday(false);
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        await phone.stopShowing('home-1', identity);
+        await browser.tendCopies(identity);
+        expect(w.up()).toHaveLength(0);
+        expect(browser.pairs()).toEqual([]);
+    });
+
+    it('its own next id free, it comes back as ever', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0].sent).not.toBe('');
+        expect(w.up()).toHaveLength(1);
     });
 });

@@ -510,12 +510,19 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         return 'shown';
     }
 
-    /** `stepOn`: {@link createCopy}'s. Only a return from a rest goes without. */
+    /**
+     * `stepOn`: {@link createCopy}'s. Only a return from a rest goes without, and that holds for a read as for a refusal: an
+     * event's cancelled copy reads, so `placeOf` would have it step past what the other device or a moderator took down.
+     */
     async function sendCopy(pair: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>, stepOn = true): Promise<CopyResult> {
         try {
             if (pair.sent) return await updateCopy(pair, home, identity, deps);
             const place = await placeOf(pair, identity, deps);
             if (place === 'later') return 'later';
+            if (!stepOn && !place.up && place.id !== pair.copyId) {
+                await dropPair(pair);
+                return { refused: t("The global community can't show this yet.") };
+            }
             const placed = await movedTo(pair, place);
             if (!placed) return 'later';
             return place.up ? await updateCopy({ ...placed, sent: 'lost', photo: firstPhoto(home) }, home, identity, deps) : await createCopy(placed, home, identity, deps, stepOn);

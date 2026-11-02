@@ -1329,9 +1329,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             startAdjusted = adjustmentOf(raw.eventStartLocal, resolved);
         } else if (raw.eventStartAt !== undefined) {
             nextStart = parseEventTime(raw.eventStartAt, 'Start time');
-        } else if (sentTz && existingPost.eventStartLocal && sentTz !== existingPost.eventTz) {
+        } else if ((sentTz || existingPost.eventRepeat) && existingPost.eventStartLocal && nextTz !== existingPost.eventTz) {
             // A new zone with the clock kept: the same clock, somewhere else, is another instant (§2 Edit); a clock that
-            // the new zone skips is said, like one the host typed.
+            // the new zone skips is said, like one the host typed. A repeating event keeps it for a zone that came with its
+            // pin too, sent by nobody: its rule holds the clock of every date, and the start must read the same.
             const resolved = instantOfClock(existingPost.eventStartLocal, nextTz, 'Start time');
             nextStart = resolved.instant;
             startAdjusted = adjustmentOf(existingPost.eventStartLocal, resolved);

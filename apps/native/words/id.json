@@ -5961,5 +5961,20 @@
   "Poll": "Jajak pendapat",
   "Stop taking questions": "Berhenti menerima pertanyaan",
   "on the global community": "di komunitas global",
-  "Open their requests there": "Buka permintaan mereka di sana"
+  "Open their requests there": "Buka permintaan mereka di sana",
+  "Pinned": "Disematkan",
+  "📌 PINNED": "📌 DISEMATKAN",
+  "Pin to the top…": "Sematkan ke atas…",
+  "Pin to the top": "Sematkan ke atas",
+  "Take the pin off": "Lepas sematan",
+  "For 1 day": "Selama 1 hari",
+  "For 3 days": "Selama 3 hari",
+  "For 1 week": "Selama 1 minggu",
+  "Pinned by your community · until {date}": "Disematkan oleh komunitas Anda · hingga {date}",
+  "Choose how long to pin this post to the top of the Market:": "Pilih berapa lama postingan ini disematkan di bagian atas Pasar:",
+  "Post options": "Opsi postingan",
+  "Event options": "Opsi acara",
+  "Poll options": "Opsi jajak pendapat",
+  "Failed to pin post": "Gagal menyematkan postingan",
+  "Failed to unpin post": "Gagal melepas sematan postingan"
 }

@@ -6202,5 +6202,20 @@
   "Poll": "نظرسنجی",
   "Stop taking questions": "توقف پذیرش پرسش‌ها",
   "on the global community": "در جامعه جهانی",
-  "Open their requests there": "درخواست‌هایشان را آنجا باز کنید"
+  "Open their requests there": "درخواست‌هایشان را آنجا باز کنید",
+  "Pinned": "سنجاق‌شده",
+  "📌 PINNED": "📌 سنجاق‌شده",
+  "Pin to the top…": "سنجاق به بالا…",
+  "Pin to the top": "سنجاق به بالا",
+  "Take the pin off": "برداشتن سنجاق",
+  "For 1 day": "برای ۱ روز",
+  "For 3 days": "برای ۳ روز",
+  "For 1 week": "برای ۱ هفته",
+  "Pinned by your community · until {date}": "سنجاق‌شده توسط جامعه شما · تا {date}",
+  "Choose how long to pin this post to the top of the Market:": "مدت زمان سنجاق کردن این پست در بالای بازار را انتخاب کنید:",
+  "Post options": "گزینه‌های پست",
+  "Event options": "گزینه‌های رویداد",
+  "Poll options": "گزینه‌های نظرسنجی",
+  "Failed to pin post": "سنجاق کردن پست ناموفق بود",
+  "Failed to unpin post": "برداشتن سنجاق پست ناموفق بود"
 }

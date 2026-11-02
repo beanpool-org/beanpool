@@ -6201,5 +6201,20 @@
   "Poll": "Umfrage",
   "Stop taking questions": "Keine Fragen mehr annehmen",
   "on the global community": "in der globalen Community",
-  "Open their requests there": "Ihre Anfragen dort öffnen"
+  "Open their requests there": "Ihre Anfragen dort öffnen",
+  "Pinned": "Angepinnt",
+  "📌 PINNED": "📌 ANGEPINNT",
+  "Pin to the top…": "Oben anpinnen…",
+  "Pin to the top": "Oben anpinnen",
+  "Take the pin off": "Anpinnung entfernen",
+  "For 1 day": "Für 1 Tag",
+  "For 3 days": "Für 3 Tage",
+  "For 1 week": "Für 1 Woche",
+  "Pinned by your community · until {date}": "Von deiner Community angepinnt · bis {date}",
+  "Choose how long to pin this post to the top of the Market:": "Wähle, wie lange dieser Beitrag oben im Marktplatz angepinnt werden soll:",
+  "Post options": "Beitragsoptionen",
+  "Event options": "Veranstaltungsoptionen",
+  "Poll options": "Umfrageoptionen",
+  "Failed to pin post": "Beitrag konnte nicht angepinnt werden",
+  "Failed to unpin post": "Anpinnung konnte nicht entfernt werden"
 }

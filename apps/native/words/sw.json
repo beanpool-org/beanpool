@@ -6201,5 +6201,20 @@
   "Poll": "Kura ya maoni",
   "Stop taking questions": "Acha kupokea maswali",
   "on the global community": "kwenye jumuiya ya kimataifa",
-  "Open their requests there": "Fungua maombi yao huko"
+  "Open their requests there": "Fungua maombi yao huko",
+  "Pinned": "Kimebandikwa",
+  "📌 PINNED": "📌 KIMEBANDIKWA",
+  "Pin to the top…": "Bandika juu…",
+  "Pin to the top": "Bandika juu",
+  "Take the pin off": "Ondoa ubandikaji",
+  "For 1 day": "Kwa siku 1",
+  "For 3 days": "Kwa siku 3",
+  "For 1 week": "Kwa wiki 1",
+  "Pinned by your community · until {date}": "Kimebandikwa na jumuiya yako · hadi {date}",
+  "Choose how long to pin this post to the top of the Market:": "Chagua muda wa kubandika chapisho hili juu ya Soko:",
+  "Post options": "Chaguo za chapisho",
+  "Event options": "Chaguo za tukio",
+  "Poll options": "Chaguo za kura",
+  "Failed to pin post": "Imeshindwa kubandika chapisho",
+  "Failed to unpin post": "Imeshindwa kuondoa ubandikaji"
 }

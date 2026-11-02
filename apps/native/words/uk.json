@@ -6681,5 +6681,20 @@
   "Poll": "Опитування",
   "Stop taking questions": "Більше не приймати запитання",
   "on the global community": "у глобальній спільноті",
-  "Open their requests there": "Відкрити їхні запити там"
+  "Open their requests there": "Відкрити їхні запити там",
+  "Pinned": "Закріплено",
+  "📌 PINNED": "📌 ЗАКРІПЛЕНО",
+  "Pin to the top…": "Закріпити вгорі…",
+  "Pin to the top": "Закріпити вгорі",
+  "Take the pin off": "Зняти закріплення",
+  "For 1 day": "На 1 день",
+  "For 3 days": "На 3 дні",
+  "For 1 week": "На 1 тиждень",
+  "Pinned by your community · until {date}": "Закріплено вашою спільнотою · до {date}",
+  "Choose how long to pin this post to the top of the Market:": "Оберіть, як довго цей допис залишатиметься закріпленим угорі Ринку:",
+  "Post options": "Параметри допису",
+  "Event options": "Параметри події",
+  "Poll options": "Параметри опитування",
+  "Failed to pin post": "Не вдалося закріпити допис",
+  "Failed to unpin post": "Не вдалося зняти закріплення"
 }

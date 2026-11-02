@@ -6202,5 +6202,20 @@
   "Poll": "পোল",
   "Stop taking questions": "প্রশ্ন নেওয়া বন্ধ করুন",
   "on the global community": "বিশ্বব্যাপী সম্প্রদায়ে",
-  "Open their requests there": "সেখানে তাদের অনুরোধ খুলুন"
+  "Open their requests there": "সেখানে তাদের অনুরোধ খুলুন",
+  "Pinned": "পিন করা",
+  "📌 PINNED": "📌 পিন করা",
+  "Pin to the top…": "শীর্ষে পিন করুন…",
+  "Pin to the top": "শীর্ষে পিন করুন",
+  "Take the pin off": "পিন সরান",
+  "For 1 day": "১ দিনের জন্য",
+  "For 3 days": "৩ দিনের জন্য",
+  "For 1 week": "১ সপ্তাহের জন্য",
+  "Pinned by your community · until {date}": "আপনার সম্প্রদায়ের দ্বারা পিন করা · {date} পর্যন্ত",
+  "Choose how long to pin this post to the top of the Market:": "মার্কেটের শীর্ষে এই পোস্টটি কতক্ষণ পিন করে রাখবেন তা বেছে নিন:",
+  "Post options": "পোস্টের বিকল্প",
+  "Event options": "ইভেন্টের বিকল্প",
+  "Poll options": "ভোটের বিকল্প",
+  "Failed to pin post": "পোস্ট পিন করতে ব্যর্থ হয়েছে",
+  "Failed to unpin post": "পোস্ট আনপিন করতে ব্যর্থ হয়েছে"
 }

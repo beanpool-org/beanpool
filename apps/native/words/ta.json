@@ -6201,5 +6201,20 @@
   "Poll": "வாக்கெடுப்பு",
   "Stop taking questions": "கேள்விகளை ஏற்பதை நிறுத்து",
   "on the global community": "உலகளாவிய சமூகத்தில்",
-  "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்"
+  "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்",
+  "Pinned": "பொருத்தப்பட்டது",
+  "📌 PINNED": "📌 பொருத்தப்பட்டது",
+  "Pin to the top…": "மேலே பொருத்துக…",
+  "Pin to the top": "மேலே பொருத்துக",
+  "Take the pin off": "பொருத்தலை நீக்குக",
+  "For 1 day": "1 நாளுக்கு",
+  "For 3 days": "3 நாட்களுக்கு",
+  "For 1 week": "1 வாரத்திற்கு",
+  "Pinned by your community · until {date}": "உங்கள் சமூகத்தால் பொருத்தப்பட்டது · {date} வரை",
+  "Choose how long to pin this post to the top of the Market:": "சந்தையின் உச்சியில் இந்த இடுகையை எவ்வளவு காலம் பொருத்த வேண்டும் என்பதைத் தேர்ந்தெடுக்கவும்:",
+  "Post options": "இடுகை விருப்பங்கள்",
+  "Event options": "நிகழ்வு விருப்பங்கள்",
+  "Poll options": "வாக்கெடுப்பு விருப்பங்கள்",
+  "Failed to pin post": "இடுகையைப் பொருத்துவதில் தோல்வி",
+  "Failed to unpin post": "பொருத்தலை நீக்குவதில் தோல்வி"
 }

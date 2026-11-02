@@ -5963,5 +5963,20 @@
   "Poll": "설문",
   "Stop taking questions": "질문 받기 중단",
   "on the global community": "글로벌 커뮤니티에서",
-  "Open their requests there": "거기서 요청 열기"
+  "Open their requests there": "거기서 요청 열기",
+  "Pinned": "고정됨",
+  "📌 PINNED": "📌 고정됨",
+  "Pin to the top…": "상단에 고정…",
+  "Pin to the top": "상단에 고정",
+  "Take the pin off": "고정 해제",
+  "For 1 day": "1일 동안",
+  "For 3 days": "3일 동안",
+  "For 1 week": "1주일 동안",
+  "Pinned by your community · until {date}": "커뮤니티에서 고정함 · {date}까지",
+  "Choose how long to pin this post to the top of the Market:": "장터 상단에 이 게시물을 고정할 기간을 선택하세요:",
+  "Post options": "게시물 옵션",
+  "Event options": "이벤트 옵션",
+  "Poll options": "투표 옵션",
+  "Failed to pin post": "게시물 고정 실패",
+  "Failed to unpin post": "고정 해제 실패"
 }

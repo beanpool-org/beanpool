@@ -6202,5 +6202,20 @@
   "Poll": "Poll",
   "Stop taking questions": "Itigil ang pagtanggap ng mga tanong",
   "on the global community": "sa pandaigdigang komunidad",
-  "Open their requests there": "Buksan doon ang mga kahilingan nila"
+  "Open their requests there": "Buksan doon ang mga kahilingan nila",
+  "Pinned": "Naka-pin",
+  "📌 PINNED": "📌 NAKA-PIN",
+  "Pin to the top…": "I-pin sa itaas…",
+  "Pin to the top": "I-pin sa itaas",
+  "Take the pin off": "Alisin ang pin",
+  "For 1 day": "Para sa 1 araw",
+  "For 3 days": "Para sa 3 araw",
+  "For 1 week": "Para sa 1 linggo",
+  "Pinned by your community · until {date}": "Naka-pin ng iyong komunidad · hanggang {date}",
+  "Choose how long to pin this post to the top of the Market:": "Piliin kung gaano katagal i-pin ang post na ito sa itaas ng Market:",
+  "Post options": "Mga opsyon sa post",
+  "Event options": "Mga opsyon sa event",
+  "Poll options": "Mga opsyon sa poll",
+  "Failed to pin post": "Hindi na-pin ang post",
+  "Failed to unpin post": "Hindi naalis ang pin sa post"
 }

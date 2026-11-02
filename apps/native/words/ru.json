@@ -6683,5 +6683,20 @@
   "Poll": "Опрос",
   "Stop taking questions": "Больше не принимать вопросы",
   "on the global community": "в глобальном сообществе",
-  "Open their requests there": "Открыть их запросы там"
+  "Open their requests there": "Открыть их запросы там",
+  "Pinned": "Закреплено",
+  "📌 PINNED": "📌 ЗАКРЕПЛЕНО",
+  "Pin to the top…": "Закрепить вверху…",
+  "Pin to the top": "Закрепить вверху",
+  "Take the pin off": "Снять закрепление",
+  "For 1 day": "На 1 день",
+  "For 3 days": "На 3 дня",
+  "For 1 week": "На 1 неделю",
+  "Pinned by your community · until {date}": "Закреплено вашим сообществом · до {date}",
+  "Choose how long to pin this post to the top of the Market:": "Выберите срок закрепления этой публикации вверху Рынка:",
+  "Post options": "Параметры публикации",
+  "Event options": "Параметры события",
+  "Poll options": "Параметры опроса",
+  "Failed to pin post": "Не удалось закрепить публикацию",
+  "Failed to unpin post": "Не удалось снять закрепление"
 }

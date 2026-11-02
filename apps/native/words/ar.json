@@ -7163,5 +7163,20 @@
   "Poll": "استطلاع",
   "Stop taking questions": "إيقاف استقبال الأسئلة",
   "on the global community": "في المجتمع العالمي",
-  "Open their requests there": "افتح طلباتهم هناك"
+  "Open their requests there": "افتح طلباتهم هناك",
+  "Pinned": "مثبت",
+  "📌 PINNED": "📌 مثبت",
+  "Pin to the top…": "تثبيت في الأعلى…",
+  "Pin to the top": "تثبيت في الأعلى",
+  "Take the pin off": "إزالة التثبيت",
+  "For 1 day": "لمدة يوم واحد",
+  "For 3 days": "لمدة 3 أيام",
+  "For 1 week": "لمدة أسبوع واحد",
+  "Pinned by your community · until {date}": "مثبت بواسطة مجتمعك · حتى {date}",
+  "Choose how long to pin this post to the top of the Market:": "اختر المدة لتثبيت هذا المنشور في أعلى السوق:",
+  "Post options": "خيارات المنشور",
+  "Event options": "خيارات الفعالية",
+  "Poll options": "خيارات الاستطلاع",
+  "Failed to pin post": "فشل تثبيت المنشور",
+  "Failed to unpin post": "فشل إزالة تثبيت المنشور"
 }

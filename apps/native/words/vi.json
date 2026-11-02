@@ -5962,5 +5962,20 @@
   "Poll": "Thăm dò",
   "Stop taking questions": "Ngừng nhận câu hỏi",
   "on the global community": "trên cộng đồng toàn cầu",
-  "Open their requests there": "Mở các yêu cầu của họ ở đó"
+  "Open their requests there": "Mở các yêu cầu của họ ở đó",
+  "Pinned": "Đã ghim",
+  "📌 PINNED": "📌 ĐÃ GHIM",
+  "Pin to the top…": "Ghim lên đầu…",
+  "Pin to the top": "Ghim lên đầu",
+  "Take the pin off": "Bỏ ghim",
+  "For 1 day": "Trong 1 ngày",
+  "For 3 days": "Trong 3 ngày",
+  "For 1 week": "Trong 1 tuần",
+  "Pinned by your community · until {date}": "Được cộng đồng của bạn ghim · đến {date}",
+  "Choose how long to pin this post to the top of the Market:": "Chọn thời gian ghim bài đăng này lên đầu Chợ:",
+  "Post options": "Tùy chọn bài đăng",
+  "Event options": "Tùy chọn sự kiện",
+  "Poll options": "Tùy chọn bình chọn",
+  "Failed to pin post": "Không thể ghim bài đăng",
+  "Failed to unpin post": "Không thể bỏ ghim bài đăng"
 }

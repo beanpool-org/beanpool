@@ -6207,5 +6207,20 @@
   "Poll": "Encuesta",
   "Stop taking questions": "Dejar de recibir preguntas",
   "on the global community": "en la comunidad global",
-  "Open their requests there": "Abrir sus solicitudes allí"
+  "Open their requests there": "Abrir sus solicitudes allí",
+  "Pinned": "Fijado",
+  "📌 PINNED": "📌 FIJADO",
+  "Pin to the top…": "Fijar arriba…",
+  "Pin to the top": "Fijar arriba",
+  "Take the pin off": "Quitar la fijación",
+  "For 1 day": "Por 1 día",
+  "For 3 days": "Por 3 días",
+  "For 1 week": "Por 1 semana",
+  "Pinned by your community · until {date}": "Fijado por tu comunidad · hasta el {date}",
+  "Choose how long to pin this post to the top of the Market:": "Elige cuánto tiempo fijar esta publicación en la parte superior del Mercado:",
+  "Post options": "Opciones de la publicación",
+  "Event options": "Opciones del evento",
+  "Poll options": "Opciones de la encuesta",
+  "Failed to pin post": "No se pudo fijar la publicación",
+  "Failed to unpin post": "No se pudo quitar la fijación de la publicación"
 }

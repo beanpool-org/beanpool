@@ -5963,5 +5963,20 @@
   "Poll": "投票",
   "Stop taking questions": "質問の受け付けをやめる",
   "on the global community": "グローバルコミュニティで",
-  "Open their requests there": "そこでリクエストを開く"
+  "Open their requests there": "そこでリクエストを開く",
+  "Pinned": "ピン留め",
+  "📌 PINNED": "📌 ピン留め",
+  "Pin to the top…": "一番上にピン留め…",
+  "Pin to the top": "一番上にピン留め",
+  "Take the pin off": "ピン留めを外す",
+  "For 1 day": "1日間",
+  "For 3 days": "3日間",
+  "For 1 week": "1週間",
+  "Pinned by your community · until {date}": "コミュニティによりピン留め · {date}まで",
+  "Choose how long to pin this post to the top of the Market:": "この投稿をマーケットの一番上にピン留めする期間を選択してください:",
+  "Post options": "投稿のオプション",
+  "Event options": "イベントのオプション",
+  "Poll options": "アンケートのオプション",
+  "Failed to pin post": "投稿のピン留めに失敗しました",
+  "Failed to unpin post": "ピン留めの解除に失敗しました"
 }

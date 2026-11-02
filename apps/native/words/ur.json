@@ -6202,5 +6202,20 @@
   "Poll": "پول",
   "Stop taking questions": "سوال قبول کرنا بند کریں",
   "on the global community": "عالمی کمیونٹی پر",
-  "Open their requests there": "ان کی درخواستیں وہاں کھولیں"
+  "Open their requests there": "ان کی درخواستیں وہاں کھولیں",
+  "Pinned": "پن کیا گیا",
+  "📌 PINNED": "📌 پن کیا گیا",
+  "Pin to the top…": "سب سے اوپر پن کریں…",
+  "Pin to the top": "سب سے اوپر پن کریں",
+  "Take the pin off": "پن ہٹائیں",
+  "For 1 day": "1 دن کے لیے",
+  "For 3 days": "3 دن کے لیے",
+  "For 1 week": "1 ہفتے کے لیے",
+  "Pinned by your community · until {date}": "آپ کی کمیونٹی نے پن کیا · {date} تک",
+  "Choose how long to pin this post to the top of the Market:": "منتخب کریں کہ اس پوسٹ کو مارکیٹ کے اوپر کتنی دیر تک پن رکھنا ہے:",
+  "Post options": "پوسٹ کے اختیارات",
+  "Event options": "ایونٹ کے اختیارات",
+  "Poll options": "پول کے اختیارات",
+  "Failed to pin post": "پوسٹ پن کرنے میں ناکامی",
+  "Failed to unpin post": "پن ہٹانے میں ناکامی"
 }

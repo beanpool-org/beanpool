@@ -16,7 +16,7 @@ const adapter = {
 };
 
 const ANCHOR = 'https://test.beanpool.org';
-let activeAnchor: string | null = ANCHOR;
+const activeAnchor: string | null = ANCHOR;
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
     DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },

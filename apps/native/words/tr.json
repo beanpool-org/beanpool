@@ -6202,5 +6202,20 @@
   "Poll": "Anket",
   "Stop taking questions": "Soru kabul etmeyi durdur",
   "on the global community": "küresel toplulukta",
-  "Open their requests there": "İsteklerini orada aç"
+  "Open their requests there": "İsteklerini orada aç",
+  "Pinned": "Sabitlendi",
+  "📌 PINNED": "📌 SABİTLENDİ",
+  "Pin to the top…": "Başa sabitle…",
+  "Pin to the top": "Başa sabitle",
+  "Take the pin off": "Sabitlemeyi kaldır",
+  "For 1 day": "1 günlüğüne",
+  "For 3 days": "3 günlüğüne",
+  "For 1 week": "1 haftalığına",
+  "Pinned by your community · until {date}": "Topluluğunuz tarafından sabitlendi · {date} tarihine kadar",
+  "Choose how long to pin this post to the top of the Market:": "Bu gönderinin Pazaryeri'nin en üstüne ne kadar süreyle sabitleneceğini seçin:",
+  "Post options": "Gönderi seçenekleri",
+  "Event options": "Etkinlik seçenekleri",
+  "Poll options": "Anket seçenekleri",
+  "Failed to pin post": "Gönderi sabitlenemedi",
+  "Failed to unpin post": "Sabitleme kaldırılamadı"
 }

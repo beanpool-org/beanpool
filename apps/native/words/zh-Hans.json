@@ -5963,5 +5963,20 @@
   "Poll": "投票",
   "Stop taking questions": "停止接受提问",
   "on the global community": "在全球社区",
-  "Open their requests there": "在那里打开他们的请求"
+  "Open their requests there": "在那里打开他们的请求",
+  "Pinned": "已置顶",
+  "📌 PINNED": "📌 已置顶",
+  "Pin to the top…": "置顶…",
+  "Pin to the top": "置顶",
+  "Take the pin off": "取消置顶",
+  "For 1 day": "1 天",
+  "For 3 days": "3 天",
+  "For 1 week": "1 周",
+  "Pinned by your community · until {date}": "由你的社区置顶 · 截止至 {date}",
+  "Choose how long to pin this post to the top of the Market:": "选择将此帖子置顶到市集顶部的时间：",
+  "Post options": "帖子选项",
+  "Event options": "活动选项",
+  "Poll options": "投票选项",
+  "Failed to pin post": "置顶帖子失败",
+  "Failed to unpin post": "取消置顶失败"
 }

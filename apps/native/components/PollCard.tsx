@@ -32,7 +32,10 @@ import {
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
-import { votePoll, closePoll, isOwnerHere } from '../utils/db';
+import { votePoll, closePoll, isOwnerHere, unpinPostOnNode, getPost } from '../utils/db';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { isPostPinned, pinnedDetailLine } from '../utils/pins';
+import { PinSheet } from './PinSheet';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSealed, pollOtherLines, pollOtherOption, POLL_OTHER_WORDS_MAX, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
 import { PollOtherAnswers } from './PollOtherAnswers';
@@ -81,6 +84,9 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     const [typingOther, setTypingOther] = useState(false);
     const [otherWords, setOtherWords] = useState('');
     const [ownerHere, setOwnerHere] = useState(false);
+    const nodeProfile = useNodeProfile();
+    const [showPinSheet, setShowPinSheet] = useState(false);
+    const [unpinning, setUnpinning] = useState(false);
 
     // Keep livePost in sync if prop changes
     React.useEffect(() => {
@@ -204,11 +210,50 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         return t('Closes in {n}d', { n: diffDays });
     };
 
+    const handlePollOptions = () => {
+        const pinned = isPostPinned(livePost);
+        if (pinned) {
+            Alert.alert(t('Poll options'), undefined, [
+                {
+                    text: t('Take the pin off'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (unpinning) return;
+                        setUnpinning(true);
+                        try {
+                            await unpinPostOnNode(livePost.id);
+                            const updated = await getPost(livePost.id);
+                            if (updated) setLivePost(updated);
+                        } catch (e: any) {
+                            Alert.alert(t('Error'), e?.message || t('Failed to unpin post'));
+                        } finally {
+                            setUnpinning(false);
+                        }
+                    },
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        } else {
+            Alert.alert(t('Poll options'), undefined, [
+                {
+                    text: t('Pin to the top…'),
+                    onPress: () => setShowPinSheet(true),
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        }
+    };
+
     return (
         <View style={styles.card}>
             {/* Header: Badge, Status, Remaining Time */}
             <View style={styles.headerRow}>
                 <View style={styles.badgeGroup}>
+                    {isPostPinned(livePost) && (
+                        <View testID="pinned-chip" style={[styles.pollBadge, { backgroundColor: colors.surface.subtle, borderColor: colors.border.default, borderWidth: 1 }]}>
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.heading }}>{t('📌 PINNED')}</Text>
+                        </View>
+                    )}
                     <View style={styles.pollBadge}>
                         <Text style={styles.pollBadgeText}>{t('🗳️ POLL')}</Text>
                     </View>
@@ -219,24 +264,46 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     </View>
                 </View>
 
-                {isAuthor && !isClosed && (
-                    <Pressable
-                        onPress={handleClosePoll}
-                        disabled={isClosing}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        style={styles.closeBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel={isClosing ? t('Closing poll...') : t('Close poll')}
-                        accessibilityState={{ busy: isClosing }}
-                    >
-                        {isClosing ? (
-                            <ActivityIndicator size="small" color="#ef4444" />
-                        ) : (
-                            <Text style={styles.closeBtnText}>{t('Close Poll')}</Text>
-                        )}
-                    </Pressable>
-                )}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {Boolean(nodeProfile?.features?.pins) && (
+                        <Pressable
+                            testID="poll-menu-btn"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Poll options')}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={{ width: 36, height: 36, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={handlePollOptions}
+                        >
+                            <Text style={{ fontSize: 20, color: colors.text.body, fontWeight: '900' }}>···</Text>
+                        </Pressable>
+                    )}
+                    {isAuthor && !isClosed && (
+                        <Pressable
+                            onPress={handleClosePoll}
+                            disabled={isClosing}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            style={styles.closeBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel={isClosing ? t('Closing poll...') : t('Close poll')}
+                            accessibilityState={{ busy: isClosing }}
+                        >
+                            {isClosing ? (
+                                <ActivityIndicator size="small" color="#ef4444" />
+                            ) : (
+                                <Text style={styles.closeBtnText}>{t('Close Poll')}</Text>
+                            )}
+                        </Pressable>
+                    )}
+                </View>
             </View>
+
+            {isPostPinned(livePost) && (
+                <View style={{ marginTop: 6, marginBottom: 4 }} testID="pinned-detail-line">
+                    <Text style={{ fontSize: 12, color: colors.text.secondary, fontWeight: '600' }} numberOfLines={1}>
+                        {pinnedDetailLine(livePost)}
+                    </Text>
+                </View>
+            )}
 
             {/* Author info */}
             <View style={styles.authorRow}>
@@ -430,6 +497,15 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
 
             {/* The words, for the poll's maker and the owners. */}
             {offersOther && (isAuthor || ownerHere) && <PollOtherAnswers postId={livePost.id} />}
+            <PinSheet
+                visible={showPinSheet}
+                postId={livePost.id}
+                onClose={() => setShowPinSheet(false)}
+                onPinned={async () => {
+                    const updated = await getPost(livePost.id);
+                    if (updated) setLivePost(updated);
+                }}
+            />
         </View>
     );
 }

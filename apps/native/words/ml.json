@@ -6202,5 +6202,20 @@
   "Poll": "പോൾ",
   "Stop taking questions": "ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നത് നിർത്തുക",
   "on the global community": "ആഗോള കമ്മ്യൂണിറ്റിയിൽ",
-  "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക"
+  "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക",
+  "Pinned": "പിൻ ചെയ്തത്",
+  "📌 PINNED": "📌 പിൻ ചെയ്തത്",
+  "Pin to the top…": "മുകളിൽ പിൻ ചെയ്യുക…",
+  "Pin to the top": "മുകളിൽ പിൻ ചെയ്യുക",
+  "Take the pin off": "പിൻ നീക്കുക",
+  "For 1 day": "1 ദിവസത്തേക്ക്",
+  "For 3 days": "3 ദിവസത്തേക്ക്",
+  "For 1 week": "1 ആഴ്ചത്തേക്ക്",
+  "Pinned by your community · until {date}": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റി പിൻ ചെയ്തത് · {date} വരെ",
+  "Choose how long to pin this post to the top of the Market:": "മാർക്കറ്റിന്റെ മുകളിൽ ഈ പോസ്റ്റ് എത്ര സമയം പിൻ ചെയ്യണമെന്ന് തിരഞ്ഞെടുക്കുക:",
+  "Post options": "പോസ്റ്റ് ഓപ്ഷനുകൾ",
+  "Event options": "ഇവന്റ് ഓപ്ഷനുകൾ",
+  "Poll options": "പോൾ ഓപ്ഷനുകൾ",
+  "Failed to pin post": "പോസ്റ്റ് പിൻ ചെയ്യാനായില്ല",
+  "Failed to unpin post": "പോസ്റ്റ് അൺപിൻ ചെയ്യാനായില്ല"
 }

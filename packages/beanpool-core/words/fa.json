@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "معمول یعنی نفر وسط: نیمی سریع‌تر و نیمی کندتر بودند.",
   "The wait for a first trade counts only people who listed before they traded.": "انتظار برای نخستین معامله فقط کسانی را می‌شمارد که پیش از معامله آگهی گذاشتند.",
   "A typical time needs at least {n} people, or it shows as too few.": "زمان معمول دست‌کم به {n} نفر نیاز دارد، وگرنه به‌صورت خیلی کم نشان داده می‌شود.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "نخستین معامله‌ها با گام‌های {n}تایی بالا می‌روند تا عدد هرگز به یک نفر اشاره نکند."
+  "First trades go up in steps of {n}, so the number never points at one person.": "نخستین معامله‌ها با گام‌های {n}تایی بالا می‌روند تا عدد هرگز به یک نفر اشاره نکند.",
+  "{n} at this spot": "{n} مورد در این نقطه"
 }

@@ -199,7 +199,9 @@ async function main(): Promise<void> {
             (init.headers as Record<string, string>)['Content-Type'] ??= Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json';
             init.body = Buffer.isBuffer(body) ? new Uint8Array(body) : body;
         }
-        const res = await localFetch(base + route, init);
+        // Connection: close: building a bomb holds the loop too, and localFetch's one turn didn't always beat the server's
+        // close on CI (ECONNRESET, queue run 41433366857, as #2508 and test-moderation-notifications).
+        const res = await localFetch(base + route, { ...init, headers: { ...init.headers, connection: 'close' } });
         const bytes = Buffer.from(await res.arrayBuffer());
         let json: any = null;
         try { json = JSON.parse(bytes.toString('utf8')); } catch { /* a file */ }

@@ -850,5 +850,6 @@
   "Typical means the middle person: half were quicker, half slower.": "“通常”指排在中间的那个人：一半人更快，一半人更慢。",
   "The wait for a first trade counts only people who listed before they traded.": "等待首次交易的时间只计算在交易前已发布信息的人。",
   "A typical time needs at least {n} people, or it shows as too few.": "通常时间至少需要 {n} 人，否则显示为人数太少。",
-  "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 递增，因此这个数字绝不会指向某一个人。"
+  "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 递增，因此这个数字绝不会指向某一个人。",
+  "{n} at this spot": "此处有 {n} 项"
 }

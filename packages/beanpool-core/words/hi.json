@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "सामान्य का मतलब बीच वाला व्यक्ति है: आधे ज़्यादा तेज़ थे, आधे धीमे।",
   "The wait for a first trade counts only people who listed before they traded.": "पहले लेन-देन के इंतज़ार में सिर्फ़ वे गिने जाते हैं जिन्होंने लेन-देन से पहले लिस्टिंग की।",
   "A typical time needs at least {n} people, or it shows as too few.": "सामान्य समय के लिए कम से कम {n} लोग चाहिए, वरना यह बहुत कम के रूप में दिखता है।",
-  "First trades go up in steps of {n}, so the number never points at one person.": "पहले लेन-देन {n} के चरणों में बढ़ते हैं, ताकि संख्या कभी किसी एक व्यक्ति की ओर इशारा न करे।"
+  "First trades go up in steps of {n}, so the number never points at one person.": "पहले लेन-देन {n} के चरणों में बढ़ते हैं, ताकि संख्या कभी किसी एक व्यक्ति की ओर इशारा न करे।",
+  "{n} at this spot": "इस जगह पर {n}"
 }

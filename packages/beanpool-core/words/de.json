@@ -904,5 +904,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Typisch heißt die Person in der Mitte: Die eine Hälfte war schneller, die andere langsamer.",
   "The wait for a first trade counts only people who listed before they traded.": "Die Wartezeit auf den ersten Handel zählt nur Personen, die vor dem Handel einen Eintrag erstellt haben.",
   "A typical time needs at least {n} people, or it shows as too few.": "Für eine typische Zeit braucht es mindestens {n} Personen, sonst wird „zu wenige“ angezeigt.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "Die Zahl der ersten Handel steigt in Schritten von {n}, sodass sie nie auf eine Person zeigt."
+  "First trades go up in steps of {n}, so the number never points at one person.": "Die Zahl der ersten Handel steigt in Schritten von {n}, sodass sie nie auf eine Person zeigt.",
+  "{n} at this spot": "{n} an diesem Ort"
 }

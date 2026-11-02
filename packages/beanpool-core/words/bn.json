@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "সাধারণ মানে মাঝের মানুষটি: অর্ধেক ছিলেন দ্রুততর, অর্ধেক ধীরতর।",
   "The wait for a first trade counts only people who listed before they traded.": "প্রথম লেনদেনের অপেক্ষায় শুধু তাঁদেরই ধরা হয় যাঁরা লেনদেনের আগে তালিকা দিয়েছিলেন।",
   "A typical time needs at least {n} people, or it shows as too few.": "সাধারণ সময়ের জন্য অন্তত {n} জন লাগে, নইলে খুব কম বলে দেখায়।",
-  "First trades go up in steps of {n}, so the number never points at one person.": "প্রথম লেনদেন {n}-এর ধাপে বাড়ে, তাই সংখ্যাটি কখনও একজন মানুষকে চিহ্নিত করে না।"
+  "First trades go up in steps of {n}, so the number never points at one person.": "প্রথম লেনদেন {n}-এর ধাপে বাড়ে, তাই সংখ্যাটি কখনও একজন মানুষকে চিহ্নিত করে না।",
+  "{n} at this spot": "এই জায়গায় {n}টি"
 }

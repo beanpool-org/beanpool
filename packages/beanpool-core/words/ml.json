@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "സാധാരണ എന്നാൽ നടുവിലെ വ്യക്തി: പകുതി പേർ വേഗത്തിലും പകുതി പേർ സാവധാനത്തിലും ആയിരുന്നു.",
   "The wait for a first trade counts only people who listed before they traded.": "ആദ്യ ഇടപാടിനുള്ള കാത്തിരിപ്പ് ഇടപാടിന് മുമ്പ് ലിസ്റ്റ് ചെയ്തവരെ മാത്രമേ കണക്കാക്കൂ.",
   "A typical time needs at least {n} people, or it shows as too few.": "സാധാരണ സമയത്തിന് കുറഞ്ഞത് {n} പേർ വേണം, അല്ലെങ്കിൽ വളരെ കുറവ് എന്ന് കാണിക്കും.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "ആദ്യ ഇടപാടുകൾ {n} വീതം ഉയരുന്നു, അതിനാൽ എണ്ണം ഒരിക്കലും ഒരാളെ ചൂണ്ടിക്കാണിക്കില്ല."
+  "First trades go up in steps of {n}, so the number never points at one person.": "ആദ്യ ഇടപാടുകൾ {n} വീതം ഉയരുന്നു, അതിനാൽ എണ്ണം ഒരിക്കലും ഒരാളെ ചൂണ്ടിക്കാണിക്കില്ല.",
+  "{n} at this spot": "ഈ സ്ഥലത്ത് {n}"
 }

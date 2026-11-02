@@ -1045,5 +1045,6 @@
   "Typical means the middle person: half were quicker, half slower.": "«المعتاد» يعني الشخص في المنتصف: نصفهم كان أسرع ونصفهم أبطأ.",
   "The wait for a first trade counts only people who listed before they traded.": "انتظار أول صفقة يشمل فقط من نشروا قائمة قبل أن يتبادلوا.",
   "A typical time needs at least {n} people, or it shows as too few.": "يحتاج الوقت المعتاد إلى {n} أشخاص على الأقل، وإلا يظهر كعدد قليل جدًا.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "تزيد الصفقات الأولى بخطوات من {n}، فلا يشير الرقم أبدًا إلى شخص واحد."
+  "First trades go up in steps of {n}, so the number never points at one person.": "تزيد الصفقات الأولى بخطوات من {n}، فلا يشير الرقم أبدًا إلى شخص واحد.",
+  "{n} at this spot": "{n} في هذا المكان"
 }

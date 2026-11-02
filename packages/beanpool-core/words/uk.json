@@ -967,5 +967,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Типове означає людину посередині: половина швидше, половина повільніше.",
   "The wait for a first trade counts only people who listed before they traded.": "Очікування першого обміну враховує лише тих, хто розмістив оголошення до обміну.",
   "A typical time needs at least {n} people, or it shows as too few.": "Для типового часу потрібно щонайменше {n} людей, інакше показується, що їх замало.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "Перші обміни зростають кроками по {n}, тож число ніколи не вказує на одну людину."
+  "First trades go up in steps of {n}, so the number never points at one person.": "Перші обміни зростають кроками по {n}, тож число ніколи не вказує на одну людину.",
+  "{n} at this spot": "У цьому місці: {n}"
 }

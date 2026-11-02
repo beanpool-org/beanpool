@@ -967,5 +967,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Типичное значение — это человек посередине: половина быстрее, половина медленнее.",
   "The wait for a first trade counts only people who listed before they traded.": "Ожидание первой сделки учитывает только тех, кто разместил объявление до сделки.",
   "A typical time needs at least {n} people, or it shows as too few.": "Для типичного времени нужно не менее {n} человек, иначе показывается, что их слишком мало.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "Первые сделки растут шагами по {n}, поэтому число никогда не указывает на одного человека."
+  "First trades go up in steps of {n}, so the number never points at one person.": "Первые сделки растут шагами по {n}, поэтому число никогда не указывает на одного человека.",
+  "{n} at this spot": "В этом месте: {n}"
 }

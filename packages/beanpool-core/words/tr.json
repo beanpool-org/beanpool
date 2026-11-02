@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Tipik, ortadaki kişi demektir: yarısı daha hızlı, yarısı daha yavaştı.",
   "The wait for a first trade counts only people who listed before they traded.": "İlk takas için bekleme yalnızca takastan önce ilan verenleri sayar.",
   "A typical time needs at least {n} people, or it shows as too few.": "Tipik süre için en az {n} kişi gerekir; yoksa çok az olarak gösterilir.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "İlk takaslar {n} kişilik adımlarla artar, böylece sayı hiçbir zaman tek bir kişiyi göstermez."
+  "First trades go up in steps of {n}, so the number never points at one person.": "İlk takaslar {n} kişilik adımlarla artar, böylece sayı hiçbir zaman tek bir kişiyi göstermez.",
+  "{n} at this spot": "Bu noktada {n}"
 }

@@ -850,5 +850,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Umumnya berarti orang di tengah: separuh lebih cepat, separuh lebih lambat.",
   "The wait for a first trade counts only people who listed before they traded.": "Waktu tunggu transaksi pertama hanya menghitung orang yang memasang iklan sebelum bertransaksi.",
   "A typical time needs at least {n} people, or it shows as too few.": "Waktu umum memerlukan setidaknya {n} orang; jika tidak, ditampilkan sebagai terlalu sedikit.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "Transaksi pertama naik per {n}, sehingga angkanya tidak pernah menunjuk satu orang."
+  "First trades go up in steps of {n}, so the number never points at one person.": "Transaksi pertama naik per {n}, sehingga angkanya tidak pernah menunjuk satu orang.",
+  "{n} at this spot": "{n} di tempat ini"
 }

@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "வழக்கமான என்பது நடுவில் உள்ள நபர்: பாதிப் பேர் வேகமாகவும் பாதிப் பேர் மெதுவாகவும் இருந்தனர்.",
   "The wait for a first trade counts only people who listed before they traded.": "முதல் வர்த்தகத்திற்கான காத்திருப்பு வர்த்தகத்திற்கு முன் பதிவிட்டவர்களை மட்டுமே கணக்கிடுகிறது.",
   "A typical time needs at least {n} people, or it shows as too few.": "வழக்கமான நேரத்திற்குக் குறைந்தது {n} பேர் தேவை, இல்லையெனில் மிகக் குறைவு எனக் காட்டப்படும்.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "முதல் வர்த்தகங்கள் {n} படிகளாக உயர்கின்றன, எனவே எண் ஒருபோதும் ஒரு நபரைச் சுட்டாது."
+  "First trades go up in steps of {n}, so the number never points at one person.": "முதல் வர்த்தகங்கள் {n} படிகளாக உயர்கின்றன, எனவே எண் ஒருபோதும் ஒரு நபரைச் சுட்டாது.",
+  "{n} at this spot": "இந்த இடத்தில் {n}"
 }

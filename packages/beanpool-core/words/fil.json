@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Ang karaniwan ay ang taong nasa gitna: mas mabilis ang kalahati, mas mabagal ang kalahati.",
   "The wait for a first trade counts only people who listed before they traded.": "Ang paghihintay sa unang palitan ay binibilang lang ang mga nag-listing bago nakipagpalitan.",
   "A typical time needs at least {n} people, or it shows as too few.": "Kailangan ng karaniwang tagal ng hindi bababa sa {n} tao, kung hindi ay ipinapakitang masyadong kaunti.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "Tumataas ang mga unang palitan nang tig-{n}, kaya hindi kailanman tumuturo ang bilang sa iisang tao."
+  "First trades go up in steps of {n}, so the number never points at one person.": "Tumataas ang mga unang palitan nang tig-{n}, kaya hindi kailanman tumuturo ang bilang sa iisang tao.",
+  "{n} at this spot": "{n} sa lugar na ito"
 }

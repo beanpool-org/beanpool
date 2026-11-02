@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Kawaida inamaanisha mtu wa katikati: nusu walikuwa haraka zaidi, nusu polepole zaidi.",
   "The wait for a first trade counts only people who listed before they traded.": "Kusubiri biashara ya kwanza kunahesabu tu watu walioweka tangazo kabla ya kufanya biashara.",
   "A typical time needs at least {n} people, or it shows as too few.": "Muda wa kawaida unahitaji angalau watu {n}, la sivyo huonyeshwa kama wachache mno.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "Biashara za kwanza hupanda kwa hatua za {n}, ili nambari isimwonyeshe mtu mmoja kamwe."
+  "First trades go up in steps of {n}, so the number never points at one person.": "Biashara za kwanza hupanda kwa hatua za {n}, ili nambari isimwonyeshe mtu mmoja kamwe.",
+  "{n} at this spot": "{n} mahali hapa"
 }

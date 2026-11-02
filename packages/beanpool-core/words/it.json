@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Tipico indica la persona a metà: metà è stata più veloce, metà più lenta.",
   "The wait for a first trade counts only people who listed before they traded.": "L'attesa del primo scambio conta solo chi ha pubblicato prima di scambiare.",
   "A typical time needs at least {n} people, or it shows as too few.": "Un tempo tipico richiede almeno {n} persone, altrimenti appare come troppo pochi.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "I primi scambi salgono a gruppi di {n}, così il numero non indica mai una persona."
+  "First trades go up in steps of {n}, so the number never points at one person.": "I primi scambi salgono a gruppi di {n}, così il numero non indica mai una persona.",
+  "{n} at this spot": "{n} in questo punto"
 }

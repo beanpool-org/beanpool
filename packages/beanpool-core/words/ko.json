@@ -850,5 +850,6 @@
   "Typical means the middle person: half were quicker, half slower.": "보통은 가운데 사람을 뜻해요. 절반은 더 빨랐고 절반은 더 느렸어요.",
   "The wait for a first trade counts only people who listed before they traded.": "첫 거래까지의 대기 시간은 거래 전에 게시물을 올린 사람만 세요.",
   "A typical time needs at least {n} people, or it shows as too few.": "보통 시간은 {n}명 이상이어야 하며, 그보다 적으면 너무 적다고 표시해요.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "첫 거래는 {n}건 단위로 늘어나서 숫자가 한 사람을 가리키지 않아요."
+  "First trades go up in steps of {n}, so the number never points at one person.": "첫 거래는 {n}건 단위로 늘어나서 숫자가 한 사람을 가리키지 않아요.",
+  "{n} at this spot": "이 장소에 {n}개"
 }

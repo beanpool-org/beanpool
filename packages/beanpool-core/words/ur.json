@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "عام کا مطلب درمیان والا شخص ہے: آدھے زیادہ تیز تھے، آدھے زیادہ سست۔",
   "The wait for a first trade counts only people who listed before they traded.": "پہلے تبادلے کے انتظار میں صرف وہ لوگ گنے جاتے ہیں جنہوں نے تبادلے سے پہلے لسٹنگ کی۔",
   "A typical time needs at least {n} people, or it shows as too few.": "عام وقت کے لیے کم از کم {n} لوگ درکار ہیں، ورنہ یہ بہت کم کے طور پر دکھایا جاتا ہے۔",
-  "First trades go up in steps of {n}, so the number never points at one person.": "پہلے تبادلے {n} کے قدموں میں بڑھتے ہیں، تاکہ عدد کبھی کسی ایک شخص کی طرف اشارہ نہ کرے۔"
+  "First trades go up in steps of {n}, so the number never points at one person.": "پہلے تبادلے {n} کے قدموں میں بڑھتے ہیں، تاکہ عدد کبھی کسی ایک شخص کی طرف اشارہ نہ کرے۔",
+  "{n} at this spot": "اس جگہ پر {n}"
 }

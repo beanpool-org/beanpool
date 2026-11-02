@@ -889,5 +889,6 @@
   "Typical means the middle person: half were quicker, half slower.": "Τυπικός σημαίνει το άτομο στη μέση: οι μισοί ήταν πιο γρήγοροι, οι μισοί πιο αργοί.",
   "The wait for a first trade counts only people who listed before they traded.": "Η αναμονή για την πρώτη συναλλαγή μετρά μόνο όσους δημοσίευσαν καταχώριση πριν από τη συναλλαγή τους.",
   "A typical time needs at least {n} people, or it shows as too few.": "Ένας τυπικός χρόνος χρειάζεται τουλάχιστον {n} άτομα, αλλιώς εμφανίζεται ως πολύ λίγα.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "Οι πρώτες συναλλαγές αυξάνονται ανά {n}, ώστε ο αριθμός να μη δείχνει ποτέ ένα άτομο."
+  "First trades go up in steps of {n}, so the number never points at one person.": "Οι πρώτες συναλλαγές αυξάνονται ανά {n}, ώστε ο αριθμός να μη δείχνει ποτέ ένα άτομο.",
+  "{n} at this spot": "{n} σε αυτό το σημείο"
 }

@@ -46,7 +46,7 @@ import { closePoll, createPost, getPollOtherAnswers, isOwnerHere, removePollOthe
 
 let host: HTMLDivElement;
 let root: Root;
-const mount = async (el: unknown) => { await act(async () => { root.render(el as ReactNode); }); };
+const mount = async (el: unknown) => { await act(async () => { root.render(el as never); }); };
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 const button = (label: RegExp) => Array.from(host.querySelectorAll('button')).find(b => label.test(b.getAttribute('aria-label') ?? b.textContent ?? '')) as HTMLButtonElement | undefined;
 const click = async (el: HTMLElement | undefined | null) => { await act(async () => { el!.click(); }); };
@@ -92,7 +92,7 @@ describe('the card', () => {
     it('a sealed poll says the answer is final; answered, it locks every answer', async () => {
         await mount(createElement(PollCard, { post: poll(), currentPubkey: 'me' }));
         expect(host.textContent).toMatch(/Your answer is final/);
-        await act(async () => { root.render(createElement(PollCard, { post: poll({ pollAnswered: true }), currentPubkey: 'me' })); });
+        await mount(createElement(PollCard, { post: poll({ pollAnswered: true }), currentPubkey: 'me' }));
         expect(q('poll-answered')).not.toBeNull();
         expect(button(/^Buses/)?.disabled).toBe(true);
         expect(button(/^Other/)?.disabled).toBe(true);

@@ -155,7 +155,7 @@ describe('the card', () => {
 
 describe('the composer', () => {
     const fill = async () => {
-        const inputs = [...host.querySelectorAll('input')];
+        const inputs = Array.from(host.querySelectorAll('input'));
         await type(inputs[0]!, 'What is missing?');
         await type(inputs[2]!, 'Buses'); // [1] is the notes
         await type(inputs[3]!, 'Beans');

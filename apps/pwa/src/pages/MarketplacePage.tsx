@@ -3774,12 +3774,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => !isNodePulsePost(p));
                 }
 
-                // Pin Daily Pulse post to the top of the feed (local only)
+                // Pin Daily Pulse post to the top of the feed (local only).
+                // Sort rows newest created first, as the phone does (apps/native/utils/db.ts:967),
+                // except where the node answered nearest first (byDistance on distanceSortDefault,
+                // which the page knows by `near` being set), or under Events (eventStartAt ASC),
+                // or under active search results (server ranking).
                 filtered.sort((a, b) => {
                     const isPulseA = isNodePulsePost(a);
                     const isPulseB = isNodePulsePost(b);
                     if (isPulseA && !isPulseB) return -1;
                     if (!isPulseA && isPulseB) return 1;
+                    if (!near && typeFilter !== 'event' && searchResults === null) {
+                        return (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0);
+                    }
                     return 0;
                 });
 

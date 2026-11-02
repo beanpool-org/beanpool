@@ -5,8 +5,8 @@
  * - The Daily Pulse post stays first.
  * - On a nearest-first answer the node's distance order stands.
  */
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -256,5 +256,116 @@ describe('MarketplacePage order (pinning-s0)', () => {
         const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
         // Distance order stands: postNear (nearest) remains first, postFar remains second
         expect(titles).toEqual(['Near Listing', 'Far Listing']);
+    });
+
+    it('under the Events tab, event start time order is preserved (soonest first) over creation time', async () => {
+        const HOUR = 60 * 60 * 1000;
+        const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
+
+        // eventSooner: created EARLIER, but starts SOONER (in 24 hours)
+        const eventSooner = {
+            id: 'event-sooner',
+            type: 'event',
+            category: 'events',
+            title: 'Soonest Event',
+            description: 'Starts tomorrow',
+            credits: 0,
+            priceType: 'fixed',
+            status: 'active',
+            active: true,
+            authorPublicKey: 'author-charlie',
+            authorCallsign: 'Charlie',
+            createdAt: '2026-10-01T10:00:00.000Z',
+            updatedAt: '2026-10-01T10:00:00.000Z',
+            eventStartAt: inHours(24),
+            eventEndAt: inHours(26),
+            eventState: 'scheduled',
+        };
+
+        // eventLater: created LATER, but starts LATER (in 72 hours)
+        const eventLater = {
+            id: 'event-later',
+            type: 'event',
+            category: 'events',
+            title: 'Later Event',
+            description: 'Starts in three days',
+            credits: 0,
+            priceType: 'fixed',
+            status: 'active',
+            active: true,
+            authorPublicKey: 'author-alice',
+            authorCallsign: 'Alice',
+            createdAt: '2026-10-25T10:00:00.000Z',
+            updatedAt: '2026-10-25T10:00:00.000Z',
+            eventStartAt: inHours(72),
+            eventEndAt: inHours(74),
+            eventState: 'scheduled',
+        };
+
+        stubNode([eventLater, eventSooner]);
+        render(<MarketplacePage identity={identity} isMember={true} />);
+
+        await waitFor(() => {
+            const cards = screen.getAllByTestId('market-post-card');
+            expect(cards.length).toBe(2);
+        });
+
+        // Click Events pill
+        fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+
+        await waitFor(() => {
+            const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
+            // Must preserve chronological start-time order (soonest first), NOT creation order
+            expect(titles).toEqual(['Soonest Event', 'Later Event']);
+        });
+    });
+
+    it('server search results order is preserved rather than overwritten by createdAt', async () => {
+        // Two search results matching 'honey':
+        // postSearchOld: created earlier, ranked first by search
+        // postSearchNew: created later, ranked second by search
+        const postSearchOld = {
+            id: 'post-honey-1',
+            type: 'offer',
+            category: 'goods',
+            title: 'Honey - Raw Forest',
+            description: 'Pure forest honey',
+            credits: 10,
+            priceType: 'fixed',
+            status: 'active',
+            active: true,
+            authorPublicKey: 'author-bob',
+            authorCallsign: 'Bob',
+            createdAt: '2026-10-01T10:00:00.000Z',
+            updatedAt: '2026-10-01T10:00:00.000Z',
+        };
+
+        const postSearchNew = {
+            id: 'post-honey-2',
+            type: 'offer',
+            category: 'goods',
+            title: 'Honey - Creamed Clover',
+            description: 'Sweet clover honey',
+            credits: 12,
+            priceType: 'fixed',
+            status: 'active',
+            active: true,
+            authorPublicKey: 'author-alice',
+            authorCallsign: 'Alice',
+            createdAt: '2026-10-25T10:00:00.000Z',
+            updatedAt: '2026-10-25T10:00:00.000Z',
+        };
+
+        stubNode([postSearchOld, postSearchNew]);
+        render(<MarketplacePage identity={identity} isMember={true} openSearch="honey" onSearchOpened={vi.fn()} />);
+
+        await waitFor(() => {
+            const cards = screen.getAllByTestId('market-post-card');
+            expect(cards.length).toBe(2);
+        });
+
+        const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
+        // Server search result ranking stands: postSearchOld first, postSearchNew second
+        expect(titles).toEqual(['Honey - Raw Forest', 'Honey - Creamed Clover']);
     });
 });

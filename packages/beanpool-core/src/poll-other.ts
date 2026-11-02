@@ -30,13 +30,14 @@ export function pollIsSealed(options: readonly { other?: unknown }[] | null | un
 
 /**
  * A typed answer as it is kept: one line, with control and direction-changing characters gone, trimmed. Empty when nothing
- * is left. Length is the caller's to hold, on what this returns.
+ * is left. Length is the caller's to hold, on what this returns. Not U+200C or U+200D, which the words of some scripts and
+ * emoji are written with (tags/free-tags.ts).
  */
 export function cleanPollOtherWords(raw: unknown): string {
     if (typeof raw !== 'string') return '';
     return raw
         // eslint-disable-next-line no-control-regex
-        .replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202F\u2066-\u206F\uFEFF]+/g, ' ')
+        .replace(/[\u0000-\u001F\u007F-\u009F\u061C\u200B\u200E\u200F\u2028-\u202F\u2066-\u206F\uFEFF]+/g, ' ')
         .replace(/ {2,}/g, ' ')
         .trim();
 }

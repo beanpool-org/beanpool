@@ -464,6 +464,8 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         const wrapperClasses = previewWrapper.className.split(/\s+/);
         // Centered horizontally on wide screens so it leaves the bottom-left controls free
         expect(wrapperClasses).toContain('items-center');
+        expect(wrapperClasses).toContain('md:pb-4');
+        expect(previewWrapper.style.paddingBottom).toBe('');
 
         // The card itself is capped at 28rem on wide windows and uses responsive width less margins on phone
         const innerCard = previewWrapper.firstElementChild as HTMLElement;

@@ -2321,7 +2321,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
         {/* Map Preview Card — an event shows its own card (§3) */}
         {previewPost && previewPost.type === 'event' && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
                 <div className="m-3 w-[calc(100%-1.5rem)] max-w-[28rem] pointer-events-auto relative flex flex-col gap-2 bg-white dark:bg-nature-900 rounded-[24px] p-2 shadow-[0_10px_20px_rgba(0,0,0,0.15)] border border-nature-200 dark:border-nature-800">
                     <EventCard
                         post={previewPost}
@@ -2359,7 +2359,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         {previewPost && previewPost.type !== 'event' && visitor && (
             // A visitor's pin card (G9a §7): the listing's title and "near here", since the pin is its area's centre, and
             // the way to its detail sheet. No price, no name, no badge.
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
                 <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
                     {/* A 44 px target, as the event card's ✕ (48 px) is: the small circle sits where it was, inside it. */}
                     <button
@@ -2391,7 +2391,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             </div>
         )}
         {previewPost && previewPost.type !== 'event' && !visitor && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
                 <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
                         onClick={() => setPreviewPost(null)}

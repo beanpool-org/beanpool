@@ -24,7 +24,7 @@ const markers = vi.hoisted(() => [] as Array<{ coords: [number, number]; listene
 
 vi.mock('leaflet.markercluster', () => ({}));
 vi.mock('leaflet', () => {
-    const layer = () => ({ clearLayers: vi.fn(), addLayer: vi.fn(), addTo: vi.fn().mockReturnThis() });
+    const layer = () => ({ clearLayers: vi.fn(), addLayer: vi.fn(), addTo: vi.fn().mockReturnThis(), on: vi.fn() });
     return {
         default: {
             map: vi.fn((_el: unknown, opts: any) => ({

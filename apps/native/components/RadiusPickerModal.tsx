@@ -10,6 +10,7 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import { radiusWords } from '../utils/market-filters';
+import { darkMapStyle, mapSchemeKey } from '../utils/map-scheme';
 import { t, tn } from '@beanpool/core';
 
 const HEADER_PAD_TOP = 18;
@@ -129,13 +130,15 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
 
                 <View style={styles.mapContainer}>
                     {HAS_MAPS_KEY ? (
-                        <MapView 
+                        <MapView
+                            key={mapSchemeKey(Platform.OS, theme === 'dark')}
                             ref={mapRef}
-                            style={styles.map} 
+                            style={styles.map}
                             initialRegion={region}
                             region={region}
                             provider={PROVIDER_DEFAULT}
-                            customMapStyle={mapStyle}
+                            customMapStyle={theme === 'dark' ? darkMapStyle : mapStyle}
+                            userInterfaceStyle={theme}
                             onPress={(e) => setCenter(e.nativeEvent.coordinate)}
                         >
                             <Marker 

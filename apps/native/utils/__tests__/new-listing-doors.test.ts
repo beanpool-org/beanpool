@@ -74,8 +74,8 @@ describe('the doors to the listing form', () => {
         for (const gone of ['showNewPost', 'createPost', 'handleSubmit', 'pinDropMode', 'OFFER_DRAFT_KEY', 'NewPostTypeSheet', 'NewEventModal', 'NewPollModal', 'KeyboardAvoidingView']) {
             expect(map, gone).not.toContain(gone);
         }
-        // What draws the map is all still there.
-        for (const kept of ['const ClusterMarker', 'const CustomMapMarker', 'const EventMapMarker', 'renderCluster={renderCluster}', '<MapMarkerManager', '<ClusterCaptureManager', 'getCachedClusterImage(displayCount)']) {
+        // What draws the map is all still there. Events draw through CustomMapMarker, in the event pin (Marty, 31 Oct).
+        for (const kept of ['const ClusterMarker', 'const CustomMapMarker', "const isEvent = postType === 'event'", 'renderCluster={renderCluster}', '<MapMarkerManager', '<ClusterCaptureManager', 'getCachedClusterImage(displayCount)']) {
             expect(map, kept).toContain(kept);
         }
     });

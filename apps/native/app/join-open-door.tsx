@@ -60,7 +60,9 @@ export { ErrorBoundary };
  * community's door with no account stays the first screen's ("Explore BeanPool worldwide"): this screen sends it there.
  */
 export default function JoinOpenDoorScreen() {
-    const { then: thenParam, from: fromParam, node: nodeParam } = useLocalSearchParams<{ then?: string; from?: string; node?: string }>();
+    const { then: rawThen, from: rawFrom, node: nodeParam } = useLocalSearchParams<{ then?: string | string[]; from?: string | string[]; node?: string | string[] }>();
+    const thenParam = Array.isArray(rawThen) ? rawThen[0] : rawThen;
+    const fromParam = Array.isArray(rawFrom) ? rawFrom[0] : rawFrom;
     const door = doorNodeFromParam(nodeParam);
     // An address the screen refuses is never swapped for another community's door: the screen says so, and asks nothing.
     if (!door) return <RefusedDoor />;

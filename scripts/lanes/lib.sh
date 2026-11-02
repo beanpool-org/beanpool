@@ -40,7 +40,7 @@ if [ -z "$LANE_GH_REPO" ]; then
   [[ "$LANE_GH_REPO" == */* ]] || LANE_GH_REPO=beanpool-org/beanpool
 fi
 
-# Backends per role. build = the builder; review = early CCR passes; decide = the pass that gates a merge.
+# Backends per role. build = the builder; review = early CCR passes, on AGY-built lanes only; decide = the pass that gates a merge.
 # Routing (which model does which job) is the playbook's call — operating-model.md — not this file's.
 : ${LANE_BUILD_BACKEND:=agy}      # agy | claude
 : ${LANE_REVIEW_BACKEND:=agy}     # agy | claude
@@ -72,7 +72,7 @@ fi
 : ${LANE_CI_SECS:=60}
 : ${LANE_CI_CHECK:=Run BeanPool Test-All Pipeline}   # the check the "Protect main" ruleset requires; one job carries it
 : ${LANE_CI_WORKFLOW:=ci.yml}
-# The wait before a deciding pass, with the limits of scratch/lanes/bin/queue-gates.sh wait_green.
+# The wait for GitHub, before a deciding pass (ci_gate) or after one beside it (ci_beside), with the limits of scratch/lanes/bin/queue-gates.sh wait_green.
 : ${LANE_GREEN_TRIES:=70}            # a head still pending: polls before it goes to the director
 : ${LANE_GREEN_NONE_TRIES:=15}       # a head with no run at all: polls before it goes to the director
 : ${LANE_GREEN_SECS:=60}
@@ -452,43 +452,37 @@ Review THAT URL: $LANE_GH_REPO pull request $2. Confirm repo and title before po
 title first. Post each real defect as an inline review comment with file and line (gh api
 repos/$LANE_GH_REPO/pulls/$2/comments). Do not edit, commit or push anything. $3"
   fi; }
-lane_weigh_brief(){ # PR SINCE → how a deciding brief opens when no FIX stage followed the early pass. The gate counts inline
-  # comments, and a pass is clean when it adds none, so this is what keeps that count honest both ways. A false early comment
-  # gets no reply, or the reply would read as a new defect. A real one is posted afresh, or it would stay open behind a clean
-  # verdict; a run script's own LANE_DECIDE_BRIEF may say not to repeat comments, hence the override.
-  print -r -- "Final, DECIDING pass. An early fast-model pass ran and NO fix stage followed it, so its inline comments, those created after $2 (gh api repos/$LANE_GH_REPO/pulls/$1/comments --paginate), are unanswered. WEIGH each one on the code.
-- REAL and still broken: post it as your own new inline comment, with file and line. This overrides any line below that says not to repeat existing comments: the gate counts inline comments and this pass reads as clean only if it adds none, so a real finding you do not post stays open behind a clean verdict.
-- NOT real, or already fixed: post nothing inline, not even a reply, which would read as a new defect. Never edit or delete a comment.
-In your summary issue comment (gh pr comment), after its first line, list every early comment as REAL or NOT REAL with one line why. Beyond them, verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line."; }
 
 cont(){ # NAME BRANCH BRIEF-FILE — finish whatever an earlier stage on this brief left undone
   stage "$1-CONTINUE" "$LANE_BUILD_TIMEOUT" "CONTINUE STAGE for branch $2 (fetch it and check it out in the lane worktree). A previous run worked on this brief and may have hit its time limit or been stopped. Start from git status, git diff and git log origin/$LANE_BASE..HEAD, and FINISH whatever is not yet done; if it is already complete, say ALREADY COMPLETE and stop. $LANE_ONE_PUSH
 
 $(cat "$(lane_brief_path "$3")")" build; }
 
-review(){ # BRANCH — the early pass(es), then the deciding pass. Sets CLEAN and PR.
+lane_tier_a(){ # PR — a Claude-built lane is tier A, and board.sh sends tier-A first, but only the label says so: 0 of the last 12 PRs
+  # carried it on 2 Nov 2026, #2718 and #2724 among them, so that order saw money paths alone. It orders the queue and gates
+  # nothing, so a failure costs a log line and never the lane. An AGY-built lane gets no label unless its run script calls this.
+  gh_try gh pr edit "$1" -R "$LANE_GH_REPO" --add-label tier-A > /dev/null || log "⚠ could not add tier-A to #$1 — board.sh will not send it first"; }
+
+review(){ # BRANCH — the deciding pass, after the early passes on an AGY-built lane. Sets CLEAN and PR.
   # AGY-built (tier B): two early passes, with a FIX stage after each that comments. It costs no Claude quota, and it finds
-  # real bypasses. Claude-built (tier A): one early pass, no FIX stage, no second pass; the deciding pass weighs what it said.
-  # Measured 1 Nov 2026 on 14 Opus lanes: Flash's comments started 272 min of Opus FIX stages, each of their pushes restarted
-  # CI, and the deciding pass still failed 10 of the 14. FIX stages on Opus cost 42% of the minutes of deciding passes.
-  local i B0 B1 T opening passes=2
+  # real bypasses. Claude-built (tier A): no early pass and no FIX stage (Marty, 2 Nov 2026, OPUS-FLOW). Measured on Opus-built
+  # PRs: Flash raised 2 of Opus's 21 serious findings and 36 of its 56 comments weren't real, and since 1 Nov nothing is fixed
+  # off them, so its only effect was that Opus had to disprove them. Its cold deciding pass runs beside GitHub: see decide.sh.
+  local i B0 B1 T
   PR=$(prnum "$1"); [ -n "$PR" ] || { log "no PR for $1 — skipping review"; CLEAN=0; return; }
-  [ "$(lane_backend build)" = claude ] && passes=1
-  for i in $(seq 1 "$passes"); do
-    B0=$(count "$PR"); T=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    stage "CCR-$1-$i" "$LANE_REVIEW_TIMEOUT" "$(lane_review_brief review "$PR" "Pass $i. Read existing comments first and do not repeat them; post only what is new or still broken, with file and line; if clean, one summary comment and no inline comments.")" review
-    lane_gate_ran "review $1 pass $i" || { CLEAN=0; return; }
-    B1=$(count "$PR"); log "review $1 pass $i: comments $B0 → $B1"
-    { lane_is_count "$B0" && lane_is_count "$B1"; } || { log "comment count unavailable (GitHub API) — NOT clean"; CLEAN=0; return; }
-    [ "$B1" -le "$B0" ] && break
-    if [ "$passes" = 1 ]; then log "$((B1-B0)) early comment(s) left for the deciding pass to weigh — no FIX stage on a Claude-built lane"; break; fi
-    stage "FIX-$1-$i" "$LANE_BUILD_TIMEOUT" "STAGE FIX — PR #$PR (branch $1; fetch and check it out in the lane worktree). Read the inline review comments created after $T: gh api repos/$LANE_GH_REPO/pulls/$PR/comments --paginate. Fix the BLOCKING ones (correctness, security, money, authorization, data loss). For OPTIONAL suggestions, reply briefly and leave them for a human — do not implement them. If a finding needs a DESIGN decision not in the docs, reply that it is parked for the maintainer. Never delete or weaken a test assertion. Commit each fix and run the suites you touched. $LANE_ONE_PUSH" build
-  done
+  if [ "$(lane_backend build)" = claude ]; then lane_tier_a "$PR"; else
+    for i in 1 2; do
+      B0=$(count "$PR"); T=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      stage "CCR-$1-$i" "$LANE_REVIEW_TIMEOUT" "$(lane_review_brief review "$PR" "Pass $i. Read existing comments first and do not repeat them; post only what is new or still broken, with file and line; if clean, one summary comment and no inline comments.")" review
+      lane_gate_ran "review $1 pass $i" || { CLEAN=0; return; }
+      B1=$(count "$PR"); log "review $1 pass $i: comments $B0 → $B1"
+      { lane_is_count "$B0" && lane_is_count "$B1"; } || { log "comment count unavailable (GitHub API) — NOT clean"; CLEAN=0; return; }
+      [ "$B1" -le "$B0" ] && break
+      stage "FIX-$1-$i" "$LANE_BUILD_TIMEOUT" "STAGE FIX — PR #$PR (branch $1; fetch and check it out in the lane worktree). Read the inline review comments created after $T: gh api repos/$LANE_GH_REPO/pulls/$PR/comments --paginate. Fix the BLOCKING ones (correctness, security, money, authorization, data loss). For OPTIONAL suggestions, reply briefly and leave them for a human — do not implement them. If a finding needs a DESIGN decision not in the docs, reply that it is parked for the maintainer. Never delete or weaken a test assertion. Commit each fix and run the suites you touched. $LANE_ONE_PUSH" build
+    done
+  fi
   # A clean early pass is corroboration, not proof: the merge is decided by the deciding pass on the strong model.
-  opening="Final, DECIDING pass: verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line."
-  # Only when the pass left something to weigh: with no comments, that brief would ask for a verdict on each of none.
-  [ "$passes" = 1 ] && [ "$B1" -gt "$B0" ] && opening=$(lane_weigh_brief "$PR" "$T")
-  decide_review "$PR" "$1" 3 0 "$opening
+  decide_review "$PR" "$1" 3 0 "Final, DECIDING pass: verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line.
 
 $LANE_DECIDE_BRIEF"; }
 

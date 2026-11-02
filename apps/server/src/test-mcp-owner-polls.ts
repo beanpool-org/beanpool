@@ -44,7 +44,7 @@ import { setMemberArea } from './engine/member-area.js';
 import { WORDS_PROVIDER } from './engine/door-signal.js';
 import { registerOpenJoin } from './engine/open-join.js';
 import { db } from './db/db.js';
-import { admitAgentEdit, resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
+import { admitAgentEdit, agentCreatesToday, agentEditsToday, resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -217,7 +217,7 @@ async function main(): Promise<void> {
         // ── 3. Each refusal of a create ──────────────────────────────────────────────────────────────
         section('── 3. Each refusal of a create ──');
         const pollsBefore = pollCount();
-        const countBefore = structured(await tool('connection_info', {}))?.posts?.today;
+        resetAgentLimits();
         const LONG_ANSWER = 'x'.repeat(81);
         for (const [what, fields, says] of [
             ['no question', { question: undefined }, /question is required/],
@@ -242,11 +242,10 @@ async function main(): Promise<void> {
             ...['beans', 'credits', 'price_type', 'photos', 'photo_urls', 'photo_ids', 'lat', 'lng', 'category', 'as_enterprise', 'group_ref', 'tags', 'free_tags', 'title', 'reach'].map((field) =>
                 [`${field}, which a poll has none of`, { [field]: field === 'photos' || field === 'tags' ? [] : field === 'lat' || field === 'beans' ? 1 : 'x' }, new RegExp(`A poll has no ${field}: create_poll takes`)] as const),
         ] as const) {
-            const r = await tool('create_poll', { ...poll(), ...fields });
+            const r = await a.callTool({ name: 'create_poll', arguments: { ...poll(), ...fields } });
             assert(r.isError === true && says.test(errorText(r)) && pollCount() === pollsBefore, `${what} → refused in words, nothing made (${errorText(r).slice(0, 90)})`);
         }
-        const countAfter = structured(await tool('connection_info', {}))?.posts?.today;
-        assert(countAfter === countBefore, `a refused poll is not counted (${countBefore}, then ${countAfter})`);
+        assert(agentCreatesToday(A.id) === 0, `a poll refused before the engine is not counted (${agentCreatesToday(A.id)})`);
 
         // ── 4. The engine's limits, in its words ─────────────────────────────────────────────────────
         section('── 4. The engine\'s limits ──');
@@ -254,12 +253,12 @@ async function main(): Promise<void> {
         setAgentPostsPerDay(1000);
         const open: string[] = [];
         for (let i = 0; i < 5; i++) open.push(await made({ question: `Poll ${i + 1}?` }));
-        const sixth = await tool('create_poll', poll());
+        const beforeSixth = agentCreatesToday(A.id);
+        const sixth = await a.callTool({ name: 'create_poll', arguments: poll() });
         assert(sixth.isError === true && /Node limit of 5 active polls reached/.test(errorText(sixth)) && pollCount() === pollsBefore + 5, `the community's 5 hold an owner too, in the engine's words (${errorText(sixth)})`);
-        const countSixth = structured(await tool('connection_info', {}))?.posts?.today;
+        assert(agentCreatesToday(A.id) === beforeSixth, `a poll the engine refuses is given back, not counted (${beforeSixth}, then ${agentCreatesToday(A.id)})`);
         clearBoard();
         await made({ question: 'Room again?' });
-        assert(structured(await tool('connection_info', {}))?.posts?.today === countSixth + 1, 'the refused sixth was given back, not counted');
         // The owners' number holds the owner, in the engine's words. Two polls from the app use it up and not the assistant's day, so only that limit can refuse this.
         clearBoard();
         const fromTheApp = (question: string) => createPost('poll', 'community', question, '', 0, 'fixed', owner.pub, undefined, undefined, [], false, undefined, false,
@@ -490,8 +489,10 @@ async function main(): Promise<void> {
             `my_posts gives a former keeper the undo list and nothing more: no answers, no votes (${Object.keys(formerRead ?? {}).join(', ')})`);
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
         clearEnterpriseFloorCache(db);
+        const editsBeforeClose = agentEditsToday(A.id);
         const keeperClose = await tool('close_poll', { post_id: asBakery });
         assert(keeperClose.isError === true && /Only the author can close a poll/.test(errorText(keeperClose)) && row(asBakery)?.status === 'active', `a keeper can't close it, as the route's author-only rule says (${errorText(keeperClose)})`);
+        assert(agentEditsToday(A.id) === editsBeforeClose, `a close the engine refuses is given back, not counted (${editsBeforeClose}, then ${agentEditsToday(A.id)})`);
         db.prepare('UPDATE posts SET active = 0, status = \'cancelled\' WHERE id = ?').run(asBakery);
 
         // ── 10. Undo ─────────────────────────────────────────────────────────────────────────────────

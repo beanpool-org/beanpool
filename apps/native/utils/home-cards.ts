@@ -10,7 +10,7 @@
  * - **The layout** (CARD-FRAME §2) is a list of card instances the member owns, kept on the account (`home.layout`
  *   version 2) with a copy on the phone; the newer wins by `updatedAt`. A member adds (the picker), removes, moves and
  *   resets cards; nothing is dragged. `needs` stays at the top and `community` at the bottom (it carries Add a card and
- *   Edit home): neither is in the list. A card of a type this build doesn't know is kept through every save, never drawn.
+ *   Arrange): neither is in the list. A card of a type this build doesn't know is kept through every save, never drawn.
  * - **Interests reorder, they never filter** (§4.3): starred categories first, the rest after, each part in its order.
  * - **Needs you** is the header's own list (utils/needs-you.ts): the phone's own deals and unread messages from its
  *   database (fresher, no request), the node's admin work, votes and group lines from the answer.
@@ -49,7 +49,7 @@ import {
 export type HomeCardId = string;
 export type { HomeCardInstance };
 
-/** First and last, always: the one card that costs a member something if missed, and the one that holds Edit home. */
+/** First and last, always: the one card that costs a member something if missed, and the one that holds Arrange. */
 export const FIXED_FIRST: HomeCardId = 'needs';
 export const FIXED_LAST: HomeCardId = 'community';
 const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
@@ -76,7 +76,7 @@ export const FIND_PINNED_DAYS = 30;
 export const STEPS_NEW_DAYS = 14;
 const DAY_MS = 86_400_000;
 
-/** A type's name: its caption, its row in the picker and Edit home, and the screen reader's words for its menu. */
+/** A type's name: its caption, its row in the picker and its band in Arrange, and the screen reader's words for its menu. */
 export function cardName(type: HomeCardId, profile?: string): string {
     const entry = homeCardType(type);
     if (!entry) return type;
@@ -87,7 +87,7 @@ export function cardName(type: HomeCardId, profile?: string): string {
 export const CARD_WORDS_MAX = 24;
 
 /**
- * One card's name for the screen reader: its "…" and Edit home's labels, and the "added" and "removed" lines. A saved
+ * One card's name for the screen reader: its "…", Arrange's arrows, and the "added" and "removed" lines. A saved
  * search is named by its words, in quotes and bounded, and its kind when it isn't Both (`"eggs"`, `"eggs" (Needs)`), so
  * two of them never sound alike (CARD-FRAME §1.3; review of #1699, finding 4; review of #1716); every other card by its
  * type's name. Never the caption: a caption is fixed words, never a member's.
@@ -113,7 +113,7 @@ function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string 
 }
 
 /**
- * One card's row name in Edit home: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
+ * One card's name on its band in Arrange: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
  * so two searches are two rows even with the same words; else its name.
  */
 export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
@@ -467,6 +467,22 @@ export const canRemoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = 
 /** Whether a card can be moved: the same cards; `needs` stays first, a pinned card under it, and `community` last. */
 export const canMoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(type) && !pinned.includes(type);
 
+/**
+ * The cards Arrange folds, in `order` (DESIGN-home-layout-fable.md §3.2): whatever is drawn now, and every other card on
+ * the list that this node can show, so a card with nothing to say can still be moved, set up or removed.
+ */
+export function arrangeCards(
+    order: readonly HomeCardInstance[], drawn: readonly Pick<HomeCardInstance, 'id'>[], onNode: (type: HomeCardId) => boolean, pinned: readonly HomeCardId[] = [],
+): HomeCardInstance[] {
+    return order.filter(c => drawn.some(d => d.id === c.id) || (canMoveCard(c.type, pinned) && onNode(c.type)));
+}
+
+/** A card's one line when it is folded: the catalogue's. */
+export const cardLine = (type: HomeCardId): string => {
+    const entry = homeCardType(type);
+    return entry ? t(entry.line) : '';
+};
+
 const at = (now: number) => new Date(now).toISOString();
 
 /**
@@ -550,7 +566,7 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
 // Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).
 export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.');
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or hold a card to arrange.');
 /** A saved search's kinds, as its settings sheet offers them (CARD-FRAME §4). */
 export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: WordKey }> = [
     { kind: 'any', label: word('Both') }, { kind: 'offer', label: word('Offers') }, { kind: 'need', label: word('Needs') },

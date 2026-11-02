@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    View, Text, ScrollView, Pressable, RefreshControl, StyleSheet, Animated, AccessibilityInfo, AppState, DeviceEventEmitter,
-    Alert, ActivityIndicator, Platform, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
+    View, Text, ScrollView, Pressable, RefreshControl, StyleSheet, Animated, AccessibilityInfo, AppState, BackHandler, DeviceEventEmitter,
+    Alert, ActivityIndicator, LayoutAnimation, Platform, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import {
-    TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
+    ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
@@ -30,7 +30,7 @@ import { useManageNode } from '../../components/useManageNode';
 import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
-import { EditHomeSheet } from '../../components/home/EditHomeSheet';
+import { ArrangeAddTile, ArrangeBar, ArrangeReset, FoldedLine } from '../../components/home/ArrangeParts';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
@@ -45,10 +45,10 @@ import {
     MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
+    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardLine, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, isHomeDoorbellFor,
     effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
-    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -82,11 +82,14 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
  * - **Nothing here waits on the network or blocks anything** (memory onboarding-no-hard-gates): with no answer yet and
  *   none kept, it says so plainly and the tabs work as ever.
  * - **Tailoring** (scratch/home/CARD-FRAME-DESIGN-fable.md, slice F2): a member's Home is a list of cards they own. Add a
- *   card (the picker) and Edit home at the bottom; each card's "…" (Settings…, Move up, Move down, Remove); kept on the
+ *   card (the picker) and Arrange at the bottom; each card's "…" (Settings…, Arrange, Remove); kept on the
  *   account (`home.layout` version 2). A card added lands first and is read for once its save is answered (§2.4). A node
  *   from before the frame refuses the new shape: the cards stay on the phone, "not on your account yet", and are sent
  *   again at each landing (§2.3). A member's only: a visitor (a key with no account on the global node, which answers
  *   with its public cards) gets none of it, no hint, and no layout is ever sent for one.
+ * - **Arrange** (DESIGN-home-layout-fable.md §3.2): one way to move a card, on the card. Holding a band, "…" → Arrange or
+ *   Arrange › folds the cards to their bands and one line, with ↑ ↓ on each; every move is saved as it is made, through
+ *   `moveCard`, so Done (in the floating button's place, or Back) only unfolds them.
  * - **The one-time reveal** (~300 ms, skipped when the phone asks for less motion) and its one-line hint (§6.2).
  * - **Where only the community's admins invite** (`door: 'admins'`), Grow your community and First steps' invite line are
  *   an owner's or admin's alone (PR #1483 review 4166559683): the role is the header's ten-minute copy
@@ -105,9 +108,14 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
 type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | 'needs_update';
 
 /** Lines kept as word() in utils/home-cards.ts and core, shown here in the member's language. */
-const LINES = { hint: HOME_HINT_LINE, fewer: FEWER_CARDS_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, start: START_CARD_WORDS };
+const LINES = {
+    hint: HOME_HINT_LINE, fewer: FEWER_CARDS_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, start: START_CARD_WORDS, notOnAccount: NOT_ON_ACCOUNT_LINE,
+    skyNoPlace: SKY_NO_PLACE_LINE, tipsAllSeen: TIPS_ALL_SEEN,
+};
 
 const REVEAL_MS = 300;
+/** The fold, and a moved card's slide (DESIGN-home-layout-fable.md §3.2). None with reduced motion. */
+const FOLD_MS = 200;
 
 /**
  * The account's list is known again: the phone's list is no longer marked as made while it wasn't (pickLayout), and the
@@ -186,7 +194,8 @@ export default function HomeScreen() {
     const [local, setLocal] = useState<LocalNeeds | null>(null);
     const [menuFor, setMenuFor] = useState<HomeCardInstance | null>(null);
     const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
-    const [editOpen, setEditOpen] = useState(false);
+    // Arrange (DESIGN-home-layout-fable.md §3.2): the cards are folded and carry their arrows.
+    const [arranging, setArranging] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
     /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
@@ -278,6 +287,53 @@ export default function HomeScreen() {
         return r;
     };
     useTabRetapScrollTop(scrollRef);
+
+    // ── Arrange: entering, moving, Done ──
+    // The cards' tops are inside the list, which starts under the banners: this is where it starts.
+    const listY = useRef(0);
+    // The card Arrange was entered from, whose "…" takes focus back at Done (Arrange › when there is none).
+    const arrangeFrom = useRef<string | null>(null);
+    const arrangeLink = useRef<View | null>(null);
+    const arrowRefs = useRef(new Map<string, React.RefObject<View | null>>());
+    const arrowRef = (key: string) => {
+        let r = arrowRefs.current.get(key);
+        if (!r) { r = React.createRef<View | null>(); arrowRefs.current.set(key, r); }
+        return r;
+    };
+    const foldMotion = useRef(false);
+    useEffect(() => { void AccessibilityInfo.isReduceMotionEnabled().then(calm => { foldMotion.current = !calm; }).catch(() => {}); }, []);
+    const fold = useCallback(() => {
+        if (foldMotion.current) LayoutAnimation.configureNext(LayoutAnimation.create(FOLD_MS, 'easeInEaseOut', 'opacity'));
+    }, []);
+    const startArrange = useCallback((from?: string) => {
+        arrangeFrom.current = from ?? null;
+        fold();
+        setArranging(true);
+        AccessibilityInfo.announceForAccessibility(t(ARRANGE_WORDS.opened));
+        // The cards are folded by then: the card it came from stays in view, else the list's top with the bar.
+        setTimeout(() => {
+            const y = from ? cardY.current.get(from) : undefined;
+            scrollRef.current?.scrollTo({ y: y === undefined ? 0 : Math.max(0, listY.current + y - 8), animated: true });
+        }, FOLD_MS + 50);
+    }, [fold]);
+    const endArrange = useCallback(() => {
+        const id = arrangeFrom.current;
+        fold();
+        setArranging(false);
+        // After the unfold: TalkBack lands on what opened Arrange rather than the top of the screen.
+        setTimeout(() => {
+            const target = (id ? menuRefs.current.get(id)?.current : null) ?? arrangeLink.current;
+            if (target) AccessibilityInfo.sendAccessibilityEvent?.(target, 'focus');
+        }, FOLD_MS + 50);
+    }, [fold]);
+    useEffect(() => {
+        if (!arranging) return;
+        // Android's Back is Done too.
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => { endArrange(); return true; });
+        return () => sub.remove();
+    }, [arranging, endArrange]);
+    // Leaving Home ends it: every move is saved already.
+    useFocusEffect(useCallback(() => () => setArranging(false), []));
 
     // ── The floating button's band ──
     const scrollY = useRef(0);
@@ -512,7 +568,7 @@ export default function HomeScreen() {
             const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1, phoneOver.current) : { layout: null, push: false };
             if (member && answered.layout && !answered.layoutV1) {
                 // A version-2 answer: this node keeps the new shape now (it was updated), so nothing waits on it: the list
-                // goes by its date at any read again, and Edit home stops saying the server needs an update, even when
+                // goes by its date at any read again, and Arrange stops saying the server needs an update, even when
                 // another device's newer list wins and nothing is sent (review of #1699 confirmation, note 1).
                 refusedShape.current = null;
                 setNotOnAccount(false);
@@ -632,6 +688,7 @@ export default function HomeScreen() {
         setLayout(null);
         setNotOnAccount(false);
         setFewer(false);
+        setArranging(false);
         setRole(undefined);
         setPlace(null);
         visitCancelled.current = [];
@@ -647,7 +704,7 @@ export default function HomeScreen() {
         try { await refresh('pull'); } finally { setRefreshing(false); }
     }, [refresh]);
 
-    // ── Tips: Next, Don't show, and Edit home's switch ──
+    // ── Tips: Next and Don't show ──
     const onTipNext = useCallback(() => {
         const id = identityRef.current;
         const ans = storedRef.current?.answer;
@@ -870,7 +927,9 @@ export default function HomeScreen() {
     const ordered = cardOrder(shown, pins);
     const tailor = canTailor(answer);
     const menuCard = tailor ? menuFor : null;
-    const menuAt = menuCard ? drawn.findIndex(d => d.id === menuCard.id) : -1;
+    // In Arrange the list is the folded cards, drawn or not; null: Home as usual.
+    const folded = arranging && tailor && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins) : null;
+    const movable = (folded ?? []).filter(c => canMoveCard(c.type, pins));
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
     const picker = answer && tailor && addOpen ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
 
@@ -941,6 +1000,57 @@ export default function HomeScreen() {
     // A Done or Skip the node didn't take (offline) is sent again on the next Home open.
     useEffect(() => { if (url && identity) void resendTourRecord(url, identity); }, [url, identity?.publicKey]);
 
+    /** ↑ or ↓ in Arrange: saved at once through `moveCard`; the place is said, and focus stays on the arrow or its twin. */
+    const moveInArrange = (c: HomeCardInstance, dir: 'up' | 'down') => {
+        const at = movable.findIndex(m => m.id === c.id) + (dir === 'up' ? -1 : 1);
+        fold();
+        changeLayout(moveCard(layoutRef.current, c.id, dir, movable, Date.now(), pins));
+        AccessibilityInfo.announceForAccessibility(arrangeMovedLine(cardLabelName(c, answer?.profile), at + 1, movable.length));
+        const end = dir === 'up' ? at === 0 : at === movable.length - 1;
+        const keep = arrowRefs.current.get(`${c.id}:${end ? (dir === 'up' ? 'down' : 'up') : dir}`);
+        setTimeout(() => {
+            if (keep?.current) AccessibilityInfo.sendAccessibilityEvent?.(keep.current, 'focus');
+            // The view keeps the moved card on screen, clear of Done.
+            const y = cardY.current.get(c.id);
+            if (y === undefined) return;
+            const top = listY.current + y;
+            if (top < scrollY.current || top > scrollY.current + winH - 200) scrollRef.current?.scrollTo({ y: Math.max(0, top - winH / 3), animated: true });
+        }, FOLD_MS + 50);
+    };
+
+    /** A card in Arrange: its band with ↑ ↓ or Stays here, and one line. Its body isn't drawn, so nothing else is read. */
+    const foldedCard = (c: HomeCardInstance): React.ReactNode => {
+        if (!answer) return null;
+        const isDrawn = drawn.some(d => d.id === c.id);
+        const at = movable.findIndex(m => m.id === c.id);
+        const label = cardLabelName(c, answer.profile);
+        const hasAccent = c.type === 'needs' && needsEntries.some(e => e.accent);
+        const line = isDrawn ? cardLine(c.type) : c.type === 'tips' && tipsAllSeen ? t(LINES.tipsAllSeen) : c.type === 'sky' ? t(LINES.skyNoPlace) : t('Nothing to show now');
+        return (
+            <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
+                <HomeCard
+                    id={c.id}
+                    caption={c.type === 'search' ? cardRowName(c, answer.profile) : cardCaption(c.type, answer)}
+                    colors={colors}
+                    testID={`home-card-${c.id}`}
+                    accent={hasAccent}
+                    hue={c.type === 'needs' ? (hasAccent ? 'amber' : 'sage') : homeCardHue(c)}
+                    arrange={at < 0
+                        ? { label, stays: true }
+                        : { label, canUp: at > 0, canDown: at < movable.length - 1, onMove: dir => moveInArrange(c, dir), upRef: arrowRef(`${c.id}:up`), downRef: arrowRef(`${c.id}:down`) }}
+                >
+                    <FoldedLine
+                        id={c.id}
+                        text={line}
+                        colors={colors}
+                        settings={!isDrawn && homeCardType(c.type)?.readSettings && c.type !== 'tools' ? { a11y: t('Settings for {card}', { card: label }), onPress: () => openSettings(c) } : undefined}
+                        remove={!isDrawn ? { a11y: t('Remove {card} from Home', { card: label }), onPress: () => onRemoveCard(c) } : undefined}
+                    />
+                </HomeCard>
+            </View>
+        );
+    };
+
     const card = (inst: HomeCardInstance): React.ReactNode => {
         if (!answer) return null;
         const { id, type } = inst;
@@ -950,7 +1060,7 @@ export default function HomeScreen() {
         const menu = tailor && type !== 'start' && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
         const hue: CardHue = type === 'needs' ? (needsEntries.some(e => e.accent) ? 'amber' : 'sage') : homeCardHue(inst);
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean; hue?: CardHue }) => (
-            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent} hue={extra?.hue ?? hue}>
+            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent} hue={extra?.hue ?? hue} onHold={tailor && type !== 'start' ? () => startArrange(id) : undefined}>
                 {body}
             </HomeCard>
         );
@@ -1065,7 +1175,8 @@ export default function HomeScreen() {
                     colors={colors}
                     onOpenShape={() => setShapeSheetOpen(true)}
                     onAdd={tailor ? () => setAddOpen(true) : undefined}
-                    onEdit={tailor ? () => setEditOpen(true) : undefined}
+                    onArrange={tailor ? () => startArrange() : undefined}
+                    arrangeRef={arrangeLink}
                 />,
             );
             case 'tools': {
@@ -1193,8 +1304,16 @@ export default function HomeScreen() {
                         </Text>
                     )}
                     {empty}
-                    <Animated.View style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
-                        {list.map(c => (
+                    <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+                        {folded ? (
+                            <>
+                                <ArrangeBar colors={colors} notOnAccount={notOnAccount ? t(LINES.notOnAccount) : null} />
+                                {folded.filter(c => c.type !== 'community').map(foldedCard)}
+                                <ArrangeAddTile colors={colors} onPress={() => setAddOpen(true)} />
+                                {folded.filter(c => c.type === 'community').map(foldedCard)}
+                                <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />
+                            </>
+                        ) : list.map(c => (
                             <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
                                 {card(c)}
                                 {hint && tailor && c.id === firstDrawn?.id && (
@@ -1216,11 +1335,16 @@ export default function HomeScreen() {
                                 {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} />}
                             </View>
                         ))}
-                        {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} />}
+                        {!folded && beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} />}
                     </Animated.View>
                 </ScrollView>
 
-                {!fabAside && (
+                {folded ? (
+                    // Done takes the floating button's place, and never steps aside: it is the way out.
+                    <Pressable accessibilityRole="button" accessibilityLabel={t(ARRANGE_WORDS.done)} style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={endArrange} testID="home-arrange-done">
+                        <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('Done')}</Text>
+                    </Pressable>
+                ) : !fabAside && (
                     <Pressable accessibilityRole="button" accessibilityLabel={t('Add a post')} style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={() => setPostPicker(true)} testID="home-add-post">
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
@@ -1235,31 +1359,11 @@ export default function HomeScreen() {
                     label={menuCard && answer ? cardLabelName(menuCard, answer.profile) : undefined}
                     colors={colors}
                     canRemove={!!menuCard && canRemoveCard(menuCard.type, pins)}
-                    canUp={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1].type, pins)}
-                    canDown={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1].type, pins)}
                     onSettings={menuCard && homeCardType(menuCard.type)?.readSettings && menuCard.type !== 'tools' ? () => openSettings(menuCard) : undefined}
+                    onArrange={() => { if (menuCard) startArrange(menuCard.id); }}
                     onRemove={() => { if (menuCard) onRemoveCard(menuCard); }}
-                    onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'up', drawn, Date.now(), pins)); }}
-                    onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'down', drawn, Date.now(), pins)); }}
                     onClose={() => setMenuFor(null)}
                     returnTo={menuCard ? menuRef(menuCard.id) : undefined}
-                />
-                <EditHomeSheet
-                    visible={editOpen && tailor && !!answer}
-                    layout={shown}
-                    node={answer ?? { profile, features: {} }}
-                    role={role}
-                    pinned={pins}
-                    drawnNow={drawn}
-                    colors={colors}
-                    onChange={next => changeLayout(next)}
-                    onClose={() => setEditOpen(false)}
-                    onAdd={() => { setEditOpen(false); afterModal(() => setAddOpen(true)); }}
-                    onRemove={onRemoveCard}
-                    onSettings={c => { setEditOpen(false); openSettings(c); }}
-                    onReset={() => { if (tips?.dismissedAt) onTipsOn(); }}
-                    tipsAllSeen={tipsAllSeen}
-                    notOnAccount={notOnAccount}
                 />
                 <AddCardSheet
                     visible={!!picker}

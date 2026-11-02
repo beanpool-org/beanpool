@@ -23,7 +23,8 @@
  *   for a reader to draw (`shownPrice`, @beanpool/core copyPriceLine): nothing adds it, compares it or pays it. Nothing of a
  *   deal goes with it ({@link copyBody}): no shop, no lending, no repeat, no reach to a peer. And none can start
  *   (engine/escrow.ts assertNoDealOnCopy), whatever this node's Beans switch says: a node with Beans on and a directory
- *   has copies too.
+ *   has copies too. So it is no Offer of the member's: it opens no credit line and passes no Offer-first gate
+ *   (@beanpool/engine posts.ts OWN_OFFER_WHERE).
  *
  * Probation, the daily limits, reports, auto-hide and retention count it as any post of its author's: those act on the
  * one post, and none of them is a read another member can follow. A re-key leaves its stamp where it was, so it doesn't

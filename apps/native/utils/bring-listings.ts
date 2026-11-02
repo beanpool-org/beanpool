@@ -313,8 +313,8 @@ export async function planBring(offer: BringOffer, identity: BeanPoolIdentity, d
         .sort((a, b) => typeOrder(a) - typeOrder(b) || String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
     const gone = mine.filter((p) => !isUp(p) && (!!p.hiddenByReportsAt || (p.status === 'cancelled' && hasNoPhoto(p)))).map((p) => p.title);
     // Offers sort first, so a Need at the head means none is left to bring. Any Offer of theirs there, in any state, is
-    // the rule the node applies (engine/posts.ts hasListedOffer).
-    if (offer.waitsForOffer && bring[0]?.type === 'need' && !there.some((p) => p.type === 'offer')) return 'waiting';
+    // the rule the node applies (engine/posts.ts hasListedOffer), and a copy of one from home is no Offer to that rule.
+    if (offer.waitsForOffer && bring[0]?.type === 'need' && !there.some((p) => p.type === 'offer' && !p.shownCopy)) return 'waiting';
     return { bring, gone };
 }
 

@@ -93,10 +93,12 @@ let clock = Date.parse('2026-10-01T10:00:00.000Z');
 function insertMessage(opts: {
     conversationId: string;
     authorPubkey: string;
-    type?: string;
+    type?: string | null;
     systemType?: string | null;
     metadata?: string | null;
     timestamp?: string;
+    ciphertext?: string;
+    nonce?: string;
 }) {
     const id = `msg-${++serial}`;
     clock += 1000;
@@ -108,9 +110,9 @@ function insertMessage(opts: {
         id,
         opts.conversationId,
         opts.authorPubkey,
-        'line text',
-        'plaintext-v1',
-        opts.type ?? 'text',
+        opts.ciphertext ?? 'line text',
+        opts.nonce ?? 'plaintext-v1',
+        opts.type === undefined ? 'text' : opts.type,
         opts.systemType ?? null,
         opts.metadata ?? null,
         ts,
@@ -270,5 +272,56 @@ describe('badge-count: real SQLite tests for all three unread readers', () => {
         expect(await getUnreadByConversation(bo.publicKey)).toEqual([]);
         const list = await withScreens(() => getConversations(bo.publicKey));
         expect(list.find((c: any) => c.id === entId)).toBeUndefined();
+    });
+
+    it('counts non-system messages with NULL type even when quiet systemType or viewer actorPubkey is present (3VL)', async () => {
+        const convId = 'grp-null-type';
+        sql.prepare('INSERT INTO conversations (id, type, name) VALUES (?, ?, ?)').run(convId, 'group_thread', 'Null Type Group');
+        sql.prepare('INSERT INTO conversation_participants (conversation_id, public_key, last_read_at) VALUES (?, ?, ?)').run(convId, bo.publicKey, null);
+        sql.prepare('INSERT INTO conversation_participants (conversation_id, public_key, last_read_at) VALUES (?, ?, ?)').run(convId, kai.publicKey, null);
+
+        // A message from Kai where type is NULL in SQLite, but systemType is in the quiet list
+        // and metadata has actorPubkey matching bo.
+        // Under 3VL without COALESCE, (NULL = 'system' AND ...) -> NULL -> falsy in WHERE.
+        // With COALESCE(type, '') = 'system', it evaluates to FALSE, and NOT (FALSE) is TRUE.
+        insertMessage({
+            conversationId: convId,
+            authorPubkey: kai.publicKey,
+            type: null,
+            systemType: 'GROUP_MEMBER_JOINED',
+            metadata: JSON.stringify({ actorPubkey: bo.publicKey }),
+        });
+
+        expect(await getGlobalUnreadCount(bo.publicKey)).toBe(1);
+        const byConv = await getUnreadByConversation(bo.publicKey);
+        expect(byConv).toEqual([
+            { id: convId, type: 'group_thread', unread: 1, peer: 'Null Type Group' },
+        ]);
+        const list = await withScreens(() => getConversations(bo.publicKey));
+        const convRow = list.find((c: any) => c.id === convId);
+        expect(convRow?.unread).toBe(1);
+    });
+
+    it('subquery unread counting does not shadow outer query message alias in getConversations', async () => {
+        const convId = 'grp-alias-test';
+        sql.prepare('INSERT INTO conversations (id, type, name) VALUES (?, ?, ?)').run(convId, 'group_thread', 'Alias Test Group');
+        sql.prepare('INSERT INTO conversation_participants (conversation_id, public_key, last_read_at) VALUES (?, ?, ?)').run(convId, bo.publicKey, null);
+        sql.prepare('INSERT INTO conversation_participants (conversation_id, public_key, last_read_at) VALUES (?, ?, ?)').run(convId, kai.publicKey, null);
+
+        // Latest message in conversation from Kai
+        const encodedText = Buffer.from('hello from Kai').toString('base64');
+        insertMessage({
+            conversationId: convId,
+            authorPubkey: kai.publicKey,
+            type: 'text',
+            ciphertext: encodedText,
+            nonce: 'plaintext-v1',
+        });
+
+        const list = await withScreens(() => getConversations(bo.publicKey));
+        const convRow = list.find((c: any) => c.id === convId);
+        expect(convRow).toBeDefined();
+        expect(convRow?.unread).toBe(1);
+        expect(convRow?.lastMessage).toBe('hello from Kai');
     });
 });

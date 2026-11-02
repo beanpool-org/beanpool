@@ -6,8 +6,9 @@
  *   else; so do its edit, read by id, cancelled date, and remove, and the signer's own "am I a member?". The answer is `*`, never
  *   the origin, with no Vary and no credentials: the same whoever asks, so an Origin keys nothing, and nothing it said is
  *   left in the post, in the log or anywhere in the database. From another site only a copy passes: an ordinary post, and an
- *   edit, a remove or a read that reaches one, are refused. An unsigned call, a search, a member's listings and every other route
- *   get no allowance. What is sent counts as a phone's does: a signed call needs a real signature and the member's
+ *   edit, a remove or a read that reaches one, are refused, however the id is written. An unsigned call, a search, a member's
+ *   listings, a blank id (which the route reads as no id, the whole board) and every other route get no allowance. What is
+ *   sent counts as a phone's does: a signed call needs a real signature and the member's
  *   limits hold, and money stays refused. Global's own web app, and an origin the operator lists, are as they were.
  *   Local: nothing of it opens, on any of those routes, and the ordinary post stays as it was.
  *
@@ -121,6 +122,8 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     const edited = await signed(member, 'POST', `${POSTS}/update`, { id, title: 'Ripe tomatoes', credits: 500, authorPublicKey: member.pk });
     assert(edited.res.status === 200 && acao(edited.res) === '*' && edited.body?.post?.title === 'Ripe tomatoes', `the edit (${edited.res.status} ${JSON.stringify(edited.body?.error ?? '')})`);
     assert((db.prepare('SELECT credits FROM posts WHERE id = ?').get(id) as any)?.credits === 0, 'an edit from another origin moves no money');
+    const again = await signed(member, 'POST', POSTS, copyBody(id, member));
+    assert(again.res.status === 400 && again.body?.code === 'post_id_taken' && acao(again.res) === '*', `a create on an id global holds says so in a code a browser can read (${again.res.status} ${again.body?.code}, ${acao(again.res)})`);
     const standing = await signed(member, 'GET', `/api/community/membership/${member.pk}`);
     assert(standing.res.status === 200 && acao(standing.res) === '*' && standing.body?.isMember === true, `the signer's own "am I a member?" (${standing.res.status})`);
     const elsesStanding = await signed(newId(), 'GET', `/api/community/membership/${member.pk}`);
@@ -147,6 +150,16 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     assert(readBoth.res.status === 403, `and a read that takes one along (${readBoth.res.status})`);
     const skipOther = await signed(member, 'POST', `/api/events/${plainId}/skip`, { date: '2030-01-04' });
     assert(skipOther.res.status === 403, `and a date of it (${skipOther.res.status})`);
+    // The driver binds a list as its items, so `[x]` reaches post x as `x` does. The guard can't read that as "names no post".
+    const rowOf = () => db.prepare('SELECT title, status FROM posts WHERE id = ?').get(plainId) as { title: string; status: string };
+    const asFound = rowOf();
+    for (const [what, value] of [['a list', [plainId]], ['a list in a list', [[plainId]]], ['an object', { id: plainId }], ['a number', 1]] as const) {
+        const editList = await signed(member, 'POST', `${POSTS}/update`, { id: value, title: 'Through a list', authorPublicKey: member.pk });
+        assert(editList.res.status === 403 && editList.body?.code === 'copy_only', `an edit naming its post as ${what} is refused (${editList.res.status} ${editList.body?.code})`);
+        const removeList = await signed(member, 'POST', `${POSTS}/remove`, { id: value, authorPublicKey: member.pk });
+        assert(removeList.res.status === 403 && removeList.body?.code === 'copy_only', `so is a remove (${removeList.res.status} ${removeList.body?.code})`);
+    }
+    assert(JSON.stringify(rowOf()) === JSON.stringify(asFound), `and the ordinary post is as it was (${JSON.stringify(rowOf())})`);
 
     console.log('── nothing else opens ──');
     const unsigned = await localFetch(`${BASE}${POSTS}?id=${id}`, { headers: { Origin: ORIGIN } });
@@ -159,10 +172,21 @@ async function onGlobal(member: Id, db: any): Promise<void> {
         [`${POSTS}/accept`, 'POST'], [`${POSTS}/request`, 'POST'], [`${POSTS}/pause`, 'POST'], ['/api/marketplace/transactions/approve', 'POST'],
         ['/api/community/members', 'GET'], ['/api/messages', 'POST'], ['/api/events/x/rsvp', 'POST'], ['/api/join/open', 'POST'], ['/api/community/membership/x/y', 'GET'],
         [`${POSTS}/${id}`, 'GET'], ['/api/community/me', 'GET'], [`${POSTS}?id=${id}&id=${plainId}`, 'GET'], [`${POSTS}?ids=${id}&ids=${plainId}`, 'GET'],
+        // A blank id is no id to the route, and no id is the whole board, whichever way it is spelled.
+        [`${POSTS}?id=`, 'GET'], [`${POSTS}?id`, 'GET'], [`${POSTS}?%69d=`, 'GET'], [`${POSTS}?id=%20`, 'GET'], [`${POSTS}?id=+`, 'GET'], [`${POSTS}?id=%09`, 'GET'],
+        [`${POSTS}?id=&id=`, 'GET'], [`${POSTS}?id=&ids=`, 'GET'], [`${POSTS}?ids=`, 'GET'], [`${POSTS}?ids`, 'GET'], [`${POSTS}?ids=,`, 'GET'], [`${POSTS}?ids=%20`, 'GET'],
+        [`${POSTS}?ids=%20,%20`, 'GET'], [`${POSTS}?ids=&ids=`, 'GET'],
     ] as const) {
         const closed = await preflight(path, method);
         assert(acao(closed) === null && closed.headers.get('access-control-allow-headers') === null, `${method} ${path}: no allowance (${acao(closed)})`);
     }
+    // What the preflights above stop, the read itself: a page can mint a key for free, so the signature stops nobody here.
+    for (const blank of ['?id=', '?id', '?%69d=']) {
+        const board = await signed(newId(), 'GET', `${POSTS}${blank}`);
+        assert(acao(board.res) === null, `${blank}, signed by a throwaway key: the board isn't readable there (${board.res.status}, ${acao(board.res)})`);
+    }
+    const padded = await signed(newId(), 'GET', `${POSTS}?id=%20${plainId}`);
+    assert(padded.res.status === 403 && padded.body?.code === 'copy_only', `an id with a space on it reads as that id: refused (${padded.res.status})`);
 
     console.log('── a call counts as a phone\'s does ──');
     const stranger = await signed(newId(), 'POST', POSTS, copyBody(crypto.randomUUID(), newId()));

@@ -8,7 +8,7 @@ import { ed25519Signer, makeCopyKeeper, toEd25519Pkcs8, type CopyPair } from '@b
 import { copyIdFor, setNodeApiUrl, signedCopyFetch } from './api';
 import { clearCopyPairs, copyPairs } from './copy-pairs';
 import { memoryIndexedDB } from './memory-indexeddb';
-import { askGlobalStanding, readGlobalStanding, tendCopiesSoon } from './show-on-global';
+import { askGlobalStanding, forgetGlobalStanding, readGlobalStanding, tendCopiesSoon } from './show-on-global';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import type { BeanPoolIdentity } from './identity';
 
@@ -155,6 +155,25 @@ describe('asking global', () => {
         expect(readGlobalStanding(me.publicKey, NOW + 1000)).toBe('stranger');
         expect(readGlobalStanding(me.publicKey, NOW + 25 * 3_600_000)).toBe('unknown');
         expect(readGlobalStanding('another-key', NOW)).toBe('unknown');
+    });
+
+    it('going to the door lets go of a kept stranger, for this key: a reload is the tick again, and drawing it asks nobody', async () => {
+        fetchMock.mockResolvedValue(new Response(JSON.stringify({ isMember: false })));
+        const soon = Date.now();
+        await askGlobalStanding(me, soon);
+        forgetGlobalStanding('another-key');
+        expect(readGlobalStanding(me.publicKey, soon)).toBe('stranger');
+        forgetGlobalStanding(me.publicKey);
+        expect(readGlobalStanding(me.publicKey, soon)).toBe('unknown');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('a kept member stays through it', async () => {
+        fetchMock.mockResolvedValue(new Response(JSON.stringify({ isMember: true })));
+        const soon = Date.now();
+        await askGlobalStanding(me, soon);
+        forgetGlobalStanding(me.publicKey);
+        expect(readGlobalStanding(me.publicKey, soon)).toBe('member');
     });
 
     it('a member needs no second ask', async () => {

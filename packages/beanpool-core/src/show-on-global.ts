@@ -21,7 +21,9 @@
  * - **A Stop showing stands.** A tap can land between any two steps of a tend, so each step goes by the pair as it is stored
  *   now: a pair that has gone stays gone, and a send that lands after it comes down (`recordSend`). It stands from
  *   either end: the host's page knows the home id and the copy's own page only the copy's ({@link CopyKeeper.stopShowing}), and a
- *   copy taken down behind this device isn't brought back by the next rest.
+ *   copy taken down behind this device isn't brought back by the next rest. A new tick is the member asking again: it posts a
+ *   new copy under the next free id ({@link POST_ID_TAKEN_CODE}), and a return from a rest never does, since it would undo a
+ *   Stop or a moderator's takedown it can't see.
  * - **Off the board, nothing goes.** A listing is only ever sent on its community's own word ({@link CopyKeeper.showOnGlobal}):
  *   the device's own row can be behind, and has nothing of a hide by reports.
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
@@ -44,8 +46,14 @@ const PREFERENCES_PATH = '/api/members/preferences';
 export const COPY_TIMEOUT_MS = 60_000;
 /** A copy unchanged this long is sent again, so global's retention (90 days without a change) only takes an untended one. */
 export const COPY_KEEP_ALIVE_MS = 30 * 24 * 60 * 60 * 1000;
-/** A first send looks this many ids on from its own for a copy that is already there (`placeOf`). */
+/** A first send looks this many ids on from its own for a copy that is already there (`placeOf`), and tries at most this many. */
 export const COPY_IDS_LOOKED_AT = 16;
+/**
+ * A node's word that a new post's id is held by a row it has (apps/server engine/posts.ts). In a code, because a device goes by
+ * it and the words around it can change. It is the only word a device gets of a removed Offer or Need: a read by id answers
+ * nothing for one, and the row stays for good, so its id is never free again.
+ */
+export const POST_ID_TAKEN_CODE = 'post_id_taken';
 /** A listing carries at most this many photos (the node keeps five). */
 export const BRING_MOST_PHOTOS = 5;
 /** The node reads at most 2 MB of JSON (https-server.ts MAX_JSON_BODY_BYTES). Edits can build a listing past one body. */
@@ -228,6 +236,9 @@ const isListing = (home: Pick<HomeEvent, 'type'>): boolean => home.type === 'off
 /** Shown, waiting to be, or resting: it stays theirs to stop. */
 const stillTheirs = (p: CopyPair) => !p.leaving || !!p.resting;
 
+/** Coming back from a rest that took a copy down. A tick that found its listing off the board rests too, but never had a copy. */
+const backFromRest = (p: CopyPair) => !!p.resting && !!p.earlierIds?.length;
+
 const firstPhoto = (home: HomeEvent) => home.photos?.[0] ?? '';
 
 /**
@@ -251,11 +262,11 @@ async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise
 }
 
 /** The node's answer to a write: done, for now, or refused in its words. A status with no words is a page in front of it. */
-async function answerOf(res: Response): Promise<{ done: any } | 'later' | { refused: string }> {
+async function answerOf(res: Response): Promise<{ done: any } | 'later' | { refused: string; code?: unknown }> {
     const answer: any = await res.json().catch(() => null);
     if (res.ok) return answer?.success === true ? { done: answer } : 'later';
     if (res.status === 401 || res.status === 408 || res.status === 429 || res.status >= 500) return 'later';
-    return typeof answer?.error === 'string' && answer.error ? { refused: answer.error } : 'later';
+    return typeof answer?.error === 'string' && answer.error ? { refused: answer.error, code: answer.code } : 'later';
 }
 
 /** Nothing at home has stopped it. Whether its date has passed is another question (`rollsOn`). */
@@ -363,8 +374,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     }
 
     /**
-     * Is the copy up on global? `later` when global didn't say. A copy taken down there still reads by id for its host, as
-     * cancelled, for 30 days: that one isn't up, and an edit can't bring it back.
+     * Is the copy up on global? `later` when global didn't say. An event's copy taken down there still reads by id for its host,
+     * as cancelled, for 30 days, and an Offer's or a Need's reads as nothing at once: neither is up, and an edit can't bring it back.
      */
     async function copyIsThere(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean | 'later'> {
         const rows = await readJson(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, deps);
@@ -373,9 +384,10 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
 
     /**
      * Where a first send stands, from global's own word. This listing's ids run on from a copy taken down to the next one, so
-     * the newest id global holds says it: up, and this send takes it up, wherever it was made; down, and the one after it is
-     * free; none at all, and the pair's own is. `later` when global didn't say. An id past {@link COPY_IDS_LOOKED_AT}, read by
-     * a device that has only now ticked and with those before it gone from global after their 30 days, isn't seen.
+     * the newest id global shows says it: up, and this send takes it up, wherever it was made; down, and the one after it is
+     * free; none at all, and the pair's own may be. A read can't say more: a removed Offer or Need reads as nothing and keeps its
+     * id, so `createCopy` hears it from the create. `later` when global didn't say. A copy at an id past
+     * {@link COPY_IDS_LOOKED_AT} isn't seen by a device that has only now ticked.
      */
     async function placeOf(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<{ generation: number; id: string; up: boolean } | 'later'> {
         const first = pair.generation ?? 0;
@@ -436,29 +448,45 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         else if (!stored?.resting) await takeDown(sent, identity, deps);
     }
 
-    async function createCopy(pair: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>): Promise<CopyResult> {
-        const { photos, later } = await photosOf({ photos: (home.photos ?? []).slice(0, BRING_MOST_PHOTOS) }, pair.home, deps);
+    /**
+     * `stepOn`: an id held by a copy that isn't up sends this on to the next one, as a tick does: the member is asking again. Each
+     * try carries the photos, which global wants before it looks at the id, so the tries stop at {@link COPY_IDS_LOOKED_AT}.
+     * Where a try has to wait, the pair keeps the id it reached and `tendCopies` goes on from there.
+     */
+    async function createCopy(first: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>, stepOn: boolean): Promise<CopyResult> {
+        const { photos, later } = await photosOf({ photos: (home.photos ?? []).slice(0, BRING_MOST_PHOTOS) }, first.home, deps);
         if (photos.length === 0 && later) return 'later';
-        const body = {
-            id: pair.copyId, ...copyFields(home, identity.publicKey), photos,
-            shownFrom: { host: await deps.hostOf(pair.home), postId: pair.homeId },
-        };
-        const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, POSTS_PATH, body, identity, signal)));
-        if (answer === 'later') return 'later';
-        if ('refused' in answer) {
+        const fields = { ...copyFields(home, identity.publicKey), photos, shownFrom: { host: await deps.hostOf(first.home), postId: first.homeId } };
+        let pair = first;
+        for (let tries = 1; ; tries++) {
+            const body = { id: pair.copyId, ...fields };
+            const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, POSTS_PATH, body, identity, signal)));
+            if (answer === 'later') return 'later';
+            if (!('refused' in answer)) {
+                // A global that predates copies made a plain event of it, with the member's name on: it comes down at once.
+                if (answer.done.post?.shownCopy !== true) {
+                    await withTimeout((signal) => deps.post(deps.global, `${POSTS_PATH}/remove`, { id: pair.copyId, authorPublicKey: identity.publicKey }, identity, signal)).catch(() => null);
+                    await dropPair(pair);
+                    return { refused: t("The global community can't show this yet.") };
+                }
+                await recordSend({ ...pair, sent: JSON.stringify(copyFields(home, identity.publicKey)), sentAt: Date.now(), photo: firstPhoto(home) }, identity, deps);
+                return answer.done.post?.shownFrom ? 'shown' : 'shown-no-name';
+            }
             // Up all the same: this was a second send of the id (an edit made during the upload, or the member's other device),
             // and the first one landed.
-            const there = await forgetIfGone(pair, identity, deps);
-            return there === false ? answer : there === 'later' ? 'later' : 'shown';
+            const there = await copyIsThere(pair, identity, deps);
+            if (there === 'later') return 'later';
+            if (there) return 'shown';
+            const taken = answer.code === POST_ID_TAKEN_CODE;
+            if (!taken || !stepOn || tries >= COPY_IDS_LOOKED_AT) {
+                await dropPair(pair);
+                return { refused: taken ? t("The global community can't show this yet.") : answer.refused };
+            }
+            const generation = (pair.generation ?? 0) + 1;
+            const moved = await movedTo(pair, { generation, id: await setup.copyId(pair.homeId, generation, identity) });
+            if (!moved) return 'later';
+            pair = moved;
         }
-        // A global that predates copies made a plain event of it, with the member's name on: it comes down at once.
-        if (answer.done.post?.shownCopy !== true) {
-            await withTimeout((signal) => deps.post(deps.global, `${POSTS_PATH}/remove`, { id: pair.copyId, authorPublicKey: identity.publicKey }, identity, signal)).catch(() => null);
-            await dropPair(pair);
-            return { refused: t("The global community can't show this yet.") };
-        }
-        await recordSend({ ...pair, sent: JSON.stringify(copyFields(home, identity.publicKey)), sentAt: Date.now(), photo: firstPhoto(home) }, identity, deps);
-        return answer.done.post?.shownFrom ? 'shown' : 'shown-no-name';
     }
 
     async function updateCopy(pair: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>): Promise<CopyResult> {
@@ -482,14 +510,15 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         return 'shown';
     }
 
-    async function sendCopy(pair: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>): Promise<CopyResult> {
+    /** `stepOn`: {@link createCopy}'s. Only a return from a rest goes without. */
+    async function sendCopy(pair: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>, stepOn = true): Promise<CopyResult> {
         try {
             if (pair.sent) return await updateCopy(pair, home, identity, deps);
             const place = await placeOf(pair, identity, deps);
             if (place === 'later') return 'later';
             const placed = await movedTo(pair, place);
             if (!placed) return 'later';
-            return place.up ? await updateCopy({ ...placed, sent: 'lost', photo: firstPhoto(home) }, home, identity, deps) : await createCopy(placed, home, identity, deps);
+            return place.up ? await updateCopy({ ...placed, sent: 'lost', photo: firstPhoto(home) }, home, identity, deps) : await createCopy(placed, home, identity, deps, stepOn);
         } catch {
             return 'later';
         }
@@ -677,7 +706,9 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                     continue;
                 }
                 if (still.sent !== JSON.stringify(copyFields(home, identity.publicKey)) || firstPhoto(home) !== still.photo || now - still.sentAt >= COPY_KEEP_ALIVE_MS) {
-                    await sendCopy({ ...still, resting: false }, home, identity, deps);
+                    // A rest's return finding its next id held: the member's other device came back first, and that copy was taken
+                    // down. It isn't brought back past that. A tick still waiting to land does go on.
+                    await sendCopy({ ...still, resting: false }, home, identity, deps, !backFromRest(still));
                 }
                 const current = await storedPair(copyId);
                 if (current?.sent) await repeatDates(current, home, identity, deps);

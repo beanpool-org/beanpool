@@ -178,6 +178,7 @@ async function main(): Promise<void> {
         const made = await listing(mallory, 'Fig preserve, again', [RED_PNG], { id: v.id });
         assert(made.status === 400 && /^A new post needs an id nothing else has/.test(String(made.body?.error)),
             `Mallory's post with Vera's id is refused as taken (${made.status} ${JSON.stringify(made.body?.error)})`);
+        assert(made.body?.code === 'post_id_taken', `in a code a device can go by, not only in words (${made.body?.code})`);
         const now = store.list(`posts/${v.id}/`).sort();
         assert(JSON.stringify(now) === JSON.stringify(before),
             `and nothing was stored under Vera's listing for it: ${JSON.stringify(before)} → ${JSON.stringify(now)}`);

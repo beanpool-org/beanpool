@@ -11,7 +11,7 @@ import * as copies from '../lib/show-on-global';
 vi.mock('../lib/features', async () => ({ ...(await vi.importActual('../lib/features')), useCommunityInfo: vi.fn() }));
 vi.mock('../lib/show-on-global', async () => ({
     ...(await vi.importActual('../lib/show-on-global')),
-    askGlobalStanding: vi.fn(), copyPairOf: vi.fn(), readGlobalStanding: vi.fn(), showPostOnGlobal: vi.fn(), stopShowing: vi.fn(),
+    askGlobalStanding: vi.fn(), copyPairOf: vi.fn(), forgetGlobalStanding: vi.fn(), readGlobalStanding: vi.fn(), showPostOnGlobal: vi.fn(), stopShowing: vi.fn(),
 }));
 
 const me: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' };
@@ -177,6 +177,99 @@ describe('the row on a member\'s own page', () => {
         await act(async () => {});
         expect(container.textContent).toBe('');
         expect(copies.copyPairOf).not.toHaveBeenCalled();
+    });
+});
+
+describe('coming back from the door', () => {
+    const atTheDoor = async () => {
+        vi.mocked(copies.readGlobalStanding).mockReturnValue('stranger');
+        const drawn = render(<ShowOnGlobalTick enabled checked={false} onChange={() => {}} identity={me} />);
+        return { drawn, door: (await screen.findByTestId('show-on-global-join')).querySelector('a') as HTMLAnchorElement };
+    };
+    /** The tab goes behind global's and comes back, as a browser says so. */
+    const tabBack = async (state: 'visible' | 'hidden' = 'visible') => {
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(state);
+        await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    };
+
+    it('drawing the door and the tab coming back ask nothing: only a member who tapped it is asked after', async () => {
+        await atTheDoor();
+        await tabBack();
+        await act(async () => { window.dispatchEvent(new Event('focus')); });
+        expect(copies.askGlobalStanding).not.toHaveBeenCalled();
+    });
+
+    it('tapping it asks nothing yet, nor does the tab going behind', async () => {
+        const { door } = await atTheDoor();
+        fireEvent.click(door);
+        await tabBack('hidden');
+        expect(copies.askGlobalStanding).not.toHaveBeenCalled();
+    });
+
+    it('joined there, the row is the tick again as the tab comes back, by itself', async () => {
+        vi.mocked(copies.askGlobalStanding).mockResolvedValue('member');
+        const { door } = await atTheDoor();
+        fireEvent.click(door);
+        await tabBack('hidden');
+        await tabBack();
+        expect(copies.askGlobalStanding).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('show-on-global-join')).toBeNull();
+        expect(screen.getByRole('checkbox')).toBeTruthy();
+        await tabBack();
+        expect(copies.askGlobalStanding).toHaveBeenCalledTimes(1);
+    });
+
+    it('so does the host\'s page', async () => {
+        vi.mocked(copies.askGlobalStanding).mockResolvedValue('member');
+        vi.mocked(copies.readGlobalStanding).mockReturnValue('stranger');
+        render(<ShowOnGlobalHostRow post={listing} identity={me} enabled listing />);
+        fireEvent.click((await screen.findByTestId('show-on-global-join')).querySelector('a') as HTMLAnchorElement);
+        await tabBack();
+        expect(await screen.findByTestId('show-on-global-act')).toBeTruthy();
+    });
+
+    it('the tab and the window both saying it came back are one ask', async () => {
+        let answer: (s: 'member') => void = () => {};
+        vi.mocked(copies.askGlobalStanding).mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+        const { door } = await atTheDoor();
+        fireEvent.click(door);
+        await tabBack();
+        await act(async () => { window.dispatchEvent(new Event('focus')); });
+        expect(copies.askGlobalStanding).toHaveBeenCalledTimes(1);
+        await act(async () => { answer('member'); });
+    });
+
+    it('a window that comes back by focus alone counts', async () => {
+        vi.mocked(copies.askGlobalStanding).mockResolvedValue('member');
+        const { door } = await atTheDoor();
+        fireEvent.click(door);
+        await act(async () => { window.dispatchEvent(new Event('focus')); });
+        expect(copies.askGlobalStanding).toHaveBeenCalledTimes(1);
+    });
+
+    it('back before joining stays at the door, and the next time back asks once more', async () => {
+        vi.mocked(copies.askGlobalStanding).mockResolvedValueOnce('stranger').mockResolvedValueOnce('member');
+        const { door } = await atTheDoor();
+        fireEvent.click(door);
+        await tabBack();
+        expect(screen.getByTestId('show-on-global-join')).toBeTruthy();
+        await tabBack();
+        expect(copies.askGlobalStanding).toHaveBeenCalledTimes(2);
+        expect(screen.queryByTestId('show-on-global-join')).toBeNull();
+    });
+
+    it('the tap lets go of the kept answer, so a reload isn\'t the door for the rest of the day', async () => {
+        const { door } = await atTheDoor();
+        fireEvent.click(door);
+        expect(copies.forgetGlobalStanding).toHaveBeenCalledWith('me-pk');
+    });
+
+    it('a row that has gone asks nothing', async () => {
+        const { drawn, door } = await atTheDoor();
+        fireEvent.click(door);
+        drawn.unmount();
+        await tabBack();
+        expect(copies.askGlobalStanding).not.toHaveBeenCalled();
     });
 });
 

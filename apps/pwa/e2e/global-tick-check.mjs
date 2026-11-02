@@ -9,7 +9,8 @@
  *      language, no name. What is stored is the rounded pin, no place, no note, 0 Beans.
  *   3. G1's cases: an unlisted community; an edit follows; a rest and its return; a rest waits for reports' hold; a rest waits for
  *      an unread answer; a lost first answer posts nothing twice; a remove nobody answered is tried again; a moderator's
- *      takedown stands; two tabs; sign-out leaves nothing; a phone and a browser on one account post one copy.
+ *      takedown stands; a new tick after Stop showing lands, on an Offer, an event and an Offer back from a rest; two tabs;
+ *      sign-out leaves nothing; a phone and a browser on one account post one copy.
  *   4. The screens at 320 px with 1.3x text, light and dark: the tick, the join door, the row in each state. Shots to
  *      GLOBAL_TICK_SHOTS. Fails on sideways scroll, a tap target under 44 px, a policy violation, or a host but this machine.
  *
@@ -311,6 +312,40 @@ async function firstCases(ctx) {
     await page.waitForTimeout(800);
     await tend(page);
     check((await upOf(global_, moderated.id)).length === 0, "a moderator's takedown stands: no rest and no return brings it back");
+
+    // A new tick after Stop showing. Global keeps a removed row and reads an Offer's as nothing, so the only word that the id is
+    // held is the create's refusal, which has to reach the page: this is the one case a stand-in for global got wrong.
+    await global_.ask({ op: 'resetLimits' });
+    const stopAndTick = async (post, what) => {
+        const before = (await pairOf(page, post.id)).copyId;
+        const stop = await page.evaluate(async (id) => window.tick.copies.stopShowing(id, await window.tick.loadIdentity()), post.id);
+        check(stop === true && (await row(global_, before))?.status === 'cancelled', `${what}: Stop showing takes it down`);
+        check(!(await pairOf(page, post.id)), `${what}: and the pair goes`);
+        const again = await tick(page, post);
+        const after = await pairOf(page, post.id);
+        check(again === null, `${what}: a second tick lands, nothing owed to the member (${again})`);
+        check(!!after?.sent && after.copyId !== before, `${what}: under a new id, and the pair took it up`);
+        check((await upOf(global_, post.id)).length === 1, `${what}: one copy up`);
+    };
+    const offerAgain = await listing(page, 'Plums');
+    await tick(page, offerAgain);
+    await stopAndTick(offerAgain, 'an Offer');
+    await stopAndTick(offerAgain, 'an Offer, a second time');
+    const startAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
+    const endAt = new Date(Date.now() + 7 * 86_400_000 + 3_600_000).toISOString();
+    const eventAgain = await listing(page, 'Plum picking', { type: 'event', category: 'community', credits: 0, eventStartAt: startAt, eventEndAt: endAt, eventTz: 'UTC' });
+    await tick(page, eventAgain);
+    await stopAndTick(eventAgain, 'an event');
+    const restedAgain = await listing(page, 'Damsons');
+    await tick(page, restedAgain);
+    await page.evaluate(async (id) => window.tick.api.pauseMarketplacePost(id, (await window.tick.loadIdentity()).publicKey), restedAgain.id);
+    await page.waitForTimeout(800);
+    await page.evaluate(async (id) => window.tick.api.resumeMarketplacePost(id, (await window.tick.loadIdentity()).publicKey), restedAgain.id);
+    await page.waitForTimeout(800);
+    await tend(page);
+    check((await pairOf(page, restedAgain.id))?.generation === 1, 'an Offer back from a rest holds the next id');
+    await stopAndTick(restedAgain, 'an Offer after a rest and its return');
+    check((await pairOf(page, restedAgain.id))?.generation === 2, 'and the tick went past both ids');
 
     // The app's load brings a copy into step, as the phone's coming to the front does: a change made elsewhere.
     const stale = await listing(page, 'Pears');

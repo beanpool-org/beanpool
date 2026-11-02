@@ -1678,3 +1678,55 @@ describe('a listing off the board at home goes nowhere, whichever door asks (sho
         expect(phoneToLocal.slice(fromPhone).every((r) => /^GET \/api\/marketplace\/posts\/[^/]+\/photos\//.test(r))).toBe(true);
     }, START_MS);
 });
+
+describe('a new tick after Stop showing: global keeps the removed row and reads an Offer\'s as nothing, so only its refusal says the id is held', () => {
+    const stopThenTick = async (home: HomeEvent, me: BeanPoolIdentity) => {
+        const before = await copyIdOf(home.id, me);
+        expect(await stopShowing(home.id, me, deps())).toBe(true);
+        expect((await copyRow(before)).status).toBe('cancelled');
+        expect(await pairOf(home.id, me.publicKey)).toBeNull();
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        const pair = await pairOf(home.id, me.publicKey);
+        expect(pair?.copyId).not.toBe(before);
+        expect(pair?.sent).toBeTruthy();
+        expect((await copyRow(pair!.copyId)).status).toBe('active');
+        expect(await liveCopies(me)).toHaveLength(1);
+    };
+
+    it('an Offer shows again, and a Stop then ends what it shows', async () => {
+        const me = await memberOfBoth('Tess Again');
+        const home = await listingAtHome(me, 'Runner beans');
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        await stopThenTick(home, me);
+        expect((await pairOf(home.id, me.publicKey))?.generation).toBe(1);
+        expect(await stopShowing(home.id, me, deps())).toBe(true);
+        expect(await liveCopies(me)).toHaveLength(0);
+    }, START_MS);
+
+    it('a Need does', async () => {
+        const me = await memberOfBoth('Noor Again');
+        const home = await listingAtHome(me, 'A hand with fencing', { type: 'need' });
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        await stopThenTick(home, me);
+    }, START_MS);
+
+    it('an event does, as it did: its cancelled copy reads, and there is no refusal to hear', async () => {
+        const me = await memberOfBoth('Etta Again');
+        const home = await eventAtHome(me, 'Seed swap');
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        await stopThenTick(home, me);
+    }, START_MS);
+
+    it('an Offer back from a rest goes past both its ids', async () => {
+        const me = await memberOfBoth('Rae Again');
+        const home = await listingAtHome(me, 'Broad beans');
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        await signedPost(local.url, '/api/marketplace/posts/pause', { postId: home.id, authorPublicKey: me.publicKey }, me);
+        await tendCopies(me, deps());
+        await signedPost(local.url, '/api/marketplace/posts/resume', { postId: home.id, authorPublicKey: me.publicKey }, me);
+        await tendCopies(me, deps());
+        expect((await pairOf(home.id, me.publicKey))?.generation).toBe(1);
+        await stopThenTick(home, me);
+        expect((await pairOf(home.id, me.publicKey))?.generation).toBe(2);
+    }, START_MS);
+});

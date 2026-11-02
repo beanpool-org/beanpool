@@ -149,6 +149,16 @@ function keptStanding(publicKey: string, now: number): GlobalStanding {
 /** What global last said of this key, from this browser's memory: drawing a row asks it nothing. */
 export const readGlobalStanding = (publicKey: string, now: number = Date.now()): GlobalStanding => keptStanding(publicKey, now);
 
+/**
+ * The member has gone to global's door: what it last said of a stranger no longer holds. Global can't reach this memory, and a
+ * browser can drop a tab left in the background, so this is what a reload finds: the tick, which asks at its tap.
+ */
+export function forgetGlobalStanding(publicKey: string): void {
+    try {
+        if (keptStanding(publicKey, Date.now()) === 'stranger') localStorage.removeItem(STANDING_KEY);
+    } catch { /* storage off: nothing was kept */ }
+}
+
 /** At the tap: is this key a member of global? `unknown` when global didn't say. */
 export async function askGlobalStanding(identity: BeanPoolIdentity, now: number = Date.now()): Promise<GlobalStanding> {
     if (keptStanding(identity.publicKey, now) === 'member') return 'member';

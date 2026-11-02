@@ -42,11 +42,19 @@ function methodsAt(path: string): readonly string[] | null {
     return MEMBERSHIP.test(path) ? ['GET'] : null;
 }
 
-/** The listings' read is open by id alone: nothing that searches, lists a member or reaches a place. */
+/** The ids a read names. One value: a repeated `id` is an array, which the guard below couldn't look up. A blank one names none. */
+function idsAsked(query: Record<string, unknown>): string[] {
+    const asked = typeof query.ids === 'string' ? query.ids.split(',') : typeof query.id === 'string' ? [query.id] : [];
+    return asked.map((id) => id.trim()).filter(Boolean);
+}
+
+/**
+ * The listings' read is open by id alone: nothing that searches, lists a member or reaches a place. An id has to be there: the
+ * route reads a blank `id` as none at all, which is the whole board, and the guard below would find no post to refuse.
+ */
 function readsById(query: Record<string, unknown>): boolean {
     const asked = Object.keys(query);
-    // One value: a repeated `id` is an array, which the guard below couldn't look up.
-    return asked.length === 1 && (asked[0] === 'id' || asked[0] === 'ids') && typeof query[asked[0]] === 'string';
+    return asked.length === 1 && (asked[0] === 'id' || asked[0] === 'ids') && idsAsked(query).length > 0;
 }
 
 function saysItIsSigned(ctx: Koa.Context): boolean {
@@ -72,18 +80,22 @@ function fromAnotherSite(ctx: Koa.Context): boolean {
     return site === 'cross-site' || site === 'same-site';
 }
 
-/** The posts this request names. A body or a query the routes will refuse names none, and they refuse it. */
-function postsNamed(ctx: Koa.Context): string[] {
-    const body = (ctx as any).requestBody as { id?: unknown } | undefined;
-    const fromQuery = typeof ctx.query.ids === 'string' ? ctx.query.ids.split(',').map((id) => id.trim()).filter(Boolean)
-        : typeof ctx.query.id === 'string' ? [ctx.query.id] : [];
-    if (ctx.path === POSTS) return ctx.method === 'GET' ? fromQuery : [];
+/**
+ * The posts this request names, or null for an `id` that is no text. That isn't a request naming nothing: the driver binds a
+ * list as its items, so `{ id: [x] }` reaches post x on the edit and the remove routes as `{ id: x }` does. A missing id names
+ * none, and the routes refuse it.
+ */
+function postsNamed(ctx: Koa.Context): string[] | null {
+    if (ctx.path === POSTS) return ctx.method === 'GET' ? idsAsked(ctx.query) : [];
     const skip = SKIP.exec(ctx.path);
     if (skip) return [decodeURIComponent(skip[1])];
-    return typeof body?.id === 'string' ? [body.id] : [];
+    const id = ((ctx as any).requestBody as { id?: unknown } | undefined)?.id;
+    if (id === undefined || id === null) return [];
+    return typeof id === 'string' ? [id] : null;
 }
 
-function namesAnotherPost(ids: string[]): boolean {
+function namesAnotherPost(ids: string[] | null): boolean {
+    if (ids === null) return true;
     if (ids.length === 0) return false;
     const someOther = db.prepare(`SELECT 1 FROM posts WHERE id IN (${ids.map(() => '?').join(', ')}) AND shown_from_host IS NULL LIMIT 1`);
     return someOther.get(...ids) !== undefined;

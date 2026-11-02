@@ -4524,7 +4524,9 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
     } finally {
         releaseSyncLock();
     }
-    if (selfMemberFound && anchorUrl && selfPubkey) await healGuestMark(anchorUrl, selfPubkey);
+    if (selfMemberFound && anchorUrl && selfPubkey) {
+        await healGuestMark(anchorUrl, selfPubkey).catch(e => console.warn('[DB] Failed to heal a guest mark:', e));
+    }
     if (ownSyncedArchetype && selfPubkey) {
         try {
             const canonical = await getCanonicalProfile().catch(() => null);

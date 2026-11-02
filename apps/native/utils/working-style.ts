@@ -11,8 +11,8 @@ import { clearWaitingArchetype, keepCarriedArchetype, keepWaitingArchetype, wait
  * (scratch/fable-design/DESIGN-archetype-across-fable.md, slice S1). There is no central copy: the result lives in the
  * phone's canonical profile and in each community's own row, and no node ever learns it from another.
  *
- * The canonical `archetype` is "my result", and only the quiz writes it here. A row, which any sync or Save can rewrite,
- * never does: that is how an older row used to overwrite a newer result.
+ * The canonical `archetype` is "my result". The quiz writes it here, and a row only when it is newer (adoptNewerRowIntoDevice,
+ * firstRunWorkingStyle): a row any sync or Save rewrites is how an older one used to overwrite a newer result.
  *
  * What a community is sent is always core's publicArchetype, and only through three lines:
  *   - the quiz, to the community open now (app/public-profile.tsx);
@@ -131,7 +131,7 @@ export const onGuestVisit = (community: string): Promise<boolean> => isGuestNode
  * A guest mark on `community` goes when the community says the key is a member, and on nothing less: a row is no answer.
  * The phone writes one on a visit (Re-run Setup, after the 404) and a community open to reads lists its visitors', so a
  * row standing in for the answer sent a guest to /node-mismatch and their block list to a community they aren't in. Only
- * a community marked is asked. Never throws.
+ * a community marked is asked.
  */
 export async function healGuestMark(community: string, publicKey: string): Promise<void> {
     const plain = community.replace(/\/+$/, '');

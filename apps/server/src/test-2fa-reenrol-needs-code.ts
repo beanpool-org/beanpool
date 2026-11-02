@@ -266,7 +266,7 @@ async function main() {
                 let reqSettled = false;
                 reqPromise.finally(() => { reqSettled = true; });
 
-                // Option C: When a wrong code engages or extends closure, the server tarpit sleeps (up to 5s)
+                // When a wrong code engages or extends closure, the server tarpit sleeps (up to 5s)
                 // before returning 401. To avoid racing the closure expiration under heavy CI load or scheduling
                 // delays, dispatch the HTTP probe concurrently while the request is held in the tarpit,
                 // asserting the server returns real HTTP 429 over the wire.

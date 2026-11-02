@@ -17,7 +17,7 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  *   no code on purpose: this is the undo of a stolen token's day. Each post goes back to where it stood, so what the server says stayed
  *   hidden (`stillHidden`, absent on an older one) is told apart from what everyone sees again.
  * - Remove now: a post goes through the delete route Settings already has, so a person's refund and its warnings are that route's. A
- *   whole call asks an owner's fresh proof, and leaves a post with a deal in escrow for one-at-a-time.
+ *   whole call asks an owner's fresh proof, and leaves a post with a deal in escrow or an open Child safety report for one-at-a-time.
  * - The assistant's words are rendered as text and read here only. No assistant reaches any of this.
  */
 
@@ -29,6 +29,7 @@ interface PostLine {
     author: string | null;
     type: string | null;
     state: 'hidden' | 'left_hidden' | 'put_back' | 'final';
+    leftFor?: 'deal' | 'child_safety' | null;
 }
 
 export interface TakedownCall {
@@ -58,6 +59,8 @@ const count = (n: number) => `${n} post${n === 1 ? '' : 's'}`;
 const STATE_WORDS: Record<PostLine['state'], string> = {
     hidden: 'Hidden', left_hidden: 'Left hidden: a deal in escrow', put_back: 'Put back', final: 'Removed',
 };
+const leftForChildSafety = (p: PostLine) => p.state === 'left_hidden' && p.leftFor === 'child_safety';
+const stateWords = (p: PostLine) => (leftForChildSafety(p) ? 'Left hidden: a Child safety report is open' : STATE_WORDS[p.state]);
 const isHeld = (p: PostLine) => p.state === 'hidden' || p.state === 'left_hidden';
 const SINCE_CHOICES = [{ days: 1, label: 'the last day' }, { days: 2, label: 'the last 2 days' }, { days: 7, label: 'the last 7 days' }];
 
@@ -126,9 +129,11 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
     const removeOne = async (p: PostLine) => {
         const ok = await ask({
             title: `Remove "${p.title ?? 'this post'}" now?`,
-            body: p.state === 'left_hidden'
-                ? 'It has a deal in escrow: removing it refunds the buyer, as any removal does. This cannot be undone.'
-                : 'It goes for good, without waiting for the 7 days. This cannot be undone.',
+            body: leftForChildSafety(p)
+                ? 'A Child safety report on it is still open, for a person to read. Removing the post closes that report and tells whoever filed it. This cannot be undone.'
+                : p.state === 'left_hidden'
+                    ? 'It has a deal in escrow: removing it refunds the buyer, as any removal does. This cannot be undone.'
+                    : 'It goes for good, without waiting for the 7 days. This cannot be undone.',
             confirmLabel: 'Remove now',
         });
         if (!ok) return;
@@ -141,7 +146,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
 
     const removeCall = async (t: TakedownCall, code?: string) => {
         if (!code) {
-            const ok = await ask({ title: `Remove ${count(t.posts.filter(isHeld).length)} now?`, body: 'They go for good, without waiting for the 7 days. A post with a deal in escrow stays for you to remove by itself.', confirmLabel: 'Remove now' });
+            const ok = await ask({ title: `Remove ${count(t.posts.filter(isHeld).length)} now?`, body: 'They go for good, without waiting for the 7 days. A post with a deal in escrow or an open Child safety report stays for you to remove by itself.', confirmLabel: 'Remove now' });
             if (!ok) return;
         }
         setBusy(true);
@@ -151,7 +156,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
             throwIfFreshProof(res.status, json);
             removeProof.close();
             if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-            const left = json.left?.length > 0 ? ` ${count(json.left.length)} stayed hidden: a deal in escrow.` : '';
+            const left = json.left?.length > 0 ? ` ${count(json.left.length)} stayed hidden: a deal in escrow, or a Child safety report still open.` : '';
             setMessage(`Removed: ${count(json.removed?.length ?? 0)}.${left}`);
             onChanged?.();
         } catch (e: unknown) {
@@ -240,7 +245,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
                                     {t.posts.map((p) => (
                                         <li key={p.id} className="bg-nature-950/60 rounded-lg p-3 space-y-2 min-w-0" data-testid="agent-takedown-post">
                                             <p className="text-sm text-white m-0 break-words">{p.title ?? 'A post with no title'}</p>
-                                            <p className="text-xs text-nature-400 m-0 break-words">{p.type ?? 'post'}{p.author ? ` by ${p.author}` : ''} · {STATE_WORDS[p.state]}</p>
+                                            <p className="text-xs text-nature-400 m-0 break-words">{p.type ?? 'post'}{p.author ? ` by ${p.author}` : ''} · {stateWords(p)}</p>
                                             {isHeld(p) && (
                                                 <div className="flex flex-wrap gap-2">
                                                     <button type="button" disabled={busy} data-testid="agent-takedown-put-back" onClick={() => void putBack({ postId: p.id })}

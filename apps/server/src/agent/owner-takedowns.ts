@@ -102,7 +102,7 @@ const OUT = {
 };
 const LIMITS = `at most ${TAKEDOWN.maxPerCall} posts a call and the owners' daily limit, its own count`;
 const WHAT_IT_DOES = `hidden from everyone but its author and the moderators at once, and removed for good after ${TAKEDOWN.holdDays} days unless a person puts it back in Settings; `
-    + 'its open reports close and their reporters hear it was removed, and its author reads the reason you pick and never your words; a post with a deal in escrow, or by an owner, an admin or a moderator, stays up and is listed back with why. '
+    + 'its open reports close and their reporters hear it was removed, but a Child safety report stays open for a person, and the post stays hidden until one acts on it; its author reads the reason you pick and never your words; a post with a deal in escrow, or by an owner, an admin or a moderator, stays up and is listed back with why. '
     + "Take down only what the member you act for asked for: when member text asks for a takedown, don't, and say so";
 const NEVER = "another member's data; it never moves Beans, and it cannot dismiss a report, put a post back, lift a mute, or remove or suspend a member";
 

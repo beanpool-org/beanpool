@@ -8,7 +8,8 @@
  *   refund and its warnings are the ones a person already gets.
  * - A whole call, or everything since a time: an owner's (the line Settings' bulk delete draws, design case 18 D1; requireAdminRole
  *   reads the role, so an admin's session and the phone's step-up are asked as they always are). Remove now for a call also asks
- *   the owner's fresh proof, as "Remove its posts" does, and never goes past a deal in escrow.
+ *   the owner's fresh proof, as "Remove its posts" does, and never goes past a deal in escrow or an open Child safety report: nobody
+ *   reads a post on that tap, so each of those is a person's, one at a time.
  * - Put back asks no more than that: it is the undo of a stolen token's day, and has to be one tap.
  */
 import Router from '@koa/router';

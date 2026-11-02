@@ -105,4 +105,27 @@ describe('Taken down by assistants', () => {
         await waitFor(() => expect(calls).toHaveLength(1));
         expect(calls[0].url).toMatch(/\/api\/local\/admin\/posts\/p2\/delete$/);
     });
+
+    it('says when a Child safety report is what left a post hidden, and that removing it closes that report', async () => {
+        const left = { ...CALL, posts: [{ id: 'p4', title: 'Waiting for a person', author: 'Sam', type: 'offer', state: 'left_hidden', leftFor: 'child_safety' }] };
+        const calls = serve({ canActOnMany: true, takedowns: [left] });
+        render(<AssistantTakedownsPanel activeNode={NODE} />);
+        fireEvent.click(await screen.findByText('Show its posts'));
+        expect(screen.getByText(/Left hidden: a Child safety report is open/)).toBeTruthy();
+        expect(screen.queryByText(/a deal in escrow/)).toBeNull();
+        fireEvent.click(screen.getByTestId('agent-takedown-remove'));
+        expect(await screen.findByText(/A Child safety report on it is still open.*Removing the post closes that report/)).toBeTruthy();
+        expect(screen.queryByText(/refunds the buyer/)).toBeNull();
+        expect(calls).toHaveLength(0);
+    });
+
+    it('says what a whole call left behind, and why, before and after', async () => {
+        const calls = serve({ canActOnMany: true, takedowns: [CALL] }, { removed: ['p1'], left: ['p2'] });
+        render(<AssistantTakedownsPanel activeNode={NODE} />);
+        fireEvent.click(await screen.findByTestId('agent-takedown-remove-call'));
+        expect(await screen.findByText(/A post with a deal in escrow or an open Child safety report stays for you to remove by itself/)).toBeTruthy();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove now' }).at(-1)!);
+        await waitFor(() => expect(calls).toHaveLength(1));
+        expect((await screen.findByRole('status')).textContent).toBe('Removed: 1 post. 1 post stayed hidden: a deal in escrow, or a Child safety report still open.');
+    });
 });

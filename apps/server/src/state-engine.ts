@@ -55,7 +55,7 @@ import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-cha
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
-import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
+import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
@@ -86,7 +86,7 @@ import {
 } from './engine/auto-moderation.js';
 import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
 import {
-    forgetTakedownsOf, hasPendingDeal, markTakedownFinal, putBackTakedowns as putBackTakedownsEngine, setTakedownRemoval, takeDownPosts as takeDownPostsEngine,
+    forgetTakedownsOf, hasOpenChildSafetyReport, hasPendingDeal, markTakedownFinal, putBackTakedowns as putBackTakedownsEngine, setTakedownRemoval, takeDownPosts as takeDownPostsEngine,
     type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
 } from './engine/agent-takedowns.js';
 import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
@@ -7498,18 +7498,12 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
     return row?.owner_pubkey ?? null;
 }
 
-/** The databases that have report_is_child_safety() (a test may open more than one in a process). */
-const childSafetyFnOn = new WeakSet<object>();
-
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
     // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
     // (the alert says "look at it first, in the Manager's Reports queue": the follow-up to #1895). Once handled, one takes
     // its date's place, so "All" never keeps a dismissed one (a false positive among them) above open ordinary reports
     // (director, 14 Oct, on the review of #1912). It stays marked (childSafety) wherever it is listed.
-    if (!childSafetyFnOn.has(db)) {
-        db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
-        childSafetyFnOn.add(db);
-    }
+    ensureChildSafetyFn();
     let whereClause = '';
     const params: any[] = [];
 
@@ -8707,12 +8701,13 @@ function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundS
 /**
  * What makes an assistant's takedown final (engine/agent-takedowns.ts sweepTakedowns). Never on a post with a pending deal, and
  * with no transfer function, so adminDeletePost has no way to move a Bean: removePostByAdmin's refund is a person's, on a
- * person's account. The takedown stamped the removal and told the author, so neither happens again here; an event is cancelled
+ * person's account. Never on a post with a Child safety report open either: this closes what is open, and that one waits for a
+ * person. The takedown stamped the removal and told the author, so neither happens again here; an event is cancelled
  * and its goers told now, unless it ended during the hold: they heard nothing of the takedown, so it may well have gone ahead, and
  * no push says otherwise. A report filed while it was hidden closes, and its reporter hears the post was removed.
  */
 function makeTakedownFinal(postId: string): boolean {
-    if (hasPendingDeal(postId)) return false;
+    if (hasPendingDeal(postId) || hasOpenChildSafetyReport(postId)) return false;
     const before = postBeforeTakedown(postId);
     const end = (db.prepare('SELECT event_end_at FROM posts WHERE id = ?').get(postId) as { event_end_at: string | null } | undefined)?.event_end_at;
     const ended = !!end && Date.parse(end) <= Date.now();

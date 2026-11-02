@@ -11,6 +11,7 @@
 
 import { word, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { reportKind } from '../services/report-kind.js';
 import { keepNotice } from './kept-notices.js';
 
 // English's own t(): a refusal with a value in it, which member-words.ts finds again by its catalog sentence.
@@ -124,16 +125,46 @@ export function closeOpenReportsOnPost(postId: string): string[] {
     return rows.map(r => r.reporter_pubkey);
 }
 
-/** The ids of the reports `closeOpenReportsOnPost` would close now: what a takedown keeps, so Put back can open them again. */
-export function openReportIdsOnPost(postId: string): string[] {
-    return (db.prepare(
-        `SELECT id FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
-    ).all(postId) as { id: string }[]).map(r => r.id);
+/**
+ * What a takedown closes (engine/agent-takedowns.ts): every open report on the post but a Child safety one, which waits for a person,
+ * first in the Open queue, and whose reporter hears nothing yet. Read as the alerts read it (`reportKind`). Returns the ids it closed,
+ * so Put back can open them again, and who to tell: never a reporter whose Child safety report on this post is the one still waiting.
+ */
+export function closeReportsForTakedown(postId: string): { ids: string[]; reporters: string[] } {
+    const open = db.prepare(
+        `SELECT id, reporter_pubkey, reason FROM abuse_reports
+          WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
+    ).all(postId) as { id: string; reporter_pubkey: string; reason: string | null }[];
+    const isWaiting = (r: { reason: string | null }) => reportKind(r.reason) === 'child safety';
+    const closing = open.filter(r => !isWaiting(r));
+    const close = db.prepare(
+        `UPDATE abuse_reports SET status = 'actioned', suspended_member = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`
+    );
+    for (const r of closing) close.run(r.id);
+    const stillWaiting = new Set(open.filter(isWaiting).map(r => r.reporter_pubkey));
+    return { ids: closing.map(r => r.id), reporters: [...new Set(closing.map(r => r.reporter_pubkey))].filter(pk => !stillWaiting.has(pk)) };
+}
+
+/** The databases that have report_is_child_safety() (a test may open more than one in a process). */
+const childSafetyFnOn = new WeakSet<object>();
+
+/** report_is_child_safety(reason) on this connection, for a query (never the file schema): `reportKind`, read as the alerts read it. */
+export function ensureChildSafetyFn(): void {
+    if (childSafetyFnOn.has(db)) return;
+    db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
+    childSafetyFnOn.add(db);
+}
+
+/** SQL: a Child safety report is open on `post`, a column or a `?`. A Pulse report is about its item, so it is never one of them. */
+export function childSafetyOpenOn(post: string): string {
+    ensureChildSafetyFn();
+    return `EXISTS (SELECT 1 FROM abuse_reports cs WHERE cs.target_post_id = ${post} AND cs.target_pulse_item_id IS NULL
+        AND (cs.status = 'pending' OR cs.status IS NULL) AND report_is_child_safety(cs.reason) = 1)`;
 }
 
 /**
  * Reports a takedown closed, back in the moderators' queue as they were (engine/agent-takedowns.ts): an undo nobody read a post on is
- * no dismissal. Only a report still as `closeOpenReportsOnPost` left it: one a person dismissed since, or acted on to suspend its
+ * no dismissal. Only a report still as `closeReportsForTakedown` left it: one a person dismissed since, or acted on to suspend its
  * member, stays as they left it. Nobody is told (the reporters' notice stands: scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.5).
  */
 export function reopenClosedReports(reportIds: string[]): number {

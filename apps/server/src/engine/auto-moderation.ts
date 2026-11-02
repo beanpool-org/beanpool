@@ -465,8 +465,16 @@ export function evaluateAutoMute(cb: ModerationNoticeCallbacks, authorPubkey: st
     if (Number.isFinite(current) && current > now) return false;
     const removals = removalsCounted(authorPubkey, now, current);
     if (removals < AUTO_MUTE.removals) return false;
-    db.prepare('UPDATE members SET moderation_muted_until = ?, updated_at = ? WHERE public_key = ?')
-        .run(MUTED_UNTIL_LIFTED, iso(now), authorPubkey);
+    db.transaction(() => {
+        db.prepare('UPDATE members SET moderation_muted_until = ?, updated_at = ? WHERE public_key = ?')
+            .run(MUTED_UNTIL_LIFTED, iso(now), authorPubkey);
+        // The one place a mute is written, so whoever made the third removal, this is what lets Put back weigh it (liftMuteATakedownBrought).
+        // Marks are this mute's alone: one left from an old mute would make a moderator's own mute look like a takedown's.
+        const mine = 'post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)';
+        db.prepare(`UPDATE agent_takedown_posts SET muted_author = 0 WHERE muted_author = 1 AND ${mine}`).run(authorPubkey);
+        db.prepare(`UPDATE agent_takedown_posts SET muted_author = 1, last_lift = ? WHERE put_back_at IS NULL AND final_at IS NULL AND ${mine}`)
+            .run(row.moderation_muted_until ?? null, authorPubkey);
+    })();
     bumpMembersVersion();
     console.log(`🛡️ Member ${authorPubkey.slice(0, 12)}… muted: ${removals} posts removed by moderators in ${AUTO_MUTE.windowDays} days.`);
     notifyMuted(cb, authorPubkey);
@@ -484,20 +492,11 @@ export function liftMute(cb: ModerationNoticeCallbacks, pubkey: string, now: num
 }
 
 /**
- * What a new mute writes over: when this member's last mute was lifted, or null. A takedown reads it before weighing a mute, and keeps
- * it only if that mutes them, which means they aren't muted now and this is a time in the past.
- */
-export function lastLiftOf(pubkey: string): string | null {
-    const row = db.prepare('SELECT moderation_muted_until FROM members WHERE public_key = ?').get(pubkey) as { moderation_muted_until?: string | null } | undefined;
-    return row?.moderation_muted_until ?? null;
-}
-
-/**
- * A takedown put back no longer counts (engine/agent-takedowns.ts): the mute goes too if one of this member's takedowns brought it,
- * unless what still counts adds up to one. Any of their takedowns, not the post that came back: one post a call is how an assistant
- * works through a list, so only the third of three carries the mark, and which one is put back first must not decide it. The count
- * is the rule that muted them (`removalsCounted`), from the last lift that mute wrote over (`last_lift`). A mute no takedown brought
- * stays a moderator's to lift, and on a standby that took over there is no record, so no lift.
+ * A takedown put back no longer counts (engine/agent-takedowns.ts): the mute goes too if a takedown of this member's was on hold when
+ * it was written (`evaluateAutoMute` marks them, whoever made the third removal), unless what still counts adds up to one. Which
+ * of them is put back first doesn't decide it, nor which of the removals came last. The count is the rule that muted them
+ * (`removalsCounted`), from the last lift that mute wrote over (`last_lift`). A mute with no takedown on hold stays a moderator's to
+ * lift, and on a standby that took over there is no record, so no lift.
  */
 export function liftMuteATakedownBrought(cb: ModerationNoticeCallbacks, pubkey: string, now: number = Date.now()): boolean {
     const brought = db.prepare(`SELECT tp.last_lift FROM agent_takedown_posts tp

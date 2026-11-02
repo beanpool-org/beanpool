@@ -23,6 +23,15 @@ index ebf87802160a201504a277fff47b7a3801c075b8..f2db030fc766a85cbd16591039ceba3b
              });
          }
      }
+@@ -377,7 +378,7 @@ public class MapView extends com.google.android.gms.maps.MapView implements Goog
+             Log.e("MapView", "Error during stop in onDetachedFromWindow: " + e.getMessage());
+         }
+
+-        savedFeatures = new ArrayList<>(features);
++        savedFeatures = new ArrayList<>(liveFeatures());
+         features.clear();
+         shouldRestorePadding = true;
+         removeView(attacherGroup);
 @@ -1165,25 +1166,21 @@ public class MapView extends com.google.android.gms.maps.MapView implements Goog
          this.handlePanDrag = handlePanDrag;
      }

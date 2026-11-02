@@ -43,7 +43,7 @@ const maps = vi.hoisted(() => ({
     /** What the community's area was drawn with, each time. */
     rings: [] as Array<Record<string, any>>,
 }));
-vi.mock('react-native-maps', () => ({ Polyline: (props: Record<string, any>) => { maps.rings.push(props); return null; } }));
+vi.mock('react-native-maps', () => ({ Polyline: (props: Record<string, any>) => { maps.rings.push(props); return createElement('div', { 'data-ring': '' }); } }));
 /** The map's own `sync_data_updated` listener. */
 const sync = vi.hoisted(() => ({ fire: () => {} }));
 /** Every off-screen capture: the slot's own element, and the file it "wrote". */
@@ -184,7 +184,8 @@ import { buildVariantList, EVENT_PIN, PIN_ANCHOR, pinCacheKey } from '../../comp
 import { POST_CATEGORIES, categoryEmoji } from '../../constants/categories';
 import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS } from '@beanpool/core';
 import { CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
-import { CLUSTER_CAP_ZOOM, LANDING_MARGIN_ZOOM, MARKER_Z, clusterZoomAt, clusterZoomOf, planBubbleTap, type MapRegion } from '../map-stack';
+import { CLUSTER_CAP_ZOOM, LANDING_MARGIN_ZOOM, MARKER_Z, clusterZoomAt, clusterZoomOf, mapRestOf, planBubbleTap, regionClearOfList, type ClusterIndex, type MapRegion } from '../map-stack';
+import { MapAreaRing } from '../../components/MapAreaRing';
 import { eventPinCard } from '../events';
 
 const NATIVE = join(__dirname, '..', '..');
@@ -773,6 +774,15 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             expect(uses('public void removeFeatureAt')).toContain('liveFeatures()');
         });
 
+        it('android: leaving keeps the list the pins are really in, or a map left before it was ready loses them all at the next tab change', () => {
+            const library = dirname(createRequire(__filename).resolve('react-native-maps/package.json'));
+            const java = readFileSync(join(library, 'android/src/main/java/com/rnmaps/maps/MapView.java'), 'utf8');
+            const leaving = java.slice(java.indexOf('protected void onDetachedFromWindow'), java.indexOf('private void attachLifecycleObserver'));
+            // That map's pins went into savedFeatures, and a copy of the empty `features` replaced them.
+            expect(leaving).toContain('savedFeatures = new ArrayList<>(liveFeatures());');
+            expect(leaving.indexOf('liveFeatures()')).toBeLessThan(leaving.indexOf('features.clear()'));
+        });
+
         it('lifts a bubble tapped low on the map clear of where the list comes up', async () => {
             // The map's first region is centred just north of this, and the bubble sits low on the view.
             const low = { lat: -28.5398 - 0.0922 * 0.4, lng: 153.4996 };
@@ -785,6 +795,120 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             const y = ((lifted.latitude - low.lat) / lifted.latitudeDelta + 0.5) * 640;
             expect(y).toBeLessThan(640 * (1 - STACK_LIST_SHARE));
             expect(lifted.latitudeDelta).toBe(0.0922);
+        });
+    });
+
+    describe('a view across the 180° line (Android reports it with a negative longitudeDelta)', () => {
+        /** What a phone at Byron reports for a view from 100°E to 153°W, about zoom 3 on 320 dp. */
+        const ACROSS = { latitude: AT.lat, longitude: AT.lng, latitudeDelta: 60, longitudeDelta: -253 };
+        const SHOWS = 107;
+        const hall = () => [eventIn('a', 2), eventIn('b', 3), eventIn('c', 4)];
+        const wait = async () => { await act(async () => { await new Promise((r) => setTimeout(r, STACK_REST_MS + 30)); }); await settle(2); };
+        const stopAcross = async (region: MapRegion = ACROSS) => { await land(region as unknown as Record<string, number>); await wait(); };
+        /** The map nudges itself once after its first posts, from the first region (map.tsx's loadPosts). */
+        const pastFirstNudge = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 520)); }); maps.moves = []; };
+        const expectAGoodRegion = (region: Record<string, number>) => {
+            for (const value of Object.values(region)) expect(Number.isFinite(value)).toBe(true);
+            expect(region.latitudeDelta).toBeGreaterThan(0);
+            expect(region.longitudeDelta).toBeGreaterThan(0);
+        };
+        /** A narrower view over Fiji, under the library's 40° test, so both the raw and the positive delta reach the same zoom. */
+        const FIJI = { latitude: -17.7, longitude: 178, latitudeDelta: 24, longitudeDelta: -330 };
+        const FIJI_POSITIVE = { ...FIJI, longitudeDelta: 30 };
+        const frame = { width: 320, height: 640 };
+        const pointsApart = [{ latitude: -17.7, longitude: 177.9 }, { latitude: -17.7, longitude: 178.1 }];
+        const realIndex = (...coords: Array<[number, number]>) => new Supercluster({ radius: 15, extent: 512, minZoom: 1, maxZoom: 20 }).load(coords.map(([lng, lat], i) => ({
+            type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [lng, lat] }, properties: { post: { id: `p${i}` } },
+        }))) as unknown as ClusterIndex;
+
+        // The timer's throw leaves the test behind: it reaches the process, so it is caught there to fail this test by name.
+        const throwsDuring = async (run: () => Promise<void>) => {
+            const thrown: unknown[] = [];
+            const keep = (e: unknown) => { thrown.push(e); };
+            process.prependListener('uncaughtException', keep);
+            try { await run(); } finally { process.removeListener('uncaughtException', keep); }
+            return thrown;
+        };
+
+        it('the library tests the raw delta, so this view reaches its zoom sum and not its 40° rule', async () => {
+            const { libraryHelpers } = await import('../../components/Map') as any;
+            expect(ACROSS.longitudeDelta + 360).toBe(SHOWS);
+            expect(clusterZoomAt(ACROSS, window320)).toBe(libraryHelpers.returnMapZoom(ACROSS, libraryHelpers.calculateBBox(ACROSS), 1));
+            expect(clusterZoomAt(ACROSS, window320)).not.toBe(clusterZoomAt({ ...ACROSS, longitudeDelta: SHOWS }, window320));
+        });
+
+        it('android: the map stopping there throws nothing, and the bubble is still drawn', async () => {
+            os.now = 'android';
+            posts.now = hall();
+            await drawMap();
+            expect(await throwsDuring(() => stopAcross())).toEqual([]);
+            expect(bubbles().map((b) => b.count)).toEqual([3]);
+            expect(heading()).toBeNull();
+        });
+
+        it('android: a tap on a bubble there zooms to a region the map can show, and the bubble parts', async () => {
+            os.now = 'android';
+            posts.now = [ev('south', AT.lat, AT.lng), ev('north', metresNorth(900), AT.lng)];
+            await drawMap();
+            await pastFirstNudge();
+            await stopAcross();
+            expect(bubbles().map((b) => b.count)).toEqual([2]);
+            await openBubble();
+            expect(heading()).toBeNull();
+            expect(maps.moves).toHaveLength(1);
+            expectAGoodRegion(maps.moves[0]);
+            await land(maps.moves[0]);
+            expect(bubbles()).toEqual([]);
+        });
+
+        it('android: a tap that lands on a hidden pin there opens the stack\'s list', async () => {
+            os.now = 'android';
+            posts.now = hall();
+            await drawMap();
+            await stopAcross();
+            await act(async () => { markerAt(AT)!.click(); });
+            await settle(2);
+            expect(heading()).toBe('3 at this spot');
+            expect(host.textContent).not.toContain('View event');
+        });
+
+        it('android: lifting a stack clear of the list keeps the view: a negative delta swaps west and east and shows the Atlantic', async () => {
+            os.now = 'android';
+            posts.now = hall();
+            await drawMap();
+            await pastFirstNudge();
+            await stopAcross({ ...ACROSS, latitude: AT.lat + 20 });
+            await openBubble();
+            expect(heading()).toBe('3 at this spot');
+            expect(maps.moves).toHaveLength(1);
+            expectAGoodRegion(maps.moves[0]);
+            expect(maps.moves[0].longitude).toBe(AT.lng);
+            expect(maps.moves[0].longitudeDelta).toBe(SHOWS);
+        });
+
+        it('plans the same landing as the same view with a positive delta', () => {
+            // Apart east to west only, so nothing but the longitude can say how far to zoom.
+            const plan = planBubbleTap(9, pointsApart, FIJI, window320);
+            expect(plan).toEqual(planBubbleTap(9, pointsApart, FIJI_POSITIVE, window320));
+            expectAGoodRegion((plan as { region: MapRegion }).region as unknown as Record<string, number>);
+            expect(clusterZoomOf(FIJI, window320)).toBe(clusterZoomOf(FIJI_POSITIVE, window320));
+        });
+
+        it('places a bubble and a card where the same view with a positive delta does', () => {
+            const index = realIndex([178, -17.7], [178.0001, -17.7]);
+            const card = { latitude: -16, longitude: 170 };
+            const rest = mapRestOf(index, FIJI, window320, frame, false, card);
+            expect(rest).toEqual(mapRestOf(index, FIJI_POSITIVE, window320, frame, false, card));
+            expect(rest.bubbles).toHaveLength(1);
+            expect(rest.bubbles[0].x).toBeCloseTo(frame.width / 2, 2);
+            expect(rest.card!.x).toBeGreaterThan(0);
+        });
+
+        it('lifts to the same region as the same view with a positive delta', () => {
+            const stack = { latitude: FIJI.latitude - 10, longitude: FIJI.longitude };
+            const lifted = regionClearOfList(FIJI, frame, stack);
+            expect(lifted).not.toBeNull();
+            expect(lifted).toEqual(regionClearOfList(FIJI_POSITIVE, frame, stack));
         });
     });
 
@@ -981,6 +1105,25 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
                 expect(onPress).toBeUndefined();
                 expect(fillColor).toBeUndefined();
                 expect(bubbles().map((b) => b.count)).toEqual([3]);
+            });
+
+            it.each(['android', 'ios'] as const)('%s: is on the map once, though the library draws what it holds twice', async (platform) => {
+                os.now = platform;
+                await drawWithArea();
+                expect(host.querySelectorAll('[data-ring]')).toHaveLength(1);
+            });
+
+            it('draws nothing at the library\'s opacity 0, draws with none given, and runs the same hooks either way', async () => {
+                const area = { lat: AT.lat, lng: AT.lng, radiusKm: 5 };
+                const fails = vi.spyOn(console, 'error').mockImplementation(() => {});
+                const render = (opacity?: number) => act(async () => { root.render(createElement(MapAreaRing, { area, darkMap: false, opacity })); });
+                await render(0);
+                expect(host.querySelectorAll('[data-ring]')).toHaveLength(0);
+                await render();
+                expect(host.querySelectorAll('[data-ring]')).toHaveLength(1);
+                await render(0);
+                expect(host.querySelectorAll('[data-ring]')).toHaveLength(0);
+                expect(fails).not.toHaveBeenCalled();
             });
 
             it('wears the map\'s colour, not the app\'s: the moon darkens the map in a light app, and the ring with it', async () => {

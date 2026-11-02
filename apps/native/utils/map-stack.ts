@@ -28,6 +28,13 @@ export interface MapRegion { latitude: number; longitude: number; latitudeDelta:
 export interface WindowSize { width: number; height: number }
 export interface MapPoint { latitude: number; longitude: number }
 
+/**
+ * How many degrees of longitude a region shows. Android reports a view across the 180° line with a negative delta (its
+ * OnRegionChangeEvent subtracts west from east, with no wrap), and a member at Byron reaches one at about zoom 3. Sent back to
+ * the map, a negative delta swaps west and east (MapManager.java) and shows the other side of the world.
+ */
+const lngSpanOf = (region: MapRegion) => (region.longitudeDelta < 0 ? region.longitudeDelta + 360 : region.longitudeDelta);
+
 const TILE = 256;
 const mercatorY = (lat: number) => {
     const clamped = Math.max(-85.05112878, Math.min(85.05112878, lat));
@@ -39,7 +46,7 @@ const mercatorY = (lat: number) => {
  * window by geo-viewport). Takes the window the library took: read once, when the app loaded.
  */
 export function clusterZoomOf(region: MapRegion, win: WindowSize): number {
-    const boxWidthAtZoom0 = (TILE * 4 * region.longitudeDelta) / 360;
+    const boxWidthAtZoom0 = (TILE * 4 * lngSpanOf(region)) / 360;
     const north = region.latitude + 2 * region.latitudeDelta;
     const south = region.latitude - 2 * region.latitudeDelta;
     const boxHeightAtZoom0 = (TILE * (mercatorY(north) - mercatorY(south))) / (2 * Math.PI);
@@ -52,7 +59,7 @@ function fitZoomOf(points: readonly MapPoint[], region: MapRegion, win: WindowSi
     const lngs = points.map((p) => p.longitude);
     const latSpan = Math.max(...lats) - Math.min(...lats);
     const lngSpan = Math.max(...lngs) - Math.min(...lngs);
-    const shrink = Math.max(latSpan / region.latitudeDelta, lngSpan / region.longitudeDelta) * FIT_ROOM;
+    const shrink = Math.max(latSpan / region.latitudeDelta, lngSpan / lngSpanOf(region)) * FIT_ROOM;
     return shrink > 0 ? clusterZoomOf(region, win) - Math.log2(shrink) : Infinity;
 }
 
@@ -74,7 +81,7 @@ export function planBubbleTap(splitsAt: number, points: readonly MapPoint[], cur
             latitude: (Math.max(...lats) + Math.min(...lats)) / 2,
             longitude: (Math.max(...lngs) + Math.min(...lngs)) / 2,
             latitudeDelta: current.latitudeDelta * shrink,
-            longitudeDelta: current.longitudeDelta * shrink,
+            longitudeDelta: lngSpanOf(current) * shrink,
         },
     };
 }
@@ -105,7 +112,7 @@ export interface MapBubble { cluster: ClusterFeature; leaves: LeafFeature[] }
 
 /** The bubbles the library is drawing for this region, from its own index: the same box, at the same zoom. */
 function bubblesOf(index: ClusterIndex, region: MapRegion, win: WindowSize): MapBubble[] {
-    const lngSpan = region.longitudeDelta < 0 ? region.longitudeDelta + 360 : region.longitudeDelta;
+    const lngSpan = lngSpanOf(region);
     const bbox: [number, number, number, number] = [
         region.longitude - lngSpan * 2, region.latitude - region.latitudeDelta * 2,
         region.longitude + lngSpan * 2, region.latitude + region.latitudeDelta * 2,
@@ -115,7 +122,10 @@ function bubblesOf(index: ClusterIndex, region: MapRegion, win: WindowSize): Map
         .map((cluster) => ({ cluster, leaves: index.getLeaves(cluster.properties.cluster_id!, Infinity) }));
 }
 
-/** The clustering zoom the library settles on for a region: its minZoom past 40° across, else clusterZoomOf, floored. */
+/**
+ * The clustering zoom the library settles on for a region: its minZoom past 40° across, else clusterZoomOf, floored. The 40
+ * reads the raw delta because the library's does, so a wide view across the 180° line goes on to clusterZoomOf there too.
+ */
 export function clusterZoomAt(region: MapRegion, win: WindowSize): number {
     return region.longitudeDelta >= 40 ? 1 : Math.max(0, Math.min(20, Math.floor(clusterZoomOf(region, win))));
 }
@@ -128,7 +138,7 @@ export function bubbleHolding(index: ClusterIndex, postId: string, region: MapRe
 /** Where a point sits in a view showing this region, in px from its top left. */
 function pointIn(region: MapRegion, frame: MapFrame, longitude: number, latitude: number) {
     return {
-        x: ((longitude - region.longitude) / region.longitudeDelta + 0.5) * frame.width,
+        x: ((longitude - region.longitude) / lngSpanOf(region) + 0.5) * frame.width,
         y: ((region.latitude - latitude) / region.latitudeDelta + 0.5) * frame.height,
     };
 }
@@ -148,7 +158,7 @@ export function mapRestOf(index: ClusterIndex, region: MapRegion, win: WindowSiz
 /** The region that lifts a tapped bubble clear of the list; null when it is already in view above it. */
 export function regionClearOfList(region: MapRegion, frame: MapFrame, stack: MapPoint): MapRegion | null {
     const lift = stackLift(pointIn(region, frame, stack.longitude, stack.latitude).y, frame);
-    return lift > 0 ? { ...region, latitude: region.latitude - (lift / frame.height) * region.latitudeDelta } : null;
+    return lift > 0 ? { ...region, longitudeDelta: lngSpanOf(region), latitude: region.latitude - (lift / frame.height) * region.latitudeDelta } : null;
 }
 
 /**

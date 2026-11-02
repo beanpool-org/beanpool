@@ -558,7 +558,7 @@ export default function PublicProfileScreen() {
 
         // The device's result now, waiting for every other community on the phone (utils/working-style.ts).
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
-        await keepQuizResult(quizResult, identity.publicKey, url);
+        await keepQuizResult(quizResult, identity.publicKey, url).catch((e) => console.warn('[Archetype] Device copy best effort:', e));
 
         // A guest visit keeps it on the phone: the member isn't in that community, so nothing goes to it.
         if (!url || await isGuestNode(url).catch(() => true)) return;

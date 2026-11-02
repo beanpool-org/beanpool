@@ -253,28 +253,52 @@ async function main() {
                     await sleep(remaining + 20);
                 }
             };
+            const handle429 = async (res: { status: number; body: any; retryAfter: number }): Promise<boolean> => {
+                if (!/from your network/.test(res.body.error || '')) return false;
+                waits.push(res.retryAfter);
+                await waitOutClosure();
+                return true;
+            };
             while (waits.length < 2 && statuses.length < 20) {
                 const t0 = Date.now();
-                const r = await send();
-                statuses.push(r.status);
-                if (r.status === 401) took401.push(Date.now() - t0);
-                if (r.status === 429) {
-                    if (!/from your network/.test(r.body.error || '')) break;
-                    waits.push(r.retryAfter);
-                    await waitOutClosure();
-                } else if (r.status === 401) {
+                const reqPromise = send();
+                let probeResult: { status: number; body: any; retryAfter: number } | null = null;
+                let reqSettled = false;
+                reqPromise.finally(() => { reqSettled = true; });
+
+                // Option C: When a wrong code engages or extends closure, the server tarpit sleeps (up to 5s)
+                // before returning 401. To avoid racing the closure expiration under heavy CI load or scheduling
+                // delays, dispatch the HTTP probe concurrently while the request is held in the tarpit,
+                // asserting the server returns real HTTP 429 over the wire.
+                while (!reqSettled) {
                     const closedUntil = sourceClosedUntil(key);
-                    // If this failure closed the brake and the closure is still active, verify the server returns 429:
                     if (closedUntil > Date.now() && closedUntil > lastClosedUntil) {
                         lastClosedUntil = closedUntil;
-                        const probe = await send();
-                        statuses.push(probe.status);
-                        if (probe.status === 429) {
-                            if (!/from your network/.test(probe.body.error || '')) break;
-                            waits.push(probe.retryAfter);
-                            await waitOutClosure();
-                        }
+                        probeResult = await send();
+                        break;
                     }
+                    await sleep(10);
+                }
+
+                const r = await reqPromise;
+                statuses.push(r.status);
+                if (r.status === 401) took401.push(Date.now() - t0);
+
+                if (!probeResult) {
+                    const closedUntil = sourceClosedUntil(key);
+                    if (closedUntil > Date.now() && closedUntil > lastClosedUntil) {
+                        lastClosedUntil = closedUntil;
+                        probeResult = await send();
+                    }
+                }
+
+                const brakedResponse = probeResult ?? (r.status === 429 ? r : null);
+                if (probeResult) {
+                    statuses.push(probeResult.status);
+                    assert(probeResult.status === 429, `${label}: concurrent probe during closure returned ${probeResult.status}, expected 429`);
+                }
+                if (brakedResponse && brakedResponse.status === 429) {
+                    if (!await handle429(brakedResponse)) break;
                 }
             }
             const checkedBeforeBrake = statuses.indexOf(429);

@@ -322,13 +322,15 @@ async function hops(browser) {
     const runs = report.hops = {};
     for (const width of [1280, 1600]) for (const [kind, nextAnswer] of [
         ['fresh answer identical to the kept one', (i) => answer({ listings: 4, events: 2, i })],
-        ['fresh answer with one more listing each reload', (i) => answer({ listings: 4 + (i % 2 ? 1 : 2), events: 2 })],
+        // 5, 6, 7, 8 listings, then back to 4, and round again: a fresh answer one listing longer on eight reloads in ten.
+        ['fresh answer one listing longer than the kept one', (i) => answer({ listings: 4 + ((i + 1) % 5), events: 2 })],
     ]) {
         console.log(`\nColumn hops at ${width}: ${kind}`);
         const { context, page, node } = await open(browser, { width });
         let hopped = 0;
         let reloadsWithHop = 0;
         const perReload = [];
+        const who = {};
         for (let i = 0; i < 10; i += 1) {
             node.held = new Promise((release) => { node.release = release; });
             await page.reload({ waitUntil: 'load' });
@@ -345,11 +347,12 @@ async function hops(browser) {
             const fresh = columnOf(await readBoxes(page));
             const moved = Object.keys(fresh).filter(id => kept[id] && kept[id] !== fresh[id]);
             perReload.push(moved.length);
+            for (const id of moved) who[id] = (who[id] ?? 0) + 1;
             hopped += moved.length;
             if (moved.length) reloadsWithHop += 1;
         }
-        runs[`${width}: ${kind}`] = { reloads: 10, cards: Object.keys(columnOf(await readBoxes(page))).length, hops: hopped, reloadsWithHop, perReload };
-        console.log(`  ${hopped} hops over 10 reloads; per reload ${perReload.join(' ')}`);
+        runs[`${width}: ${kind}`] = { reloads: 10, cards: Object.keys(columnOf(await readBoxes(page))).length, hops: hopped, reloadsWithHop, perReload, who };
+        console.log(`  ${hopped} hops over 10 reloads, ${reloadsWithHop} reloads with a hop; per reload ${perReload.join(' ')}; ${JSON.stringify(who)}`);
         await context.close();
     }
 }

@@ -3238,19 +3238,22 @@ describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layo
 
     let width = 0;
     let heights: Record<string, number | (() => number)> = {};
+    let cardWidths: Record<string, () => number> = {};
     let spies: { mockRestore(): void }[] = [];
     let offsetReads = 0;
     let commits = 0;
 
     beforeEach(() => {
         width = 800;
+        cardWidths = {};
         offsetReads = 0;
         commits = 0;
         WatchingObserver.live.clear();
         vi.stubGlobal('ResizeObserver', WatchingObserver);
         spies = [
             vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
-                return this.getAttribute('data-testid') === 'home-page' ? width : 0;
+                const id = this.getAttribute('data-testid') ?? '';
+                return id === 'home-page' ? width : cardWidths[id]?.() ?? 0;
             }),
             vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
                 offsetReads += 1;
@@ -3384,6 +3387,26 @@ describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layo
         expect(card('tips').style.gridRow).toBe('55 / span 54');
     });
 
+    it('every packed child is watched: the fewer-cards note too, by its own observer and before the paint', async () => {
+        heights = { ...CARDS, 'home-fewer': 44 };
+        nodeV2(answer({}, { needs: NEEDS }), null);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const fewer = await screen.findByTestId('home-fewer');
+        await screen.findByTestId('home-card-community');
+        settle();
+        expect(fewer.parentElement).toBe(screen.getByTestId('home-grid'));
+        expect(fewer.style.gridRow).toBe('30 / span 15');
+
+        heights['home-fewer'] = 84;
+        settle();
+        expect(fewer.style.gridRow).toBe('30 / span 25');
+
+        heights['home-fewer'] = 64;
+        width = 1400;
+        Array.from(WatchingObserver.live).find(ro => Array.from(ro.size.keys()).some(el => el.getAttribute('data-testid') === 'home-page'))!.deliver();
+        await waitFor(() => expect(fewer.style.gridRow).toBe('30 / span 20'));
+    });
+
     it('the note stands on the packed row, not 4 px above it (no gap over 20 px under it)', async () => {
         await land();
         expect(screen.getByTestId('home-hint').style.marginTop).toBe('0px');
@@ -3397,13 +3420,15 @@ describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layo
     it('a change of columns reads every card before the paint: no card has to report for the new widths to land', async () => {
         await land({ needs: NEEDS }, { ...CARDS });
         heights['home-card-tips'] = 260;
+        heights['home-hint'] = 84;
         width = 1400;
         // Only the page's own observer has told the page; the cards' observers have not run.
         const page = Array.from(WatchingObserver.live).find(ro => Array.from(ro.size.keys()).some(el => el.getAttribute('data-testid') === 'home-page'))!;
         act(() => { page.deliver(); });
 
         expect(screen.getByTestId('home-page').dataset.columns).toBe('3');
-        expect(card('tips').style.gridRow).toBe('45 / span 69');
+        expect(screen.getByTestId('home-hint').style.gridRow).toBe('30 / span 25');
+        expect(card('tips').style.gridRow).toBe('55 / span 69');
     });
 
     it('a window resize settles: one commit a step at most, and nothing after it stops', async () => {
@@ -3434,6 +3459,23 @@ describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layo
         expect(rounds).toBeLessThan(20);
         const span = Number(card('tips').style.gridRow.split('span ')[1]);
         expect(span).toBe(Math.ceil((400 + 16) / 4));
+        const commitsThen = commits;
+        expect(settle()).toBe(0);
+        expect(commits).toBe(commitsThen);
+    });
+
+    it('a card crossing `wide` as the scrollbar comes and goes, through its real width: bounded the same way', async () => {
+        // Tall page: the scrollbar, 470 px, rows. Short page: no scrollbar, 490 px, tiles, which here are the taller.
+        const pageIsTall = () => Number(card('community').style.gridRow.split(' ')[0]) > 160;
+        cardWidths = { 'home-card-tips': () => (pageIsTall() ? 470 : 490) };
+        await land({ needs: NEEDS }, { ...CARDS, 'home-card-tips': () => (card('tips').dataset.cardWide === 'true' ? 400 : 200) });
+
+        const rounds = settle();
+
+        expect(rounds).toBeLessThan(40);
+        expect(Number(card('tips').style.gridRow.split('span ')[1])).toBe(Math.ceil((400 + 16) / 4));
+        // It stood at the taller height, so the page stays tall, the scrollbar stays and the card stays narrow: a gap at worst.
+        expect(card('tips').dataset.cardWide).toBe('false');
         const commitsThen = commits;
         expect(settle()).toBe(0);
         expect(commits).toBe(commitsThen);

@@ -1697,6 +1697,25 @@ describe('the door on a copy', () => {
             expect(w.doorSends).toEqual([]);
         });
 
+        it("a wait asked of an On is not charged to a later Off", async () => {
+            const w = world();
+            const phone = w.device();
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, false);
+            w.doorAnswers(busy(429, '3000'));
+            expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('later');
+            w.doorAnswers(null);
+            await phone.tendCopies(identity, w.deps);
+            expect(up(w).takesQuestions).toBe(true);
+            w.doorAnswers(busy(503));
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+            w.doorSends.length = 0;
+            w.doorAnswers(null);
+            const at = Date.now();
+            expect(await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_FIRST_MS)).toBeNull();
+            expect(w.doorSends).toHaveLength(1);
+            expect(up(w).takesQuestions).toBe(false);
+        });
+
         it('a wait global asked for holds once: the next no-answer goes by the back-off', async () => {
             const w = world();
             const phone = w.device();

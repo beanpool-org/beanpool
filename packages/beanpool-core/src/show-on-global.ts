@@ -596,7 +596,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         const on = !!pair.questions;
         const answer = await withTimeout(async (signal) => {
             const res = await deps.post(deps.global, QUESTIONS_PATH, { id: pair.copyId, on }, identity, signal);
-            offWaitAsked = Math.max(offWaitAsked, waitAskedOf(res));
+            // An Off's tries clear this; an On's wait left here would hold the next Off for no reason of its own.
+            if (!on) offWaitAsked = Math.max(offWaitAsked, waitAskedOf(res));
             return answerOf(res);
         });
         if (answer === 'later') return 'later';

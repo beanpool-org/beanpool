@@ -191,6 +191,11 @@ async function main(): Promise<void> {
     const off = await exceptions(ada);
     assert(off.status === 409 && off.body?.code === 'not_known', `no exceptions while the community doesn't confirm members (${show(off)})`);
     assert(logRows() === 0, 'and nothing is logged');
+    const meOff = await call('GET', kim, '/api/community/me');
+    assert(meOff.status === 200 && meOff.body?.confirmed === false && meOff.body?.confirmedAt === null && !('debtLinePct' in (meOff.body?.features ?? {})) && !('quietDays' in (meOff.body?.features ?? {})),
+        `with the dial off the rule reaches nobody: a member confirmed against the names list isn't told it does (${show(meOff)})`);
+    const ruleOff = await call('GET', null, '/api/community/known-rule');
+    assert(ruleOff.status === 200 && Object.keys(ruleOff.body ?? {}).join() === 'known' && ruleOff.body?.known === false, `and the join screen reads no rule (${show(ruleOff)})`);
 
     // ── 3. the dial on ────────────────────────────────────────────────────────────────────────────
     console.log('── 3. the dial on ──');
@@ -395,9 +400,13 @@ async function main(): Promise<void> {
     assert((await listed()).get(vic.pk)?.reasons?.join() === 'stepped_back_owing', 'a new confirmation waiting for a second admin changes nothing yet: she stays listed as stepped back');
     const vicNew = confirmedRow(vic).id;
     db.prepare("UPDATE confirmations SET seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), seconded_by = ? WHERE id = ?").run(bea.pk, vicNew);
-    const vicAgain = (await listed()).get(vic.pk);
-    assert(getBalance(vic.pk).floor === -1200 && !vicAgain?.reasons?.includes('stepped_back_owing'), `confirmed again, she holds the known floor and is read as any confirmed member (${JSON.stringify(vicAgain)})`);
+    assert(getBalance(vic.pk).floor === -1200, `confirmed again, she holds the known floor (${getBalance(vic.pk).floor})`);
     assert((await call('GET', vic, '/api/community/me')).body?.confirmedAt === confirmedRow(vic).seconded_at, 'her confirmedAt is new, so her app shows the card again');
+    // Her limit set under what she owes, so that "back within it" can't take the old step-back off the list on its own.
+    db.prepare("INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, 100, 0, ?)").run(vic.pk, ada.pk);
+    const vicLines = ((await exceptions(ada)).body?.exceptions ?? []).filter((e: any) => e.memberPubkey === vic.pk);
+    assert(getBalance(vic.pk).floor === -300 && vicLines.length === 1 && !vicLines[0].reasons.includes('stepped_back_owing'),
+        `owing past even that, she is one line, read as confirmed: the step-back before it is over (${JSON.stringify(vicLines)})`);
     db.prepare("UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoked_by = ?, revoke_reason = 'admin' WHERE id = ?").run(ada.pk, vicNew);
     assert(!(await listed()).has(vic.pk), 'an admin revoking that one ends it: her older step-back is not read again');
 
@@ -411,10 +420,10 @@ async function main(): Promise<void> {
     const mae = makeMember('Maelys');
     const maeEntry = confirm(mae, ada);
     assert((await stepBack(mae)).status === 200, 'Maelys steps back');
-    confirm(mae, ada, 0);
+    const maeLater = confirm(mae, ada, 0);
     db.prepare("UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = 'admin' WHERE member_pubkey = ? AND revoked_at IS NULL").run(mae.pk);
     dropNamesListHoldOf(mae.pk, 'account_deleted', -350);
-    assert(!db.prepare('SELECT 1 FROM names_debts WHERE entry_id = ?').get(maeEntry), 'but an older step-back behind an admin\'s later revoke is no reason for a note, as for any revoked member');
+    assert(!db.prepare('SELECT 1 FROM names_debts WHERE entry_id IN (?, ?)').get(maeEntry, maeLater), 'but an older step-back behind an admin\'s later revoke is no reason for a note, on either entry, as for any revoked member');
 
     // A work-off ends with the step-back, as with an admin's revoke: the debt stays open on the entry, with nobody repaying.
     const wyn = makeMember('Wynifred');

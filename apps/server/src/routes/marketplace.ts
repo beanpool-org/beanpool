@@ -59,7 +59,7 @@ import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet,
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 import { setReadCaching, PHOTO_EDGE_MAX_S } from '../guest-cache.js';
-import { FREE_TAGS_MAX, SEARCH_TAGS_MAX, TAG_ID_PATTERN, freeTagRefusal, freeTagStored, word } from '@beanpool/core';
+import { FREE_TAGS_MAX, POST_ID_TAKEN_CODE, SEARCH_TAGS_MAX, TAG_ID_PATTERN, freeTagRefusal, freeTagStored, word } from '@beanpool/core';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -859,7 +859,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         if (respondProfileRefusal(ctx, e)) return;
         if (respondShopRefusal(ctx, e)) return;
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, word('Failed to create post')) };
+        ctx.body = { error: memberErrorText(e, word('Failed to create post')), ...(e?.code === POST_ID_TAKEN_CODE ? { code: POST_ID_TAKEN_CODE } : {}) };
     }
 });
 

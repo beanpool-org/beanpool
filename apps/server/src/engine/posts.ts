@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -569,7 +569,9 @@ export function createPost(
     // make is. An id that a strip, a cut or a disk that folds case turned into another post's put its photos under that
     // post's keys, and its edit or delete then took the other post's photos (review FABLE-sec-images, HIGH).
     if (id) {
-        if (typeof id !== 'string' || idNamesMoney(id) || db.prepare('SELECT 1 FROM posts WHERE id = ?').get(id)) throw new Error(POST_ID_TAKEN_ERROR);
+        // The code is what a device reads (@beanpool/core show-on-global.ts): a row is never deleted, and a removed listing reads
+        // as nothing by id, so a refused create is the only word it gets that the id is held.
+        if (typeof id !== 'string' || idNamesMoney(id) || db.prepare('SELECT 1 FROM posts WHERE id = ?').get(id)) throw Object.assign(new Error(POST_ID_TAKEN_ERROR), { code: POST_ID_TAKEN_CODE });
         if (!isKeySafeId(id) || id !== id.toLowerCase()) throw new Error(POST_ID_SHAPE_ERROR);
     }
 

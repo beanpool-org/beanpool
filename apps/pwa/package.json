@@ -15,6 +15,7 @@
     "app-csp-check": "node e2e/app-csp-check.mjs",
     "web-join-check": "node e2e/web-join-check.mjs",
     "global-door-check": "node e2e/global-door-check.mjs",
+    "global-tick-check": "node e2e/global-tick-check.mjs",
     "lobby-shots": "node e2e/lobby-shots.mjs",
     "home-check": "node e2e/home-check.mjs",
     "dark-contrast-check": "node e2e/dark-contrast-check.mjs",

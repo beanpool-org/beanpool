@@ -272,7 +272,7 @@ function ownAddressLive(target: OwnTarget, out: (s: string) => void): void {
     out(`✓ ${target.at} reaches this server, with a certificate phones trust.`);
     if (target.kind !== 'ip') return;
     out(`Members reach this community by this server's number, ${target.host}. If the server or its number changes, each member`);
-    out('will have to type the new one. A name follows the community: add one later in Settings → Public Address.');
+    out('will have to type the new one. A name follows the community: add one later in Settings → Addresses.');
 }
 
 /** What the owner is told when the wait for an own address ended without its certificate: why, and what to do next. */

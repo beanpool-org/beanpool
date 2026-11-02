@@ -158,11 +158,12 @@ export function canBecomeMain(host: string, primary: string | null | undefined):
 /**
  * Whether a row offers Make main. A hard-coded address is set by hand and no claim of it is held (design §6), and a name the
  * project stopped is only refused, or, paused, stored and left dark. The record says so whatever the check found: `stopped`
- * covers a former name and a stale check, which the step doesn't; the step covers a server before the record's flag.
- * A pause that isn't the project's stays: there Make main is the heal.
+ * covers a former name and a stale check, which the step doesn't; the step covers a server before the record's flag. A name
+ * another key holds is refused too, once a code is spent, and Add an address still reaches it if that reading is out of date.
+ * A pause that isn't the project's stays: there Make main is the heal. So does a released name: there it is the take-back.
  */
 export function offersMakeMain(a: AppAddress, primary: string | null | undefined): boolean {
-    return a.source !== 'env' && !a.stopped && a.reach?.step !== 'stopped' && canBecomeMain(a.address, primary);
+    return a.source !== 'env' && !a.stopped && a.reach?.step !== 'stopped' && a.standing?.registrarSays !== 'other' && canBecomeMain(a.address, primary);
 }
 
 /** A name as typed or pasted (a whole host, capitals, spaces): the label the claim takes. */

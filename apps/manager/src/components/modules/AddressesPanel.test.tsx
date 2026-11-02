@@ -809,6 +809,9 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         // Hard-coded: held by nobody's key here, set by hand, a BeanPool name or not.
         expect(offersMakeMain(row({ source: 'env' }), 'byron.beanpool.org')).toBe(false);
         expect(offersMakeMain(row({ source: 'env', address: 'coop.example.net' }), 'beans.example.org')).toBe(false);
+        // Another key holds it: 409 "name taken", after the code. Released stays: there Make main is the take-back.
+        expect(offersMakeMain(row({ standing: { state: 'at-risk', registrarSays: 'other' } }), 'byron.beanpool.org')).toBe(false);
+        expect(offersMakeMain(row({ standing: { state: 'at-risk', registrarSays: 'released' } }), 'byron.beanpool.org')).toBe(true);
         // What the server can't do stays out too.
         expect(offersMakeMain(row({ address: '203.0.113.5', source: 'owner' }), 'byron.beanpool.org')).toBe(false);
     });

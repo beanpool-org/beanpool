@@ -22,8 +22,9 @@ export async function postPhotoOf(uri: string): Promise<string | null> {
     return out.base64 ? `data:image/jpeg;base64,${out.base64}` : null;
 }
 
-/** A photo a community already holds, as a new post sends it, or why it can't be had: `gone` for good, or `later`. */
-export type FetchedPhoto = { photo: string } | { failed: 'gone' | 'later' };
+import type { FetchedPhoto } from '@beanpool/core';
+
+export type { FetchedPhoto };
 
 /** How long a community has to give one photo. */
 const FETCH_PHOTO_TIMEOUT_MS = 20_000;

@@ -39,6 +39,7 @@ export * from './geo.js';
 export * from './member-area-words.js';
 export * from './community-card.js';
 export * from './event-copy.js';
+export * from './show-on-global.js';
 export * from './peek-ticket.js';
 export * from './find-community.js';
 export * from './place-circle.js';

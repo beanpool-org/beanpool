@@ -196,6 +196,8 @@ export function useRequestPreviews(): RequestPreviews {
 interface ListProps {
     /** What waits on the global community, and where (lib/show-on-global.ts). Their cards are there: this row is the way. */
     onGlobal?: { count: number; href: string } | null;
+    /** The member has taken the card to global, where what they answer changes the count. */
+    onGoToGlobal?: () => void;
     entries: DmRequestEntry[];
     count: number;
     identity: BeanPoolIdentity;
@@ -220,7 +222,7 @@ interface ListProps {
  * Decline all when more than five wait. Each card's lines are read once per request (by its id and time) while the page is
  * open, three at a time.
  */
-export function MessageRequestsList({ entries, count, onGlobal, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport, onBack }: ListProps) {
+export function MessageRequestsList({ entries, count, onGlobal, onGoToGlobal, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport, onBack }: ListProps) {
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
     const { previews, setPreviews, asked } = store;
     const keyOf = (e: DmRequestEntry) => `${e.id}@${e.request.at}`;
@@ -278,7 +280,7 @@ export function MessageRequestsList({ entries, count, onGlobal, identity, store,
                 <span aria-hidden="true">‹ </span>{t('Back to chats')}
             </button>
             {onGlobal && (
-                <a data-testid="message-requests-on-global" href={onGlobal.href} target="_blank" rel="noopener noreferrer" style={{
+                <a data-testid="message-requests-on-global" href={onGlobal.href} target="_blank" rel="noopener noreferrer" onClick={onGoToGlobal} style={{
                     display: 'block', minHeight: '44px', padding: '1rem', marginBottom: '0.75rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
                     borderRadius: '1rem', color: 'var(--text-primary)', fontWeight: 600, textDecoration: 'none', overflowWrap: 'anywhere',
                 }}>

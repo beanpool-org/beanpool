@@ -258,6 +258,9 @@ function ChatPhotoShown({ uri, failed, onOpen }: { uri: string | null; failed: b
     );
 }
 
+/** A tab flicked back and forth asks global at most this often (the phone's ASK_EVERY_MS, apps/native utils/global-requests.ts). */
+const ASK_GLOBAL_EVERY_MS = 5 * 60 * 1000;
+
 export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
@@ -265,10 +268,31 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [requests, setRequests] = useState<{ count: number; conversations: DmRequestEntry[] } | null>(null);
     // Requests waiting on the global community for a member who takes questions there (lib/show-on-global.ts): behind the same row.
     const [onGlobal, setOnGlobal] = useState<{ count: number; href: string } | null>(null);
+    // When global was last asked. The card opens global in a new tab and this page stays up, so what the member answers there is
+    // heard when the tab comes back. Going to global lets go of this, or a quick answer would wait out the 5 minutes.
+    const askedGlobalAt = useRef(0);
     useEffect(() => {
         let gone = false;
-        void requestsWaitingOnGlobal(identity).then((found) => { if (!gone) setOnGlobal(found); });
-        return () => { gone = true; };
+        let shown: { count: number; href: string } | null = null;
+        let newest = 0;
+        const ask = () => {
+            const asking = ++newest;
+            askedGlobalAt.current = Date.now();
+            void requestsWaitingOnGlobal(identity, shown).then((found) => {
+                if (gone || asking !== newest) return;
+                shown = found;
+                setOnGlobal(found);
+            });
+        };
+        const tabBack = () => {
+            if (document.visibilityState === 'visible' && Date.now() - askedGlobalAt.current >= ASK_GLOBAL_EVERY_MS) ask();
+        };
+        ask();
+        document.addEventListener('visibilitychange', tabBack);
+        return () => {
+            gone = true;
+            document.removeEventListener('visibilitychange', tabBack);
+        };
     }, [identity]);
     // Their cards' lines as read, kept here so a chat opened from a card and Back reads none of them again.
     const requestPreviews = useRequestPreviews();
@@ -3457,6 +3481,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     entries={requests?.conversations ?? []}
                     count={requestCount}
                     onGlobal={onGlobal}
+                    onGoToGlobal={() => { askedGlobalAt.current = 0; }}
                     identity={identity}
                     store={requestPreviews}
                     avatar={renderAvatar}

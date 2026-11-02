@@ -1,8 +1,6 @@
 import { archetypeIsNewer, archetypeToCarry, parseArchetype, publicArchetype, type QuizResult } from '@beanpool/core';
-import * as SQLite from 'expo-sqlite';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { buildSignedHeaders } from './crypto';
-import { loadIdentity } from './identity';
 import { fetchMembership } from './membership-probe';
 import { plainOriginOf } from './node-url';
 import { clearGuestNode, getDatabaseFilenameForNode, getSavedNodes, isGuestNode } from './nodes';
@@ -49,8 +47,12 @@ export async function adoptNewerRowIntoDevice(publicKey: string, rowArchetype: s
  * Safe to run twice; a tie changes nothing.
  */
 export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> {
-    const identity = await loadIdentity().catch(() => null);
-    const publicKey = explicitKey ?? identity?.publicKey;
+    let publicKey = explicitKey;
+    if (!publicKey) {
+        const { loadIdentity } = await import('./identity');
+        const identity = await loadIdentity().catch(() => null);
+        publicKey = identity?.publicKey;
+    }
     if (!publicKey) return;
 
     const nodes = await getSavedNodes();
@@ -75,6 +77,7 @@ export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> 
         const filename = getDatabaseFilenameForNode(node.url);
         let handle: any = null;
         try {
+            const SQLite = await import('expo-sqlite');
             handle = await SQLite.openDatabaseAsync(filename, { useNewConnection: true });
             await handle.execAsync('PRAGMA busy_timeout = 30000;');
             const row = await handle.getFirstAsync(

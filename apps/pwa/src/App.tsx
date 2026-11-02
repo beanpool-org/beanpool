@@ -35,7 +35,6 @@ import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
 import { webAppBehindServer } from './lib/app-version';
 import { retryPendingReports, startBlocklist } from './lib/blocklist';
-import { reconcileWorkingStyleAtOpen } from './lib/working-style';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 // The tools' covered page is its own chunk, as each tool is (tools/index.ts): a member who never opens one never fetches it.
 const ToolsPage = lazy(() => import('./pages/ToolsPage').then(m => ({ default: m.ToolsPage })));
@@ -674,10 +673,6 @@ export function App() {
     // Connect to BeanPool Node once identity is loaded
     useEffect(() => {
         if (!identity) return;
-
-        // The member's working style (scratch/fable-design/DESIGN-archetype-across-fable.md §3 S2): at open, adopt the
-        // community's row into the browser copy when the row is newer.
-        void reconcileWorkingStyleAtOpen(identity.publicKey);
 
         // The node's alerts, live and kept for this member, are SystemAlerts' (below).
         connectToAnchor();

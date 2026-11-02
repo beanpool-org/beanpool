@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -1030,7 +1030,7 @@
   "At least {n}": "{n} على الأقل",
   "Typical time from joining to a first listing": "الوقت المعتاد من الانضمام إلى أول قائمة",
   "Typical time from a first listing to a first trade": "الوقت المعتاد من أول قائمة إلى أول صفقة",
-  "Too few yet to show": "العدد قليل جدًا حتى الآن للعرض",
+  "Held back": "محجوب",
   "No trades yet": "لا صفقات بعد",
   "Under a day": "أقل من يوم",
   "This community has no Beans, so there are no trades to measure.": "لا توجد فاصوليا في هذا المجتمع، لذا لا توجد صفقات لقياسها.",
@@ -1044,7 +1044,7 @@
   },
   "Typical means the middle person: half were quicker, half slower.": "«المعتاد» يعني الشخص في المنتصف: نصفهم كان أسرع ونصفهم أبطأ.",
   "The wait for a first trade counts only people who listed before they traded.": "انتظار أول صفقة يشمل فقط من نشروا قائمة قبل أن يتبادلوا.",
-  "A typical time needs at least {n} people, or it shows as too few.": "يحتاج الوقت المعتاد إلى {n} أشخاص على الأقل، وإلا يظهر كعدد قليل جدًا.",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "يُحجب الرقم إذا كان وراءه أقل من {n} أشخاص، أو إذا كان الفرق بين العمودين أقل من {n} أشخاص.",
   "First trades go up in steps of {n}, so the number never points at one person.": "تزيد الصفقات الأولى بخطوات من {n}، فلا يشير الرقم أبدًا إلى شخص واحد.",
   "{n} at this spot": "{n} في هذا المكان"
 }

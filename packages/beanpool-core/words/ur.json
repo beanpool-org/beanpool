@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -878,7 +878,7 @@
   "At least {n}": "کم از کم {n}",
   "Typical time from joining to a first listing": "شامل ہونے سے پہلی لسٹنگ تک کا عام وقت",
   "Typical time from a first listing to a first trade": "پہلی لسٹنگ سے پہلے تبادلے تک کا عام وقت",
-  "Too few yet to show": "دکھانے کے لیے ابھی بہت کم",
+  "Held back": "روکا گیا",
   "No trades yet": "ابھی کوئی تبادلہ نہیں",
   "Under a day": "ایک دن سے کم",
   "This community has no Beans, so there are no trades to measure.": "اس کمیونٹی میں پھلیاں نہیں ہیں، اس لیے ناپنے کے لیے کوئی تبادلہ نہیں۔",
@@ -888,7 +888,7 @@
   },
   "Typical means the middle person: half were quicker, half slower.": "عام کا مطلب درمیان والا شخص ہے: آدھے زیادہ تیز تھے، آدھے زیادہ سست۔",
   "The wait for a first trade counts only people who listed before they traded.": "پہلے تبادلے کے انتظار میں صرف وہ لوگ گنے جاتے ہیں جنہوں نے تبادلے سے پہلے لسٹنگ کی۔",
-  "A typical time needs at least {n} people, or it shows as too few.": "عام وقت کے لیے کم از کم {n} لوگ درکار ہیں، ورنہ یہ بہت کم کے طور پر دکھایا جاتا ہے۔",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "کوئی عدد اس وقت روکا جاتا ہے جب اس کے پیچھے {n} سے کم لوگ ہوں، یا دونوں کالموں میں {n} سے کم لوگوں کا فرق ہو۔",
   "First trades go up in steps of {n}, so the number never points at one person.": "پہلے تبادلے {n} کے قدموں میں بڑھتے ہیں، تاکہ عدد کبھی کسی ایک شخص کی طرف اشارہ نہ کرے۔",
   "{n} at this spot": "اس جگہ پر {n}"
 }

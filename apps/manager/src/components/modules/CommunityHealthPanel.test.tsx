@@ -132,12 +132,12 @@ describe('CommunityHealthPanel', () => {
         expect(recent).toHaveTextContent('Typical time from a first listing to a first trade1 day');
         expect(screen.getByTestId('first-trade')).toHaveTextContent('owners and admins only');
         expect(screen.getByTestId('first-trade')).toHaveTextContent('Typical means the middle person');
-        expect(screen.getByTestId('first-trade')).toHaveTextContent('A typical time needs at least 5 people, or it shows as too few.');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('A figure is held back when fewer than 5 people are behind it, or fewer than 5 people separate the two columns.');
         expect(screen.getByTestId('first-trade')).toHaveTextContent('The wait for a first trade counts only people who listed before they traded.');
         expect(screen.getByTestId('first-trade')).toHaveTextContent('First trades go up in steps of 5');
     });
 
-    it('a figure the node holds back says too few, and is never a 0', async () => {
+    it('a figure the node holds back says so, and is never a 0', async () => {
         mockNode(withNew({ ...NEW_MEMBERS,
             last90Days: { joined: 3, firstListing: 1, firstTrade: null, daysToFirstListing: null, daysFromListingToTrade: null },
             allTime: { joined: 3, firstListing: 1, firstTrade: null, daysToFirstListing: null, daysFromListingToTrade: null } }));
@@ -145,16 +145,27 @@ describe('CommunityHealthPanel', () => {
         const recent = await screen.findByTestId('first-trade-90-days');
         expect(recent).toHaveTextContent('Joined3');
         expect(recent).toHaveTextContent('Made a first listing1');
-        expect(recent).toHaveTextContent('Completed a first tradeToo few yet to show');
-        expect(recent).toHaveTextContent('Typical time from joining to a first listingToo few yet to show');
-        expect(recent).toHaveTextContent('Typical time from a first listing to a first tradeToo few yet to show');
+        expect(recent).toHaveTextContent('Completed a first tradeHeld back');
+        expect(recent).toHaveTextContent('Typical time from joining to a first listingHeld back');
+        expect(recent).toHaveTextContent('Typical time from a first listing to a first tradeHeld back');
         expect(recent.textContent).not.toMatch(/At least|Under a day/);
     });
 
-    it('a real 0 days reads as under a day, and only a held-back figure as too few', () => {
+    it('a real 0 days reads as under a day, and only a held-back figure as held back', () => {
         const rows = new Map(firstTradeRows({ ...WINDOW, daysToFirstListing: 0, daysFromListingToTrade: null }, NEW_MEMBERS as never));
         expect(rows.get('Typical time from joining to a first listing')).toBe('Under a day');
-        expect(rows.get('Typical time from a first listing to a first trade')).toBe('Too few yet to show');
+        expect(rows.get('Typical time from a first listing to a first trade')).toBe('Held back');
+    });
+
+    it('a figure held back in a large group never says there are too few people', async () => {
+        mockNode(withNew({ ...NEW_MEMBERS,
+            last90Days: { joined: 60, firstListing: 60, firstTrade: null, daysToFirstListing: null, daysFromListingToTrade: null },
+            allTime: { joined: 63, firstListing: 63, firstTrade: 60, daysToFirstListing: 2, daysFromListingToTrade: 8 } }));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const recent = await screen.findByTestId('first-trade-90-days');
+        expect(recent).toHaveTextContent('Joined60');
+        expect(recent).toHaveTextContent('Completed a first tradeHeld back');
+        expect(screen.getByTestId('first-trade').textContent).not.toMatch(/too few/i);
     });
 
     it('with no Beans it says there are no trades to measure, and shows no trade figure at all', async () => {

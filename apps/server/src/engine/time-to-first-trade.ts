@@ -4,7 +4,7 @@
  * and through the assistant's `community_totals`; nothing public carries it. It goes out inside communityTotals
  * (engine/community-health.ts), whose other numbers are public by rule. These are not: they say what new members did.
  *
- * The people: everyone who joined here (engine/funnel.ts JOINED_HERE, so no federation visitor and no genesis operator), and
+ * The people: everyone who joined here (engine/funnel.ts JOINED_HERE, so no federation visitor and no first owner, by genesis or by claim code), and
  * no visitor's row and no enterprise's. Each is read once, and what comes out is counts and medians: no key is selected, and
  * no name, date or member row leaves this file.
  *  - Removed, suspended or gone (status 'pruned', 'disabled'): still counted, with what they reached. They joined, and leaving
@@ -71,11 +71,11 @@ const DAY_MS = 86_400_000;
 export interface FirstTradeWindow {
     joined: number;
     firstListing: number;
-    /** At least this many, a multiple of 5. Null: too few yet to show (or Beans are off). 0 only where there has been no trade at all. */
+    /** At least this many, a multiple of 5. Null: held back (or Beans are off). 0 only where there has been no trade at all. */
     firstTrade: number | null;
-    /** Median whole days from joining to a first listing. Null: too few yet to show. */
+    /** Median whole days from joining to a first listing. Null: held back. */
     daysToFirstListing: number | null;
-    /** Median whole days from a first listing to a first trade. Null: too few yet to show, or nothing to measure. */
+    /** Median whole days from a first listing to a first trade. Null: held back, or nothing to measure. */
     daysFromListingToTrade: number | null;
 }
 

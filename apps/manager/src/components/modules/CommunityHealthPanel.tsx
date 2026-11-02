@@ -95,7 +95,7 @@ export function readHealth(v: unknown): Health | null {
 
 const beans = (n: number) => `${Math.round(n).toLocaleString('en')} Beans`;
 
-const waited = (days: number | null) => (days === null ? say(W.tooFew) : days === 0 ? say(W.underADay) : tn(days, W.days.one, W.days.other));
+const waited = (days: number | null) => (days === null ? say(W.heldBack) : days === 0 ? say(W.underADay) : tn(days, W.days.one, W.days.other));
 
 /** One window's rows. With no Beans there are no trade rows at all, so no zero can read as a measure. */
 export function firstTradeRows(w: FirstTradeWindow, n: NewMembers): Array<[string, string]> {
@@ -107,7 +107,7 @@ export function firstTradeRows(w: FirstTradeWindow, n: NewMembers): Array<[strin
     if (!n.beans) return rows;
     const noTrades = say(W.noTrades);
     rows.push(
-        [say(W.firstTrade), !n.anyTrades ? noTrades : w.firstTrade === null ? say(W.tooFew) : say(W.atLeast, { n: w.firstTrade })],
+        [say(W.firstTrade), !n.anyTrades ? noTrades : w.firstTrade === null ? say(W.heldBack) : say(W.atLeast, { n: w.firstTrade })],
         [say(W.listingToTrade), !n.anyTrades ? noTrades : waited(w.daysFromListingToTrade)],
     );
     return rows;

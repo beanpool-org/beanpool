@@ -121,11 +121,12 @@ export function hasNoAvatarYet(publicKey: string): boolean {
  * trader lands in this hub's join funnel. The genesis row goes too — an operator
  * seeding themselves is not an onboarding event.
  *
+ * A node claimed with a code has its first owner on `claim:<id>` (claim-code.ts, claim-shell-owner.ts), not 'genesis'.
  * Shared rather than written twice: the genesis clause was originally on the signup
  * query and missing from the activation one, so the operator's first post counted as a
  * new member getting started. Two copies of a predicate drift; one cannot.
  */
-export const JOINED_HERE = `m.home_node_url IS NULL AND COALESCE(m.invite_code, '') != 'genesis'`;
+export const JOINED_HERE = `m.home_node_url IS NULL AND COALESCE(m.invite_code, '') != 'genesis' AND COALESCE(m.invite_code, '') NOT LIKE 'claim:%'`;
 
 interface CohortMemberRow {
     day: string;

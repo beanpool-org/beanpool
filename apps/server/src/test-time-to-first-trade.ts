@@ -34,6 +34,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { grantNodeRole } from './engine/node-roles.js';
+import { registerMemberInternal } from './engine/members.js';
 import { communityTotals } from './engine/community-health.js';
 import { FIRST_TRADE_PEOPLE_SQL, firstTradeFunnel } from './engine/time-to-first-trade.js';
 import { AGENT_TOOLS } from './agent/tools.js';
@@ -135,6 +136,8 @@ async function main(): Promise<void> {
     addMember(10, { home: 'https://peer.example' });
     addMember(10, { inviteCode: 'genesis' });
     assert(all().joined === 1, `a visitor, an enterprise, a member of another community and a genesis row aren't new members (${all().joined})`);
+    registerMemberInternal(() => {}, key(), 'Claimed owner', null, 'claim:abc123');
+    assert(all().joined === 1, `a claimed node's first owner, joined through the real door, isn't a new member (${all().joined})`);
     const removed = addMember(10, { status: 'pruned' });
     const suspended = addMember(10, { status: 'disabled' });
     const closed = addMember(10, { status: 'pruned', closed: true, callsign: 'Deleted Member' });
@@ -489,7 +492,7 @@ async function main(): Promise<void> {
         const tool = AGENT_TOOLS.find(t => t.name === 'community_totals')!;
         const answer = await tool.run({ role: 'admin' } as never, {}, 'x') as unknown as { ok: boolean; result: { newMembers: { allTime: { firstTrade: number } } } };
         assert(answer.ok && answer.result.newMembers.allTime.firstTrade === 10, `the assistant's community_totals carries it (${JSON.stringify(answer.result.newMembers.allTime)})`);
-        assert(/first trade/.test(tool.reads) && /too few/.test(tool.reads), `and its description says what it reads and what a null means`);
+        assert(/first trade/.test(tool.reads) && /held back/.test(tool.reads), `and its description says what it reads and what a null means`);
         // 10 of 10 traded in the window, and the window reads null (the two-windows scene in part 5): "under 5 people" alone would be false.
         assert(/between the two windows/.test(tool.reads) && /can hide a large number/.test(tool.reads) && /never read it as 0 or as a small number/.test(tool.reads),
             `and a null can't be told to an owner as a small number: it can be a window held back beside another`);

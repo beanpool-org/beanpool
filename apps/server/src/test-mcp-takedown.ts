@@ -11,9 +11,12 @@
  *      the author reads are the closed list's. A report dismissed later does not bring the takedown back (recheckHiddenPost), nor
  *      does a burst's undo.
  *   5. Put back: clears both stamps, tells the author, and the post is up; a mute the takedown brought goes with it; the old restore
- *      route is the same; admin one post only; a token reaches none of it.
- *   6. The sweep: nothing before 7 days; final at 7 days, event cancelled and its goers told; skips a deal; skips what was put back;
- *      a standby makes nothing final.
+ *      route is the same; admin one post only; a token reaches none of it. A post goes back to where it stood: hidden before, it
+ *      stays hidden on that stamp and its burst undo still works; the reports the takedown closed are open again in every scope, one
+ *      closed another way stays closed, and reporters hear nothing. Whether a mute lifts doesn't depend on which call held the post,
+ *      and the count is the rule that muted them, from the last lift.
+ *   6. The sweep: nothing before 7 days; final at 7 days, event cancelled and its goers told, but no push for an event that ended
+ *      during the hold; skips a deal; skips what was put back; a standby makes nothing final.
  *   7. Caps: 200 a call, the owners' limit a day on its own count, and what is over comes back in `kept`, and a restart keeps the day.
  *   8. A stolen token's day undone in one call; an injected report's text changes nothing beyond one logged takedown.
  *   9. The record: an ADMIN line, an AGENT line, the owners' daily count and the sec.agent alert; `why` in no log line.
@@ -34,8 +37,11 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 import { initTls } from './services/tls.js';
 import {
-    createPost, dismissReport, getPosts, hideBurst, initStateEngine, requestPost, runLedgerAudit, seedGenesisMember, undoBurst,
+    actionReport, createPost, dismissReport, getPosts, hideBurst, initStateEngine, requestPost, runLedgerAudit, seedGenesisMember, undoBurst,
 } from './state-engine.js';
+import { eventGoingPubkeys, rsvpEvent } from './engine/posts.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
+import { toldPush, type ToldPush } from './push-notice-test-harness.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -341,8 +347,166 @@ async function main(): Promise<void> {
             await a.callTool({ name: 'take_down', arguments: { post_id: oldToo, reason: 'spam', why: WHY } });
             await call('POST', `/api/local/admin/posts/${oldToo}/restore`, { headers: adminHeaders, body: {} });
             assert(muteOf(already.pub).muted, 'and by that door too, a mute it did not bring stays');
+
+            // One post a call is how an assistant works through a list: which call held the post must not decide the mute.
+            const oneByOne = async (name: string) => {
+                const k = keypair();
+                addMember(k, name);
+                const ids = [post(`${name} 1`, k.pub), post(`${name} 2`, k.pub), post(`${name} 3`, k.pub)];
+                for (const id of ids) await a.callTool({ name: 'take_down', arguments: { post_id: id, reason: 'spam', why: WHY } });
+                return { k, ids };
+            };
+            const single = await oneByOne('Sue Single');
+            const flags = single.ids.map(id => (db.prepare('SELECT muted_author FROM agent_takedown_posts WHERE post_id = ?').get(id) as { muted_author: number }).muted_author);
+            assert(muteOf(single.k.pub).muted && flags.join() === '0,0,1', `three single-post calls mute them, and only the third carries the mark (${flags.join()})`);
+            await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: single.ids[0] } });
+            await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: single.ids[1] } });
+            assert(!muteOf(single.k.pub).muted, 'putting back the first two lifts the mute: one removal is left, and the rule needs three');
+            const singleRoute = await oneByOne('Sid Single');
+            assert(muteOf(singleRoute.k.pub).muted, 'three more, one a call');
+            await call('POST', `/api/local/admin/posts/${singleRoute.ids[0]}/restore`, { headers: adminHeaders, body: {} });
+            assert(!muteOf(singleRoute.k.pub).muted, 'the restore route had the same gap: restoring the first post of three lifts it too');
+
+            // The count is the rule that muted them: removals since the last lift, which the new mute wrote over.
+            const liftedAt = new Date(Date.now() - 5 * DAY).toISOString();
+            const removedLongAgo = (k: Key, title: string, days: number) => {
+                const id = post(title, k.pub);
+                db.prepare("UPDATE posts SET active = 0, status = 'cancelled', removed_by_moderator_at = ? WHERE id = ?").run(new Date(Date.now() - days * DAY).toISOString(), id);
+            };
+            const lifted = keypair();
+            addMember(lifted, 'Lou Lifted');
+            for (const n of [1, 2, 3]) removedLongAgo(lifted, `Removed before the lift ${n}`, 10);
+            db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(liftedAt, lifted.pub);
+            const mistaken = [post('Mistaken one', lifted.pub), post('Mistaken two', lifted.pub), post('Mistaken three', lifted.pub)];
+            await a.callTool({ name: 'take_down_many', arguments: { post_ids: mistaken, reason: 'spam', why: WHY } });
+            const liftKept = (db.prepare('SELECT last_lift FROM agent_takedown_posts WHERE post_id = ?').get(mistaken[0]) as { last_lift: string | null }).last_lift;
+            assert(muteOf(lifted.pub).muted && liftKept === liftedAt, `three after a lift mute them again, and the record keeps that lift (${liftKept})`);
+            for (const id of mistaken) await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: id } });
+            assert(!muteOf(lifted.pub).muted, 'a whole mistaken day put back lifts it: removals from before the lift do not count, as they did not when it muted');
+            // A second mute's floor is the lift before THAT mute: a removal between the two lifts counted for neither.
+            removedLongAgo(lifted, 'Removed between the two lifts', 1);
+            const mistakenAgain = [post('Again one', lifted.pub), post('Again two', lifted.pub), post('Again three', lifted.pub)];
+            await a.callTool({ name: 'take_down_many', arguments: { post_ids: mistakenAgain, reason: 'spam', why: WHY } });
+            assert(muteOf(lifted.pub).muted, 'three more mute them a second time');
+            await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: mistakenAgain[0] } });
+            assert(!muteOf(lifted.pub).muted, 'the newest mute decides the floor: two count since its lift, and it lifts');
+            // ...and what does still count holds the mute until it no longer adds up.
+            const counted = keypair();
+            addMember(counted, 'Kit Counted');
+            removedLongAgo(counted, 'Removed since the lift', 1);
+            db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(liftedAt, counted.pub);
+            const moreMistakes = [post('More one', counted.pub), post('More two', counted.pub), post('More three', counted.pub)];
+            await a.callTool({ name: 'take_down_many', arguments: { post_ids: moreMistakes, reason: 'spam', why: WHY } });
+            await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: moreMistakes[0] } });
+            assert(muteOf(counted.pub).muted, 'one put back of four: three still count since the lift, so the mute stands');
+            await call('POST', `${PATH}/put-back`, { headers: adminHeaders, body: { postId: moreMistakes[1] } });
+            assert(!muteOf(counted.pub).muted, 'a second put back: two count, and it lifts');
+            // A post no takedown held says nothing about the mute, whatever the count has become.
+            const aged = await oneByOne('Ada Aged');
+            db.prepare(`UPDATE posts SET removed_by_moderator_at = ? WHERE id IN (${aged.ids.map(() => '?').join(',')})`).run(new Date(Date.now() - 31 * DAY).toISOString(), ...aged.ids);
+            const plainHidden = post('Hidden, and no takedown', aged.k.pub);
+            db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(new Date().toISOString(), plainHidden);
+            const plainRestore = await call('POST', `/api/local/admin/posts/${plainHidden}/restore`, { headers: adminHeaders, body: {} });
+            assert(plainRestore.status === 200 && muteOf(aged.k.pub).muted, `restoring a post no takedown held lifts no mute (${show(plainRestore)})`);
         }
         delete process.env.NODE_PROFILE;
+
+        // ── 5b. Put back leaves a post where it stood ────────────────────────────────────────────────
+        const up = (id: string) => getPosts({ viewerPubkey: rae.pub } as any).some(p => p.id === id);
+        const takeDown = (id: string) => a.callTool({ name: 'take_down', arguments: { post_id: id, reason: 'spam', why: WHY } });
+        const callOf = async (id: string): Promise<string> =>
+            (await call('GET', PATH, { headers: session })).body?.takedowns?.find((t: any) => t.posts.some((p: any) => p.id === id))?.id;
+        const putBack = (body: Record<string, unknown>) => call('POST', `${PATH}/put-back`, { headers: session, body });
+        const POST_BACK = '🛡️ Your post is back';
+        const bea = keypair();
+        addMember(bea, 'Bea Burst');
+
+        // A moderator's burst hid it, and the burst stands. Put back by assistant and time, the stolen token's undo.
+        const burstHidden = post('Hidden by a burst, then taken down', bea.pub), sibling = post('Hidden by the same burst', bea.pub);
+        const standing = hideBurst(bea.pub, [bea.pub], 'owner');
+        const burstStamp = row(burstHidden).hidden_by_reports_at;
+        const burstFrom = new Date().toISOString();
+        await takeDown(burstHidden);
+        const beforeBack = noticesOf(bea.pub).length;
+        const burstBack = await putBack({ grantId: ticked.body.grant.id, since: burstFrom });
+        assert(burstBack.status === 200 && burstBack.body?.back?.includes(burstHidden) && burstBack.body?.stillHidden?.includes(burstHidden), `Put back answers which posts stayed hidden (${show(burstBack)})`);
+        assert(row(burstHidden).hidden_by_reports_at === burstStamp && !row(burstHidden).removed_by_moderator_at, 'a post a burst hid keeps that stamp, and only the removal goes');
+        assert(!up(burstHidden) && !up(sibling), 'a neighbour sees neither it nor its sibling');
+        const toldBea = noticesOf(bea.pub).slice(beforeBack);
+        assert(toldBea.length === 1 && toldBea[0].title !== POST_BACK && /is hidden while the community's moderators look at it/.test(toldBea[0].body), `its author is not told it is back, and hears it is hidden for review (${JSON.stringify(toldBea.map(n => n.title))})`);
+        const burstUndo = undoBurst(standing.id);
+        assert(burstUndo.ok === true && burstUndo.restored === 2 && up(burstHidden) && up(sibling), `and the burst's undo still brings both back (${JSON.stringify(burstUndo)})`);
+
+        // A burst undone during the hold skipped this post, so a stamp put back would have no undo left.
+        const undoneMeanwhile = post('A burst undone during the hold', bea.pub);
+        const undoneBurst = hideBurst(bea.pub, [bea.pub], 'owner');
+        await takeDown(undoneMeanwhile);
+        undoBurst(undoneBurst.id);
+        assert(!!row(undoneMeanwhile).hidden_by_reports_at, 'set up: the undo left the takedown as it was');
+        const afterUndo = await putBack({ postId: undoneMeanwhile });
+        assert(afterUndo.body?.stillHidden?.length === 0 && !row(undoneMeanwhile).hidden_by_reports_at && up(undoneMeanwhile) && noticesOf(bea.pub).at(-1)?.title === POST_BACK,
+            `an undone burst's stamp counts as no hide: the post is up, and its author hears so (${show(afterUndo)})`);
+
+        // The reports had hidden it. Put back by call.
+        const reportsHid = post('Hidden by reports, then taken down', bea.pub);
+        const reportStamp = new Date(Date.now() - DAY).toISOString();
+        const hidingReport = report(reportsHid, rae.pub);
+        db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(reportStamp, reportsHid);
+        const takenByReport = structured(await a.callTool({ name: 'take_down', arguments: { report_id: hidingReport, reason: 'spam', why: WHY } }));
+        assert(takenByReport?.removed?.[0] === reportsHid && statusOf(hidingReport) === 'actioned', 'a post reports hid can be taken down by its report, which closes');
+        const raeBefore = noticesOf(rae.pub).length, beaBefore = noticesOf(bea.pub).length;
+        await putBack({ takedownId: await callOf(reportsHid) });
+        assert(row(reportsHid).hidden_by_reports_at === reportStamp && !row(reportsHid).removed_by_moderator_at && !up(reportsHid), 'a post reports hid stays hidden on its own stamp');
+        assert(statusOf(hidingReport) === 'pending', 'and its report is open again, so a moderator can read it');
+        assert(noticesOf(rae.pub).length === raeBefore && !noticesOf(bea.pub).slice(beaBefore).some(n => n.title === POST_BACK), 'its reporter hears nothing, and its author is not told it is back');
+        dismissReport(hidingReport);
+        assert(!row(reportsHid).hidden_by_reports_at && up(reportsHid), 'a moderator dismissing that report brings it up, as it did before the takedown');
+
+        // The report the takedown closed returns to the queue, whichever way it is put back.
+        const scopes: [string, (id: string, from: string) => Promise<Record<string, unknown>>][] = [
+            ['one post', async (id) => ({ postId: id })],
+            ['one call', async (id) => ({ takedownId: await callOf(id) })],
+            ['an assistant since a time', async (_id, from) => ({ grantId: ticked.body.grant.id, since: from })],
+        ];
+        for (const [name, scope] of scopes) {
+            const open = post(`Reported, put back by ${name}`, bea.pub);
+            const openReport = report(open, rae.pub);
+            const from = new Date().toISOString();
+            await takeDown(open);
+            const told = noticesOf(rae.pub).length;
+            assert(statusOf(openReport) === 'actioned' && noticesOf(rae.pub).at(-1)?.body.includes('The post you reported was removed') === true, `${name}: the takedown closes the report and tells its reporter`);
+            const reportRow = () => db.prepare('SELECT suspended_member, updated_at FROM abuse_reports WHERE id = ?').get(openReport) as { suspended_member: number | null; updated_at: string };
+            const closedAt = reportRow().updated_at;
+            await putBack(await scope(open, from));
+            const queue = await call('GET', '/api/local/admin/reports?status=open&limit=500', { headers: session });
+            assert(statusOf(openReport) === 'pending' && queue.body?.reports?.some((r: any) => r.id === openReport), `${name}: the report is in the moderators' queue again`);
+            assert(reportRow().suspended_member === null && reportRow().updated_at > closedAt, `${name}: as it was before it closed, and a standby's copy follows (updated_at moved)`);
+            assert(up(open) && noticesOf(rae.pub).length === told, `${name}: the post is up, and the reporter hears nothing`);
+        }
+
+        // A report closed some other way stays closed; one filed during the hold stays open, and nobody says it was kept.
+        const sid = keypair();
+        addMember(sid, 'Sid Suspended');
+        const mixed = post('Reports closed every way', sid.pub);
+        const closedBefore = report(mixed, rae.pub), dismissedSince = report(mixed, goer.pub), actedOnSince = report(mixed, mia.pub);
+        db.prepare("UPDATE abuse_reports SET status = 'reviewed' WHERE id = ?").run(closedBefore);
+        await takeDown(mixed);
+        dismissReport(dismissedSince);
+        assert(actionReport(actedOnSince, false, true, false, { actor: owner.pub }), 'a moderator suspends the member on a report the takedown closed');
+        const filedInHold = report(mixed, rae.pub, 'filed during the hold');
+        const raeThen = noticesOf(rae.pub).length;
+        await putBack({ postId: mixed });
+        assert(statusOf(closedBefore) === 'reviewed' && statusOf(dismissedSince) === 'reviewed', 'a report dismissed, before the takedown or since, stays dismissed');
+        assert(statusOf(actedOnSince) === 'actioned', 'one a moderator acted on since stays actioned');
+        assert(statusOf(filedInHold) === 'pending' && noticesOf(rae.pub).length === raeThen, 'one filed during the hold stays open for a person to read, and its reporter is not told it was kept');
+
+        // The restore route is the same undo for the reports too: they left the queue before that person could read them.
+        const restoredReported = post('Reported, restored from the posts screen', bea.pub);
+        const restoredReport = report(restoredReported, rae.pub);
+        await takeDown(restoredReported);
+        const raeAtRestore = noticesOf(rae.pub).length;
+        await call('POST', `/api/local/admin/posts/${restoredReported}/restore`, { headers: adminHeaders, body: {} });
+        assert(up(restoredReported) && statusOf(restoredReport) === 'pending' && noticesOf(rae.pub).length === raeAtRestore, 'the restore route opens the reports the takedown closed, and tells nobody');
 
         // ── 6. The sweep ─────────────────────────────────────────────────────────────────────────────
         db.prepare('DELETE FROM agent_takedown_posts').run();
@@ -394,6 +558,37 @@ async function main(): Promise<void> {
         rollDueSeries(undefined, Date.parse('2027-10-02T00:00:00.000Z'));
         assert(dateOf() > firstDate && !!row(weekly).hidden_by_reports_at && !!row(weekly).removed_by_moderator_at && row(weekly).active === 1,
             `a repeating event rolls to its next date still taken down (${firstDate} → ${dateOf()})`);
+
+        // An event with someone going: told when the takedown stands, unless it ended during the hold. All the way out to Expo's door,
+        // which is answered here.
+        const realFetch = globalThis.fetch;
+        const toPhones: ToldPush[] = [];
+        (globalThis as any).fetch = async (url: any, init: any) => {
+            if (!String(url).includes('exp.host')) return realFetch(url, init);
+            toPhones.push(...JSON.parse(init.body).map((m: any) => toldPush(db, m)));
+            return { ok: true, status: 200, json: async () => ({}) } as any;
+        };
+        try {
+            putPushTokenRow(goer.pub, 'ExponentPushToken[goer]', 'android');
+            const meetUp = (title: string) => createPost('event', 'community', title, 'Words.', 0, 'fixed', sam.pub, -28.55, 153.5, [AVATAR], false, undefined, false,
+                { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventPlaceName: 'The hall' })!.id;
+            const stillAhead = meetUp('Still ahead'), overDuringHold = meetUp('Over during the hold');
+            for (const id of [stillAhead, overDuringHold]) rsvpEvent(() => {}, id, goer.pub, 'going');
+            const twoEvents = structured(await a.callTool({ name: 'take_down_many', arguments: { post_ids: [stillAhead, overDuringHold], reason: 'rules', why: WHY } }));
+            assert(twoEvents?.removed?.length === 2, `two events, one person going to each (${JSON.stringify(twoEvents?.kept)})`);
+            // Its date is past now: the RSVP moves with it, or nobody is going and the push below could never be sent.
+            const wasOn = new Date(Date.now() - 4 * DAY).toISOString();
+            db.prepare('UPDATE posts SET event_start_at = ?, event_end_at = ? WHERE id = ?').run(wasOn, new Date(Date.now() - 3 * DAY).toISOString(), overDuringHold);
+            db.prepare('UPDATE event_rsvps SET occurrence_at = ? WHERE post_id = ?').run(wasOn, overDuringHold);
+            assert(eventGoingPubkeys(overDuringHold).includes(goer.pub) && eventGoingPubkeys(stillAhead).includes(goer.pub), 'someone is going to each, as far as a cancellation reads it');
+            backdate(TAKEDOWN.holdDays + 1);
+            sweepTakedowns();
+            await new Promise(r => setImmediate(r));
+            assert(row(stillAhead).status === 'cancelled' && row(overDuringHold).status === 'cancelled', 'both go when the takedown stands');
+            assert(toPhones.length === 1 && toPhones[0].data?.postId === stillAhead, `its goers are told of the one still ahead, and nobody that one already over was cancelled (${JSON.stringify(toPhones.map(p => p.data?.postId))})`);
+        } finally {
+            (globalThis as any).fetch = realFetch;
+        }
 
         // ── 7. Caps ──────────────────────────────────────────────────────────────────────────────────
         db.prepare('DELETE FROM agent_takedown_posts').run();

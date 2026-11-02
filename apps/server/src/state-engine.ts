@@ -8708,12 +8708,15 @@ function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundS
  * What makes an assistant's takedown final (engine/agent-takedowns.ts sweepTakedowns). Never on a post with a pending deal, and
  * with no transfer function, so adminDeletePost has no way to move a Bean: removePostByAdmin's refund is a person's, on a
  * person's account. The takedown stamped the removal and told the author, so neither happens again here; an event is cancelled
- * and its goers told now. A report filed while it was hidden closes, and its reporter hears the post was removed.
+ * and its goers told now, unless it ended during the hold: they heard nothing of the takedown, so it may well have gone ahead, and
+ * no push says otherwise. A report filed while it was hidden closes, and its reporter hears the post was removed.
  */
 function makeTakedownFinal(postId: string): boolean {
     if (hasPendingDeal(postId)) return false;
     const before = postBeforeTakedown(postId);
-    if (!before || !adminDeletePostEngine(broadcast, postId, undefined, undefined, dispatchPushNotification)) return false;
+    const end = (db.prepare('SELECT event_end_at FROM posts WHERE id = ?').get(postId) as { event_end_at: string | null } | undefined)?.event_end_at;
+    const ended = !!end && Date.parse(end) <= Date.now();
+    if (!before || !adminDeletePostEngine(broadcast, postId, undefined, undefined, ended ? undefined : dispatchPushNotification)) return false;
     notifyPostTakedown(moderationNoticeCb, { ...before, wasLive: false }, closeOpenReportsOnPost(postId));
     return true;
 }

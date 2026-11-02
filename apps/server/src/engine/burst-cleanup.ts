@@ -43,7 +43,7 @@
  * and a moderator can still restore or remove each one as it is. Each author is told once, without why or by whom. The
  * action is recorded (`burst_actions`, `burst_action_posts`), and every socket hears one doorbell for it, never one per
  * post. Its undo un-hides each of its posts that still carries its stamp, unless reports from enough independent circles
- * would hide it now, weighed with the whole hide undone (engine/auto-moderation.ts hideTally), and tells each author once. A post restored, removed, re-hidden or taken down by an assistant (engine/agent-takedowns.ts) meanwhile is left as it is. The record is this
+ * would hide it now, weighed with the whole hide undone (engine/auto-moderation.ts hideTally), and tells each author once. A post restored, removed, re-hidden or taken down by an assistant (engine/agent-takedowns.ts) meanwhile is left as it is; a takedown put back returns this hide's stamp, and the undo reaches the post again. The record is this
  * server's (a standby never copies it): after a take-over the posts stay hidden, and are restored one at a time. Records
  * go after `BURST.keepActionsDays` days, and a member who deletes their own account, and so their label, leaves them
  * (`forgetBurstActionsOf`).

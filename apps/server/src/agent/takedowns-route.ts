@@ -77,8 +77,8 @@ export function createTakedownRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Nothing here is waiting to be put back: it was put back already, or it is final' };
             return;
         }
-        logger.info('ADMIN', 'Posts an AI assistant took down put back', { posts: out.back.slice(0, 200), gone: out.gone, role: (ctx.state as any)?.adminRole ?? null, by: actor(ctx) });
-        ctx.body = { back: out.back, gone: out.gone };
+        logger.info('ADMIN', 'Posts an AI assistant took down put back', { posts: out.back.slice(0, 200), stillHidden: out.stillHidden.length, gone: out.gone, role: (ctx.state as any)?.adminRole ?? null, by: actor(ctx) });
+        ctx.body = { back: out.back, stillHidden: out.stillHidden, gone: out.gone };
     });
 
     router.post('/api/local/admin/agent/takedowns/:id/remove-now', async (ctx) => {

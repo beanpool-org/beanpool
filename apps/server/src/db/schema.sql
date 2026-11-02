@@ -1109,7 +1109,10 @@ CREATE INDEX IF NOT EXISTS idx_burst_action_posts_post ON burst_action_posts(pos
 -- put them back for 7 days and the sweep can make them final. This server's own record (a standby never copies it; the posts
 -- travel hidden in posts.hidden_by_reports_at). `grant_name`: the assistant's name then, kept for a grant since disconnected.
 -- `why`: the assistant's own words, cleaned, read only in Settings, never by an author or a reporter. Foreign keys are off on
--- this database: the posts go with their call by hand. `muted_author`: this takedown was the one that muted its author.
+-- this database: the posts go with their call by hand. What Put back needs to return a post to where it stood: `hidden_before`, its
+-- hide from before the takedown (NULL: it was up); `reports_closed`, the ids (JSON) of the reports this takedown closed.
+-- `muted_author`: this takedown was the one that muted its author; `last_lift`: then, the last lift of a mute before that, which the
+-- new mute wrote over and which the count needs (engine/auto-moderation.ts liftMuteATakedownBrought).
 CREATE TABLE IF NOT EXISTS agent_takedowns (
     id TEXT PRIMARY KEY,
     grant_id TEXT NOT NULL,
@@ -1129,6 +1132,9 @@ CREATE TABLE IF NOT EXISTS agent_takedown_posts (
     put_back_at TEXT,
     final_at TEXT,
     muted_author INTEGER NOT NULL DEFAULT 0,
+    hidden_before TEXT,
+    reports_closed TEXT NOT NULL DEFAULT '[]',
+    last_lift TEXT,
     PRIMARY KEY (takedown_id, post_id)
 );
 CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_post ON agent_takedown_posts(post_id);

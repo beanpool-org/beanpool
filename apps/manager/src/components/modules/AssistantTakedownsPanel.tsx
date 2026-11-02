@@ -14,7 +14,8 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  *
  * - For 7 days a post is only hidden. After that the server removes it, and there is nothing to put back.
  * - Put back: a post (owners and admins), a call, or everything one assistant took down lately (owners, `canActOnMany`). One tap and
- *   no code on purpose: this is the undo of a stolen token's day.
+ *   no code on purpose: this is the undo of a stolen token's day. Each post goes back to where it stood, so what the server says stayed
+ *   hidden (`stillHidden`, absent on an older one) is told apart from what everyone sees again.
  * - Remove now: a post goes through the delete route Settings already has, so a person's refund and its warnings are that route's. A
  *   whole call asks an owner's fresh proof, and leaves a post with a deal in escrow for one-at-a-time.
  * - The assistant's words are rendered as text and read here only. No assistant reaches any of this.
@@ -115,7 +116,11 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
         const { res, json } = await post(`${LIST}/put-back`, body);
         if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
         const gone = json.gone > 0 ? ` ${count(json.gone)} had gone already.` : '';
-        return `Put back: ${count(json.back?.length ?? 0)}.${gone} Each author is told, and everyone sees them again.`;
+        const total = json.back?.length ?? 0;
+        const hidden = json.stillHidden?.length ?? 0;
+        const stayed = hidden > 0 ? ` ${count(hidden)} stayed hidden for the moderators, as before the assistant took ${hidden === 1 ? 'it' : 'them'} down.` : '';
+        const up = total > hidden ? ` ${count(total - hidden)} back up: each author is told, and everyone sees them again.` : '';
+        return `Put back: ${count(total)}.${gone}${stayed}${up} Any reports the takedown closed are open again.`;
     });
 
     const removeOne = async (p: PostLine) => {
@@ -166,7 +171,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
             <div className="border-b border-nature-800 pb-3 min-w-0">
                 <h3 id="agent-takedowns-title" className="text-base font-bold text-white m-0 break-words">Taken down by assistants</h3>
                 <p className="text-xs text-nature-400 m-0 mt-1 break-words">
-                    What an owner&apos;s AI assistant took down. It is hidden at once, and removed for good after 7 days unless you put it back here. Only a person can put a post back.
+                    What an owner&apos;s AI assistant took down. It is hidden at once, and removed for good after 7 days unless you put it back here. Only a person can put a post back: it returns to where it stood, so a post hidden for review before stays hidden, and the reports the takedown closed open again.
                 </p>
             </div>
             {message && <p role="status" className="text-sm text-nature-200 m-0 break-words">{message}</p>}

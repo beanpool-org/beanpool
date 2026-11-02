@@ -124,6 +124,26 @@ export function closeOpenReportsOnPost(postId: string): string[] {
     return rows.map(r => r.reporter_pubkey);
 }
 
+/** The ids of the reports `closeOpenReportsOnPost` would close now: what a takedown keeps, so Put back can open them again. */
+export function openReportIdsOnPost(postId: string): string[] {
+    return (db.prepare(
+        `SELECT id FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
+    ).all(postId) as { id: string }[]).map(r => r.id);
+}
+
+/**
+ * Reports a takedown closed, back in the moderators' queue as they were (engine/agent-takedowns.ts): an undo nobody read a post on is
+ * no dismissal. Only a report still as `closeOpenReportsOnPost` left it: one a person dismissed since, or acted on to suspend its
+ * member, stays as they left it. Nobody is told (the reporters' notice stands: scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.5).
+ */
+export function reopenClosedReports(reportIds: string[]): number {
+    const reopen = db.prepare(
+        `UPDATE abuse_reports SET status = 'pending', suspended_member = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          WHERE id = ? AND status = 'actioned' AND suspended_member = 0`
+    );
+    return reportIds.reduce((n, id) => n + reopen.run(id).changes, 0);
+}
+
 /**
  * The admins removed a post. The author is told (only when the post was live — removing an already-removed
  * post tells them nothing new), and so is each member whose report on it this closed.

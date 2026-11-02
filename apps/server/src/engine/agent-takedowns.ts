@@ -4,12 +4,14 @@
  *
  * ## What a takedown is
  *
- * `takeDownPosts`, in one transaction, on each post it may take: `hidden_by_reports_at` (kept if the post was already hidden) and
+ * `takeDownPosts`, in one transaction, on each post it may take: `hidden_by_reports_at` (kept if the post was already hidden, and
+ * noted on this record) and
  * `removed_by_moderator_at`, so the hidden state's whole reach applies (every list, search, map and count; no new deal) and the
  * removal counts as a moderator's for standing, probation and the mute. A live post with that second stamp is a takedown on hold:
  * nothing else sets it on a live post, and the stamps travel, so that holds on a standby that took over, where this record does
  * not (engine/auto-moderation.ts onHold reads it, so that a report dismissed later, or a burst's undo, can't bring it back).
- * Every open report on it closes as actioned. A deal only asked for is declined, as an author's removal declines it.
+ * Every open report on it closes as actioned, and this record keeps which. A deal only asked for is declined, as an author's removal
+ * declines it.
  *
  * ## What it refuses, and what it never does
  *
@@ -20,11 +22,18 @@
  *
  * ## After
  *
- * Put back (`putBackTakedowns`, a person's only; engine/auto-moderation.ts restoreHiddenPost is the same for one post) clears both
- * stamps, so a mistaken day costs its author nothing, and a mute that takedown brought goes with it. The sweep
- * (`sweepTakedowns`, on the pulse scheduler's tick) makes a post 7 days old final through `setTakedownRemoval`'s function, which
- * has no way to move a Bean: an event is cancelled and its goers told then, and the author hears nothing more. A post that
- * somehow holds a pending deal by then is left hidden, and shows so in Settings for a person.
+ * Put back (`putBackTakedowns`, a person's only) leaves a post where it stood before the takedown, because nobody reads a post on
+ * that tap: it is the answer to a stolen token. The removal's stamp goes, so a mistaken day costs its author nothing, and a mute a
+ * takedown brought goes with it. A post that was up is up. One a moderator's burst or the reports had hidden stays hidden on the
+ * same stamp, so its burst undo still works, and its author hears that and not that it is back. The reports the takedown closed go
+ * back to the moderators' queue, a report filed in the hold stays there, and reporters hear nothing (design §3.5): dismissing a report
+ * stays a person's act on that report. One case: a burst undone during the hold skipped this post (engine/burst-cleanup.ts), so its
+ * stamp has no undo left and counts as no hide. engine/auto-moderation.ts restoreHiddenPost is the same undo for one post, except
+ * that a moderator there looks at that post and means it: it comes up, and the open reports they saw are dismissed.
+ *
+ * The sweep (`sweepTakedowns`, on the pulse scheduler's tick) makes a post 7 days old final through `setTakedownRemoval`'s function, which
+ * has no way to move a Bean: an event is cancelled then and its goers told, unless it has ended, and the author hears nothing more.
+ * A post that somehow holds a pending deal by then is left hidden, and shows so in Settings for a person.
  *
  * The record is this server's (a standby never copies it). Records go after `TAKEDOWN.keepDays`, once nothing waits on them.
  */
@@ -34,11 +43,11 @@ import { getNodeRole } from '../config/node-role.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
-import { evaluateAutoMute, liftMuteNoLongerEarned, muteOf } from './auto-moderation.js';
+import { evaluateAutoMute, lastLiftOf, liftMuteATakedownBrought } from './auto-moderation.js';
 import { holdsRole } from './burst-cleanup.js';
 import {
-    closeOpenReportsOnPost, notifyPostBack, notifyPostsBack, notifyPostsTakenDown, notifyReportDismissed, notifyReportersRemoved,
-    REMOVAL_REASON_LABELS, type ModerationNoticeCallbacks,
+    closeOpenReportsOnPost, notifyPostBack, notifyPostsBack, notifyPostsHiddenForReview, notifyPostsTakenDown, notifyReportersRemoved, openReportIdsOnPost,
+    reopenClosedReports, REMOVAL_REASON_LABELS, type ModerationNoticeCallbacks,
 } from './moderation-notices.js';
 import { bumpActivityVersion, bumpPostsVersion } from './versions.js';
 
@@ -154,7 +163,7 @@ export function takeDownPosts(cb: ModerationNoticeCallbacks, input: TakeDownInpu
         const hide = db.prepare(`UPDATE posts SET hidden_by_reports_at = COALESCE(hidden_by_reports_at, ?), removed_by_moderator_at = ?, updated_at = ? WHERE id = ?`);
         // As an author's own removal declines one (engine/posts.ts cancelPostFollowOns): no Bean is held on a request.
         const decline = db.prepare(`UPDATE marketplace_transactions SET status = 'rejected', completed_at = ? WHERE post_id = ? AND status = 'requested'`);
-        const record = db.prepare('INSERT INTO agent_takedown_posts (takedown_id, post_id) VALUES (?, ?)');
+        const record = db.prepare('INSERT INTO agent_takedown_posts (takedown_id, post_id, hidden_before, reports_closed) VALUES (?, ?, ?, ?)');
         for (const postId of new Set(input.postIds)) {
             const p = read.get(postId) as PostRow | undefined;
             const refusal = !p ? KEPT_WORDS.notHere
@@ -167,8 +176,9 @@ export function takeDownPosts(cb: ModerationNoticeCallbacks, input: TakeDownInpu
             if (refusal || !p) { kept.push({ postId, why: refusal ?? KEPT_WORDS.notHere }); continue; }
             hide.run(at, at, at, postId);
             decline.run(at, postId);
+            const closing = openReportIdsOnPost(postId);
             reporters.set(postId, closeOpenReportsOnPost(postId));
-            record.run(id, postId);
+            record.run(id, postId, p.hidden_by_reports_at, JSON.stringify(closing));
             removed.push(p);
         }
         if (removed.length === 0) return;
@@ -184,11 +194,12 @@ export function takeDownPosts(cb: ModerationNoticeCallbacks, input: TakeDownInpu
     }
     for (const [author, posts] of byAuthor) {
         notifyPostsTakenDown(cb, author, posts, reason);
-        // One weighing per author: on the global profile, the third removal in 30 days mutes them. Kept on the record, so that
-        // putting this takedown back can take that mute away with it.
+        // One weighing per author: on the global profile, the third removal in 30 days mutes them. Kept on the record, with the last
+        // lift that mute writes over, so that putting these takedowns back can take it away by the same count.
+        const lastLift = lastLiftOf(author);
         if (evaluateAutoMute(cb, author, now)) {
-            const mark = db.prepare('UPDATE agent_takedown_posts SET muted_author = 1 WHERE takedown_id = ? AND post_id = ?');
-            for (const p of posts) mark.run(id, p.id);
+            const mark = db.prepare('UPDATE agent_takedown_posts SET muted_author = 1, last_lift = ? WHERE takedown_id = ? AND post_id = ?');
+            for (const p of posts) mark.run(lastLift, id, p.id);
         }
     }
     notifyReportersRemoved(cb, reporters, new Map(removed.map(p => [p.id, p.author_pubkey])));
@@ -206,50 +217,58 @@ export function takeDownPosts(cb: ModerationNoticeCallbacks, input: TakeDownInpu
 
 export type PutBackScope = { postId: string } | { takedownId: string } | { grantId: string; since: string };
 
-export interface PutBackResult { back: string[]; gone: number }
+export interface PutBackResult {
+    /** Every post back where it stood before the takedown. */
+    back: string[];
+    /** Of those, the ones hidden before it: they stay hidden, for the moderators. */
+    stillHidden: string[];
+    gone: number;
+}
 
-/** Put back, a person's: `postId`, one call, or everything one assistant took down since a time (a stolen token's day, in one call). */
+/** A burst's undo skipped a post on hold, so that burst's stamp has nothing left to lift it: it can't be what a post goes back to. */
+const burstHideUndone = (postId: string, stamp: string): boolean =>
+    !!db.prepare(`SELECT 1 FROM burst_action_posts bp JOIN burst_actions a ON a.id = bp.action_id
+                   WHERE bp.post_id = ? AND a.at = ? AND a.undone_at IS NOT NULL`).get(postId, stamp);
+
+/** Put back, a person's (the file header): `postId`, one call, or everything one assistant took down since a time (a stolen token's day, in one call). */
 export function putBackTakedowns(cb: ModerationNoticeCallbacks, scope: PutBackScope, now: number = Date.now()): PutBackResult {
     const at = iso(now);
     const where = 'postId' in scope ? 'tp.post_id = ?' : 'takedownId' in scope ? 'tp.takedown_id = ?' : 't.grant_id = ? AND t.at >= ?';
     const args = 'postId' in scope ? [scope.postId] : 'takedownId' in scope ? [scope.takedownId] : [scope.grantId, scope.since];
-    const back: { id: string; title: string | null; author: string | null; muted: boolean }[] = [];
-    const openReports: { postId: string; reporter: string; author: string | null }[] = [];
+    const back: { id: string; title: string | null; author: string | null; up: boolean }[] = [];
     let gone = 0;
     db.transaction(() => {
-        const held = db.prepare(`SELECT tp.takedown_id, tp.post_id, tp.muted_author, p.title, p.author_pubkey, p.active, p.status
+        const held = db.prepare(`SELECT tp.takedown_id, tp.post_id, tp.hidden_before, tp.reports_closed, p.title, p.author_pubkey, p.active, p.status
                                    FROM agent_takedown_posts tp JOIN agent_takedowns t ON t.id = tp.takedown_id
                                    LEFT JOIN posts p ON p.id = tp.post_id
                                   WHERE tp.put_back_at IS NULL AND tp.final_at IS NULL AND ${where}`).all(...args) as
-            { takedown_id: string; post_id: string; muted_author: number; title: string | null; author_pubkey: string | null; active: number | null; status: string | null }[];
+            { takedown_id: string; post_id: string; hidden_before: string | null; reports_closed: string; title: string | null; author_pubkey: string | null; active: number | null; status: string | null }[];
         for (const h of held) {
             if (h.active !== 1 || h.status === 'cancelled') {
                 db.prepare('UPDATE agent_takedown_posts SET final_at = ? WHERE takedown_id = ? AND post_id = ?').run(at, h.takedown_id, h.post_id);
                 gone++;
                 continue;
             }
-            db.prepare('UPDATE posts SET hidden_by_reports_at = NULL, removed_by_moderator_at = NULL, updated_at = ? WHERE id = ?').run(at, h.post_id);
+            const stamp = h.hidden_before && !burstHideUndone(h.post_id, h.hidden_before) ? h.hidden_before : null;
+            db.prepare('UPDATE posts SET hidden_by_reports_at = ?, removed_by_moderator_at = NULL, updated_at = ? WHERE id = ?').run(stamp, at, h.post_id);
             db.prepare('UPDATE agent_takedown_posts SET put_back_at = ? WHERE takedown_id = ? AND post_id = ?').run(at, h.takedown_id, h.post_id);
-            // A report filed while it was hidden: looked at and kept, as a restore dismisses one.
-            const reporters = db.prepare(`SELECT DISTINCT reporter_pubkey FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`)
-                .all(h.post_id) as { reporter_pubkey: string }[];
-            db.prepare(`UPDATE abuse_reports SET status = 'reviewed', updated_at = ? WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`)
-                .run(at, h.post_id);
-            for (const r of reporters) openReports.push({ postId: h.post_id, reporter: r.reporter_pubkey, author: h.author_pubkey });
-            back.push({ id: h.post_id, title: h.title, author: h.author_pubkey, muted: h.muted_author === 1 });
+            reopenClosedReports(JSON.parse(h.reports_closed) as string[]);
+            back.push({ id: h.post_id, title: h.title, author: h.author_pubkey, up: !stamp });
         }
     })();
-    if (back.length === 0) return { back: [], gone };
+    if (back.length === 0) return { back: [], stillHidden: [], gone };
     announce(cb, 'post_updated');
     const byAuthor = new Map<string, typeof back>();
     for (const b of back) if (b.author) byAuthor.set(b.author, [...(byAuthor.get(b.author) ?? []), b]);
     for (const [author, posts] of byAuthor) {
-        if (posts.length === 1) notifyPostBack(cb, { id: posts[0].id, title: posts[0].title, authorPubkey: author });
-        else notifyPostsBack(cb, author, posts.length);
-        if (posts.some(p => p.muted) && muteOf(author, now).muted) liftMuteNoLongerEarned(cb, author, now);
+        const up = posts.filter(p => p.up);
+        if (up.length === 1) notifyPostBack(cb, { id: up[0].id, title: up[0].title, authorPubkey: author });
+        else notifyPostsBack(cb, author, up.length);
+        // Not "back", and no longer "removed in 7 days": what they were told at the takedown has to end somewhere.
+        notifyPostsHiddenForReview(cb, author, posts.length - up.length);
+        liftMuteATakedownBrought(cb, author, now);
     }
-    for (const r of openReports) if (r.reporter !== r.author) notifyReportDismissed(cb, r.reporter, r.postId, true);
-    return { back: back.map(b => b.id), gone };
+    return { back: back.map(b => b.id), stillHidden: back.filter(b => !b.up).map(b => b.id), gone };
 }
 
 /** What makes a takedown final: no way to move a Bean (state-engine.ts). False: it refused, and the post stays hidden. */

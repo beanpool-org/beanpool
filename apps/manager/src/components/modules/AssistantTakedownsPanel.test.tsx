@@ -14,12 +14,12 @@ const CALL = {
     ],
 };
 
-function serve(answer: any) {
+function serve(answer: any, putBackAnswer: any = { back: ['p1'], gone: 0, success: true }) {
     const calls: { url: string; body: any }[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
         if (!init || init.method !== 'POST') return new Response(JSON.stringify(answer));
         calls.push({ url, body: JSON.parse(String(init.body)) });
-        return new Response(JSON.stringify({ back: ['p1'], gone: 0, success: true }));
+        return new Response(JSON.stringify(putBackAnswer));
     }));
     return calls;
 }
@@ -57,6 +57,26 @@ describe('Taken down by assistants', () => {
         await waitFor(() => expect(calls).toHaveLength(1));
         expect(calls[0].url).toMatch(/\/api\/local\/admin\/agent\/takedowns\/put-back$/);
         expect(calls[0].body).toEqual({ postId: 'p1' });
+    });
+
+    it('says everyone sees a post again only when they do', async () => {
+        const putBackOne = async (answer: any) => {
+            serve({ canActOnMany: false, takedowns: [CALL] }, answer);
+            const panel = render(<AssistantTakedownsPanel activeNode={NODE} />);
+            fireEvent.click(await screen.findByText('Show its posts'));
+            fireEvent.click(screen.getAllByTestId('agent-takedown-put-back')[0]);
+            const said = (await screen.findByRole('status')).textContent ?? '';
+            panel.unmount();
+            return said;
+        };
+        const hidden = await putBackOne({ back: ['p1'], stillHidden: ['p1'], gone: 0 });
+        expect(hidden).toMatch(/^Put back: 1 post\. 1 post stayed hidden for the moderators, as before the assistant took it down\./);
+        expect(hidden).not.toMatch(/everyone sees/);
+        const mixed = await putBackOne({ back: ['p1', 'p2', 'p3'], stillHidden: ['p1'], gone: 0 });
+        expect(mixed).toMatch(/1 post stayed hidden/);
+        expect(mixed).toMatch(/2 posts back up: each author is told, and everyone sees them again\./);
+        // A server older than this says nothing of what stayed hidden, and nothing did.
+        expect(await putBackOne({ back: ['p1'], gone: 0 })).toMatch(/^Put back: 1 post\. 1 post back up: each author is told/);
     });
 
     it('offers an admin no whole-call button, and an owner one for a call and for a time', async () => {

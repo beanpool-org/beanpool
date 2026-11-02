@@ -120,7 +120,7 @@ const fetchMock = vi.fn(async (url: string, init?: { method?: string; body?: str
         return answer(200, JSON.stringify({ success: true, profile: { ...node.held } }));
     }
     if (pathname === `/api/profile/${ME}`) {
-        if (node.member === 'silent' || node.profileSilent) return answer(503, '{}');
+        if (node.profileSilent) return answer(503, '{}');
         return answer(200, JSON.stringify({ publicKey: ME, ...node.held }));
     }
     if (pathname === '/api/marketplace/posts') return answer(200, '[]');

@@ -48,8 +48,10 @@ export function MapStackList({ posts, onOpen, onClose, heading: headingProp }: {
     const rows = useMemo(() => posts.map(stackRow), [posts]);
     const heading = headingProp ?? stackHeading(rows.length);
 
-    // Opening does not move a screen reader's focus, so the count is said aloud as the panel comes up.
-    useEffect(() => { AccessibilityInfo.announceForAccessibility?.(heading); }, []);
+    // Opening or heading updates announce the current date and count to screen readers
+    useEffect(() => {
+        AccessibilityInfo.announceForAccessibility?.(heading);
+    }, [heading]);
 
     const renderRow = ({ item }: { item: StackRow }) => (
         <Pressable

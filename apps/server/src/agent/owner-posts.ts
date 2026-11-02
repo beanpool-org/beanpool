@@ -45,10 +45,16 @@
  * - Slice S2 (design §2.3, §2.7): `my_posts`, `update_post`, `remove_post` and `remove_all_i_made` act only on a post THIS
  *   grant made (created_via = 'assistant:<this grant id>'), still by the owner or an enterprise they keep now: never another
  *   member's post, nor one the owner made in the app, nor another assistant's. Through the routes' own engine calls
- *   (updatePost, removePost): an edit holds to the create's fields, a deal in escrow keeps a post up, and no tool moves a
- *   Bean. 200 edits a day; remove_all_i_made once a day. The owner's own "Remove its posts" in Settings
+ *   (updatePost, removePost): a deal in escrow keeps a post up, and no tool moves a Bean. 200 edits a day; remove_all_i_made
+ *   once a day. The owner's own "Remove its posts" in Settings
  *   (agent/grants-route.ts) runs the same removal (removeAllMadeBy), for a disconnected assistant too, and both write an
  *   ADMIN line naming the ids removed.
+ * - update_post takes every field a person's edit changes (MCP-UPDATE-ALL; Damo via Marty, 2 Nov: an assistant had to remove
+ *   and re-create an event to move a pin, which lost its RSVPs and links): place, an event's times, end, repeat, online, link,
+ *   note and who it lets in, a listing's terms, shop and lending. All of it goes to the route's own updatePost, which keeps the
+ *   id, the RSVPs and the links and tells whoever a host's edit tells; a member's copy is held as the route holds one
+ *   (copyEventUpdates). What the engine would leave out without a word (a term on an Offer that isn't lent, a link on an event
+ *   in person, a place on an online one) is refused here in words, because the answer's `changed` is what an assistant believes.
  * - Tags T4 (DESIGN-tags-free-entry-fable.md §8, §5; DESIGN-owner-seeding-tags-fable.md §2.6): every create and update_post takes
  *   `tags`, ids from the library in core (tags_search, agent/owner-reads.ts, finds them), and `free_tags`, the words the
  *   library lacks, each held to core's rule through the engine's own check (engine/post-fields.ts assertFreeTags). Neither is
@@ -63,17 +69,19 @@
  */
 import crypto from 'node:crypto';
 import {
-    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, plainWords, POST_TAGS_MAX, postTagsOf,
-    PRICING_CATEGORIES, singulars, TAG_LIBRARY, tagIndex,
+    approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LISTING_DESCRIPTION_LIMIT, plainWords,
+    POST_TAGS_MAX, postTagsOf, PRICING_CATEGORIES, singulars, TAG_LIBRARY, tagIndex,
 } from '@beanpool/core';
+import { EVENT_REPEAT_WEEKDAYS, readRepeatRule } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { featureOffFor } from '../routes/profile-feature-gate.js';
 import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS, removePost, updatePost } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { createEventFromBody } from '../routes/event-post.js';
-import type { EventTimeOut } from '../engine/posts.js';
-import { assertFreeTags } from '../engine/post-fields.js';
+import { EVENT_PRIVATE_NOTE_MAX, type EventTimeOut } from '../engine/posts.js';
+import { copyEventUpdates } from '../engine/event-copy.js';
+import { assertFreeTags, POST_PRICE_TYPES } from '../engine/post-fields.js';
 import { assertMayAddPhotos, assertMayEditPhotos, assertMayPost } from '../engine/probation.js';
 import { enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -1038,11 +1046,32 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
 /** A post this grant made, as it is now: for update_post, remove_post and the undo list. */
 interface MadeRow {
     id: string; type: string; status: string; active: number; title: string; author_pubkey: string; created_by: string | null; created_at: string;
-    tags: string; free_tags: string;
+    tags: string; free_tags: string; shown_from_host: string | null;
+    description: string; category: string; credits: number; price_type: string | null; repeatable: number | null; cash_also_needed: number | null;
+    lat: number | null; lng: number | null; shop_id: string | null; photo_count: number;
+    lendable: number; lend_max_days: number | null; lend_terms: string | null; replacement_value: string | null;
+    event_start_at: string | null; event_end_at: string | null; event_start_local: string | null; event_end_local: string | null; event_tz: string | null; event_place_name: string | null;
+    event_private_note: string | null; event_online: number | null; event_link: string | null; event_host_lets_in: number | null;
+    event_repeat: string | null; event_repeat_until: string | null;
 }
+
+/** What update_post can change and my_posts reads back, and what either has to know first. */
+const MADE_COLUMNS = `id, type, status, active, title, author_pubkey, created_by, created_at, tags, free_tags, shown_from_host,
+    description, category, credits, price_type, repeatable, cash_also_needed, lat, lng, shop_id,
+    (SELECT COUNT(*) FROM post_photos WHERE post_id = posts.id) AS photo_count,
+    lendable, lend_max_days, lend_terms, replacement_value,
+    event_start_at, event_end_at, event_start_local, event_end_local, event_tz, event_place_name, event_private_note, event_online, event_link, event_host_lets_in,
+    event_repeat, event_repeat_until`;
 
 /** The words for a post that is not this assistant's to change (design §2.3). */
 const NOT_MADE_HERE = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
+
+/**
+ * Is this post the owner's own, or an enterprise's they keep now? One test for what update_post may change and my_posts may
+ * read: someone who left an enterprise is no host of its events (the engine's isEventHost), so neither reads their note.
+ */
+const stillTheirs = (grant: AgentGrant, r: Pick<MadeRow, 'author_pubkey' | 'created_by'>): boolean =>
+    r.author_pubkey === grant.member || (r.created_by === grant.member && canOperateTreasury(grant.member, r.author_pubkey));
 
 /**
  * The post `postId` names, when THIS grant made it (created_via) and it is this community's own (not a copy pulled from
@@ -1050,12 +1079,10 @@ const NOT_MADE_HERE = 'That is not a post this assistant made: edit or remove it
  */
 function madePost(grant: AgentGrant, postId: unknown): { ok: true; row: MadeRow } | { ok: false; error: string } {
     if (typeof postId !== 'string' || !postId.trim()) return { ok: false, error: 'post_id is required: the id a create answered, or my_posts lists.' };
-    const row = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at, tags, free_tags FROM posts
+    const row = db.prepare(`SELECT ${MADE_COLUMNS} FROM posts
         WHERE id = ? AND created_via = ? AND origin_node IS NULL`).get(postId.trim().slice(0, 200), createdViaOf(grant)) as MadeRow | undefined;
     if (!row) return { ok: false, error: NOT_MADE_HERE };
-    if (row.author_pubkey !== grant.member && !(row.created_by === grant.member && canOperateTreasury(grant.member, row.author_pubkey))) {
-        return { ok: false, error: "That post is an enterprise's you no longer keep: its keepers edit or remove it in the app." };
-    }
+    if (!stillTheirs(grant, row)) return { ok: false, error: "That post is an enterprise's you no longer keep: its keepers edit or remove it in the app." };
     return { ok: true, row };
 }
 
@@ -1070,7 +1097,145 @@ function tendGate(grant: AgentGrant): string | null {
     return null;
 }
 
-/** update_post: the fields an edit may change, by the tools' own names, through the route's own updatePost. */
+/** update_post's fields beyond what every post takes, by the kind that takes them, in the tool's own names. */
+const LEND_TERMS = ['lend_max_days', 'lend_terms', 'replacement_value'] as const;
+const OFFER_FIELDS = ['shop_id', 'lendable', ...LEND_TERMS] as const;
+const LISTING_FIELDS = ['category', 'beans', 'price_type', 'use_my_area', 'repeatable', 'cash_also_needed', ...OFFER_FIELDS] as const;
+const EVENT_FIELDS = ['start_at', 'end_at', 'timezone', 'place_name', 'online', 'link', 'private_note', 'host_lets_in', 'repeat', 'repeat_until'] as const;
+const ALL_POSTS_FIELDS = ['title', 'description', 'lat', 'lng', 'tags', 'free_tags', ...PHOTO_FIELDS] as const;
+const UPDATE_FIELDS: ReadonlySet<string> = new Set(['post_id', ...ALL_POSTS_FIELDS, ...LISTING_FIELDS, ...EVENT_FIELDS]);
+/** Null on these is refused, as on tags (heldTags): a client that fills every field would otherwise clear them unasked. */
+const NEVER_NULL = ['lat', 'lng', ...LISTING_FIELDS, ...EVENT_FIELDS] as const;
+
+const EVENT_TAKES = `title, description, lat, lng, tags, free_tags, photos, ${EVENT_FIELDS.join(', ')}`;
+const LISTING_TAKES = `title, description, lat, lng, tags, free_tags, photos, ${LISTING_FIELDS.join(', ')}`;
+
+/** A field the post's kind does not take, in words: the engine would leave some of these out without one. */
+function wrongKind(grant: AgentGrant, row: MadeRow, args: Record<string, unknown>): string | null {
+    const sent = (fields: readonly string[]): string | undefined => fields.find((k) => args[k] !== undefined);
+    if (row.type === 'event') {
+        const field = sent(LISTING_FIELDS);
+        return field ? `An event has no ${field}: it takes ${EVENT_TAKES}.` : null;
+    }
+    const eventField = sent(EVENT_FIELDS);
+    if (eventField) return `An Offer or a Need has no ${eventField}: it takes ${LISTING_TAKES}.`;
+    const offerField = row.type === 'need' ? sent(OFFER_FIELDS) : undefined;
+    if (offerField) return `A Need has no ${offerField}: only an Offer goes in a shop or is lent.`;
+    const ownerField = row.author_pubkey !== grant.member ? sent(['use_my_area', 'cash_also_needed']) : undefined;
+    if (ownerField) return `An enterprise's listing has no ${ownerField}: its form does not ask one, as create_enterprise_listing does not.`;
+    return null;
+}
+
+type Updates = Record<string, unknown>;
+
+/** Sets the fields a call named; one it left out stays out, so "no change" is still no change. */
+function put(updates: Updates, fields: Updates): void {
+    for (const [k, v] of Object.entries(fields)) if (v !== undefined) updates[k] = v;
+}
+
+const isBlank = (v: unknown): boolean => typeof v === 'string' && !v.trim();
+
+/** The first of `fields` sent that is not true or false, in words: the engine reads any text as true. */
+function notAFlag(args: Record<string, unknown>, fields: readonly string[]): string | null {
+    const field = fields.find((k) => args[k] !== undefined && typeof args[k] !== 'boolean');
+    return field ? `${field} is true or false.` : null;
+}
+
+/** A new place: both halves of a pin, rounded as a create's is, or the owner's own area said out loud. */
+function placeEdit(grant: AgentGrant, args: Record<string, unknown>, updates: Updates): string | null {
+    const flag = notAFlag(args, ['use_my_area']);
+    if (flag) return flag;
+    const pinSent = args.lat !== undefined || args.lng !== undefined;
+    if (args.use_my_area === true) {
+        if (pinSent) return 'Send lat and lng, or use_my_area: true, not both.';
+        const area = readMemberArea(grant.member);
+        if (!area) return NO_AREA;
+        put(updates, approximateLocation(area.lat, area.lng));
+        return null;
+    }
+    if (!pinSent) return null;
+    const { lat, lng } = roundedPin(args);
+    if (lat === undefined || lng === undefined) return `${lat === undefined ? 'lat' : 'lng'} is required as a number: a place on the map is lat and lng together.`;
+    put(updates, { lat, lng });
+    return null;
+}
+
+/** An Offer's or a Need's own fields, under the engine's names. */
+function listingEdit(row: MadeRow, grant: AgentGrant, args: Record<string, unknown>, updates: Updates): string | null {
+    if (args.category !== undefined) {
+        const category = typeof args.category === 'string' ? args.category.trim() : '';
+        if (!AGENT_POST_CATEGORIES.includes(category)) return `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.`;
+        updates.category = category;
+    }
+    if (args.beans !== undefined) {
+        const beans = num(args.beans);
+        if (beans === undefined || beans < 0) return 'beans is the price in Beans: a number, 0 or more.';
+        // An enterprise's listing keeps a price of more than 0 where the node has Beans, as its form asks (create_enterprise_listing).
+        if (row.author_pubkey !== grant.member && getProfileSwitches().beans && beans <= 0) {
+            return "beans must be more than 0: an enterprise's listing has a price, as its form asks.";
+        }
+        updates.credits = beans;
+    }
+    const flag = notAFlag(args, ['repeatable', 'cash_also_needed', 'lendable']);
+    if (flag) return flag;
+    if (args.shop_id !== undefined && typeof args.shop_id !== 'string') return 'shop_id is the id of a shop, or "" to take it out of its shop.';
+    const lent = args.lendable === undefined ? row.lendable === 1 : args.lendable === true;
+    const term = LEND_TERMS.find((k) => args[k] !== undefined);
+    // The engine stores no term on an Offer that isn't lent, and keeps a lent one repeatable, whatever the edit says.
+    if (term && !lent) return `${term}: this Offer is not lent. Send lendable: true with it.`;
+    if (lent && args.repeatable === false) return 'A lent Offer is always repeatable: it goes back on the board after each loan. Send lendable: false to stop lending it.';
+    // Held to the engine's rules by updatePost: a price type it does not take, a lending term past its limit, a shop not the author's.
+    put(updates, {
+        priceType: args.price_type, repeatable: args.repeatable, cashAlsoNeeded: args.cash_also_needed, lendable: args.lendable,
+        lendMaxDays: args.lend_max_days === 0 ? null : args.lend_max_days, lendTerms: args.lend_terms, replacementValue: args.replacement_value,
+        shopId: typeof args.shop_id === 'string' ? args.shop_id.trim() || null : undefined,
+    });
+    return null;
+}
+
+/** An event's own fields, under the names the apps send them by; the engine's own edit holds each one. */
+function eventEdit(row: MadeRow, args: Record<string, unknown>, updates: Updates): string | null {
+    const flag = notAFlag(args, ['online', 'host_lets_in']);
+    if (flag) return flag;
+    const wasOnline = row.event_online === 1;
+    const online = args.online === undefined ? wasOnline : args.online === true;
+    // Both of these the engine would drop without a word: it clears a link on an event in person, and a place on an online one.
+    if (online) {
+        const place = ['lat', 'lng', 'place_name'].find((k) => args[k] !== undefined);
+        if (place) return `An online event has no ${place}: send online: false with lat, lng and place_name to put it at a place.`;
+    } else {
+        if (args.link !== undefined) return 'An event in person has no link: send online: true with it.';
+        // As in both apps: in person it has a pin and a named place, so an online event coming to one names both.
+        const missing = wasOnline ? missingField(args, REQUIRED.eventInPerson) : null;
+        if (missing) return missing;
+        if (isBlank(args.place_name)) return 'place_name is empty: an event in person has a named place. Send the new name, or leave it out to keep it.';
+    }
+    const blank = ['start_at', 'end_at', 'timezone'].find((k) => isBlank(args[k]));
+    if (blank) return `${blank} is empty: send the new value, or leave it out to keep it.`;
+    const unzoned = unzonedTime(args);
+    if (unzoned) return unzoned;
+    const repeat = args.repeat;
+    if (repeat !== undefined && (typeof repeat !== 'object' || repeat === null || Array.isArray(repeat))) {
+        return 'repeat is a rule, e.g. {"freq":"weekly","byDay":"FR"}, or {"freq":"never"} to make it a one-off.';
+    }
+    const repeats = repeat === undefined ? !!row.event_repeat : (repeat as { freq?: unknown }).freq !== 'never';
+    if (args.repeat_until !== undefined && typeof args.repeat_until !== 'string') return 'repeat_until is the last date, YYYY-MM-DD, or "" for no last date.';
+    if (args.repeat_until !== undefined && !repeats) return 'repeat_until: this event does not repeat. Send repeat with it.';
+    put(updates, {
+        eventStartAt: args.start_at, eventEndAt: args.end_at, eventTz: args.timezone, eventPlaceName: args.place_name, eventOnline: args.online,
+        eventLink: args.link, eventPrivateNote: args.private_note, eventHostLetsIn: args.host_lets_in, eventRepeat: repeat, eventRepeatUntil: args.repeat_until,
+    });
+    return null;
+}
+
+/** What an edit asks of a member's copy, as the route asks it: a refusal in words for what the route leaves out of one. */
+function copyEdit(updates: Updates): string | null {
+    const asked = Object.keys(updates);
+    copyEventUpdates(updates);
+    return asked.every((k) => k in updates) ? null : 'This is a copy of an event from your own community: it carries its times and a rounded pin only, never a place name, a note, a link, who it lets in or online.';
+}
+
+/** update_post: every field a person's edit changes, by the tools' own names, through the route's own updatePost. */
 async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Promise<ToolResult> {
     const refused = tendGate(grant);
     if (refused) return { ok: false, error: refused };
@@ -1079,7 +1244,13 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
     const { row } = made;
     if (!isLive(row) || row.status !== 'active') return { ok: false, error: `That post is ${isLive(row) ? row.status : 'removed'} now: only a live post is edited.` };
     const event = row.type === 'event';
-    const updates: Record<string, unknown> = {};
+    const unknown = Object.keys(args).find((k) => !UPDATE_FIELDS.has(k));
+    if (unknown) return { ok: false, error: `update_post has no field ${cleanMemberText(unknown, REFUSED_TAG_CHARS)}: it takes ${event ? EVENT_TAKES : LISTING_TAKES}.` };
+    const wrong = wrongKind(grant, row, args);
+    if (wrong) return { ok: false, error: wrong };
+    const cleared = NEVER_NULL.find((k) => args[k] === null);
+    if (cleared) return { ok: false, error: `${cleared} is empty: send the new value, or leave it out to keep it.` };
+    const updates: Updates = {};
     for (const k of ['title', 'description'] as const) {
         if (args[k] === undefined) continue;
         if (!isText(args[k])) return { ok: false, error: `${k} is empty: send the new ${k}, or leave it out to keep it.` };
@@ -1087,24 +1258,9 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
     }
     const tooLong = updates.title !== undefined ? titleTooLong(args, event ? AGENT_TITLE_MAX.event : AGENT_TITLE_MAX.listing) : null;
     if (tooLong) return { ok: false, error: tooLong };
-    if (event && (args.category !== undefined || args.beans !== undefined || args.price_type !== undefined)) {
-        return { ok: false, error: 'An event has no category or price: send title, description, tags, free_tags or photos.' };
-    }
-    if (args.category !== undefined) {
-        const category = typeof args.category === 'string' ? args.category.trim() : '';
-        if (!AGENT_POST_CATEGORIES.includes(category)) return { ok: false, error: `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.` };
-        updates.category = category;
-    }
-    if (args.beans !== undefined) {
-        const beans = num(args.beans);
-        if (beans === undefined || beans < 0) return { ok: false, error: 'beans is the price in Beans: a number, 0 or more.' };
-        // An enterprise's listing keeps a price of more than 0 where the node has Beans, as its form asks (create_enterprise_listing).
-        if (row.author_pubkey !== grant.member && getProfileSwitches().beans && beans <= 0) {
-            return { ok: false, error: "beans must be more than 0: an enterprise's listing has a price, as its form asks." };
-        }
-        updates.credits = beans;
-    }
-    if (args.price_type !== undefined) updates.priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
+    const problem = placeEdit(grant, args, updates) ?? (event ? eventEdit(row, args, updates) : listingEdit(row, grant, args, updates))
+        ?? (row.shown_from_host != null ? copyEdit(updates) : null);
+    if (problem) return { ok: false, error: problem };
     const tagged = heldTags(args, row);
     if (!tagged.ok) return tagged;
     Object.assign(updates, tagged.fields);
@@ -1113,7 +1269,7 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
     if (newPhotos && !newPhotos.ok) return newPhotos;
     if (newPhotos) updates.photos = newPhotos.photos;
     if (!Object.keys(updates).length) {
-        return { ok: false, error: 'Send at least one field to change: title, description, category, beans, price_type, tags, free_tags, or photos (photo_urls, photo_ids or photos).' };
+        return { ok: false, error: `Send at least one field to change: ${event ? EVENT_TAKES : LISTING_TAKES}, with photos from photo_urls, photo_ids or photos.` };
     }
     const edit = (): ToolResult => {
         if (!admitAgentEdit(grant.id)) {
@@ -1126,7 +1282,8 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
             assertNotMuted(owner);
             const photos = updates.photos as string[] | undefined;
             if (photos) assertMayEditPhotos(owner, row.id, Math.min(photos.length, 5), photos.length);
-            const post = updatePost(row.id, row.author_pubkey, updates as Parameters<typeof updatePost>[2], owner, {});
+            const timeOut: EventTimeOut = {};
+            const post = updatePost(row.id, row.author_pubkey, updates as Parameters<typeof updatePost>[2], owner, timeOut);
             if (!post) {
                 returnAgentEdit(grant.id);
                 return { ok: false, error: 'The post could not be changed now: try again later.' };
@@ -1135,7 +1292,12 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
                 ok: true, rows: 1,
                 result: {
                     postId: row.id, kind: row.type, link: `/?post=${encodeURIComponent(row.id)}`,
-                    changed: Object.keys(args).filter((k) => k !== 'post_id'), editsToday: agentEditsToday(grant.id), editsPerDay: AGENT_EDITS_PER_DAY,
+                    // What the edit stored, for the assistant to check: the rounded pin, and an event's clock as its members see it.
+                    ...(post.lat != null && post.lng != null ? { lat: post.lat, lng: post.lng } : {}),
+                    ...(post.eventStartLocal && post.eventEndLocal && post.eventTz ? { startsLocal: post.eventStartLocal, endsLocal: post.eventEndLocal, timezone: post.eventTz } : {}),
+                    ...(timeOut.eventTimeAdjusted ? { timeAdjusted: timeOut.eventTimeAdjusted } : {}),
+                    changed: Object.keys(args).filter((k) => k !== 'post_id' && !(k === 'use_my_area' && args[k] !== true)),
+                    editsToday: agentEditsToday(grant.id), editsPerDay: AGENT_EDITS_PER_DAY,
                 },
             };
         } catch (e) {
@@ -1213,13 +1375,42 @@ export function grantIdsWithMadePosts(): string[] {
         AND active = 1 AND status != 'cancelled'`).all() as Array<{ id: string }>).map((r) => r.id);
 }
 
+/** What update_post can change on an Offer or a Need, for an assistant to read first; words typed are fenced. */
+function listingFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
+    return {
+        category: r.category, beans: r.credits, priceType: r.price_type ?? 'fixed', repeatable: r.repeatable === 1, cashAlsoNeeded: r.cash_also_needed === 1,
+        shopId: r.shop_id, lendable: r.lendable === 1, lendMaxDays: r.lend_max_days,
+        lendTerms: fence(boundary, `post ${r.id}, lending terms`, r.lend_terms), replacementValue: fence(boundary, `post ${r.id}, replacement value`, r.replacement_value),
+    };
+}
+
+/** What update_post can change on an event: the instants it takes, and the clock its members see, in its zone. */
+function eventFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
+    return {
+        startAt: r.event_start_at, endAt: r.event_end_at, startsLocal: r.event_start_local, endsLocal: r.event_end_local, timezone: r.event_tz, online: r.event_online === 1,
+        placeName: fence(boundary, `post ${r.id}, place name`, r.event_place_name), joinLink: fence(boundary, `post ${r.id}, join link`, r.event_link),
+        privateNote: fence(boundary, `post ${r.id}, note for people going`, r.event_private_note, EVENT_PRIVATE_NOTE_MAX),
+        hostLetsIn: r.event_host_lets_in === 1, repeat: readRepeatRule(r.event_repeat), repeatUntil: r.event_repeat_until,
+    };
+}
+
+/** What update_post can change on any post, read back for one still the owner's (stillTheirs). */
+function editableFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
+    return {
+        // Whole, not a list's preview: an edit replaces all of it.
+        description: fence(boundary, `post ${r.id}, description`, r.description, LISTING_DESCRIPTION_LIMIT.chars),
+        lat: r.lat, lng: r.lng, photoCount: r.photo_count,
+        ...(r.type === 'event' ? eventFieldsOf(r, boundary) : listingFieldsOf(r, boundary)),
+    };
+}
+
 /** my_posts: what THIS grant made, newest first (design §2.2: the undo list). */
 function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: string): ToolResult {
     const status = args.status === 'removed' ? 'removed' : args.status === 'all' ? 'all' : 'live';
     const n = Math.floor(Number(args.limit));
     const limit = Number.isFinite(n) && n >= 1 ? Math.min(n, AGENT_LIST_MAX) : 20;
     const where = status === 'live' ? `AND active = 1 AND status != 'cancelled'` : status === 'removed' ? `AND (active = 0 OR status = 'cancelled')` : '';
-    const rows = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at, tags, free_tags FROM posts
+    const rows = db.prepare(`SELECT ${MADE_COLUMNS} FROM posts
         WHERE created_via = ? AND origin_node IS NULL ${where} ORDER BY created_at DESC LIMIT ?`).all(createdViaOf(grant), limit) as MadeRow[];
     const total = (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE created_via = ? AND origin_node IS NULL ${where}`).get(createdViaOf(grant)) as { c: number }).c;
     return {
@@ -1234,6 +1425,8 @@ function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: str
                 // What an edit replaces: update_post takes the whole new list of either.
                 tags: postTagsOf(r.tags),
                 freeTags: fence(boundary, `post ${r.id}, free tags`, freeTagsOf(r.free_tags).join(', ')),
+                // An enterprise's post the owner no longer keeps stays on the undo list and reads nothing more.
+                ...(stillTheirs(grant, r) ? editableFieldsOf(r, boundary) : {}),
             })),
             _notice: MEMBER_TEXT_NOTICE,
         },
@@ -1253,8 +1446,11 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         name: 'my_posts',
         title: 'Posts this assistant made',
         reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
-            + 'its link, its library tags, and its title and its own tags, fenced; the live ones (the default), the removed ones, or all',
-        never: "a post made in the app or by another assistant, another member's data, or a key",
+            + "its link, its library tags, its pin and how many photos, and fenced its title, description and its own tags; a listing's category, price, shop and "
+            + "lending terms; an event's start and end, its clock in its zone, online or not, place name, join link, note for people going, who it lets in and repeat rule: what "
+            + 'update_post can change, to read before it edits. An enterprise\'s post you no longer keep lists only its id, kind, status, when, whose it is, its link, title and tags. '
+            + 'The live ones (the default), the removed ones, or all',
+        never: "a post made in the app or by another assistant, who is going to an event, another member's data, or a key",
         memberText: true,
         ownerOnly: true,
         posts: true,
@@ -1279,9 +1475,14 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
     {
         name: 'update_post',
         title: 'Edit a post this assistant made',
-        reads: `nothing: it changes the title, description, category, price, tags or photos of a live post THIS assistant made, as the app's edit does, `
-            + `at most ${AGENT_EDITS_PER_DAY} edits a day; any other post is refused; ${TAGS_WORDS}; tags or free_tags sent is the whole new list of that kind, left out it stays`,
-        never: "anything but the post's id and its link, or another member's data; it never moves Beans",
+        reads: `nothing: it changes a live post THIS assistant made, whatever the app's edit changes, under the same rules: on any post its title, description, `
+            + `place, tags and photos; on an Offer or a Need its category, price, repeat and cash note; on an Offer its shop and lending; on an event its times, zone, `
+            + `place name, online, link, note, who it lets in and repeat. The post keeps its id, so move a pin here, never by removing it and making it again: an event keeps its RSVPs and `
+            + `links, and everyone going is told when its time or place moves, as for a host's own edit. A moved pin leaves place_name as it is: send it too when the `
+            + `place itself changed. A pin moved into another time zone takes that zone: a one-off keeps the moment, so its clock changes, and a repeating event keeps its clock with its repeat `
+            + `rule, as a host's own edit does, so the moment changes. The answer says the clock, and start_at sets it. Only the fields sent change; a field its kind does not take is refused in words. At most ${AGENT_EDITS_PER_DAY} edits a day; any `
+            + `other post is refused; ${TAGS_WORDS}; tags or free_tags sent is the whole new list of that kind, left out it stays; my_posts reads what it holds now`,
+        never: "anything but the post's id, its link and the place and time it now holds, or another member's data; it never moves Beans",
         ownerOnly: true,
         posts: true,
         write: true,
@@ -1293,7 +1494,36 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
                 description: { type: 'string', description: `the new details; ${NO_TAGS_HERE}` },
                 category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: "an Offer's or a Need's new Market category" },
                 beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
-                price_type: { type: 'string', enum: ['fixed', 'hourly'] },
+                price_type: { type: 'string', enum: [...POST_PRICE_TYPES], description: "an Offer's or a Need's: how the price is counted; a lent Offer's is fixed, daily or weekly" },
+                lat: { type: 'number', description: 'the new latitude, with lng, rounded to about 100 m as the apps do; not on an online event' },
+                lng: { type: 'number', description: 'the new longitude, with lat, rounded the same' },
+                use_my_area: { type: 'boolean', description: "an Offer's or a Need's as you: true puts it at your own area, in place of lat and lng" },
+                repeatable: { type: 'boolean', description: "an Offer's or a Need's: stays up after each trade" },
+                cash_also_needed: { type: 'boolean', description: "an Offer's or a Need's as you: a real cash outlay is attached (fuel, materials)" },
+                shop_id: { type: 'string', description: "an Offer's: the author's own shop to put it in, or \"\" to take it out (my_posts shows the one it is in)" },
+                lendable: { type: 'boolean', description: "an Offer's: lent, one borrower at a time; priced fixed, daily or weekly" },
+                lend_max_days: { type: 'integer', minimum: 0, description: "a lent Offer's longest loan in days; 0 takes the limit off" },
+                lend_terms: { type: 'string', description: "a lent Offer's terms, in the owner's words; \"\" takes them off" },
+                replacement_value: { type: 'string', description: "a lent Offer's cost to replace, in words such as \"$120\" or \"like for like\"; \"\" takes it off" },
+                start_at: { type: 'string', description: "an event's new start: ISO 8601 with its offset, e.g. 2026-11-07T10:00:00+11:00 (Z for UTC); one without is refused. It keeps its length unless end_at is sent" },
+                end_at: { type: 'string', description: "an event's new end: ISO 8601 with its offset, as start_at" },
+                timezone: { type: 'string', description: "an event's IANA zone, e.g. Australia/Melbourne. Sent alone, the same clock in the new zone, which is another moment: send start_at too to keep the moment" },
+                place_name: { type: 'string', description: "an event's place name, in person" },
+                online: { type: 'boolean', description: 'true: online, with no place, and link if there is one. false: in person, with lat, lng and place_name in the same call' },
+                link: { type: 'string', description: "an online event's join link, http or https; \"\" takes it off" },
+                private_note: { type: 'string', description: "an event's note, shown only to the host and the people going; \"\" takes it off" },
+                host_lets_in: { type: 'boolean', description: "an event's \"Only people I let in\": true, someone going reads the note and the chat only once the host lets them in" },
+                repeat: {
+                    type: 'object',
+                    properties: {
+                        freq: { type: 'string', enum: ['weekly', 'monthly', 'never'] }, interval: { type: 'integer', minimum: 1 },
+                        byDay: { type: 'string', enum: [...EVENT_REPEAT_WEEKDAYS] }, byMonthDay: { type: 'integer', minimum: 1, maximum: 31 },
+                        pos: { type: 'integer', enum: [1, 2, 3, 4, -1], description: 'with byDay on a monthly rule: which of that weekday in the month; -1 is the last' },
+                    },
+                    description: "an event's repeat rule, whose first date is the event's own: {\"freq\":\"weekly\",\"byDay\":\"FR\"}, {\"freq\":\"monthly\",\"byMonthDay\":15}, "
+                        + '{"freq":"monthly","byDay":"FR","pos":1}, or {"freq":"never"} to make it a one-off',
+                },
+                repeat_until: { type: 'string', description: "a repeating event's last date, YYYY-MM-DD; \"\" for no last date" },
                 // Each the whole new list, or left out to leave them: an assistant reads what a post carries in my_posts.
                 tags: { ...TAGS_SCHEMA, description: `the whole new list in place of the ones it has (my_posts lists them; [] takes them all off; left out, they stay): ${TAGS_SCHEMA.description}` },
                 free_tags: { ...FREE_TAGS_SCHEMA, description: `the whole new list in place of the ones it has (my_posts lists them; [] takes them all off; left out, they stay): ${FREE_TAGS_SCHEMA.description}` },
@@ -1309,6 +1539,9 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
             type: 'object',
             properties: {
                 postId: { type: 'string' }, kind: { type: 'string' }, link: { type: 'string' }, changed: { type: 'array' },
+                lat: { type: 'number', description: 'the place it now holds, rounded' }, lng: { type: 'number' },
+                startsLocal: POST_OUT.properties.startsLocal, endsLocal: POST_OUT.properties.endsLocal, timezone: POST_OUT.properties.timezone,
+                timeAdjusted: { type: 'object', description: 'when a clock had to move: it fell in a daylight-saving change in the new zone' },
                 editsToday: { type: 'number' }, editsPerDay: { type: 'number' },
             },
             required: ['postId', 'kind', 'link', 'changed', 'editsToday', 'editsPerDay'],

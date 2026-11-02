@@ -7,6 +7,7 @@
  * answer carries a key, a balance of any member, a reporter, a DM, a photo, an address or URL (the node's own included:
  * links are Settings paths the assistant joins to the address in its welcome), a host, a log line, or a destination's name.
  * The one exception is what a tool is for: photo_upload_link answers an address on this node, which the assistant sends photos to.
+ * (my_posts reads back an online event's join link, as the fenced text it is.)
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *
  * Slice S1: reads, and `take_backup` for owner grants. Slice S4: `suggest_action`, which changes nothing: it files a card the

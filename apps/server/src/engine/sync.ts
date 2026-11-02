@@ -1519,6 +1519,21 @@ function replaceMemberPreferences(publicKey: string, preferences: Record<string,
 }
 
 /**
+ * A poll's answers as the main server holds them (`pollAnswers` in its row, @beanpool/engine sync.ts postsWithAnswers): the
+ * copy names all of them, so they replace what is here. A copy that doesn't carry the field (a main server from before
+ * them, or a poll with none) leaves them. A malformed entry is left out.
+ */
+function replacePollAnswers(postId: string, answers: unknown): void {
+    if (!Array.isArray(answers)) return;
+    db.prepare('DELETE FROM poll_answers WHERE post_id = ?').run(postId);
+    const insert = db.prepare('INSERT OR IGNORE INTO poll_answers (post_id, id, option_id, words, words_removed) VALUES (?, ?, ?, ?, ?)');
+    for (const a of answers as Array<{ id?: unknown; optionId?: unknown; words?: unknown; wordsRemoved?: unknown }>) {
+        if (typeof a?.id !== 'string' || !a.id || typeof a.optionId !== 'string' || !a.optionId) continue;
+        insert.run(postId, a.id, a.optionId, typeof a.words === 'string' ? a.words : null, a.wordsRemoved === 1 ? 1 : 0);
+    }
+}
+
+/**
  * Who keeps each enterprise, as the main server holds it (design G2c): the copy carries the whole set, so it is applied as a
  * diff, a row it no longer has (a keeper unbound, an enterprise deleted) deleted here. After the re-key follow, which has
  * moved this standby's rows to the new keys the main server's rows name. A malformed row is left out and counted.
@@ -2734,17 +2749,23 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             // A followed re-key's recovery copies: the ones the main server moved to the new key go from the old one.
             if (followedRekeys.length > 0) dropMovedRecoveryCopies(followedRekeys);
 
+            // A poll's answers travel in its row, and go in once its row is here (schema.sql poll_answers).
+            for (const rp of remote.posts ?? []) {
+                if (rp.type === 'poll') replacePollAnswers(rp.id, (rp as { pollAnswers?: unknown }).pollAnswers);
+            }
+
             if (remote.pollVotes) {
                 // The vote's kind (new or 12-word account) as the main server stamped it; a main server from before the
                 // stamp sends none (NULL), as it holds none.
                 const importVote = db.prepare(`INSERT INTO poll_votes
-                    (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words, other_answer_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
                         option_id = excluded.option_id,
                         signature = excluded.signature,
                         created_at = excluded.created_at,
-                        voter_new_or_words = excluded.voter_new_or_words
+                        voter_new_or_words = excluded.voter_new_or_words,
+                        other_answer_id = excluded.other_answer_id
                     WHERE excluded.created_at IS NOT NULL
                       AND (poll_votes.created_at IS NULL OR excluded.created_at >= poll_votes.created_at)`);
                 for (const pv of remote.pollVotes) {
@@ -2755,7 +2776,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         pv.optionId,
                         pv.signature || '',
                         pv.createdAt || new Date().toISOString(),
-                        kind
+                        kind,
+                        typeof pv.otherAnswerId === 'string' ? pv.otherAnswerId : null
                     );
                 }
             }

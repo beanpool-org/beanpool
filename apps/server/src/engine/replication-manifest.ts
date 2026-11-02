@@ -324,7 +324,14 @@ export const TABLES: Record<string, TableEntry> = {
     },
     poll_votes: {
         kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
-        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words'),
+        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words other_answer_id'),
+    },
+    // A poll's answers that name nobody, in each poll's row (`pollAnswers`): they keep no time of their own, on purpose
+    // (schema.sql), and every writer moves the poll's updated_at (engine/posts.ts votePoll, engine/poll-other.ts); the
+    // import replaces the poll's rows with the ones the copy names (engine/sync.ts replacePollAnswers).
+    poll_answers: {
+        kind: 'replicated', payload: 'posts', watermark: 'updated_at', inRowOf: { table: 'posts', field: 'pollAnswers' },
+        columns: cols('post_id id option_id words words_removed'), key: ['post_id', 'id'],
     },
     event_rsvps: {
         kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',

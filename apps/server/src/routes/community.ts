@@ -835,6 +835,8 @@ router.get('/api/community/info', async (ctx) => {
         // Request binding (@beanpool/core request-signing.ts): this server verifies format 2, so an app signs its
         // requests here for the host it connects to. A server that doesn't say gets the old format. `addresses`: this
         // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
+        // A poll here can offer a typed Other (engine/poll-other.ts): an app asks the maker only where the node says.
+        pollOther: true,
         requestSigning: REQUEST_SIGNING_VERSION,
         addresses: publishedAddresses(),
         // Lost-name L4: where the community lives now (one of `addresses`, or null), and the BeanPool names it had

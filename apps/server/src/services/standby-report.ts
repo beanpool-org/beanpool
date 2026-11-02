@@ -187,6 +187,7 @@ const TABLE_WORDS: Record<string, string> = {
     recovery_shares: 'sign-in recovery copies',
     settlements: 'settlements with other communities',
     poll_votes: 'poll votes',
+    poll_answers: 'poll answers',
     event_rsvps: 'event replies',
     groups: 'groups',
     group_members: 'group members',

@@ -1689,6 +1689,8 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
     try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
+    // An open vote's typed Other (schema.sql); poll_answers itself comes with the schema.sql exec.
+    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN other_answer_id TEXT`).run(); } catch { }
     try { if (makeActivePollIndexPlain()) console.log('[DB] The one-active-poll index is a plain one now (owners and admins may have more)'); } catch (e) { console.warn('[DB] Could not make the active-poll index plain:', (e as Error)?.message || e); }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.

@@ -22,6 +22,7 @@ import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
 import { readOfCopy, type CopyColumns } from './engine/event-copy.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
+import { POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
@@ -5665,6 +5666,7 @@ export function createPost(
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
         pollOpenVote?: unknown;
+        pollOther?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -6684,9 +6686,10 @@ export function votePoll(
     postId: string,
     voterPublicKey: string,
     optionId: string,
-    signature?: string
+    signature?: string,
+    otherWords?: unknown
 ): { success: boolean; post: MarketplacePost } {
-    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature);
+    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature, otherWords);
 }
 
 export function rsvpEvent(
@@ -7717,6 +7720,8 @@ export function undoBurst(actionId: string): UndoOutcome {
  * the report names. Null when it names nobody.
  */
 function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null }): string | null {
+    // A report of a poll's typed answer is about nobody (engine/poll-other.ts): no action on it reaches a member.
+    if (report.target_pubkey === POLL_ANSWER_REPORT_SUBJECT) return null;
     if (report.target_pulse_item_id) {
         const item = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ?').get(report.target_pulse_item_id) as { owner_pubkey: string | null } | undefined;
         return item?.owner_pubkey || report.target_pubkey || null;

@@ -286,6 +286,16 @@ export interface SyncPollVote {
     createdAt: string;
     /** Whether the voter was a new or 12-word account when they first voted: 1, 0, or null where the node kept none. */
     voterNewOrWords?: number | null;
+    /** An open vote's typed Other: its poll_answers row. Never on an anonymous poll. */
+    otherAnswerId?: string | null;
+}
+
+/** A row of poll_answers, as it travels in its poll's row (`pollAnswers` on a copied post): it names nobody. */
+export interface SyncPollAnswer {
+    id: string;
+    optionId: string;
+    words: string | null;
+    wordsRemoved: number;
 }
 
 export interface SyncEventRsvp {
@@ -1008,6 +1018,33 @@ function enterprisePledgeOfRow(r: any): SyncEnterprisePledge {
     };
 }
 
+/**
+ * Posts as a standby copies them, each poll with its poll_answers in its row (`pollAnswers`). They have no time of their
+ * own to be found by (schema.sql): every write moves the poll's updated_at, so a delta that carries a change carries the
+ * poll, and all its answers, in the order of their random ids. This is the copy for a standby, which holds the whole node;
+ * the listings pull reads its own columns and no read of a post has this field.
+ */
+function postsWithAnswers(db: Db, rows: any[]): MarketplacePost[] {
+    const polls = rows.filter((r) => r.type === 'poll').map((r) => r.id as string);
+    const answersOf = new Map<string, SyncPollAnswer[]>();
+    if (polls.length > 0) {
+        try {
+            const found = db.prepare('SELECT post_id, id, option_id, words, words_removed FROM poll_answers WHERE post_id IN (SELECT value FROM json_each(?)) ORDER BY post_id, id')
+                .all(JSON.stringify(polls)) as { post_id: string; id: string; option_id: string; words: string | null; words_removed: number }[];
+            for (const a of found) {
+                if (!answersOf.has(a.post_id)) answersOf.set(a.post_id, []);
+                answersOf.get(a.post_id)!.push({ id: a.id, optionId: a.option_id, words: a.words, wordsRemoved: a.words_removed });
+            }
+        } catch {
+            // Table absent on older schema/fixtures
+        }
+    }
+    return rows.map((row) => {
+        const post = postOfRow(row);
+        return answersOf.has(row.id) ? { ...post, pollAnswers: answersOf.get(row.id) } as MarketplacePost : post;
+    });
+}
+
 function postOfRow(row: any): MarketplacePost {
     return {
         id: row.id,
@@ -1339,6 +1376,7 @@ function pollVoteOfRow(r: any): SyncPollVote {
         signature: r.signature || '',
         createdAt: r.created_at,
         voterNewOrWords: r.voter_new_or_words ?? null,
+        otherAnswerId: r.other_answer_id ?? null,
     };
 }
 
@@ -1548,7 +1586,7 @@ export const EXPORT_CATEGORIES: readonly ExportCategory[] = [
             return rows.map((r) => memberOfRow(withPhoto(r, photos), prefs));
         },
     },
-    { key: 'posts', table: 'posts', delta: { watermark: 'updated_at' }, shape: eachRow(postOfRow) },
+    { key: 'posts', table: 'posts', delta: { watermark: 'updated_at' }, shape: postsWithAnswers },
     // The photos' rows as the table holds them: the server puts each one's bytes back, or, in a copy served in pages, names
     // each one's object by reference (apps/server engine/sync.ts).
     { key: 'photos', table: 'post_photos', delta: { watermark: 'updated_at' }, shape: asTheyAre },
@@ -1641,7 +1679,7 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
-    const posts: MarketplacePost[] = sel('posts', 'updated_at').map(postOfRow);
+    const posts: MarketplacePost[] = postsWithAnswers(db, sel('posts', 'updated_at'));
 
     const photos = sel('post_photos', 'updated_at') as PostPhoto[];
     const projects = sel('projects', 'updated_at') as Project[];

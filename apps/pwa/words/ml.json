@@ -3689,5 +3689,8 @@
   "Message not delivered": "സന്ദേശം എത്തിയില്ല",
   "Stop taking questions": "ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നത് നിർത്തുക",
   "on the global community": "ആഗോള കമ്മ്യൂണിറ്റിയിൽ",
-  "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക"
+  "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക",
+  "Previous month": "മുൻപത്തെ മാസം",
+  "Next month": "അടുത്ത മാസം",
+  "Event · {from}": "പരിപാടി · {from}"
 }

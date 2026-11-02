@@ -4,6 +4,7 @@ import React from 'react';
 import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import type { MarketplacePost } from '../lib/api';
 import L from 'leaflet';
 import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -3354,5 +3355,109 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         const newPanel = await view!.findByTestId('map-new-post-panel');
         // The manually opened composer must NOT have the shop toggle leaked into it
         expect(within(newPanel).queryByTestId('composer-shop-toggle')).toBeNull();
+    });
+
+    describe('MapCalendar integration in MapPage (PR #2762 fixes)', () => {
+        // The month reads today: a day that has gone is shut, so these dates need a today of their own.
+        beforeEach(() => {
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(new Date('2026-11-03T10:00:00'));
+        });
+        afterEach(() => { vi.useRealTimers(); });
+
+        const allowedEvent: MarketplacePost = {
+            id: 'ev-allowed',
+            type: 'event',
+            title: 'Allowed Working Bee',
+            description: 'Community gardening',
+            createdAt: '2026-11-01T00:00:00.000Z',
+            category: 'general',
+            authorPublicKey: 'author-allowed',
+            authorCallsign: 'alice',
+            eventStartLocal: '2026-11-15T10:00',
+            eventEndLocal: '2026-11-15T12:00',
+            eventStartAt: '2026-11-15T10:00:00.000Z',
+            status: 'active',
+            active: true,
+            repeatable: false,
+            credits: 0,
+            priceType: 'fixed',
+            lat: -28.5,
+            lng: 153.5,
+        };
+
+        const blockedEvent: MarketplacePost = {
+            id: 'ev-blocked',
+            type: 'event',
+            title: 'Blocked Member Gathering',
+            description: 'Private gathering',
+            createdAt: '2026-11-01T00:00:00.000Z',
+            category: 'general',
+            authorPublicKey: 'author-blocked',
+            authorCallsign: 'mallory',
+            eventStartLocal: '2026-11-15T14:00',
+            eventEndLocal: '2026-11-15T16:00',
+            eventStartAt: '2026-11-15T14:00:00.000Z',
+            status: 'active',
+            active: true,
+            repeatable: false,
+            credits: 0,
+            priceType: 'fixed',
+            lat: -28.5,
+            lng: 153.5,
+        };
+
+        it('filters blocked authors and inactive enterprises before passing posts to MapCalendar', async () => {
+            const { getBlockedUsers } = await import('../lib/blocklist');
+            (getBlockedUsers as any).mockReturnValue(['author-blocked']);
+            vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([allowedEvent, blockedEvent] as any);
+
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(<MapPage identity={mockIdentity} />);
+            });
+
+            const calBtn = await view!.findByTestId('map-calendar-button');
+            await act(async () => {
+                fireEvent.click(calBtn);
+            });
+
+            // MapCalendar should be open
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            // Allowed event appears in the calendar day list
+            expect(view!.getByText('Allowed Working Bee')).toBeInTheDocument();
+            // Blocked event must NOT appear anywhere in the calendar
+            expect(view!.queryByText('Blocked Member Gathering')).toBeNull();
+        });
+
+        it('dismisses calendarOpen when starting an event so the map is interactive for pin dropping', async () => {
+            const { getBlockedUsers } = await import('../lib/blocklist');
+            (getBlockedUsers as any).mockReturnValue([]);
+            // Provide no events so empty state is displayed with Start one link
+            vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(<MapPage identity={mockIdentity} />);
+            });
+
+            const calBtn = await view!.findByTestId('map-calendar-button');
+            await act(async () => {
+                fireEvent.click(calBtn);
+            });
+
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+
+            // Click "Start one ›" link
+            const startLink = view!.getByTestId('calendar-start-one-link');
+            await act(async () => {
+                fireEvent.click(startLink);
+            });
+
+            // MapCalendar must be dismissed
+            expect(view!.queryByTestId('map-calendar')).toBeNull();
+            // Composer modal must open
+            expect(await view!.findByTestId('map-new-post-panel')).toBeInTheDocument();
+        });
     });
 });

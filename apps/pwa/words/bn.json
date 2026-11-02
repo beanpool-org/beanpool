@@ -3689,5 +3689,8 @@
   "Message not delivered": "বার্তা পৌঁছায়নি",
   "Stop taking questions": "প্রশ্ন নেওয়া বন্ধ করুন",
   "on the global community": "বিশ্বব্যাপী সম্প্রদায়ে",
-  "Open their requests there": "সেখানে তাদের অনুরোধ খুলুন"
+  "Open their requests there": "সেখানে তাদের অনুরোধ খুলুন",
+  "Previous month": "আগের মাস",
+  "Next month": "পরের মাস",
+  "Event · {from}": "ইভেন্ট · {from}"
 }

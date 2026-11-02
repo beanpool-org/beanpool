@@ -39,9 +39,34 @@ describe('the pairs in this browser', () => {
         expect((await copyPairs.read()).map((p) => p.copyId)).toEqual(['a', 'b']);
     });
 
-    it('two changes at once lose neither: each reads what the other wrote', async () => {
-        await Promise.all([copyPairs.change((pairs) => [...pairs, pair('a')]), copyPairs.change((pairs) => [...pairs, pair('b')])]);
-        expect((await copyPairs.read()).map((p) => p.copyId).sort()).toEqual(['a', 'b']);
+    it('a change is one transaction: what it read is what it writes over', async () => {
+        // This stand-in can't interleave two tabs, so what makes that safe is held here: the race itself runs in Chromium
+        // (e2e/global-tick-check.mjs, "twenty changes at once").
+        const real = indexedDB.open.bind(indexedDB);
+        const modes: string[] = [];
+        vi.stubGlobal('indexedDB', {
+            ...indexedDB,
+            open: (...args: Parameters<typeof real>) => {
+                const req = real(...args);
+                const success = Object.getOwnPropertyDescriptor(req, 'onsuccess');
+                let handler: ((ev: unknown) => void) | null = success?.value ?? null;
+                Object.defineProperty(req, 'onsuccess', {
+                    get: () => handler,
+                    set: (next) => {
+                        handler = (ev) => {
+                            const open = req.result.transaction.bind(req.result);
+                            req.result.transaction = (store: string, mode?: IDBTransactionMode) => { modes.push(mode ?? 'readonly'); return open(store, mode); };
+                            next(ev);
+                        };
+                    },
+                });
+                return req;
+            },
+        });
+        vi.resetModules();
+        const fresh = await import('./copy-pairs');
+        await fresh.copyPairs.change((pairs) => [...pairs, pair('a')]);
+        expect(modes).toEqual(['readwrite']);
     });
 
     it('sign-out leaves none', async () => {

@@ -337,6 +337,11 @@ async function firstCases(ctx) {
     await Promise.all([tick(page, a), tick(other, b)]);
     const both = await pairs(page);
     check(both.some((p) => p.homeId === a.id) && both.some((p) => p.homeId === b.id), 'two tabs ticking at once: neither loses the other\'s pair');
+    const race = (tab, n) => tab.evaluate((n) => Promise.all(Array.from({ length: 10 }, (_, i) => window.tick.copyPairs.change((held) => [...held, { copyId: `race-${n}-${i}`, publicKey: 'nobody', homeId: 'race' }]))), n);
+    await Promise.all([race(page, 1), race(other, 2)]);
+    const raced = (await pairs(page)).filter((p) => p.copyId.startsWith('race-'));
+    check(raced.length === 20, `twenty changes at once from two tabs on real IndexedDB: all kept (${raced.length})`);
+    await page.evaluate(() => window.tick.copyPairs.change((held) => held.filter((p) => !p.copyId.startsWith('race-'))));
     await other.close();
 
     // A phone on the same account: another browser, its store its own, the same key.

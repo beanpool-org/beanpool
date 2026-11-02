@@ -182,6 +182,26 @@ describe('a phone and a browser on one account', () => {
         expect(phone.pairs()).toEqual([]);
     });
 
+    it('what can\'t cross: a Stop on one while both hold a rest. It comes back once, reads Shown, and a Stop there stands', async () => {
+        const w = world();
+        const phone = w.device();
+        const browser = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        await browser.showOnGlobal(w.home, HOME, identity);
+        w.home.status = 'paused';
+        await Promise.all([phone.tendCopies(identity), browser.tendCopies(identity)]);
+        await browser.stopShowing('home-1', identity);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(w.up()).toHaveLength(1);
+        expect(await phone.pairOf('home-1', publicKey)).not.toBeNull();
+        await phone.stopShowing('home-1', identity);
+        await phone.tendCopies(identity);
+        await browser.tendCopies(identity);
+        expect(w.up()).toHaveLength(0);
+        expect(w.creates()).toBe(2);
+    });
+
     it('a new tick after a Stop is a new copy under the next id, on either device', async () => {
         const w = world();
         const phone = w.device();

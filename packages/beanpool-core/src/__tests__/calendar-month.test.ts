@@ -356,6 +356,24 @@ describe('calendar-month: series expansion (pattern, until, skips)', () => {
             eventRepeatUntil: '2026-10-01',
         };
         expect(expandEventSeries(pastUntil, { start: '2026-11-01', end: '2026-11-30' })).toHaveLength(0);
+
+        // Corrupt or unparseable event timestamps never throw RangeError
+        const corrupt: CalendarEventInput = {
+            id: 'ev-corrupt',
+            eventStartLocal: '2026-11-06T10:00',
+            eventEndLocal: 'invalid-end-date-string',
+            eventStartAt: 'not-a-valid-timestamp',
+            eventEndAt: 'garbage-time',
+            eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' },
+        };
+        const occCorrupt = expandEventSeries(corrupt, { start: '2026-11-01', end: '2026-11-15' });
+        expect(occCorrupt).toHaveLength(2);
+        expect(occCorrupt[0].eventStartAt).toBe('2026-11-06T10:00:00.000Z');
+        expect(occCorrupt[0].eventEndAt).toBeNull();
+        expect(occCorrupt[0].eventEndLocal).toBeNull();
+        expect(occCorrupt[1].eventStartAt).toBe('2026-11-13T10:00:00.000Z');
+        expect(occCorrupt[1].eventEndAt).toBeNull();
+        expect(occCorrupt[1].eventEndLocal).toBeNull();
     });
 });
 

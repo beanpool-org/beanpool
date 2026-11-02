@@ -339,23 +339,27 @@ export function expandEventSeries<T extends CalendarEventInput>(event: T, range:
 
         const baseEndLocal = event.eventEndLocal ?? event.event_end_local ?? null;
         let endLocal: string | null = null;
-        if (baseEndLocal && baseEndLocal.length >= 16) {
-            const baseStartDate = baseStartLocal ? baseStartLocal.slice(0, 10) : anchorDate;
+        if (baseEndLocal && baseEndLocal.length >= 16 && isLocalDate(baseEndLocal.slice(0, 10))) {
+            const baseStartDate = baseStartLocal && isLocalDate(baseStartLocal.slice(0, 10)) ? baseStartLocal.slice(0, 10) : anchorDate;
             const baseEndDate = baseEndLocal.slice(0, 10);
             const endOffset = daysBetween(baseStartDate, baseEndDate);
             const endTime = baseEndLocal.slice(11, 16);
-            endLocal = `${addDays(cand, endOffset)}T${endTime}`;
+            if (Number.isFinite(endOffset)) {
+                endLocal = `${addDays(cand, endOffset)}T${endTime}`;
+            }
         }
 
         const baseStartAt = event.eventStartAt ?? event.event_start_at ?? null;
-        const startAt = baseStartAt
-            ? new Date(Date.parse(baseStartAt) + dayOffset * 86_400_000).toISOString()
+        const parsedStart = baseStartAt ? Date.parse(baseStartAt) : NaN;
+        const startAt = Number.isFinite(parsedStart)
+            ? new Date(parsedStart + dayOffset * 86_400_000).toISOString()
             : `${startLocal}:00.000Z`;
 
         const baseEndAt = event.eventEndAt ?? event.event_end_at ?? null;
+        const parsedEnd = baseEndAt ? Date.parse(baseEndAt) : NaN;
         let endAt: string | null = null;
-        if (baseEndAt) {
-            endAt = new Date(Date.parse(baseEndAt) + dayOffset * 86_400_000).toISOString();
+        if (Number.isFinite(parsedEnd)) {
+            endAt = new Date(parsedEnd + dayOffset * 86_400_000).toISOString();
         }
 
         occurrences.push({

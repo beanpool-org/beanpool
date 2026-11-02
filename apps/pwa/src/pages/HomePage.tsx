@@ -1016,6 +1016,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [interestsOpen, setInterestsOpen] = useState(false);
     // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
     const [safetyDrawn, setSafetyDrawn] = useState(false);
+    // Arrange doesn't draw the card's body, and its going says "not drawn": that isn't news of the card. Done draws it again.
+    const inArrangeNow = useRef(false);
+    const noteSafetyDrawn = useCallback((drawn: boolean) => { if (drawn || !inArrangeNow.current) setSafetyDrawn(drawn); }, []);
     const [tipsGuide, setTipsGuide] = useState<Guide | null>(() => {
         try { return getBundledGuide(); } catch { return null; }
     });
@@ -1670,6 +1673,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             .filter(c => c.type !== FIXED_LAST || !!answer.cards.community)
         : null;
     const inArrange = !!folded;
+    inArrangeNow.current = inArrange;
     const shownKey = (folded ?? shown).map(c => `${c.id}:${c.type}`).join(',');
 
     // Each child reports its own height at mount and by its own ResizeObserver, but that comes a frame late, so when the
@@ -1788,6 +1792,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             || page?.querySelector<HTMLElement>('[data-testid="home-arrange-open"]');
         target?.focus({ preventScroll: back.quiet });
     }, [inArrange]);
+    // Before the slide below, which puts a moved card back where it stood for 150 ms: focus and scroll have to see where it landed.
+    useLayoutEffect(() => {
+        const moved = focusArrow.current;
+        if (!moved) return;
+        focusArrow.current = null;
+        const page = pageRef.current;
+        const twin = moved.dir === 'up' ? 'down' : 'up';
+        const arrow = page?.querySelector<HTMLElement>(`[data-testid="home-arrange-${moved.dir}-${moved.id}"]:not([disabled])`)
+            ?? page?.querySelector<HTMLElement>(`[data-testid="home-arrange-${twin}-${moved.id}"]:not([disabled])`);
+        arrow?.focus();
+        arrow?.closest('section')?.scrollIntoView?.({ block: 'nearest' });
+    }, [layout]);
     // The fold shows as a quick settle, and a moved card slides from where it stood (none with reduced motion).
     const stood = useRef(new Map<string, { x: number; y: number }>());
     const wasFolded = useRef(false);
@@ -1814,17 +1830,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         }
         stood.current = next;
     }, [inArrange, shownKey, packedList]);
-    useLayoutEffect(() => {
-        const moved = focusArrow.current;
-        if (!moved) return;
-        focusArrow.current = null;
-        const page = pageRef.current;
-        const twin = moved.dir === 'up' ? 'down' : 'up';
-        const arrow = page?.querySelector<HTMLElement>(`[data-testid="home-arrange-${moved.dir}-${moved.id}"]:not([disabled])`)
-            ?? page?.querySelector<HTMLElement>(`[data-testid="home-arrange-${twin}-${moved.id}"]:not([disabled])`);
-        arrow?.focus();
-        arrow?.closest('section')?.scrollIntoView?.({ block: 'nearest' });
-    }, [layout]);
 
     // ── "Save this search to Home" from the Market (Marty, 7 Oct) ──
     // The search to add, its dialog open; and why one couldn't be (the same search there, five there, Home full, Home not
@@ -1990,7 +1995,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const added = focusAfterAdd.current;
         if (added) {
             const card = pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${added.id}"]`);
-            const target = card?.querySelector<HTMLElement>('[data-testid="home-card-menu"], [data-testid^="home-arrange-"]:not([disabled])') ?? card?.querySelector<HTMLElement>('h2');
+            const target = card?.querySelector<HTMLElement>('[data-testid="home-card-menu"], button[data-testid^="home-arrange-"]:not([disabled])') ?? card?.querySelector<HTMLElement>('h2');
             const waiting = pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-add"], [data-testid="home-add-open"]');
             const active = document.activeElement;
             const free = !active || active === document.body || !active.isConnected || active === waiting;
@@ -2335,7 +2340,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
                 // (arriving second in the order, it moved every card after it to another cell).
                 return identity && (
-                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn}
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={noteSafetyDrawn}
                         keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => (
                         <PackedBlock onHeight={common.onHeight} style={{ ...cardStyle(index), ...placementStyle }} data-testid={`home-card-${card.id}`} className="mb-3 [&>section]:mb-0">
                             {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}

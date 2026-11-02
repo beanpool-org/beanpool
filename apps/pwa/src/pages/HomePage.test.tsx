@@ -749,6 +749,45 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
         return node;
     }
 
+    it('a card added where it is the only one that can move: focus lands on a control, never the page', async () => {
+        nodeV2(answer(), v2([]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-arrange-open');
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
+        fireEvent.click(screen.getByTestId('home-add-pulse'));
+        await screen.findByTestId('home-card-pulse');
+        await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+        expect(screen.getByTestId('home-card-pulse').contains(document.activeElement)).toBe(true);
+    });
+
+    it('a moved card takes focus and scrolls before it slides: the slide puts it back for a moment, and focus has to see where it landed', async () => {
+        window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return false; }, onchange: null })) as unknown as typeof window.matchMedia;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        const said: string[] = [];
+        const animate = vi.fn(function (this: Element) { said.push('slide'); return {} as Animation; });
+        const scroll = vi.fn(() => { said.push('scroll'); });
+        const had = { animate: Element.prototype.animate, scroll: Element.prototype.scrollIntoView };
+        Element.prototype.animate = animate as never;
+        Element.prototype.scrollIntoView = scroll as never;
+        // jsdom lays nothing out: a card that moved reads as moved only if its box does.
+        let row = 0;
+        const box = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => ({ left: 0, top: (row += 10), right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON() {} }) as DOMRect);
+        try {
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-tips');
+            openArrange();
+            said.length = 0;
+            fireEvent.click(screen.getByTestId('home-arrange-down-tips'));
+            await waitFor(() => expect(said).toContain('scroll'));
+            expect(said.indexOf('slide')).toBeGreaterThan(said.indexOf('scroll'));
+        } finally {
+            box.mockRestore();
+            Element.prototype.animate = had.animate;
+            Element.prototype.scrollIntoView = had.scroll;
+        }
+    });
+
     it('Add a card (from Arrange) reads Home again with the Pulse in cards= once the save is answered, and the card is drawn, no timer waited for', async () => {
         const node = await removePulseThenComeBack();
         openArrange();
@@ -3009,6 +3048,16 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         fireEvent.click(within(card).getByRole('button', { name: 'Hide this for now' }));
         expect(screen.queryByTestId('home-card-safety')).toBeNull();
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
+    });
+
+    it('"Your way back in" with something to say still has it in Arrange, and is drawn again after Done', async () => {
+        wordsOnly();
+        await landAt(1400, SAFETY);
+        await screen.findByTestId('one-way-back-landing');
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-safety')).not.toHaveTextContent('Nothing to show now');
+        doneArrange();
+        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
     });
 
     // Arrange shows it with nothing to say, so a move past it shows too: no press moves something a member can't see.

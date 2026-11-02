@@ -60,6 +60,7 @@ import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { ShowOnGlobalTick, showEventOnGlobal } from '../components/ShowOnGlobalRow';
 import { marked, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
@@ -317,6 +318,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
     // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
     const [newPostReach, setNewPostReach] = useState<PostReach>('local');
+    const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
     const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
@@ -1178,6 +1180,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     repeatable: false,
                     ...event,
                 });
+            if (alsoOnGlobal && res?.post && identity) void showEventOnGlobal(res.post, identity).catch(() => {});
+            setAlsoOnGlobal(false);
             setNewPostTitle('');
             setNewPostDescription('');
             setNewPostPhotos([]);
@@ -1301,7 +1305,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             }
         }
         try {
-            await createMarketplacePost({
+            const made = await createMarketplacePost({
                 type: newPostType,
                 category: newPostCategory,
                 title: newPostTitle.trim(),
@@ -1321,6 +1325,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(newPostFreeTags.length > 0 ? { freeTags: newPostFreeTags } : {}),
                 ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
+            if (alsoOnGlobal && made?.post && identity) void showEventOnGlobal(made.post, identity).catch(() => {});
+            setAlsoOnGlobal(false);
             setNewPostTitle('');
             setNewPostDescription('');
             setNewPostTags([]);
@@ -3234,6 +3240,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         </div>
                         {postRefusal.code === PROBATION_LIMIT && <NewAccountCard refreshKey={postRefusal} />}
                     </div>
+                )}
+
+                {newPostType === 'event' ? (
+                    <ShowOnGlobalTick
+                        enabled={!eventEdit && !enterpriseHostsEvent && audienceScope === 'public' && !eventOnline}
+                        online={!eventEdit && !enterpriseHostsEvent && audienceScope === 'public' && eventOnline}
+                        checked={alsoOnGlobal} onChange={setAlsoOnGlobal} identity={identity}
+                    />
+                ) : newPostType !== 'poll' && (
+                    <ShowOnGlobalTick
+                        enabled={audienceScope === 'public' && postLat != null && postLng != null}
+                        checked={alsoOnGlobal} onChange={setAlsoOnGlobal} identity={identity} listing need={newPostType === 'need'}
+                    />
                 )}
 
                 <button

@@ -181,6 +181,23 @@ export function eventRepeatOf(p: any): { rule: RepeatPattern | null; until: stri
     return { rule, until: typeof until === 'string' && until ? until : null };
 }
 
+/** The kinds of image a node stores, by the start of their base64 (engine/avatar.ts sniffRasterImageType). */
+function imageMimeOf(base64: string): string | null {
+    if (base64.startsWith('/9j/')) return 'image/jpeg';
+    if (base64.startsWith('iVBORw0KGgo')) return 'image/png';
+    if (base64.startsWith('R0lGOD')) return 'image/gif';
+    return base64.startsWith('UklGR') ? 'image/webp' : null;
+}
+
+/** A node stores no picture past 2 MB (MAX_PICTURE_BYTES): as base64, about this many characters. */
+const MOST_PHOTO_CHARS = 2_800_000;
+
+/** A fetched photo's bytes as a post sends them. A 200 that isn't an image (a captive portal's page) is no photo. */
+export function fetchedPhotoOf(base64: string): FetchedPhoto {
+    const mime = imageMimeOf(base64);
+    return mime && base64.length <= MOST_PHOTO_CHARS ? { photo: `data:${mime};base64,${base64}` } : { failed: 'gone' };
+}
+
 function photoUrlOf(photo: unknown, from: string): string | null {
     if (typeof photo !== 'string' || !/^\/api\/marketplace\/posts\/[^/?#]+\/photos\/\d+(\?[^#]*)?$/.test(photo)) return null;
     return `${from}${photo}`;

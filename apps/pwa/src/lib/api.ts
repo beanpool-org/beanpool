@@ -12,6 +12,7 @@ import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
     buildBoundWsParams,
+    copyIdOf,
     buildInviteTicket,
     ed25519Signer,
     type Signer,
@@ -638,6 +639,34 @@ export async function signedFetchAt(
         : { method, headers: signed, cache: 'no-cache' });
 }
 
+/**
+ * A request for the member's own copy on the global community (lib/show-on-global.ts), to global or to their community. What
+ * the phone sends and nothing more: the signature's headers and a JSON type. No cookie, no `Referer`, no language, no shared
+ * cache. A browser's `Origin` can't be left off a cross-origin call, and global reads nothing from it (apps/server copy-cors.ts).
+ */
+export async function signedCopyFetch(
+    method: 'GET' | 'POST' | 'DELETE', community: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
+): Promise<Response> {
+    const bodyString = body === undefined ? '' : JSON.stringify(body);
+    const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
+    return fetch(`${community}${path}`, {
+        method, headers: { 'Content-Type': 'application/json', ...signed }, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
+        ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
+    });
+}
+
+/** Core's id for this key's copy of a listing (request-signing.ts copyIdOf): a phone on the same account works out the same one. */
+export function copyIdFor(homeId: string, generation: number, identity: BeanPoolIdentity): Promise<string> {
+    return copyIdOf(homeId, generation, memberSigner(identity.privateKey));
+}
+
+/** The member's copy on the global community follows, if there is one. Loaded when used; a miss is caught up by the next tend. */
+function onGlobalCopy(run: (copy: typeof import('./show-on-global'), identity: BeanPoolIdentity) => Promise<unknown>): void {
+    void loadIdentity().then(async (identity) => {
+        if (identity?.privateKey) await run(await import('./show-on-global'), identity);
+    }).catch(() => {});
+}
+
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {
     return request('GET', `/api/invite/mine/${encodeURIComponent(publicKey)}`);
 }
@@ -785,7 +814,10 @@ export async function getMemberPreferences(publicKey: string): Promise<Record<st
 /** Toggle holiday mode. Turning it ON throws (with the open-trade count in the message) when the
  *  member still has in-flight trades. Signed POST — the actor is taken from the signature. */
 export async function setHolidayModeApi(enabled: boolean): Promise<{ success: boolean; enabled: boolean; openTrades: number }> {
-    return request('POST', '/api/members/holiday', { enabled });
+    const answer = await request<{ success: boolean; enabled: boolean; openTrades: number }>('POST', '/api/members/holiday', { enabled });
+    // A copy on the global community comes down and goes back up with the member's listings here.
+    onGlobalCopy((copy, identity) => copy.tendCopies(identity));
+    return answer;
 }
 
 export async function getMemberProfile(publicKey: string, requester?: string): Promise<MemberProfile> {
@@ -1348,6 +1380,7 @@ export type EventRsvpStatus = 'going' | 'interested';
 
 export interface MarketplacePost {
     /** A member's copy on the global community (@beanpool/core eventCopyOf): no author, no RSVP, no deal. */
+    originNode?: string | null;
     shownCopy?: boolean;
     shownFrom?: ShownFromLine;
     /** Its price at home, for its words alone (core copyPriceLine). */
@@ -1886,7 +1919,9 @@ export async function commissionListing(postId: string, amount?: number): Promis
 }
 
 export async function removeMarketplacePost(id: string, authorPublicKey: string): Promise<{ success: boolean }> {
-    return request('POST', '/api/marketplace/posts/remove', { id, authorPublicKey });
+    const answer = await request<{ success: boolean }>('POST', '/api/marketplace/posts/remove', { id, authorPublicKey });
+    onGlobalCopy((copy, identity) => copy.stopShowing(id, identity));
+    return answer;
 }
 
 export async function updateMarketplacePost(
@@ -1922,7 +1957,9 @@ export async function updateMarketplacePost(
         eventRepeatUntil?: string | null;
     },
 ): Promise<{ success: boolean; post: MarketplacePost; eventTimeAdjusted?: EventTimeAdjusted }> {
-    return request('POST', '/api/marketplace/posts/update', { id, authorPublicKey, ...updates });
+    const answer = await request<any>('POST', '/api/marketplace/posts/update', { id, authorPublicKey, ...updates });
+    if (answer?.post) onGlobalCopy((copy, identity) => copy.repeatOnCopy(answer.post, identity));
+    return answer;
 }
 
 /** One of a repeating event's next dates, as the node sends them on a by-id read. */
@@ -1934,7 +1971,9 @@ export interface EventNextDate { date: string; startLocal: string; startAt: stri
  * (DESIGN-event-times §8). Cancelling the current date moves the event to its next date at once; the answer is the event.
  */
 export async function setEventDateCancelled(postId: string, date: string, cancelled: boolean): Promise<{ success: boolean; post: MarketplacePost; skips: string[] }> {
-    return request(cancelled ? 'POST' : 'DELETE', `/api/events/${encodeURIComponent(postId)}/skip`, { date });
+    const answer = await request<{ success: boolean; post: MarketplacePost; skips: string[] }>(cancelled ? 'POST' : 'DELETE', `/api/events/${encodeURIComponent(postId)}/skip`, { date });
+    if (answer?.post) onGlobalCopy((copy, identity) => copy.repeatOnCopy(answer.post as never, identity));
+    return answer;
 }
 
 // ===================== EVENT TIME ZONES (DESIGN-event-times §2) =====================
@@ -2020,13 +2059,17 @@ export async function cancelMarketplaceTransaction(
 export async function pauseMarketplacePost(
     postId: string, authorPublicKey: string
 ): Promise<{ success: boolean }> {
-    return request('POST', '/api/marketplace/posts/pause', { postId, authorPublicKey });
+    const answer = await request<{ success: boolean }>('POST', '/api/marketplace/posts/pause', { postId, authorPublicKey });
+    onGlobalCopy((copy, identity) => copy.tendCopies(identity));
+    return answer;
 }
 
 export async function resumeMarketplacePost(
     postId: string, authorPublicKey: string
 ): Promise<{ success: boolean }> {
-    return request('POST', '/api/marketplace/posts/resume', { postId, authorPublicKey });
+    const answer = await request<{ success: boolean }>('POST', '/api/marketplace/posts/resume', { postId, authorPublicKey });
+    onGlobalCopy((copy, identity) => copy.tendCopies(identity));
+    return answer;
 }
 
 /** Newest first; the node answers 50 when no `limit` is given, and at most 200 a page. */

@@ -146,6 +146,7 @@ import { tlsSendWindows } from './tls-send-window.js';
 import { CommonsPotUnknownError } from './engine/audit.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createAppleReturnRoutes } from './routes/apple-return.js';
+import { copyCorsMethods, copyOnlyFromOtherSites, SIGNED_COPY_HEADERS } from './copy-cors.js';
 import { isDocumentPolicyFile, isNonCanonicalSpelling, useAppDocumentPolicy, useDocumentPolicy } from './app-document-csp.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
@@ -1428,6 +1429,15 @@ export async function startHttpsServer(port: number): Promise<number> {
                 ctx.set('Access-Control-Allow-Origin', '*');
                 ctx.set('Access-Control-Allow-Headers', SIGNED_KNOCK_HEADERS);
                 ctx.set('Access-Control-Allow-Methods', SIGNED_KNOCK_CORS.get(ctx.path)!);
+            } else {
+                // The web app's tick on the global community (copy-cors.ts). The Origin decides nothing here and is kept nowhere.
+                const copyMethods = copyCorsMethods(ctx);
+                if (copyMethods) {
+                    ctx.state.copyCors = true;
+                    ctx.set('Access-Control-Allow-Origin', '*');
+                    ctx.set('Access-Control-Allow-Headers', SIGNED_COPY_HEADERS);
+                    ctx.set('Access-Control-Allow-Methods', copyMethods);
+                }
             }
         }
 
@@ -1880,6 +1890,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     };
     app.use(privatePreviewEarlyGate(isNodeMember, previewImages));
     app.use(requireSignature);
+    app.use(copyOnlyFromOtherSites);
 
     // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the
     // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything. An app below

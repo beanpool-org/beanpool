@@ -16,6 +16,7 @@ import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
 import { PostTagChips } from '../components/PostTagChips';
 import { SharePostButtons } from '../components/SharePost';
+import { ShowOnGlobalHostRow } from '../components/ShowOnGlobalRow';
 import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
@@ -2072,6 +2073,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                  {/* Share with members, and outside the community where it allows it (front doors S6). */}
                  <SharePostButtons post={selectedPost} />
+
+                 {!!identity && selectedPost.authorPublicKey === identity.publicKey && (
+                     <ShowOnGlobalHostRow
+                         post={selectedPost}
+                         identity={identity}
+                         enabled={(selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.originNode && !selectedPost.shownCopy
+                             && typeof selectedPost.lat === 'number' && typeof selectedPost.lng === 'number' && ['active', 'paused', 'pending'].includes(selectedPost.status)}
+                         listing
+                     />
+                 )}
 
                  {/* Action buttons */}
 

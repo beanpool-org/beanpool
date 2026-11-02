@@ -14,6 +14,7 @@ import { clearGroupChatLocks } from './group-chat-lock-store';
 import { forgetGroupKeys } from './group-chat-keys';
 import { ACCOUNT_EPOCH_KEY } from './account-epoch';
 import { clearToolStore } from '../tools/store';
+import { clearCopyPairs } from './copy-pairs';
 
 const DEVICE_KEYS = [
     'beanpool-install-dismissed',
@@ -40,6 +41,7 @@ export async function clearAccountStorage(): Promise<void> {
     const locks = clearGroupChatLocks();
     // Every tool's document (tools/store.ts): the member's own, so nothing of it is left once the account has gone.
     const tools = clearToolStore();
+    const copies = clearCopyPairs();
     const keep = new Map<string, string>();
     for (const key of [...DEVICE_KEYS, ACCOUNT_EPOCH_KEY]) {
         const value = localStorage.getItem(key);
@@ -49,5 +51,5 @@ export async function clearAccountStorage(): Promise<void> {
     for (const [key, value] of keep) {
         try { localStorage.setItem(key, value); } catch { /* quota/private mode — not worth failing sign-out over */ }
     }
-    await Promise.all([home, locks, tools]);
+    await Promise.all([home, locks, tools, copies]);
 }

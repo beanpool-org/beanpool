@@ -54,10 +54,15 @@ const store: CopyStore = {
     change: async (edit) => AsyncStorage.setItem(SHOWN_ON_GLOBAL_STORE_KEY, JSON.stringify(edit(await readPairs()))),
 };
 
+/** Core's id for this key's copy of a listing (request-signing.ts copyIdOf): a browser on the same account works out the same one. */
+function copyIdFor(homeId: string, generation: number, identity: BeanPoolIdentity): Promise<string> {
+    return copyIdOf(homeId, generation, memberSigner(identity.privateKey));
+}
+
 export const { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, repeatOnCopy, stopShowing, tendCopies } = makeCopyKeeper<BeanPoolIdentity>({
     store,
     deps: liveDeps,
-    copyId: (homeId, generation, identity) => copyIdOf(homeId, generation, memberSigner(identity.privateKey)),
+    copyId: copyIdFor,
     plainOrigin: plainOriginOf,
     isEventEnded: (home: HomeEvent) => isEventEnded(home),
 });

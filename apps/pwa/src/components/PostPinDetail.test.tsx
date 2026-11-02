@@ -202,4 +202,99 @@ describe('PostPinDetail', () => {
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.queryByTestId('post-actions-menu')).not.toBeInTheDocument();
     });
+
+    it('never offers Pin to the top on remote posts (originNode or _remoteNode)', () => {
+        const remoteServerPost = { ...unpinnedPost, originNode: 'node-peer-1' };
+        const { rerender } = render(
+            <PostPinDetail
+                post={remoteServerPost}
+                identity={adminIdentity as any}
+                isOwnerOrAdmin={true}
+                featuresPins={true}
+                onPostUpdated={vi.fn()}
+            />
+        );
+        expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
+
+        const remoteClientPost = { ...unpinnedPost, _remoteNode: 'node-peer-2' };
+        rerender(
+            <PostPinDetail
+                post={remoteClientPost}
+                identity={adminIdentity as any}
+                isOwnerOrAdmin={true}
+                featuresPins={true}
+                onPostUpdated={vi.fn()}
+            />
+        );
+        expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
+    });
+
+    it('never offers Pin to the top on group-scoped posts', () => {
+        const groupPost = { ...unpinnedPost, audienceScope: 'group' };
+        render(
+            <PostPinDetail
+                post={groupPost}
+                identity={adminIdentity as any}
+                isOwnerOrAdmin={true}
+                featuresPins={true}
+                onPostUpdated={vi.fn()}
+            />
+        );
+        expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
+    });
+
+    it('never offers Pin to the top on ended or cancelled events', () => {
+        const cancelledEvent = {
+            ...unpinnedPost,
+            type: 'event',
+            eventState: 'cancelled',
+            eventStartAt: futureDate,
+        };
+        const { rerender } = render(
+            <PostPinDetail
+                post={cancelledEvent}
+                identity={adminIdentity as any}
+                isOwnerOrAdmin={true}
+                featuresPins={true}
+                onPostUpdated={vi.fn()}
+            />
+        );
+        expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
+
+        const pastEvent = {
+            ...unpinnedPost,
+            type: 'event',
+            eventState: 'confirmed',
+            eventStartAt: pastDate,
+            eventEndAt: pastDate,
+        };
+        rerender(
+            <PostPinDetail
+                post={pastEvent}
+                identity={adminIdentity as any}
+                isOwnerOrAdmin={true}
+                featuresPins={true}
+                onPostUpdated={vi.fn()}
+            />
+        );
+        expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
+    });
+
+    it('never offers Pin to the top on closed polls', () => {
+        const closedPoll = {
+            ...unpinnedPost,
+            type: 'poll',
+            pollClosesAt: pastDate,
+        };
+        render(
+            <PostPinDetail
+                post={closedPoll}
+                identity={adminIdentity as any}
+                isOwnerOrAdmin={true}
+                featuresPins={true}
+                onPostUpdated={vi.fn()}
+            />
+        );
+        expect(screen.queryByTestId('post-menu-trigger')).not.toBeInTheDocument();
+    });
 });

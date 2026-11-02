@@ -5,7 +5,8 @@
  * and provides "…" menu with "Pin to the top…" and "Take the pin off".
  *
  * An app never offers what the node refuses: "Pin to the top…" is shown only when
- * features.pins is true on the node profile.
+ * features.pins is true on the node profile, and the post is eligible to be pinned
+ * (local community post, public audience, active, and not ended/cancelled).
  */
 import { useEffect, useRef, useState } from 'react';
 import { formatDate, pinLive, t } from '@beanpool/core';
@@ -39,7 +40,19 @@ export function PostPinDetail({
     const isLive = pinLive(post as any);
     const isAuthor = Boolean(identity?.publicKey && post.authorPublicKey === identity.publicKey);
     const canUnpin = isLive && (isOwnerOrAdmin || isAuthor);
-    const canPin = featuresPins && isOwnerOrAdmin && post.status === 'active';
+
+    const isPinnable =
+        !post.originNode &&
+        !(post as any)._remoteNode &&
+        (!post.audienceScope || post.audienceScope === 'public') &&
+        post.status === 'active' &&
+        post.active !== false &&
+        !post.hiddenByReportsAt &&
+        !post.removedByModeratorAt &&
+        (post.type !== 'event' || (post.eventState !== 'cancelled' && (!post.eventEndAt && !post.eventStartAt || Date.parse(post.eventEndAt ?? post.eventStartAt!) > Date.now()))) &&
+        (post.type !== 'poll' || (!post.pollClosesAt || Date.parse(post.pollClosesAt) > Date.now()));
+
+    const canPin = Boolean(identity?.publicKey) && featuresPins && isOwnerOrAdmin && isPinnable;
 
     // Close menu when clicking outside or pressing Escape
     useEffect(() => {

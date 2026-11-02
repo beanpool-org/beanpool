@@ -1769,6 +1769,7 @@ describe('the door on a copy', () => {
             w.doorAnswers(none);
             expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('later');
             w.doorSends.length = 0;
+            expect(await phone.tendOwedOffs(identity, w.deps)).toBeNull();
             expect(await phone.tendOwedOffs(identity, w.deps, later(OFF_RETRY_MOST_MS))).toBeNull();
             expect(w.doorSends).toEqual([]);
         });

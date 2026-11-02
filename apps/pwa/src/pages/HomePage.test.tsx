@@ -3037,6 +3037,7 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
 
     const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
     const grid = () => screen.getByTestId('home-grid');
+    const SAFETY = { needs: NEEDS, safety: { words: true as const, signInLinked: false as const } };
 
     async function landWithHeights(w: number, h: Record<string, number>, cards: HomeAnswer['cards'] = { needs: NEEDS }) {
         width = w;
@@ -3162,6 +3163,28 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
         const tips = screen.getByTestId('home-card-tips');
         expect(tips.style.gridRow).toBe('');
         expect(tips.style.gridColumn).toBe('');
+    });
+
+    it('safety card when not drawn is skipped by packing and leaves no gap', async () => {
+        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-safety': 180,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        }, SAFETY);
+
+        expect(screen.queryByTestId('home-card-safety')).toBeNull();
+        const tips = screen.getByTestId('home-card-tips');
+        const events = screen.getByTestId('home-card-events');
+        expect(tips.style.gridColumn).toBe('1');
+        expect(tips.style.gridRow).toBe('34 / span 54');
+        expect(events.style.gridColumn).toBe('2');
+        expect(events.style.gridRow).toBe('34 / span 42');
     });
 });
 

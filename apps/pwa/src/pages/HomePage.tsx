@@ -1195,40 +1195,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     const onCardHeight = useCallback((id: string, h: number) => {
         if (!h || cardHeightsRef.current[id] === h) return;
+        cardHeightsRef.current[id] = h;
         setCardHeights(prev => {
             if (prev[id] === h) return prev;
             return { ...prev, [id]: h };
         });
     }, []);
-
-    useLayoutEffect(() => {
-        if (cols <= 1 || typeof ResizeObserver === 'undefined') return;
-        let changed = false;
-        const next = { ...cardHeightsRef.current };
-        const checkEl = (key: string, el: HTMLElement | null) => {
-            if (!el) return;
-            const h = el.offsetHeight || Math.round(el.getBoundingClientRect().height);
-            if (h > 0 && next[key] !== h) {
-                next[key] = h;
-                changed = true;
-            }
-        };
-        checkEl('note-fewer', fewerRef.current);
-        checkEl('note-hint', hintRef.current);
-        if (gridRef.current) {
-            const cardEls = gridRef.current.querySelectorAll<HTMLElement>('[data-testid^="home-card-"]');
-            cardEls.forEach(cardEl => {
-                const testId = cardEl.getAttribute('data-testid');
-                if (!testId || testId === 'home-card-menu') return;
-                const cardId = testId.replace('home-card-', '');
-                checkEl(cardId, cardEl);
-            });
-        }
-        if (changed) {
-            cardHeightsRef.current = next;
-            setCardHeights(next);
-        }
-    });
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
     const focusAfterHide = useRef<string[] | null>(null);
     // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
@@ -1680,6 +1652,38 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const isVisitor = !answer || !!answer.welcome || !answer.me;
     const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
 
+    useLayoutEffect(() => {
+        if (cols <= 1 || typeof ResizeObserver === 'undefined') return;
+        let changed = false;
+        const next = { ...cardHeightsRef.current };
+        const checkEl = (key: string, el: HTMLElement | null) => {
+            if (!el) return;
+            const h = el.offsetHeight || Math.round(el.getBoundingClientRect().height);
+            if (h > 0 && next[key] !== h) {
+                next[key] = h;
+                changed = true;
+            }
+        };
+        checkEl('note-fewer', fewerRef.current);
+        checkEl('note-hint', hintRef.current);
+        if (gridRef.current) {
+            const knownIds = new Set(shown.map(c => c.id));
+            const cardEls = gridRef.current.querySelectorAll<HTMLElement>('[data-testid^="home-card-"]');
+            cardEls.forEach(cardEl => {
+                const testId = cardEl.getAttribute('data-testid');
+                if (!testId || testId === 'home-card-menu') return;
+                const cardId = testId.replace('home-card-', '');
+                if (knownIds.has(cardId)) {
+                    checkEl(cardId, cardEl);
+                }
+            });
+        }
+        if (changed) {
+            cardHeightsRef.current = next;
+            setCardHeights(next);
+        }
+    }, [cols, shown, notesUnderFirst, fewerOpen, hintOpen, safetyDrawn]);
+
     const packedList = useMemo(() => {
         if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
         const hasHeights = Object.values(cardHeights).some(h => h > 0);
@@ -1687,6 +1691,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const items: PackableCard[] = [];
         for (let i = 0; i < shown.length; i++) {
             const card = shown[i];
+            if (card.type === 'safety' && !safetyDrawn) continue;
             items.push({
                 id: card.id,
                 height: cardHeights[card.id] || 0,
@@ -1710,7 +1715,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             }
         }
         return packHome(items, cols);
-    }, [cols, shown, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp]);
+    }, [cols, shown, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp, safetyDrawn]);
 
     const packedMap = useMemo(() => new Map(packedList.map(p => [p.id, p])), [packedList]);
     const isPacked = typeof ResizeObserver !== 'undefined' && cols > 1 && packedList.length > 0;

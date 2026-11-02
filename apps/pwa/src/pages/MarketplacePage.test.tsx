@@ -1544,4 +1544,41 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         const pairs = [first, second].map(c => [c.textContent, /Held one/.test(cardOf(c)) && !/Asked one/.test(cardOf(c)) ? 'a' : /Asked one/.test(cardOf(c)) && !/Held one/.test(cardOf(c)) ? 'b' : '?']);
         expect(pairs.sort()).toEqual([['✋ ASKED', 'b'], ['🤝 IN TRUST', 'a']]);
     });
+
+    describe('the listing page keeps its phone order and only moves columns on wide screens (#2744)', () => {
+        const order = () => {
+            const title = screen.getByRole('heading', { name: 'Listing' });
+            const words = screen.getByText('Words');
+            const photo = screen.getByRole('button', { name: /View enlarged photo 1 of 1/ });
+            const price = screen.getByText('Asking Price');
+            return { title, words, photo, price };
+        };
+        const after = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+        it('reads words, photos, price in the DOM, so Tab follows what a phone shows', async () => {
+            await open(listing({}), []);
+            const { title, words, photo, price } = order();
+            expect(after(title, words)).toBe(true);
+            expect(after(words, photo)).toBe(true);
+            expect(after(photo, price)).toBe(true);
+            expect(title.closest('.flex-col')?.parentElement?.innerHTML).not.toMatch(/\border-\d/);
+        });
+
+        it('places photos left and the rest right from md up, with the price under the words', async () => {
+            await open(listing({}), []);
+            const { title, photo, price } = order();
+            const photos = photo.parentElement as HTMLElement;
+            expect(photos.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-2']));
+            expect(title.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1']));
+            const priceColumn = price.parentElement!.parentElement as HTMLElement;
+            expect(priceColumn.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
+        });
+
+        it('leaves the photo column at its full height on wide screens, with no inner scroll', async () => {
+            await open(listing({}), []);
+            const classes = order().photo.parentElement!.className.split(/\s+/);
+            expect(classes).toContain('md:overflow-visible');
+            expect(classes).not.toContain('md:overflow-y-auto');
+        });
+    });
 });

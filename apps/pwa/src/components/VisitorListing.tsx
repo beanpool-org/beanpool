@@ -156,9 +156,11 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                                 <CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="banner" />
                             </div>
                         )}
+                        {/* The title spans both columns, so photos come after it in the DOM and on screen at every width. */}
+                        <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight break-words">{post.title}</h2>
                         <div className={photos.length > 0 ? "flex flex-col md:grid md:grid-cols-2 md:gap-6 md:items-start" : ""}>
                             {photos.length > 0 && (
-                                <div data-testid="visitor-detail-photos" className="order-2 md:order-1 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto mb-4 md:mb-0 pb-2 snap-x snap-mandatory" style={{ overscrollBehaviorX: 'contain' }}>
+                                <div data-testid="visitor-detail-photos" className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible mb-4 md:mb-0 pb-2 snap-x snap-mandatory" style={{ overscrollBehaviorX: 'contain' }}>
                                     {photos.map((photo, i) => (
                                         <img
                                             key={i}
@@ -170,9 +172,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                                 </div>
                             )}
 
-                            <div className={`order-1 ${photos.length > 0 ? "md:order-2" : ""} flex flex-col`}>
-                                <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight break-words">{post.title}</h2>
-
+                            <div className="flex flex-col">
                                 {post.type === 'event' && (
                                     <div data-testid="visitor-detail-when" className="mb-3">
                                         <p className="m-0 text-lg font-black text-violet-800 dark:text-violet-200">{formatEventWhen(post)}</p>

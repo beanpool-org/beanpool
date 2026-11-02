@@ -1817,6 +1817,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             );
         };
 
+        const hasPhotosColumn = !!selectedPost.photos && selectedPost.photos.length > 0;
+
         return (
             <div className="p-4 sm:p-6 w-full max-w-3xl mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {/* Back Button */}
@@ -1910,37 +1912,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
-                        <div className={selectedPost.photos && selectedPost.photos.length > 0 ? "flex flex-col md:grid md:grid-cols-2 md:gap-6 md:items-start" : ""}>
-                            {/* Photos */}
-                            {selectedPost.photos && selectedPost.photos.length > 0 && (
-                                <div className="order-2 md:order-1 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto mb-5 md:mb-0 pb-2 snap-x">
-                                    {selectedPost.photos.map((photo, i) => (
-                                        <button
-                                            key={i}
-                                            type="button"
-                                            onClick={(e) =>
-                                                setLightboxState({
-                                                    isOpen: true,
-                                                    photos: selectedPost.photos!,
-                                                    initialIndex: i,
-                                                    title: selectedPost.title,
-                                                    triggerElement: e.currentTarget,
-                                                })
-                                            }
-                                            aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: selectedPost.photos!.length, title: selectedPost.title })}
-                                            className="h-44 sm:h-64 md:h-72 w-auto md:w-full max-w-[85%] md:max-w-none rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
-                                        >
-                                            <img
-                                                src={photo}
-                                                alt={t('photo {n}', { n: i + 1 })}
-                                                className="h-44 sm:h-64 md:h-72 w-auto md:w-full object-cover"
-                                            />
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div className={`order-1 ${selectedPost.photos && selectedPost.photos.length > 0 ? "md:order-2" : ""} flex flex-col`}>
+                        {/* Phone order, as in the DOM: words, photos, price. Wide: photos left, the rest right. No order-*: focus must follow what is seen. */}
+                        <div className={hasPhotosColumn ? "flex flex-col md:grid md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-6 md:items-start" : ""}>
+                            <div className={`${hasPhotosColumn ? "md:col-start-2 md:row-start-1" : ""} flex flex-col`}>
                                 <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
                                     {selectedPost.status === 'paused' && (
                                         <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-bp-chip-warn-tint text-bp-chip-warn-ink">{t('⏸ Paused')}</span>
@@ -1967,7 +1941,38 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 )}
 
                                 <PostTagChips tags={selectedPost.tags} freeTags={selectedPost.freeTags} onPick={openTag} onPickFree={openFree} className="mb-5" />
+                            </div>
 
+                            {/* Photos */}
+                            {selectedPost.photos && selectedPost.photos.length > 0 && (
+                                <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible mb-5 md:mb-0 pb-2 snap-x md:col-start-1 md:row-start-1 md:row-span-2">
+                                    {selectedPost.photos.map((photo, i) => (
+                                        <button
+                                            key={i}
+                                            type="button"
+                                            onClick={(e) =>
+                                                setLightboxState({
+                                                    isOpen: true,
+                                                    photos: selectedPost.photos!,
+                                                    initialIndex: i,
+                                                    title: selectedPost.title,
+                                                    triggerElement: e.currentTarget,
+                                                })
+                                            }
+                                            aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: selectedPost.photos!.length, title: selectedPost.title })}
+                                            className="h-44 sm:h-64 md:h-72 w-auto md:w-full max-w-[85%] md:max-w-none rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
+                                        >
+                                            <img
+                                                src={photo}
+                                                alt={t('photo {n}', { n: i + 1 })}
+                                                className="h-44 sm:h-64 md:h-72 w-auto md:w-full object-cover"
+                                            />
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className={`${hasPhotosColumn ? "md:col-start-2 md:row-start-2" : ""} flex flex-col`}>
                                 {/* Credits; where Beans live in a local community, what the description asks in return and the line */}
                                 {!isPulsePost && priceMarked && (
                                     <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 border border-nature-100 dark:border-nature-800 shadow-inner" data-testid="listing-in-return">

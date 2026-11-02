@@ -27,6 +27,11 @@ import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, Ne
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { openNoticeIn } from '../../utils/push-notice-switch';
+import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-communities';
+import { getPendingOnboarding } from '../../utils/onboarding-state';
+import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
 import { listPhotoUrl, t, tn, word, type WordKey } from '@beanpool/core';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
@@ -90,7 +95,20 @@ export default function ChatsScreen() {
     // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
     const [onGlobal, setOnGlobal] = useState(0);
     const { recheck } = useNodeStatus();
+    const otherNotices = useOtherCommunitiesNotices();
     const requestsHere = requests ?? (onGlobal > 0 ? { count: 0, conversations: [] } : null);
+
+    const openOtherCommunity = async (url: string) => {
+        if (!identity?.publicKey) return;
+        await openNoticeIn(url, null, async () => '/(tabs)/chats', {
+            storage: AsyncStorage,
+            publicKey: identity.publicKey,
+            joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+            switchUnderWay: communitySwitchUnderWay,
+            switchTo: switchCommunity,
+            recheck,
+        });
+    };
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
@@ -886,6 +904,23 @@ export default function ChatsScreen() {
                     <MaterialCommunityIcons name="pencil-outline" size={22} color={colors.accent.primary} />
                 </Pressable>
             </View>
+            {/* One row per other community where messages wait (design R6): lands in that community's Talk. */}
+            {otherNotices.length > 0 && messagesFilter !== 'requests' && otherNotices.map((item) => {
+                const label = tn(item.count, '{n} new message in {community} · Switch', '{n} new messages in {community} · Switch', { community: item.name });
+                return (
+                    <Pressable
+                        key={item.url}
+                        accessibilityRole="button"
+                        accessibilityLabel={label}
+                        testID={`other-community-notice-${item.url}`}
+                        style={styles.requestsRow}
+                        onPress={() => void openOtherCommunity(item.url)}
+                    >
+                        <Text style={styles.requestsRowText} numberOfLines={2}>{label}</Text>
+                        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
+                    </Pressable>
+                );
+            })}
             {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
             {requestsHere && requestsHere.count + onGlobal > 0 && messagesFilter !== 'requests' && (
                 <Pressable

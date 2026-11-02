@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Share, TextInput, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Share, TextInput, Platform, DeviceEventEmitter, Modal, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -13,7 +14,9 @@ import {
 import { openBeanPoolWebsite } from '../utils/beanpool-links';
 import { useCommunities, type CommunityRow, type CommunityStatus } from '../utils/use-communities';
 import { useNoticeCounts } from '../utils/use-notice-counts';
-import { noticeCountFor } from '../utils/notice-counts';
+import { dropCounts, noticeCountFor } from '../utils/notice-counts';
+import { readAlertsOff } from '../utils/push-alerts-off';
+import { sameCommunity } from '../utils/push-pins';
 import { useGlobalEntry } from '../utils/use-global-entry';
 import { useGlobalDoor } from '../utils/use-global-door-open';
 import { isGlobalCommunity } from '../utils/global-join-existing';
@@ -129,6 +132,18 @@ export default function BeanPoolSheet() {
         ctaText: { fontSize: 15, fontWeight: '700', flexShrink: 1 },
         empty: { fontSize: 15, color: colors.text.body, lineHeight: 22, padding: 16 },
         foot: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 24, lineHeight: 18 },
+        modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+        optionsCard: { width: '100%', maxWidth: 360, backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default },
+        optionsTitle: { fontSize: 18, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
+        switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, minHeight: 48, gap: 12 },
+        switchTextWrap: { flex: 1, minWidth: 0 },
+        switchLabel: { fontSize: 15, fontWeight: '600', color: colors.text.body },
+        switchSub: { fontSize: 13, color: colors.text.secondary, marginTop: 2, lineHeight: 18 },
+        optionsDivider: { borderTopWidth: 1, borderTopColor: colors.border.default, marginVertical: 8 },
+        removeBtn: { minHeight: 48, justifyContent: 'center' },
+        removeBtnText: { fontSize: 15, fontWeight: '600', color: colors.feedback.danger.fg },
+        optionsDoneBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.subtle, borderRadius: 12, marginTop: 12 },
+        optionsDoneText: { fontSize: 15, fontWeight: '700', color: colors.text.heading },
     }));
 
     const dotFor = (st: CommunityStatus | 'none') => st === 'online' ? colors.feedback.success.solid
@@ -156,6 +171,36 @@ export default function BeanPoolSheet() {
     // preview; this account closed there). No-domain-lock-in: every state but member and join is "the global community
     // isn't available from here right now", and nothing else on the sheet waits on it.
     const { identity } = useIdentity();
+    const [optionsCommunity, setOptionsCommunity] = useState<CommunityRow | null>(null);
+    const [alertsOff, setAlertsOff] = useState<string[]>([]);
+
+    React.useEffect(() => {
+        let alive = true;
+        readAlertsOff(AsyncStorage).then((list) => { if (alive) setAlertsOff(list); }).catch(() => {});
+        return () => { alive = false; };
+    }, []);
+
+    const toggleAlerts = async () => {
+        if (!optionsCommunity) return;
+        const target = optionsCommunity.url;
+        const isOff = alertsOff.some((c) => sameCommunity(c, target));
+        if (isOff) {
+            setAlertsOff((prev) => prev.filter((c) => !sameCommunity(c, target)));
+            const { turnAlertsOnAt } = await import('../services/push-notifications');
+            await turnAlertsOnAt(target).catch((e) => console.warn('[Push] Turn alerts on failed', e));
+        } else {
+            setAlertsOff((prev) => [...prev, target]);
+            if (identity) {
+                const { turnAlertsOffAt } = await import('../utils/account-leaves-phone');
+                await turnAlertsOffAt(identity, target).catch((e) => console.warn('[Push] Turn alerts off failed', e));
+            } else {
+                const { markAlertsOff } = await import('../utils/push-alerts-off');
+                await markAlertsOff(target).catch(() => {});
+            }
+            await dropCounts(AsyncStorage, [target]).catch(() => {});
+        }
+    };
+
     const globalSaved = communities.rows.find(r => isGlobalCommunity(r.url)) ?? null;
     const globalDoor = useGlobalDoor(!!identity);
     const globalEntry = useGlobalEntry(!!identity, globalDoor.state, !!globalSaved);
@@ -243,7 +288,7 @@ export default function BeanPoolSheet() {
                 key={saved?.url ?? 'global'}
                 style={({ pressed }) => [styles.row, !first && styles.rowDivider, isCurrent && styles.rowCurrent, pressed && styles.rowPressed]}
                 onPress={globalTap}
-                onLongPress={saved ? () => communities.remove(saved) : undefined}
+                onLongPress={saved ? () => setOptionsCommunity(saved) : undefined}
                 delayLongPress={500}
                 disabled={!globalTap || communities.switching || guestVisit.visiting}
                 accessibilityRole="button"
@@ -343,7 +388,7 @@ export default function BeanPoolSheet() {
                                 key={r.url}
                                 style={({ pressed }) => [styles.row, i > 0 && styles.rowDivider, isCurrent && styles.rowCurrent, pressed && styles.rowPressed]}
                                 onPress={() => communities.switchTo(r.url)}
-                                onLongPress={() => communities.remove(r)}
+                                onLongPress={() => setOptionsCommunity(r)}
                                 delayLongPress={500}
                                 disabled={communities.switching}
                                 accessibilityRole="button"
@@ -485,6 +530,69 @@ export default function BeanPoolSheet() {
                     </>
                 )}
             </ScrollView>
+
+            {optionsCommunity && (
+                <Modal
+                    visible={!!optionsCommunity}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setOptionsCommunity(null)}
+                >
+                    <View style={styles.modalBackdrop}>
+                        <Pressable
+                            style={StyleSheet.absoluteFill}
+                            onPress={() => setOptionsCommunity(null)}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Done')}
+                        />
+                        <View
+                            style={styles.optionsCard}
+                            testID="community-options-modal"
+                        >
+                            <Text style={styles.optionsTitle} numberOfLines={1}>{optionsCommunity.name}</Text>
+                            <View style={styles.switchRow}>
+                                <View style={styles.switchTextWrap}>
+                                    <Text style={styles.switchLabel}>{t('Alerts from this community')}</Text>
+                                    <Text style={styles.switchSub}>{t('Stops notifications and unread message checks from this community')}</Text>
+                                </View>
+                                <Switch
+                                    value={!alertsOff.some((c) => sameCommunity(c, optionsCommunity.url))}
+                                    onValueChange={() => void toggleAlerts()}
+                                    trackColor={{ false: colors.surface.subtle, true: colors.brand.primary }}
+                                    thumbColor={colors.surface.card}
+                                    accessibilityRole="switch"
+                                    accessibilityLabel={t('Alerts from this community')}
+                                />
+                            </View>
+                            {optionsCommunity.url !== communities.active && (
+                                <>
+                                    <View style={styles.optionsDivider} />
+                                    <Pressable
+                                        style={styles.removeBtn}
+                                        onPress={() => {
+                                            const target = optionsCommunity;
+                                            setOptionsCommunity(null);
+                                            communities.remove(target);
+                                        }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Remove from your saved list')}
+                                    >
+                                        <Text style={styles.removeBtnText}>{t('Remove from your saved list')}</Text>
+                                    </Pressable>
+                                </>
+                            )}
+                            <Pressable
+                                style={styles.optionsDoneBtn}
+                                onPress={() => setOptionsCommunity(null)}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Done')}
+                            >
+                                <Text style={styles.optionsDoneText}>{t('Done')}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </Modal>
+            )}
         </SafeAreaView>
     );
 }

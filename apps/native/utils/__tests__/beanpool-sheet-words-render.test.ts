@@ -28,11 +28,13 @@ vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID, placeholder, numberOfLines, adjustsFontSizeToFit, minimumFontScale, value, onChangeText, disabled } = props;
+        const { children, onPress, onLongPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID, placeholder, numberOfLines, adjustsFontSizeToFit, minimumFontScale, value, onChangeText, disabled, onValueChange } = props;
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = () => onPress();
+        if (onLongPress && !disabled) attrs.onContextMenu = (e: any) => { e?.preventDefault?.(); onLongPress(); };
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
+        if (onValueChange) { attrs.onChange = (e: any) => onValueChange(e?.target?.checked ?? !value); attrs.checked = !!value; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -51,7 +53,8 @@ vi.mock('react-native', () => {
     const listener = () => ({ remove() {} });
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), Switch: el('input'),
+        Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => flat(s) },
         Share: { share: async ({ message }: { message: string }) => { shared.messages.push(message); return {}; } },
         DeviceEventEmitter: { addListener: listener, emit() {} },
@@ -319,6 +322,33 @@ describe('the BeanPool sheet in the pseudo-locale: every word on it came through
         expect(host.querySelector('[aria-label="Riverside, Connected. You are a member here., in use"]')).not.toBeNull();
         expect(host.querySelector('[aria-label="Connected. You are a member here., synced 5m ago"]')).not.toBeNull();
         expect(Array.from(host.querySelectorAll('span')).some((s) => /^\[/.test(s.textContent ?? ''))).toBe(false);
+    });
+
+    it('long-pressing a saved community row opens the options modal with Alerts switch and Remove button', async () => {
+        store.map.set('beanpool_anchor_url', RIVERSIDE);
+        store.map.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: RIVERSIDE }, { url: HILLS }]));
+        await renderIn('en');
+
+        const hillsBtn = host.querySelector('[aria-label="Hills, Can\'t reach it right now"]');
+        expect(hillsBtn).not.toBeNull();
+        await act(async () => {
+            (hillsBtn as any).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        });
+        await settle();
+
+        expect(host.textContent).toContain('Alerts from this community');
+        expect(host.textContent).toContain('Stops notifications and unread message checks from this community');
+        expect(host.textContent).toContain('Remove from your saved list');
+        expect(host.textContent).toContain('Done');
+
+        // Clicking Done closes the modal
+        const doneBtn = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Done');
+        expect(doneBtn).not.toBeNull();
+        await act(async () => {
+            doneBtn!.click();
+        });
+        await settle();
+        expect(host.textContent).not.toContain('Stops notifications and unread message checks from this community');
     });
 });
 

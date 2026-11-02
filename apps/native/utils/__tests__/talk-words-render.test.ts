@@ -176,6 +176,16 @@ vi.mock('../global-join-existing', () => ({ isGlobalCommunity: () => globalDoor.
 vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => globalDoor.entry }));
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)));
+const openNoticeCalls = vi.hoisted(() => ({ calls: [] as Array<{ url: string; id: string | null; route: unknown }> }));
+vi.mock('../push-notice-switch', async (importOriginal) => {
+    const orig = await importOriginal<Record<string, unknown>>();
+    return {
+        ...orig,
+        openNoticeIn: vi.fn(async (url: string, id: string | null, route: unknown) => {
+            openNoticeCalls.calls.push({ url, id, route });
+        }),
+    };
+});
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
@@ -825,5 +835,46 @@ describe("Talk's per-person chip counts the deals that need the member (core's d
         await renderIn('en');
         expect(host.textContent).toContain('Waiting on you: answer');
         expect(host.textContent).not.toContain('Fulfill Order');
+    });
+});
+
+// ── S1.4 Cross-community messages waiting (design R6) ──
+describe('Cross-community unread notices at top of Chat (design R6)', () => {
+    beforeEach(() => {
+        openNoticeCalls.calls = [];
+        store.map.delete('beanpool_notice_counts');
+        store.map.delete('beanpool_saved_nodes');
+        store.map.set('beanpool_anchor_url', 'https://mullum.example');
+    });
+
+    it('renders singular notice and opens the community on tap', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({
+            'https://castlemaine.example': { n: 1, seen: {} },
+        }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([
+            { url: 'https://castlemaine.example', name: 'Castlemaine' },
+        ]));
+        await renderIn('en');
+
+        const row = buttonWithText('1 new message in Castlemaine · Switch');
+        expect(row).not.toBeNull();
+        expect(row?.textContent).toBe('1 new message in Castlemaine · Switch');
+        await click(row, 'Castlemaine notice row');
+        expect(openNoticeCalls.calls.length).toBe(1);
+        expect(openNoticeCalls.calls[0].url).toBe('https://castlemaine.example');
+    });
+
+    it('renders plural notice when multiple messages wait', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({
+            'https://castlemaine.example': { n: 3, seen: {} },
+        }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([
+            { url: 'https://castlemaine.example', name: 'Castlemaine' },
+        ]));
+        await renderIn('en');
+
+        const row = buttonWithText('3 new messages in Castlemaine · Switch');
+        expect(row).not.toBeNull();
+        expect(row?.textContent).toBe('3 new messages in Castlemaine · Switch');
     });
 });

@@ -336,6 +336,12 @@ async function main(): Promise<void> {
     };
     // A parent row carrying its rows (`inRowOf`): one planted, with one of the rows it carries.
     const IN_ROW_OF: Partial<Record<string, () => (x: any) => boolean>> = {
+        poll_answers: () => {
+            db.prepare("INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row-poller', 'Manifest Poller')").run();
+            db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, poll_options) VALUES ('manifest-in-row-poll', 'poll', 'community', 'Q', '', 0, 'manifest-in-row-poller', '[]')").run();
+            db.prepare("INSERT INTO poll_answers (post_id, id, option_id, words) VALUES ('manifest-in-row-poll', 'a1', 'o1', 'typed')").run();
+            return (x) => x?.id === 'manifest-in-row-poll' && x?.pollAnswers?.[0]?.words === 'typed';
+        },
         member_preferences: () => {
             db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row', 'Manifest In Row')`).run();
             db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES ('manifest-in-row', 'notify_chat', 'false')`).run();

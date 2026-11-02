@@ -77,7 +77,7 @@ export const HOME_TIPS: readonly HomeTip[] = [
     { id: 'polls', when: n => !decideHere(n), guide: 'polls',
         text: word('Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.') },
     { id: 'private', when: beansOn, guide: 'privacy',
-        text: word('Only you can see your balance and your trades. Other members see your name, photo, level and reviews.') },
+        text: word("Your balance and your trades are private. If your community has a rule on when the admins can see a balance, it's under How this community works.") },
     { id: 'visitors', when: n => !beansOn(n), guide: 'privacy',
         text: word("People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.") },
     { id: 'guide', when: always, guide: 'the-bean',

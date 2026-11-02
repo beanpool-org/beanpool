@@ -32,7 +32,7 @@ Every trade, gift and fee, newest first, with a note, the time, and plus or minu
 
 A line for beans held in a deal (or paid out or returned from one) opens that deal when you tap it, on the phone and in the web app. You land on the post, where you release or cancel the deal.
 
-Only you can see your balance and these transactions. Nobody else in your community can read them. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
+Your balance and these transactions are private. If your community has a rule on when the admins can see a balance, it's under "How this community works". See "Your privacy" for the rest. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
 
 The list has no search or filters yet.
 

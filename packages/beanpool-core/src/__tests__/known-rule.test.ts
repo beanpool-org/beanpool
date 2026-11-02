@@ -2,11 +2,12 @@
  * A known community's rule as the apps say it: the rule line and its half variant, what a node's answer can draw, and the
  * standing decision that this is all a member gets (Marty, 2 Nov: "Rules page only").
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { COMMUNITY_SHAPE_CARD_WORDS, communityShapeLines, joinRuleLines, knownRuleLine, waitingLineSentences } from '../community-shape-card.js';
+import { HOME_TIPS } from '../home-tips.js';
 import { readKnownRule, ruleStartsLine, type KnownRule } from '../known-rule.js';
 import { pseudoLocalise, setLanguage } from '../words.js';
 
@@ -140,5 +141,61 @@ describe('Rules page only (Marty, 2 Nov): no card, no step-back, no tick, on eit
             return keys.filter(k => sentences.some(s => s.test(k))).map(k => `${relative(ROOT, p)}: ${k.slice(0, 80)}`);
         });
         expect(inCatalogs).toEqual([]);
+    });
+});
+
+describe('no sentence left that contradicts the rule (review of #2746)', () => {
+    const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+    const GUIDE = join(ROOT, 'packages/beanpool-guide/content');
+    /** The same claim, however it was said: only the member can see a balance or trades. */
+    const CLAIM = /only you can see your balance|nobody else in your community can read/i;
+    /** S3 rewrites this page, with the tick it still describes; #2746 names the line under "Until S3 merges". */
+    const S3_REWRITES = ['settings/privacy.md'];
+    const tip = () => HOME_TIPS.find(t => t.id === 'private')!;
+
+    function walk(dir: string): string[] {
+        return readdirSync(dir).flatMap((name) => {
+            const p = join(dir, name);
+            return statSync(p).isDirectory() ? walk(p) : [p];
+        });
+    }
+
+    it('Home\'s tip says private, and sends the exception to the rules page by the page\'s own name', () => {
+        expect(String(tip().text)).toMatch(/^Your balance and your trades are private\./);
+        expect(String(tip().text)).toContain(String(COMMUNITY_SHAPE_CARD_WORDS.title));
+    });
+
+    it('the tip is true with the rule on and with it off: it only says where a rule would be, and never says the reader has one', () => {
+        expect(String(tip().text)).toMatch(/\bIf your community has a rule\b/);
+        expect(String(tip().text)).not.toMatch(/\?/);
+        expect(String(tip().text)).not.toMatch(/\byou (are|owe|have been)\b/i);
+    });
+
+    it('in every language the tip names the page by the title the page draws, and the old sentence has gone', () => {
+        const old = 'Only you can see your balance and your trades. Other members see your name, photo, level and reviews.';
+        const catalogs = readdirSync(join(ROOT, 'packages/beanpool-core/words')).filter(f => f.endsWith('.json'));
+        expect(catalogs.length).toBe(24);
+        for (const file of catalogs) {
+            const catalog = JSON.parse(readFileSync(join(ROOT, 'packages/beanpool-core/words', file), 'utf8')) as Record<string, string>;
+            const title = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.title)];
+            expect(title, `${file}: the rules page's title`).toBeTruthy();
+            expect(catalog[String(tip().text)], `${file}: the tip`).toContain(title);
+            expect(catalog, file).not.toHaveProperty(old);
+        }
+    });
+
+    it('no English guide page makes the claim, but the page S3 rewrites', () => {
+        const LANGS = new Set(readdirSync(GUIDE).filter(d => existsSync(join(GUIDE, d, 'manifest.json'))));
+        const pages = walk(GUIDE).filter(p => p.endsWith('.md') && !LANGS.has(relative(GUIDE, p).split('/')[0]));
+        expect(pages.map(p => relative(GUIDE, p))).toContain('ledger/your-balance.md');
+        expect(pages.length).toBeGreaterThan(50);
+        expect(pages.filter(p => CLAIM.test(readFileSync(p, 'utf8'))).map(p => relative(GUIDE, p))).toEqual(S3_REWRITES);
+    });
+
+    it('the balance page and What\'s new say private, not "only you", and the balance page points to the rules page', () => {
+        const balance = readFileSync(join(GUIDE, 'ledger/your-balance.md'), 'utf8');
+        expect(balance).toContain('Your balance and these transactions are private.');
+        expect(balance).toContain('"How this community works"');
+        expect(readFileSync(join(GUIDE, 'about/whats-new.md'), 'utf8')).toContain("Other members can't read your balance or your history.");
     });
 });

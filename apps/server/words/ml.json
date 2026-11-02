@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "ml",
+    "name": "Malayalam",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "ഉടമയ്ക്കോ അഡ്മിനോ മാത്രമേ ഒരു പോസ്റ്റ് പിൻ ചെയ്യാനാകൂ.",
+  "Only an owner, an admin or the post's author can take a pin off.": "ഉടമയ്ക്കോ അഡ്മിനോ പോസ്റ്റിന്റെ രചയിതാവിനോ മാത്രമേ പിൻ നീക്കാനാകൂ.",
+  "A pin lasts 1 day, 3 days or 1 week.": "ഒരു പിൻ 1 ദിവസം, 3 ദിവസം അല്ലെങ്കിൽ 1 ആഴ്ച നിലനിൽക്കും.",
+  "That post is no longer here.": "ആ പോസ്റ്റ് ഇപ്പോൾ ഇവിടെ ഇല്ല.",
+  "Only a public post can be pinned.": "പൊതു പോസ്റ്റ് മാത്രമേ പിൻ ചെയ്യാനാകൂ.",
+  "Only this community's own posts can be pinned.": "ഈ കമ്മ്യൂണിറ്റിയുടെ സ്വന്തം പോസ്റ്റുകൾ മാത്രമേ പിൻ ചെയ്യാനാകൂ.",
+  "This post has ended, so it can't be pinned.": "ഈ പോസ്റ്റ് അവസാനിച്ചു, അതിനാൽ പിൻ ചെയ്യാനാകില്ല.",
+  "Three posts are pinned already. Take one off first.": "മൂന്ന് പോസ്റ്റുകൾ ഇതിനകം പിൻ ചെയ്തിട്ടുണ്ട്. ആദ്യം ഒന്ന് നീക്കുക."
+}

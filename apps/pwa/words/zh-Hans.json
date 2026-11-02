@@ -3560,5 +3560,8 @@
   "Message not delivered": "消息未送达",
   "Stop taking questions": "停止接受提问",
   "on the global community": "在全球社区",
-  "Open their requests there": "在那里打开他们的请求"
+  "Open their requests there": "在那里打开他们的请求",
+  "Previous month": "上个月",
+  "Next month": "下个月",
+  "Event · {from}": "活动 · {from}"
 }

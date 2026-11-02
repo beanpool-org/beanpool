@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "ja",
+    "name": "Japanese",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "投稿をピン留めできるのはオーナーまたは管理者のみです。",
+  "Only an owner, an admin or the post's author can take a pin off.": "ピン留めを外せるのはオーナー、管理者、または投稿者のみです。",
+  "A pin lasts 1 day, 3 days or 1 week.": "ピン留めの期間は1日、3日、または1週間です。",
+  "That post is no longer here.": "その投稿はもうここにありません。",
+  "Only a public post can be pinned.": "ピン留めできるのは公開の投稿のみです。",
+  "Only this community's own posts can be pinned.": "ピン留めできるのはこのコミュニティの投稿のみです。",
+  "This post has ended, so it can't be pinned.": "この投稿は終了しているため、ピン留めできません。",
+  "Three posts are pinned already. Take one off first.": "すでに3件の投稿がピン留めされています。先に1件外してください。"
+}

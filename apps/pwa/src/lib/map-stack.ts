@@ -4,7 +4,10 @@
  * MapPage's maxClusterRadius, 40 px: at 17 that is 47.8 m at the equator, 42 m at Bangalow. A 40 px pin is that wide, so
  * pins closer than that sit on top of each other however they are tapped.
  */
-import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, orderStack, type StackBubble } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, copyFromLine, eventCopyOf, listPhotoUrl, orderStack, t, type StackBubble } from '@beanpool/core';
+import type { MarketplacePost } from './api';
+import { formatEventWhen } from './events';
+import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
 
 /**
  * The parts of a markercluster bubble this reads. The library has no public way to ask when a bubble parts, and its own
@@ -91,4 +94,32 @@ export function stackPins(keys: readonly string[], onMap: ReadonlyMap<string, St
         return pin ? [pin] : [];
     });
     return orderStack(pins, (pin) => ({ eventStartMs: pin.eventStartMs, createdMs: pin.createdMs }));
+}
+
+/**
+ * A post's row in the map stack list (web twin of the phone's stackRow in utils/map-stack.ts; Marty, 2 Nov).
+ * A copy from another community gets "Event · from Mullumbimby" as its type line (DESIGN-map-calendar-fable.md §4).
+ */
+export function stackPinFromPost(
+    post: MarketplacePost,
+    open: () => void = () => {},
+): StackPin {
+    const copy = eventCopyOf(post);
+    const copyFrom = copy?.from ? copyFromLine(copy.from) : null;
+    const typeLabel = post.type === 'event'
+        ? (copyFrom ? t('Event · {from}', { from: copyFrom }) : t('Event'))
+        : post.type === 'offer'
+            ? t('Offer')
+            : t('Need');
+    return {
+        key: `post:${post.id}`,
+        title: post.title,
+        type: typeLabel,
+        when: post.type === 'event' ? formatEventWhen(post) || null : null,
+        photo: post.photos?.[0] ? listPhotoUrl(post.photos[0]) : null,
+        emoji: MARKETPLACE_CATEGORIES_BY_ID.get(post.category)?.emoji || '📌',
+        eventStartMs: post.type === 'event' ? Date.parse(post.eventStartAt ?? '') : null,
+        createdMs: Date.parse(post.createdAt ?? ''),
+        open,
+    };
 }

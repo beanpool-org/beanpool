@@ -3689,5 +3689,8 @@
   "Message not delivered": "پیام تحویل داده نشد",
   "Stop taking questions": "توقف پذیرش پرسش‌ها",
   "on the global community": "در جامعه جهانی",
-  "Open their requests there": "درخواست‌هایشان را آنجا باز کنید"
+  "Open their requests there": "درخواست‌هایشان را آنجا باز کنید",
+  "Previous month": "ماه قبل",
+  "Next month": "ماه بعد",
+  "Event · {from}": "رویداد · {from}"
 }

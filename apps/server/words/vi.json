@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "vi",
+    "name": "Vietnamese",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Chỉ chủ sở hữu hoặc quản trị viên mới có thể ghim bài đăng.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Chỉ chủ sở hữu, quản trị viên hoặc tác giả bài đăng mới có thể bỏ ghim.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Ghim có hiệu lực 1 ngày, 3 ngày hoặc 1 tuần.",
+  "That post is no longer here.": "Bài đăng đó không còn ở đây nữa.",
+  "Only a public post can be pinned.": "Chỉ bài đăng công khai mới có thể được ghim.",
+  "Only this community's own posts can be pinned.": "Chỉ bài đăng của chính cộng đồng này mới có thể được ghim.",
+  "This post has ended, so it can't be pinned.": "Bài đăng này đã kết thúc nên không thể ghim.",
+  "Three posts are pinned already. Take one off first.": "Đã có ba bài đăng được ghim. Hãy bỏ ghim một bài trước."
+}

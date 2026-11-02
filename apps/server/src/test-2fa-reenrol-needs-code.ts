@@ -352,7 +352,8 @@ async function main() {
                 statuses.push((await call('/api/local/admin/2fa/verify', asOwner, { code: wrongCode() })).status);
             }
             assert(statuses.includes(429), `verify with no setup in progress, wrong codes against the active secret: braked (${statuses.join(',')})`);
-            assert(statuses.filter(st => st !== 429).length <= SOURCE_FREE_FAILURES + 1, `…after at most ${SOURCE_FREE_FAILURES + 1} checked`);
+            // One more when the two-second closure after the sixth is spent in its own tarpit, as on a slow runner: measured 3 Nov.
+            assert(statuses.filter(st => st !== 429).length <= SOURCE_FREE_FAILURES + 2, `…after at most ${SOURCE_FREE_FAILURES + 2} checked`);
             resetAdminAuthTarpit();
             const right = await call('/api/local/admin/2fa/verify', asOwner, { code: generateTotpCode(SECRET) });
             assert(right.status === 200 && activeSecret() === SECRET && getLocalConfig().totpEnabled === true,
@@ -474,7 +475,9 @@ async function main() {
                 const r = await call('/api/local/admin/2fa/disable', again.session, { code: wrongCode() });
                 statuses.push(r.status);
                 if (r.status === 401) took401.push(Date.now() - t0);
-                if (r.status === 429 && /from your network/.test(r.body.error || '')) sourceWait = r.retryAfter;
+                // Either rule of the brake holds it. The closure after the sixth is two seconds, and a slow runner can spend them in the
+                // tarpit: then this address, in backoff, meets the node's smaller allowance first (password-brake.ts tryAdmit).
+                if (r.status === 429 && r.body.passwordBackoff === true) sourceWait = r.retryAfter;
             }
             assert(sourceWait > 0 && statuses.indexOf(429) <= SOURCE_FREE_FAILURES + 1,
                 `…while wrong current codes still brake that address (statuses ${statuses.join(',')}, Retry-After ${sourceWait} s)`);

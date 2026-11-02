@@ -1732,6 +1732,10 @@ export function initSchema() {
     // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
     // existing row: nothing is featured until its author or a keeper says so.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
+    // A pin (schema.sql; DESIGN-pinning-fable.md §4). Before the schema.sql exec, whose index and trigger read them. NULL on
+    // every existing row: nothing is pinned until an owner or admin says so.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN pinned_until TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN pinned_at TEXT`).run(); } catch { }
     // What made a post when that was not its author's own app (schema.sql posts.created_via): 'assistant:<grant id>' for an
     // owner's AI assistant. NULL on every existing row: none was made that way.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN created_via TEXT`).run(); } catch { }

@@ -489,7 +489,8 @@ async function main(): Promise<void> {
         // Version 11: posts with shown_price (a copy's price at home, in words, slice G1′).
         // Version 12: confirmations with stepped_back_owing (the balance rule, S1).
         // Version 14: posts with shown_takes_questions (the door on a copy, slice GD), on top of 13.
-        assert(snap?.tableHashes?.v === 14 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 15: posts with pinned_until and pinned_at (pinning, slice 1).
+        assert(snap?.tableHashes?.v === 15 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

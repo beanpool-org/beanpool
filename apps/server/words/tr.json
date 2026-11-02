@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "tr",
+    "name": "Turkish",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Bir gönderiyi yalnızca sahip veya yönetici sabitleyebilir.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Sabitlemeyi yalnızca sahip, yönetici veya gönderinin yazarı kaldırabilir.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Sabitleme 1 gün, 3 gün veya 1 hafta sürer.",
+  "That post is no longer here.": "O gönderi artık burada değil.",
+  "Only a public post can be pinned.": "Yalnızca herkese açık bir gönderi sabitlenebilir.",
+  "Only this community's own posts can be pinned.": "Yalnızca bu topluluğun kendi gönderileri sabitlenebilir.",
+  "This post has ended, so it can't be pinned.": "Bu gönderi sona erdi, bu yüzden sabitlenemez.",
+  "Three posts are pinned already. Take one off first.": "Üç gönderi zaten sabitlenmiş. Önce birini kaldır."
+}

@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "ur",
+    "name": "Urdu",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "صرف مالک یا ایڈمن کسی پوسٹ کو پن کر سکتے ہیں۔",
+  "Only an owner, an admin or the post's author can take a pin off.": "صرف مالک، ایڈمن یا پوسٹ کا مصنف پن ہٹا سکتے ہیں۔",
+  "A pin lasts 1 day, 3 days or 1 week.": "پن 1 دن، 3 دن یا 1 ہفتے تک رہتا ہے۔",
+  "That post is no longer here.": "وہ پوسٹ اب یہاں نہیں ہے۔",
+  "Only a public post can be pinned.": "صرف عوامی پوسٹ کو پن کیا جا سکتا ہے۔",
+  "Only this community's own posts can be pinned.": "صرف اس کمیونٹی کی اپنی پوسٹس کو پن کیا جا سکتا ہے۔",
+  "This post has ended, so it can't be pinned.": "یہ پوسٹ ختم ہو چکی ہے، اس لیے اسے پن نہیں کیا جا سکتا۔",
+  "Three posts are pinned already. Take one off first.": "تین پوسٹس پہلے سے پن ہیں۔ پہلے ایک ہٹائیں۔"
+}

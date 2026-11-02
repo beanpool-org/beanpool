@@ -2910,8 +2910,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 {[1, 2, 3, 4, 5].map(star => (
                                                     <button
                                                         key={star}
+                                                        type="button"
                                                         onClick={() => setMyRating(star)}
-                                                        className={`text-4xl leading-none transition-transform focus:outline-none ${
+                                                        aria-label={tn(star, 'Rate {n} star', 'Rate {n} stars')}
+                                                        className={`text-4xl leading-none transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg ${
                                                             star <= myRating ? 'text-amber-400 scale-110 drop-shadow-sm' : 'text-nature-300 scale-100'
                                                         }`}
                                                     >

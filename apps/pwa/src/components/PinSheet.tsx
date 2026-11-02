@@ -64,6 +64,7 @@ export function PinSheet({ post, isOpen, onClose, onSuccess }: PinSheetProps) {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="pin-sheet-title"
+                data-testid="pin-sheet-modal"
                 className="w-full max-w-sm bg-white dark:bg-nature-950 rounded-t-3xl sm:rounded-3xl border border-nature-200 dark:border-nature-800 shadow-2xl p-5 flex flex-col gap-3 animate-in slide-in-from-bottom-4 duration-200"
             >
                 <div className="flex items-center justify-between pb-1">

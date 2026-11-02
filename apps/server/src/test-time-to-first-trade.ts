@@ -289,14 +289,17 @@ async function main(): Promise<void> {
         assert(all().daysFromListingToTrade === before6, `who traded before they listed isn't in the listing-to-trade median (${all().daysFromListingToTrade} from ${before6})`);
     }
     {
+        // Read as local time, in Sydney this date lands 11 hours early, and 2.25 days rounds up to 3.
+        const zone = process.env.TZ;
+        process.env.TZ = 'Australia/Sydney';
         clearScene();
-        const m = addMember(100);
-        db.prepare("UPDATE members SET joined_at = '2026-01-10 08:00:00' WHERE public_key = ?").run(m);
-        for (let i = 0; i < 4; i++) { const x = addMember(100); db.prepare("UPDATE members SET joined_at = '2026-01-10 08:00:00' WHERE public_key = ?").run(x); }
-        for (const pk of db.prepare("SELECT public_key FROM members WHERE joined_at = '2026-01-10 08:00:00'").pluck().all() as string[]) {
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status) VALUES (?, 'offer', 'general', 't', '', 5, ?, '2026-01-12T08:00:00.000Z', 'active')`).run(`old-${++n}`, pk);
+        for (let i = 0; i < 5; i++) {
+            const m = addMember(100);
+            db.prepare("UPDATE members SET joined_at = '2026-01-10 08:00:00' WHERE public_key = ?").run(m);
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status) VALUES (?, 'offer', 'general', 't', '', 5, ?, '2026-01-12T14:00:00.000Z', 'active')`).run(`old-${++n}`, m);
         }
-        assert(all().daysToFirstListing === 2, `an older row's "YYYY-MM-DD HH:MM:SS" date reads as UTC (${all().daysToFirstListing})`);
+        assert(all().daysToFirstListing === 2, `an older row's "YYYY-MM-DD HH:MM:SS" date reads as UTC, whatever the server's time zone (${all().daysToFirstListing})`);
+        if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone;
     }
     {
         clearScene();
@@ -434,7 +437,8 @@ async function main(): Promise<void> {
         db.exec('ANALYZE');
         const plan = (db.prepare(`EXPLAIN QUERY PLAN ${FIRST_TRADE_PEOPLE_SQL}`).all() as Array<{ detail: string }>).map(r => r.detail);
         const walks = plan.filter(d => /\b(SCAN|SEARCH) (p|t|o)\b/.test(d) && !/USING (COVERING )?INDEX/.test(d));
-        assert(plan.some(d => /idx_posts_created_by/.test(d)) && walks.length === 0, `every read of posts and deals goes by an index, ANALYZE or none (${walks.join(' | ') || plan.length + ' steps'})`);
+        const byKeeper = plan.filter(d => /idx_posts_created_by/.test(d)).length;
+        assert(byKeeper === 2 && walks.length === 0, `every read of posts and deals goes by an index, ANALYZE or none: both keeper lookups name theirs (${byKeeper}; ${walks.join(' | ') || plan.length + ' steps'})`);
     }
 
     // ── 7. who reads it ───────────────────────────────────────────────────────────────────────────

@@ -36,9 +36,9 @@
  * every member sees every listing, so `joined` and `firstListing` are exact: they tell nobody anything new. A trade is
  * different: "Admins never see anyone's trades".
  *  - No median of fewer than FIRST_TRADE_MIN_GROUP people, ever: "1 member, 3 days" is a person.
- *  - The first-trade count is shown in steps of 5, rounded down, and only for a group of at least 5, so "fewer than 5" reads
- *    the same as none. An exact count that moved by one would name someone: when one member ages out of the window, whether
- *    it falls says whether they had traded, and the admins can see who that was.
+ *  - The first-trade count is shown in steps of 5, rounded down, so fewer than 5 reads the same as none. An exact count that
+ *    moved by one would name someone: when one member ages out of the window, whether it falls says whether they had traded,
+ *    and the admins can see who that was.
  *  - Two windows side by side: their difference is the people who joined before the window. Where that is 1 to 4 people, the
  *    last-90-days trade figures are hidden and all time stands alone, or those few people would be readable by subtraction.
  *    The same for a median whose two groups differ by 1 to 4.
@@ -130,7 +130,7 @@ const apartFromAllTime = (here: number, allTime: number) => allTime === here || 
 function reading(here: Tally, all: Tally, beans: boolean, anyTrades: boolean): FirstTradeWindow {
     const median = (spans: number[], allSpans: number[], open = true) =>
         open && spans.length >= FIRST_TRADE_MIN_GROUP && apartFromAllTime(spans.length, allSpans.length) ? medianDays(spans) : null;
-    const tradesCanShow = beans && anyTrades && here.joined >= FIRST_TRADE_MIN_GROUP && apartFromAllTime(here.joined, all.joined);
+    const tradesCanShow = beans && anyTrades && apartFromAllTime(here.joined, all.joined);
     const stepped = here.traded - (here.traded % FIRST_TRADE_MIN_GROUP);
     return {
         joined: here.joined,

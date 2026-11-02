@@ -319,6 +319,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
     const [newPostReach, setNewPostReach] = useState<PostReach>('local');
     const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
+    // Off, every time: a form put away or changed to another kind doesn't keep it.
+    useEffect(() => { setAlsoOnGlobal(false); }, [showNewPost, newPostType]);
     const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);

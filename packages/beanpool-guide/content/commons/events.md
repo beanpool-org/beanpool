@@ -91,18 +91,16 @@ Open your event. As the host you can:
 
 ## Showing your event on the global community
 
-On a local community, an event at a place can also show on the global community, so people who aren't in your community yet can find it. It is off unless you turn it on, on the phone app: tick **Also show this on the global community** when you create the event, or open the event and tap the same words.
+On a local community, an event at a place can also show on the global community, so people who aren't in your community yet can find it. It is off unless you turn it on: tick **Also show this on the global community** when you create the event, or open the event and tap the same words.
 
-Your phone posts your own copy there, with your own key, if you are a member of the global community. Your community's server has no part in it and isn't told.
+Your phone or your web browser posts your own copy there, with your own key, if you are a member of the global community. Your community's server has no part in it and isn't told.
 
 - **What shows:** the title, your words and photos, the times, and a rough area of about 10 km.
 - **What doesn't:** your name, the place name, the exact spot, and the note for people who are going. Nobody can message you from it.
-- **Where it says it's from:** **from** your community's name, with **Ask to join**, as long as your community is in the directory. If it isn't, the event shows without a name, and the phone tells you once.
+- **Where it says it's from:** **from** your community's name, with **Ask to join**, as long as your community is in the directory. If it isn't, the event shows without a name, and the app tells you once.
 - **Going:** there is no **Going** on the copy and no chat. People are told **To go, ask to join** your community, and join to see the rest.
 
-An edit, a new time, a cancelled date and **Cancel event** follow onto the copy from your phone. If your phone can't reach the global community, it tries again later. **Stop showing** on the event takes the copy down, and so does moving the event online. A copy still counts as one of your posts there, and if your phone can no longer look after it (say you got a new phone), it comes off after 90 days without a change; until then you can remove it yourself from your posts on the global community. Holiday mode on your own community takes the copy down, and your phone puts it back up when you're back. Holiday mode on the global community doesn't hide a copy, because that would show it is yours: use **Stop showing**.
-
-In the web app you see these events and can ask to join, but showing one is on the phone app for now.
+An edit, a new time, a cancelled date and **Cancel event** follow onto the copy from your phone or browser. If it can't reach the global community, it tries again later. **Stop showing** on the event takes the copy down, and so does moving the event online. A copy still counts as one of your posts there, and if nothing of yours can look after it any more (say you got a new phone), it comes off after 90 days without a change; until then you can remove it yourself from your posts on the global community. Holiday mode on your own community takes the copy down, and your phone puts it back up when you're back. Holiday mode on the global community doesn't hide a copy, because that would show it is yours: use **Stop showing**.
 
 ## Repeating events
 

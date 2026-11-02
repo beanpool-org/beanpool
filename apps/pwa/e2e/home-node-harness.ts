@@ -20,7 +20,7 @@
  *   { op: 'cors', origins }             the web addresses this node lets call it (Settings' CORS allowed origins), as for
  *                                       a web app on another community's address pointed here (Sovereign Node Connection)
  *   { op: 'joinGroup', groupId, member } a member joins a group as the node's own join does (e2e/group-chat-check.mjs)
- *   { op: 'directory', url, name }      one community in the mirrored directory, as a mirror run writes it (e2e/global-tick-check.mjs)
+ *   { op: 'directory', url?, name? }    one community in the mirrored directory, as a mirror run writes it, or none (e2e/global-tick-check.mjs)
  *
  * Run by the check as: node --import tsx ../pwa/e2e/home-node-harness.ts (cwd apps/server).
  */
@@ -172,7 +172,7 @@ async function main(): Promise<void> {
                     updateGatewayConfig({ corsAllowedOrigins: (req.origins as unknown[]).map(String) });
                     break;
                 case 'directory': {
-                    const entry = normaliseRegistryRow({ node_id: req.url, shown_name: req.name, node_url: req.url, last_seen_at: new Date().toISOString(), accepting_knocks: true });
+                    const entry = req.url ? normaliseRegistryRow({ node_id: req.url, shown_name: req.name, node_url: req.url, last_seen_at: new Date().toISOString(), accepting_knocks: true }) : null;
                     result = writeDirectoryRows(entry ? [entry] : [], new Date().toISOString());
                     break;
                 }

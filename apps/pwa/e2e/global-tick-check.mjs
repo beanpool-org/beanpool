@@ -38,6 +38,13 @@ const HOST = 'mullum.example.org';
 const PHOTO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
 const failures = [];
+const started = [];
+const WATCHDOG_MS = Number(process.env.GLOBAL_TICK_WATCHDOG_MS) || 240_000;
+const watchdog = setTimeout(() => {
+    console.error(`The check took past ${WATCHDOG_MS} ms: stopped. So far: ${failures.length} failed.`);
+    for (const stop of started) stop();
+    process.exit(2);
+}, WATCHDOG_MS);
 function check(ok, what) {
     if (ok) console.log(`  ✓ ${what}`);
     else { failures.push(what); console.error(`  ✗ ${what}`); }
@@ -76,6 +83,7 @@ async function startNode(root, profile, members, env = {}) {
         } else log.push(line);
     });
     readline.createInterface({ input: child.stderr }).on('line', (line) => log.push(line));
+    started.push(() => { try { child.kill('SIGKILL'); } catch { /* gone */ } });
     const { port } = await readyAt;
     let n = 0;
     const ask = (req) => new Promise((resolve, reject) => {
@@ -95,7 +103,7 @@ async function startNode(root, profile, members, env = {}) {
 let globalUrl = '';
 
 async function openContext(browser, origin, identity, { dark = false } = {}) {
-    const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce', geolocation: { latitude: PIN.lat, longitude: PIN.lng }, permissions: ['geolocation'] });
     const seen = { violations: [], otherHosts: new Set() };
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
     await context.addInitScript(([mode]) => {
@@ -107,7 +115,9 @@ async function openContext(browser, origin, identity, { dark = false } = {}) {
         } catch { /* none */ }
     }, [dark ? 'dark' : 'light']);
     await context.route((url) => url.hostname !== 'localhost' && url.hostname !== '127.0.0.1', (route) => {
-        seen.otherHosts.add(new URL(route.request().url()).hostname);
+        const asked = new URL(route.request().url()).hostname;
+        // The map under the composer asks for its tiles, as it always does: refused here all the same.
+        if (!asked.endsWith('.tile.openstreetmap.org')) seen.otherHosts.add(asked);
         return route.abort();
     });
     // The community's main address, as a node behind a real name says it: this machine's port is no directory row.
@@ -134,7 +144,7 @@ async function openContext(browser, origin, identity, { dark = false } = {}) {
 const harness = async (context, origin) => {
     const page = await context.newPage();
     await page.goto(`${origin}/e2e/global-tick-harness.html`, { waitUntil: 'load' });
-    await page.waitForFunction(() => document.title === 'tick-ready');
+    await page.waitForFunction(() => document.title === 'tick-ready', undefined, { timeout: 90_000 });
     return page;
 };
 
@@ -147,8 +157,14 @@ const listing = (page, title, extra = {}) => page.evaluate(async ([title, extra,
     return made.post;
 }, [title, extra, PIN, PHOTO]);
 
-const tick = (page, post) => page.evaluate(async (post) => window.tick.copies.showPostOnGlobal(post, await window.tick.loadIdentity()), post);
-const tend = (page) => page.evaluate(async () => window.tick.copies.tendCopies(await window.tick.loadIdentity()));
+/** A page's work never answering must end the check, not hold it: evaluate has no timeout of its own. */
+const inTime = (work, what, ms = 90_000) => {
+    let timer;
+    return Promise.race([work, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in time: ${what}`)), ms); })]).finally(() => clearTimeout(timer));
+};
+
+const tick = (page, post) => inTime(page.evaluate(async (post) => window.tick.copies.showPostOnGlobal(post, await window.tick.loadIdentity()), post), 'the tick');
+const tend = (page) => inTime(page.evaluate(async () => window.tick.copies.tendCopies(await window.tick.loadIdentity())), 'a tend');
 const pairs = (page) => page.evaluate(() => window.tick.copyPairs.read());
 const pairOf = async (page, id) => (await pairs(page)).find((p) => p.homeId === id);
 const row = async (global_, id) => (await global_.ask({ op: 'sql', sql: 'SELECT * FROM posts WHERE id = ?', params: [id], all: true }))[0];
@@ -191,7 +207,8 @@ async function corsAndRequest(ctx) {
     const names = Object.keys(wire?.headers ?? {}).filter((h) => !h.startsWith(':'));
     const allowed = new Set(['content-type', 'x-signature', 'x-public-key', 'x-timestamp', 'x-nonce', 'x-signed-for', 'origin', 'accept', 'accept-encoding', 'accept-language', 'user-agent', 'content-length', 'host', 'connection', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform']);
     check(names.every((h) => allowed.has(h)), `only the phone's headers, and what any browser adds itself (${names.filter((h) => !allowed.has(h)).join(' ')})`);
-    check(!wire?.headers.cookie && !wire?.headers.referer && !wire?.headers['x-language'], 'no cookie, no Referer, no language');
+    check(!wire?.headers.cookie && !wire?.headers.referer && !wire?.headers['x-language'], 'no cookie, no Referer, no language header');
+    check(wire?.headers['accept-language'] === 'en', `not the browser's own language either (${wire?.headers['accept-language']})`);
     const atHome = await local.ask({ op: 'sql', sql: 'SELECT COUNT(*) AS n FROM posts WHERE id = ?', params: [copyId], all: true });
     check(atHome[0].n === 0, 'home holds nothing of the copy');
     const logged = [...global_.log].join('\n');
@@ -204,7 +221,7 @@ async function firstCases(ctx) {
     console.log('3. G1\'s cases');
 
     // Unlisted.
-    await global_.ask({ op: 'sql', sql: 'DELETE FROM directory_cache' }).catch(() => {});
+    await global_.ask({ op: 'directory' });
     const hidden = await listing(page, 'Unlisted plums');
     const noRow = await tick(page, hidden);
     const quiet = await row(global_, (await pairOf(page, hidden.id))?.copyId);
@@ -321,11 +338,15 @@ async function screens(ctx, dark) {
     const { browser, local, global_, member, stranger, shop } = ctx;
     const mode = dark ? 'dark' : 'light';
     console.log(`4. the screens, ${mode}`);
+    // Every request here comes from one address, and the walk above has spent its minute's allowance.
+    const fresh = () => Promise.all([local.ask({ op: 'resetLimits' }), global_.ask({ op: 'resetLimits' })]);
+    await fresh();
     const opened = await openContext(browser, local.origin, member, { dark });
     const { page, seen, context } = opened;
     const work = await harness(context, local.origin);
     const post = await listing(work, `Tomatoes ${mode}`);
     await work.close();
+    await fresh();
     await page.goto(`${local.origin}/app`, { waitUntil: 'load' });
     await page.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
     const tall = async (testid) => {
@@ -342,9 +363,10 @@ async function screens(ctx, dark) {
         shop.push(file);
     };
 
-    await page.goto(`${local.origin}/?post=${post.id}`, { waitUntil: 'load' });
+    await page.goto(`${local.origin}/app?post=${post.id}`, { waitUntil: 'load' });
     const opened1 = await page.getByTestId('show-on-global-host').waitFor({ timeout: 15000 }).then(() => true, () => false);
     check(opened1, 'the row is on the member\'s own listing');
+    if (!opened1) await page.screenshot({ path: path.join(SHOTS, `debug-no-row-${mode}.png`) });
     if (opened1) {
         await page.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
         await page.getByTestId('show-on-global-host').scrollIntoViewIfNeeded();
@@ -361,6 +383,33 @@ async function screens(ctx, dark) {
         await page.getByText('Also show this on the global community').first().waitFor({ timeout: 15000 });
         check((await upOf(global_, post.id)).length === 0, 'Stop showing takes it down');
     }
+    // The composer: the same tick, off, on an Offer with a place and on an event.
+    await fresh();
+    await page.goto(`${local.origin}/app?post=${post.id}`, { waitUntil: 'load' });
+    await page.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
+    await page.getByRole('button', { name: /Back|←/ }).first().click({ timeout: 5000 }).catch(() => {});
+    await page.getByRole('button', { name: 'ADD POST' }).last().click({ timeout: 15000 });
+    await page.getByTestId('map-new-post-panel').waitFor({ timeout: 15000 });
+    const panel = page.getByTestId('map-new-post-panel');
+    await panel.getByRole('button', { name: /Offer/ }).first().click();
+    await panel.locator('button', { hasText: /location/i }).first().click();
+    const listingTick = await page.getByTestId('show-on-global-tick').waitFor({ timeout: 15000 }).then(() => true, () => false);
+    check(listingTick, 'the Offer composer has the tick once it has a place');
+    if (listingTick) {
+        check(!(await page.getByTestId('show-on-global-tick').locator('input').isChecked()), 'off until it is ticked');
+        await page.getByTestId('show-on-global-tick').scrollIntoViewIfNeeded();
+        await tall('show-on-global-tick');
+        await noSideways('the Offer composer');
+        await shot('composer-offer');
+    }
+    await panel.getByRole('button', { name: /^Event$/ }).first().click();
+    const eventTick = await page.getByTestId('show-on-global-tick').waitFor({ timeout: 15000 }).then(() => true, () => false);
+    check(eventTick, 'the event composer has the tick');
+    if (eventTick) {
+        await page.getByTestId('show-on-global-tick').scrollIntoViewIfNeeded();
+        await noSideways('the event composer');
+        await shot('composer-event');
+    } else await shot('debug-composer');
     check(seen.violations.length === 0, `no document policy violation (${JSON.stringify(seen.violations.slice(0, 2))})`);
     check(seen.otherHosts.size === 0, `no host but this machine (${[...seen.otherHosts].join(' ')})`);
     await context.close();
@@ -370,8 +419,9 @@ async function screens(ctx, dark) {
     const strangerWork = await harness(asStranger.context, local.origin);
     const theirs = await listing(strangerWork, `Beans ${mode}`);
     await strangerWork.close();
+    await fresh();
     const p2 = asStranger.page;
-    await p2.goto(`${local.origin}/?post=${theirs.id}`, { waitUntil: 'load' });
+    await p2.goto(`${local.origin}/app?post=${theirs.id}`, { waitUntil: 'load' });
     await p2.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
     const offered = await p2.getByTestId('show-on-global-act').waitFor({ timeout: 15000 }).then(() => true, () => false);
     if (offered) {
@@ -388,6 +438,7 @@ async function screens(ctx, dark) {
         }
     }
     await asStranger.context.close();
+    await fresh();
 }
 
 async function main() {
@@ -417,8 +468,10 @@ async function main() {
         const { context } = await openContext(browser, local.origin, member);
         const page = await harness(context, local.origin);
         const ctx = { browser, context, page, global_, local, listed, member, stranger, shop: [] };
-        await corsAndRequest(ctx);
-        await firstCases(ctx);
+        if (process.env.GLOBAL_TICK_ONLY !== 'screens') {
+            await corsAndRequest(ctx);
+            await firstCases(ctx);
+        }
         await context.close();
         for (const dark of [false, true]) await screens(ctx, dark);
         console.log(`Shots:\n${ctx.shop.join('\n')}`);
@@ -427,6 +480,7 @@ async function main() {
         for (const n of nodes) await n.stop().catch(() => {});
         fs.rmSync(root, { recursive: true, force: true });
     }
+    clearTimeout(watchdog);
     if (failures.length) {
         console.error(`\n${failures.length} failed:\n- ${failures.join('\n- ')}`);
         process.exit(1);

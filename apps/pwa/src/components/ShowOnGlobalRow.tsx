@@ -5,8 +5,8 @@
  * nor a community that names no global.
  *
  * Nothing is asked of the global community until the member taps: the row is drawn from what this browser kept of its last
- * answer. Told this key is a stranger there, it offers the door, in a new tab so a form in progress isn't lost. Their 12 words
- * are the way in there: "I'm new" would make a second account, and the tick would still say Join.
+ * answer. Told this key is a stranger there, it offers the door, in a new tab so a form in progress isn't lost. "I have my 12
+ * words" is the way in there, which joins with the same key: "I'm new" would make a second account, and the tick would still say Join.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listingFreeTags, postTagsOf, t, type HomeEvent } from '@beanpool/core';
@@ -23,9 +23,9 @@ export const showListingOnGlobalHint = (need = false) => need
     ? t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To answer it, they ask to join.")
     : t("Anyone there can see it, with its photos, its rough area, its price and this community's name. Not your name or the exact place. To buy or take it, they ask to join.");
 const joinFirstWords = () => t('Join the global community to show this there');
-const sameAccountWords = () => t('Use your 12 words there, so it stays one account.');
+const sameAccountWords = () => t('Choose "I have my 12 words" there, so it stays one account.');
 
-const say = (line: string | null) => { if (line) alert(`${showOnGlobalLabel()}\n\n${line}`); };
+const say = (line: string | null) => { if (line) alert([showOnGlobalLabel(), line].join('\n\n')); };
 const unreachable = () => say(t("The global community can't be reached right now."));
 
 /** A post as the node gave it, as core reads one. */
@@ -66,7 +66,7 @@ function JoinDoor({ href }: { href: string | null }) {
             {href
                 ? <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[44px] text-sm font-bold text-nature-800 dark:text-oat-50 underline break-words">{joinFirstWords()}</a>
                 : <p className="m-0 text-sm font-bold text-nature-800 dark:text-oat-50 break-words">{joinFirstWords()}</p>}
-            <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 leading-snug break-words">{sameAccountWords()}</p>
+            <p className="m-0 mt-1 text-sm text-nature-950 dark:text-nature-100 leading-snug break-words">{sameAccountWords()}</p>
         </div>
     );
 }
@@ -93,7 +93,7 @@ export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, i
     }, [enabled, checked, onChange]);
     if (online) {
         if (!offer) return null;
-        return <p data-testid="show-on-global-online" className="m-0 mb-3 text-xs text-nature-600 dark:text-nature-300 leading-snug break-words">{t("Online events can't be shown on the global community yet.")}</p>;
+        return <p data-testid="show-on-global-online" className="m-0 mb-3 text-xs text-nature-800 dark:text-nature-200 leading-snug break-words">{t("Online events can't be shown on the global community yet.")}</p>;
     }
     if (offer === 'join') return <div className="mb-3"><JoinDoor href={global} /></div>;
     if (offer !== 'tick') return null;
@@ -114,7 +114,7 @@ export function ShowOnGlobalTick({ enabled, online = false, checked, onChange, i
             <input type="checkbox" checked={checked} disabled={busy} onChange={() => void tap()} className="mt-0.5 w-5 h-5 shrink-0 accent-terra-600" />
             <span className="min-w-0">
                 <span className="block text-sm font-bold text-nature-800 dark:text-oat-50 leading-snug break-words">{showOnGlobalLabel()}</span>
-                <span className="block mt-1 text-xs text-nature-600 dark:text-nature-300 leading-snug break-words">{hint}</span>
+                <span className="block mt-1 text-xs text-nature-800 dark:text-nature-200 leading-snug break-words">{hint}</span>
             </span>
         </label>
     );
@@ -166,7 +166,7 @@ export function ShowOnGlobalHostRow({ post, identity, enabled, listing = false }
                 ? <p className="m-0 text-sm font-bold text-nature-800 dark:text-oat-50 leading-snug break-words">{!resting ? t('Shown on the global community')
                     : listing ? t("It comes down while this is off the board here, and goes back up when it's on again.")
                     : t("It comes down while you're on holiday, and goes back up when you're back.")}</p>
-                : <p className="m-0 text-xs text-nature-600 dark:text-nature-300 leading-snug break-words">{listing ? showListingOnGlobalHint(post.type === 'need') : showOnGlobalHint()}</p>}
+                : <p className="m-0 text-sm text-nature-950 dark:text-nature-100 leading-snug break-words">{listing ? showListingOnGlobalHint(post.type === 'need') : showOnGlobalHint()}</p>}
             <button type="button" onClick={() => void act()} disabled={busy} data-testid="show-on-global-act"
                 className={`min-h-[44px] text-left text-sm font-bold text-nature-800 dark:text-oat-50 underline break-words cursor-pointer ${busy ? 'opacity-60' : ''}`}>
                 {shown ? t('Stop showing') : showOnGlobalLabel()}

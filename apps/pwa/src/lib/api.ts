@@ -641,8 +641,9 @@ export async function signedFetchAt(
 
 /**
  * A request for the member's own copy on the global community (lib/show-on-global.ts), to global or to their community. What
- * the phone sends and nothing more: the signature's headers and a JSON type. No cookie, no `Referer`, no language, no shared
- * cache. A browser's `Origin` can't be left off a cross-origin call, and global reads nothing from it (apps/server copy-cors.ts).
+ * the phone sends and nothing more: the signature's headers and a JSON type. No cookie, no `Referer`, no shared cache, and not
+ * the browser's own language: left alone it adds `Accept-Language` by itself. A browser's `Origin` can't be left off a cross-origin
+ * call, and global reads nothing from it (apps/server copy-cors.ts).
  */
 export async function signedCopyFetch(
     method: 'GET' | 'POST' | 'DELETE', community: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
@@ -650,7 +651,7 @@ export async function signedCopyFetch(
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
     return fetch(`${community}${path}`, {
-        method, headers: { 'Content-Type': 'application/json', ...signed }, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
+        method, headers: { 'Content-Type': 'application/json', 'Accept-Language': 'en', ...signed }, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
         ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
     });
 }

@@ -2660,6 +2660,20 @@ export interface PollOtherRead {
     canRemove: boolean;
 }
 
+let ownerHereRead: { anchor: string | null; owner: Promise<boolean> } | null = null;
+
+/** Whether the signer is an owner on this community (GET /api/node-admin/me), asked once per community a run, and only by a poll card with words to offer. It decides nothing: the node checks every read. */
+export async function isOwnerHere(): Promise<boolean> {
+    const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (ownerHereRead?.anchor === anchor) return ownerHereRead.owner;
+    const owner = signedGet('/api/node-admin/me')
+        .then(res => (res.ok ? res.json() : null))
+        .then((body: { role?: unknown } | null) => body?.role === 'owner')
+        .catch(() => { ownerHereRead = null; return false; });
+    ownerHereRead = { anchor, owner };
+    return owner;
+}
+
 export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {
     const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers`);
     const body = await res.json().catch(() => null);

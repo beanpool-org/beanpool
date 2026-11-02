@@ -124,7 +124,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         setVotingOptionId(optionId);
         setError(null);
         try {
-            const res = await votePoll(livePost.id, optionId, typed);
+            const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
             if (res?.post) {
                 setLivePost(res.post);
             }

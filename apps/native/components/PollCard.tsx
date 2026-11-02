@@ -32,7 +32,7 @@ import {
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
-import { votePoll, closePoll } from '../utils/db';
+import { votePoll, closePoll, isOwnerHere } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSealed, pollOtherLines, pollOtherOption, POLL_OTHER_WORDS_MAX, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -135,12 +135,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     React.useEffect(() => {
         if (!asksRole) return;
         let cancelled = false;
-        void (async () => {
-            const [nodeUrl, identity] = await Promise.all([AsyncStorage.getItem('beanpool_anchor_url'), loadIdentity()]);
-            if (!nodeUrl || !identity) return;
-            const mine = await fetchMyNodeRole(nodeUrl, identity);
-            if (!cancelled && mine.role === 'owner') setOwnerHere(true);
-        })().catch(() => {});
+        void isOwnerHere().then(owner => { if (!cancelled && owner) setOwnerHere(true); });
         return () => { cancelled = true; };
     }, [asksRole]);
 
@@ -156,7 +151,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
 
         setVotingOptionId(optionId);
         try {
-            const res = await votePoll(livePost.id, optionId, typed);
+            const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
             if (res?.post) {
                 setLivePost(res.post);
             }

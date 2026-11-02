@@ -94,8 +94,8 @@ describe('Settings on a phone', () => {
         menu = screen.getByRole('dialog', { name: 'Settings menu' });
         // The current section starts open, its screens listed under it.
         expect(within(menu).getByRole('button', { name: /appliance & data/i }).getAttribute('aria-expanded')).toBe('true');
-        await act(async () => { fireEvent.click(within(menu).getByRole('button', { name: 'Public Address' })); });
-        expect(topBar().textContent).toContain('Appliance & Data › Public Address');
+        await act(async () => { fireEvent.click(within(menu).getByRole('button', { name: 'Addresses' })); });
+        expect(topBar().textContent).toContain('Appliance & Data › Addresses');
 
         await back();
         expect(screen.queryByRole('dialog', { name: 'Settings menu' })).not.toBeInTheDocument();

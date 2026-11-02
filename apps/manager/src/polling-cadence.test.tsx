@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { App } from './App';
 import { TopologyModule } from './components/modules/TopologyModule';
-import { PublicAddressPanel } from './components/modules/PublicAddressPanel';
+import { AddressesPanel } from './components/modules/AddressesPanel';
 import { ActivityPauseProvider } from './lib/activity-pause';
 import type { NodeProfile } from './lib/profiles';
 
@@ -558,7 +558,7 @@ describe('Section timers obey the same pause', () => {
         await act(async () => {
             render(
                 <ActivityPauseProvider>
-                    <PublicAddressPanel activeNode={activeNode} onRefreshDiag={() => {}} />
+                    <AddressesPanel activeNode={activeNode} onRefreshDiag={() => {}} />
                 </ActivityPauseProvider>,
             );
         });
@@ -566,6 +566,9 @@ describe('Section timers obey the same pause', () => {
             await vi.advanceTimersByTimeAsync(0);
         });
 
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('addresses-add-address-btn'));
+        });
         const nameInput = screen.getAllByPlaceholderText(/e\.g\. cairns/i)[0];
         await act(async () => {
             fireEvent.change(nameInput, { target: { value: 'cairns' } });

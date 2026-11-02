@@ -387,9 +387,12 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         try {
             probeLogs.length = 0;
             addProbeLog('1/4', `⏳ Requesting tunnel allocation for "${name}.beanpool.org"...`, 'info');
+            // What the claim leaves out stays as this server holds it: Make main on a name sends only the name, and the record
+            // below is replaced whole, so an omitted contact would otherwise go, and the registrar would have none for a new name.
+            const communityName = b.communityName || b.community_name || live?.communityName || live?.community_name;
+            const contact = b.contact !== undefined ? b.contact : live?.contact;
             // The tunnel runs inside this server, so it always leads to this server's own loopback.
-            const communityName = b.communityName || b.community_name;
-            const result = await claimAddress(name, mode, LOOPBACK_ORIGIN, b.contact, communityName, mode === 'direct' ? publicIp : undefined);
+            const result = await claimAddress(name, mode, LOOPBACK_ORIGIN, contact, communityName, mode === 'direct' ? publicIp : undefined);
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
             // Before the stored address changes: where the community lives until now stays one of its addresses. A live
@@ -399,7 +402,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // Recorded before the stored address changes: a name held until now is kept, as former.
             recordRegistrarAnswer({ name, hostname: result.hostname, status: result.status, reason: result.reason }, 'claim');
             updateNodeConfig({ publicAddress: {
-                name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact,
+                name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact,
                 ...(result.reason ? { reason: result.reason } : {}),   // pending: awaiting approval, or still being made ('provisioning')
                 ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}),
             } } as any);

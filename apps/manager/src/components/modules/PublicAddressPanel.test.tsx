@@ -113,7 +113,7 @@ describe('PublicAddressPanel Component', () => {
         expect(screen.getByRole('button', { name: /Take offline/i })).toBeInTheDocument();
     });
 
-    it('renders with an empty payload without crashing and shows the claim form', async () => {
+    it('renders with an empty payload without crashing', async () => {
         vi.spyOn(global, 'fetch').mockImplementation((url) => {
             const strUrl = String(url);
             if (strUrl.includes('/api/local/admin/public-address/status')) {
@@ -142,16 +142,6 @@ describe('PublicAddressPanel Component', () => {
         await waitFor(() => {
             expect(screen.getByText(/No public address currently assigned/i)).toBeInTheDocument();
         });
-
-        // Claim form fields
-        expect(screen.getByLabelText(/Subdomain Prefix/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/Community \/ Pool Name/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/Reachability Mode/i)).toBeInTheDocument();
-        // Settings offers a tunnel only: a direct name needs the server's public IPv4 address, which it can't know (SEC-REG-01).
-        expect(screen.getByLabelText(/Reachability Mode/i)).toHaveTextContent('Tunnel');
-        expect(screen.queryByRole('option', { name: /Direct/i })).not.toBeInTheDocument();
-        expect(screen.queryByText(/Direct/)).not.toBeInTheDocument();
-        expect(screen.getByText('https://cairns.beanpool.org')).toBeInTheDocument();
     });
 
     it('says the address service has no record, and names the address this server keeps', async () => {
@@ -178,9 +168,8 @@ describe('PublicAddressPanel Component', () => {
         });
         expect(screen.getByTestId('public-address-kept')).toHaveTextContent(/This server keeps cairns\.beanpool\.org, and members' apps that use it are still accepted/);
         expect(screen.queryByText(/No public address currently assigned/i)).not.toBeInTheDocument();
-        // Nothing to release at the address service, and the claim form stays.
+        // Nothing to release at the address service. (The claim form stays: AddressesPanel.test.tsx.)
         expect(screen.queryByRole('button', { name: /Take offline/i })).not.toBeInTheDocument();
-        expect(screen.getByLabelText(/Subdomain Prefix/i)).toBeInTheDocument();
     });
 
     it('renders safely with wrong-typed fields without crashing', async () => {
@@ -224,61 +213,6 @@ describe('PublicAddressPanel Component', () => {
 
         // Does not throw and terminal exists
         expect(screen.getByTestId('propagation-monitor-terminal')).toBeInTheDocument();
-    });
-
-    it('submits a new public address claim with sanitized subdomain and mode', async () => {
-        let postBody: any = null;
-
-        vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
-            const strUrl = String(url);
-            if (strUrl.includes('/api/local/admin/public-address/claim') && opts?.method === 'POST') {
-                postBody = JSON.parse(String(opts?.body));
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({
-                        success: true,
-                        status: 'live',
-                        hostname: 'byron.beanpool.org',
-                        tunnelToken: 'new-token-123',
-                    }),
-                } as Response);
-            }
-            if (strUrl.includes('/api/local/admin/public-address/status')) {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({ status: 'none' }),
-                } as Response);
-            }
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({ logs: [] }),
-            } as Response);
-        });
-
-        render(<PublicAddressPanel activeNode={mockActiveNode} />);
-
-        await waitFor(() => {
-            expect(screen.getByLabelText(/Subdomain Prefix/i)).toBeInTheDocument();
-        });
-
-        const subdomainInput = screen.getByLabelText(/Subdomain Prefix/i);
-        fireEvent.change(subdomainInput, { target: { value: 'Byron-Bay' } });
-
-        // Preview updates automatically
-        expect(screen.getByText('https://byron-bay.beanpool.org')).toBeInTheDocument();
-
-        const submitBtn = screen.getByRole('button', { name: /Go public · Claim Web Address/i });
-        fireEvent.click(submitBtn);
-
-        await waitFor(() => {
-            expect(postBody).not.toBeNull();
-            expect(postBody.name).toBe('byron-bay');
-            expect(postBody.mode).toBe('tunnel');
-            expect(postBody.password).toBe('test-password');
-        });
     });
 
     it('requires confirmation step before restarting the tunnel inside the server', async () => {
@@ -654,6 +588,17 @@ describe('PublicAddressPanel Component', () => {
             expect(await screen.findByText(/No public address currently assigned/)).toBeInTheDocument();
             expect(screen.queryByTestId('public-address-name-service')).not.toBeInTheDocument();
             expect(screen.queryByText(/Couldn.t reach the registrar/i)).not.toBeInTheDocument();
+        });
+
+        it('no address: an owner is told to press Add an address, and an admin, who has no such button, is not', async () => {
+            serve({ success: true, status: 'none' });
+            const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            expect(await screen.findByTestId('public-address-none')).toHaveTextContent('or press Add an address above');
+            unmount();
+            render(<PublicAddressPanel activeNode={mockActiveNode} viewer={{ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }} />);
+            const none = await screen.findByTestId('public-address-none');
+            expect(none).toHaveTextContent('No public address currently assigned. An owner of this community can add one.');
+            expect(none).not.toHaveTextContent('Add an address');
         });
 
         it('an own address: this server\'s own, its certificate, and no Take offline (the server refuses it for one)', async () => {

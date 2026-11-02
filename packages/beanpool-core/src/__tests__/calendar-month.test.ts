@@ -364,6 +364,30 @@ describe('calendar-month: series expansion (pattern, until, skips)', () => {
         const occEndless = expandEventSeries(endless, { start: '2026-01-01', end: '2040-01-01' });
         expect(occEndless.length).toBeLessThanOrEqual(500);
 
+        // A repeating series queried 10+ years out (> 500 weeks) fast-forwards and does not leave a silent empty month
+        const occTenYears = expandEventSeries(endless, { start: '2036-11-01', end: '2036-11-30' });
+        expect(occTenYears.length).toBe(4);
+        expect(occTenYears.map((o) => o.date)).toEqual(['2036-11-06', '2036-11-13', '2036-11-20', '2036-11-27']);
+
+        // Monthly series 10+ years out also expands properly
+        const monthlyByDay: CalendarEventInput = {
+            id: 'ev-monthly-day',
+            eventStartLocal: '2026-01-15T10:00',
+            eventRepeat: { freq: 'monthly', interval: 1, byMonthDay: 15 },
+        };
+        const occMonthlyDay = expandEventSeries(monthlyByDay, { start: '2036-11-01', end: '2036-11-30' });
+        expect(occMonthlyDay).toHaveLength(1);
+        expect(occMonthlyDay[0].date).toBe('2036-11-15');
+
+        const monthlyNth: CalendarEventInput = {
+            id: 'ev-monthly-nth',
+            eventStartLocal: '2026-01-02T10:00', // First Friday of Jan 2026
+            eventRepeat: { freq: 'monthly', interval: 1, byDay: 'FR', pos: 1 },
+        };
+        const occMonthlyNth = expandEventSeries(monthlyNth, { start: '2036-11-01', end: '2036-11-30' });
+        expect(occMonthlyNth).toHaveLength(1);
+        expect(occMonthlyNth[0].date).toBe('2036-11-07'); // First Friday of Nov 2036
+
         // Past until
         const pastUntil: CalendarEventInput = {
             id: 'ev-past-until',

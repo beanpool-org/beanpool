@@ -355,7 +355,7 @@ export async function postAdminKnockNoticesFromSync(deps: SyncNoticeDeps): Promi
 /**
  * Every notice the background sync posts (services/push-notifications.ts postNoticesAfterSync): the community's unseen
  * notices, the answers to this phone's requests to join, new requests for an owner or admin without push, and `alongside`
- * (the round that asks the other communities, other-communities-unread.ts, handed the deadline as a signal), all asked at
+ * (the round that asks the phone's communities, other-communities-unread.ts, handed the deadline as a signal), all asked at
  * once under one deadline (`timeoutMs`), so a slow or unreachable community can't take the task past iOS's ~30 seconds.
  * Returns how many were posted. Never throws, as long as `alongside` doesn't.
  */

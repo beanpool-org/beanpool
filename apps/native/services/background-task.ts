@@ -33,7 +33,7 @@ TaskManager.defineTask(TASK_NAME, async () => {
         });
 
         // The floor under push (utils/sync-notices.ts): the member's unseen notices from their own community, posted
-        // on the phone, each once, and a round of the phone's other communities for what waits there
+        // on the phone, each once, and a round of the phone's communities, the one in use among them, for what waits there
         // (utils/other-communities-unread.ts), under one deadline. No push service involved.
         try {
             const { postNoticesAfterSync } = await import('./push-notifications');

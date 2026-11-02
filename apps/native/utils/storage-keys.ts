@@ -183,9 +183,9 @@ export const PUSH_PINS_STORE_KEY = 'beanpool_push_pins';
 export const NOTICE_COUNTS_STORE_KEY = 'beanpool_notice_counts';
 
 /**
- * Where the rounds that ask this phone's other communities for their unread counts stand (utils/other-communities-unread.ts):
- * when the last one went out, whose turn is next, and which communities said this account isn't theirs. Sign Out wipes it
- * (utils/identity.ts wipeIdentityScopedStorage): it names where the account belongs.
+ * Where the rounds that ask this phone's communities for their unread counts stand (utils/other-communities-unread.ts): when
+ * the last one went out, whose turn is next, which communities said this account isn't theirs, and what the community in use
+ * last said. Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage): it names where the account belongs.
  */
 export const UNREAD_ROUNDS_STORE_KEY = 'beanpool_unread_rounds';
 

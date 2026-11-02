@@ -29,9 +29,10 @@ interface Props {
     tools?: readonly ToolManifest[];
     apps?: Readonly<Record<string, unknown>>;
     hue?: CardHue;
+    onHeight?: (height: number) => void;
 }
 
-export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onNavigate, tools = TOOLS, apps = TOOL_APPS, hue }: Props) {
+export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onNavigate, tools = TOOLS, apps = TOOL_APPS, hue, onHeight }: Props) {
     const tool = toolOfCard(type, tools, apps);
     const [doc, setDoc] = useState<{ value: unknown } | null>(null);
     const toolId = tool?.id;
@@ -67,7 +68,7 @@ export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onN
     if (!tool) return null;
     const open = (screen?: string) => onNavigate('tool', toolTarget(tool.id, screen && tool.screens.includes(screen) ? screen : 'main'));
     return (
-        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue}>
+        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue} onHeight={onHeight}>
             {lines && lines.length > 0
                 ? lines.map((l, i) => (
                     <HomeLine key={i} onClick={() => open(l.screen)} testId={`home-tool-line-${i}`}>

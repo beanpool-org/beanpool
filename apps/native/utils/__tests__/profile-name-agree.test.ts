@@ -852,6 +852,100 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         expect(field('Contact details')).toBe('new@x');
     });
 
+    describe('a Save and the working style (the device\'s one result, S1)', () => {
+        const older = JSON.stringify({ primary: 'guardian', secondary: 'weaver', mode: 'quick', takenOn: '2026-11-01' });
+        const newer = JSON.stringify({ primary: 'spark', secondary: 'sage', mode: 'deep', scores: { spark: 9 }, takenOn: '2026-11-03' });
+        const newerSent = JSON.stringify({ primary: 'spark', secondary: 'sage', mode: 'deep', takenOn: '2026-11-03' });
+        const sameDay = JSON.stringify({ primary: 'sage', secondary: 'spark', mode: 'quick', takenOn: '2026-11-01' });
+        const waitingKeyOf = (url: string) => `beanpool_pending_profile:archetype:${new URL(url).origin}`;
+        const saveWith = async (row: string | null, deviceCopy: string | null) => {
+            identityState.identity = { publicKey: KEY, privateKey: PRIV, callsign: 'Marty' };
+            mockDb.localProfile = { public_key: KEY, callsign: 'Marty', archetype: row };
+            mockDb.remoteCallsign = 'Marty';
+            if (deviceCopy) store.map.set(CANONICAL_PROFILE_STORE_KEY, JSON.stringify({ archetype: deviceCopy }));
+        };
+        const saveProfile = async () => {
+            await renderSettings();
+            await press('✏️ Edit');
+            await press('Save Profile');
+        };
+
+        it('sends the newer device copy in its public form, not this community\'s older row, and the row takes it', async () => {
+            await saveWith(older, newer);
+            const { updates } = mockNode();
+            await saveProfile();
+            expect(updates).toHaveLength(1);
+            expect(updates[0].archetype).toBe(newerSent);
+            expect(mockDb.updatedProfiles.at(-1)?.archetype).toBe(newerSent);
+        });
+
+        it('an older device copy goes nowhere, and the row is not sent back', async () => {
+            await saveWith(sameDay.replace('2026-11-01', '2026-11-03'), older);
+            const { updates } = mockNode();
+            await saveProfile();
+            expect(updates).toHaveLength(1);
+            expect(updates[0]).not.toHaveProperty('archetype');
+            expect(mockDb.updatedProfiles.at(-1)).not.toHaveProperty('archetype');
+        });
+
+        it('on a tie the row stands', async () => {
+            await saveWith(older, sameDay);
+            const { updates } = mockNode();
+            await saveProfile();
+            expect(updates[0]).not.toHaveProperty('archetype');
+        });
+
+        it('a member with a row and no device copy (a second phone) sends nothing of it', async () => {
+            await saveWith(older, null);
+            const { updates } = mockNode();
+            await saveProfile();
+            expect(updates[0]).not.toHaveProperty('archetype');
+        });
+
+        it('a member who never took the quiz sends nothing of it', async () => {
+            await saveWith(null, null);
+            const { updates } = mockNode();
+            await saveProfile();
+            expect(updates[0]).not.toHaveProperty('archetype');
+        });
+
+        it('what waits for this community goes with the Save, a tie or not, and stops waiting', async () => {
+            await saveWith(older, sameDay);
+            store.map.set(waitingKeyOf(NODE), JSON.stringify({ publicKey: KEY, archetype: sameDay }));
+            const { updates } = mockNode();
+            await saveProfile();
+            expect(updates[0].archetype).toBe(sameDay);
+            expect(store.map.get(waitingKeyOf(NODE))).toBeUndefined();
+        });
+
+        it('a Save that never reached the community leaves what waits, and leaves the row', async () => {
+            await saveWith(older, newer);
+            store.map.set(waitingKeyOf(NODE), JSON.stringify({ publicKey: KEY, archetype: newerSent }));
+            mockNode({ offline: true });
+            await saveProfile();
+            expect(store.map.get(waitingKeyOf(NODE))).toBeDefined();
+            expect(mockDb.updatedProfiles.at(-1)).not.toHaveProperty('archetype');
+        });
+
+        it('a Save refused by the community leaves what waits', async () => {
+            await saveWith(older, newer);
+            store.map.set(waitingKeyOf(NODE), JSON.stringify({ publicKey: KEY, archetype: newerSent }));
+            globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ error: 'nope' }), { status: 400 })) as typeof fetch;
+            await saveProfile();
+            expect(store.map.get(waitingKeyOf(NODE))).toBeDefined();
+        });
+
+        it('a name change the node reports does not put the device copy into a row that has none', async () => {
+            await saveWith(null, newer);
+            mockDb.remoteCallsign = 'Marty on the node';
+            mockNode();
+            await renderSettings();
+            const written = mockDb.updatedProfiles.find((u) => u.callsign === 'Marty on the node');
+            expect(written).toBeDefined();
+            expect(written).not.toHaveProperty('archetype');
+        });
+    });
+
     it('shows short key prefix under each name in the invite picker to tell same/similar names apart', async () => {
         await act(async () => {
             root.render(createElement(InvitePeopleSheet, {

@@ -344,4 +344,83 @@ describe('AddressesPanel Component (S2)', () => {
         });
         expect(screen.getByText(/No addresses configured yet\./)).toBeInTheDocument();
     });
+
+    it('handleMakeMain reports approval-pending without false success when claim is pending', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/local/admin/app-addresses')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(mockReport) } as Response);
+            }
+            if (urlStr.includes('/api/local/admin/public-address/claim')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, status: 'pending' }) } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
+        });
+
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('make-main-btn-pending.beanpool.org')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByTestId('make-main-btn-pending.beanpool.org'));
+
+        await waitFor(() => {
+            expect(screen.getByText(/Requested pending\.beanpool\.org, awaiting approval by the BeanPool project\./)).toBeInTheDocument();
+        });
+        expect(screen.queryByText(/pending\.beanpool\.org is now the main address\./)).not.toBeInTheDocument();
+    });
+
+    it('Remove/Release button is hidden for lost and main addresses and shown for former or owner non-main addresses', async () => {
+        const reportWithLost = {
+            ...mockReport,
+            addresses: [
+                ...mockReport.addresses,
+                {
+                    address: 'lost.beanpool.org',
+                    source: 'registrar' as const,
+                    lost: true,
+                    former: true,
+                    today: 0,
+                    busiestDay: 0,
+                    reach: {
+                        answers: 'silence' as const,
+                        dns: { outcome: 'no-such-name' as const, a: [], aaaa: [], cname: [] },
+                        step: 'no-longer-ours' as const,
+                        minutes: null,
+                        nextStep: "No longer this community's address. Nothing to do.",
+                        checkedAt: '2026-11-02T05:02:00.000Z',
+                        ownAt: null,
+                    },
+                },
+            ],
+        };
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/local/admin/app-addresses')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(reportWithLost) } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
+        });
+
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('byron.beanpool.org')).toBeInTheDocument();
+        });
+
+        // Main address must NOT have Remove/Release
+        expect(screen.queryByTestId('remove-release-btn-byron.beanpool.org')).not.toBeInTheDocument();
+
+        // Lost address must NOT have Remove/Release
+        expect(screen.queryByTestId('remove-release-btn-lost.beanpool.org')).not.toBeInTheDocument();
+
+        // Former BeanPool name (not lost) has Release button
+        expect(screen.getByTestId('remove-release-btn-mullum.beanpool.org')).toBeInTheDocument();
+
+        // Configured owner IP has Remove button with accessible label
+        const removeIpBtn = screen.getByTestId('remove-release-btn-203.0.113.5');
+        expect(removeIpBtn).toBeInTheDocument();
+        expect(removeIpBtn).toHaveAttribute('aria-label', 'Remove 203.0.113.5');
+    });
 });

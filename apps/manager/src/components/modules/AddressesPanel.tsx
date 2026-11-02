@@ -25,6 +25,7 @@ import {
 } from '../../lib/node-client';
 import { proofField, t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { useInPageConfirm } from '../common/InPageConfirm';
 import { standingText } from './AppAddressesPanel';
 import { describeTunnel } from './PublicAddressPanel';
 
@@ -143,6 +144,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
 
     // Fresh proof
     const proof = useFreshProof();
+    const [ask, confirmation] = useInPageConfirm();
     const cred = nodeCredential(activeNode);
 
     // Unique IDs for form labels
@@ -227,9 +229,16 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                     }),
                 });
                 if (await proof.check(res, (c) => handleMakeMain(a, c), code)) return;
+                const body = await res.json().catch(() => ({}));
                 if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
                     throw new Error(body?.error || `HTTP ${res.status}`);
+                }
+                if (body?.status === 'pending') {
+                    proof.close();
+                    setActionMessage({ text: `Requested ${a.address}, awaiting approval by the BeanPool project.`, type: 'success' });
+                    await loadData();
+                    onRefreshDiag?.();
+                    return;
                 }
             } else if (isIpAddress(a.address)) {
                 got = await setOwnAddress(activeNode.url, { ip: a.address }, cred, getTfaSessionToken(activeNode.id), code);
@@ -253,6 +262,19 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
     // Handle "Remove" or "Release"
     const handleRemoveOrRelease = async (a: AppAddress, code?: string) => {
         setActionMessage(null);
+        if (code === undefined) {
+            const isBp = isBeanPoolName(a.address);
+            const isMainAddress = a.address === report?.primaryAddress;
+            const yes = await ask({
+                title: isBp ? t('Release {address}?', { address: a.address }) : t('Remove {address}?', { address: a.address }),
+                body: isMainAddress
+                    ? t("It is this community's address. Members' apps that use it are refused after this, and new members are sent to another of its addresses, if it has one.")
+                    : t("Members' apps that use it are refused after this."),
+                confirmLabel: isBp ? t('Release') : t('Remove'),
+                cancelLabel: t('Keep it'),
+            });
+            if (!yes) return;
+        }
         try {
             if (isBeanPoolName(a.address)) {
                 const name = extractSubdomain(a.address);
@@ -758,11 +780,12 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                                         )}
 
                                         {/* Remove / Release */}
-                                        {isOwner && (a.former || a.source === 'owner' || a.lost) && (
+                                        {isOwner && !isMain && !a.lost && (a.former || a.source === 'owner') && (
                                             <button
                                                 type="button"
                                                 onClick={() => handleRemoveOrRelease(a)}
                                                 data-testid={`remove-release-btn-${a.address}`}
+                                                aria-label={isBeanPoolName(a.address) ? `Release ${a.address}` : `Remove ${a.address}`}
                                                 className="px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-bp-danger-fill hover:text-bp-danger-on text-xs font-semibold text-bp-ink-danger border border-nature-800 min-h-[40px] inline-flex items-center gap-1"
                                             >
                                                 <span>🗑️</span>
@@ -812,6 +835,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
 
             {/* Fresh Proof Dialog */}
             <FreshProofBox proof={proof} />
+            {confirmation}
         </div>
     );
 }

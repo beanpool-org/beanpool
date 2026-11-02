@@ -1456,6 +1456,21 @@ function globalMember(days = 3): HomeAnswer {
 
 const homeCards = () => homeReads().map(r => new URL(r.url).searchParams.get('cards')!.split(','));
 
+describe('Home\'s "How this community works": the floor and the rule, from what the node sends (review of #2746)', () => {
+    it('the summary line opens the sheet on the floor, then the rule', async () => {
+        const a = localMember();
+        // features on GET /api/home, for a member of a known community (apps/server config/features-for.ts).
+        node.answer = { ...a, features: { ...a.features, door: 'members', knocks: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60 } as HomeAnswer['features'] };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const summary = document.querySelector('[data-testid="home-community-shape-summary"]') as HTMLElement;
+        expect(summary).toBeTruthy();
+        await act(async () => { summary.click(); });
+        expect(document.querySelector('[data-testid="community-shape-sheet"]')?.textContent)
+            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.");
+    });
+});
+
 describe('the global node\'s Home (H4): Find your community on top, the global First steps, a count of who joined, Near you by distance', () => {
     it('one request; Find your community first, with no "…" for the first 30 days; the cards in the design\'s order', async () => {
         node.answer = globalMember(3);

@@ -15,6 +15,8 @@ vi.mock('../lib/api', () => ({
     getCommunityMe: vi.fn(async () => ({ probation: null })),
     watchPlace: vi.fn(),
     getListedCommunityByHost: vi.fn(async () => null),
+    // The modal reads the date on a tightened line (lib/known-rule.ts).
+    request: vi.fn(async () => null),
 }));
 vi.mock('../components/AddressSearch', () => ({
     AddressSearch: () => null,
@@ -107,6 +109,19 @@ describe('HomePage community shape line and modal (S5)', () => {
         const readMoreBtn = screen.getByTestId('community-shape-read-more');
         fireEvent.click(readMoreBtn);
         expect(onNavigate).toHaveBeenCalledWith('guide', 'how-your-community-works');
+    });
+
+    it('opens on the floor, then the rule, from what the node sends (review of #2746)', async () => {
+        // features on GET /api/home, for a member of a known community (apps/server config/features-for.ts).
+        vi.mocked(api.getHome).mockResolvedValueOnce({
+            notModified: false,
+            etag: 'tag-rule',
+            answer: { ...HOME_ANSWER_WITH_SHAPE, features: { ...HOME_ANSWER_WITH_SHAPE.features, debtLinePct: 50, quietDays: 60 } } as unknown as HomeAnswer,
+        });
+        render(<HomePage identity={ME} onNavigate={() => {}} onSeeWords={() => {}} />);
+        fireEvent.click(await screen.findByTestId('home-community-shape-summary'));
+        expect(screen.getByTestId('community-shape-modal').textContent)
+            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.");
     });
 
     it('does NOT render the shape summary line on an old node without shape features', async () => {

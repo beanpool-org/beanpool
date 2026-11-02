@@ -98,6 +98,12 @@ export interface NodeFeatures {
      */
     knownFloor?: number;
     /**
+     * The rule's two lines, which a member's read says beside the floor (apps/server config/features-for.ts): the community's
+     * public settings, not a member's. "How this community works" states the rule from them, on every way into it.
+     */
+    debtLinePct?: number;
+    quietDays?: number;
+    /**
      * Members may share a listing or an event outside the community (front doors S6, utils/peek.ts): a link that opens that
      * one post, without names or faces, for seven days. The phone offers "Share outside the community" and Settings'
      * Shared outside only then. A node that doesn't say (turned off, the worldwide one, a node from before it) offers
@@ -109,7 +115,10 @@ export interface NodeFeatures {
 export type NodeDoor = 'open' | 'members' | 'admins';
 const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
-const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'knownFloor'>> = [
+/** The numbers a member's read says beside the switches: the floor and the rule's two lines, kept and carried together. */
+const NUMBER_KEYS = ['knownFloor', 'debtLinePct', 'quietDays'] as const;
+
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | typeof NUMBER_KEYS[number]>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'dmRequests', 'shareOutside',
@@ -186,7 +195,7 @@ function cacheKey(url: string): string {
  * Read the profile out of an info answer, or null when the answer is not one.
  *
  * Only the exact string `global` makes a node global: anything else, including an answer that does
- * not say, is `local`. Only booleans are kept from `features`, beside `door` and `nearbyListings`' two numbers.
+ * not say, is `local`. Only booleans are kept from `features`, beside `door`, `nearbyListings`' two numbers and NUMBER_KEYS.
  * The community's own addresses are kept as bare hosts (ownAddresses).
  */
 export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProfile | null {
@@ -201,7 +210,9 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         for (const key of FEATURE_KEYS) {
             if (typeof f[key] === 'boolean') features[key] = f[key] as boolean;
         }
-        if (typeof f.knownFloor === 'number') features.knownFloor = f.knownFloor;
+        for (const key of NUMBER_KEYS) {
+            if (typeof f[key] === 'number') features[key] = f[key] as number;
+        }
         if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
         const n = f.nearbyListings as { radiusKm?: unknown; max?: unknown } | undefined;
         if (n && typeof n === 'object' && typeof n.radiusKm === 'number' && n.radiusKm > 0 && typeof n.max === 'number' && n.max > 0) {
@@ -429,7 +440,9 @@ export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?
         if (key === 'showcase') continue;
         if (typeof reader[key] === 'boolean') out[key] = reader[key];
     }
-    if (typeof reader.knownFloor === 'number') out.knownFloor = reader.knownFloor;
+    for (const key of NUMBER_KEYS) {
+        if (typeof reader[key] === 'number') out[key] = reader[key];
+    }
     if (reader.door) out.door = reader.door;
     return out;
 }

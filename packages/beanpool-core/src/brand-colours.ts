@@ -277,12 +277,12 @@ export const WEB_ONLY_INKS: readonly string[] = ['info'];
 export const DEAL_TINT_ALPHA = 0.4;
 
 /**
- * What a line on a map is drawn over. Light: land, road, park and water on Google's light map, as near as its default style
- * gives them, then OSM's land, water, forest and streets, the only map the web has. Dark: the phone's dark map, the land and
+ * What a line on a map is drawn over. Light: Google's rural land, town, buildings and water, read off the emulator's map on
+ * 2 Nov 2026, then OSM's land, water, forest and streets, the only map the web has. Dark: the phone's dark map, the land and
  * water of apps/native/utils/map-scheme.ts, whose test holds these to it.
  */
 export const MAP_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
-    light: ['#f5f5f5', '#ffffff', '#c8e6c9', '#aadaff', '#f2efe9', '#aad3df', '#add19e', '#e0dfdf'],
+    light: ['#d3f8e2', '#f7f6f6', '#e9eaef', '#8fd8ec', '#f2efe9', '#aad3df', '#add19e', '#e0dfdf'],
     dark: ['#414e61', '#0f2f4d'],
 };
 

@@ -202,6 +202,24 @@ async function main(): Promise<void> {
         const list = addPost(other, 2000);
         for (let i = 0; i < 5; i++) addDeal(list, other, addMember(10), 1);
         assert(all().firstTrade === 5, `the seller reaches a first trade as much as the buyer (${all().firstTrade})`);
+        for (let i = 0; i < 5; i++) addDeal(list, other, addMember(10), 1, 'cancelled');
+        assert(all().firstTrade === 5, `and a cancelled deal is no trade for the seller either (${all().firstTrade} of ${all().joined})`);
+        const lastDeals = 'SELECT id FROM marketplace_transactions ORDER BY rowid DESC LIMIT 5';
+        for (let i = 0; i < 5; i++) addDeal(list, other, addMember(10), 1);
+        db.prepare(`UPDATE marketplace_transactions SET completed_at = NULL WHERE id IN (${lastDeals})`).run();
+        assert(all().firstTrade === 10, `a finished deal from before completed_at was kept reads by when it began, and still counts (${all().firstTrade})`);
+    }
+    {
+        clearScene();
+        const other = oldTrader();
+        for (let i = 0; i < 5; i++) {
+            const t = addMember(10, { treasury: true });
+            const k = addMember(10);
+            db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role) VALUES (?, ?, 'keeper')").run(t, k);
+            addDeal(addPost(t, 5, { createdBy: k }), other, t, 1, 'cancelled');
+        }
+        addDeal(addPost(other, 2000), other, oldTrader(), 2000);
+        assert(all().firstTrade === null, `a cancelled deal on an enterprise's listing is no trade for the keeper who made it (${all().firstTrade} of ${all().joined})`);
     }
     {
         clearScene();

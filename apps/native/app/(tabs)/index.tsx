@@ -332,8 +332,6 @@ export default function HomeScreen() {
         const sub = BackHandler.addEventListener('hardwareBackPress', () => { endArrange(); return true; });
         return () => sub.remove();
     }, [arranging, endArrange]);
-    // Leaving Home ends it: every move is saved already.
-    useFocusEffect(useCallback(() => () => setArranging(false), []));
 
     // ── The floating button's band ──
     const scrollY = useRef(0);
@@ -654,6 +652,8 @@ export default function HomeScreen() {
             focused.current = false;
             clearInterval(poll);
             setTuneOpen(false);
+            // Leaving Home ends Arrange: every move is saved already.
+            setArranging(false);
             // Home lost focus: the visit's cancelled requests (and their lines) go; the next visit reads the phone's memory.
             const gone = visitCancelled.current;
             visitCancelled.current = [];

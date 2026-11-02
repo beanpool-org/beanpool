@@ -65,7 +65,7 @@ export function ArrangeReset({ colors, onPress }: { colors: AppColors; onPress: 
 export const st = StyleSheet.create({
     bar: { marginHorizontal: HOME_GUTTER_DP, marginBottom: 10, gap: 4 },
     barText: { fontSize: 13, lineHeight: 18 },
-    line: { fontSize: 13, lineHeight: 18, paddingVertical: 4 },
+    line: { fontSize: 13, lineHeight: 18 },
     words: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 16 },
     word: { minHeight: HOME_TARGET_DP, minWidth: HOME_TARGET_DP, justifyContent: 'center', alignItems: 'center' },
     wordText: { fontSize: 14, fontWeight: '700' },

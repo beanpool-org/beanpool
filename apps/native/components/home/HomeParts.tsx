@@ -116,13 +116,13 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
         </Pressable>
     );
     return (
-        <View style={[s.card, accent && s.cardAccent]} testID={testID}>
+        <View style={[s.card, accent && s.cardAccent, arrange && s.cardFolded]} testID={testID}>
             <Pressable
                 onLongPress={arrange ? undefined : onHold}
                 delayLongPress={HOLD_MS}
                 accessible={false}
-                style={[s.captionRow, { backgroundColor: tint }]}
-                testID={testID ? `${testID}-band` : undefined}
+                style={[s.captionRow, arrange && s.captionFolded, { backgroundColor: tint }]}
+                testID={`card-band-${id}`}
             >
                 {/* Drawn in capitals; read in its own words (a screen reader can spell an all-caps word out). */}
                 <Text style={[s.caption, { color: ink }]} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
@@ -131,7 +131,7 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                 {arrange ? (
                     <View style={s.captionTargets}>
                         {arrange.stays ? (
-                            <Text style={[s.stays, { color: ink }]} testID={`home-arrange-${id}-stays`}>{t(ARRANGE_WORDS.stays)}</Text>
+                            <Text style={[s.stays, { color: ink }]} maxFontSizeMultiplier={CAPTION_MAX_SCALE} testID={`home-arrange-${id}-stays`}>{t(ARRANGE_WORDS.stays)}</Text>
                         ) : (
                             <>
                                 {arrow('up', !!arrange.canUp, arrange.upRef, t('Move {card} up', { card: arrange.label }))}
@@ -288,6 +288,9 @@ function make(colors: AppColors) {
         },
         captionTargets: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
         menuButton: { width: HOME_TARGET_DP, height: HOME_TARGET_DP, marginRight: -12, alignItems: 'center', justifyContent: 'center', borderRadius: HOME_TARGET_DP / 2, flexShrink: 0 },
+        // Folded, a card is its band and a line, and eight of them nearly fit a small screen.
+        cardFolded: { marginBottom: 6, paddingBottom: 4 },
+        captionFolded: { marginBottom: 2 },
         // Only the last arrow reaches into the card's edge, as the "…" does.
         arrowFirst: { marginRight: 0 },
         arrowOff: { opacity: 0.4 },

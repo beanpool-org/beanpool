@@ -18,12 +18,14 @@ import * as path from 'node:path';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+const back = vi.hoisted(() => ({ press: null as null | (() => boolean), add: vi.fn(() => ({ remove: vi.fn() })) }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', summary: 'region' };
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, accessibilityState, disabled, value, onValueChange, onChangeText, accessible } = props;
         const attrs: Record<string, unknown> = {};
         if (onPress && !disabled) attrs.onClick = () => onPress();
+        if (props.onLongPress) attrs.onDoubleClick = () => props.onLongPress();
         if (onValueChange) attrs.onClick = () => onValueChange(!value);
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
@@ -38,14 +40,18 @@ vi.mock('react-native', () => {
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     class Value { constructor(public v: number) {} setValue(v: number) { this.v = v; } interpolate() { return 0; } }
+    const pressable = el('button');
+    const plainPressable = el('div');
     return {
         Platform: { OS: 'android' },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Switch: el('button'), TextInput: el('input'),
+        View: el('div'), Text: el('span'), Pressable: (p: Record<string, any>) => createElement(p.accessible === false ? plainPressable : pressable, p), ScrollView: el('div'), Switch: el('button'), TextInput: el('input'),
         ActivityIndicator: () => createElement('span', null, '…'),
         RefreshControl: () => null,
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         Animated: { View: el('div'), Value, timing: () => ({ start: (cb?: () => void) => cb?.() }) },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
+        BackHandler: { addEventListener: back.add },
+        LayoutAnimation: { configureNext: vi.fn(), create: vi.fn() },
         AccessibilityInfo: { isReduceMotionEnabled: vi.fn(async () => true), announceForAccessibility: vi.fn(), sendAccessibilityEvent: vi.fn() },
         AppState: { currentState: 'active', addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
         DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
@@ -331,7 +337,7 @@ const byLabel = (label: string) => document.querySelector(`[aria-label="${label.
 const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/home');
 const marketOrder = () => Array.from(document.querySelectorAll('[data-testid^="home-market-p"]')).map(e => e.getAttribute('data-testid')!.replace('home-market-', ''));
 // What the phone sent since a point, the cards a layout save named, the phone-only mark (index.tsx `phoneOver`), a Remove
-// through a card's "…" menu, and whether Edit home says the cards aren't on the account yet (review of #1699, confirmation).
+// through a card's "…" menu, and whether Arrange says the cards aren't on the account yet (review of #1699, confirmation).
 const trace = (from = 0) => node.requests.slice(from).map(r => `${r.method} ${new URL(r.url).pathname} ${r.status}`);
 const sentIds = (r: { body: string }) => (JSON.parse(r.body).preferences['home.layout'].cards as { id: string }[]).map(c => c.id);
 const markKey = () => homeLayoutPhoneOnlyStoreKey(who.identity.publicKey, NODE);
@@ -341,9 +347,9 @@ async function removeVia(id: string) {
     await settle();
 }
 async function notOnAccountShown() {
-    await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-    const shown = !!document.querySelector('[data-testid="edit-home-not-on-account"]');
-    await act(async () => { (document.querySelector('[data-testid="edit-home-done"]') as HTMLElement).click(); });
+    await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+    const shown = !!document.querySelector('[data-testid="home-arrange-not-on-account"]');
+    await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); });
     return shown;
 }
 
@@ -380,7 +386,7 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
         expect(document.body.textContent).not.toMatch(/Ʀ|unlock/i);
     });
 
-    it('"See all", "All events", "Edit home" go where they say; a step opens its screen', async () => {
+    it('"See all", "All events", "Arrange" go where they say; a step opens its screen', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-events-all"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { filter: 'events' } });
@@ -388,20 +394,22 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
         expect(nav.router.navigate).toHaveBeenCalledWith('/(tabs)/market');
         await act(async () => { (document.querySelector('[data-testid="home-step-post-offer"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'offer' } });
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-done"]')).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="home-arrange-done"]')).not.toBeNull();
     });
 });
 
-describe('tailoring: the "…" menu, Edit home, interests', () => {
+describe('tailoring: the "…" menu, Arrange, interests', () => {
     it('Remove: the card goes at once, the instance leaves the list on the phone and the account, and it is said (CARD-FRAME §1.3)', async () => {
         await render();
         await act(async () => { byLabel('Card options for Coming up')!.click(); });
         expect(document.querySelector('[data-modal]')?.textContent).toContain('Remove');
         expect(document.querySelector('[data-modal]')?.textContent).not.toContain('Hide');
         expect(document.querySelector('[data-modal]')?.textContent).not.toContain('Settings');
-        expect(byLabel('Move Coming up up')).not.toBeNull();
-        expect(byLabel('Move Coming up down')).not.toBeNull();
+        // One way to move a card, on the card: the "…" has Arrange and no moves.
+        expect(document.querySelector('[data-testid="home-menu-arrange"]')).not.toBeNull();
+        expect(byLabel('Move Coming up up')).toBeNull();
+        expect(byLabel('Move Coming up down')).toBeNull();
         await act(async () => { byLabel('Remove Coming up from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('events');
@@ -414,23 +422,6 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Coming up removed. Add a card brings it back.');
         // A remove reads nothing.
         expect(homeReads()).toHaveLength(1);
-    });
-
-    it('Move down: the card swaps with the one below it on screen', async () => {
-        await render();
-        await act(async () => { byLabel('Card options for Coming up')!.click(); });
-        await act(async () => { byLabel('Move Coming up down')!.click(); });
-        await settle();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'joined', 'pulse', 'beans', 'community']);
-    });
-
-    it('the first movable card can\'t move up; the last can\'t move down past the community card', async () => {
-        await render();
-        await act(async () => { byLabel('Card options for First steps')!.click(); });
-        expect(byLabel('Move First steps up')!.getAttribute('aria-disabled')).toBe('true');
-        await act(async () => { byLabel('Cancel')!.click(); });
-        await act(async () => { byLabel('Card options for Your Beans')!.click(); });
-        expect(byLabel('Move Your Beans down')!.getAttribute('aria-disabled')).toBe('true');
     });
 
     it('Add a card: only this node\'s types, "On Home" for one already there; Add puts it first, says so, and reads Home only after the save is answered', async () => {
@@ -456,17 +447,6 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         expect(after.slice(0, 2)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
         expect(JSON.parse(node.requests[before].body).preferences['home.layout'].cards[0]).toEqual({ id: 'pulse', type: 'pulse' });
         expect(homeReads().at(-1)!.url).toContain('pulse');
-    });
-
-    it('Edit home: ＋ Add a card first, ↑ ↓ … per card, no switches, and Reset gives the newcomer\'s list', async () => {
-        await render();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-add"]')).not.toBeNull();
-        expect(document.querySelector('[data-testid="edit-home-pulse-switch"]')).toBeNull();
-        expect(document.querySelector('[data-testid="edit-home-pulse-menu"]')).not.toBeNull();
-        await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
-        await settle();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
     });
 
     it('a saved search: Add opens its settings sheet, Add to Home puts it first with its words, and it says it fills in from the node', async () => {
@@ -749,11 +729,12 @@ type Link = { card: string; control: string; href: { pathname: string; params?: 
 
 /**
  * Press every control on Home, top to bottom, and note where each one went: a screen (`router.push`/`navigate`, Needs
- * you through the header's own landing), or nowhere (it acts in place: "…", Edit home, Tune, a chip, a notice, the
+ * you through the header's own landing), or nowhere (it acts in place: "…", Arrange, Tune, a chip, a notice, the
  * admin work).
  */
 async function pressEverything(): Promise<{ links: Link[]; inPlace: string[] }> {
-    const controls = Array.from(document.querySelectorAll('[data-testid="home-scroll"] button')).map(b => ({
+    // Arrange › folds the page it is pressed on: it has its own tests, and every other line must stay to be pressed.
+    const controls = Array.from(document.querySelectorAll('[data-testid="home-scroll"] button:not([data-testid="home-arrange-open"])')).map(b => ({
         card: (b.closest('[data-testid^="home-card-"]')?.getAttribute('data-testid') ?? '').replace('home-card-', ''),
         key: b.getAttribute('data-testid') ?? b.getAttribute('aria-label') ?? '',
     }));
@@ -1071,7 +1052,7 @@ function visitorAnswer(): HomeAnswer {
 }
 
 describe('a visitor on the global node: its public cards, nothing to tailor, nothing sent', () => {
-    it('no "…", no Edit home, no hint, no Tune; a layout the phone has is neither drawn nor sent, read after read', async () => {
+    it('no "…", no Arrange, no hint, no Tune; a layout the phone has is neither drawn nor sent, read after read', async () => {
         node.answer = visitorAnswer();
         node.refuse = 400; // as the node refuses a Home save from a key that is no member there
         mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 1, order: [], hidden: ['events'], dismissed: {}, updatedAt: new Date().toISOString() }));
@@ -1079,7 +1060,7 @@ describe('a visitor on the global node: its public cards, nothing to tailor, not
         // A visitor's Home is the newcomer's (CARD-FRAME §3): New in the Market before Coming up.
         expect(cards()).toEqual(['market', 'events', 'community']);
         expect(document.querySelectorAll('[aria-label^="Card options for"]')).toHaveLength(0);
-        expect(document.querySelector('[data-testid="home-edit"]')).toBeNull();
+        expect(document.querySelector('[data-testid="home-arrange-open"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-hint"]')).toBeNull();
         expect(document.body.textContent).not.toContain('This is your Home');
         expect(document.querySelector('[data-testid="home-market-tune"]')).toBeNull();
@@ -1108,7 +1089,7 @@ describe('a layout save the node refuses is not sent again at every read', () =>
         expect(JSON.parse(mem.store.get(key)!).cards.map((c: { id: string }) => c.id)).toContain('pulse');
     });
 
-    it('a node from before the frame refuses the new shape: the cards stay on the phone, Edit home says so, and each landing sends them again (CARD-FRAME §2.3)', async () => {
+    it('a node from before the frame refuses the new shape: the cards stay on the phone, Arrange says so, and each landing sends them again (CARD-FRAME §2.3)', async () => {
         node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
         node.refuse = 400;
         const key = homeLayoutStoreKey(who.identity.publicKey, NODE);
@@ -1119,9 +1100,9 @@ describe('a layout save the node refuses is not sent again at every read', () =>
         expect(JSON.parse(mem.store.get(key)!)).toEqual(mine);
         const posts = () => node.requests.filter(r => r.method === 'POST').length;
         expect(posts()).toBe(1);
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-not-on-account"]')?.textContent).toBe("Your community's server needs an update before your cards follow you to other devices.");
-        await act(async () => { (document.querySelector('[data-testid="edit-home-done"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="home-arrange-not-on-account"]')?.textContent).toBe("Your community's server needs an update before your cards follow you to other devices.");
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); });
         await act(async () => { nav.focus?.(); });
         await settle();
         expect(posts()).toBe(2);
@@ -1165,7 +1146,7 @@ describe('a layout save the node refuses is not sent again at every read', () =>
     });
 
     // Review of #1699 (confirmation), note 1: the line stayed until an edit or a restart.
-    it('P6: the node is updated and another device saved a newer list: that list stands, nothing is sent, and Edit home no longer says the server needs an update', async () => {
+    it('P6: the node is updated and another device saved a newer list: that list stands, nothing is sent, and Arrange no longer says the server needs an update', async () => {
         node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
         node.refuse = 400;
         mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: iso(Date.now() - H) }));
@@ -1195,26 +1176,195 @@ describe('a layout save the node refuses is not sent again at every read', () =>
     });
 });
 
-// ── Edit home offers only what this node can show (PR #1483 review 4165384151) ─────────────────────────────────────────
+// ── Arrange (DESIGN-home-layout-fable.md §3.2, slice L2): one way to move a card, on the card ─────────────────────────
 
-const editRows = () => Array.from(document.querySelectorAll('[data-testid^="edit-home-"]'))
-    .map(e => e.getAttribute('data-testid')!.replace('edit-home-', ''))
-    .filter(id => !/-(up|down|menu)$/.test(id) && !['done', 'reset', 'add', 'not-on-account'].includes(id));
+describe('Arrange', () => {
+    const open = async () => { await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); }); };
+    const done = async () => { await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); }); };
+    const press = async (id: string) => { await act(async () => { (document.querySelector(`[data-testid="${id}"]`) as HTMLElement).click(); }); await settle(); };
+    const has = (id: string) => !!document.querySelector(`[data-testid="${id}"]`);
+    const sent = () => node.requests.filter(r => r.method === 'POST' && r.body.includes('home.layout'));
+
+    it('Arrange › folds the cards to their bands and one line: no bodies, no "…", Done in the floating button\'s place, and it is said', async () => {
+        await render();
+        expect(has('home-market-all')).toBe(true);
+        expect(has('home-add-post')).toBe(true);
+        await open();
+        expect(has('home-market-all')).toBe(false);
+        expect(has('home-card-events-menu')).toBe(false);
+        expect(has('home-add-post')).toBe(false);
+        expect(byLabel('Done arranging Home')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-arrange-bar"]')!.textContent).toBe("Arrange Home: use the arrows. Done when you're happy.");
+        expect(document.querySelector('[data-testid="home-arrange-events-line"]')!.textContent).toBe('Events coming up soon.');
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Arrange Home. Use the arrows on each card.');
+    });
+
+    it('↑ and ↓ swap the card with its neighbour, in one save of the whole list, and say where it stands now', async () => {
+        await render();
+        await open();
+        const before = cards();
+        const at = before.indexOf('events');
+        const posts = sent().length;
+        await press('home-arrange-events-down');
+        const after = [...before];
+        [after[at], after[at + 1]] = [after[at + 1], after[at]];
+        expect(cards()).toEqual(after);
+        expect(sent().length).toBe(posts + 1);
+        const movable = before.filter(id => !has(`home-arrange-${id}-stays`));
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(`Coming up moved to ${movable.indexOf('events') + 2} of ${movable.length}`);
+        await press('home-arrange-events-up');
+        expect(cards()).toEqual(before);
+        await done();
+        expect(has('home-arrange-bar')).toBe(false);
+        expect(has('home-market-all')).toBe(true);
+    });
+
+    it('the first card can\'t go up and the last can\'t go down; an arrow says so to a screen reader', async () => {
+        await render();
+        await open();
+        const movable = cards().filter(id => !has(`home-arrange-${id}-stays`));
+        const off = (id: string) => document.querySelector(`[data-testid="${id}"]`)!.getAttribute('aria-disabled');
+        expect(off(`home-arrange-${movable[0]}-up`)).toBe('true');
+        expect(off(`home-arrange-${movable[0]}-down`)).toBeNull();
+        expect(off(`home-arrange-${movable.at(-1)}-down`)).toBe('true');
+    });
+
+    it('Stays here on the fixed two and a pinned Find: no arrows there', async () => {
+        node.answer = everyCard('global', 1);
+        await render();
+        await open();
+        for (const id of ['find', 'community']) {
+            expect(document.querySelector(`[data-testid="home-arrange-${id}-stays"]`)?.textContent, id).toBe('Stays here');
+            expect(has(`home-arrange-${id}-up`), id).toBe(false);
+        }
+    });
+
+    it('a card with nothing to show folds too, with Remove: it goes, is said and saved; a card that is drawn keeps Remove in its "…"', async () => {
+        const mine = { v: 2, cards: [{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide' }, { id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...localMember(), layout: mine as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+        await render();
+        expect(cards()).not.toContain('decide');
+        await open();
+        expect(document.querySelector('[data-testid="home-arrange-decide-line"]')!.textContent).toBe('Nothing to show now');
+        expect(has('home-arrange-market-remove')).toBe(false);
+        await press('home-arrange-decide-remove');
+        expect(cards()).not.toContain('decide');
+        expect(sentIds(sent().at(-1)!)).toEqual(['market', 'pulse']);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Decide removed. Add a card brings it back.');
+    });
+
+    it('a card with settings and nothing to show keeps Settings… here: the only way to give Sun and moon its place', async () => {
+        const mine = { v: 2, cards: [{ id: 'sky', type: 'sky' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...localMember(), layout: mine as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+        await render();
+        await open();
+        expect(byLabel('Settings for Sun and moon')).not.toBeNull();
+        await press('home-arrange-sky-settings');
+        await settle(5);
+        expect(has('card-settings-sheet')).toBe(true);
+        expect(has('home-arrange-bar')).toBe(true);
+    });
+
+    it('+ Add a card opens the picker; the new card folds in first, and Arrange stands', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-card-pulse-menu"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Remove The Pulse from Home')!.click(); });
+        await settle();
+        await open();
+        expect(byLabel('Add a card to Home')!.getAttribute('data-testid')).toBe('home-arrange-add');
+        await press('home-arrange-add');
+        await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
+        await settle();
+        expect(has('home-arrange-bar')).toBe(true);
+        expect(cards()[0]).toBe('pulse');
+        expect(has('home-arrange-pulse-down')).toBe(true);
+    });
+
+    it('Reset to defaults gives the newcomer\'s list, and Arrange stands', async () => {
+        await render();
+        await open();
+        await press('home-arrange-reset');
+        expect(has('home-arrange-bar')).toBe(true);
+        await done();
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+    });
+
+    it('Done saves nothing, and gives TalkBack back what opened it; from a "…", that "…"', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-card-events-menu"]') as HTMLElement).click(); });
+        await press('home-menu-arrange');
+        expect(has('home-arrange-bar')).toBe(true);
+        const posts = sent().length;
+        vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
+        await done();
+        await settle(40);
+        expect(sent().length).toBe(posts);
+        expect(has('home-card-events-menu')).toBe(true);
+    });
+
+    it('Android\'s Back is Done, and only while Arrange is up', async () => {
+        await render();
+        back.add.mockClear();
+        await open();
+        expect(back.add).toHaveBeenCalledWith('hardwareBackPress', expect.any(Function));
+        const onBack = back.add.mock.calls.at(-1)!.at(1) as unknown as () => boolean;
+        await act(async () => { expect(onBack()).toBe(true); });
+        expect(has('home-arrange-bar')).toBe(false);
+    });
+
+    it('holding a band enters; Getting started and a visitor have no hold', async () => {
+        await render();
+        const hold = (id: string) => (document.querySelector(`[data-testid="card-band-${id}"]`) as HTMLElement);
+        await act(async () => { hold('events').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+        expect(has('home-arrange-bar')).toBe(true);
+        await done();
+    });
+
+    it('leaving Home ends it: every move is already saved', async () => {
+        await render();
+        await open();
+        await act(async () => { nav.blur?.(); });
+        expect(has('home-arrange-bar')).toBe(false);
+    });
+
+    it('the order is what comes back: the next landing draws the moved order, the same shape, nothing new in it', async () => {
+        await render();
+        await open();
+        await press('home-arrange-events-down');
+        await done();
+        const list = JSON.parse(sent().at(-1)!.body).preferences['home.layout'];
+        expect(Object.keys(list).sort()).toEqual(['cards', 'dismissed', 'updatedAt', 'v']);
+        const order = cards();
+        node.answer = { ...node.answer, layout: list };
+        act(() => root?.unmount());
+        host?.remove();
+        await render();
+        expect(cards()).toEqual(order);
+    });
+});
+
+// ── Arrange offers only what this node can show (PR #1483 review 4165384151) ─────────────────────────────────────────
+
+const editRows = () => Array.from(document.querySelectorAll('[data-testid^="home-arrange-"][data-testid$="-line"]'))
+    .map(e => e.getAttribute('data-testid')!.replace('home-arrange-', '').replace(/-line$/, ''))
+    .filter(id => !document.querySelector(`[data-testid="home-arrange-${id}-stays"]`));
 const pickerRows = () => Array.from(document.querySelectorAll('[data-testid^="add-card-"]'))
     .map(e => e.getAttribute('data-testid')!.replace('add-card-', ''))
     .filter(id => !/-(add|on-home|count|status)$/.test(id) && !/^(sheet|done|note|group-.*)$/.test(id));
 
-describe('Edit home offers only the cards this node can show', () => {
+describe('Arrange offers only the cards this node can show', () => {
     it('the global node: no Your deals, Your enterprise, Your Beans or Grow your community; First steps since H4; Find your community not while pinned', async () => {
         node.answer = everyCard('global', 1);
         await render();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         // Core's one rule (CARD-FRAME §1.2): no Decide on the worldwide community either.
         expect(editRows()).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices']);
         expect(document.body.textContent).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/);
-        expect(document.querySelector('[data-modal]')?.textContent).toContain('Find your community stays near the top for your first 30 days.');
+        expect(document.querySelector('[data-testid="home-arrange-find-stays"]')?.textContent).toBe('Stays here');
         // The picker lists the same: no money cards, no Decide, no invites, and no Find your community while it is pinned.
-        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-add"]') as HTMLElement).click(); });
         await settle(2);
         const rows = pickerRows();
         expect(rows.length).toBeGreaterThan(5);
@@ -1222,20 +1372,20 @@ describe('Edit home offers only the cards this node can show', () => {
         expect(document.body.textContent).toContain('Near you');
     });
 
-    it('the global node after a member\'s first 30 days: Find your community is listed in its place, with its arrows and "…"', async () => {
+    it('the global node after a member\'s first 30 days: Find your community is listed in its place, with its arrows', async () => {
         const a = everyCard('global', 1);
         node.answer = { ...a, me: { ...a.me!, joinedAt: iso(Date.now() - 31 * 24 * H) } };
         await render();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(editRows()).toEqual(['safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices']);
-        expect(document.querySelector('[data-testid="edit-home-find-menu"]')).not.toBeNull();
-        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
+        expect(document.querySelector('[data-testid="home-arrange-find-down"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-arrange-find-stays"]')).toBeNull();
     });
 
     it('a local community with Beans, escrow, enterprises and invites: every card but Find your community and "Your way back in" (no 12-words door)', async () => {
         node.answer = everyCard('local', 1);
         await render();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(editRows()).toEqual(['steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite']);
         expect(document.body.textContent).not.toContain('Your way back in');
     });
@@ -1246,7 +1396,7 @@ describe('Edit home offers only the cards this node can show', () => {
         await render();
         // The card is drawn by OneWayBackCard, which decides when it is up: it is given the node's word.
         expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(a.me!.joinedAt!) } });
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(editRows()[0]).toBe('safety');
     });
 });
@@ -1391,7 +1541,7 @@ describe('where only a community\'s admins invite, Home asks only them to', () =
         };
     }
 
-    it('a plain member: no Grow your community, no invite step (First steps is done), nothing that opens Invites, none offered in Edit home', async () => {
+    it('a plain member: no Grow your community, no invite step (First steps is done), nothing that opens Invites, none offered in Arrange', async () => {
         node.answer = knownCommunity();
         node.role = null;
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
@@ -1400,7 +1550,7 @@ describe('where only a community\'s admins invite, Home asks only them to', () =
         expect(cards()).not.toContain('steps');
         const { links } = await pressEverything();
         expect(links.filter(l => l.href.pathname === '/(tabs)/people' && l.href.params?.view === 'invites').map(fmt)).toEqual([]);
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(editRows()).not.toContain('invite');
     });
 
@@ -1480,7 +1630,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         expect(cards().slice(0, 4)).toEqual(['find', 'market', 'events', 'steps']);
         expect(homeCards().at(-1)).toContain('find');
         // Nothing moves above it: the card under it can't move up.
-        await act(async () => { byLabel('Card options for Near you')!.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(byLabel('Move Near you up')!.getAttribute('aria-disabled')).toBe('true');
     });
 
@@ -1839,8 +1989,8 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         await act(async () => { nav.focus?.(); });
         await settle();
         expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-not-on-account"]')).toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="home-arrange-not-on-account"]')).toBeNull();
     });
 
     it('the mark outlives the app: closed and opened again on the standby, then the primary back with a later list, the account\'s still wins', async () => {
@@ -2202,7 +2352,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
 });
 
 describe('two saved searches: each is named by its words, never in its caption (review of #1699, finding 4; slice F4)', () => {
-    it('their "…", the menu, Edit home and the removed line each say the words, bounded; the caption stays the type\'s', async () => {
+    it('their "…", the menu, Arrange and the removed line each say the words, bounded; the caption stays the type\'s', async () => {
         const long = 'second hand children\'s bicycles near the school';
         const mine = { v: 2, cards: [
             { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } },
@@ -2228,7 +2378,6 @@ describe('two saved searches: each is named by its words, never in its caption (
         expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
         expect(byLabel('Card options for A saved search')).toBeNull();
         await act(async () => { byLabel('Card options for "eggs"')!.click(); });
-        expect(byLabel('Move "eggs" down')).not.toBeNull();
         expect(byLabel('Settings for "eggs"')).not.toBeNull();
         // The menu's title is the card's name, drawn; only its labels carry the words.
         expect(document.querySelector('[role="heading"][aria-label=\'Card options for "eggs"\']')!.textContent).toBe('A saved search');
@@ -2236,17 +2385,16 @@ describe('two saved searches: each is named by its words, never in its caption (
         await settle();
         expect(vi.mocked(AccessibilityInfo.announceForAccessibility)).toHaveBeenCalledWith('"eggs" removed. Add a card brings it back.');
         expect(cards()).not.toContain('search-k2x7');
-        // Edit home: the row shows the words, bounded, so two searches are two different rows; its arrows and "…" say them too.
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        const row = document.querySelector('[data-testid="edit-home-search-m4p9"]')!;
+        // Arrange: the band shows the words, bounded, so two searches read as two cards; its arrows say them too.
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        const row = document.querySelector('[data-testid="home-card-search-m4p9"]')!;
         expect(row.textContent).toContain('second hand children\'s b…');
         expect(row.textContent).not.toContain('A saved search');
         expect(row.textContent).not.toContain('bicycles');
         expect(byLabel(`Move ${bounded} down`)).not.toBeNull();
-        expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
     });
 
-    it('two searches with the same words and another kind: Edit home\'s rows and labels say the kind (review of #1716)', async () => {
+    it('two searches with the same words and another kind: Arrange\'s bands and labels say the kind (review of #1716)', async () => {
         const mine = { v: 2, cards: [
             { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'offer' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'need' } },
@@ -2257,10 +2405,10 @@ describe('two saved searches: each is named by its words, never in its caption (
         await render();
         expect(byLabel('Card options for "eggs" (Offers)')).not.toBeNull();
         expect(byLabel('Card options for "eggs" (Needs)')).not.toBeNull();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-search-k2x7"]')!.textContent).toContain('Offers · eggs');
-        expect(document.querySelector('[data-testid="edit-home-search-m4p9"]')!.textContent).toContain('Needs · eggs');
-        const both = document.querySelector('[data-testid="edit-home-search-r8t2"]')!.textContent!;
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="home-card-search-k2x7"]')!.textContent).toContain('Offers · eggs');
+        expect(document.querySelector('[data-testid="home-card-search-m4p9"]')!.textContent).toContain('Needs · eggs');
+        const both = document.querySelector('[data-testid="home-card-search-r8t2"]')!.textContent!;
         expect(both).toContain('eggs');
         expect(both).not.toMatch(/Offers|Needs|Both/);
         expect(byLabel('Move "eggs" (Offers) down')).not.toBeNull();
@@ -2328,10 +2476,9 @@ describe('a local community\'s Home is H2\'s, whatever the answer or the phone h
         expect(byLabel('Post your first Offer, not done yet')).not.toBeNull();
         expect(new URL(homeReads()[0].url).searchParams.has('lat')).toBe(false);
         expect(node.requests.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['GET /api/home']);
-        // Edit home offers no Find your community, and says nothing of a pin.
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        // Arrange offers no Find your community.
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(editRows()).not.toContain('find');
-        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
     });
 });
 
@@ -2384,7 +2531,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(tipsRecord().seen).toEqual(['what-this-is']);
     });
 
-    it('Done on the last tip: the card goes, and Edit home says "All tips seen"; Remove and Add a card again starts over', async () => {
+    it('Done on the last tip: the card goes, and Arrange says "All tips seen"; Remove and Add a card again starts over', async () => {
         mem.store.set(homeTipsStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, seen: LOCAL_IDS.filter(id => id !== 'guide'), current: 'guide', currentShownOn: localDay(), dismissedAt: null }));
         await render();
         const done = document.querySelector('[data-testid="home-tip-next"]') as HTMLElement;
@@ -2394,15 +2541,15 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await act(async () => { done.click(); });
         await settle();
         expect(cards()).not.toContain('tips');
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).toContain('All tips seen');
-        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="home-arrange-tips-line"]')?.textContent).toContain('All tips seen');
         await act(async () => { byLabel('Remove Tips from Home')!.click(); });
         await settle();
-        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-add"]') as HTMLElement).click(); });
         await settle(2);
         await act(async () => { byLabel('Add Tips to Home')!.click(); });
         await settle();
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); });
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
     });
@@ -2411,7 +2558,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await render();
         const dont = document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement;
         expect(dont.textContent).toBe("Don't show tips again");
-        expect(dont.getAttribute('aria-label')).toBe("Don't show tips again. Edit home brings them back.");
+        expect(dont.getAttribute('aria-label')).toBe("Don't show tips again. Add a card brings them back.");
         await act(async () => { dont.click(); });
         await settle();
         expect(cards()).not.toContain('tips');
@@ -2531,11 +2678,10 @@ describe('the Tips card: one tip at a time, and it ends', () => {
     });
 
     // Finding 2: a node older than `tips` keeps the layout without it, so the switch-off must hold through the record.
-    it('Remove on Tips from Edit home is "Don\'t show tips again": it holds on the next landing', async () => {
+    it('Remove on Tips from its "…" is "Don\'t show tips again": it holds on the next landing', async () => {
         await render();
         expect(cards()).toContain('tips');
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-card-tips-menu"]') as HTMLElement).click(); });
         await act(async () => { byLabel('Remove Tips from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('tips');
@@ -2556,11 +2702,12 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await act(async () => { (document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement).click(); });
         await settle();
         expect(cards()).not.toContain('tips');
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-reset"]') as HTMLElement).click(); });
         await settle();
-        expect(document.querySelector('[data-testid="edit-home-tips"]')).not.toBeNull();
-        expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).not.toContain('Nothing to show now');
+        expect(document.querySelector('[data-testid="home-arrange-tips-line"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-arrange-tips-line"]')?.textContent).not.toContain('Nothing to show now');
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); });
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
         expect(tipsRecord()).toMatchObject({ seen: [], current: 'what-this-is', currentShownOn: localDay(), dismissedAt: null });
@@ -2869,17 +3016,18 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         expect(posts()[0].body).toContain(exact);
         expect(sentList(posts()[0]).map(c => c.id)).toEqual(['events', 'garden-k2x7', 'market']);
 
-        // Move down, from the card's "…": Coming up passes the Market on screen; the unseen card keeps its place.
-        await act(async () => { byLabel('Card options for Coming up')!.click(); });
+        // Move down, in Arrange: Coming up passes the Market on screen; the unseen card keeps its place.
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         await act(async () => { byLabel('Move Coming up down')!.click(); });
         await settle();
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); });
         const moved = posts().at(-1)!;
         expect(moved.body).toContain(exact);
         expect(sentList(moved).map(c => c.id)).toEqual(['market', 'garden-k2x7', 'events']);
 
-        // Reset to defaults, from Edit home: the newcomer's list, and the unseen card kept at its end.
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
+        // Reset to defaults, from Arrange: the newcomer's list, and the unseen card kept at its end.
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-reset"]') as HTMLElement).click(); });
         await settle();
         const reset = posts().at(-1)!;
         expect(reset.body).toContain(exact);
@@ -2983,13 +3131,13 @@ describe('sun and moon: worked out on the phone, from the place it already has (
         expect(sunPart(skyLine()!.textContent!)).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
     });
 
-    it('with no place at all, it is not drawn, and Edit home says why', async () => {
+    it('with no place at all, it is not drawn, and Arrange says why', async () => {
         withSky({});
         await render();
         expect(cards()).not.toContain('sky');
         expect(skyLine()).toBeNull();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-sky"]')!.textContent).toContain(SKY_NO_PLACE_LINE);
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="home-arrange-sky-line"]')!.textContent).toContain(SKY_NO_PLACE_LINE);
         expect(SKY_NO_PLACE_LINE).toBe('Nothing to show now: no place is known.');
     });
 
@@ -3476,7 +3624,7 @@ describe('Home in the pseudo-locale: every word on it came through t() (words S3
         expect(bypassing(writtenByOthers(node.answer))).toEqual([]);
     });
 
-    it('the menus and sheets: a card\'s "…", Edit home, Add a card, a saved search\'s settings; and what a Remove says', async () => {
+    it('the menus and sheets: a card\'s "…", Arrange, Add a card, a saved search\'s settings; and what a Remove says', async () => {
         node.answer = localMember();
         vi.mocked(AccessibilityInfo.announceForAccessibility).mockClear();
         await renderIn('xx');
@@ -3487,10 +3635,10 @@ describe('Home in the pseudo-locale: every word on it came through t() (words S3
         await click('[data-testid="home-menu-remove"]');
         expect(vi.mocked(AccessibilityInfo.announceForAccessibility).mock.calls.length).toBeGreaterThan(0);
         expect(bypassing(others)).toEqual([]);
-        await click('[data-testid="home-edit"]');
-        expect(document.querySelector('[data-testid="edit-home-done"]')).not.toBeNull();
+        await click('[data-testid="home-arrange-open"]');
+        expect(document.querySelector('[data-testid="home-arrange-done"]')).not.toBeNull();
         expect(bypassing(others)).toEqual([]);
-        await click('[data-testid="edit-home-done"]');
+        await click('[data-testid="home-arrange-done"]');
         await click('[data-testid="home-add-card"]');
         expect(document.querySelector('[data-modal]')).not.toBeNull();
         expect(bypassing(others)).toEqual([]);

@@ -2182,6 +2182,8 @@ export async function createPost(post: any) {
             durationDays: post.durationDays || 7,
             // Anonymous unless its creator chose an open vote (2026-09-28); only `true` opens one.
             pollOpenVote: post.pollOpenVote === true,
+            // A typed Other, only when the maker asked and the node said it can (NewPollModal).
+            ...(post.pollOther === true ? { pollOther: true } : {}),
         } : {}),
         // Events (docs/events-on-the-map.md §2.2): the server forces reach local and the other trade fields.
         ...(post.type === 'event' ? {
@@ -2311,7 +2313,7 @@ export async function createPost(post: any) {
     return { eventTimeAdjusted: answer?.eventTimeAdjusted ?? null, post: answer?.post ?? null };
 }
 
-export async function votePoll(postId: string, optionId: string) {
+export async function votePoll(postId: string, optionId: string, otherWords?: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
         throw new Error('You are currently offline.');
@@ -2323,7 +2325,8 @@ export async function votePoll(postId: string, optionId: string) {
     const body = {
         postId,
         optionId,
-        voterPublicKey: identity.publicKey
+        voterPublicKey: identity.publicKey,
+        ...(otherWords === undefined ? {} : { otherWords }),
     };
     const bodyString = JSON.stringify(body);
     const voteUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/vote`;
@@ -2646,6 +2649,30 @@ export async function updateEvent(postId: string, patch: EventEditPatch, out?: {
 /** The member's copy on the global community follows, if there is one. Loaded when used; a miss is caught up later. */
 function repeatOnGlobalCopy(run: (copy: typeof import('./show-on-global')) => Promise<unknown>): void {
     import('./show-on-global').then(run).catch(() => {});
+}
+
+/** A poll's typed answers as its maker or an owner reads them (apps/server engine/poll-other.ts). */
+export interface PollOtherRead {
+    state: 'held' | 'open';
+    count: number;
+    answers: Array<{ id: string; words: string; reported: boolean }>;
+    removed: number;
+    canRemove: boolean;
+}
+
+export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {
+    const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.error || 'The typed answers could not be read.');
+    return body as PollOtherRead;
+}
+
+export async function reportPollOtherAnswer(postId: string, answerId: string) {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/report`, {});
+}
+
+export async function removePollOtherAnswer(postId: string, answerId: string) {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/remove`, {});
 }
 
 export async function closePoll(postId: string) {

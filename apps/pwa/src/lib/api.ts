@@ -1427,7 +1427,7 @@ export interface MarketplacePost {
     authorAvatarUrl?: string | null;
     /** The shop banner URL of the author enterprise (Pictures S6). */
     authorBannerUrl?: string | null;
-    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number; other?: boolean }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
     pollOpenVote?: boolean;
@@ -1435,6 +1435,8 @@ export interface MarketplacePost {
     /** How many of the votes came from new or 12-word accounts (the global node's public polls; @beanpool/core poll-vote-origins). */
     pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
+    /** The reader has answered this sealed poll, which is all the node knows of it (@beanpool/core pollIsSealed). */
+    pollAnswered?: boolean;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
     // Audience scoping (docs/the-commons.md §9, Item 10)
     audienceScope?: 'public' | 'group' | 'direct';
@@ -1587,6 +1589,8 @@ export async function createMarketplacePost(post: {
     durationDays?: number;
     /** A poll only: true makes it an open vote (members see who chose what). Left out, it is anonymous. */
     pollOpenVote?: boolean;
+    /** Offer a typed Other (@beanpool/core poll-other). */
+    pollOther?: boolean;
     audienceScope?: 'public' | 'group' | 'direct';
     targetGroupId?: string;
     targetPubkey?: string;
@@ -1815,8 +1819,39 @@ export async function deleteGroupPost(groupId: string, postId: string): Promise<
     return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`);
 }
 
-export async function votePoll(postId: string, optionId: string): Promise<{ success: boolean; post: MarketplacePost }> {
-    return request('POST', `/api/marketplace/posts/${postId}/vote`, { optionId });
+export async function votePoll(postId: string, optionId: string, otherWords?: string): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/marketplace/posts/${postId}/vote`, otherWords === undefined ? { optionId } : { optionId, otherWords });
+}
+
+/** A poll's typed answers as its maker or an owner reads them (apps/server engine/poll-other.ts). */
+export interface PollOtherRead {
+    state: 'held' | 'open';
+    count: number;
+    answers: Array<{ id: string; words: string; reported: boolean }>;
+    removed: number;
+    canRemove: boolean;
+}
+
+export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {
+    return request('GET', `/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers`);
+}
+
+export async function reportPollOtherAnswer(postId: string, answerId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/report`, {});
+}
+
+export async function removePollOtherAnswer(postId: string, answerId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/remove`, {});
+}
+
+let myNodeRoleRead: Promise<string | null> | null = null;
+
+/** The signer's role here (GET /api/node-admin/me), asked once a page load, and only by a card that has something to offer an owner. It decides nothing: the node checks every read. */
+export function myNodeRoleOnce(): Promise<string | null> {
+    myNodeRoleRead ??= (request('GET', '/api/node-admin/me') as Promise<{ role?: string | null }>)
+        .then(r => r?.role ?? null)
+        .catch(() => { myNodeRoleRead = null; return null; });
+    return myNodeRoleRead;
 }
 
 /** RSVP to an event as the signed member: Going, Interested, or null for not going. */

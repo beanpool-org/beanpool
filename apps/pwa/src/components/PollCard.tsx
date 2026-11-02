@@ -9,6 +9,8 @@
  * - Anonymous by default (Marty, 2026-09-28): everyone sees the counts. On a poll its creator made an open vote
  *   (`pollOpenVote`), members also get a collapsible list of who voted for what. The card says which.
  * - Author "Close Poll" action for early closure.
+ * - Other, where the maker offered it (@beanpool/core poll-other): picking it opens a line to type in. On an anonymous poll the
+ *   answer is then final and the card can't say which it was, only that it was given. The words: PollOtherAnswers.
  * - On the global community (`informal`), "An informal poll; it decides nothing", for members and visitors alike: anyone
  *   may join there with a sign-in, so a count can be tipped by one person with several accounts (lib/informal-polls.ts).
  * - Once an anonymous poll has closed, where the node says (the global community's public polls), how many votes came
@@ -19,14 +21,15 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { type PollOption, type PollVoteRecord } from '../lib/marketplace';
-import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
+import { votePoll, closePoll, myNodeRoleOnce, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { marked, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine, type LocalCommunityWays } from './LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
-import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSealed, pollOtherLines, pollOtherOption, POLL_OTHER_WORDS_MAX } from '@beanpool/core';
+import { PollOtherAnswers } from './PollOtherAnswers';
 
 interface PollCardProps {
     post: MarketplacePost;
@@ -53,6 +56,9 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     const [isClosing, setIsClosing] = useState(false);
     const [showVoters, setShowVoters] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [typingOther, setTypingOther] = useState(false);
+    const [otherWords, setOtherWords] = useState('');
+    const [ownerHere, setOwnerHere] = useState(false);
 
     useEffect(() => {
         setLivePost(post);
@@ -93,7 +99,19 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
     const optionsById = useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
 
-    const handleVote = async (optionId: string) => {
+    const offersOther = pollOtherOption(options) !== null;
+    const sealed = pollIsSealed(options, livePost.pollOpenVote);
+    const answered = sealed && livePost.pollAnswered === true;
+    // Only a card with words to offer asks; a member's card asks nothing. The node decides who reads.
+    const asksRole = offersOther && !visitor && !isAuthor && Boolean(identity);
+    useEffect(() => {
+        if (!asksRole) return;
+        let cancelled = false;
+        void myNodeRoleOnce().then(role => { if (!cancelled && role === 'owner') setOwnerHere(true); });
+        return () => { cancelled = true; };
+    }, [asksRole]);
+
+    const handleVote = async (optionId: string, typed?: string) => {
         if (isClosed) {
             setError(t('This poll has ended and can no longer receive votes.'));
             return;
@@ -106,10 +124,12 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         setVotingOptionId(optionId);
         setError(null);
         try {
-            const res = await votePoll(livePost.id, optionId);
+            const res = await votePoll(livePost.id, optionId, typed);
             if (res?.post) {
                 setLivePost(res.post);
             }
+            setTypingOther(false);
+            setOtherWords('');
             onVoteSuccess?.();
         } catch (err: any) {
             setError(err.message || t('Could not record your vote.'));
@@ -223,6 +243,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     const count = opt.votes ?? 0;
                     const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
 
+                    const optionText = opt.other ? pollOtherLines.other() : opt.text;
+
                     const row = (
                         <>
                             {/* Live Progress Bar Fill */}
@@ -231,7 +253,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                 aria-valuenow={pct}
                                 aria-valuemin={0}
                                 aria-valuemax={100}
-                                aria-label={t('{option}: {pct}% of votes', { option: opt.text, pct })}
+                                aria-label={t('{option}: {pct}% of votes', { option: optionText, pct })}
                                 className={`absolute top-0 bottom-0 left-0 transition-all duration-500 rounded-l-xl ${
                                     isVoted
                                         ? 'bg-purple-200/70 dark:bg-purple-800/50'
@@ -256,7 +278,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                         {isVoted ? '✓' : null}
                                     </div>
                                     <span className={`font-bold ${isGrid ? 'break-words' : 'truncate'} ${isVoted ? 'text-purple-950 dark:text-purple-200' : 'text-nature-900 dark:text-white'}`}>
-                                        {opt.text}
+                                        {optionText}
                                     </span>
                                 </div>
 
@@ -290,8 +312,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                             key={opt.id || String(idx)}
                             type="button"
                             aria-pressed={isVoted}
-                            disabled={isClosed || Boolean(votingOptionId)}
-                            onClick={() => handleVote(opt.id)}
+                            disabled={isClosed || Boolean(votingOptionId) || answered}
+                            onClick={() => (opt.other ? setTypingOther(v => !v) : handleVote(opt.id))}
                             className={`w-full relative overflow-hidden rounded-xl border text-left transition-all p-3 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-1 ${
                                 isVoted
                                     ? 'border-purple-500 ring-2 ring-purple-400/40 bg-purple-50/30 dark:bg-purple-950/30'
@@ -303,6 +325,52 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     );
                 })}
             </div>
+
+            {/* Other: a line to type, and what becomes of it. */}
+            {typingOther && !visitor && !isClosed && !answered && (() => {
+                const other = pollOtherOption(options)!;
+                const typed = otherWords.trim();
+                return (
+                    <div className="mb-3 p-3 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-950/20" data-testid="poll-other-box">
+                        <input
+                            type="text"
+                            value={otherWords}
+                            maxLength={POLL_OTHER_WORDS_MAX}
+                            onChange={e => setOtherWords(e.target.value)}
+                            placeholder={pollOtherLines.placeholder()}
+                            aria-label={pollOtherLines.placeholder()}
+                            data-testid="poll-other-words"
+                            className="w-full min-w-0 rounded-lg border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-sm p-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <p className="mt-1 text-[11px] font-bold text-nature-700 dark:text-nature-300 break-words" data-testid="poll-other-no-name">{pollOtherLines.noName()}</p>
+                        {sealed && <p className="mt-0.5 text-[11px] text-nature-600 dark:text-nature-400 break-words">{pollOtherLines.sealedNote()}</p>}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                disabled={!typed || Boolean(votingOptionId)}
+                                onClick={() => handleVote(other.id, typed)}
+                                data-testid="poll-other-send"
+                                className="min-h-[44px] px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+                            >
+                                {pollOtherLines.send()}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTypingOther(false)}
+                                className="min-h-[44px] px-3 rounded-lg text-xs font-bold text-nature-600 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+                            >
+                                {pollOtherLines.cancel()}
+                            </button>
+                            <span className="ml-auto text-[10px] text-nature-500 dark:text-nature-400">{otherWords.length}/{POLL_OTHER_WORDS_MAX}</span>
+                        </div>
+                    </div>
+                );
+            })()}
+            {answered && (
+            <p className="mb-2 text-[11px] font-bold text-purple-700 dark:text-purple-300 break-words" data-testid="poll-answered">
+                <span aria-hidden="true">✓ </span>{pollOtherLines.answered()}
+            </p>
+            )}
 
             {/* On the global community: a show of opinion, never a decision. Said to visitors too, before they join to vote. */}
             {informal && (
@@ -381,7 +449,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     {voterName}
                                 </span>
                                 <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                    {opt ? opt.text : vote.optionId}
+                                    {opt ? (opt.other ? pollOtherLines.other() : opt.text) : vote.optionId}
                                 </span>
                             </div>
                         );
@@ -389,10 +457,13 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                 </div>
             )}
 
+            {/* The words, for the poll's maker and the owners. */}
+            {offersOther && !visitor && (isAuthor || ownerHere) && <PollOtherAnswers postId={livePost.id} />}
+
             {/* Village Notice */}
             {!visitor && (
             <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-400 text-center">
-                <span aria-hidden="true">ℹ️ </span>{openVote ? t('Open vote · Re-voting overwrites choice') : t('Anonymous vote · Re-voting overwrites choice')}
+                <span aria-hidden="true">ℹ️ </span>{sealed ? pollOtherLines.sealedNote() : openVote ? t('Open vote · Re-voting overwrites choice') : t('Anonymous vote · Re-voting overwrites choice')}
             </p>
             )}
         </div>

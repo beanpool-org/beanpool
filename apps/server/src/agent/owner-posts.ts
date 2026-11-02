@@ -132,8 +132,11 @@ export function enterpriseRef(enterpriseKey: string): string {
 /** The Market's categories, the ones both apps' composers pick from (@beanpool/core PRICING_CATEGORIES). */
 export const AGENT_POST_CATEGORIES: readonly string[] = PRICING_CATEGORIES.map((c) => c.id);
 
-/** A stored category that is the node's own word: the Market's, one it had before, or what an event or a listing with none is given. */
-const OWN_CATEGORIES: ReadonlySet<string> = new Set([...AGENT_POST_CATEGORIES, ...Object.keys(LEGACY_CATEGORY_ALIASES), 'community', 'other']);
+/**
+ * A stored category that is the node's own word: the Market's, one it had before, what an event or a listing with none is
+ * given, or the Daily Pulse's `skills`, the one word its entries use that the Market doesn't list (daily-pulse-entries.ts).
+ */
+const OWN_CATEGORIES: ReadonlySet<string> = new Set([...AGENT_POST_CATEGORIES, ...Object.keys(LEGACY_CATEGORY_ALIASES), 'community', 'other', 'skills']);
 
 /**
  * A post's category as an assistant reads it. Stored, it is any text of up to 50 characters (engine/post-fields.ts), and it

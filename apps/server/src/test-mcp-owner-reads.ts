@@ -37,9 +37,11 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { setMemberArea } from './engine/member-area.js';
 import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
-import { enterpriseRef } from './agent/owner-posts.js';
+import { categoryRead, enterpriseRef } from './agent/owner-posts.js';
 import { fence, isMadeId, timeCell } from './agent/fence.js';
 import { cacheRemoteListings } from './federation-listings.js';
+import { rotateDailyPulse } from './daily-pulse.js';
+import { getAllPulseEntries, getTodaysPulseEntry } from './daily-pulse-entries.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -115,6 +117,11 @@ async function main(): Promise<void> {
     const buf = await sharp({ create: { width: 240, height: 200, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
     const tiny = `data:image/jpeg;base64,${buf.toString('base64')}`;
     const post = (title: string, author: string, lat = -28.55, lng = 153.5) => createPost('offer', 'food', title, 'Words.', 2, 'fixed', author, lat, lng, [tiny], false)!.id;
+    // The real Daily Pulse post, made while the board is this empty, on a day whose entry is the one Pulse category the Market
+    // doesn't list. The listings below put it away, as they would on a node; the reads further down bring it back.
+    const pulseDay = new Date();
+    while (getTodaysPulseEntry(pulseDay).category !== 'skills') pulseDay.setDate(pulseDay.getDate() + 1);
+    const pulsePost = rotateDailyPulse(pulseDay).post as { id: string; category: string };
     const miaPublic = post('Sourdough starter from Mia', mia.pub, -28.567891, 153.512345);
     const ownersOwn = post('Sourdough loaves from Olive', owner.pub);
     const bakerys = post('Sourdough rye from the bakery', bakery);
@@ -247,6 +254,16 @@ async function main(): Promise<void> {
         assert(byId(legacy)?.category === 'food_produce', `control: a legacy category is the node's own word (${byId(legacy)?.category})`);
         const anEvent = structured(await seeder.callTool({ name: 'listings_search', arguments: { kind: 'event', limit: 100 } }));
         assert(rowsOf(anEvent).find((l) => l.postId === swap)?.category === 'community', `control: an event's category, the word both apps' events store (${rowsOf(anEvent)[0]?.category})`);
+        // The node's own Daily Pulse post, on a board quiet enough to show it: its id and its category are not a stranger's.
+        assert(/^pulse_\d{4}-\d{2}-\d{2}$/.test(pulsePost.id) && pulsePost.category === 'skills', `the Daily Pulse stored the day's category and its own id (${pulsePost.id}, ${pulsePost.category})`);
+        db.prepare("UPDATE posts SET active = 1, status = 'active' WHERE id = ?").run(pulsePost.id);
+        const pulseRead = async (include_text: boolean) => rowsOf(structured(await seeder.callTool({ name: 'listings_search', arguments: { kind: 'offer', limit: 100, include_text } }))).find((l) => l.postId === pulsePost.id);
+        const pulsePlain = await pulseRead(false), pulseWithText = await pulseRead(true);
+        db.prepare("UPDATE posts SET active = 0, status = 'cancelled' WHERE id = ?").run(pulsePost.id);
+        assert(pulsePlain?.category === 'skills' && pulseWithText?.category === 'skills',
+            `control: a Daily Pulse post reads its category as plain text, with and without include_text (${JSON.stringify(pulsePlain?.category)}, ${JSON.stringify(pulseWithText?.category)})`);
+        const pulseWords = [...new Set(getAllPulseEntries().map((e) => e.category))];
+        assert(pulseWords.length > 0 && pulseWords.every((c) => categoryRead(c, 'abcd1234', 'a category') === c), `every category in the Daily Pulse's entries is the node's own word (${pulseWords.join(', ')})`);
         assert(isMadeId('pulse_2026-11-02') && isMadeId(miaPublic) && isMadeId(`xn:abc123def456:${miaPublic}`) && !isMadeId(chosenId) && !isMadeId(`xn:abc123def456:${chosenId}`) && !isMadeId(`${miaPublic}\n`),
             "a UUID, a Daily Pulse's id and a peer's copy of a UUID are ids made by a machine; a word in either place is not");
         assert(timeCell('2026-11-02T01:51:29.123Z') === '2026-11-02T01:51:29.123Z' && timeCell('2026-11-02 01:51:29') === '2026-11-02 01:51:29' && timeCell(SAYS) === null && timeCell(`2026-11-02T01:51:29Z ${SAYS}`) === null,

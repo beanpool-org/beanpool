@@ -8,7 +8,7 @@
  * The cards stay in their DOM places all the while (a node moved in the DOM drops its pointer capture): the page lays them
  * out in the live order, and `follow()` puts the lifted card back under the pointer after each layout and each scroll.
  */
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 
 /** A pointer that moves this far from where it went down is dragging, not tapping. */
 const SLOP_PX = 4;

@@ -4,7 +4,7 @@
  * the phone sends here it can now send, and nothing more:
  *
  * - **Only a node that keeps copies** (`directoryMirror`, engine/event-copy.ts). A local community's CORS is as it was.
- * - **Only what the tick calls**: the copy's create, edit and remove, a read by id, a cancelled date, and the signer's own
+ * - **Only what the tick calls**: the copy's create, edit and remove, its door, a read by id, a cancelled date, and the signer's own
  *   "am I a member here?", which the tick asks at the tap. Each for its own methods. A photo needs nothing of its own: it
  *   travels inside the create and the edit, as the phone's does.
  * - **Only a signed request**: the answer is readable for a call that carries the signature's headers, and a preflight is
@@ -37,7 +37,7 @@ const MEMBERSHIP = /^\/api\/community\/membership\/[^/]+$/;
 
 function methodsAt(path: string): readonly string[] | null {
     if (path === POSTS) return ['GET', 'POST'];
-    if (path === `${POSTS}/update` || path === `${POSTS}/remove`) return ['POST'];
+    if (path === `${POSTS}/update` || path === `${POSTS}/remove` || path === `${POSTS}/takes-questions`) return ['POST'];
     if (SKIP.test(path)) return ['POST', 'DELETE'];
     return MEMBERSHIP.test(path) ? ['GET'] : null;
 }

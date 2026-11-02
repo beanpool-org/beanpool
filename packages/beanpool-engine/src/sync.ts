@@ -1055,6 +1055,7 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host } : {}),
         ...(row.shown_from_post_id != null ? { shownFromPostId: row.shown_from_post_id } : {}),
         ...(row.shown_price != null ? { shownPrice: row.shown_price } : {}),
+        ...(row.shown_takes_questions === 1 ? { shownTakesQuestions: 1 } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

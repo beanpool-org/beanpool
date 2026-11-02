@@ -4,6 +4,7 @@
 // A leaf module (the database and the listing pushes' area map, nothing else), so the standby's import (engine/sync.ts)
 // and the re-key share one list.
 
+import { UNNAMED_COPY_SQL } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
 import { refreshMemberAreas } from './member-area.js';
 
@@ -100,8 +101,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
 
     // (f) posts. A copy of an event shows no author, and this move stamps a member's rows at one instant: a copy stamped with
     // them would read beside a listing that names them, with the same time to the millisecond (engine/event-copy.ts). So it
-    // keeps its stamp, and no delta sends it again: a standby makes this same move itself (followReplicatedRekeys).
-    const movePost = (column: string): void => rewrite('posts', `${column} = ?`, `${column} = ?`, 'shown_from_host IS NOT NULL');
+    // keeps its stamp, and no delta sends it again: a standby makes this same move itself (followReplicatedRekeys). One that
+    // takes questions names them anyway, and its readers need the new key to write to.
+    const movePost = (column: string): void => rewrite('posts', `${column} = ?`, `${column} = ?`, UNNAMED_COPY_SQL.replace(/\bp\./g, ''));
     movePost('author_pubkey');
     movePost('accepted_by');
     movePost('created_by');

@@ -76,7 +76,10 @@ export interface TableHashes {
  * 12: confirmations gains stepped_back_owing (the balance rule, S1). Raised for the same reason as 4: a standby updated before
  * its main server hashes `confirmations` over one more column. Every community with a known floor has rows there.
  */
-export const TABLE_HASHES_VERSION = 12;
+/**
+ * 13: posts gains shown_takes_questions (DESIGN-reaching-across-fable.md §1 row 5, slice GD). Raised for the same reason as 8.
+ */
+export const TABLE_HASHES_VERSION = 13;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

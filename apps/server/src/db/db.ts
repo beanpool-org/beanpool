@@ -1743,6 +1743,7 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_host TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_post_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_price TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_takes_questions INTEGER`).run(); } catch { }
     // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.

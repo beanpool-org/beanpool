@@ -151,6 +151,11 @@ export interface MarketplacePost {
      * price here: `credits` stays 0, and it can't be bought, taken or compared.
      */
     shownPrice?: string;
+    /**
+     * Its member takes questions about it (apps/server engine/event-copy.ts). Sent to its author, and to a member while it is
+     * up, with the name and key they write to. Never a visitor's.
+     */
+    takesQuestions?: boolean;
     /** This post is such a copy: it shows no author, and takes no RSVP and no deal. */
     shownCopy?: boolean;
     /** Where it is from, drawn from the directory row global holds for it at each read, never from the phone's words. */
@@ -827,7 +832,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         lng: row.lng,
         photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at, row.audience_scope)),
         originNode: row.origin_node,
-        ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}), ...(row.shown_price ? { shownPrice: row.shown_price } : {}) } : {}),
+        ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}), ...(row.shown_price ? { shownPrice: row.shown_price } : {}), ...(row.shown_takes_questions === 1 ? { takesQuestions: true } : {}) } : {}),
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
         // what an absent value means — on a database upgraded before the column existed, it means "stays
         // home", and that is the answer the poster is entitled to.
@@ -970,12 +975,18 @@ const ENTERPRISE_ON_BOARD_BY_KEY_SQL = `p.author_pubkey NOT IN (SELECT public_ke
  * stops at a copy: a block, a holiday, a paused account, a new name or face. The board's rule costs a copy nothing: it
  * is there because the author can't answer a request, and nobody answers on a copy. A report, a moderator's removal and
  * the author's own hand still reach it, as a post. Used by each read below that follows the author.
+ *
+ * A copy whose member takes questions names them to members, so nothing above is left to hide and it goes by its author's
+ * rules as any listing does: a block holds, and a card's change reaches it. `?author=` still leaves it out for anyone
+ * but its author: a visitor reads no name on it, and a list of one member's posts would be one.
  */
-const IS_COPY_SQL = 'p.shown_from_host IS NOT NULL';
-/** The reader's block list as a condition on a listing, its one parameter the list as JSON: a copy stays (IS_COPY_SQL). */
-const NOT_BLOCKED_SQL = ` AND (${IS_COPY_SQL} OR p.author_pubkey NOT IN (SELECT value FROM json_each(?)))`;
-/** A row's author as a read may follow them: NULL for a copy (IS_COPY_SQL). */
-const NAMED_AUTHOR_SQL = `CASE WHEN ${IS_COPY_SQL} THEN NULL ELSE p.author_pubkey END`;
+export const UNNAMED_COPY_SQL = '(p.shown_from_host IS NOT NULL AND COALESCE(p.shown_takes_questions, 0) = 0)';
+/** {@link UNNAMED_COPY_SQL} on a row read. */
+const isUnnamedCopy = (r: { shown_from_host?: string | null; shown_takes_questions?: number | null }): boolean => r.shown_from_host != null && r.shown_takes_questions !== 1;
+/** The reader's block list as a condition on a listing, its one parameter the list as JSON: a copy stays (UNNAMED_COPY_SQL). */
+const NOT_BLOCKED_SQL = ` AND (${UNNAMED_COPY_SQL} OR p.author_pubkey NOT IN (SELECT value FROM json_each(?)))`;
+/** A row's author as a read may follow them: NULL for a copy (UNNAMED_COPY_SQL). */
+const NAMED_AUTHOR_SQL = `CASE WHEN ${UNNAMED_COPY_SQL} THEN NULL ELSE p.author_pubkey END`;
 
 /** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
 function authorsOffBoard(db: Db, authors: string[]): Set<string> {
@@ -1723,7 +1734,7 @@ export interface NearbySet {
  *   same rules, wherever they are. Neither holds a listing by an author the member blocked on the web (member_blocks,
  *   their own rows only): they asked not to see those. The phone keeps its own list on the device (apps/native
  *   utils/blocklist.ts never calls /api/blocks) and hides those itself, so for a phone-only member member_blocks is empty
- *   and this leaves out nothing (#1808 review, finding 6). A copy is never left out for its author (IS_COPY_SQL).
+ *   and this leaves out nothing (#1808 review, finding 6). A copy is never left out for its author (UNNAMED_COPY_SQL).
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
@@ -1849,7 +1860,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     if (ids.length > 0) {
         // The authors of S whose standing ever moved (idx_members_standing_by_key, schema.sql). One whose never has adds
         // nothing: a listing's author never changes, so the authors are fixed by `ids`, and a first change adds a line.
-        // A copy's author is none of them (IS_COPY_SQL): a tag that moved with their row would say whose it is.
+        // A copy's author is none of them (UNNAMED_COPY_SQL): a tag that moved with their row would say whose it is.
         const authors = [...new Set([...ranked, ...kept].flatMap(r => r.author_pubkey ?? []))];
         const standing = prepared(db, `SELECT public_key, board_standing_changed_at AS at FROM members
             WHERE board_standing_changed_at IS NOT NULL AND public_key IN (SELECT value FROM json_each(?)) ORDER BY public_key`).all(JSON.stringify(authors)) as Array<{ public_key: string; at: string }>;
@@ -1984,7 +1995,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            where += ` AND (${IS_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
+            where += ` AND (${UNNAMED_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
         } else if (!selfView && !filter?.includeInactive) {
             where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         }
@@ -2103,7 +2114,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // A search leaves out the listings of the authors the reader blocked on the web (member_blocks), as their nearby
         // set does (#1781): the web and Home would show them otherwise. The phone keeps its own list on the device and
         // hides those itself; it never writes member_blocks, so for a phone-only member this leaves out nothing (#1808
-        // review, finding 6). A read for nobody in particular has no list. A copy stays (IS_COPY_SQL).
+        // review, finding 6). A read for nobody in particular has no list. A copy stays (UNNAMED_COPY_SQL).
         const blocked = viewer && !filter?.includeAllScopes ? authorsBlockedBy(db, viewer) : [];
         if (blocked.length > 0) {
             where += NOT_BLOCKED_SQL;
@@ -2125,9 +2136,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
         // And, for a member, the listings a sync may no longer have the last word on (offBoardPostsToResend): the phone
         // wrote them from a read outside a sync, or its deal heal did. A search of the primary key, so the OR stays a
-        // MULTI-INDEX OR. A copy is sent again for neither its author's standing nor their card (IS_COPY_SQL): it would
+        // MULTI-INDEX OR. A copy is sent again for neither its author's standing nor their card (UNNAMED_COPY_SQL): it would
         // arrive beside their listings, with no change of its own to explain it.
-        where += ` AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))`;
+        where += ` AND (p.updated_at >= ? OR (p.origin_node IS NULL AND NOT ${UNNAMED_COPY_SQL} AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))`;
         params.push(filter.updatedAfter, filter.updatedAfter);
         // A member's set (`authorCardsChanged`): also each listing whose author changed their card since (a new name, a
         // new face), so a phone that keeps no card for its listings' authors gets the new name within a cycle
@@ -2135,10 +2146,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // member directory already gives every member: nothing a member could not read. On the members row the read already
         // LEFT JOINs (m), so the cost follows the set, not the members whose card changed since the cursor (#1847 review NB1).
         if (filter.authorCardsChanged) {
-            where += " OR (p.shown_from_host IS NULL AND m.profile_updated_at >= ?)";
+            where += ` OR (NOT ${UNNAMED_COPY_SQL} AND m.profile_updated_at >= ?)`;
             params.push(filter.updatedAfter);
         } else if (filter.localAuthorCardsChanged) {
-            where += " OR (p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?))";
+            where += ` OR (p.origin_node IS NULL AND NOT ${UNNAMED_COPY_SQL} AND p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?))`;
             params.push(filter.updatedAfter);
         }
         resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);
@@ -2338,7 +2349,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // An off-board host's event, read for this reader as it is: their phone writes it into its cache as it is,
             // so their deltas send it again, as paused, for a while (noteEventReadOutsideSync). Only for a key with a
             // member row here, so a key that merely signs can't fill what the node keeps. A copy is never off the board.
-            if (readerView && viewer && r.author_pubkey !== viewer && r.shown_from_host == null && onBoardByStatus(post)
+            if (readerView && viewer && r.author_pubkey !== viewer && !isUnnamedCopy(r) && onBoardByStatus(post)
                 && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
                 && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
@@ -2428,7 +2439,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             }
         }
 
-        if (r.shown_from_host == null && offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
+        if (!isUnnamedCopy(r) && offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
             && !viewerDeals.has(r.id) && onBoardByStatus(post)) {
             post.status = 'paused';
         }
@@ -2490,7 +2501,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
     // A copy says it is one, where from when the directory says so, and its price at home in words. The stored host is never a
     // reader's.
-    shownCopy: 'keep', shownFrom: 'keep', shownPrice: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop',
+    shownCopy: 'keep', shownFrom: 'keep', shownPrice: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop', takesQuestions: 'drop',
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',

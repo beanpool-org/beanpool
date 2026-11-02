@@ -369,6 +369,8 @@ CREATE TABLE IF NOT EXISTS posts (
     shown_from_host TEXT,
     shown_from_post_id TEXT,
     shown_price TEXT,
+    -- 1 while the member takes questions about this Offer or Need (engine/event-copy.ts). Anything else: nobody is named.
+    shown_takes_questions INTEGER,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

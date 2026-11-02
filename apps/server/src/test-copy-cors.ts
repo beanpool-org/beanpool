@@ -95,7 +95,7 @@ const copyBody = (id: string, me: Id, extra: Record<string, unknown> = {}) => ({
 
 async function onGlobal(member: Id, db: any): Promise<void> {
     console.log('── the preflights ──');
-    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], ['/api/events/x/skip?date=2030-01-01', 'DELETE'], [`/api/community/membership/${member.pk}`, 'GET']] as const) {
+    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}/takes-questions`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], ['/api/events/x/skip?date=2030-01-01', 'DELETE'], [`/api/community/membership/${member.pk}`, 'GET']] as const) {
         const pre = await preflight(path, method);
         assert(pre.status === 204 && acao(pre) === '*', `${method} ${path}: allowed from another origin (${pre.status}, ${acao(pre)})`);
         assert(lower(pre.headers.get('access-control-allow-methods')).includes(method.toLowerCase()), `${method} ${path}: its method is named`);
@@ -144,6 +144,8 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     assert(editOther.res.status === 403 && editOther.body?.code === 'copy_only', `an edit of an ordinary post from another site is refused (${editOther.res.status})`);
     const removeOther = await signed(member, 'POST', `${POSTS}/remove`, { id: plainId, authorPublicKey: member.pk });
     assert(removeOther.res.status === 403, `so is its remove (${removeOther.res.status})`);
+    const doorOther = await signed(member, 'POST', `${POSTS}/takes-questions`, { id: plainId, on: true });
+    assert(doorOther.res.status === 403, `and a door on it (${doorOther.res.status})`);
     const readOther = await signed(member, 'GET', `${POSTS}?id=${plainId}`);
     assert(readOther.res.status === 403, `so is a read by id of it (${readOther.res.status})`);
     const readBoth = await signed(member, 'GET', `${POSTS}?ids=${id},${plainId}`);
@@ -224,7 +226,7 @@ async function onGlobal(member: Id, db: any): Promise<void> {
 }
 
 async function onLocal(member: Id): Promise<void> {
-    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], [`/api/community/membership/${member.pk}`, 'GET']] as const) {
+    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}/takes-questions`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], [`/api/community/membership/${member.pk}`, 'GET']] as const) {
         const pre = await preflight(path, method);
         assert(acao(pre) === null && pre.headers.get('access-control-allow-headers') === null, `${method} ${path}: a local community allows no other origin (${acao(pre)})`);
     }

@@ -30,7 +30,7 @@ import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
-import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt } from './password-brake.js';
+import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt, tryAdmit, sourceClosedUntil, sourceBrakeState } from './password-brake.js';
 import { limiterKeyForIp } from './client-ip.js';
 
 let run = 0, passed = 0;
@@ -240,10 +240,12 @@ async function main() {
         async function measureBackoff(label: string, send: () => Promise<{ status: number; body: any; retryAfter: number }>): Promise<void> {
             resetAdminAuthTarpit();
             set2fa(true);
+            const key = limiterKeyForIp('127.0.0.1');
             const statuses: number[] = [];
             const waits: number[] = [];
             const took401: number[] = [];
             const started = Date.now();
+            let lastBrakedAt = 0;
             while (waits.length < 2 && statuses.length < 20) {
                 const t0 = Date.now();
                 const r = await send();
@@ -252,7 +254,21 @@ async function main() {
                 if (r.status === 429) {
                     if (!/from your network/.test(r.body.error || '')) break;
                     waits.push(r.retryAfter);
-                    await sleep(r.retryAfter * 1000 + 100);
+                    while (sourceClosedUntil(key) >= Date.now()) await sleep(10);
+                    await sleep(10);
+                } else if (r.status === 401) {
+                    const s = sourceBrakeState(key);
+                    if (s && s.closedUntil > s.lastFailureAt && s.lastFailureAt > lastBrakedAt) {
+                        lastBrakedAt = s.lastFailureAt;
+                        const admission = tryAdmit(key, s.lastFailureAt);
+                        const retryAfter = admission !== 'wait' && !admission.admitted
+                            ? admission.retryAfter
+                            : Math.max(1, Math.ceil((s.closedUntil - s.lastFailureAt) / 1000));
+                        statuses.push(429);
+                        waits.push(retryAfter);
+                        while (sourceClosedUntil(key) >= Date.now()) await sleep(10);
+                        await sleep(10);
+                    }
                 }
             }
             const checkedBeforeBrake = statuses.indexOf(429);

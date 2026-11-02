@@ -1924,7 +1924,19 @@ describe('Stop showing takes the copy down, whichever device stops it: a phone a
     it.each(kinds)('%s: the browser resting at the id the phone came back on, then Stop on the browser', async (kind, make) => {
         const { me, home, browser } = await bothTicked(`Waits ${kind}`, make);
         await pause(me, home);
-        await Promise.all([tendCopies(me, deps()), browser.tendCopies(me, deps())]);
+        // Both read the copy up before either brings it down, or one follows the other and no id is shared: a slow runner decides.
+        let atDown = 0;
+        let bothThere!: () => void;
+        const met = new Promise<void>((go) => { bothThere = go; });
+        const heldAtDown: CopyDeps = {
+            ...deps(),
+            post: async (host, path, ...rest) => {
+                if (path.endsWith('/remove')) { if (++atDown === 2) bothThere(); await met; }
+                return signedPost(host, path, ...rest);
+            },
+        };
+        await Promise.all([tendCopies(me, heldAtDown), browser.tendCopies(me, heldAtDown)]);
+        expect(atDown).toBe(2);
         await resume(me, home);
         await tendCopies(me, deps());
         expect(await liveCopies(me)).toHaveLength(1);

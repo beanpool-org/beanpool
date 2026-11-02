@@ -6,6 +6,7 @@ import {
     copyFromLine,
     eventCopyOf,
     listPhotoUrl,
+    STACK_LIST_SHARE,
     t,
     type CalendarOccurrence,
 } from '@beanpool/core';
@@ -87,6 +88,12 @@ export function MapCalendar({
     const [selectedDate, setSelectedDate] = useState<string | null>(() => month.firstActiveDate);
     const [selectedByTap, setSelectedByTap] = useState(false);
 
+    useEffect(() => {
+        if (!selectedByTap) {
+            setSelectedDate(month.firstActiveDate);
+        }
+    }, [month.firstActiveDate, selectedByTap]);
+
     // Keyboard accessibility: Escape closes the calendar overlay
     useEffect(() => {
         if (covered) return;
@@ -131,7 +138,14 @@ export function MapCalendar({
             </header>
 
             {/* Scrollable grid area */}
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div
+                className="flex-1 overflow-y-auto overscroll-contain"
+                style={{
+                    paddingBottom: selectedDate
+                        ? `calc((100% - var(--bottom-nav-offset, 0px)) * ${STACK_LIST_SHARE} + var(--bottom-nav-offset, 0px))`
+                        : undefined,
+                }}
+            >
                 <MonthGrid
                     month={month}
                     selectedDate={selectedDate}
@@ -143,16 +157,12 @@ export function MapCalendar({
                         const p = month.prevMonth;
                         setViewYear(p.year);
                         setViewMonth(p.month);
-                        const nextM = buildCalendarMonth<CalendarEventPost>({ year: p.year, month: p.month, now, events: eventPosts as CalendarEventPost[] });
-                        setSelectedDate(nextM.firstActiveDate);
                         setSelectedByTap(false);
                     }}
                     onNextMonth={() => {
                         const n = month.nextMonth;
                         setViewYear(n.year);
                         setViewMonth(n.month);
-                        const nextM = buildCalendarMonth<CalendarEventPost>({ year: n.year, month: n.month, now, events: eventPosts as CalendarEventPost[] });
-                        setSelectedDate(nextM.firstActiveDate);
                         setSelectedByTap(false);
                     }}
                     onJumpToDate={(targetDate) => {
@@ -170,11 +180,15 @@ export function MapCalendar({
             {/* The same list a stacked bubble opens, with day heading */}
             {selectedDate && (
                 <MapStackList
+                    key={selectedDate}
                     pins={selectedPins}
                     covered={covered}
                     takeFocus={selectedByTap}
                     heading={calendarDayHeading(selectedDate, selectedPins.length)}
-                    onClose={() => setSelectedDate(null)}
+                    onClose={() => {
+                        setSelectedDate(null);
+                        setSelectedByTap(true);
+                    }}
                 />
             )}
         </aside>

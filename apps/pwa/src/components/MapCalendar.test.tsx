@@ -177,4 +177,48 @@ describe('MapCalendar (DESIGN-map-calendar-fable.md §1, §4, §8 S3)', () => {
         fireEvent.click(startLink);
         expect(onStartEvent).toHaveBeenCalledTimes(1);
     });
+
+    it('adds bottom padding to the scroll container when a date is selected, removing it on close', () => {
+        const { rerender } = render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+
+        // Container has padding when a date is selected
+        const gridArea = screen.getByTestId('map-calendar').querySelector('.overflow-y-auto') as HTMLElement;
+        expect(gridArea.style.paddingBottom).toMatch(/calc/);
+
+        // Close day list
+        const closeListBtn = within(screen.getByTestId('map-stack-list')).getByRole('button', { name: 'Close' });
+        fireEvent.click(closeListBtn);
+
+        // Padding removed
+        expect(gridArea.style.paddingBottom).toBe('');
+    });
+
+    it('synchronizes selectedDate when posts update asynchronously', () => {
+        // Mount initially with no posts (e.g. while loading)
+        const { rerender } = render(<MapCalendar posts={[]} onClose={vi.fn()} />);
+        expect(screen.queryByTestId('map-stack-list')).toBeNull();
+
+        // Posts resolve asynchronously
+        rerender(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+        const list = screen.getByTestId('map-stack-list');
+        expect(within(list).getByRole('heading').textContent).toBe('Sat 7 Nov: 1 event');
+    });
+
+    it('remounts MapStackList with key on date change and moves focus to the heading', () => {
+        render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+
+        // Initial selection: 2026-11-07
+        const initialHeading = within(screen.getByTestId('map-stack-list')).getByRole('heading');
+        expect(initialHeading.textContent).toBe('Sat 7 Nov: 1 event');
+
+        // Tap another day (e.g. 2026-11-10)
+        const dayButtons = screen.getAllByTestId('month-day-cell');
+        const anotherDay = dayButtons.find(btn => btn.getAttribute('data-date')?.endsWith('-10'));
+        expect(anotherDay).toBeDefined();
+
+        fireEvent.click(anotherDay!);
+        const newHeading = within(screen.getByTestId('map-stack-list')).getByRole('heading');
+        expect(newHeading.textContent).toMatch(/Nothing on Tue 10 Nov/);
+        expect(document.activeElement).toBe(newHeading);
+    });
 });

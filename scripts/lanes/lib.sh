@@ -470,7 +470,7 @@ review(){ # BRANCH — the deciding pass, after the early passes on an AGY-built
   # off them, so its only effect was that Opus had to disprove them. Its cold deciding pass runs beside GitHub: see decide.sh.
   local i B0 B1 T
   PR=$(prnum "$1"); [ -n "$PR" ] || { log "no PR for $1 — skipping review"; CLEAN=0; return; }
-  if [ "$(lane_backend build)" = claude ]; then lane_tier_a "$PR"; else
+  if [ "$(lane_backend build)" != claude ]; then
     for i in 1 2; do
       B0=$(count "$PR"); T=$(date -u +%Y-%m-%dT%H:%M:%SZ)
       stage "CCR-$1-$i" "$LANE_REVIEW_TIMEOUT" "$(lane_review_brief review "$PR" "Pass $i. Read existing comments first and do not repeat them; post only what is new or still broken, with file and line; if clean, one summary comment and no inline comments.")" review

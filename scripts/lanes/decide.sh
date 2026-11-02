@@ -125,7 +125,7 @@ round_end(){ # PR B0 ALLOWANCE — a pass beside GitHub has just ended, on the h
   else
     B1=$(count "$pr"); log "#$pr comments after the deciding pass: $B1"
     if ! lane_is_count "$B1"; then verdict="NOT CLEAN (its comment count was unavailable)"
-    elif [ "$B1" -gt $(($2+$3)) ]; then verdict="NOT CLEAN ($((B1-$2)) new comments)"; fi
+    elif [ "$B1" -gt $(($2+$3)) ]; then verdict="NOT CLEAN ($((B1-$2)) new comment(s))"; fi
   fi
   ci_beside "$pr" "$CI_HEAD" || green=0
   [ -z "$CI_MOVED" ] || verdict="VOID (the head moved from ${CI_HEAD[1,8]} to ${CI_MOVED[1,8]}, and the review of the old head said $verdict)"
@@ -138,6 +138,7 @@ decide_review(){ # PR BRANCH [SUFFIX] [ALLOWANCE] [BRIEF] — one deciding pass;
   local PRN=$1 BR=$2 sfx=${3:-3} allow=${4:-1} extra=${5:-$LANE_DECIDE_BRIEF} be model i B0 B1 beside=0
   CLEAN=0; CI_FIXES=0
   be=$LANE_DECIDE_BACKEND
+  [ "$(lane_backend build)" = claude ] && lane_tier_a "$PRN"   # here because every way to a deciding pass comes through here
   if [ "$be" != director ]; then
     model=$(lane_model decide "$be") || { log "no deciding model — #$PRN left open for the maintainer"; return; }
     # Not for a director pass: there is no stage here to run beside GitHub, and "ready" promises the director a green head.

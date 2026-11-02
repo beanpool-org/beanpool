@@ -792,13 +792,19 @@ head_is aaa1; ci aaa1 failure; print aaa2 > "$FAKE_STATE/pushes"
 decide
 check "CLEAN=0, one review, no fix stage"        [ "$CLEAN:$(reviews):$(fixes)" = 0:1:0 ]
 check "exactly one hold line"                    [ "$(holds)" = 1 ]
-check "it carries both results"                  held "NOT CLEAN (2 new comments); CI red on aaa1"
+check "it carries both results"                  held "NOT CLEAN (2 new comment(s)); CI red on aaa1"
 again; head_is bbb1
 decide
-check "NOT CLEAN and green: held, with both"     eval '[ "$CLEAN" = 0 ] && [ "$(holds)" = 1 ] && held "NOT CLEAN (2 new comments); CI green on bbb1"'
+check "NOT CLEAN and green: held, with both"     eval '[ "$CLEAN" = 0 ] && [ "$(holds)" = 1 ] && held "NOT CLEAN (2 new comment(s)); CI green on bbb1"'
 again; head_is ccc1; ci ccc1 pending pending failure
 decide
-check "the verdict waits for GitHub: a finding does not go back before the red it sits beside" eval '[ "$(reads ccc1)" = 3 ] && [ "$(holds)" = 1 ] && held "NOT CLEAN (2 new comments); CI red on ccc1"'
+check "the verdict waits for GitHub: a finding does not go back before the red it sits beside" eval '[ "$(reads ccc1)" = 3 ] && [ "$(holds)" = 1 ] && held "NOT CLEAN (2 new comment(s)); CI red on ccc1"'
+again; FAKE_REVIEW_POSTS=1 FAKE_GH_PR=42; head_is ddd1
+{ review feat/x; } >> "$LOG" 2>&1
+check "review() allows no new comment: one finding is NOT CLEAN" eval '[ "$CLEAN" = 0 ] && held "NOT CLEAN (1 new comment(s)); CI green on ddd1"'
+again; head_is eee1
+decide
+check "a caller's allowance still counts: the one comment decide_pass allows is clean" [ "$CLEAN" = 1 ]
 
 scenario "56. a Claude-built lane: a head that moved voids the verdict, whenever it moved and whatever GitHub says"
 opus
@@ -817,7 +823,7 @@ check "moved as green was read: a green on a commit already replaced does not co
 again; FAKE_REVIEW_POSTS=2; head_is ddd1; print ddd2 > "$FAKE_STATE/review-push"; ci ddd2 failure
 decide
 unset FAKE_REVIEW_POSTS
-check "a NOT CLEAN verdict is voided the same way, in one line" eval '[ "$(holds)" = 1 ] && held "VOID (the head moved from ddd1 to ddd2, and the review of the old head said NOT CLEAN (2 new comments)); CI red on the new head ddd2"'
+check "a NOT CLEAN verdict is voided the same way, in one line" eval '[ "$(holds)" = 1 ] && held "VOID (the head moved from ddd1 to ddd2, and the review of the old head said NOT CLEAN (2 new comment(s))); CI red on the new head ddd2"'
 again; head_is eee1; : > "$FAKE_STATE/review-push"
 decide
 check "GitHub stops giving the head after the review: not clean" eval '[ "$CLEAN" = 0 ] && held "CLEAN; CI unread: GitHub did not give the head commit"'
@@ -903,7 +909,7 @@ again; head_is ddd1; ci ddd1 none; ci ddd2 failure; print ddd2 > "$FAKE_STATE/pu
 check "land: a red after the sync holds with both, and goes no further" eval '[ "$(holds)" = 1 ] && held "CLEAN; CI red on ddd2" && logged "post-sync review of #42 did not come back clean" && not_logged "HELD for the maintainer"'
 
 scenario "61. watch.sh wakes on a round coming back, with both results in its headline; the lane's last line shows in the same wake"
-print -l '#!/bin/zsh' "source ${(qq)LIB}" 'round_hold 45 "NOT CLEAN (2 new comments)" "red on aaa1"' 'CLEAN=0 PR=45' "$done_line" > "$T/run-selftestround.sh"
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'round_hold 45 "NOT CLEAN (2 new comment(s))" "red on aaa1"' 'CLEAN=0 PR=45' "$done_line" > "$T/run-selftestround.sh"
 zsh "${HERE:h}/start.sh" "$T/run-selftestround.sh" > /dev/null 2>&1 &
 sleep 2
 watch_now "$T/w-round.out"; woke_round=$WOKE
@@ -912,7 +918,7 @@ wait 2>/dev/null
 cat "$T/w-round.out" >> "$LOG"
 show
 check "woke, once"                               [ "$woke_round:$woke_round2" = 1:0 ]
-check "the headline has the verdict and CI"      grep -qE "REVIEW AND CI BACK on lane selftestround at [0-9:]+ — verdict NOT CLEAN \(2 new comments\); CI red on aaa1" "$T/w-round.out"
+check "the headline has the verdict and CI"      grep -qE "REVIEW AND CI BACK on lane selftestround at [0-9:]+ — verdict NOT CLEAN \(2 new comment\(s\)\); CI red on aaa1" "$T/w-round.out"
 check "it does not say the PR was not reviewed"  eval '! grep -q "NOT REVIEWED" "$T/w-round.out"'
 check "the lane's last line wakes with it"       grep -qE "selftestround at [0-9:]+ — clean=0, PR #45, held for the director" "$T/w-round.out"
 check "printed no shell errors"                  eval '! grep -qE "bad option|bad pattern|command not found|parse error|read-only" "$T/w-round.out"'
@@ -934,6 +940,9 @@ unset FAKE_GH_LABEL_DOWN
 again; rm -f "$FAKE_STATE/gh.calls"; FAKE_GH_PR=
 { review feat/x; } >> "$LOG" 2>&1
 check "no PR: nothing to label"                  eval '[ "$(label_calls)" = 0 ] && logged "no PR for feat/x"'
+again; rm -f "$FAKE_STATE/gh.calls"; head_is ddd1
+{ decide_pass 42 feat/x; } >> "$LOG" 2>&1
+check "a lane that goes straight to decide_pass gets it too" [ "$(label_calls)" = 1 ]
 again; rm -f "$FAKE_STATE/gh.calls"; LANE_BUILD_BACKEND=agy LANE_WT=$T/repo/.claude/worktrees/lane-selftest; FAKE_GH_PR=42; head_is ccc1
 { review feat/x; } >> "$LOG" 2>&1
 check "the control: an AGY-built lane's review ran, and it got no label" eval '[ "$CLEAN" = 1 ] && [ "$(label_calls)" = 0 ]'

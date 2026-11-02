@@ -317,6 +317,7 @@ async function main(): Promise<void> {
             forgetOwnAddresses();
             const entry = configuredAddresses().find((a) => a.address === FLEET);
             assert(entry?.source === 'public-address' && !entry.former && !entry.lost, `beside ${what}, CF_RECORD_NAME ${show(cf)} is item 1 (${show(entry)})`);
+            assert(entry?.hardCoded === true, `beside ${what}, it is marked hard-coded: no claim of it is held (${show(entry)})`);
             assert(publishedAddresses().includes(FLEET), `beside ${what}, it is published (${show(publishedAddresses())})`);
             assert(audienceStanding(FLEET) === 'own', `beside ${what}, a signature for it is this community's (got ${audienceStanding(FLEET)})`);
         }
@@ -330,6 +331,12 @@ async function main(): Promise<void> {
     apply({ name: 'both', publicAddress: tunnel, env: { CF_RECORD_NAME: FLEET }, want: all(null) });
     assert(primaryAddress() === REG, `the live registrar name is still the main one (${primaryAddress()})`);
     assert(getDirectoryInfo().publicUrl === `https://${REG}`, `and the directory's publicUrl is unchanged (${getDirectoryInfo().publicUrl})`);
+    {
+        const { appAddressesReport } = await import('./routes/app-addresses.js');
+        const row = (host: string) => (appAddressesReport().addresses as any[]).find((r) => r.address === host);
+        assert(row(FLEET)?.hardCoded === true, `the Addresses report marks the fleet name hard-coded (${show(row(FLEET))})`);
+        assert(!row(REG)?.hardCoded, `and not the claimed name (${show(row(REG))})`);
+    }
     assert(configuredAddresses().filter((a) => a.source === 'public-address').map((a) => a.address).join() === `${REG},${FLEET}`,
         `each once, the stored name first (${show(configuredAddresses())})`);
 

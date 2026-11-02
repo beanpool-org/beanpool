@@ -78,6 +78,8 @@ export interface OwnAddress {
     former?: true;
     /** Lost (see above): refused and never published, still one of this community's names. */
     lost?: true;
+    /** The host CF_RECORD_NAME sets (2): by hand on the server, so no claim of it is held. */
+    hardCoded?: true;
 }
 
 /** How a host a request was signed for stands here. */
@@ -152,14 +154,18 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     const names = registrarNames(config);
     // Per host, whichever source names it.
     const lost = new Set(names.filter((r) => r.lost).map((r) => r.address));
+    const given = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null });
+    const hardCoded = given ? normalizeAddress(given) : null;
     const add = (address: string | null, source: AddressSource, former = false) => {
         if (!address || list.some((a) => a.address === address)) return;
-        list.push({ address, source, ...(former ? { former: true as const } : {}), ...(lost.has(address) ? { lost: true as const } : {}) });
+        list.push({
+            address, source, ...(former ? { former: true as const } : {}), ...(lost.has(address) ? { lost: true as const } : {}),
+            ...(address === hardCoded ? { hardCoded: true as const } : {}),
+        });
     };
     const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
     add(url ? normalizeAddress(url) : null, 'public-address');
-    const given = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null });
-    add(given ? normalizeAddress(given) : null, 'public-address');
+    add(hardCoded, 'public-address');
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');
     for (const r of names) add(r.address, 'registrar', r.role === 'former');

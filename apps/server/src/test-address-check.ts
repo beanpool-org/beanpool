@@ -389,6 +389,9 @@ async function main(): Promise<void> {
             `made 12 minutes ago: it says so (${fresh?.nextStep})`);
             const later = (await P.send('reaches', { offsetMs: 19 * MIN }))['gone.beanpool.org'];
             assert(later?.step === 'no-dns-beanpool', `31 minutes on it no longer does (${later?.step})`);
+            await P.send('registrarNames', { set: entry('pending', 'provisioning') });
+            const making = (await P.send('reaches', {}))['gone.beanpool.org'];
+            assert(making?.step !== 'awaiting-approval', `a name still being made waits for nobody's approval (${making?.step})`);
             await P.send('registrarNames', { set: entry('pending') });
             const pending = (await P.send('reaches', {}))['gone.beanpool.org'];
             assert(pending?.step === 'awaiting-approval', `a name waiting for approval has its own step (${pending?.step})`);

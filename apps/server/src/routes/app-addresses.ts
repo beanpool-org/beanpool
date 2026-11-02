@@ -89,6 +89,7 @@ export function appAddressesReport(pageHost?: unknown) {
             ...(a.lost ? { lost: true, tried: { today: tried?.today ?? 0, busiestDay: tried?.busiestDay ?? 0 } } : {}),
             ...(standing ? { standing } : {}),
             ...(stopped.has(a.address) ? { stopped: true } : {}),
+            ...(a.hardCoded ? { hardCoded: true } : {}),
             ...(reach ? { reach } : {}),
         };
     });

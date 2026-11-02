@@ -163,7 +163,7 @@ export function canBecomeMain(host: string, primary: string | null | undefined):
  * A pause that isn't the project's stays: there Make main is the heal. So does a released name: there it is the take-back.
  */
 export function offersMakeMain(a: AppAddress, primary: string | null | undefined): boolean {
-    return a.source !== 'env' && !a.stopped && a.reach?.step !== 'stopped' && a.standing?.registrarSays !== 'other' && canBecomeMain(a.address, primary);
+    return a.source !== 'env' && !a.hardCoded && !a.stopped && a.reach?.step !== 'stopped' && a.standing?.registrarSays !== 'other' && canBecomeMain(a.address, primary);
 }
 
 /** A name as typed or pasted (a whole host, capitals, spaces): the label the claim takes. */
@@ -313,7 +313,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                     const current = report?.primaryAddress;
                     const said = { address: a.address, status: String(body?.status ?? 'nothing') };
                     setActionMessage({
-                        text: body?.status === 'pending'
+                        text: body?.status === 'pending' && body?.reason !== 'provisioning'
                             ? t('Requested {address}, awaiting approval by the BeanPool project.', { address: a.address })
                             : current ? t(W.notMainYetMembersAt, { ...said, current }) : t(W.notMainYet, said),
                         type: 'warning',
@@ -873,7 +873,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                     const canRemove = isOwner && a.source === 'owner';
                     // Release gives a BeanPool name up: only where the community isn't living at it now, and where nothing says
                     // this key has let it go already or doesn't hold it, as the node would refuse that once a code is spent.
-                    const canRelease = isOwner && isBeanPoolName(a.address) && !a.lost && !isMain && (a.former || a.source === 'owner') && !a.standing?.registrarSays;
+                    const canRelease = isOwner && isBeanPoolName(a.address) && !a.lost && !isMain && (a.former || a.source === 'owner') && !a.stopped && !a.standing?.registrarSays;
                     // A lost name now leads to another community, and a home-network one leads nowhere from a phone.
                     const canCheckFromPhone = !a.lost && a.reach?.step !== 'home-network';
 

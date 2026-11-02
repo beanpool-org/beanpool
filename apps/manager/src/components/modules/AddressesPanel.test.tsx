@@ -378,6 +378,37 @@ describe('AddressesPanel Component (S2)', () => {
         expect(screen.queryByText(/pending\.beanpool\.org is now the main address\./)).not.toBeInTheDocument();
     });
 
+    it('a name still being made is not said to wait for approval', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/local/admin/app-addresses')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(mockReport) } as Response);
+            }
+            if (urlStr.includes('/api/local/admin/public-address/claim')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, status: 'pending', reason: 'provisioning' }) } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
+        });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        await waitFor(() => { expect(screen.getByTestId('make-main-btn-pending.beanpool.org')).toBeInTheDocument(); });
+        fireEvent.click(screen.getByTestId('make-main-btn-pending.beanpool.org'));
+        await waitFor(() => { expect(screen.getByText(/pending\.beanpool\.org is not the main address yet/)).toBeInTheDocument(); });
+        expect(screen.queryByText(/awaiting approval by the BeanPool project/)).not.toBeInTheDocument();
+    });
+
+    it('Release is not offered on a name the project stopped: the node would refuse it once a code is spent', async () => {
+        const report = { ...mockReport, addresses: [...mockReport.addresses, { address: 'paused.beanpool.org', source: 'registrar' as const, former: true, stopped: true, today: 0, busiestDay: 0 }] };
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            if (String(url).includes('/api/local/admin/app-addresses')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(report) } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
+        });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        await waitFor(() => { expect(screen.getByTestId('address-row-paused.beanpool.org')).toBeInTheDocument(); });
+        expect(screen.queryByTestId('release-btn-paused.beanpool.org')).not.toBeInTheDocument();
+    });
+
     it('Remove/Release button is hidden for lost and main addresses and shown for former or owner non-main addresses', async () => {
         const reportWithLost = {
             ...mockReport,
@@ -808,6 +839,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         expect(offersMakeMain(row({ stopped: true }), 'byron.beanpool.org')).toBe(false);
         // Hard-coded: held by nobody's key here, set by hand, a BeanPool name or not.
         expect(offersMakeMain(row({ source: 'env' }), 'byron.beanpool.org')).toBe(false);
+        expect(offersMakeMain(row({ source: 'public-address', hardCoded: true }), 'byron.beanpool.org')).toBe(false);
         expect(offersMakeMain(row({ source: 'env', address: 'coop.example.net' }), 'beans.example.org')).toBe(false);
         // Another key holds it: 409 "name taken", after the code. Released stays: there Make main is the take-back.
         expect(offersMakeMain(row({ standing: { state: 'at-risk', registrarSays: 'other' } }), 'byron.beanpool.org')).toBe(false);

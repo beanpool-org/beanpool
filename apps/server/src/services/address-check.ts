@@ -294,7 +294,7 @@ export function stepOf(
     }
     if (c.dns?.outcome === 'no-such-name') {
         if (isBeanPoolName(host)) {
-            if (registrar?.status === 'pending') return only('awaiting-approval');
+            if (registrar?.status === 'pending' && registrar.reason !== 'provisioning') return only('awaiting-approval');
             if (stoppedByProject(registrar)) return only('stopped');
             if (registrar?.status === 'paused') return only('paused');
         }

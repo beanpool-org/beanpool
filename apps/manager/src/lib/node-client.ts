@@ -3509,6 +3509,8 @@ export interface AppAddress {
     lost?: boolean;
     /** With `lost`: members' apps refused there, today and on the busiest day of the last 7. */
     tried?: { today: number; busiestDay: number };
+    /** Set by hand on the server (CF_RECORD_NAME): no claim of it is held. */
+    hardCoded?: boolean;
     /** A BeanPool name the project blocked or paused, from the node's record: only the project lifts that. */
     stopped?: boolean;
     /** A BeanPool name the address service no longer gives this community, and what that means here. */

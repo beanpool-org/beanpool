@@ -946,8 +946,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Зараз це адреса цієї спільноти. Після цього нових учасників скеровуватимуть на іншу її адресу, якщо вона є. Ця спільнота припиняє оголошувати {address}, і жодне ім'я не віддається. Поки її ключ тримає {address}, застосунки учасників, які його використовують, і далі приймаються. Якщо ключ його не тримає, після цього вони відхилятимуться.",
   "From joining to a first trade": "Від приєднання до першого обміну",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Як далеко просуваються нові учасники, лише для власників і адміністраторів цієї спільноти. Цифри всієї спільноти: жодних імен і нічого про одну людину.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "Типове означає людину посередині: половина швидше, половина повільніше. Очікування першого обміну враховує лише тих, хто розмістив оголошення до обміну.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "Менше ніж {n} людей показується як замало. Перші обміни зростають кроками по {n}, тож число ніколи не вказує на одну людину.",
   "Last 90 days": "Останні 90 днів",
   "All time": "За весь час",
   "Joined": "Приєдналися",
@@ -965,5 +963,9 @@
     "few": "{n} дні",
     "many": "{n} днів",
     "other": "{n} дня"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Типове означає людину посередині: половина швидше, половина повільніше.",
+  "The wait for a first trade counts only people who listed before they traded.": "Очікування першого обміну враховує лише тих, хто розмістив оголошення до обміну.",
+  "A typical time needs at least {n} people, or it shows as too few.": "Для типового часу потрібно щонайменше {n} людей, інакше показується, що їх замало.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Перші обміни зростають кроками по {n}, тож число ніколи не вказує на одну людину."
 }

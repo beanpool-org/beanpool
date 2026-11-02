@@ -131,7 +131,10 @@ describe('CommunityHealthPanel', () => {
         expect(recent).toHaveTextContent('Typical time from joining to a first listingUnder a day');
         expect(recent).toHaveTextContent('Typical time from a first listing to a first trade1 day');
         expect(screen.getByTestId('first-trade')).toHaveTextContent('owners and admins only');
-        expect(screen.getByTestId('first-trade')).toHaveTextContent('Fewer than 5 people shows as too few');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('Typical means the middle person');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('A typical time needs at least 5 people, or it shows as too few.');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('The wait for a first trade counts only people who listed before they traded.');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('First trades go up in steps of 5');
     });
 
     it('a figure the node holds back says too few, and is never a 0', async () => {
@@ -166,6 +169,10 @@ describe('CommunityHealthPanel', () => {
             expect(screen.getByTestId(id)).not.toHaveTextContent('Too few');
         }
         expect(screen.getByTestId('community-health-panel')).not.toHaveTextContent('Trades this month');
+        // The typical time still shows, so its word is explained; nothing is said of trades that aren't there.
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('Typical means the middle person');
+        expect(screen.getByTestId('first-trade')).not.toHaveTextContent('steps of');
+        expect(screen.getByTestId('first-trade')).not.toHaveTextContent('listed before they traded');
     });
 
     it('a node with no trades says so plainly', async () => {

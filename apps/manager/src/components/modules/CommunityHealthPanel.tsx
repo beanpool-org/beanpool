@@ -138,8 +138,10 @@ function FirstTradeSection({ data }: { data: NewMembers }) {
                 ))}
             </div>
             {!data.beans && <p data-testid="first-trade-no-beans" className="text-xs text-nature-300 m-0 leading-relaxed break-words">{say(W.beansOff)}</p>}
-            {data.beans && <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.typical)}</p>}
-            <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.smallGroups, { n: data.minGroup })}</p>
+            <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.typical)}</p>
+            <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.smallGroup, { n: data.minGroup })}</p>
+            {data.beans && <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.listedFirst)}</p>}
+            {data.beans && <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.steps, { n: data.minGroup })}</p>}
         </div>
     );
 }

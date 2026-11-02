@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "अब यह इस समुदाय का पता है। इसके बाद, नए सदस्यों को इसके किसी अन्य पते पर भेजा जाता है, यदि कोई हो। यह समुदाय {address} का प्रचार बंद करता है, और कोई नाम नहीं छोड़ा जाता। जब तक इसकी कुंजी के पास {address} है, इसका उपयोग करने वाले सदस्यों के ऐप स्वीकार किए जाते रहेंगे। यदि कुंजी के पास यह नहीं है, तो इसके बाद उन्हें अस्वीकार कर दिया जाएगा।",
   "From joining to a first trade": "जुड़ने से पहले लेन-देन तक",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "नए सदस्य कितना आगे बढ़ते हैं, सिर्फ़ इस समुदाय के मालिकों और एडमिन के लिए। पूरे समुदाय की संख्याएँ: कोई नाम नहीं, और किसी एक व्यक्ति के बारे में कुछ नहीं।",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "सामान्य का मतलब बीच वाला व्यक्ति है: आधे ज़्यादा तेज़ थे, आधे धीमे। पहले लेन-देन के इंतज़ार में सिर्फ़ वे गिने जाते हैं जिन्होंने लेन-देन से पहले लिस्टिंग की।",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "{n} से कम लोग बहुत कम के रूप में दिखते हैं। पहले लेन-देन {n} के चरणों में बढ़ते हैं, ताकि संख्या कभी किसी एक व्यक्ति की ओर इशारा न करे।",
   "Last 90 days": "पिछले 90 दिन",
   "All time": "अब तक",
   "Joined": "जुड़े",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "{n} दिन",
     "other": "{n} दिन"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "सामान्य का मतलब बीच वाला व्यक्ति है: आधे ज़्यादा तेज़ थे, आधे धीमे।",
+  "The wait for a first trade counts only people who listed before they traded.": "पहले लेन-देन के इंतज़ार में सिर्फ़ वे गिने जाते हैं जिन्होंने लेन-देन से पहले लिस्टिंग की।",
+  "A typical time needs at least {n} people, or it shows as too few.": "सामान्य समय के लिए कम से कम {n} लोग चाहिए, वरना यह बहुत कम के रूप में दिखता है।",
+  "First trades go up in steps of {n}, so the number never points at one person.": "पहले लेन-देन {n} के चरणों में बढ़ते हैं, ताकि संख्या कभी किसी एक व्यक्ति की ओर इशारा न करे।"
 }

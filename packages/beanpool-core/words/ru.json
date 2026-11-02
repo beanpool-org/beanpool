@@ -946,8 +946,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Сейчас это адрес этого сообщества. После этого новых участников будут направлять на другой его адрес, если он есть. Это сообщество перестаёт объявлять {address}, и ни от какого имени оно не отказывается. Пока ключ сообщества держит {address}, приложения участников, которые его используют, по-прежнему принимаются. Если ключ его не держит, после этого они будут отклоняться.",
   "From joining to a first trade": "От вступления до первой сделки",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Как далеко продвигаются новые участники, только для владельцев и администраторов этого сообщества. Цифры по всему сообществу: никаких имён и ничего об одном человеке.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "Типичное значение — это человек посередине: половина быстрее, половина медленнее. Ожидание первой сделки учитывает только тех, кто разместил объявление до сделки.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "Меньше {n} человек показывается как слишком мало. Первые сделки растут шагами по {n}, поэтому число никогда не указывает на одного человека.",
   "Last 90 days": "Последние 90 дней",
   "All time": "За всё время",
   "Joined": "Вступили",
@@ -965,5 +963,9 @@
     "few": "{n} дня",
     "many": "{n} дней",
     "other": "{n} дня"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Типичное значение — это человек посередине: половина быстрее, половина медленнее.",
+  "The wait for a first trade counts only people who listed before they traded.": "Ожидание первой сделки учитывает только тех, кто разместил объявление до сделки.",
+  "A typical time needs at least {n} people, or it shows as too few.": "Для типичного времени нужно не менее {n} человек, иначе показывается, что их слишком мало.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Первые сделки растут шагами по {n}, поэтому число никогда не указывает на одного человека."
 }

@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "இது இப்போது இந்த சமூகத்தின் முகவரி. இதன் பிறகு, புதிய உறுப்பினர்கள் அதன் மற்றொரு முகவரிக்கு அனுப்பப்படுவார்கள், இருந்தால். இந்த சமூகம் {address} ஐ விளம்பரப்படுத்துவதை நிறுத்துகிறது, எந்தப் பெயரும் விட்டுக்கொடுக்கப்படவில்லை. அதன் விசை {address} ஐ வைத்திருக்கும் வரை, இதைப் பயன்படுத்தும் உறுப்பினர்களின் பயன்பாடுகள் தொடர்ந்து ஏற்கப்படும். விசை இதை வைத்திருக்கவில்லை என்றால், இதன் பிறகு அவை நிராகரிக்கப்படும்.",
   "From joining to a first trade": "இணைந்ததிலிருந்து முதல் வர்த்தகம் வரை",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "புதிய உறுப்பினர்கள் எவ்வளவு தூரம் முன்னேறுகிறார்கள் என்பது, இந்தச் சமூகத்தின் உரிமையாளர்களுக்கும் நிர்வாகிகளுக்கும் மட்டும். முழுச் சமூகத்தின் எண்கள்: பெயர்கள் இல்லை, ஒரு நபரைப் பற்றி எதுவும் இல்லை.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "வழக்கமான என்பது நடுவில் உள்ள நபர்: பாதிப் பேர் வேகமாகவும் பாதிப் பேர் மெதுவாகவும் இருந்தனர். முதல் வர்த்தகத்திற்கான காத்திருப்பு வர்த்தகத்திற்கு முன் பதிவிட்டவர்களை மட்டுமே கணக்கிடுகிறது.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "{n} பேருக்குக் குறைவாக இருந்தால் மிகக் குறைவு எனக் காட்டப்படும். முதல் வர்த்தகங்கள் {n} படிகளாக உயர்கின்றன, எனவே எண் ஒருபோதும் ஒரு நபரைச் சுட்டாது.",
   "Last 90 days": "கடந்த 90 நாட்கள்",
   "All time": "எல்லாக் காலமும்",
   "Joined": "இணைந்தவர்கள்",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "{n} நாள்",
     "other": "{n} நாட்கள்"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "வழக்கமான என்பது நடுவில் உள்ள நபர்: பாதிப் பேர் வேகமாகவும் பாதிப் பேர் மெதுவாகவும் இருந்தனர்.",
+  "The wait for a first trade counts only people who listed before they traded.": "முதல் வர்த்தகத்திற்கான காத்திருப்பு வர்த்தகத்திற்கு முன் பதிவிட்டவர்களை மட்டுமே கணக்கிடுகிறது.",
+  "A typical time needs at least {n} people, or it shows as too few.": "வழக்கமான நேரத்திற்குக் குறைந்தது {n} பேர் தேவை, இல்லையெனில் மிகக் குறைவு எனக் காட்டப்படும்.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "முதல் வர்த்தகங்கள் {n} படிகளாக உயர்கின்றன, எனவே எண் ஒருபோதும் ஒரு நபரைச் சுட்டாது."
 }

@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Είναι πλέον η διεύθυνση αυτής της κοινότητας. Μετά από αυτό, τα νέα μέλη στέλνονται σε άλλη διεύθυνσή της, αν έχει. Αυτή η κοινότητα σταματά να προβάλλει το {address} και κανένα όνομα δεν παραδίδεται. Όσο το κλειδί της κατέχει το {address}, οι εφαρμογές μελών που το χρησιμοποιούν εξακολουθούν να γίνονται δεκτές. Αν το κλειδί δεν το κατέχει, θα απορρίπτονται μετά από αυτό.",
   "From joining to a first trade": "Από την εγγραφή στην πρώτη συναλλαγή",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Πόσο μακριά φτάνουν τα νέα μέλη, μόνο για τους ιδιοκτήτες και τους διαχειριστές αυτής της κοινότητας. Αριθμοί όλης της κοινότητας: κανένα όνομα και τίποτα για ένα μόνο άτομο.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "Τυπικός σημαίνει το άτομο στη μέση: οι μισοί ήταν πιο γρήγοροι, οι μισοί πιο αργοί. Η αναμονή για την πρώτη συναλλαγή μετρά μόνο όσους δημοσίευσαν καταχώριση πριν από τη συναλλαγή τους.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "Λιγότερα από {n} άτομα εμφανίζονται ως πολύ λίγα. Οι πρώτες συναλλαγές αυξάνονται ανά {n}, ώστε ο αριθμός να μη δείχνει ποτέ ένα άτομο.",
   "Last 90 days": "Τελευταίες 90 ημέρες",
   "All time": "Από την αρχή",
   "Joined": "Εγγράφηκαν",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "{n} ημέρα",
     "other": "{n} ημέρες"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Τυπικός σημαίνει το άτομο στη μέση: οι μισοί ήταν πιο γρήγοροι, οι μισοί πιο αργοί.",
+  "The wait for a first trade counts only people who listed before they traded.": "Η αναμονή για την πρώτη συναλλαγή μετρά μόνο όσους δημοσίευσαν καταχώριση πριν από τη συναλλαγή τους.",
+  "A typical time needs at least {n} people, or it shows as too few.": "Ένας τυπικός χρόνος χρειάζεται τουλάχιστον {n} άτομα, αλλιώς εμφανίζεται ως πολύ λίγα.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Οι πρώτες συναλλαγές αυξάνονται ανά {n}, ώστε ο αριθμός να μη δείχνει ποτέ ένα άτομο."
 }

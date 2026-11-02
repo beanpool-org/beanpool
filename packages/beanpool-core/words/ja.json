@@ -832,8 +832,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "これは現在このコミュニティのアドレスです。この後、新しいメンバーは別のアドレスがあればそちらに案内されます。このコミュニティは {address} の案内をやめますが、名前は手放しません。鍵が {address} を保持している間は、これを使うメンバーのアプリは引き続き受け入れられます。鍵が保持していない場合、この後は拒否されます。",
   "From joining to a first trade": "参加から初めての取引まで",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "新しいメンバーがどこまで進んでいるかを示します。このコミュニティのオーナーと管理者だけが見られます。コミュニティ全体の数字で、名前も個人についての情報も含みません。",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "「目安」は真ん中の人の値で、半数はこれより早く、半数は遅い人です。初めての取引までの待ち時間は、取引より先に投稿した人だけを数えます。",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "{n} 人未満は「少なすぎる」と表示します。初めての取引は {n} 件単位で増えるため、数字が特定の人を指すことはありません。",
   "Last 90 days": "過去90日",
   "All time": "全期間",
   "Joined": "参加した人",
@@ -848,5 +846,9 @@
   "This community has no Beans, so there are no trades to measure.": "このコミュニティには豆がないため、測る取引はありません。",
   "{n} day|{n} days": {
     "other": "{n}日"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "「目安」は真ん中の人の値で、半数はこれより早く、半数は遅い人です。",
+  "The wait for a first trade counts only people who listed before they traded.": "初めての取引までの待ち時間は、取引より先に投稿した人だけを数えます。",
+  "A typical time needs at least {n} people, or it shows as too few.": "目安の表示には {n} 人以上が必要です。それ未満は「少なすぎる」と表示します。",
+  "First trades go up in steps of {n}, so the number never points at one person.": "初めての取引は {n} 件単位で増えるため、数字が特定の人を指すことはありません。"
 }

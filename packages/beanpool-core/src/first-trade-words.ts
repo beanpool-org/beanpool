@@ -7,8 +7,10 @@ import { word, wordn } from './words.js';
 export const FIRST_TRADE_WORDS = {
     title: word('From joining to a first trade'),
     intro: word("How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person."),
-    typical: word('Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.'),
-    smallGroups: word('Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.'),
+    typical: word('Typical means the middle person: half were quicker, half slower.'),
+    smallGroup: word('A typical time needs at least {n} people, or it shows as too few.'),
+    listedFirst: word('The wait for a first trade counts only people who listed before they traded.'),
+    steps: word('First trades go up in steps of {n}, so the number never points at one person.'),
     last90Days: word('Last 90 days'),
     allTime: word('All time'),
     joined: word('Joined'),

@@ -13,7 +13,8 @@
  *    taking it out would move the numbers on the day it closed, which says what that person had reached.
  *  - A re-keyed member is one person: key-move.ts moves the row, its listings and its deals to the new key.
  *
- * A first listing: the earliest Offer or Need the member made here by their own hand. An event or a poll isn't a listing.
+ * A first listing: the earliest Offer or Need the member made here by their own hand, on the Market for everyone. An event or a
+ * poll isn't a listing. One shown only to a group or to one person doesn't count: it is why `firstListing` can be exact, below.
  *  - A copy of a listing from elsewhere isn't one: not one held from a peer (origin_node), and not a member's copy on the
  *    global community (shown_from_host, set even on a copy its owner deleted).
  *  - An enterprise's listing is the listing of the keeper who made it (created_by): that keeper's own first step. The
@@ -33,8 +34,8 @@
  * count and not in this median: their wait wasn't for a buyer.
  *
  * What small numbers would give away, and what this does about it. Owners and admins already see who joined and when, and
- * every member sees every listing, so `joined` and `firstListing` are exact: they tell nobody anything new. A trade is
- * different: "Admins never see anyone's trades".
+ * every member sees every public listing, so `joined` and `firstListing` are exact: they tell nobody anything new. A trade
+ * is different: "Admins never see anyone's trades".
  *  - No median of fewer than FIRST_TRADE_MIN_GROUP people, ever: "1 member, 3 days" is a person.
  *  - The first-trade count is shown in steps of 5, rounded down, so fewer than 5 reads the same as none. An exact count that
  *    moved by one would name someone: when one member ages out of the window, whether it falls says whether they had traded,
@@ -89,7 +90,7 @@ interface Tally { joined: number; listed: number; traded: number; toListing: num
 const tally = (): Tally => ({ joined: 0, listed: 0, traded: 0, toListing: [], listingToTrade: [] });
 
 /** A member's own Offer or Need here: see the header. */
-const OWN_LISTING = `p.type IN ('offer', 'need') AND p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.created_via IS NULL`;
+const OWN_LISTING = `p.type IN ('offer', 'need') AND p.audience_scope = 'public' AND p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.created_via IS NULL`;
 const COMPLETED_AT = 'COALESCE(t.completed_at, t.created_at)';
 const KEEPS = (enterprise: string, member: string) => `EXISTS (SELECT 1 FROM treasury_operators o WHERE o.treasury_pubkey = ${enterprise} AND o.member_pubkey = ${member})`;
 

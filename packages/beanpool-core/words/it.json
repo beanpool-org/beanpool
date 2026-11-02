@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ora è l'indirizzo di questa comunità. Dopo questo, i nuovi membri vengono mandati a un altro dei suoi indirizzi, se ne ha uno. Questa comunità smette di pubblicizzare {address} e nessun nome viene ceduto. Finché la sua chiave detiene {address}, le app dei membri che lo usano restano accettate. Se la chiave non lo detiene, dopo questo saranno rifiutate.",
   "From joining to a first trade": "Dall'iscrizione al primo scambio",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Fin dove arrivano i nuovi membri, solo per i proprietari e gli amministratori di questa comunità. Numeri di tutta la comunità: nessun nome e niente su una singola persona.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "Tipico indica la persona a metà: metà è stata più veloce, metà più lenta. L'attesa del primo scambio conta solo chi ha pubblicato prima di scambiare.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "Meno di {n} persone appare come troppo poche. I primi scambi salgono a gruppi di {n}, così il numero non indica mai una persona.",
   "Last 90 days": "Ultimi 90 giorni",
   "All time": "Da sempre",
   "Joined": "Iscritti",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "{n} giorno",
     "other": "{n} giorni"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Tipico indica la persona a metà: metà è stata più veloce, metà più lenta.",
+  "The wait for a first trade counts only people who listed before they traded.": "L'attesa del primo scambio conta solo chi ha pubblicato prima di scambiare.",
+  "A typical time needs at least {n} people, or it shows as too few.": "Un tempo tipico richiede almeno {n} persone, altrimenti appare come troppo pochi.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "I primi scambi salgono a gruppi di {n}, così il numero non indica mai una persona."
 }

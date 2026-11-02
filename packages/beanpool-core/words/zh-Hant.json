@@ -832,8 +832,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它現在是此社群的地址。此後，新成員會被引導到此社群的其他地址（如果有）。此社群不再公布 {address}，也不會放棄任何名稱。只要其金鑰持有 {address}，使用它的成員應用程式仍被接受。如果金鑰不持有它，此後這些應用程式將被拒絕。",
   "From joining to a first trade": "從加入到首次交易",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "新成員走到了哪一步，僅本社群的擁有者和管理員可見。這些是整個社群的數字：沒有姓名，也沒有關於任何一個人的內容。",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "「通常」指排在中間的那個人：一半的人較快，一半的人較慢。等待首次交易的時間只計算在交易前已刊登的人。",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "不足 {n} 人時顯示為人數太少。首次交易按 {n} 遞增，因此這個數字絕不會指向某一個人。",
   "Last 90 days": "最近 90 天",
   "All time": "全部時間",
   "Joined": "已加入",
@@ -848,5 +846,9 @@
   "This community has no Beans, so there are no trades to measure.": "本社群沒有豆子，因此沒有可衡量的交易。",
   "{n} day|{n} days": {
     "other": "{n} 天"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "「通常」指排在中間的那個人：一半的人較快，一半的人較慢。",
+  "The wait for a first trade counts only people who listed before they traded.": "等待首次交易的時間只計算在交易前已刊登的人。",
+  "A typical time needs at least {n} people, or it shows as too few.": "通常時間至少需要 {n} 人，否則顯示為人數太少。",
+  "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 遞增，因此這個數字絕不會指向某一個人。"
 }

@@ -832,8 +832,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Đây hiện là địa chỉ của cộng đồng này. Sau thao tác này, thành viên mới được chuyển đến một địa chỉ khác của cộng đồng, nếu có. Cộng đồng này ngừng quảng bá {address} và không từ bỏ tên nào. Chừng nào khóa của cộng đồng còn giữ {address}, ứng dụng của thành viên dùng địa chỉ này vẫn được chấp nhận. Nếu khóa không giữ nó, chúng sẽ bị từ chối sau thao tác này.",
   "From joining to a first trade": "Từ lúc tham gia đến giao dịch đầu tiên",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Thành viên mới đi được bao xa, chỉ dành cho chủ sở hữu và quản trị viên của cộng đồng này. Số liệu của cả cộng đồng: không có tên và không có gì về một người cụ thể.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "Thông thường nghĩa là người ở giữa: một nửa nhanh hơn, một nửa chậm hơn. Thời gian chờ giao dịch đầu tiên chỉ tính những người đã đăng tin trước khi giao dịch.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "Dưới {n} người sẽ hiện là quá ít. Giao dịch đầu tiên tăng theo từng bước {n}, nên con số không bao giờ chỉ ra một người.",
   "Last 90 days": "90 ngày qua",
   "All time": "Toàn bộ thời gian",
   "Joined": "Đã tham gia",
@@ -848,5 +846,9 @@
   "This community has no Beans, so there are no trades to measure.": "Cộng đồng này không có đậu, nên không có giao dịch nào để đo.",
   "{n} day|{n} days": {
     "other": "{n} ngày"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Thông thường nghĩa là người ở giữa: một nửa nhanh hơn, một nửa chậm hơn.",
+  "The wait for a first trade counts only people who listed before they traded.": "Thời gian chờ giao dịch đầu tiên chỉ tính những người đã đăng tin trước khi giao dịch.",
+  "A typical time needs at least {n} people, or it shows as too few.": "Thời gian thông thường cần ít nhất {n} người, nếu không sẽ hiện là quá ít.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Giao dịch đầu tiên tăng theo từng bước {n}, nên con số không bao giờ chỉ ra một người."
 }

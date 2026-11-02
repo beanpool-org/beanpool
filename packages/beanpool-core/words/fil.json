@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ito na ngayon ang address ng komunidad na ito. Pagkatapos nito, ipapadala ang mga bagong miyembro sa iba pa nitong address, kung mayroon. Ititigil ng komunidad na ito ang pag-advertise sa {address}, at walang pangalang isusuko. Hangga't hawak ng key nito ang {address}, tinatanggap pa rin ang mga app ng miyembro na gumagamit nito. Kung hindi ito hawak ng key, tatanggihan ang mga ito pagkatapos nito.",
   "From joining to a first trade": "Mula sa pagsali hanggang sa unang palitan",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Gaano kalayo ang naaabot ng mga bagong miyembro, para lang sa mga may-ari at admin ng komunidad na ito. Mga bilang ng buong komunidad: walang pangalan, at walang tungkol sa iisang tao.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "Ang karaniwan ay ang taong nasa gitna: mas mabilis ang kalahati, mas mabagal ang kalahati. Ang paghihintay sa unang palitan ay binibilang lang ang mga nag-listing bago nakipagpalitan.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "Kapag wala pang {n} tao, ipinapakitang masyadong kaunti. Tumataas ang mga unang palitan nang tig-{n}, kaya hindi kailanman tumuturo ang bilang sa iisang tao.",
   "Last 90 days": "Huling 90 araw",
   "All time": "Buong panahon",
   "Joined": "Sumali",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "{n} araw",
     "other": "{n} araw"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Ang karaniwan ay ang taong nasa gitna: mas mabilis ang kalahati, mas mabagal ang kalahati.",
+  "The wait for a first trade counts only people who listed before they traded.": "Ang paghihintay sa unang palitan ay binibilang lang ang mga nag-listing bago nakipagpalitan.",
+  "A typical time needs at least {n} people, or it shows as too few.": "Kailangan ng karaniwang tagal ng hindi bababa sa {n} tao, kung hindi ay ipinapakitang masyadong kaunti.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Tumataas ang mga unang palitan nang tig-{n}, kaya hindi kailanman tumuturo ang bilang sa iisang tao."
 }

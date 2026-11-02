@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "ഇത് ഇപ്പോൾ ഈ കമ്മ്യൂണിറ്റിയുടെ വിലാസമാണ്. ഇതിനുശേഷം, പുതിയ അംഗങ്ങളെ അതിന്റെ മറ്റൊരു വിലാസത്തിലേക്ക് അയയ്ക്കും, ഉണ്ടെങ്കിൽ. ഈ കമ്മ്യൂണിറ്റി {address} പരസ്യപ്പെടുത്തുന്നത് നിർത്തുന്നു, ഒരു പേരും വിട്ടുകൊടുക്കുന്നില്ല. അതിന്റെ കീ {address} കൈവശം വയ്ക്കുന്നിടത്തോളം, ഇത് ഉപയോഗിക്കുന്ന അംഗങ്ങളുടെ ആപ്പുകൾ തുടർന്നും സ്വീകരിക്കും. കീ ഇത് കൈവശം വയ്ക്കുന്നില്ലെങ്കിൽ, ഇതിനുശേഷം അവ നിരസിക്കും.",
   "From joining to a first trade": "ചേരുന്നതു മുതൽ ആദ്യ ഇടപാട് വരെ",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "പുതിയ അംഗങ്ങൾ എത്രത്തോളം മുന്നേറുന്നു എന്നത്, ഈ കമ്മ്യൂണിറ്റിയുടെ ഉടമകൾക്കും അഡ്മിൻമാർക്കും മാത്രം. മുഴുവൻ കമ്മ്യൂണിറ്റിയുടെയും കണക്കുകൾ: പേരുകളില്ല, ഒരാളെക്കുറിച്ച് ഒന്നുമില്ല.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "സാധാരണ എന്നാൽ നടുവിലെ വ്യക്തി: പകുതി പേർ വേഗത്തിലും പകുതി പേർ സാവധാനത്തിലും ആയിരുന്നു. ആദ്യ ഇടപാടിനുള്ള കാത്തിരിപ്പ് ഇടപാടിന് മുമ്പ് ലിസ്റ്റ് ചെയ്തവരെ മാത്രമേ കണക്കാക്കൂ.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "{n} പേരിൽ താഴെയാണെങ്കിൽ വളരെ കുറവ് എന്ന് കാണിക്കും. ആദ്യ ഇടപാടുകൾ {n} വീതം ഉയരുന്നു, അതിനാൽ എണ്ണം ഒരിക്കലും ഒരാളെ ചൂണ്ടിക്കാണിക്കില്ല.",
   "Last 90 days": "കഴിഞ്ഞ 90 ദിവസം",
   "All time": "എല്ലാ കാലവും",
   "Joined": "ചേർന്നവർ",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "{n} ദിവസം",
     "other": "{n} ദിവസം"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "സാധാരണ എന്നാൽ നടുവിലെ വ്യക്തി: പകുതി പേർ വേഗത്തിലും പകുതി പേർ സാവധാനത്തിലും ആയിരുന്നു.",
+  "The wait for a first trade counts only people who listed before they traded.": "ആദ്യ ഇടപാടിനുള്ള കാത്തിരിപ്പ് ഇടപാടിന് മുമ്പ് ലിസ്റ്റ് ചെയ്തവരെ മാത്രമേ കണക്കാക്കൂ.",
+  "A typical time needs at least {n} people, or it shows as too few.": "സാധാരണ സമയത്തിന് കുറഞ്ഞത് {n} പേർ വേണം, അല്ലെങ്കിൽ വളരെ കുറവ് എന്ന് കാണിക്കും.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "ആദ്യ ഇടപാടുകൾ {n} വീതം ഉയരുന്നു, അതിനാൽ എണ്ണം ഒരിക്കലും ഒരാളെ ചൂണ്ടിക്കാണിക്കില്ല."
 }

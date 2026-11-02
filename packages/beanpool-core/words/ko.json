@@ -832,8 +832,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "이제 이 커뮤니티의 주소입니다. 이후 새 회원은 다른 주소가 있으면 그 주소로 안내됩니다. 이 커뮤니티는 {address} 홍보를 중단하며 어떤 이름도 포기하지 않습니다. 키가 {address}을(를) 보유하는 동안에는 이를 사용하는 회원 앱이 계속 허용됩니다. 키가 보유하지 않으면 이후 거부됩니다.",
   "From joining to a first trade": "가입부터 첫 거래까지",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "새 멤버가 어디까지 왔는지 보여 줘요. 이 커뮤니티의 소유자와 관리자만 볼 수 있어요. 커뮤니티 전체 숫자이며, 이름도 한 사람에 대한 내용도 없어요.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "보통은 가운데 사람을 뜻해요. 절반은 더 빨랐고 절반은 더 느렸어요. 첫 거래까지의 대기 시간은 거래 전에 게시물을 올린 사람만 세요.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "{n}명 미만이면 너무 적다고 표시해요. 첫 거래는 {n}건 단위로 늘어나서 숫자가 한 사람을 가리키지 않아요.",
   "Last 90 days": "최근 90일",
   "All time": "전체 기간",
   "Joined": "가입",
@@ -848,5 +846,9 @@
   "This community has no Beans, so there are no trades to measure.": "이 커뮤니티에는 콩이 없어서 측정할 거래가 없어요.",
   "{n} day|{n} days": {
     "other": "{n}일"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "보통은 가운데 사람을 뜻해요. 절반은 더 빨랐고 절반은 더 느렸어요.",
+  "The wait for a first trade counts only people who listed before they traded.": "첫 거래까지의 대기 시간은 거래 전에 게시물을 올린 사람만 세요.",
+  "A typical time needs at least {n} people, or it shows as too few.": "보통 시간은 {n}명 이상이어야 하며, 그보다 적으면 너무 적다고 표시해요.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "첫 거래는 {n}건 단위로 늘어나서 숫자가 한 사람을 가리키지 않아요."
 }

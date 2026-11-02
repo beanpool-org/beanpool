@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Sasa ni anwani ya jumuiya hii. Baada ya hili, wanachama wapya wanatumwa kwenye anwani yake nyingine, ikiwa ipo. Jumuiya hii inaacha kutangaza {address}, na hakuna jina linaloachwa. Maadamu ufunguo wake unashikilia {address}, programu za wanachama zinazolitumia zinaendelea kukubaliwa. Ikiwa ufunguo haulishikilii, zitakataliwa baada ya hili.",
   "From joining to a first trade": "Kutoka kujiunga hadi biashara ya kwanza",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Wanachama wapya wanafika umbali gani, kwa wamiliki na wasimamizi wa jumuiya hii tu. Takwimu za jumuiya nzima: hakuna majina, na hakuna chochote kuhusu mtu mmoja.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "Kawaida inamaanisha mtu wa katikati: nusu walikuwa haraka zaidi, nusu polepole zaidi. Kusubiri biashara ya kwanza kunahesabu tu watu walioweka tangazo kabla ya kufanya biashara.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "Chini ya watu {n} huonyeshwa kama wachache mno. Biashara za kwanza hupanda kwa hatua za {n}, ili nambari isimwonyeshe mtu mmoja kamwe.",
   "Last 90 days": "Siku 90 zilizopita",
   "All time": "Muda wote",
   "Joined": "Walijiunga",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "siku {n}",
     "other": "siku {n}"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Kawaida inamaanisha mtu wa katikati: nusu walikuwa haraka zaidi, nusu polepole zaidi.",
+  "The wait for a first trade counts only people who listed before they traded.": "Kusubiri biashara ya kwanza kunahesabu tu watu walioweka tangazo kabla ya kufanya biashara.",
+  "A typical time needs at least {n} people, or it shows as too few.": "Muda wa kawaida unahitaji angalau watu {n}, la sivyo huonyeshwa kama wachache mno.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "Biashara za kwanza hupanda kwa hatua za {n}, ili nambari isimwonyeshe mtu mmoja kamwe."
 }

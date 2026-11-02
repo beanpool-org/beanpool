@@ -870,8 +870,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "اب یہ اس کمیونٹی کا پتہ ہے۔ اس کے بعد نئے اراکین کو اس کے کسی اور پتے پر بھیجا جاتا ہے، اگر کوئی ہو۔ یہ کمیونٹی {address} کی تشہیر بند کرتی ہے، اور کوئی نام نہیں چھوڑا جاتا۔ جب تک اس کی کلید کے پاس {address} ہے، اسے استعمال کرنے والی اراکین کی ایپس قبول ہوتی رہیں گی۔ اگر کلید کے پاس یہ نہیں ہے تو اس کے بعد انہیں مسترد کر دیا جائے گا۔",
   "From joining to a first trade": "شامل ہونے سے پہلے تبادلے تک",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "نئے ارکان کہاں تک پہنچتے ہیں، صرف اس کمیونٹی کے مالکان اور ایڈمنز کے لیے۔ پوری کمیونٹی کے اعداد: کوئی نام نہیں، اور کسی ایک شخص کے بارے میں کچھ نہیں۔",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "عام کا مطلب درمیان والا شخص ہے: آدھے زیادہ تیز تھے، آدھے زیادہ سست۔ پہلے تبادلے کے انتظار میں صرف وہ لوگ گنے جاتے ہیں جنہوں نے تبادلے سے پہلے لسٹنگ کی۔",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "{n} سے کم لوگ بہت کم کے طور پر دکھائے جاتے ہیں۔ پہلے تبادلے {n} کے قدموں میں بڑھتے ہیں، تاکہ عدد کبھی کسی ایک شخص کی طرف اشارہ نہ کرے۔",
   "Last 90 days": "پچھلے 90 دن",
   "All time": "اب تک",
   "Joined": "شامل ہوئے",
@@ -887,5 +885,9 @@
   "{n} day|{n} days": {
     "one": "{n} دن",
     "other": "{n} دن"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "عام کا مطلب درمیان والا شخص ہے: آدھے زیادہ تیز تھے، آدھے زیادہ سست۔",
+  "The wait for a first trade counts only people who listed before they traded.": "پہلے تبادلے کے انتظار میں صرف وہ لوگ گنے جاتے ہیں جنہوں نے تبادلے سے پہلے لسٹنگ کی۔",
+  "A typical time needs at least {n} people, or it shows as too few.": "عام وقت کے لیے کم از کم {n} لوگ درکار ہیں، ورنہ یہ بہت کم کے طور پر دکھایا جاتا ہے۔",
+  "First trades go up in steps of {n}, so the number never points at one person.": "پہلے تبادلے {n} کے قدموں میں بڑھتے ہیں، تاکہ عدد کبھی کسی ایک شخص کی طرف اشارہ نہ کرے۔"
 }

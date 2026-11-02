@@ -1022,8 +1022,6 @@
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "إنه عنوان هذا المجتمع الآن. بعد ذلك، يُرسل الأعضاء الجدد إلى عنوان آخر من عناوينه، إن وجد. يتوقف هذا المجتمع عن الإعلان عن {address}، ولا يتم التخلي عن أي اسم. ما دام مفتاحه يحتفظ بـ {address}، تظل تطبيقات الأعضاء التي تستخدمه مقبولة. وإذا لم يكن المفتاح يحتفظ به، فسيتم رفضها بعد ذلك.",
   "From joining to a first trade": "من الانضمام إلى أول صفقة",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "إلى أي مدى يصل الأعضاء الجدد، لمالكي هذا المجتمع ومشرفيه فقط. أرقام على مستوى المجتمع كله: بلا أسماء، ولا شيء عن شخص بعينه.",
-  "Typical means the middle person: half were quicker, half slower. The wait for a first trade counts only people who listed before they traded.": "«المعتاد» يعني الشخص في المنتصف: نصفهم كان أسرع ونصفهم أبطأ. انتظار أول صفقة يشمل فقط من نشروا قائمة قبل أن يتبادلوا.",
-  "Fewer than {n} people shows as too few. First trades go up in steps of {n}, so the number never points at one person.": "أقل من {n} أشخاص يظهر كعدد قليل جدًا. تزيد الصفقات الأولى بخطوات من {n}، فلا يشير الرقم أبدًا إلى شخص واحد.",
   "Last 90 days": "آخر 90 يومًا",
   "All time": "كل الوقت",
   "Joined": "انضموا",
@@ -1043,5 +1041,9 @@
     "few": "{n} أيام",
     "many": "{n} يومًا",
     "other": "{n} يوم"
-  }
+  },
+  "Typical means the middle person: half were quicker, half slower.": "«المعتاد» يعني الشخص في المنتصف: نصفهم كان أسرع ونصفهم أبطأ.",
+  "The wait for a first trade counts only people who listed before they traded.": "انتظار أول صفقة يشمل فقط من نشروا قائمة قبل أن يتبادلوا.",
+  "A typical time needs at least {n} people, or it shows as too few.": "يحتاج الوقت المعتاد إلى {n} أشخاص على الأقل، وإلا يظهر كعدد قليل جدًا.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "تزيد الصفقات الأولى بخطوات من {n}، فلا يشير الرقم أبدًا إلى شخص واحد."
 }

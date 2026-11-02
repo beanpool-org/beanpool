@@ -3,7 +3,7 @@
  * middleware where a reader's role matters. Counts and medians only, of the whole community.
  *
  *   1. who counts: visitors, enterprises and the genesis operator don't; departed and closed accounts do
- *   2. what a first listing is: an Offer or Need of their own; not an event, a poll, a copy, or an assistant's; a keeper's
+ *   2. what a first listing is: a public Offer or Need of their own; not an event, a poll, a copy, or an assistant's; a keeper's
  *      enterprise listing is theirs; a cancelled one still counts
  *   3. what a first trade is: a finished deal; a cancelled, rejected, refunded or open one isn't; nor one with an enterprise
  *      they keep; a sale of a keeper's enterprise listing is
@@ -58,11 +58,11 @@ function addMember(joinedDaysAgo: number, opts: { status?: string; visitor?: boo
     return pk;
 }
 
-function addPost(author: string, daysAgo: number, opts: { type?: string; originNode?: string; shownFrom?: string; createdVia?: string; createdBy?: string; status?: string } = {}): string {
+function addPost(author: string, daysAgo: number, opts: { type?: string; originNode?: string; shownFrom?: string; createdVia?: string; createdBy?: string; status?: string; audience?: string } = {}): string {
     const id = `post-${++n}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, created_by)
-                VALUES (?, ?, 'general', ?, '', 5, ?, ?, ?, 1, ?, ?, ?, ?)`)
-        .run(id, opts.type ?? 'offer', id, author, ago(daysAgo), opts.status ?? 'active', opts.originNode ?? null, opts.shownFrom ?? null, opts.createdVia ?? null, opts.createdBy ?? null);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, created_by, audience_scope)
+                VALUES (?, ?, 'general', ?, '', 5, ?, ?, ?, 1, ?, ?, ?, ?, ?)`)
+        .run(id, opts.type ?? 'offer', id, author, ago(daysAgo), opts.status ?? 'active', opts.originNode ?? null, opts.shownFrom ?? null, opts.createdVia ?? null, opts.createdBy ?? null, opts.audience ?? 'public');
     return id;
 }
 
@@ -156,6 +156,9 @@ async function main(): Promise<void> {
     assert(all().firstListing === 0, `a listing held from a peer isn't either (${all().firstListing})`);
     const assistantOnly = addMember(10); addPost(assistantOnly, 9, { createdVia: 'assistant:grant-1' });
     assert(all().firstListing === 0, `a listing an owner's assistant made doesn't count as a person's first listing (${all().firstListing})`);
+    const groupOnly = addMember(10); addPost(groupOnly, 9, { audience: 'group' });
+    const directOnly = addMember(10); addPost(directOnly, 9, { audience: 'direct' });
+    assert(all().firstListing === 0, `a listing only a group or one person can see doesn't count: the count is exact because a listing is public (${all().firstListing})`);
     const offerer = addMember(10); addPost(offerer, 9);
     const needer = addMember(10); addPost(needer, 9, { type: 'need' });
     assert(all().firstListing === 2, `an Offer and a Need do (${all().firstListing})`);
@@ -169,7 +172,7 @@ async function main(): Promise<void> {
     addPost(enterprise, 9, { createdBy: keeperByAssistant, createdVia: 'assistant:grant-1' });
     assert(all().firstListing === 4, `one an assistant made for an enterprise isn't (${all().firstListing})`);
     const elsewhere = firstTradeFunnel(NOW);
-    assert(elsewhere.allTime.joined === 11, `and the enterprise itself isn't a member in the numbers: eleven people here, no twelfth (${elsewhere.allTime.joined})`);
+    assert(elsewhere.allTime.joined === 13, `and the enterprise itself isn't a member in the numbers: thirteen people here, no fourteenth (${elsewhere.allTime.joined})`);
 
     // ── 3. what a first trade is ──────────────────────────────────────────────────────────────────
     console.log('── 3. what a first trade is ──');

@@ -565,7 +565,7 @@ export interface PackHeight {
     flips: number;
 }
 
-/** Quicker than a person can open and close a card, and slower than a re-pack on an old tablet. */
+/** Quicker than a person opens and closes a card; the loop itself turned every 33 ms in Chromium (PR #2748). */
 export const HOME_PACK_FLIP_MS = 250;
 /** Turns before a card counts as going round. */
 export const HOME_PACK_MAX_FLIPS = 4;

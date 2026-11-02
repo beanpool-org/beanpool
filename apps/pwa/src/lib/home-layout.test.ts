@@ -579,6 +579,14 @@ describe('settleHeights: a height that keeps turning back stops moving the cards
         expect(report(was, 300, 400).tips.height).toBe(300);
     });
 
+    it('growing lands even on the turn past the limit: after a slow shrink, that turn is a rise', () => {
+        let was = settleHeights({}, { tips: 140 }, 0);
+        was = report(was, 100, 1000);
+        [140, 100, 140, 100, 140].forEach((h, i) => { was = report(was, h, 1016 + i * 16); });
+        expect(was.tips.flips).toBeGreaterThan(HOME_PACK_MAX_FLIPS);
+        expect(was.tips.height).toBe(140);
+    });
+
     it('a held card lets go once it has been still: the shrink that comes after lands', () => {
         let was = settleHeights({}, { tips: 100 }, 0);
         for (let i = 1; i <= 20; i += 1) was = report(was, i % 2 ? 140 : 100, i * 16);

@@ -54,7 +54,7 @@ export function MonthGrid({
             color: colors.text.heading,
         },
         navArrowDisabled: {
-            color: colors.text.disabled,
+            color: colors.text.muted,
             opacity: 0.35,
         },
         monthHeading: {
@@ -116,7 +116,7 @@ export function MonthGrid({
             color: colors.text.heading,
         },
         dayPast: {
-            color: colors.text.disabled,
+            color: colors.text.muted,
             opacity: 0.4,
         },
         dayHighlighted: {
@@ -249,8 +249,7 @@ export function MonthGrid({
                                     return <View key={`pad-${wIdx}-${cIdx}`} style={styles.dayCellEmpty} />;
                                 }
                                 const isSelected = cell.date === selectedDate;
-                                const baseLabel = calendarDayHeading(cell.date, cell.eventCount);
-                                const a11yLabel = cell.isToday ? `${baseLabel}, ${t('Today')}` : baseLabel;
+                                const a11yLabel = calendarDayHeading(cell.date, cell.eventCount);
 
                                 return (
                                     <Pressable

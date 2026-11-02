@@ -50,11 +50,18 @@ export default function CalendarScreen() {
             backgroundColor: colors.surface.chrome,
         },
         backButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
             minWidth: 44,
             minHeight: 44,
             paddingHorizontal: 8,
-            alignItems: 'center',
-            justifyContent: 'center',
+            gap: 4,
+        },
+        backButtonArrow: {
+            fontSize: 22,
+            fontWeight: '600',
+            color: colors.brand.primary,
+            marginTop: -2,
         },
         backButtonText: {
             fontSize: 16,
@@ -167,7 +174,8 @@ export default function CalendarScreen() {
                     onPress={handleGoBack}
                     style={styles.backButton}
                 >
-                    <Text style={styles.backButtonText}>‹ {t('Map', undefined, 'tab')}</Text>
+                    <Text style={styles.backButtonArrow}>‹</Text>
+                    <Text style={styles.backButtonText}>{t('Map', undefined, 'tab')}</Text>
                 </Pressable>
                 <Text style={styles.title} accessibilityRole="header">
                     {calendarTitle()}

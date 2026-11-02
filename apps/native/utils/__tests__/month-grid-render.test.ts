@@ -101,7 +101,7 @@ describe('MonthGrid component', () => {
                     onSelectDate,
                     onPrevMonth,
                     onNextMonth,
-                })
+                }) as any
             );
         });
 
@@ -169,7 +169,7 @@ describe('MonthGrid component', () => {
                     onPrevMonth: vi.fn(),
                     onNextMonth: vi.fn(),
                     onJumpToDate,
-                })
+                }) as any
             );
         });
 
@@ -204,7 +204,7 @@ describe('MonthGrid component', () => {
                     onPrevMonth: vi.fn(),
                     onNextMonth: vi.fn(),
                     onStartEvent,
-                })
+                }) as any
             );
         });
 

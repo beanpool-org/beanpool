@@ -100,7 +100,7 @@ describe('CalendarScreen route component', () => {
 
     it('navigates back to map on back button tap', async () => {
         await act(async () => {
-            root.render(createElement(CalendarScreen));
+            root.render(createElement(CalendarScreen) as any);
         });
 
         const backBtn = container.querySelector('[data-testid="calendar-back"]') as HTMLButtonElement;
@@ -158,7 +158,7 @@ describe('CalendarScreen route component', () => {
         ];
 
         await act(async () => {
-            root.render(createElement(CalendarScreen));
+            root.render(createElement(CalendarScreen) as any);
         });
 
         // MapStackList should be open for date1
@@ -191,7 +191,7 @@ describe('CalendarScreen route component', () => {
         fakeDb.events = [];
 
         await act(async () => {
-            root.render(createElement(CalendarScreen));
+            root.render(createElement(CalendarScreen) as any);
         });
 
         const startBtn = container.querySelector('[data-testid="month-start-event"]') as HTMLButtonElement;

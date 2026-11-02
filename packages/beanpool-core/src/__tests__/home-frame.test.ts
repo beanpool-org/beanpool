@@ -477,7 +477,7 @@ describe('card hues (S1, scratch/fable-design/DESIGN-home-look-fable.md §2.2)',
         expect(homeCardHue({ type: 'unknown-type' })).toBe('sage');
         expect(homeCardHue(undefined)).toBe('sage');
         expect(homeCardHue(null)).toBe('sage');
-        expect(homeCardHue({} as any)).toBe('sage');
+        expect(homeCardHue({} as unknown as { type: string })).toBe('sage');
     });
 });
 

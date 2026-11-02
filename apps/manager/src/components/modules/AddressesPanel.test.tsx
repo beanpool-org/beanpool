@@ -1003,7 +1003,8 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         render(<AddressesPanel activeNode={mockActiveNode} />);
         fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
         expect(await screen.findByRole('alert')).toHaveTextContent('The address service failed.');
-        expect(scroll).toHaveBeenCalled();
+        // The scroll is a useEffect: it runs on a turn after the commit findByRole saw, and a spent scheduler slice puts this line between them.
+        await waitFor(() => expect(scroll).toHaveBeenCalled());
         delete (Element.prototype as Partial<Element>).scrollIntoView;
     });
 

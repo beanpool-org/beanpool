@@ -867,5 +867,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} bado si anwani kuu: huduma ya anwani inasema {status}. Seva hii imehamia huko na inaendelea kuiomba, kwa hiyo paneli iliyo chini sasa inaionyesha.",
   "No public address currently assigned. An owner of this community can add one.": "Hakuna anwani ya umma iliyowekwa kwa sasa. Mmiliki wa jumuiya hii anaweza kuongeza moja.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} bado si anwani kuu: huduma ya anwani inasema {status}. Seva hii imehamia huko na inaendelea kuiomba, kwa hiyo paneli iliyo chini sasa inaionyesha. Wanachama bado wanafikia jumuiya hii kupitia {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Sasa ni anwani ya jumuiya hii. Baada ya hili, wanachama wapya wanatumwa kwenye anwani yake nyingine, ikiwa ipo. Jumuiya hii inaacha kutangaza {address}, na hakuna jina linaloachwa. Maadamu ufunguo wake unashikilia {address}, programu za wanachama zinazolitumia zinaendelea kukubaliwa. Ikiwa ufunguo haulishikilii, zitakataliwa baada ya hili."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Sasa ni anwani ya jumuiya hii. Baada ya hili, wanachama wapya wanatumwa kwenye anwani yake nyingine, ikiwa ipo. Jumuiya hii inaacha kutangaza {address}, na hakuna jina linaloachwa. Maadamu ufunguo wake unashikilia {address}, programu za wanachama zinazolitumia zinaendelea kukubaliwa. Ikiwa ufunguo haulishikilii, zitakataliwa baada ya hili.",
+  "Your answer": "Jibu lako",
+  "Don't put your name": "Usiandike jina lako",
+  "Send my answer": "Tuma jibu langu",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Jibu lako ni la mwisho: hakuna kinachokiunganisha nawe, kwa hivyo haliwezi kubadilishwa.",
+  "You have answered this poll.": "Umejibu kura hii.",
+  "Offer \"Other\" with a typed answer": "Toa \"Nyingine\" yenye jibu la kuandika",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Wanachama wanaweza kuandika jibu lao. Kila mtu huona wangapi walichagua Nyingine; ni wewe na wamiliki wa jumuiya pekee mnaosoma maneno.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Katika kura isiyotaja jina kila jibu ni la mwisho, na maneno huonekana kura inapofungwa.",
+  "Read the typed answers": "Soma majibu yaliyoandikwa",
+  "The typed answers show here once the poll closes.": "Majibu yaliyoandikwa yataonekana hapa kura itakapofungwa.",
+  "No typed answers to read.": "Hakuna majibu yaliyoandikwa ya kusoma.",
+  "Only the poll's maker and the owners can read these.": "Ni muundaji wa kura na wamiliki pekee wanaoweza kuyasoma.",
+  "Report": "Ripoti",
+  "Reported": "Imeripotiwa",
+  "Cancel": "Ghairi",
+  "The typed answers could not be read.": "Majibu yaliyoandikwa hayakuweza kusomwa.",
+  "Remove this typed answer? The vote still counts.": "Ondoa jibu hili lililoandikwa? Kura bado inahesabiwa."
 }

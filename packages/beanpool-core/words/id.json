@@ -829,5 +829,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} belum menjadi alamat utama: layanan alamat mengatakan {status}. Server ini telah berpindah ke sana dan terus memintanya, sehingga panel di bawah kini menampilkannya.",
   "No public address currently assigned. An owner of this community can add one.": "Belum ada alamat publik yang ditetapkan. Pemilik komunitas ini dapat menambahkannya.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} belum menjadi alamat utama: layanan alamat mengatakan {status}. Server ini telah berpindah ke sana dan terus memintanya, sehingga panel di bawah kini menampilkannya. Anggota masih menjangkau komunitas ini di {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ini sekarang alamat komunitas ini. Setelah ini, anggota baru dikirim ke alamat lainnya, jika ada. Komunitas ini berhenti mengiklankan {address}, dan tidak ada nama yang dilepaskan. Selama kuncinya memegang {address}, aplikasi anggota yang memakainya tetap diterima. Jika kunci tidak memegangnya, aplikasi itu akan ditolak setelah ini."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ini sekarang alamat komunitas ini. Setelah ini, anggota baru dikirim ke alamat lainnya, jika ada. Komunitas ini berhenti mengiklankan {address}, dan tidak ada nama yang dilepaskan. Selama kuncinya memegang {address}, aplikasi anggota yang memakainya tetap diterima. Jika kunci tidak memegangnya, aplikasi itu akan ditolak setelah ini.",
+  "Your answer": "Jawaban Anda",
+  "Don't put your name": "Jangan tulis nama Anda",
+  "Send my answer": "Kirim jawaban saya",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Jawaban Anda bersifat final: tidak ada yang menautkannya dengan Anda, jadi tidak bisa diubah.",
+  "You have answered this poll.": "Anda sudah menjawab jajak pendapat ini.",
+  "Offer \"Other\" with a typed answer": "Tawarkan \"Lainnya\" dengan jawaban tertulis",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Anggota dapat menulis jawaban sendiri. Semua orang melihat berapa yang memilih Lainnya; hanya Anda dan pemilik komunitas yang membaca kata-katanya.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Pada jajak pendapat anonim setiap jawaban bersifat final, dan kata-katanya muncul setelah jajak pendapat ditutup.",
+  "Read the typed answers": "Baca jawaban tertulis",
+  "The typed answers show here once the poll closes.": "Jawaban tertulis muncul di sini setelah jajak pendapat ditutup.",
+  "No typed answers to read.": "Tidak ada jawaban tertulis untuk dibaca.",
+  "Only the poll's maker and the owners can read these.": "Hanya pembuat jajak pendapat dan pemilik yang dapat membacanya.",
+  "Report": "Laporkan",
+  "Reported": "Dilaporkan",
+  "Cancel": "Batal",
+  "The typed answers could not be read.": "Jawaban tertulis tidak dapat dibaca.",
+  "Remove this typed answer? The vote still counts.": "Hapus jawaban tertulis ini? Suaranya tetap dihitung."
 }

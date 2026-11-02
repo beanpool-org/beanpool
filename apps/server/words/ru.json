@@ -7,10 +7,21 @@
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
   },
+  "A typed answer is at most {n} characters": "Написанный ответ — не более {n} символов",
   "Add a photo first": "Сначала добавьте фото",
+  "Failed to read the typed answers": "Не удалось прочитать написанные ответы",
+  "Failed to remove the typed answer": "Не удалось удалить написанный ответ",
+  "Failed to report the typed answer": "Не удалось пожаловаться на написанный ответ",
+  "Only Other takes a typed answer": "Только «Другое» принимает написанный ответ",
   "Only a pending message request can be cancelled.": "Можно отменить только ожидающий запрос сообщения.",
+  "Only an owner can remove a typed answer": "Удалить написанный ответ может только владелец",
   "Only the person who sent a message request can cancel it.": "Только отправитель запроса сообщения может отменить его.",
+  "Only the poll's maker and the owners can read its typed answers": "Написанные ответы могут читать только автор опроса и владельцы",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Отправьте conversationId, чат, и decision, 'accept', 'ignore' или 'cancel'.",
+  "That typed answer is not here": "Этого написанного ответа здесь нет",
   "This community has a new address": "У этого сообщества новый адрес",
-  "This community is also at {address}. The old address keeps working.": "Это сообщество теперь доступно и по адресу {address}. Старый адрес продолжает работать."
+  "This community is also at {address}. The old address keeps working.": "Это сообщество теперь доступно и по адресу {address}. Старый адрес продолжает работать.",
+  "This poll already offers Other: leave it out of the answers": "В этом опросе уже есть «Другое»: уберите его из ответов",
+  "To answer Other, type your answer. If there is nowhere to type, update the app.": "Чтобы выбрать «Другое», напишите свой ответ. Если писать негде, обновите приложение.",
+  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Вы уже ответили на этот опрос, и ничто не связывает ваш ответ с вами, поэтому его нельзя изменить."
 }

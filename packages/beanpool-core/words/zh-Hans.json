@@ -829,5 +829,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} 还不是主地址：地址服务的回答是 {status}。此服务器已转到它并继续请求，因此下方面板现在显示它。",
   "No public address currently assigned. An owner of this community can add one.": "目前未分配公开地址。此社区的所有者可以添加一个。",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} 还不是主地址：地址服务的回答是 {status}。此服务器已转到它并继续请求，因此下方面板现在显示它。成员仍可通过 {current} 访问此社区。",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它现在是此社区的地址。此后，新成员会被引导到此社区的其他地址（如果有）。此社区不再公布 {address}，也不会放弃任何名称。只要其密钥持有 {address}，使用它的成员应用仍被接受。如果密钥不持有它，此后这些应用将被拒绝。"
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它现在是此社区的地址。此后，新成员会被引导到此社区的其他地址（如果有）。此社区不再公布 {address}，也不会放弃任何名称。只要其密钥持有 {address}，使用它的成员应用仍被接受。如果密钥不持有它，此后这些应用将被拒绝。",
+  "Your answer": "你的回答",
+  "Don't put your name": "不要写你的名字",
+  "Send my answer": "发送我的回答",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "你的回答是最终的：没有任何信息把它与你关联，因此无法更改。",
+  "You have answered this poll.": "你已回答此投票。",
+  "Offer \"Other\" with a typed answer": "提供可填写的“其他”选项",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "成员可以写下自己的回答。所有人都能看到选择“其他”的人数；只有你和社区所有者能读到内容。",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "在匿名投票中，每个回答都是最终的，内容会在投票结束后显示。",
+  "Read the typed answers": "查看填写的回答",
+  "The typed answers show here once the poll closes.": "填写的回答将在投票结束后显示在这里。",
+  "No typed answers to read.": "没有可查看的填写回答。",
+  "Only the poll's maker and the owners can read these.": "只有投票发起人和所有者可以查看。",
+  "Report": "举报",
+  "Reported": "已举报",
+  "Cancel": "取消",
+  "The typed answers could not be read.": "无法读取填写的回答。",
+  "Remove this typed answer? The vote still counts.": "要移除这条填写的回答吗？投票仍然计入。"
 }

@@ -829,5 +829,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} はまだメインアドレスではありません。アドレスサービスの回答は {status} です。このサーバーはそちらに移り、要求を続けています。そのため下のパネルにはそのアドレスが表示されます。",
   "No public address currently assigned. An owner of this community can add one.": "公開アドレスはまだ割り当てられていません。このコミュニティのオーナーが追加できます。",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} はまだメインアドレスではありません。アドレスサービスの回答は {status} です。このサーバーはそちらに移り、要求を続けています。そのため下のパネルにはそのアドレスが表示されます。メンバーは引き続き {current} でこのコミュニティにアクセスできます。",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "これは現在このコミュニティのアドレスです。この後、新しいメンバーは別のアドレスがあればそちらに案内されます。このコミュニティは {address} の案内をやめますが、名前は手放しません。鍵が {address} を保持している間は、これを使うメンバーのアプリは引き続き受け入れられます。鍵が保持していない場合、この後は拒否されます。"
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "これは現在このコミュニティのアドレスです。この後、新しいメンバーは別のアドレスがあればそちらに案内されます。このコミュニティは {address} の案内をやめますが、名前は手放しません。鍵が {address} を保持している間は、これを使うメンバーのアプリは引き続き受け入れられます。鍵が保持していない場合、この後は拒否されます。",
+  "Your answer": "あなたの回答",
+  "Don't put your name": "名前を書かないでください",
+  "Send my answer": "回答を送信",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "回答は確定です。あなたと結びつくものが何もないため、変更できません。",
+  "You have answered this poll.": "このアンケートに回答しました。",
+  "Offer \"Other\" with a typed answer": "自由回答の「その他」を用意する",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "メンバーは自分の回答を書けます。「その他」を選んだ人数は全員に見えますが、内容を読めるのはあなたとコミュニティのオーナーだけです。",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "匿名のアンケートでは回答は確定となり、内容はアンケート終了後に表示されます。",
+  "Read the typed answers": "書かれた回答を読む",
+  "The typed answers show here once the poll closes.": "書かれた回答はアンケート終了後にここに表示されます。",
+  "No typed answers to read.": "読める回答はありません。",
+  "Only the poll's maker and the owners can read these.": "読めるのはアンケートの作成者とオーナーだけです。",
+  "Report": "報告",
+  "Reported": "報告済み",
+  "Cancel": "キャンセル",
+  "The typed answers could not be read.": "書かれた回答を読めませんでした。",
+  "Remove this typed answer? The vote still counts.": "この書かれた回答を削除しますか？票は数えられたままです。"
 }

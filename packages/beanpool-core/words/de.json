@@ -882,5 +882,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} ist noch nicht die Hauptadresse: Der Adressdienst sagt {status}. Dieser Server ist dorthin gewechselt und fragt weiter danach, daher zeigt der Bereich unten sie jetzt an.",
   "No public address currently assigned. An owner of this community can add one.": "Derzeit ist keine öffentliche Adresse zugewiesen. Ein Eigentümer dieser Gemeinschaft kann eine hinzufügen.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} ist noch nicht die Hauptadresse: Der Adressdienst sagt {status}. Dieser Server ist dorthin gewechselt und fragt weiter danach, daher zeigt der Bereich unten sie jetzt an. Mitglieder erreichen diese Gemeinschaft weiterhin unter {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Es ist jetzt die Adresse dieser Gemeinschaft. Danach werden neue Mitglieder zu einer anderen ihrer Adressen geschickt, falls sie eine hat. Diese Gemeinschaft bewirbt {address} nicht mehr, und kein Name wird aufgegeben. Solange ihr Schlüssel {address} hält, werden Apps von Mitgliedern, die es nutzen, weiter akzeptiert. Hält der Schlüssel es nicht, werden sie danach abgelehnt."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Es ist jetzt die Adresse dieser Gemeinschaft. Danach werden neue Mitglieder zu einer anderen ihrer Adressen geschickt, falls sie eine hat. Diese Gemeinschaft bewirbt {address} nicht mehr, und kein Name wird aufgegeben. Solange ihr Schlüssel {address} hält, werden Apps von Mitgliedern, die es nutzen, weiter akzeptiert. Hält der Schlüssel es nicht, werden sie danach abgelehnt.",
+  "Your answer": "Deine Antwort",
+  "Don't put your name": "Schreib nicht deinen Namen",
+  "Send my answer": "Meine Antwort senden",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Deine Antwort ist endgültig: Nichts verbindet sie mit dir, darum kann sie nicht geändert werden.",
+  "You have answered this poll.": "Du hast diese Umfrage beantwortet.",
+  "Offer \"Other\" with a typed answer": "„Sonstiges“ mit eigener Antwort anbieten",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Mitglieder können ihre eigene Antwort schreiben. Alle sehen, wie viele Sonstiges gewählt haben; nur du und die Eigentümer der Gemeinschaft lesen die Worte.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Bei einer anonymen Umfrage ist jede Antwort endgültig, und die Worte erscheinen, sobald die Umfrage endet.",
+  "Read the typed answers": "Geschriebene Antworten lesen",
+  "The typed answers show here once the poll closes.": "Die geschriebenen Antworten erscheinen hier, sobald die Umfrage endet.",
+  "No typed answers to read.": "Keine geschriebenen Antworten zum Lesen.",
+  "Only the poll's maker and the owners can read these.": "Nur wer die Umfrage erstellt hat und die Eigentümer können sie lesen.",
+  "Report": "Melden",
+  "Reported": "Gemeldet",
+  "Cancel": "Abbrechen",
+  "The typed answers could not be read.": "Die geschriebenen Antworten konnten nicht gelesen werden.",
+  "Remove this typed answer? The vote still counts.": "Diese geschriebene Antwort entfernen? Die Stimme zählt weiter."
 }

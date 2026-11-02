@@ -829,5 +829,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address}은(는) 아직 기본 주소가 아닙니다. 주소 서비스의 답변: {status}. 이 서버는 그 주소로 옮겨 계속 요청하고 있으므로 아래 패널에 이제 그 주소가 표시됩니다.",
   "No public address currently assigned. An owner of this community can add one.": "현재 지정된 공개 주소가 없습니다. 이 커뮤니티의 소유자가 추가할 수 있습니다.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address}은(는) 아직 기본 주소가 아닙니다. 주소 서비스의 답변: {status}. 이 서버는 그 주소로 옮겨 계속 요청하고 있으므로 아래 패널에 이제 그 주소가 표시됩니다. 회원은 여전히 {current}에서 이 커뮤니티에 접속합니다.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "이제 이 커뮤니티의 주소입니다. 이후 새 회원은 다른 주소가 있으면 그 주소로 안내됩니다. 이 커뮤니티는 {address} 홍보를 중단하며 어떤 이름도 포기하지 않습니다. 키가 {address}을(를) 보유하는 동안에는 이를 사용하는 회원 앱이 계속 허용됩니다. 키가 보유하지 않으면 이후 거부됩니다."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "이제 이 커뮤니티의 주소입니다. 이후 새 회원은 다른 주소가 있으면 그 주소로 안내됩니다. 이 커뮤니티는 {address} 홍보를 중단하며 어떤 이름도 포기하지 않습니다. 키가 {address}을(를) 보유하는 동안에는 이를 사용하는 회원 앱이 계속 허용됩니다. 키가 보유하지 않으면 이후 거부됩니다.",
+  "Your answer": "내 답변",
+  "Don't put your name": "이름을 쓰지 마세요",
+  "Send my answer": "내 답변 보내기",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "답변은 확정입니다. 나와 연결되는 정보가 없어 변경할 수 없습니다.",
+  "You have answered this poll.": "이 투표에 답변했습니다.",
+  "Offer \"Other\" with a typed answer": "직접 쓰는 \"기타\" 답변 제공",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "회원이 직접 답변을 쓸 수 있습니다. 기타를 고른 사람 수는 모두가 보지만, 내용은 나와 커뮤니티 소유자만 읽습니다.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "익명 투표에서는 각 답변이 확정되며, 내용은 투표가 끝나면 표시됩니다.",
+  "Read the typed answers": "작성된 답변 읽기",
+  "The typed answers show here once the poll closes.": "작성된 답변은 투표가 끝나면 여기에 표시됩니다.",
+  "No typed answers to read.": "읽을 작성 답변이 없습니다.",
+  "Only the poll's maker and the owners can read these.": "투표를 만든 사람과 소유자만 읽을 수 있습니다.",
+  "Report": "신고",
+  "Reported": "신고됨",
+  "Cancel": "취소",
+  "The typed answers could not be read.": "작성된 답변을 읽을 수 없습니다.",
+  "Remove this typed answer? The vote still counts.": "이 작성 답변을 삭제할까요? 투표는 그대로 집계됩니다."
 }

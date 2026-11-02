@@ -943,5 +943,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} ще не основна адреса: служба адрес відповідає {status}. Цей сервер перейшов на неї й далі її запитує, тому панель нижче тепер показує її.",
   "No public address currently assigned. An owner of this community can add one.": "Публічну адресу зараз не призначено. Власник цієї спільноти може її додати.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} ще не основна адреса: служба адрес відповідає {status}. Цей сервер перейшов на неї й далі її запитує, тому панель нижче тепер показує її. Учасники й далі потрапляють до цієї спільноти за адресою {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Зараз це адреса цієї спільноти. Після цього нових учасників скеровуватимуть на іншу її адресу, якщо вона є. Ця спільнота припиняє оголошувати {address}, і жодне ім'я не віддається. Поки її ключ тримає {address}, застосунки учасників, які його використовують, і далі приймаються. Якщо ключ його не тримає, після цього вони відхилятимуться."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Зараз це адреса цієї спільноти. Після цього нових учасників скеровуватимуть на іншу її адресу, якщо вона є. Ця спільнота припиняє оголошувати {address}, і жодне ім'я не віддається. Поки її ключ тримає {address}, застосунки учасників, які його використовують, і далі приймаються. Якщо ключ його не тримає, після цього вони відхилятимуться.",
+  "Your answer": "Ваша відповідь",
+  "Don't put your name": "Не вказуйте своє ім'я",
+  "Send my answer": "Надіслати мою відповідь",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Ваша відповідь остаточна: ніщо не пов'язує її з вами, тому її не можна змінити.",
+  "You have answered this poll.": "Ви відповіли на це опитування.",
+  "Offer \"Other\" with a typed answer": "Запропонувати «Інше» з власною відповіддю",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Учасники можуть написати власну відповідь. Усі бачать, скільки людей обрали «Інше»; слова читаєте лише ви та власники спільноти.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "В анонімному опитуванні кожна відповідь остаточна, а слова з'являться, коли опитування закриється.",
+  "Read the typed answers": "Читати написані відповіді",
+  "The typed answers show here once the poll closes.": "Написані відповіді з'являться тут, коли опитування закриється.",
+  "No typed answers to read.": "Написаних відповідей немає.",
+  "Only the poll's maker and the owners can read these.": "Читати їх можуть лише автор опитування та власники.",
+  "Report": "Поскаржитися",
+  "Reported": "Скаргу надіслано",
+  "Cancel": "Скасувати",
+  "The typed answers could not be read.": "Не вдалося прочитати написані відповіді.",
+  "Remove this typed answer? The vote still counts.": "Видалити цю написану відповідь? Голос усе одно враховується."
 }

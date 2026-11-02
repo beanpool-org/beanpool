@@ -867,5 +867,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} இன்னும் முதன்மை முகவரி அல்ல: முகவரி சேவை {status} என்று கூறுகிறது. இந்த சேவையகம் அதற்கு மாறி அதைத் தொடர்ந்து கேட்கிறது, எனவே கீழே உள்ள பலகம் இப்போது அதைக் காட்டுகிறது.",
   "No public address currently assigned. An owner of this community can add one.": "தற்போது பொது முகவரி எதுவும் ஒதுக்கப்படவில்லை. இந்த சமூகத்தின் உரிமையாளர் ஒன்றைச் சேர்க்கலாம்.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} இன்னும் முதன்மை முகவரி அல்ல: முகவரி சேவை {status} என்று கூறுகிறது. இந்த சேவையகம் அதற்கு மாறி அதைத் தொடர்ந்து கேட்கிறது, எனவே கீழே உள்ள பலகம் இப்போது அதைக் காட்டுகிறது. உறுப்பினர்கள் இன்னும் {current} இல் இந்த சமூகத்தை அடைகிறார்கள்.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "இது இப்போது இந்த சமூகத்தின் முகவரி. இதன் பிறகு, புதிய உறுப்பினர்கள் அதன் மற்றொரு முகவரிக்கு அனுப்பப்படுவார்கள், இருந்தால். இந்த சமூகம் {address} ஐ விளம்பரப்படுத்துவதை நிறுத்துகிறது, எந்தப் பெயரும் விட்டுக்கொடுக்கப்படவில்லை. அதன் விசை {address} ஐ வைத்திருக்கும் வரை, இதைப் பயன்படுத்தும் உறுப்பினர்களின் பயன்பாடுகள் தொடர்ந்து ஏற்கப்படும். விசை இதை வைத்திருக்கவில்லை என்றால், இதன் பிறகு அவை நிராகரிக்கப்படும்."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "இது இப்போது இந்த சமூகத்தின் முகவரி. இதன் பிறகு, புதிய உறுப்பினர்கள் அதன் மற்றொரு முகவரிக்கு அனுப்பப்படுவார்கள், இருந்தால். இந்த சமூகம் {address} ஐ விளம்பரப்படுத்துவதை நிறுத்துகிறது, எந்தப் பெயரும் விட்டுக்கொடுக்கப்படவில்லை. அதன் விசை {address} ஐ வைத்திருக்கும் வரை, இதைப் பயன்படுத்தும் உறுப்பினர்களின் பயன்பாடுகள் தொடர்ந்து ஏற்கப்படும். விசை இதை வைத்திருக்கவில்லை என்றால், இதன் பிறகு அவை நிராகரிக்கப்படும்.",
+  "Your answer": "உங்கள் பதில்",
+  "Don't put your name": "உங்கள் பெயரை எழுத வேண்டாம்",
+  "Send my answer": "என் பதிலை அனுப்பு",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "உங்கள் பதில் இறுதியானது: எதுவும் அதை உங்களுடன் இணைப்பதில்லை, எனவே அதை மாற்ற முடியாது.",
+  "You have answered this poll.": "இந்த வாக்கெடுப்புக்கு நீங்கள் பதிலளித்துவிட்டீர்கள்.",
+  "Offer \"Other\" with a typed answer": "எழுதும் பதிலுடன் \"மற்றவை\" வழங்கு",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "உறுப்பினர்கள் தங்கள் பதிலை எழுதலாம். எத்தனை பேர் மற்றவை தேர்ந்தெடுத்தனர் என்பதை அனைவரும் பார்ப்பார்கள்; சொற்களை நீங்களும் சமூக உரிமையாளர்களும் மட்டுமே படிப்பீர்கள்.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "அநாமதேய வாக்கெடுப்பில் ஒவ்வொரு பதிலும் இறுதியானது, வாக்கெடுப்பு முடிந்ததும் சொற்கள் தெரியும்.",
+  "Read the typed answers": "எழுதிய பதில்களைப் படி",
+  "The typed answers show here once the poll closes.": "வாக்கெடுப்பு முடிந்ததும் எழுதிய பதில்கள் இங்கே தெரியும்.",
+  "No typed answers to read.": "படிக்க எழுதிய பதில்கள் இல்லை.",
+  "Only the poll's maker and the owners can read these.": "வாக்கெடுப்பை உருவாக்கியவரும் உரிமையாளர்களும் மட்டுமே இவற்றைப் படிக்க முடியும்.",
+  "Report": "புகார் செய்",
+  "Reported": "புகார் செய்யப்பட்டது",
+  "Cancel": "ரத்து செய்",
+  "The typed answers could not be read.": "எழுதிய பதில்களைப் படிக்க முடியவில்லை.",
+  "Remove this typed answer? The vote still counts.": "இந்த எழுதிய பதிலை நீக்கவா? வாக்கு இன்னும் கணக்கில் இருக்கும்."
 }

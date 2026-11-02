@@ -910,5 +910,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} aún no es la dirección principal: el servicio de direcciones dice {status}. Este servidor se ha pasado a ella y sigue pidiéndola, por eso el panel de abajo ahora la muestra.",
   "No public address currently assigned. An owner of this community can add one.": "No hay ninguna dirección pública asignada. Un propietario de esta comunidad puede añadir una.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} aún no es la dirección principal: el servicio de direcciones dice {status}. Este servidor se ha pasado a ella y sigue pidiéndola, por eso el panel de abajo ahora la muestra. Los miembros siguen llegando a esta comunidad en {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ahora es la dirección de esta comunidad. Después de esto, los nuevos miembros se envían a otra de sus direcciones, si tiene alguna. Esta comunidad deja de anunciar {address} y no se renuncia a ningún nombre. Mientras su clave tenga {address}, las apps de los miembros que lo usan siguen aceptándose. Si la clave no lo tiene, se rechazarán después de esto."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ahora es la dirección de esta comunidad. Después de esto, los nuevos miembros se envían a otra de sus direcciones, si tiene alguna. Esta comunidad deja de anunciar {address} y no se renuncia a ningún nombre. Mientras su clave tenga {address}, las apps de los miembros que lo usan siguen aceptándose. Si la clave no lo tiene, se rechazarán después de esto.",
+  "Your answer": "Tu respuesta",
+  "Don't put your name": "No pongas tu nombre",
+  "Send my answer": "Enviar mi respuesta",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Tu respuesta es definitiva: nada la vincula contigo, así que no se puede cambiar.",
+  "You have answered this poll.": "Has respondido a esta encuesta.",
+  "Offer \"Other\" with a typed answer": "Ofrecer «Otro» con una respuesta escrita",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Los miembros pueden escribir su propia respuesta. Todos ven cuántos eligieron Otro; solo tú y los dueños de la comunidad leen las palabras.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "En una encuesta anónima cada respuesta es definitiva, y las palabras se muestran cuando la encuesta se cierra.",
+  "Read the typed answers": "Leer las respuestas escritas",
+  "The typed answers show here once the poll closes.": "Las respuestas escritas aparecerán aquí cuando la encuesta se cierre.",
+  "No typed answers to read.": "No hay respuestas escritas que leer.",
+  "Only the poll's maker and the owners can read these.": "Solo quien creó la encuesta y los dueños pueden leerlas.",
+  "Report": "Denunciar",
+  "Reported": "Denunciada",
+  "Cancel": "Cancelar",
+  "The typed answers could not be read.": "No se pudieron leer las respuestas escritas.",
+  "Remove this typed answer? The vote still counts.": "¿Quitar esta respuesta escrita? El voto sigue contando."
 }

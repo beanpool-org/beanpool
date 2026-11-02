@@ -867,5 +867,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} ainda não é o endereço principal: o serviço de endereços diz {status}. Este servidor passou para ele e continua a pedi-lo, por isso o painel abaixo já o mostra.",
   "No public address currently assigned. An owner of this community can add one.": "Nenhum endereço público atribuído de momento. Um proprietário desta comunidade pode adicionar um.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} ainda não é o endereço principal: o serviço de endereços diz {status}. Este servidor passou para ele e continua a pedi-lo, por isso o painel abaixo já o mostra. Os membros continuam a chegar a esta comunidade em {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "É agora o endereço desta comunidade. Depois disto, os novos membros são enviados para outro dos seus endereços, se tiver algum. Esta comunidade deixa de anunciar {address}, e nenhum nome é abandonado. Enquanto a sua chave detiver {address}, as apps dos membros que o usam continuam a ser aceites. Se a chave não o detiver, serão recusadas depois disto."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "É agora o endereço desta comunidade. Depois disto, os novos membros são enviados para outro dos seus endereços, se tiver algum. Esta comunidade deixa de anunciar {address}, e nenhum nome é abandonado. Enquanto a sua chave detiver {address}, as apps dos membros que o usam continuam a ser aceites. Se a chave não o detiver, serão recusadas depois disto.",
+  "Your answer": "Sua resposta",
+  "Don't put your name": "Não coloque seu nome",
+  "Send my answer": "Enviar minha resposta",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Sua resposta é definitiva: nada a liga a você, por isso não pode ser alterada.",
+  "You have answered this poll.": "Você respondeu a esta enquete.",
+  "Offer \"Other\" with a typed answer": "Oferecer “Outro” com resposta escrita",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Os membros podem escrever a própria resposta. Todos veem quantos escolheram Outro; só você e os donos da comunidade leem as palavras.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Numa enquete anônima cada resposta é definitiva, e as palavras aparecem quando a enquete fecha.",
+  "Read the typed answers": "Ler as respostas escritas",
+  "The typed answers show here once the poll closes.": "As respostas escritas aparecem aqui quando a enquete fechar.",
+  "No typed answers to read.": "Nenhuma resposta escrita para ler.",
+  "Only the poll's maker and the owners can read these.": "Só quem criou a enquete e os donos podem ler estas respostas.",
+  "Report": "Denunciar",
+  "Reported": "Denunciada",
+  "Cancel": "Cancelar",
+  "The typed answers could not be read.": "Não foi possível ler as respostas escritas.",
+  "Remove this typed answer? The vote still counts.": "Remover esta resposta escrita? O voto continua a contar."
 }

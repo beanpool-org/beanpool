@@ -943,5 +943,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} ещё не основной адрес: служба адресов отвечает {status}. Этот сервер перешёл на него и продолжает его запрашивать, поэтому панель ниже теперь показывает его.",
   "No public address currently assigned. An owner of this community can add one.": "Публичный адрес сейчас не назначен. Владелец этого сообщества может его добавить.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} ещё не основной адрес: служба адресов отвечает {status}. Этот сервер перешёл на него и продолжает его запрашивать, поэтому панель ниже теперь показывает его. Участники по-прежнему попадают в это сообщество по адресу {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Сейчас это адрес этого сообщества. После этого новых участников будут направлять на другой его адрес, если он есть. Это сообщество перестаёт объявлять {address}, и ни от какого имени оно не отказывается. Пока ключ сообщества держит {address}, приложения участников, которые его используют, по-прежнему принимаются. Если ключ его не держит, после этого они будут отклоняться."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Сейчас это адрес этого сообщества. После этого новых участников будут направлять на другой его адрес, если он есть. Это сообщество перестаёт объявлять {address}, и ни от какого имени оно не отказывается. Пока ключ сообщества держит {address}, приложения участников, которые его используют, по-прежнему принимаются. Если ключ его не держит, после этого они будут отклоняться.",
+  "Your answer": "Ваш ответ",
+  "Don't put your name": "Не указывайте своё имя",
+  "Send my answer": "Отправить мой ответ",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Ваш ответ окончателен: ничто не связывает его с вами, поэтому его нельзя изменить.",
+  "You have answered this poll.": "Вы ответили на этот опрос.",
+  "Offer \"Other\" with a typed answer": "Предложить «Другое» со своим ответом",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Участники могут написать свой ответ. Все видят, сколько человек выбрали «Другое»; слова читаете только вы и владельцы сообщества.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "В анонимном опросе каждый ответ окончателен, а слова появятся, когда опрос закроется.",
+  "Read the typed answers": "Читать написанные ответы",
+  "The typed answers show here once the poll closes.": "Написанные ответы появятся здесь, когда опрос закроется.",
+  "No typed answers to read.": "Написанных ответов нет.",
+  "Only the poll's maker and the owners can read these.": "Читать их могут только автор опроса и владельцы.",
+  "Report": "Пожаловаться",
+  "Reported": "Жалоба отправлена",
+  "Cancel": "Отмена",
+  "The typed answers could not be read.": "Не удалось прочитать написанные ответы.",
+  "Remove this typed answer? The vote still counts.": "Удалить этот написанный ответ? Голос всё равно учитывается."
 }

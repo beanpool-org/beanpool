@@ -867,5 +867,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} এখনও প্রধান ঠিকানা নয়: ঠিকানা পরিষেবা বলছে {status}। এই সার্ভার এতে সরে গেছে এবং এটি চাইতে থাকে, তাই নিচের প্যানেল এখন এটি দেখায়।",
   "No public address currently assigned. An owner of this community can add one.": "বর্তমানে কোনো সর্বজনীন ঠিকানা নির্ধারিত নেই। এই সম্প্রদায়ের একজন মালিক একটি যোগ করতে পারেন।",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} এখনও প্রধান ঠিকানা নয়: ঠিকানা পরিষেবা বলছে {status}। এই সার্ভার এতে সরে গেছে এবং এটি চাইতে থাকে, তাই নিচের প্যানেল এখন এটি দেখায়। সদস্যরা এখনও {current}-এ এই সম্প্রদায়ে পৌঁছান।",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "এটি এখন এই সম্প্রদায়ের ঠিকানা। এরপর নতুন সদস্যদের এর অন্য কোনো ঠিকানায় পাঠানো হবে, যদি থাকে। এই সম্প্রদায় {address}-এর প্রচার বন্ধ করে, এবং কোনো নাম ছেড়ে দেওয়া হয় না। যতক্ষণ এর কী {address} ধরে রাখে, ততক্ষণ এটি ব্যবহারকারী সদস্যদের অ্যাপ গৃহীত থাকে। কী এটি ধরে না রাখলে, এরপর সেগুলি প্রত্যাখ্যাত হবে।"
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "এটি এখন এই সম্প্রদায়ের ঠিকানা। এরপর নতুন সদস্যদের এর অন্য কোনো ঠিকানায় পাঠানো হবে, যদি থাকে। এই সম্প্রদায় {address}-এর প্রচার বন্ধ করে, এবং কোনো নাম ছেড়ে দেওয়া হয় না। যতক্ষণ এর কী {address} ধরে রাখে, ততক্ষণ এটি ব্যবহারকারী সদস্যদের অ্যাপ গৃহীত থাকে। কী এটি ধরে না রাখলে, এরপর সেগুলি প্রত্যাখ্যাত হবে।",
+  "Your answer": "আপনার উত্তর",
+  "Don't put your name": "আপনার নাম লিখবেন না",
+  "Send my answer": "আমার উত্তর পাঠান",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "আপনার উত্তর চূড়ান্ত: কিছুই এটিকে আপনার সঙ্গে যুক্ত করে না, তাই এটি বদলানো যাবে না।",
+  "You have answered this poll.": "আপনি এই পোলে উত্তর দিয়েছেন।",
+  "Offer \"Other\" with a typed answer": "লেখা উত্তরসহ \"অন্যান্য\" দিন",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "সদস্যরা নিজের উত্তর লিখতে পারেন। কতজন অন্যান্য বেছেছেন তা সবাই দেখেন; শব্দগুলো শুধু আপনি ও কমিউনিটির মালিকরা পড়েন।",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "বেনামী পোলে প্রতিটি উত্তর চূড়ান্ত, এবং পোল বন্ধ হলে শব্দগুলো দেখা যায়।",
+  "Read the typed answers": "লেখা উত্তরগুলো পড়ুন",
+  "The typed answers show here once the poll closes.": "পোল বন্ধ হলে লেখা উত্তরগুলো এখানে দেখা যাবে।",
+  "No typed answers to read.": "পড়ার মতো কোনো লেখা উত্তর নেই।",
+  "Only the poll's maker and the owners can read these.": "এগুলো শুধু পোল নির্মাতা ও মালিকরা পড়তে পারেন।",
+  "Report": "রিপোর্ট করুন",
+  "Reported": "রিপোর্ট করা হয়েছে",
+  "Cancel": "বাতিল",
+  "The typed answers could not be read.": "লেখা উত্তরগুলো পড়া যায়নি।",
+  "Remove this typed answer? The vote still counts.": "এই লেখা উত্তরটি সরাবেন? ভোট তবুও গণনা হবে।"
 }

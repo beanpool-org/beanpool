@@ -867,5 +867,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "Το {address} δεν είναι ακόμη η κύρια διεύθυνση: η υπηρεσία διευθύνσεων λέει {status}. Αυτός ο διακομιστής μετακινήθηκε σε αυτό και συνεχίζει να το ζητά, γι' αυτό ο πίνακας παρακάτω το δείχνει τώρα.",
   "No public address currently assigned. An owner of this community can add one.": "Δεν έχει οριστεί δημόσια διεύθυνση. Ένας ιδιοκτήτης αυτής της κοινότητας μπορεί να προσθέσει μία.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "Το {address} δεν είναι ακόμη η κύρια διεύθυνση: η υπηρεσία διευθύνσεων λέει {status}. Αυτός ο διακομιστής μετακινήθηκε σε αυτό και συνεχίζει να το ζητά, γι' αυτό ο πίνακας παρακάτω το δείχνει τώρα. Τα μέλη εξακολουθούν να φτάνουν σε αυτή την κοινότητα στο {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Είναι πλέον η διεύθυνση αυτής της κοινότητας. Μετά από αυτό, τα νέα μέλη στέλνονται σε άλλη διεύθυνσή της, αν έχει. Αυτή η κοινότητα σταματά να προβάλλει το {address} και κανένα όνομα δεν παραδίδεται. Όσο το κλειδί της κατέχει το {address}, οι εφαρμογές μελών που το χρησιμοποιούν εξακολουθούν να γίνονται δεκτές. Αν το κλειδί δεν το κατέχει, θα απορρίπτονται μετά από αυτό."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Είναι πλέον η διεύθυνση αυτής της κοινότητας. Μετά από αυτό, τα νέα μέλη στέλνονται σε άλλη διεύθυνσή της, αν έχει. Αυτή η κοινότητα σταματά να προβάλλει το {address} και κανένα όνομα δεν παραδίδεται. Όσο το κλειδί της κατέχει το {address}, οι εφαρμογές μελών που το χρησιμοποιούν εξακολουθούν να γίνονται δεκτές. Αν το κλειδί δεν το κατέχει, θα απορρίπτονται μετά από αυτό.",
+  "Your answer": "Η απάντησή σας",
+  "Don't put your name": "Μη γράφετε το όνομά σας",
+  "Send my answer": "Αποστολή της απάντησής μου",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Η απάντησή σας είναι οριστική: τίποτα δεν τη συνδέει με εσάς, οπότε δεν μπορεί να αλλάξει.",
+  "You have answered this poll.": "Απαντήσατε σε αυτή τη δημοσκόπηση.",
+  "Offer \"Other\" with a typed answer": "Προσφορά «Άλλο» με γραπτή απάντηση",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Τα μέλη μπορούν να γράψουν τη δική τους απάντηση. Όλοι βλέπουν πόσοι επέλεξαν Άλλο· τα λόγια τα διαβάζετε μόνο εσείς και οι ιδιοκτήτες της κοινότητας.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Σε ανώνυμη δημοσκόπηση κάθε απάντηση είναι οριστική, και τα λόγια εμφανίζονται όταν κλείσει η δημοσκόπηση.",
+  "Read the typed answers": "Ανάγνωση γραπτών απαντήσεων",
+  "The typed answers show here once the poll closes.": "Οι γραπτές απαντήσεις θα εμφανιστούν εδώ όταν κλείσει η δημοσκόπηση.",
+  "No typed answers to read.": "Δεν υπάρχουν γραπτές απαντήσεις.",
+  "Only the poll's maker and the owners can read these.": "Μόνο ο δημιουργός της δημοσκόπησης και οι ιδιοκτήτες μπορούν να τις διαβάσουν.",
+  "Report": "Αναφορά",
+  "Reported": "Αναφέρθηκε",
+  "Cancel": "Ακύρωση",
+  "The typed answers could not be read.": "Οι γραπτές απαντήσεις δεν μπόρεσαν να διαβαστούν.",
+  "Remove this typed answer? The vote still counts.": "Αφαίρεση αυτής της γραπτής απάντησης; Η ψήφος εξακολουθεί να μετρά."
 }

@@ -867,5 +867,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "Hindi pa pangunahing address ang {address}: sabi ng serbisyo ng address ay {status}. Lumipat na rito ang server na ito at patuloy itong hinihiling, kaya ipinapakita na ito ng panel sa ibaba.",
   "No public address currently assigned. An owner of this community can add one.": "Walang public address na nakatalaga ngayon. Maaaring magdagdag ang isang may-ari ng komunidad na ito.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "Hindi pa pangunahing address ang {address}: sabi ng serbisyo ng address ay {status}. Lumipat na rito ang server na ito at patuloy itong hinihiling, kaya ipinapakita na ito ng panel sa ibaba. Naaabot pa rin ng mga miyembro ang komunidad na ito sa {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ito na ngayon ang address ng komunidad na ito. Pagkatapos nito, ipapadala ang mga bagong miyembro sa iba pa nitong address, kung mayroon. Ititigil ng komunidad na ito ang pag-advertise sa {address}, at walang pangalang isusuko. Hangga't hawak ng key nito ang {address}, tinatanggap pa rin ang mga app ng miyembro na gumagamit nito. Kung hindi ito hawak ng key, tatanggihan ang mga ito pagkatapos nito."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Ito na ngayon ang address ng komunidad na ito. Pagkatapos nito, ipapadala ang mga bagong miyembro sa iba pa nitong address, kung mayroon. Ititigil ng komunidad na ito ang pag-advertise sa {address}, at walang pangalang isusuko. Hangga't hawak ng key nito ang {address}, tinatanggap pa rin ang mga app ng miyembro na gumagamit nito. Kung hindi ito hawak ng key, tatanggihan ang mga ito pagkatapos nito.",
+  "Your answer": "Ang sagot mo",
+  "Don't put your name": "Huwag ilagay ang pangalan mo",
+  "Send my answer": "Ipadala ang sagot ko",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Pinal na ang sagot mo: walang nag-uugnay nito sa iyo, kaya hindi ito mababago.",
+  "You have answered this poll.": "Nasagutan mo na ang poll na ito.",
+  "Offer \"Other\" with a typed answer": "Mag-alok ng \"Iba pa\" na may sariling sagot",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Puwedeng isulat ng mga miyembro ang sarili nilang sagot. Nakikita ng lahat kung ilan ang pumili ng Iba pa; ikaw at ang mga may-ari ng komunidad lang ang nakakabasa ng mga salita.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Sa anonymous na poll, pinal ang bawat sagot, at lalabas ang mga salita kapag nagsara na ang poll.",
+  "Read the typed answers": "Basahin ang mga isinulat na sagot",
+  "The typed answers show here once the poll closes.": "Lalabas dito ang mga isinulat na sagot kapag nagsara na ang poll.",
+  "No typed answers to read.": "Walang isinulat na sagot na mababasa.",
+  "Only the poll's maker and the owners can read these.": "Ang gumawa ng poll at ang mga may-ari lang ang makakabasa nito.",
+  "Report": "I-report",
+  "Reported": "Na-report",
+  "Cancel": "Kanselahin",
+  "The typed answers could not be read.": "Hindi mabasa ang mga isinulat na sagot.",
+  "Remove this typed answer? The vote still counts.": "Alisin ang isinulat na sagot na ito? Bilang pa rin ang boto."
 }

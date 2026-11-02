@@ -829,5 +829,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} chưa phải là địa chỉ chính: dịch vụ địa chỉ cho biết {status}. Máy chủ này đã chuyển sang địa chỉ đó và tiếp tục xin, vì vậy bảng bên dưới hiện hiển thị nó.",
   "No public address currently assigned. An owner of this community can add one.": "Hiện chưa có địa chỉ công khai nào được gán. Chủ sở hữu của cộng đồng này có thể thêm một địa chỉ.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} chưa phải là địa chỉ chính: dịch vụ địa chỉ cho biết {status}. Máy chủ này đã chuyển sang địa chỉ đó và tiếp tục xin, vì vậy bảng bên dưới hiện hiển thị nó. Thành viên vẫn đến được cộng đồng này tại {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Đây hiện là địa chỉ của cộng đồng này. Sau thao tác này, thành viên mới được chuyển đến một địa chỉ khác của cộng đồng, nếu có. Cộng đồng này ngừng quảng bá {address} và không từ bỏ tên nào. Chừng nào khóa của cộng đồng còn giữ {address}, ứng dụng của thành viên dùng địa chỉ này vẫn được chấp nhận. Nếu khóa không giữ nó, chúng sẽ bị từ chối sau thao tác này."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Đây hiện là địa chỉ của cộng đồng này. Sau thao tác này, thành viên mới được chuyển đến một địa chỉ khác của cộng đồng, nếu có. Cộng đồng này ngừng quảng bá {address} và không từ bỏ tên nào. Chừng nào khóa của cộng đồng còn giữ {address}, ứng dụng của thành viên dùng địa chỉ này vẫn được chấp nhận. Nếu khóa không giữ nó, chúng sẽ bị từ chối sau thao tác này.",
+  "Your answer": "Câu trả lời của bạn",
+  "Don't put your name": "Đừng ghi tên bạn",
+  "Send my answer": "Gửi câu trả lời của tôi",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Câu trả lời của bạn là cuối cùng: không có gì liên kết nó với bạn, nên không thể thay đổi.",
+  "You have answered this poll.": "Bạn đã trả lời cuộc thăm dò này.",
+  "Offer \"Other\" with a typed answer": "Thêm \"Khác\" với câu trả lời tự viết",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Thành viên có thể tự viết câu trả lời. Mọi người thấy có bao nhiêu người chọn Khác; chỉ bạn và chủ sở hữu cộng đồng đọc được nội dung.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Trong cuộc thăm dò ẩn danh, mỗi câu trả lời là cuối cùng, và nội dung sẽ hiện khi cuộc thăm dò kết thúc.",
+  "Read the typed answers": "Đọc các câu trả lời đã viết",
+  "The typed answers show here once the poll closes.": "Các câu trả lời đã viết sẽ hiện ở đây khi cuộc thăm dò kết thúc.",
+  "No typed answers to read.": "Không có câu trả lời đã viết nào.",
+  "Only the poll's maker and the owners can read these.": "Chỉ người tạo cuộc thăm dò và chủ sở hữu mới đọc được.",
+  "Report": "Báo cáo",
+  "Reported": "Đã báo cáo",
+  "Cancel": "Hủy",
+  "The typed answers could not be read.": "Không đọc được các câu trả lời đã viết.",
+  "Remove this typed answer? The vote still counts.": "Xóa câu trả lời đã viết này? Phiếu vẫn được tính."
 }

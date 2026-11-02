@@ -867,5 +867,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} هنوز آدرس اصلی نیست: سرویس آدرس می‌گوید {status}. این سرور به آن منتقل شده و همچنان آن را درخواست می‌کند، بنابراین پنل پایین اکنون آن را نشان می‌دهد.",
   "No public address currently assigned. An owner of this community can add one.": "در حال حاضر هیچ آدرس عمومی تعیین نشده است. یکی از مالکان این انجمن می‌تواند آدرسی اضافه کند.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} هنوز آدرس اصلی نیست: سرویس آدرس می‌گوید {status}. این سرور به آن منتقل شده و همچنان آن را درخواست می‌کند، بنابراین پنل پایین اکنون آن را نشان می‌دهد. اعضا همچنان از طریق {current} به این انجمن می‌رسند.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "اکنون آدرس این انجمن است. پس از این، اعضای جدید به آدرس دیگری از آن فرستاده می‌شوند، اگر داشته باشد. این انجمن دیگر {address} را تبلیغ نمی‌کند و هیچ نامی واگذار نمی‌شود. تا زمانی که کلید آن {address} را در اختیار دارد، برنامه‌های اعضا که از آن استفاده می‌کنند همچنان پذیرفته می‌شوند. اگر کلید آن را در اختیار نداشته باشد، پس از این رد می‌شوند."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "اکنون آدرس این انجمن است. پس از این، اعضای جدید به آدرس دیگری از آن فرستاده می‌شوند، اگر داشته باشد. این انجمن دیگر {address} را تبلیغ نمی‌کند و هیچ نامی واگذار نمی‌شود. تا زمانی که کلید آن {address} را در اختیار دارد، برنامه‌های اعضا که از آن استفاده می‌کنند همچنان پذیرفته می‌شوند. اگر کلید آن را در اختیار نداشته باشد، پس از این رد می‌شوند.",
+  "Your answer": "پاسخ شما",
+  "Don't put your name": "نام خود را ننویسید",
+  "Send my answer": "ارسال پاسخ من",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "پاسخ شما نهایی است: چیزی آن را به شما پیوند نمی‌دهد، پس نمی‌توان آن را تغییر داد.",
+  "You have answered this poll.": "به این نظرسنجی پاسخ داده‌اید.",
+  "Offer \"Other\" with a typed answer": "ارائه «غیره» با پاسخ نوشتاری",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "اعضا می‌توانند پاسخ خود را بنویسند. همه می‌بینند چند نفر غیره را انتخاب کرده‌اند؛ فقط شما و مالکان جامعه نوشته‌ها را می‌خوانید.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "در نظرسنجی ناشناس هر پاسخ نهایی است و نوشته‌ها پس از بسته شدن نظرسنجی نشان داده می‌شوند.",
+  "Read the typed answers": "خواندن پاسخ‌های نوشتاری",
+  "The typed answers show here once the poll closes.": "پاسخ‌های نوشتاری پس از بسته شدن نظرسنجی اینجا نشان داده می‌شوند.",
+  "No typed answers to read.": "پاسخ نوشتاری برای خواندن نیست.",
+  "Only the poll's maker and the owners can read these.": "فقط سازنده نظرسنجی و مالکان می‌توانند این‌ها را بخوانند.",
+  "Report": "گزارش",
+  "Reported": "گزارش شد",
+  "Cancel": "لغو",
+  "The typed answers could not be read.": "پاسخ‌های نوشتاری خوانده نشدند.",
+  "Remove this typed answer? The vote still counts.": "این پاسخ نوشتاری حذف شود؟ رأی همچنان شمرده می‌شود."
 }

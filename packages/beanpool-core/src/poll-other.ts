@@ -48,7 +48,6 @@ export const pollOtherLines = {
     noName: () => t("Don't put your name"),
     send: () => t('Send my answer'),
     cancel: () => t('Cancel'),
-    wordsMissing: () => t('Type your answer first.'),
     sealedNote: () => t('Your answer is final: nothing links it to you, so it cannot be changed.'),
     answered: () => t('You have answered this poll.'),
     tick: () => t('Offer "Other" with a typed answer'),

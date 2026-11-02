@@ -1019,5 +1019,22 @@
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} ليس العنوان الرئيسي بعد: تقول خدمة العناوين {status}. انتقل هذا الخادم إليه ويواصل طلبه، لذا تعرضه اللوحة أدناه الآن.",
   "No public address currently assigned. An owner of this community can add one.": "لا يوجد عنوان عام معيَّن حاليًا. يمكن لأحد مالكي هذا المجتمع إضافة عنوان.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} ليس العنوان الرئيسي بعد: تقول خدمة العناوين {status}. انتقل هذا الخادم إليه ويواصل طلبه، لذا تعرضه اللوحة أدناه الآن. لا يزال الأعضاء يصلون إلى هذا المجتمع على {current}.",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "إنه عنوان هذا المجتمع الآن. بعد ذلك، يُرسل الأعضاء الجدد إلى عنوان آخر من عناوينه، إن وجد. يتوقف هذا المجتمع عن الإعلان عن {address}، ولا يتم التخلي عن أي اسم. ما دام مفتاحه يحتفظ بـ {address}، تظل تطبيقات الأعضاء التي تستخدمه مقبولة. وإذا لم يكن المفتاح يحتفظ به، فسيتم رفضها بعد ذلك."
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "إنه عنوان هذا المجتمع الآن. بعد ذلك، يُرسل الأعضاء الجدد إلى عنوان آخر من عناوينه، إن وجد. يتوقف هذا المجتمع عن الإعلان عن {address}، ولا يتم التخلي عن أي اسم. ما دام مفتاحه يحتفظ بـ {address}، تظل تطبيقات الأعضاء التي تستخدمه مقبولة. وإذا لم يكن المفتاح يحتفظ به، فسيتم رفضها بعد ذلك.",
+  "Your answer": "إجابتك",
+  "Don't put your name": "لا تكتب اسمك",
+  "Send my answer": "إرسال إجابتي",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "إجابتك نهائية: لا شيء يربطها بك، لذا لا يمكن تغييرها.",
+  "You have answered this poll.": "لقد أجبت عن هذا الاستطلاع.",
+  "Offer \"Other\" with a typed answer": "إتاحة «أخرى» مع إجابة مكتوبة",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "يمكن للأعضاء كتابة إجابتهم. يرى الجميع عدد من اختار أخرى؛ ولا يقرأ الكلمات إلا أنت ومالكو المجتمع.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "في الاستطلاع المجهول كل إجابة نهائية، وتظهر الكلمات عند إغلاق الاستطلاع.",
+  "Read the typed answers": "قراءة الإجابات المكتوبة",
+  "The typed answers show here once the poll closes.": "ستظهر الإجابات المكتوبة هنا عند إغلاق الاستطلاع.",
+  "No typed answers to read.": "لا توجد إجابات مكتوبة للقراءة.",
+  "Only the poll's maker and the owners can read these.": "لا يقرؤها إلا منشئ الاستطلاع والمالكون.",
+  "Report": "إبلاغ",
+  "Reported": "تم الإبلاغ",
+  "Cancel": "إلغاء",
+  "The typed answers could not be read.": "تعذّرت قراءة الإجابات المكتوبة.",
+  "Remove this typed answer? The vote still counts.": "هل تريد إزالة هذه الإجابة المكتوبة؟ يبقى الصوت محسوبًا."
 }

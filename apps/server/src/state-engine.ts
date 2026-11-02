@@ -85,6 +85,10 @@ import {
     evaluateAutoMute, liftMute as liftMuteEngine,
 } from './engine/auto-moderation.js';
 import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
+import {
+    forgetTakedownsOf, hasPendingDeal, markTakedownFinal, putBackTakedowns as putBackTakedownsEngine, setTakedownRemoval, takeDownPosts as takeDownPostsEngine,
+    type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
+} from './engine/agent-takedowns.js';
 import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
 import { getPulseTreasuryPubkey } from './daily-pulse.js';
 import {
@@ -7706,6 +7710,16 @@ export function undoBurst(actionId: string): UndoOutcome {
     return undoBurstHide(moderationNoticeCb, actionId);
 }
 
+/** An owner's AI assistant takes posts down (engine/agent-takedowns.ts). */
+export function takeDownPosts(input: TakeDownInput): TakeDownResult {
+    return takeDownPostsEngine(moderationNoticeCb, input);
+}
+
+/** A person puts an assistant's takedowns back (engine/agent-takedowns.ts). */
+export function putBackTakedowns(scope: PutBackScope): PutBackResult {
+    return putBackTakedownsEngine(moderationNoticeCb, scope);
+}
+
 /**
  * Who a report is about, as every moderator's action on it must read it. A report on a Pulse item is about the item's
  * owner, read from the item, whatever post id the row carries: the route sets no post id on one since #1444, but a row
@@ -8682,8 +8696,24 @@ function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundS
         onRefundShortfall,
     });
     if (ok && before && takedown && before.wasLive) recordModeratorRemoval(postId);
+    // Removed by a person while an assistant's takedown held it: it is final now, and the sweep has nothing to do.
+    if (ok) markTakedownFinal(postId);
     return ok && before ? before : null;
 }
+
+/**
+ * What makes an assistant's takedown final (engine/agent-takedowns.ts sweepTakedowns). Never on a post with a pending deal, and
+ * with no transfer function, so adminDeletePost has no way to move a Bean: removePostByAdmin's refund is a person's, on a
+ * person's account. The takedown stamped the removal and told the author, so neither happens again here; an event is cancelled
+ * and its goers told now. A report filed while it was hidden closes, and its reporter hears the post was removed.
+ */
+setTakedownRemoval((postId) => {
+    if (hasPendingDeal(postId)) return false;
+    const before = postBeforeTakedown(postId);
+    if (!before || !adminDeletePostEngine(broadcast, postId, undefined, undefined, dispatchPushNotification)) return false;
+    notifyPostTakedown(moderationNoticeCb, { ...before, wasLive: false }, closeOpenReportsOnPost(postId));
+    return true;
+});
 
 /**
  * An admin removes a post. Its author is told, in words and without naming the admin; every still-open
@@ -9164,6 +9194,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             // With their connection label goes every record of a burst action that names them (engine/burst-cleanup.ts).
             forgetBurstActionsOf(publicKey);
         }
+        if (!closed) forgetTakedownsOf(publicKey);
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {

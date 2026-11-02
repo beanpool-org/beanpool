@@ -98,6 +98,8 @@ export const OWNER_ALERT_WORDS = {
         one: `A member's account was moved to a new phone in the last day, ${how}.`,
         many: `{n} members' accounts were moved to a new phone in the last day, ${how}.`,
     }),
+    /** Posts an owner's AI assistant took down (engine/agent-takedowns.ts): a day's count, with no member and no assistant named. */
+    assistantTakedowns: { one: 'An AI assistant took down a post in the last day.', many: 'An AI assistant took down {n} posts in the last day.' },
     branchesPruned: { one: 'A branch of invites was pruned in the last day, by an owner.', many: '{n} branches of invites were pruned in the last day, by an owner.' },
     communityRenamed: "The community's name was changed, by an admin.",
     callsignChanged: "The community's callsign was changed, by an admin.",

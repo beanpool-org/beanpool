@@ -1513,6 +1513,8 @@ async function main(): Promise<void> {
             'POST /api/local/admin/agent/preview',
             // An assistant's suggestions (agent/suggestions-route.ts): a person's own session only; approve is the existing route.
             'GET /api/local/admin/agent/suggestions', 'POST /api/local/admin/agent/suggestions/:id/decline',
+            // What an owner's assistant took down (agent/takedowns-route.ts): a person's own session only.
+            'GET /api/local/admin/agent/takedowns', 'POST /api/local/admin/agent/takedowns/put-back', 'POST /api/local/admin/agent/takedowns/:id/remove-now',
             // The OAuth door (agent/oauth-route.ts): metadata, registration, the consent page and its two calls, token, revoke.
             'GET /.well-known/oauth-protected-resource', 'GET /.well-known/oauth-protected-resource/mcp', 'GET /.well-known/oauth-authorization-server',
             'POST /oauth/register', 'GET /oauth/authorize', 'POST /oauth/authorize/:id/wait', 'POST /oauth/authorize/:id/confirm',

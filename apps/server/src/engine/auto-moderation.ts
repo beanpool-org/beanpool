@@ -94,10 +94,10 @@ export const MUTED_UNTIL_LIFTED = '9999-12-31T23:59:59.999Z';
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
-interface PostForModeration { id: string; title: string | null; author_pubkey: string | null; active: number; status: string; hidden_by_reports_at: string | null }
+interface PostForModeration { id: string; title: string | null; author_pubkey: string | null; active: number; status: string; hidden_by_reports_at: string | null; removed_by_moderator_at: string | null }
 
 function postRow(postId: string): PostForModeration | undefined {
-    return db.prepare('SELECT id, title, author_pubkey, active, status, hidden_by_reports_at FROM posts WHERE id = ?')
+    return db.prepare('SELECT id, title, author_pubkey, active, status, hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?')
         .get(postId) as PostForModeration | undefined;
 }
 
@@ -105,6 +105,12 @@ const forNotice = (p: PostForModeration) => ({ id: p.id, title: p.title, authorP
 
 /** Still up: not taken down by its author or a moderator. Only then is "your post is back" true. */
 const isLive = (p: PostForModeration) => p.active === 1 && p.status !== 'cancelled';
+
+/**
+ * An assistant's takedown on hold (engine/agent-takedowns.ts): stamped removed by a moderator, and not removed yet. Read from the
+ * row, not the record, because the record is this server's and the stamps travel: it holds on a standby that took over too.
+ */
+const onHold = (p: PostForModeration) => isLive(p) && !!p.removed_by_moderator_at;
 
 export function isHiddenByReports(postId: string): boolean {
     return !!postRow(postId)?.hidden_by_reports_at;
@@ -351,10 +357,13 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
     let reporters: string[] = [];
     let restored = false;
     db.transaction(() => {
-        const res = db.prepare('UPDATE posts SET hidden_by_reports_at = NULL, updated_at = ? WHERE id = ? AND hidden_by_reports_at IS NOT NULL')
-            .run(iso(now), postId);
+        // A takedown on hold comes back whole, by this route or Settings' Put back: nothing of it counts against its author.
+        const held = onHold(post);
+        const res = db.prepare(`UPDATE posts SET hidden_by_reports_at = NULL, updated_at = ?${held ? ', removed_by_moderator_at = NULL' : ''}
+                                 WHERE id = ? AND hidden_by_reports_at IS NOT NULL`).run(iso(now), postId);
         if (res.changes === 0) return;
         restored = true;
+        if (held) db.prepare('UPDATE agent_takedown_posts SET put_back_at = ? WHERE post_id = ? AND put_back_at IS NULL AND final_at IS NULL').run(iso(now), postId);
         reporters = (db.prepare(
             `SELECT DISTINCT reporter_pubkey FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
         ).all(postId) as { reporter_pubkey: string }[]).map(r => r.reporter_pubkey);
@@ -381,6 +390,8 @@ export function recheckHiddenPost(cb: ModerationNoticeCallbacks, postId: string 
     if (!postId) return false;
     const post = postRow(postId);
     if (!post?.hidden_by_reports_at) return false;
+    // Reports did not hide a takedown, so a report dismissed later (one filed while it is hidden) can't bring it back.
+    if (onHold(post)) return false;
     const tally = hideTally(postId, now);
     if (tally.circles.length >= tally.circlesNeeded) return false;
     return unhide(cb, post, now);
@@ -391,7 +402,8 @@ export function recheckHiddenPost(cb: ModerationNoticeCallbacks, postId: string 
 /** A moderator took this post down (one post, not the stale-post prune): what auto-mute counts. */
 export function recordModeratorRemoval(postId: string, now: number = Date.now()): void {
     const at = iso(now);
-    db.prepare('UPDATE posts SET removed_by_moderator_at = ?, updated_at = ? WHERE id = ?').run(at, at, postId);
+    // A takedown on hold has its time already: a removal now moving it would count it again after a lift.
+    db.prepare('UPDATE posts SET removed_by_moderator_at = COALESCE(removed_by_moderator_at, ?), updated_at = ? WHERE id = ?').run(at, at, postId);
 }
 
 export interface MuteState { muted: boolean; until: string | null }
@@ -456,6 +468,15 @@ export function liftMute(cb: ModerationNoticeCallbacks, pubkey: string, now: num
     bumpMembersVersion();
     notifyUnmuted(cb, pubkey);
     return true;
+}
+
+/**
+ * A takedown put back no longer counts (engine/agent-takedowns.ts): the mute it brought goes too, unless other removals in the
+ * window still add up to one. Only for a member that takedown muted: a mute older than the window stays a moderator's to lift.
+ */
+export function liftMuteNoLongerEarned(cb: ModerationNoticeCallbacks, pubkey: string, now: number = Date.now()): boolean {
+    const removals = (db.prepare(REMOVALS_SINCE_SQL).get(pubkey, iso(now - AUTO_MUTE.windowDays * DAY_MS)) as { c: number }).c;
+    return removals < AUTO_MUTE.removals && liftMute(cb, pubkey, now);
 }
 
 /** Everyone muted now, for the moderators' list. */

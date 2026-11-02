@@ -1,5 +1,7 @@
 /**
- * An AI assistant's suggestions (admin MCP design §5, slice S4). An assistant changes nothing in moderation: it files a
+ * An AI assistant's suggestions (admin MCP design §5, slice S4). An assistant changes nothing in moderation by itself, with one
+ * exception: an owner's assistant ticked "May take down posts for me" takes posts down at once, and they can be put back for 7 days
+ * (agent/owner-takedowns.ts). Anything else it can only suggest: dismissing a report, or putting a post back. It files a
  * suggestion, and the member it acts for approves or declines it in Settings → Moderation or on their phone, with the
  * ORIGINAL report beside it, never the assistant's summary alone.
  *

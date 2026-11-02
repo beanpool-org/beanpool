@@ -181,17 +181,7 @@ export function notifyPostsCleared(
         const days = a.youngestMs === null ? null : Math.floor((now - a.youngestMs) / 86_400_000);
         tell(cb, [author], POSTS_CLEARED_TITLE, postsClearedBody(a.count, days), { kind: 'posts_cleared', count: a.count });
     }
-    const authorOf = new Map(removed.map(p => [p.id, p.authorPubkey]));
-    const byReporter = new Map<string, number>();
-    for (const [postId, reporters] of reportersByPost) {
-        for (const r of new Set(reporters)) {
-            if (r === authorOf.get(postId)) continue;
-            byReporter.set(r, (byReporter.get(r) ?? 0) + 1);
-        }
-    }
-    for (const [reporter, n] of byReporter) {
-        tell(cb, [reporter], REPORT_OUTCOME_TITLE, reportedPostsRemovedBody(n), { kind: 'report_outcome', outcome: 'removed' });
-    }
+    notifyReportersRemoved(cb, reportersByPost, new Map(removed.map(p => [p.id, p.authorPubkey])));
 }
 
 // ── Auto-moderation on the global profile (engine/auto-moderation.ts) ────────────────────────────
@@ -248,6 +238,46 @@ export function notifyPostHidden(cb: ModerationNoticeCallbacks, post: { id: stri
 export function notifyPostBack(cb: ModerationNoticeCallbacks, post: { id: string; title: string | null; authorPubkey: string | null }): void {
     if (!post.authorPubkey) return;
     tell(cb, [post.authorPubkey], POST_BACK_TITLE, postBackBody(post.title), { kind: 'post_restored', screen: 'post', postId: post.id });
+}
+
+// ── An owner's AI assistant took posts down (engine/agent-takedowns.ts) ──────────────────────────
+
+export const POST_TAKEN_DOWN_TITLE = tr('🛡️ Your post was taken down');
+export const POSTS_TAKEN_DOWN_TITLE = tr('🛡️ Your posts were taken down');
+
+/**
+ * The closed list's label, never the assistant's own words, and never that an assistant did it: "the community's moderators", as
+ * a moderator's removal never names the moderator. `count` above 1 is a batch's one notice.
+ */
+export function postTakenDownBody(title: string | null | undefined, reasonCategory: string, count = 1): string {
+    const reason = REMOVAL_REASON_LABELS[reasonCategory] ?? REMOVAL_REASON_LABELS.rules;
+    if (count > 1) return tr("{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.", { n: count, reason });
+    return title && title.trim()
+        ? tr("Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.", { title: quoted(title), reason })
+        : tr("Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.", { reason });
+}
+
+/** One notice to the author, however many of their posts the call took down. The post is theirs to open while it is hidden. */
+export function notifyPostsTakenDown(cb: ModerationNoticeCallbacks, authorPubkey: string, posts: { id: string; title: string | null }[], reasonCategory: string): void {
+    if (posts.length === 0) return;
+    if (posts.length > 1) {
+        tell(cb, [authorPubkey], POSTS_TAKEN_DOWN_TITLE, postTakenDownBody(null, reasonCategory, posts.length), { kind: 'post_hidden', reason: 'taken_down', count: posts.length });
+        return;
+    }
+    const [post] = posts;
+    tell(cb, [authorPubkey], POST_TAKEN_DOWN_TITLE, postTakenDownBody(post.title, reasonCategory), { kind: 'post_hidden', reason: 'taken_down', screen: 'post', postId: post.id });
+}
+
+/** Each reporter hears once, with the count, in the words a removal uses, never about a report of their own post. */
+export function notifyReportersRemoved(cb: ModerationNoticeCallbacks, reportersByPost: Map<string, string[]>, authorOf: Map<string, string | null>): void {
+    const byReporter = new Map<string, number>();
+    for (const [postId, reporters] of reportersByPost) {
+        for (const r of new Set(reporters)) {
+            if (r === authorOf.get(postId)) continue;
+            byReporter.set(r, (byReporter.get(r) ?? 0) + 1);
+        }
+    }
+    for (const [reporter, n] of byReporter) tell(cb, [reporter], REPORT_OUTCOME_TITLE, reportedPostsRemovedBody(n), { kind: 'report_outcome', outcome: 'removed' });
 }
 
 // ── Clean-up by burst (engine/burst-cleanup.ts) ─────────────────────────────────────────────────

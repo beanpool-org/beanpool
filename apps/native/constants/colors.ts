@@ -238,6 +238,9 @@ export const lightColors = {
     // Category tile tints and inks
     tile: brandLight.tile,
 
+    // Card caption band tints and inks
+    card: brandLight.card,
+
     // Trust tiers — one warm "gold" family that deepens with tier; the
     // intensity encodes the ranking. Newcomer stays neutral grey (no trust
     // earned yet). Single source of truth for PostAuthorTrust, the Ledger,
@@ -379,6 +382,9 @@ export const darkColors = {
 
     // Category tile tints and inks
     tile: brandDark.tile,
+
+    // Card caption band tints and inks
+    card: brandDark.card,
 
     // Trust tiers
     trust: {

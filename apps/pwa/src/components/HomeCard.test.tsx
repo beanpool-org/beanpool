@@ -60,3 +60,51 @@ describe('HomeCard menu', () => {
         expect(asideContainer?.className).not.toContain('shrink-0');
     });
 });
+
+describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable.md §2.1, §5)', () => {
+    it('the band carries the hue and the "…" the ink', () => {
+        const { container } = render(
+            <HomeCard
+                id="market"
+                title="New in the Market"
+                hue="orange"
+                menu={{ label: 'Market', canMoveUp: false, canMoveDown: false, onMove: vi.fn() }}
+            >
+                <p>body</p>
+            </HomeCard>,
+        );
+        const band = container.querySelector('[data-testid="card-band-market"]') as HTMLElement;
+        expect(band).toBeInTheDocument();
+        expect(band.style.backgroundColor).toBe('var(--bp-card-orange-tint)');
+        expect(band.style.color).toBe('var(--bp-card-orange-ink)');
+        const menuBtn = screen.getByRole('button', { name: 'Card options for Market' });
+        expect(menuBtn.style.color).toBe('var(--bp-card-orange-ink)');
+    });
+
+    it('Needs you is amber only with an accent item (otherwise sage)', () => {
+        const { container: sageCard } = render(
+            <HomeCard id="needs" title="Needs you" hue="sage" accent={false}>
+                <p>body</p>
+            </HomeCard>,
+        );
+        const sageBand = sageCard.querySelector('[data-testid="card-band-needs"]') as HTMLElement;
+        expect(sageBand).toBeInTheDocument();
+        expect(sageBand.style.backgroundColor).toBe('var(--bp-card-sage-tint)');
+        expect(sageBand.style.color).toBe('var(--bp-card-sage-ink)');
+        const sageSection = sageCard.querySelector('section') as HTMLElement;
+        expect(sageSection.style.borderColor).not.toBe('var(--bp-card-amber-ink)');
+
+        const { container: amberCard } = render(
+            <HomeCard id="needs" title="Needs you" hue="amber" accent={true}>
+                <p>body</p>
+            </HomeCard>,
+        );
+        const amberBand = amberCard.querySelector('[data-testid="card-band-needs"]') as HTMLElement;
+        expect(amberBand).toBeInTheDocument();
+        expect(amberBand.style.backgroundColor).toBe('var(--bp-card-amber-tint)');
+        expect(amberBand.style.color).toBe('var(--bp-card-amber-ink)');
+        const amberSection = amberCard.querySelector('section') as HTMLElement;
+        expect(amberSection.style.borderColor).toBe('var(--bp-card-amber-ink)');
+    });
+});
+

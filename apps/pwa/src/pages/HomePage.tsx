@@ -32,7 +32,8 @@ import {
     HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
+    homeCardHue, homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
+    type CardHue,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
@@ -2069,7 +2070,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const id = card.type as HomeCardId;
         const c = a.cards;
         const title = nameOf(card);
-        const common = { id: card.id, title, menu: menuFor(card), style: spansRow(card.type) ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
+        const hue: CardHue = card.type === 'needs'
+            ? (c.needs?.items.some(i => i.accent) ? 'amber' : 'sage')
+            : homeCardHue(card);
+        const common = { id: card.id, title, hue, menu: menuFor(card), style: spansRow(card.type) ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
         switch (card.type) {
             case 'needs':
                 return c.needs && (
@@ -2463,7 +2467,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common} titleAside={!isVisitor && (
                         <button type="button" onClick={openTune} aria-label={t('Tune: pick what comes first')} data-testid="home-tune"
-                            className="min-h-[44px] px-2 -mt-2 bg-transparent border-0 text-xs font-bold text-text-secondary hover:text-text-primary cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            style={{ color: 'var(--bp-card-orange-ink)' }}
+                            className="min-h-[44px] px-2 bg-transparent border-0 text-xs font-bold cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                             {t('Tune')}
                         </button>
                     )}>

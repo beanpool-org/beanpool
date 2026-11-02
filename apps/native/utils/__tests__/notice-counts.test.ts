@@ -265,6 +265,38 @@ describe('a community\'s own word beside the push tally: the `server` field and 
         expect(await noteServerUnread(storage, OLDTOWN, 0)).toBe(false);
     });
 
+    it('a rise is in what a push would have told: `unread` alone moves the number and says no rise', async () => {
+        expect(await noteServerUnread(storage, BYRON, 2, 0)).toBe(false);
+        expect(await noteServerUnread(storage, BYRON, 5, 0)).toBe(false);
+        expect(await readNoticeCounts(storage)).toEqual({ [BYRON]: 5 });
+        expect(await noteServerUnread(storage, BYRON, 5, 1)).toBe(true);
+        expect(await noteServerUnread(storage, BYRON, 5, 1)).toBe(false);
+        expect(await noteServerUnread(storage, BYRON, 9, 0)).toBe(false);
+        expect(await noteServerUnread(storage, BYRON, 9, 1)).toBe(true);
+        expect(await readNoticeCounts(storage)).toEqual({ [BYRON]: 9 });
+    });
+
+    it('a change in `alerts` alone is still written down, though the number stands', async () => {
+        await noteServerUnread(storage, BYRON, 3, 2);
+        await noteServerUnread(storage, BYRON, 3, 0);
+        expect(await noteServerUnread(storage, BYRON, 3, 2)).toBe(true);
+    });
+
+    it('it goes with the number: at a drop, and as the community comes into use', async () => {
+        await noteServerUnread(storage, BYRON, 3, 3);
+        await dropCounts(storage, [BYRON]);
+        expect(await noteServerUnread(storage, BYRON, 1, 1)).toBe(true);
+        await storage.setItem(ANCHOR, BYRON);
+        await clearActiveCount(storage);
+        await storage.setItem(ANCHOR, MULLUM);
+        expect(await noteServerUnread(storage, BYRON, 1, 1)).toBe(true);
+    });
+
+    it.each([['words', '"many"'], ['a negative', '-1'], ['a fraction', '1.5']])('%s kept for it is none', async (_, kept) => {
+        await storage.setItem(NOTICE_COUNTS_STORE_KEY, `{"${BYRON}":{"n":0,"seen":{},"server":1,"alerts":${kept}}}`);
+        expect(await noteServerUnread(storage, BYRON, 1, 1)).toBe(true);
+    });
+
     it('two answers at once: one rise, one teller', async () => {
         const told = await Promise.all([noteServerUnread(storage, BYRON, 2), noteServerUnread(storage, BYRON, 2)]);
         expect(told.filter(Boolean)).toHaveLength(1);

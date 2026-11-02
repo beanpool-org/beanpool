@@ -41,10 +41,11 @@ interface Storage {
 }
 
 /**
- * A community's count, the notices it has seen (id → when the phone noted it, whole seconds), and its own unread count as
- * it last answered a round: absent until it answers, and again after a switch to it.
+ * A community's count, the notices it has seen (id → when the phone noted it, whole seconds), its own unread count as it
+ * last answered a round, and what a rise is measured from: how many of those lines it said a push would have told
+ * ({@link noteServerUnread}). The last two are absent until it answers, and again after a switch to it.
  */
-interface Tally { n: number; seen: Record<string, number>; server?: number }
+interface Tally { n: number; seen: Record<string, number>; server?: number; alerts?: number }
 type Tallies = Record<string, Tally>;
 
 function parse(raw: string | null): Tallies {
@@ -54,7 +55,7 @@ function parse(raw: string | null): Tallies {
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out;
         for (const [community, v] of Object.entries(parsed as Record<string, unknown>)) {
             const at = communityAddress(community);
-            const tally = v && typeof v === 'object' ? v as { n?: unknown; seen?: unknown; server?: unknown } : null;
+            const tally = v && typeof v === 'object' ? v as { n?: unknown; seen?: unknown; server?: unknown; alerts?: unknown } : null;
             if (!at || !tally) continue;
             const seen: Record<string, number> = {};
             if (tally.seen && typeof tally.seen === 'object') {
@@ -65,6 +66,7 @@ function parse(raw: string | null): Tallies {
             const n = typeof tally.n === 'number' && Number.isSafeInteger(tally.n) && tally.n > 0 ? tally.n : 0;
             out[at] = { n, seen };
             if (typeof tally.server === 'number' && Number.isSafeInteger(tally.server) && tally.server >= 0) out[at].server = tally.server;
+            if (typeof tally.alerts === 'number' && Number.isSafeInteger(tally.alerts) && tally.alerts >= 0) out[at].alerts = tally.alerts;
         }
     } catch {
         // Counts that can't be read are none: a number shown wrong is worse than none.
@@ -151,20 +153,22 @@ export async function countNotice(storage: Storage, community: string, id: strin
 
 /**
  * `community` answered a round with its own unread count: that is its number from now on, and the notices count afresh from
- * there. Resolves to whether this is a rise on what it last said, written down before it says so, so one rise is one
- * caller's to tell and nobody tells it twice (two rounds at once, or a write that failed). A community that has said nothing
- * since it was last in use is compared with none waiting. Nothing for the community in use (the member moved there while it
- * answered) or one the phone doesn't keep. Never throws.
+ * there. `alerts` is how many of those lines it says a push would have told; a node too old to say gives `unread` here.
+ * Resolves to whether `alerts` rose on what it last said, written down before it says so, so one rise is one caller's to
+ * tell and nobody tells it twice (two rounds at once, or a write that failed): a line in a muted chat moves the number and
+ * tells nobody. A community that has said nothing since it was last in use is compared with none waiting. Nothing for the
+ * community in use (the member moved there while it answered) or one the phone doesn't keep. Never throws.
  */
-export async function noteServerUnread(storage: Storage, community: string, unread: number): Promise<boolean> {
+export async function noteServerUnread(storage: Storage, community: string, unread: number, alerts: number = unread): Promise<boolean> {
     let rose = false;
     const held = await update(storage, (tallies, active, kept) => {
         const at = communityAddress(community);
         if (!at || at === active || !kept?.has(at)) return false;
         const tally = tallies[at] ?? { n: 0, seen: {} };
-        const same = tally.server === unread && tally.n === 0;
-        rose = unread > (tally.server ?? 0);
+        const same = tally.server === unread && tally.alerts === alerts && tally.n === 0;
+        rose = alerts > (tally.alerts ?? 0);
         tally.server = unread;
+        tally.alerts = alerts;
         tally.n = 0;
         tallies[at] = tally;
         return !same;
@@ -185,6 +189,7 @@ export async function dropCounts(storage: Storage, communities: readonly string[
             if (!tally || (tally.n === 0 && tally.server === undefined)) continue;
             tally.n = 0;
             delete tally.server;
+            delete tally.alerts;
             dirty = true;
         }
         return dirty;
@@ -201,6 +206,7 @@ export async function clearActiveCount(storage: Storage): Promise<void> {
         if (!tally || (tally.n === 0 && tally.server === undefined)) return false;
         tally.n = 0;
         delete tally.server;
+        delete tally.alerts;
         return true;
     });
 }

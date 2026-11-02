@@ -61,7 +61,7 @@ function account(): Account {
 }
 
 /** How a community answers: its counts, a refusal, no connection, or nothing until the phone gives up. */
-type Answer = { unread: number; requests?: number } | { status: number; body?: unknown } | 'down' | 'never';
+type Answer = { unread: number; requests?: number; alerts?: unknown } | { status: number; body?: unknown } | 'down' | 'never';
 interface Asked { community: string; path: string; signed: boolean; method: string; headers: Record<string, string>; body: unknown }
 
 let kim: Account;
@@ -98,6 +98,9 @@ async function round(over: Partial<RoundDeps> = {}): Promise<number> {
     return askOtherCommunities(deps(over));
 }
 
+/** A round with the app closed (the background sync's). */
+const closedRound = (over: Partial<RoundDeps> = {}) => round({ closed: true, ...over });
+
 const askedOf = (community: string) => asked.filter((a) => a.community === community);
 const unreadAsks = () => asked.filter((a) => a.path === '/api/me/unread');
 
@@ -128,7 +131,9 @@ beforeEach(() => {
         }
         if ('status' in a) return new Response(JSON.stringify(a.body ?? {}), { status: a.status });
         if (!signed) return new Response(JSON.stringify({ error: 'A signed request is required' }), { status: 401 });
-        return new Response(JSON.stringify({ unread: a.unread, requests: a.requests ?? 0, asOf: new Date(clock).toISOString() }), { status: 200 });
+        // `alerts` is `unread` unless a test says otherwise; set to undefined, it isn't sent: a node from before it.
+        const alerts = 'alerts' in a ? a.alerts : a.unread;
+        return new Response(JSON.stringify({ unread: a.unread, alerts, requests: a.requests ?? 0, asOf: new Date(clock).toISOString() }), { status: 200 });
     }));
 });
 
@@ -216,7 +221,7 @@ describe('bounded work on an old phone', () => {
         const phone: PhoneNotices = { mayNotify: async () => true, post: async () => {}, setBadge: async () => {} };
         vi.useFakeTimers({ now: clock });
         const settled = vi.fn();
-        void noticesAfterSync({ storage: AsyncStorage, account: kim, phone, activeUnread: async () => 0 }).then(settled);
+        void noticesAfterSync({ storage: AsyncStorage, account: kim, phone }).then(settled);
         await vi.advanceTimersByTimeAsync(7999);
         expect(askedOf(CASTLEMAINE)).toHaveLength(1);
         expect(syncReads).toBeGreaterThan(0);
@@ -340,6 +345,59 @@ describe('a rise posts one notice, once', () => {
         mem.async.set(ANCHOR, HOME);
         // One new message: fewer than the 3 last seen, and news all the same.
         answers.set(CASTLEMAINE, { unread: 1 });
+        await round();
+        expect(posted).toHaveLength(2);
+    });
+});
+
+describe('silent where a push is: the notice rises on what the node would have pushed about', () => {
+    it('a rise in `unread` alone posts nothing: a muted chat, Direct Messages off, an event\'s chat. The number and the badge still move', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(CASTLEMAINE, { unread: 1, alerts: 0 });
+        await round();
+        answers.set(CASTLEMAINE, { unread: 4, alerts: 0 });
+        await round();
+        expect(posted).toEqual([]);
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({ [CASTLEMAINE]: 4 });
+        expect(badges).toEqual([1, 4]);
+    });
+
+    it('a rise in what would have pushed posts once, whatever `unread` does; a fall posts nothing; a rise after it posts again', async () => {
+        keep(HOME, CASTLEMAINE);
+        const seen: number[] = [];
+        for (const [unread, alerts] of [[5, 2], [5, 2], [7, 2], [3, 1], [3, 2]]) {
+            answers.set(CASTLEMAINE, { unread, alerts });
+            await round();
+            seen.push(posted.length);
+        }
+        expect(seen).toEqual([1, 1, 1, 1, 2]);
+    });
+
+    it('a node too old to send it is taken at its `unread`, that community alone', async () => {
+        keep(HOME, CASTLEMAINE, BYRON);
+        answers.set(CASTLEMAINE, { unread: 2, alerts: undefined });
+        answers.set(BYRON, { unread: 2, alerts: 0 });
+        await round();
+        expect(posted.map((n) => n.data.url)).toEqual([CASTLEMAINE]);
+    });
+
+    it.each([['words', 'many'], ['a negative', -1], ['a fraction', 1.5], ['null', null]])('%s for it is as good as not sent', async (_, alerts) => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(CASTLEMAINE, { unread: 2, alerts });
+        await round();
+        expect(posted).toHaveLength(1);
+        expect(await noticeCountsSum(AsyncStorage)).toBe(2);
+    });
+
+    it('a server updated between rounds tells nothing new because of it, and what it says from then on counts', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(CASTLEMAINE, { unread: 3, alerts: undefined });
+        await round();
+        expect(posted).toHaveLength(1);
+        answers.set(CASTLEMAINE, { unread: 3, alerts: 1 });
+        await round();
+        expect(posted).toHaveLength(1);
+        answers.set(CASTLEMAINE, { unread: 4, alerts: 2 });
         await round();
         expect(posted).toHaveLength(2);
     });
@@ -614,13 +672,15 @@ describe('permissions only when asked (Marty, standing)', () => {
 
     it('no permission, in the background: the count, the numbers and the badge move, nothing shows, and the sync\'s own notices wait', async () => {
         keep(HOME, [CASTLEMAINE, 'Castlemaine']);
+        answers.set(HOME, { unread: 1 });
         answers.set(CASTLEMAINE, { unread: 2 });
-        const n = await noticesAfterSync({ storage: AsyncStorage, account: kim, phone: phone({ mayNotify: async () => false }), activeUnread: async () => 0 });
+        const n = await noticesAfterSync({ storage: AsyncStorage, account: kim, phone: phone({ mayNotify: async () => false }) });
         expect(n).toBe(0);
         expect(posted).toEqual([]);
-        expect(badges).toEqual([2]);
+        expect(badges).toEqual([3]);
         expect(await readNoticeCounts(AsyncStorage)).toEqual({ [CASTLEMAINE]: 2 });
-        expect(askedOf(HOME)).toEqual([]);
+        // The community in use is asked its count, and nothing else: the sync's own notices wait.
+        expect(askedOf(HOME).map((a) => a.path)).toEqual(['/api/me/unread']);
     });
 
     it('no permission, while open: the same', async () => {
@@ -656,11 +716,12 @@ describe('permissions only when asked (Marty, standing)', () => {
 });
 
 describe('the app-icon badge is the sum', () => {
-    it('every community that answered, added up, and the one in use as the phone\'s copy counts it while the app is closed', async () => {
+    it('every community that answered, added up, and the one in use as it answered itself while the app is closed', async () => {
         keep(HOME, CASTLEMAINE, BYRON);
+        answers.set(HOME, { unread: 2 });
         answers.set(CASTLEMAINE, { unread: 3 });
         answers.set(BYRON, { unread: 4 });
-        await round({ activeUnread: async () => 2 });
+        await closedRound();
         expect(badges).toEqual([9]);
     });
 
@@ -684,11 +745,23 @@ describe('the app-icon badge is the sum', () => {
         expect(badges).toEqual([4, 3]);
     });
 
-    it('a count of the community in use that can\'t be read leaves the badge as it was, not lower than the truth', async () => {
+    it.each([
+        ['down', 'down'],
+        ['refusing for some other reason', { status: 500 }],
+        ['answering with no count', { status: 200, body: { unread: 'many' } }],
+    ] as Array<[string, Answer]>)('the community in use %s leaves the badge as it was, not lower than the truth', async (_, answer) => {
         keep(HOME, CASTLEMAINE);
+        answers.set(HOME, answer);
         answers.set(CASTLEMAINE, { unread: 3 });
-        await round({ activeUnread: async () => { throw new Error('no database'); } });
+        await closedRound();
         expect(badges).toEqual([]);
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({ [CASTLEMAINE]: 3 });
+    });
+
+    it('nothing is ever read from a copy nobody refreshed: the round has no way to', () => {
+        const read = (file: string) => fs.readFileSync(path.resolve(__dirname, file), 'utf8');
+        expect(read('../other-communities-unread.ts')).not.toMatch(/getGlobalUnreadCount/);
+        expect(read('../../services/push-notifications.ts')).not.toMatch(/getGlobalUnreadCount/);
     });
 
     it('while the app is open, what the phone knows, asking nobody; the community in use isn\'t in it, as ever', async () => {
@@ -731,6 +804,331 @@ describe('the app-icon badge is the sum', () => {
         const body = (name: string) => service.slice(service.indexOf(`export ${name}`), service.indexOf('\n}\n', service.indexOf(`export ${name}`)));
         expect(body('async function showBadgeSum')).toContain("AppState.currentState !== 'active'");
         expect(body('async function askOtherCommunitiesNow')).toContain("AppState.currentState !== 'active'");
+    });
+});
+
+describe('the community in use, while the app is closed: no socket, and the phone\'s copy is from when it closed', () => {
+    const phone = (): PhoneNotices => ({ mayNotify: async () => true, post: async (n) => { posted.push(n); }, setBadge: async (n) => { badges.push(n); } });
+
+    it('the review\'s reproduction: two DMs wait, its push set the icon to 2, and a background round leaves it at 2', async () => {
+        keep(HOME, CASTLEMAINE);
+        pushLanded(HOME, CASTLEMAINE);
+        answers.set(HOME, { unread: 2 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        await closedRound();
+        expect(badges).toEqual([2]);
+        expect(posted).toEqual([]);
+    });
+
+    it('the same with it silent: no write at all, as the review asks, and the others still move', async () => {
+        keep(HOME, CASTLEMAINE);
+        pushLanded(HOME, CASTLEMAINE);
+        answers.set(HOME, 'down');
+        answers.set(CASTLEMAINE, { unread: 3 });
+        await closedRound();
+        expect(badges).toEqual([]);
+        expect(await noticeCountsSum(AsyncStorage)).toBe(3);
+    });
+
+    it('a DM there with no push: one notice in the app\'s own words, and the badge. This is the DM that went unheard', async () => {
+        keep([HOME, 'Home'], CASTLEMAINE);
+        answers.set(HOME, { unread: 1 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        expect(await closedRound()).toBe(1);
+        expect(posted).toHaveLength(1);
+        expect(posted[0].title).toBe('BeanPool');
+        expect(posted[0].body).toBe('You have new messages in Home');
+        expect(posted[0].data).toEqual({ bpLocal: 1, type: 'unread-elsewhere', url: HOME });
+        expect(badges).toEqual([1]);
+    });
+
+    it('through the whole background sync, not only a round', async () => {
+        keep([HOME, 'Home'], CASTLEMAINE);
+        answers.set(HOME, { unread: 1 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        expect(await noticesAfterSync({ storage: AsyncStorage, account: kim, phone: phone() })).toBe(1);
+        expect(posted.map((n) => n.body)).toEqual(['You have new messages in Home']);
+        expect(badges).toEqual([1]);
+    });
+
+    it('a phone with one community and no push is told as well: nothing else can', async () => {
+        keep([HOME, 'Home']);
+        answers.set(HOME, { unread: 1 });
+        await closedRound();
+        expect(posted.map((n) => n.body)).toEqual(['You have new messages in Home']);
+        expect(badges).toEqual([1]);
+    });
+
+    it('a phone with one community whose push landed is left to that push: nothing asked, no badge written', async () => {
+        keep(HOME);
+        pushLanded(HOME);
+        expect(await closedRound()).toBe(0);
+        expect(asked).toEqual([]);
+        expect(badges).toEqual([]);
+        expect(mem.async.has(UNREAD_ROUNDS_STORE_KEY)).toBe(false);
+    });
+
+    it('a phone with one community with alerts off there, or on old signing: nothing asked, no badge written', async () => {
+        keep(HOME);
+        mem.async.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([HOME]));
+        await closedRound();
+        mem.async.delete(PUSH_ALERTS_OFF_STORE_KEY);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME, requestSigning: 1 }]));
+        await closedRound();
+        expect(asked).toEqual([]);
+        expect(badges).toEqual([]);
+    });
+
+    it('a rise posts once; the same count posts nothing, a kill between them included; a fall posts nothing; a rise after it posts again', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(CASTLEMAINE, { unread: 0 });
+        const seen: number[] = [];
+        for (const unread of [2, 2, 1, 1, 3]) {
+            answers.set(HOME, { unread });
+            await closedRound();
+            vi.resetModules();
+            seen.push(posted.length);
+        }
+        expect(seen).toEqual([1, 1, 1, 1, 2]);
+    });
+
+    it('a mute holds here too: a rise in `unread` alone moves the badge and tells nobody', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(HOME, { unread: 5, alerts: 1 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        await closedRound();
+        answers.set(HOME, { unread: 7, alerts: 1 });
+        await closedRound();
+        expect(posted).toHaveLength(1);
+        expect(badges).toEqual([5, 7]);
+    });
+
+    it('where its push landed, no second line on the lock screen', async () => {
+        keep(HOME, CASTLEMAINE);
+        pushLanded(HOME);
+        answers.set(HOME, { unread: 2 });
+        await closedRound();
+        expect(posted).toEqual([]);
+    });
+
+    it('read with the app open, the next line is still a rise: 1 is not less than the 2 no round saw go', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(HOME, { unread: 2 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        await closedRound();
+        expect(posted).toHaveLength(1);
+        await round();
+        answers.set(HOME, { unread: 1 });
+        await closedRound();
+        expect(posted).toHaveLength(2);
+    });
+
+    it('that holds if the app opens inside the 5 minutes, and on a phone with one community', async () => {
+        keep(HOME);
+        answers.set(HOME, { unread: 2 });
+        await closedRound();
+        expect(posted).toHaveLength(1);
+        await askOtherCommunities(deps());
+        answers.set(HOME, { unread: 1 });
+        await closedRound();
+        expect(posted).toHaveLength(2);
+    });
+
+    it('a closed round still going as the app opens can\'t write what the open round forgot', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(CASTLEMAINE, { unread: 0 });
+        let answer: (r: Response) => void = () => {};
+        const before = vi.mocked(fetch).getMockImplementation()!;
+        vi.mocked(fetch).mockImplementation(async (input, init) => (String(input).startsWith(HOME)
+            ? new Promise<Response>((resolve) => { answer = resolve; })
+            : before(input, init)));
+        const closing = closedRound();
+        await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(2));
+        const opening = roundWhileOpen(AsyncStorage, kim, phone());
+        await Promise.resolve();
+        answer(new Response(JSON.stringify({ unread: 2, alerts: 2, requests: 0 }), { status: 200 }));
+        await closing;
+        await opening;
+        expect(JSON.parse(mem.async.get(UNREAD_ROUNDS_STORE_KEY) ?? '{}').inUse).toBeNull();
+    });
+
+    it('it is one of the six: five others go with it, and their turn goes on from where it stood', async () => {
+        const towns = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((t) => `https://${t}.example.org`);
+        keep(HOME, ...towns);
+        answers.set(HOME, { unread: 0 });
+        for (const t of towns) answers.set(t, { unread: 0 });
+        const others = () => unreadAsks().map((a) => a.community).filter((c) => c !== HOME);
+
+        await closedRound();
+        expect(unreadAsks()).toHaveLength(UNREAD_ROUND_SIZE);
+        expect(askedOf(HOME)).toHaveLength(1);
+        expect(others()).toEqual(towns.slice(0, 5));
+        asked = [];
+        await closedRound();
+        expect(askedOf(HOME)).toHaveLength(1);
+        expect(others()).toEqual([...towns.slice(5), ...towns.slice(0, 2)]);
+        asked = [];
+        await round();
+        expect(askedOf(HOME)).toEqual([]);
+        expect(others()).toEqual([...towns.slice(2, 8)]);
+    });
+
+    it('under the sync\'s one deadline: with it hanging the task still ends at 8 seconds, a quick community\'s notice goes, and the badge stays', async () => {
+        keep(HOME, [CASTLEMAINE, 'Castlemaine']);
+        answers.set(HOME, 'never');
+        answers.set(CASTLEMAINE, { unread: 1 });
+        vi.useFakeTimers({ now: clock });
+        const settled = vi.fn();
+        void noticesAfterSync({ storage: AsyncStorage, account: kim, phone: phone() }).then(settled);
+        await vi.advanceTimersByTimeAsync(7999);
+        expect(unreadAsks().map((a) => a.community).sort()).toEqual([CASTLEMAINE, HOME]);
+        expect(settled).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toHaveBeenCalledWith(1);
+        expect(badges).toEqual([]);
+    });
+
+    it('one that says the account isn\'t theirs: none in the badge, and left alone for the wait', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(HOME, { status: 403, body: { code: 'not_a_member' } });
+        answers.set(CASTLEMAINE, { unread: 2 });
+        await closedRound();
+        expect(badges).toEqual([2]);
+        asked = [];
+        await closedRound();
+        expect(askedOf(HOME)).toEqual([]);
+        expect(badges).toEqual([2, 2]);
+    });
+
+    it('one on old signing isn\'t asked, so there is no number for it: the badge stays as it was', async () => {
+        mem.async.set(ANCHOR, HOME);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME, requestSigning: 1 }, { url: CASTLEMAINE }]));
+        answers.set(CASTLEMAINE, { unread: 2 });
+        await closedRound();
+        expect(askedOf(HOME)).toEqual([]);
+        expect(badges).toEqual([]);
+    });
+
+    it('one with alerts off isn\'t asked, and has no part in the badge', async () => {
+        keep(HOME, CASTLEMAINE);
+        mem.async.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([HOME]));
+        answers.set(CASTLEMAINE, { unread: 2 });
+        await closedRound();
+        expect(askedOf(HOME)).toEqual([]);
+        expect(badges).toEqual([2]);
+    });
+
+    it('an account that left the phone while it answered leaves nothing behind', async () => {
+        keep(HOME, CASTLEMAINE);
+        vi.stubGlobal('fetch', vi.fn(async () => {
+            mem.async.delete(ANCHOR);
+            mem.async.delete(SAVED_NODES_STORE_KEY);
+            mem.async.delete(UNREAD_ROUNDS_STORE_KEY);
+            return new Response(JSON.stringify({ unread: 5, alerts: 5, requests: 0 }), { status: 200 });
+        }));
+        await closedRound();
+        expect(posted).toEqual([]);
+        expect(mem.async.has(UNREAD_ROUNDS_STORE_KEY)).toBe(false);
+    });
+
+    it('a rise that can\'t be written down tells nobody: it would be told again every round', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(HOME, { unread: 2 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        let writes = 0;
+        const failing = {
+            ...AsyncStorage,
+            getItem: AsyncStorage.getItem,
+            setItem: async (key: string, value: string) => {
+                if (key === UNREAD_ROUNDS_STORE_KEY && ++writes === 2) throw new Error('storage full');
+                return AsyncStorage.setItem(key, value);
+            },
+        };
+        await closedRound({ storage: failing });
+        expect(posted).toEqual([]);
+        expect(badges).toEqual([2]);
+    });
+
+    it('rounds belong to the account: another key starts from nothing', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(HOME, { unread: 2 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        await closedRound();
+        expect(posted).toHaveLength(1);
+        await closedRound({ account: account() });
+        expect(posted).toHaveLength(2);
+    });
+
+    it('a tap opens its Chat, with no switch: it is already there', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(HOME, { unread: 1 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        await closedRound();
+        const opened: string[] = [];
+        const went: NoticeRoute[] = [];
+        await followTap({ identifier: 'n', remote: false, title: 'BeanPool', body: 'x', data: posted[0].data }, {
+            storage: AsyncStorage, account: kim, openIn: async (community) => { opened.push(community); },
+        }, (route) => { went.push(route); });
+        expect(went).toEqual(['/(tabs)/chats']);
+        expect(opened).toEqual([]);
+    });
+});
+
+describe('one community saved in two spellings is one community', () => {
+    const SPELT = 'https://Home.example.org';
+    const twice = (extra: object[] = []) => {
+        mem.async.set(ANCHOR, SPELT);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: SPELT, alias: 'Home' }, { url: HOME }, ...extra]));
+    };
+
+    it('the review\'s reproduction, open: no question and no notice for the community the phone is on, and its badge left alone', async () => {
+        twice();
+        answers.set(HOME, { unread: 3 });
+        await round();
+        expect(asked).toEqual([]);
+        expect(posted).toEqual([]);
+        expect(badges).toEqual([]);
+    });
+
+    it('the review\'s reproduction, closed: asked once, and a badge of 3 for 3 unread, not 6', async () => {
+        twice();
+        answers.set(HOME, { unread: 3 });
+        await closedRound();
+        expect(unreadAsks()).toHaveLength(1);
+        expect(badges).toEqual([3]);
+        expect(await noticeCountsSum(AsyncStorage)).toBe(0);
+    });
+
+    it.each([['capitals', SPELT], ['the default port', `${HOME}:443`], ['a trailing slash', `${HOME}/`]])('%s make it no other community', async (_, spelling) => {
+        mem.async.set(ANCHOR, HOME);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: spelling }]));
+        expect(await keepsOtherCommunities(AsyncStorage)).toBe(false);
+    });
+
+    it('a real other community on the list is still another', async () => {
+        twice([{ url: CASTLEMAINE }]);
+        expect(await keepsOtherCommunities(AsyncStorage)).toBe(true);
+        answers.set(CASTLEMAINE, { unread: 1 });
+        await round();
+        expect(unreadAsks().map((a) => a.community)).toEqual([CASTLEMAINE]);
+    });
+
+    it('another community saved twice is asked once, told of once, and counted once', async () => {
+        mem.async.set(ANCHOR, HOME);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME }, { url: CASTLEMAINE }, { url: 'https://Castlemaine.example.org' }]));
+        answers.set(CASTLEMAINE, { unread: 2 });
+        await round();
+        expect(unreadAsks()).toHaveLength(1);
+        expect(posted).toHaveLength(1);
+        expect(badges).toEqual([2]);
+    });
+
+    it('old signing on either spelling stands for the community', async () => {
+        mem.async.set(ANCHOR, SPELT);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: HOME, requestSigning: 1 }, { url: SPELT }, { url: CASTLEMAINE }]));
+        answers.set(CASTLEMAINE, { unread: 1 });
+        await closedRound();
+        expect(unreadAsks().map((a) => a.community)).toEqual([CASTLEMAINE]);
     });
 });
 

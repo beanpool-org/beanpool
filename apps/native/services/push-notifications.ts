@@ -335,20 +335,11 @@ export function setupNotificationResponseHandler(options: NotificationTapOptions
 }
 
 /**
- * What waits at the community in use, as the phone's own copy counts it, for the badge while the app is closed: the sync
- * that came before it has brought that copy up to date.
- */
-async function unreadInUse(publicKey: string): Promise<number> {
-    const { getGlobalUnreadCount } = await import('../utils/db');
-    return getGlobalUnreadCount(publicKey);
-}
-
-/**
  * The background sync's notices (utils/sync-notices.ts): the community the phone is set to asked for its member's
- * unseen notices, and one posted on the phone for each recent one not shown before; and a round of its other communities
- * (utils/other-communities-unread.ts). Only while the app is not open (the socket's alerts and the 5-minute tick do it
- * then). Nothing is posted unless the phone lets the app notify, and a round still moves the numbers and the badge when it
- * doesn't. Returns how many were posted. Never throws.
+ * unseen notices, and one posted on the phone for each recent one not shown before; and a round of its communities, the
+ * one in use among them (utils/other-communities-unread.ts). Only while the app is not open (the socket's alerts and the
+ * 5-minute tick do it then). Nothing is posted unless the phone lets the app notify, and a round still moves the numbers
+ * and the badge when it doesn't. Returns how many were posted. Never throws.
  */
 export async function postNoticesAfterSync(): Promise<number> {
     if (isExpoGo || !Notifications) return 0;
@@ -356,7 +347,7 @@ export async function postNoticesAfterSync(): Promise<number> {
         if (AppState.currentState === 'active') return 0;
         // The unseen notices, the answers to this phone's requests to join, new requests for an owner or admin with no
         // push here, and the round, all at once under one deadline (utils/sync-notices.ts), inside the task's ~30 seconds.
-        return await noticesAfterSync({ storage: AsyncStorage, account: await loadIdentity(), phone: phoneNotices, activeUnread: unreadInUse });
+        return await noticesAfterSync({ storage: AsyncStorage, account: await loadIdentity(), phone: phoneNotices });
     } catch (e) {
         console.warn('[Notices] The sync\'s notices were not posted', e);
         return 0;

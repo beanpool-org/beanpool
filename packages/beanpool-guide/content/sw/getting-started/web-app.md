@@ -92,7 +92,7 @@ Ikiwa ulijiunga na jumuiya ya kimataifa kwa maneno 12, ndiyo njia yako pekee ya 
 ## Majina na maeneo tofauti
 
 - **Kujiunga kwa mwaliko:** kitufe cha hatua ya kwanza kinasema **Tengeneza Utambulisho na Ujiunge →**. Ikiwa mtu fulani hapa tayari anatumia jina ulilochagua, unalipata likiwa na nambari iliyoongezwa. **← Rudi** kwenye **Picha Yako** huonyesha jina lako pekee, ikiwa na **Endelea →**: libadilishe (hadi herufi 20) au libakize, kwenye akaunti ileile. Ikiwa mtu tayari anatumia jina jipya, ukurasa unasema hivyo na unapendekeza mengine.
-- **Vichupo:** programu ya wavuti ina **Nyumbani**, **Soko**, **Ramani**, **Mali za Pamoja**, **Gumzo**, **Watu** na **Leja**. Kile ambacho programu ya simu inakiita **Gumzo** (Talk) ni **Gumzo** (Chat) kwenye wavuti, na **Watu** ina kichupo chake yenyewe.
+- **Vichupo:** programu ya wavuti ina **Nyumbani**, **Soko**, **Ramani**, **Mali za Pamoja**, **Gumzo**, **Watu** na **Leja**. Programu zote mbili huita kichupo hiki **Gumzo**, na kwenye wavuti **Watu** ina kichupo chake yenyewe.
 - **Mipangilio na wasifu wako:** vitufe vidogo vilivyo juu kulia: wasifu wako, **?**, kisha Mipangilio. Kwenye skrini pana viko chini ya menyu upande wa kushoto.
 - **Kuchapisha Ofa au Hitaji:** tumia **Chapisho Jipya** kwenye ukurasa wa **Ramani**.
 - **Mwonekano:** chaguo linaitwa **Sawa na kifaa** badala ya "Sawa na simu".

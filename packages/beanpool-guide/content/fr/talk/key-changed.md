@@ -31,7 +31,7 @@ Votre téléphone ne peut pas faire la distinction par lui-même. Vous le pouvez
 - Vérifiez-le **en personne, ou lors d'un appel téléphonique ou vidéo** où vous avez la certitude de vous adresser à elle. Ne le vérifiez pas par message dans BeanPool : si la clé n'est pas la bonne, votre interlocuteur ne l'est pas non plus.
 - Si chaque chiffre concorde, cochez **J'ai vérifié avec Ben : le code de clé dans ses Paramètres correspond à celui-ci**, puis touchez **Continuer avec la nouvelle clé**.
 
-Dès lors, vos messages partent vers la nouvelle clé. Le bandeau et la pastille **clé modifiée** sur la discussion dans **Échanges** disparaissent, et vos messages antérieurs restent lisibles.
+Dès lors, vos messages partent vers la nouvelle clé. Le bandeau et la pastille **clé modifiée** sur la discussion dans **Chat** disparaissent, et vos messages antérieurs restent lisibles.
 
 Le code n'est pas secret. Il peut être énoncé à voix haute sans danger.
 
@@ -59,7 +59,7 @@ Vous pouvez la réinitialiser pour une communauté : ouvrez les **Paramètres**,
 
 Après une réinitialisation, votre téléphone revérifie chaque discussion de cette communauté depuis le début, à partir des messages qu'il conserve. Une discussion dont les messages proviennent d'une autre clé que celle désormais fournie par la communauté affiche à nouveau le bandeau, débutant par **La mémoire des discussions de cette communauté a été réinitialisée, le téléphone revérifie cette discussion depuis le début.** Vérifiez le code avec la personne comme vu plus haut.
 
-Deux conséquences peuvent survenir après une réinitialisation, et l'avertissement vous en informe avant confirmation : une discussion suspendue en raison d'un changement de clé peut s'ouvrir avec la nouvelle clé, et une discussion privée qui avait disparu d'Échanges peut réapparaître sous la forme d'une discussion de groupe lisible par la communauté. Vérifiez le code de clé ou les participants d'une discussion avant d'envoyer quoi que ce soit.
+Deux conséquences peuvent survenir après une réinitialisation, et l'avertissement vous en informe avant confirmation : une discussion suspendue en raison d'un changement de clé peut s'ouvrir avec la nouvelle clé, et une discussion privée qui avait disparu de Chat peut réapparaître sous la forme d'une discussion de groupe lisible par la communauté. Vérifiez le code de clé ou les participants d'une discussion avant d'envoyer quoi que ce soit.
 
 Une réinitialisation ne résout rien pour une discussion que votre téléphone ne parvient pas à associer à une clé unique : elle sera revérifiée et se bloquera à nouveau. Vérifiez plutôt le code avec la personne (ci-dessus).
 

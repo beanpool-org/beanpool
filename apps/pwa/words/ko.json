@@ -3554,5 +3554,8 @@
   "🫘 Welcome to BeanPool": "🫘 BeanPool에 오신 걸 환영해요",
   "Offer": "제공",
   "Need": "요청",
-  "Enterprise": "기업"
+  "Enterprise": "기업",
+  "! not delivered": "! 전송되지 않음",
+  "Discard": "삭제",
+  "Message not delivered": "메시지가 전송되지 않았어요"
 }

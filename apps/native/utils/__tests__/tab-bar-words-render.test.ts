@@ -102,7 +102,7 @@ const CATALOG_LANGS = fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.j
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
 
 /** The strip's tabs, in order, with their English names; and those off the strip (routes only). */
-const STRIP = [['index', 'Home'], ['market', 'Market'], ['map', 'Map'], ['chats', 'Talk'], ['projects', 'Commons'], ['ledger', 'Ledger']] as const;
+const STRIP = [['index', 'Home'], ['market', 'Market'], ['map', 'Map'], ['chats', 'Chat'], ['projects', 'Commons'], ['ledger', 'Ledger']] as const;
 const OFF_STRIP = [['people', 'People'], ['pulse', 'Pulse'], ['settings', 'Settings']] as const;
 const TAB_KEY = (english: string) => `${english}\u0004tab`;
 

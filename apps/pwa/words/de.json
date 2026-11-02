@@ -3683,5 +3683,8 @@
   "🫘 Welcome to BeanPool": "🫘 Willkommen bei BeanPool",
   "Offer": "Angebot",
   "Need": "Gesuch",
-  "Enterprise": "Betrieb"
+  "Enterprise": "Betrieb",
+  "! not delivered": "! nicht zugestellt",
+  "Discard": "Verwerfen",
+  "Message not delivered": "Nachricht nicht zugestellt"
 }

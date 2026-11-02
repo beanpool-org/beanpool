@@ -21,7 +21,7 @@ Muting a one-to-one chat is on the phone only for now; group chats can be muted 
 - It stops that chat's alerts. In a group's chat, someone who @mentions you still reaches you. See "Mentions".
 - An enterprise's chat sends no alerts, so there are none to stop. Muting it keeps it out of the numbers below.
 - The chat still shows new messages.
-- In **Talk**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.
+- In **Chat**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.
 - In a group's or an enterprise's chat, the top bar stays quiet about it too. A muted chat with one person still counts there.
 - The mute stays when you leave the chat. When you open a group's or an enterprise's chat again, the top says **muted**.
 

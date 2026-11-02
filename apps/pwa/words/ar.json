@@ -4199,5 +4199,8 @@
   "🫘 Welcome to BeanPool": "🫘 مرحبًا بك في BeanPool",
   "Offer": "عرض",
   "Need": "طلب",
-  "Enterprise": "مؤسسة"
+  "Enterprise": "مؤسسة",
+  "! not delivered": "! لم يتم التسليم",
+  "Discard": "تجاهل",
+  "Message not delivered": "لم يتم تسليم الرسالة"
 }

@@ -31,7 +31,7 @@ Seu celular não consegue distinguir esses casos sozinho. Você consegue, usando
 - Confira o código **pessoalmente ou por chamada de áudio ou vídeo** em que você tenha certeza de que é ela. Não confira por mensagem no BeanPool: se a chave estiver errada, quem responde também estará.
 - Se todos os dígitos coincidirem, marque a opção **Conferi com Ben: o código de chave nas Configurações dele coincide com este** e depois toque em **Continuar com a nova chave**.
 
-A partir desse momento, suas mensagens irão para a nova chave. O aviso e a etiqueta de **chave alterada** na conversa em **Conversas** desaparecem, e suas mensagens anteriores continuam legíveis.
+A partir desse momento, suas mensagens irão para a nova chave. O aviso e a etiqueta de **chave alterada** na conversa em **Bate-papo** desaparecem, e suas mensagens anteriores continuam legíveis.
 
 O código não é segredo. É seguro lê-lo em voz alta.
 
@@ -59,7 +59,7 @@ Você pode redefini-la para uma comunidade: abra **Configurações**, toque em *
 
 Após a redefinição, seu celular verifica todas as conversas daquela comunidade novamente desde o início, a partir das mensagens que armazena. Uma conversa cujas mensagens vieram de uma chave diferente daquela informada atualmente pela comunidade exibirá o aviso novamente, começando com **A memória de bate-papo desta comunidade foi redefinida, por isso este celular está verificando esta conversa do início.** Confira o código com a pessoa como descrito acima.
 
-Duas coisas podem mudar após uma redefinição, e o aviso destaca isso antes de você confirmar: uma conversa que estava pausada por troca de chave pode se abrir com a nova chave, e uma conversa privada que havia sumido de Conversas pode retornar como uma conversa em grupo legível pela comunidade. Confira o código de chave, ou quem participa da conversa, antes de enviar.
+Duas coisas podem mudar após uma redefinição, e o aviso destaca isso antes de você confirmar: uma conversa que estava pausada por troca de chave pode se abrir com a nova chave, e uma conversa privada que havia sumido de Bate-papo pode retornar como uma conversa em grupo legível pela comunidade. Confira o código de chave, ou quem participa da conversa, antes de enviar.
 
 Uma redefinição não resolve uma conversa que o celular não consegue associar a uma chave única: ela é verificada novamente e para de novo. Confira o código com a pessoa (acima).
 

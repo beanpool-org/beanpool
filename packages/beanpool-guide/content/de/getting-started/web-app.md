@@ -92,7 +92,7 @@ Wenn du der globalen Community mit 12 Wörtern beigetreten bist, sind diese dein
 ## Unterschiedliche Bezeichnungen und Positionen
 
 - **Mit einer Einladung beitreten:** Die Schaltfläche des ersten Schritts heißt **Identität erstellen & beitreten →**. Wenn jemand hier bereits den von dir gewählten Namen hat, erhältst du ihn mit einer angehängten Zahl. **← Zurück** auf **Dein Foto** zeigt deinen Namen allein mit **Weiter →**: Ändere ihn (bis zu 20 Zeichen) oder behalte ihn, auf demselben Konto. Wenn jemand den neuen Namen bereits hat, weist die Seite darauf hin und schlägt andere vor.
-- **Tabs:** Die Web-App bietet **Startseite**, **Markt**, **Karte**, **Gemeingut**, **Chat**, **Personen** und **Buch**. Was in der Smartphone-App **Chat** (Talk) heißt, ist im Web **Chat**, und **Personen** hat einen eigenen Tab.
+- **Tabs:** Die Web-App bietet **Startseite**, **Markt**, **Karte**, **Gemeingut**, **Chat**, **Personen** und **Buch**. Beide Apps nennen diesen Tab **Chat**, und im Web hat **Personen** einen eigenen Tab.
 - **Einstellungen und dein Profil:** Die kleinen Schaltflächen oben rechts: Dein Profil, das **?**, dann die Einstellungen. Auf einem breiten Bildschirm befinden sie sich ganz unten im Menü auf der linken Seite.
 - **Ein Angebot oder Gesuch aufgeben:** Verwende **Neuer Beitrag** auf der Seite **Karte**.
 - **Erscheinungsbild:** Die Option heißt **Wie Gerät** anstelle von „Wie Smartphone“.

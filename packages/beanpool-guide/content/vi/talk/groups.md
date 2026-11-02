@@ -15,7 +15,7 @@ Những người trông coi một nhóm trò chuyện là các **điều hành v
 
 ## Các nhóm của bạn
 
-Nhấn **Trò chuyện**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia đều được liệt kê ở đó, tin nhắn mới nhất xếp trước, cùng các dự án bạn phụ trách hoặc cộng tác (🎯), các doanh nghiệp bạn quản lý (🥖) và các sự kiện bạn tổ chức hoặc sẽ tham gia (📅). Cuộc trò chuyện của một doanh nghiệp là cuộc thảo luận công khai: bất kỳ thành viên nào trong cộng đồng của bạn đều có thể đọc. Xem "Tin nhắn". Mỗi nhóm hiển thị tin nhắn mới nhất và số lượng tin nhắn bạn chưa đọc. Trong một cuộc trò chuyện được mã hóa, hàng hiển thị người đã viết tin nhắn cuối cùng và **🔒 Tin nhắn**, chứ không phải nội dung chữ.
+Nhấn **Chat**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia đều được liệt kê ở đó, tin nhắn mới nhất xếp trước, cùng các dự án bạn phụ trách hoặc cộng tác (🎯), các doanh nghiệp bạn quản lý (🥖) và các sự kiện bạn tổ chức hoặc sẽ tham gia (📅). Cuộc trò chuyện của một doanh nghiệp là cuộc thảo luận công khai: bất kỳ thành viên nào trong cộng đồng của bạn đều có thể đọc. Xem "Tin nhắn". Mỗi nhóm hiển thị tin nhắn mới nhất và số lượng tin nhắn bạn chưa đọc. Trong một cuộc trò chuyện được mã hóa, hàng hiển thị người đã viết tin nhắn cuối cùng và **🔒 Tin nhắn**, chứ không phải nội dung chữ.
 
 - Con số trên mục **Nhóm** ở trên cùng cộng dồn các tin nhắn chưa đọc của bạn, ngoại trừ các cuộc trò chuyện bạn đã tắt thông báo.
 - Nhấn vào một nhóm để mở cuộc trò chuyện của nhóm đó. Thao tác này sẽ đánh dấu nhóm là đã đọc.
@@ -25,8 +25,8 @@ Trên điện thoại, danh sách tương tự nằm trong **Chung**, dưới m�
 
 ## Bắt đầu một nhóm
 
-- Trên điện thoại, trong **Trò chuyện**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc trong **Chung**, dưới mục **Nhóm**, nhấn nút tròn **+**. Cả hai đều mở cùng một biểu mẫu **Tạo nhóm**. (Trên thẻ phân loại **Dự án** hoặc **Doanh nghiệp**, nút **+** sẽ bắt đầu một dự án hoặc doanh nghiệp thay thế.)
-- Trong ứng dụng web, mở **Chung**, sau đó chọn **Nhóm**, và nhấn **+ Tạo nhóm**. Bạn sẽ ở lại trang **Chung** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Trò chuyện**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.
+- Trên điện thoại, trong **Chat**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc trong **Chung**, dưới mục **Nhóm**, nhấn nút tròn **+**. Cả hai đều mở cùng một biểu mẫu **Tạo nhóm**. (Trên thẻ phân loại **Dự án** hoặc **Doanh nghiệp**, nút **+** sẽ bắt đầu một dự án hoặc doanh nghiệp thay thế.)
+- Trong ứng dụng web, mở **Chung**, sau đó chọn **Nhóm**, và nhấn **+ Tạo nhóm**. Bạn sẽ ở lại trang **Chung** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Chat**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.
 - Đặt **Tên nhóm**, tối đa 60 ký tự, và nếu muốn, nhập **Mục đích / Mô tả**, tối đa 300 ký tự: nhóm dùng để làm gì và dành cho ai.
 - Chọn một **Danh mục**: **Nhóm giao lưu**, **Chung**, **Nhóm làm việc** hoặc **Hội nghề**. Trên điện thoại, **Nhóm giao lưu** được chọn sẵn cho bạn. Trong ứng dụng web, **Nhóm làm việc** được chọn sẵn.
 - Chọn một **Chính sách tham gia**: **Mở**, **Yêu cầu tham gia** hoặc **Chỉ theo lời mời**.
@@ -43,7 +43,7 @@ Bạn có thể mời mọi người trên điện thoại và trong ứng dụn
 - Nhấn **Mời mọi người**, tích chọn những người bạn muốn mời, và nhấn nút ở dưới cùng (ví dụ **Mời 2 người**).
 - Hoặc nhấn **Không phải bây giờ** để bỏ qua bước này.
 
-Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ thấy nhóm trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại (trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**). Ứng dụng web chưa đánh dấu lời mời: ở đó, họ mở nhóm và nhấn **Chấp nhận lời mời**. Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó.
+Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ thấy nhóm trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại (trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Chat**). Ứng dụng web chưa đánh dấu lời mời: ở đó, họ mở nhóm và nhấn **Chấp nhận lời mời**. Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó.
 
 ## Cuộc trò chuyện của nhóm
 
@@ -61,7 +61,7 @@ Cuộc trò chuyện của một nhóm được mã hóa đầu cuối: chỉ c�
 - Một tin nhắn không kiểm tra được là do thành viên viết sẽ hiển thị dưới dạng **Chưa xác minh**, như là của người lạ, kèm dòng **Không thể xác minh tin nhắn này.** Một tin nhắn mà khóa chưa đến điện thoại của bạn sẽ hiển thị **Đang đợi khóa cho tin nhắn này.**
 - Nếu máy chủ cộng đồng của bạn cũ hơn và chưa thể khóa các cuộc trò chuyện nhóm, cuộc trò chuyện sẽ thông báo rằng máy chủ có thể đọc được và nhóm sẽ được khóa khi máy chủ được cập nhật. Khi máy chủ được cập nhật, các tin nhắn trước đó của nhóm mà máy chủ có thể đọc được sẽ bị gỡ bỏ, và một dòng trong cuộc trò chuyện sẽ thông báo điều đó. Mỗi tin nhắn trước đó sau đó sẽ hiển thị **Một tin nhắn trước đó đã bị xóa khi đoạn chat này bị khóa**, và nhiều tin nhắn liên tiếp sẽ hiển thị thành một dòng, chẳng hạn như **11 tin nhắn trước đó đã bị xóa khi đoạn chat này bị khóa**.
 
-Trong ứng dụng web, các cuộc trò chuyện nhóm của bạn nằm trong mục **Trò chuyện**, được đánh dấu 👥. Bạn có thể đọc và viết ở đó, được mã hóa đầu cuối như trên điện thoại: trả lời, bày tỏ cảm xúc, chỉnh sửa trong vòng 15 phút và tìm kiếm trong cuộc trò chuyện. Việc tắt thông báo, **Xóa** và **Gỡ** chỉ có trên điện thoại. Trong ứng dụng web, hãy nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để mở nhóm; một điều hành viên có thể mời mọi người từ đó. Cuộc trò chuyện của một doanh nghiệp không được mã hóa: xem "Tin nhắn".
+Trong ứng dụng web, các cuộc trò chuyện nhóm của bạn nằm trong mục **Chat**, được đánh dấu 👥. Bạn có thể đọc và viết ở đó, được mã hóa đầu cuối như trên điện thoại: trả lời, bày tỏ cảm xúc, chỉnh sửa trong vòng 15 phút và tìm kiếm trong cuộc trò chuyện. Việc tắt thông báo, **Xóa** và **Gỡ** chỉ có trên điện thoại. Trong ứng dụng web, hãy nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để mở nhóm; một điều hành viên có thể mời mọi người từ đó. Cuộc trò chuyện của một doanh nghiệp không được mã hóa: xem "Tin nhắn".
 
 ## Nói chuyện trong đoạn chat của nhóm
 
@@ -108,7 +108,7 @@ Trên điện thoại, một nhóm bạn đã yêu cầu tham gia sẽ không n�
 
 Một nhóm **Chỉ theo lời mời** sẽ bị ẩn khỏi tất cả những ai không ở trong nhóm hoặc không được mời vào nhóm.
 
-Trên điện thoại, một cộng đồng địa phương không có Đậu sẽ không có tab **Chung**. Ở đó, hãy nhấn **Trò chuyện**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Cộng đồng toàn cầu có tab **Chung**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
+Trên điện thoại, một cộng đồng địa phương không có Đậu sẽ không có tab **Chung**. Ở đó, hãy nhấn **Chat**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Cộng đồng toàn cầu có tab **Chung**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
 
 Nếu một điều hành viên đã gỡ bạn khỏi một nhóm, bạn không thể tự mình tham gia lại nhóm đó.
 
@@ -116,7 +116,7 @@ Trong khi tài khoản của bạn bị đình chỉ, bạn không thể bắt �
 
 ## Tham gia theo lời mời
 
-Một nhóm bạn được mời tham gia hiển thị trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại. Trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:
+Một nhóm bạn được mời tham gia hiển thị trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại. Trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Chat**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:
 
 - Nhấn **Tham gia nhóm**. Bạn sẽ vào thẳng cuộc trò chuyện của nhóm.
 - Nhấn **Không phải bây giờ** để quyết định sau. Lời mời vẫn còn đó.

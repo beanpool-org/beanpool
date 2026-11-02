@@ -90,12 +90,12 @@ Some of these changes live on your community's server. You get them when your co
 
 ### Groups
 
-- **Every group has a chat.** Talk now has three buttons: **Messages**, **Groups** and **People**. **Groups** lists your groups, the enterprises you keep and the events you are going to, each with its latest message and unread count.
-- **One way to start a group.** **New group** in Talk and **+** in Commons open the same form, with **Social Circle** chosen for you. After you create it you land in its chat, which asks who you want to invite.
+- **Every group has a chat.** Chat now has three buttons: **Messages**, **Groups** and **People**. **Groups** lists your groups, the enterprises you keep and the events you are going to, each with its latest message and unread count.
+- **One way to start a group.** **New group** in Chat and **+** in Commons open the same form, with **Social Circle** chosen for you. After you create it you land in its chat, which asks who you want to invite.
 - **Invitations.** Convenors can invite people from the chat's menu. An invitation shows who sent it, and **Join the group** takes you straight into the chat.
 - **Mute a chat**: For 8 hours, For a week or Always. In a group, @mentions still get through.
 - **One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.
-- The old group chats in Talk have been removed, with their messages.
+- The old group chats in Chat have been removed, with their messages.
 - Every group now has a **lead convenor** — whoever created it, to begin with. Any convenor still looks after members and posts, but only the lead can remove or demote a convenor, and nobody can remove the lead. The lead can hand the lead on to someone else. If the lead goes quiet for 30 days, the group can choose a new one, on the group's screen above the roster. See "Rules and how decisions work".
 - **Votes in a group.** A group's members can vote on the group's own things, such as a new convenor or a new lead: open the group and look under **Decisions**.
 - **Choosing a new lead for a quiet group.** Only people who were in the group before its lead went quiet can vote. People who joined, or were made convenors, after that have no say, so new accounts can't take over a group whose lead has gone quiet.

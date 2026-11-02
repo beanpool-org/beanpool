@@ -42,8 +42,8 @@
     },
     "talk": {
       "title": {
-        "text": "对话",
-        "sourceHash": "449f5a775762cdc5"
+        "text": "聊天",
+        "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
         "text": "消息、群组及其聊天、人脉与好友、活动聊天、静音、提及以及密钥变更。",

@@ -3554,5 +3554,8 @@
   "🫘 Welcome to BeanPool": "🫘 Selamat Datang di BeanPool",
   "Offer": "Penawaran",
   "Need": "Permintaan",
-  "Enterprise": "Usaha"
+  "Enterprise": "Usaha",
+  "! not delivered": "! tidak terkirim",
+  "Discard": "Buang",
+  "Message not delivered": "Pesan tidak terkirim"
 }

@@ -3682,5 +3682,8 @@
   "🫘 Welcome to BeanPool": "🫘 Καλώς ήρθατε στο BeanPool",
   "Offer": "Προσφορά",
   "Need": "Ζήτηση",
-  "Enterprise": "Εγχείρημα"
+  "Enterprise": "Εγχείρημα",
+  "! not delivered": "! δεν παραδόθηκε",
+  "Discard": "Απόρριψη",
+  "Message not delivered": "Το μήνυμα δεν παραδόθηκε"
 }

@@ -92,7 +92,7 @@ Nếu bạn tham gia cộng đồng toàn cầu bằng 12 từ, chúng là cách
 ## Tên gọi và vị trí khác biệt
 
 - **Tham gia bằng lời mời:** nút của bước đầu tiên ghi **Tạo danh tính & Tham gia →**. Nếu ai đó ở đây đã có tên bạn chọn, bạn sẽ nhận được tên đó kèm theo một con số. Nút **← Quay lại** trên bước **Ảnh của bạn** hiển thị riêng tên của bạn, cùng nút **Tiếp →**: hãy đổi tên (tối đa 20 ký tự) hoặc giữ nguyên, trên cùng một tài khoản. Nếu ai đó đã có tên mới, trang sẽ thông báo và gợi ý những tên khác.
-- **Các tab:** ứng dụng web có các tab **Trang chủ**, **Chợ**, **Bản đồ**, **Chung**, **Trò chuyện**, **Mọi người** và **Sổ cái**. Những gì ứng dụng điện thoại gọi là **Trò chuyện** thì trên web gọi là **Trò chuyện**, và mục **Mọi người** có tab riêng.
+- **Các tab:** ứng dụng web có các tab **Trang chủ**, **Chợ**, **Bản đồ**, **Chung**, **Chat**, **Mọi người** và **Sổ cái**. Cả hai ứng dụng đều gọi tab này là **Chat**, và trên web mục **Mọi người** có tab riêng.
 - **Cài đặt và hồ sơ của bạn:** các nút nhỏ ở trên cùng bên phải: hồ sơ của bạn, dấu **?**, sau đó là Cài đặt. Trên màn hình rộng, chúng nằm ở cuối menu bên trái.
 - **Đăng Lời đề nghị hoặc Nhu cầu:** sử dụng nút **Bài đăng mới** trên trang **Bản đồ**.
 - **Giao diện:** tùy chọn được gọi là **Giống như thiết bị** thay vì "Giống như điện thoại".

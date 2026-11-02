@@ -3682,5 +3682,8 @@
   "🫘 Welcome to BeanPool": "🫘 BeanPool-க்கு வரவேற்கிறோம்",
   "Offer": "சலுகை",
   "Need": "தேவை",
-  "Enterprise": "கூட்டு முயற்சி"
+  "Enterprise": "கூட்டு முயற்சி",
+  "! not delivered": "! அனுப்பப்படவில்லை",
+  "Discard": "நிராகரி",
+  "Message not delivered": "செய்தி போய்ச் சேரவில்லை"
 }

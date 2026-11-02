@@ -22,6 +22,8 @@ interface Props {
     display?: 'inline' | 'block';
     /** The bubble is the member's own (white on the accent), or someone else's. */
     mine?: boolean;
+    /** The button's ink on a bubble of another colour, a line that failed; it follows `mine` otherwise. */
+    ink?: string;
 }
 
 interface Measured {
@@ -44,7 +46,7 @@ function boxAround(el: HTMLElement): HTMLElement {
     return box ?? el;
 }
 
-export function FoldedChatText({ text, enabled = true, display = 'inline', mine = false }: Props) {
+export function FoldedChatText({ text, enabled = true, display = 'inline', mine = false, ink = mine ? '#ffffff' : 'var(--accent)' }: Props) {
     const ref = useRef<HTMLSpanElement>(null);
     const [open, setOpen] = useState(false);
     // The button's name is the word it shows (WCAG 2.5.3); the longer phrase describes it.
@@ -104,7 +106,7 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
                         fontWeight: 600,
                         textDecoration: 'underline',
                         textUnderlineOffset: '2px',
-                        color: mine ? '#ffffff' : 'var(--accent)',
+                        color: ink,
                         cursor: 'pointer',
                     }}
                 >

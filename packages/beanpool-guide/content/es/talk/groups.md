@@ -15,7 +15,7 @@ Las personas que cuidan un grupo de chat son sus **coordinadores**; uno de ellos
 
 ## Tus grupos
 
-Toca **Charlas** y luego **Grupos**. Cada grupo en el que estás aparece allí, el mensaje más reciente primero, con los proyectos que lideras o en los que trabajas (🎯), los emprendimientos que gestionas (🥖) y los eventos que organizas o a los que vas a asistir (📅). El chat de un emprendimiento es su conversación pública: cualquier miembro de tu comunidad puede leerlo. Consulta «Mensajes». Cada uno muestra su mensaje más reciente y cuántos no has leído. En un chat cifrado, la fila muestra quién escribió por última vez y **🔒 Mensaje**, no el texto.
+Toca **Chat** y luego **Grupos**. Cada grupo en el que estás aparece allí, el mensaje más reciente primero, con los proyectos que lideras o en los que trabajas (🎯), los emprendimientos que gestionas (🥖) y los eventos que organizas o a los que vas a asistir (📅). El chat de un emprendimiento es su conversación pública: cualquier miembro de tu comunidad puede leerlo. Consulta «Mensajes». Cada uno muestra su mensaje más reciente y cuántos no has leído. En un chat cifrado, la fila muestra quién escribió por última vez y **🔒 Mensaje**, no el texto.
 
 - El número en **Grupos** en la parte superior suma tus mensajes no leídos, excepto en los chats que has silenciado.
 - Toca un grupo para abrir su chat. Eso lo marca como leído.
@@ -25,7 +25,7 @@ En el teléfono, la misma lista se encuentra en **Bienes comunes**, en **Grupos*
 
 ## Crear un grupo
 
-- En el teléfono, en **Charlas**, en **Grupos**, toca **Nuevo grupo**. O en **Bienes comunes**, en **Grupos**, toca el botón redondo **+**. Ambos abren el mismo formulario **Crear un grupo**. (En la pestaña de selección **Proyectos** o **Emprendimientos**, el **+** inicia un proyecto o un emprendimiento en su lugar).
+- En el teléfono, en **Chat**, en **Grupos**, toca **Nuevo grupo**. O en **Bienes comunes**, en **Grupos**, toca el botón redondo **+**. Ambos abren el mismo formulario **Crear un grupo**. (En la pestaña de selección **Proyectos** o **Emprendimientos**, el **+** inicia un proyecto o un emprendimiento en su lugar).
 - En la aplicación web, abre **Bienes comunes**, luego **Grupos** y toca **+ Crear grupo**. Permaneces en **Bienes comunes** después. Para invitar personas, abre el grupo y toca **Invitar a personas**. También puedes abrir **Chat**, tocar **Grupos** y luego **Nuevo grupo**: eso te lleva directamente al chat del nuevo grupo.
 - Asígnale un **Nombre del grupo**, de hasta 60 caracteres y, si lo deseas, un **Propósito / Descripción**, de hasta 300: para qué es el grupo y para quién está pensado.
 - Elige una **Categoría**: **Círculo social**, **General**, **Grupo de trabajo** o **Gremio**. En el teléfono se selecciona **Círculo social** por defecto. En la aplicación web se selecciona **Grupo de trabajo**.
@@ -43,7 +43,7 @@ Puedes invitar personas en el teléfono y en la aplicación web. En el teléfono
 - Toca **Invitar a personas**, marca las personas que deseas y toca el botón en la parte inferior (por ejemplo, **Invitar a 2 personas**).
 - O toca **Ahora no** para omitirlo.
 
-Más adelante, un coordinador puede invitar personas desde el menú **⋮** del chat, **Invitar a personas**. En la aplicación web, un coordinador abre el grupo y toca **Invitar a personas**, marca las personas y toca el botón en la parte inferior de la misma manera. Cada persona a la que invites ve el grupo en **Bienes comunes**, en **Grupos**, marcado como **INVITADO** en la app del teléfono (en el teléfono, en una comunidad sin pestaña **Bienes comunes**, en **Buscar grupos** en **Charlas**). La aplicación web todavía no marca las invitaciones: allí, abren el grupo y tocan **Aceptar invitación**. Cuando se unen, el chat lo indica.
+Más adelante, un coordinador puede invitar personas desde el menú **⋮** del chat, **Invitar a personas**. En la aplicación web, un coordinador abre el grupo y toca **Invitar a personas**, marca las personas y toca el botón en la parte inferior de la misma manera. Cada persona a la que invites ve el grupo en **Bienes comunes**, en **Grupos**, marcado como **INVITADO** en la app del teléfono (en el teléfono, en una comunidad sin pestaña **Bienes comunes**, en **Buscar grupos** en **Chat**). La aplicación web todavía no marca las invitaciones: allí, abren el grupo y tocan **Aceptar invitación**. Cuando se unen, el chat lo indica.
 
 ## El chat del grupo
 
@@ -108,7 +108,7 @@ En el teléfono, un grupo al que solicitaste unirte no está en ninguna de las l
 
 Un grupo **Solo por invitación** está oculto para todos los que no forman parte de él ni han sido invitados a él.
 
-En el teléfono, una comunidad local sin frijoles no tiene pestaña **Bienes comunes**. Allí, toca **Charlas**, luego **Grupos**, luego **Buscar grupos**: abre la misma lista. Antes de que estés en algún grupo, el enlace es **Buscar un grupo para unirse**. La comunidad global tiene la pestaña **Bienes comunes**: sus grupos están allí, debajo de un ejemplo de una comunidad local (consulta «Los frijoles y la comunidad global»).
+En el teléfono, una comunidad local sin frijoles no tiene pestaña **Bienes comunes**. Allí, toca **Chat**, luego **Grupos**, luego **Buscar grupos**: abre la misma lista. Antes de que estés en algún grupo, el enlace es **Buscar un grupo para unirse**. La comunidad global tiene la pestaña **Bienes comunes**: sus grupos están allí, debajo de un ejemplo de una comunidad local (consulta «Los frijoles y la comunidad global»).
 
 Si un coordinador te eliminó de un grupo, no puedes unirte de nuevo por ti mismo.
 
@@ -116,7 +116,7 @@ Mientras tu cuenta esté suspendida, no puedes crear un grupo, unirte a uno, sol
 
 ## Unirse por invitación
 
-Un grupo al que te invitan se muestra en **Bienes comunes**, en **Grupos**, marcado como **INVITADO** en la app del teléfono. En el teléfono, en una comunidad sin pestaña **Bienes comunes**, se encuentra en **Buscar grupos** en **Charlas**. Tócalo para ver la invitación: quién te invitó, qué es el grupo, quién está en él (para un grupo solo por invitación, cuántos) y quién puede leer su chat. En el teléfono:
+Un grupo al que te invitan se muestra en **Bienes comunes**, en **Grupos**, marcado como **INVITADO** en la app del teléfono. En el teléfono, en una comunidad sin pestaña **Bienes comunes**, se encuentra en **Buscar grupos** en **Chat**. Tócalo para ver la invitación: quién te invitó, qué es el grupo, quién está en él (para un grupo solo por invitación, cuántos) y quién puede leer su chat. En el teléfono:
 
 - Toca **Unirse al grupo**. Entras a su chat.
 - Toca **Ahora no** para decidir después. La invitación se conserva.

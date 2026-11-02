@@ -3,31 +3,37 @@
  *
  * One screen for every address members and browsers reach this community at:
  *  - unified list with rows as §5.2: Address, Points at, Answers from outside, Apps today, Apps can sign, Next step;
- *  - "Check now": asks every address from outside and updates checked times;
+ *  - "Check now": asks every address from outside, and says only what the rows show (a round still running, or the last
+ *    round's results inside the server's 30-second gap, is never reported as a new check);
  *  - "Check from your phone": opens /check to verify outside reach on mobile data;
- *  - "Add an address": folds in the three choices (a free BeanPool name, this server's number, your own domain);
- *  - "Make main": heals / promotes any held address to the community's primary address;
+ *  - "Add an address": the three forms folded together (a free BeanPool name, this server's number, your own domain);
+ *  - "Make main": heals / promotes an address, where the server can make it the community's address;
  *  - Recovery code reminder on the BeanPool name request: never a hard gate, protects against server loss.
+ *
+ * It replaces the top halves of the three panels below it, which stay for everything else an owner has: PublicAddressPanel
+ * (the address service's record, tunnel controls and token, notices, spare names, the log), with OwnAddressCard (certificates)
+ * inside it, and AppAddressesPanel (the warnings, and confirming an address behind its tick). A change on either side
+ * re-reads the other (`changes`, onChanged).
  *
  * Central tokens only (bg-bp-*, text-bp-*, nature-*, oat-*, terra-*); accessible at 320 px with 130 % text.
  */
-import React, { useCallback, useEffect, useId, useState } from 'react';
-import {
-    ADDRESS_CHECK_WORDS, ADDRESS_SCREEN_WORDS, addressNextStep,
-    type AddressAnswer, type AddressReach, type AddressStep,
-} from '@beanpool/core';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ADDRESS_SCREEN_WORDS, addressNextStep, type AddressReach } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
-    buildAdminHeaders, checkAppAddresses, confirmAppAddress, getAppAddresses, getTfaSessionToken,
+    buildAdminHeaders, checkAppAddresses, getAppAddresses, getTfaSessionToken, getTlsStatus,
     passwordField, removeAppAddress, resolveNodeApiUrl, setOwnAddress,
-    type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
+    type AppAddress, type AppAddressesReport,
 } from '../../lib/node-client';
-import { proofField, t } from '../../lib/fresh-proof';
+import { proofField, t, timeAgo, tn } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { useInPageConfirm } from '../common/InPageConfirm';
-import { standingText } from './AppAddressesPanel';
-import { describeTunnel } from './PublicAddressPanel';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { AppAddressesPanel, addressSourceText, standingText } from './AppAddressesPanel';
+import type { RolesViewer } from './NodeRolesPanel';
+import { domainOf } from './OwnAddressCard';
+import { PublicAddressPanel, type PublicAddressStatus } from './PublicAddressPanel';
 
 const W = ADDRESS_SCREEN_WORDS;
 
@@ -57,31 +63,44 @@ export function formatTime(iso: string | null | undefined): string {
     return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-/** Relative time in minutes or hours for answersFromOutside */
+/** How long ago, in the reader's words: "just now", "3 minutes ago". '' for no time. */
 export function formatRelativeTime(iso: string | null | undefined, now = Date.now()): string {
     const ms = iso ? Date.parse(iso) : NaN;
-    if (!Number.isFinite(ms)) return '';
-    const diffMin = Math.round((now - ms) / 60_000);
-    if (diffMin <= 1) return t('just now');
-    if (diffMin < 60) return `${diffMin} min ago`;
-    const hours = Math.round(diffMin / 60);
-    return `${hours}h ago`;
+    return Number.isFinite(ms) ? timeAgo(now - ms) : '';
+}
+
+/** The newest time any row was asked: the rows' own, never this browser's clock. */
+export function latestCheck(addresses: AppAddress[] | undefined): string | null {
+    let newest: string | null = null;
+    for (const a of addresses ?? []) {
+        const at = a.reach?.checkedAt;
+        if (at && Number.isFinite(Date.parse(at)) && (!newest || Date.parse(at) > Date.parse(newest))) newest = at;
+    }
+    return newest;
+}
+
+/** The state of the tunnel that serves `host`, or undefined when the node says of none: that row claims none. */
+export function tunnelStateOf(host: string, st: PublicAddressStatus | null): string | undefined {
+    if (!st?.tunnel) return undefined;
+    const stored = st.hostname || (st.name ? `${st.name}.beanpool.org` : '');
+    if (stored === host) return st.tunnel.state;
+    return st.tunnel.others?.find((o) => o.host === host)?.state;
 }
 
 export function pointsAtText(address: string, reach?: AddressReach | null, tunnelState?: string): string {
-    if (isBeanPoolName(address)) {
-        const state = tunnelState || 'connected';
-        if (state === 'connected') return t(W.pointsTunnelConnected);
-        if (state === 'retrying') return t(W.pointsTunnelRetrying);
-        if (state === 'starting') return t(W.pointsTunnelStarting);
-        if (state === 'disconnected') return t(W.pointsTunnelDisconnected);
+    if (isBeanPoolName(address) && tunnelState) {
+        if (tunnelState === 'connected') return t(W.pointsTunnelConnected);
+        if (tunnelState === 'retrying') return t(W.pointsTunnelRetrying);
+        if (tunnelState === 'starting') return t(W.pointsTunnelStarting);
+        if (tunnelState === 'disconnected') return t(W.pointsTunnelDisconnected);
         return t(W.pointsTunnelOff);
     }
     if (isIpAddress(address)) return address;
-    // Own domain: what DNS records were seen
-    const a = reach?.dns?.a ?? [];
-    const aaaa = reach?.dns?.aaaa ?? [];
-    const cname = reach?.dns?.cname ?? [];
+    if (!reach) return t('not checked yet');
+    // What DNS records were seen
+    const a = reach.dns?.a ?? [];
+    const aaaa = reach.dns?.aaaa ?? [];
+    const cname = reach.dns?.cname ?? [];
     const records = [...a, ...aaaa];
     if (records.length > 0) return records.join(', ');
     if (cname.length > 0) return cname.join(', ');
@@ -91,8 +110,7 @@ export function pointsAtText(address: string, reach?: AddressReach | null, tunne
 export function answersText(reach?: AddressReach | null): string {
     if (!reach) return t('not checked yet');
     if (reach.answers === 'own') {
-        const time = formatRelativeTime(reach.checkedAt);
-        return t(W.answersAnswered).replace('{time}', time || formatTime(reach.checkedAt));
+        return t(W.answersAnswered, { time: formatRelativeTime(reach.checkedAt) || formatTime(reach.checkedAt) });
     }
     if (reach.dns?.outcome === 'no-such-name') return t(W.answersNotFound);
     if (reach.answers === 'other') return t(W.answersAnother);
@@ -110,27 +128,58 @@ export function signingText(a: AppAddress): string {
 }
 
 export function appsTodayText(today: number): string {
-    return today === 1 ? '1 app today' : `${today} apps today`;
+    return tn(today, W.appsCount.one, W.appsCount.other);
+}
+
+/**
+ * The reach sentence. Beside a name's standing, which says what to do, it never adds "Nothing to do": a lost name with
+ * members still on it is not a closed matter. A step this manager doesn't know reads as the node said it.
+ */
+export function reachSentence(reach: AddressReach, besideStanding: boolean): string {
+    if (besideStanding && reach.step === 'fine') return t(W.reachFine);
+    if (besideStanding && reach.step === 'no-longer-ours') return t(W.reachNoLonger);
+    return addressNextStep(reach.step, reach.minutes, { t, tn }) || reach.nextStep;
+}
+
+/**
+ * Whether the server can make `host` the community's address (services/public-address-agent.ts asCommunityAddress): a name
+ * always, as a claim; an own address never over a BeanPool name, and a number never over a domain. A press that can only be
+ * refused is not offered.
+ */
+export function canBecomeMain(host: string, primary: string | null | undefined): boolean {
+    if (isBeanPoolName(host) || !primary) return true;
+    if (isBeanPoolName(primary)) return false;
+    return !(isIpAddress(host) && !isIpAddress(primary));
+}
+
+/** A name as typed or pasted (a whole host, capitals, spaces): the label the claim takes. */
+export function cleanSubdomain(typed: string): string {
+    return typed.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/[^a-z0-9-]+/g, '');
 }
 
 export interface AddressesPanelProps {
     activeNode: NodeProfile;
     onRefreshDiag?: () => void;
-    viewer?: { kind?: string; memberPubkey?: string; role?: string };
+    viewer?: RolesViewer;
 }
 
-export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'owner' } }: AddressesPanelProps) {
-    const isOwner = viewer.role === 'owner' || viewer.kind === 'password';
+export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'password' } }: AddressesPanelProps) {
+    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
     const [report, setReport] = useState<AppAddressesReport | null>(null);
     const [loading, setLoading] = useState(false);
     const [checking, setChecking] = useState(false);
-    const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null);
+    const messageRef = useRef<HTMLDivElement>(null);
+    // The address a Make main or Remove is running for: every row's buttons wait, so a double tap can't send two.
+    const [busy, setBusy] = useState<string | null>(null);
+    // A claim is running: the log below streams it, as it does a restart or Take offline.
+    const [claiming, setClaiming] = useState(false);
+    // Each change made here: the panels below read again.
+    const [changes, setChanges] = useState(0);
 
-    // Tunnel info from public-address/status
-    const [tunnelStatus, setTunnelStatus] = useState<string>('connected');
-    const [tunnelDetail, setTunnelDetail] = useState<string | null>(null);
+    // What PublicAddressPanel last read of the address service and the tunnel.
+    const [addressStatus, setAddressStatus] = useState<PublicAddressStatus | null>(null);
 
     // "Add an address" section state
     const [showAddSection, setShowAddSection] = useState(false);
@@ -140,6 +189,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
     const [contact, setContact] = useState('');
     const [ipInput, setIpInput] = useState('');
     const [domainInput, setDomainInput] = useState('');
+    const [formError, setFormError] = useState<string | null>(null);
     const [submittingAdd, setSubmittingAdd] = useState(false);
 
     // Fresh proof
@@ -151,6 +201,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
     const subdomainId = useId();
     const communityNameId = useId();
     const contactId = useId();
+    const modeLabelId = useId();
     const ipInputId = useId();
     const domainInputId = useId();
 
@@ -158,33 +209,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
         setLoading(true);
         setError(null);
         try {
-            const data = await getAppAddresses(activeNode.url, cred, getTfaSessionToken(activeNode.id));
-            setReport(data);
-
-            // Also check latest check time from addresses
-            const checkTimes = (data.addresses || [])
-                .map((a) => a.reach?.checkedAt)
-                .filter((t): t is string => !!t)
-                .sort();
-            if (checkTimes.length > 0) {
-                setLastCheckedAt(checkTimes[checkTimes.length - 1]);
-            }
-
-            // Fetch tunnel state if available
-            try {
-                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/status'), {
-                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
-                });
-                if (res.ok) {
-                    const st = await res.json().catch(() => ({}));
-                    if (st?.tunnel?.state) setTunnelStatus(st.tunnel.state);
-                    if (st?.tunnel) setTunnelDetail(describeTunnel(st.tunnel));
-                }
-            } catch {
-                // Ignore auxiliary tunnel status read failure
-            }
+            setReport(await getAppAddresses(activeNode.url, cred, getTfaSessionToken(activeNode.id)));
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : 'Failed to load addresses');
+            setError(e instanceof Error ? e.message : t('Failed to load addresses'));
         } finally {
             setLoading(false);
         }
@@ -194,17 +221,47 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
         loadData();
     }, [loadData]);
 
-    // Handle "Check now"
+    // The form shows what this server holds for a claim, as the claim keeps it when the form says nothing.
+    const readAddressStatus = useCallback((st: PublicAddressStatus) => {
+        setAddressStatus(st);
+        const held = st.communityName || st.community_name;
+        if (held) setCommunityName((prev) => prev || String(held));
+        if (st.contact) setContact((prev) => prev || String(st.contact));
+    }, []);
+
+    // A result lands at the top of the screen: on a phone the row pressed can be a long way below it.
+    useEffect(() => {
+        if (actionMessage) messageRef.current?.scrollIntoView?.({ block: 'nearest' });
+    }, [actionMessage]);
+
+    /** After a change here: this list, the panels below, and the page's header. */
+    const afterChange = async () => {
+        await loadData();
+        setChanges((n) => n + 1);
+        onRefreshDiag?.();
+    };
+
+    // Handle "Check now": says what came back, never more. The server answers `checking` for a round that hasn't finished,
+    // and the last round's report, with no new round, within 30 seconds of one (services/address-check.ts).
     const handleCheckNow = async () => {
+        const before = latestCheck(report?.addresses);
         setChecking(true);
         setActionMessage(null);
         try {
             const updated = await checkAppAddresses(activeNode.url, cred, getTfaSessionToken(activeNode.id));
             setReport(updated);
-            setLastCheckedAt(new Date().toISOString());
-            setActionMessage({ text: t('Addresses checked from outside.'), type: 'success' });
+            const after = latestCheck(updated.addresses);
+            if (updated.checking) {
+                setActionMessage({ text: t(W.stillChecking), type: 'warning' });
+            } else if (after && (!before || Date.parse(after) > Date.parse(before))) {
+                setActionMessage({ text: t(W.checkedFromOutside), type: 'success' });
+            } else if (after) {
+                setActionMessage({ text: t(W.checkedAlready, { time: formatTime(after) }), type: 'warning' });
+            } else {
+                setActionMessage({ text: t(W.nothingChecked), type: 'warning' });
+            }
         } catch (e: unknown) {
-            setActionMessage({ text: e instanceof Error ? e.message : 'Check failed', type: 'error' });
+            setActionMessage({ text: e instanceof Error ? e.message : t('Check failed'), type: 'error' });
         } finally {
             setChecking(false);
         }
@@ -213,12 +270,14 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
     // Handle "Make main"
     const handleMakeMain = async (a: AppAddress, code?: string) => {
         setActionMessage(null);
+        setBusy(a.address);
         try {
             let got: { communityAddress?: boolean } | undefined;
             if (isBeanPoolName(a.address)) {
                 const name = extractSubdomain(a.address);
-                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim');
-                const res = await fetch(url, {
+                setClaiming(true);
+                // No contact or community name: the claim keeps what this server holds (routes/public-address.ts).
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim'), {
                     method: 'POST',
                     headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
                     body: JSON.stringify({
@@ -233,11 +292,16 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                 if (!res.ok) {
                     throw new Error(body?.error || `HTTP ${res.status}`);
                 }
-                if (body?.status === 'pending') {
+                // Only a live answer moves the community: anything else says what the address service said.
+                if (body?.status !== 'live') {
                     proof.close();
-                    setActionMessage({ text: `Requested ${a.address}, awaiting approval by the BeanPool project.`, type: 'success' });
-                    await loadData();
-                    onRefreshDiag?.();
+                    setActionMessage({
+                        text: body?.status === 'pending'
+                            ? t('Requested {address}, awaiting approval by the BeanPool project.', { address: a.address })
+                            : t('{address} is not the main address: the address service says {status}.', { address: a.address, status: String(body?.status ?? 'nothing') }),
+                        type: 'warning',
+                    });
+                    await afterChange();
                     return;
                 }
             } else if (isIpAddress(a.address)) {
@@ -247,39 +311,62 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
             }
             proof.close();
             if (got && !got.communityAddress) {
-                setActionMessage({ text: `${a.address} added, but could not replace the active BeanPool address.`, type: 'warning' });
+                setActionMessage({ text: t('{address} added, but could not replace the active address.', { address: a.address }), type: 'warning' });
             } else {
-                setActionMessage({ text: `${a.address} is now the main address.`, type: 'success' });
+                setActionMessage({ text: t('{address} is now the main address.', { address: a.address }), type: 'success' });
             }
-            await loadData();
-            onRefreshDiag?.();
+            await afterChange();
         } catch (e: unknown) {
             if (proof.checkError(e, (c) => handleMakeMain(a, c), code)) return;
-            setActionMessage({ text: e instanceof Error ? e.message : 'Could not make main', type: 'error' });
+            setActionMessage({ text: e instanceof Error ? e.message : t('Could not make main'), type: 'error' });
+        } finally {
+            setClaiming(false);
+            setBusy(null);
         }
+    };
+
+    /** What releasing a name means, in the words the spare-names list uses: it goes back to the pool. */
+    const releaseQuestion = (a: AppAddress) => {
+        const current = report?.primaryAddress;
+        const works = a.reach?.answers === 'own' || a.today > 0 || a.busiestDay > 0;
+        if (!works) {
+            return {
+                title: t('Release a name this community does not use'),
+                body: current
+                    ? t("Release {address}? Your community's address stays {current}. Another community can claim {address} once the address service's hold ends.", { address: a.address, current })
+                    : t("Release {address}? Another community can claim {address} once the address service's hold ends.", { address: a.address }),
+            };
+        }
+        return {
+            title: t('Release an address that still works'),
+            body: current
+                ? t("Release {address}? Phones still using this address lose the community. Your community's address stays {current}. Another community can claim {address} once the address service's hold ends.", { address: a.address, current })
+                : t("Release {address}? Phones still using this address lose the community. Another community can claim {address} once the address service's hold ends.", { address: a.address }),
+        };
     };
 
     // Handle "Remove" or "Release"
     const handleRemoveOrRelease = async (a: AppAddress, code?: string) => {
         setActionMessage(null);
+        const isBp = isBeanPoolName(a.address);
         if (code === undefined) {
-            const isBp = isBeanPoolName(a.address);
-            const isMainAddress = a.address === report?.primaryAddress;
-            const yes = await ask({
-                title: isBp ? t('Release {address}?', { address: a.address }) : t('Remove {address}?', { address: a.address }),
-                body: isMainAddress
-                    ? t("It is this community's address. Members' apps that use it are refused after this, and new members are sent to another of its addresses, if it has one.")
-                    : t("Members' apps that use it are refused after this."),
-                confirmLabel: isBp ? t('Release') : t('Remove'),
-                cancelLabel: t('Keep it'),
-            });
+            const yes = await ask(isBp
+                ? { ...releaseQuestion(a), confirmLabel: t(W.release), cancelLabel: t('Keep it') }
+                : {
+                    title: t('Remove {address}?', { address: a.address }),
+                    body: a.address === report?.primaryAddress
+                        ? t("It is this community's address. Members' apps that use it are refused after this, and new members are sent to another of its addresses, if it has one.")
+                        : t("Members' apps that use it are refused after this."),
+                    confirmLabel: t(W.remove),
+                    cancelLabel: t('Keep it'),
+                });
             if (!yes) return;
         }
+        setBusy(a.address);
         try {
-            if (isBeanPoolName(a.address)) {
+            if (isBp) {
                 const name = extractSubdomain(a.address);
-                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name');
-                const res = await fetch(url, {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name'), {
                     method: 'POST',
                     headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
                     body: JSON.stringify({
@@ -297,31 +384,58 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                 await removeAppAddress(activeNode.url, a.address, cred, getTfaSessionToken(activeNode.id), code);
             }
             proof.close();
-            setActionMessage({ text: `${a.address} removed.`, type: 'success' });
-            await loadData();
-            onRefreshDiag?.();
+            setActionMessage({ text: isBp ? t("{address} released. This community's address is unchanged.", { address: a.address }) : t('{address} removed.', { address: a.address }), type: 'success' });
+            await afterChange();
         } catch (e: unknown) {
             if (proof.checkError(e, (c) => handleRemoveOrRelease(a, c), code)) return;
-            setActionMessage({ text: e instanceof Error ? e.message : 'Could not remove address', type: 'error' });
+            setActionMessage({ text: e instanceof Error ? e.message : t('Could not remove address'), type: 'error' });
+        } finally {
+            setBusy(null);
         }
+    };
+
+    /** A claim's answer, in the words the claim form always used. */
+    const claimAnswered = (body: { status?: string; warning?: string }) => {
+        if (body.status !== 'live') setActionMessage({ text: t('Claimed: awaiting registrar approval'), type: 'warning' });
+        else if (body.warning) setActionMessage({ text: t('Address claimed! It can take a few minutes for the Cloudflare Tunnel to connect globally.'), type: 'warning' });
+        else setActionMessage({ text: t('Address live and verified.'), type: 'success' });
+    };
+
+    /** An own address taken: what happens next, and whether it became the community's address. */
+    const ownAnswered = async (got: { address: string; communityAddress: boolean }) => {
+        const tls = await getTlsStatus(activeNode.url, cred, getTfaSessionToken(activeNode.id)).catch(() => null);
+        const ca = tls?.ca ?? 'the CA';
+        setActionMessage({
+            type: 'success',
+            text: got.communityAddress
+                ? t("{address} is this community's address now, and the server is asking {ca} for its certificate. This takes a minute or two once the address leads to this server.", { address: got.address, ca })
+                : t('{address} added, and the server is asking {ca} for its certificate. This takes a minute or two once the address leads to this server.', { address: got.address, ca }),
+        });
     };
 
     // Handle adding an address (folded form submission)
     const handleAddSubmit = async (e?: React.FormEvent, code?: string) => {
         if (e) e.preventDefault();
-        setSubmittingAdd(true);
+        setFormError(null);
         setActionMessage(null);
+        const name = cleanSubdomain(beanpoolSubdomain);
+        if (addKind === 'beanpool' && !/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/.test(name)) {
+            setFormError(t('Invalid name (3–32 chars: a–z, 0–9, hyphen, no leading/trailing hyphen)'));
+            return;
+        }
+        setSubmittingAdd(true);
         try {
             if (addKind === 'beanpool') {
-                const name = beanpoolSubdomain.trim().toLowerCase();
-                if (!name) throw new Error('Please enter a name');
-                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim');
-                const res = await fetch(url, {
+                setClaiming(true);
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim'), {
                     method: 'POST',
                     headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
                     body: JSON.stringify({
                         ...passwordField(cred),
                         name,
+                        // Always a tunnel: a direct name needs this server's public IPv4 address, which Settings can't know
+                        // (SEC-REG-01, verified 2026-10-16). Direct stays for operators who set PUBLIC_ADDRESS_MODE=direct
+                        // and PUBLIC_ADDRESS_IP themselves.
                         mode: 'tunnel',
                         communityName: communityName.trim() || undefined,
                         contact: contact.trim() || undefined,
@@ -331,35 +445,32 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                 if (await proof.check(res, (c) => handleAddSubmit(undefined, c), code)) return;
                 const body = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
-                setActionMessage({ text: `Requested ${name}.beanpool.org`, type: 'success' });
+                claimAnswered(body);
                 setBeanpoolSubdomain('');
             } else if (addKind === 'ip') {
                 const ip = ipInput.trim();
-                if (!ip) throw new Error('Please enter an IP address');
-                await setOwnAddress(activeNode.url, { ip }, cred, getTfaSessionToken(activeNode.id), code);
-                setActionMessage({ text: `Set IP address ${ip}`, type: 'success' });
+                await ownAnswered(await setOwnAddress(activeNode.url, { ip }, cred, getTfaSessionToken(activeNode.id), code));
                 setIpInput('');
             } else {
-                const dom = domainInput.trim().replace(/^https?:\/\//i, '').replace(/[/?#].*$/, '');
-                if (!dom) throw new Error('Please enter a domain');
-                await setOwnAddress(activeNode.url, { domain: dom }, cred, getTfaSessionToken(activeNode.id), code);
-                setActionMessage({ text: `Added domain ${dom}`, type: 'success' });
+                const domain = domainOf(domainInput);
+                await ownAnswered(await setOwnAddress(activeNode.url, { domain }, cred, getTfaSessionToken(activeNode.id), code));
                 setDomainInput('');
             }
             proof.close();
             setShowAddSection(false);
-            await loadData();
-            onRefreshDiag?.();
+            await afterChange();
         } catch (err: unknown) {
             if (proof.checkError(err, (c) => handleAddSubmit(undefined, c), code)) return;
-            setActionMessage({ text: err instanceof Error ? err.message : 'Failed to add address', type: 'error' });
+            setActionMessage({ text: err instanceof Error ? err.message : t('Failed to add address'), type: 'error' });
         } finally {
+            setClaiming(false);
             setSubmittingAdd(false);
         }
     };
 
     // Sort addresses: main first, then active configured, then former and lost
     const primary = report?.primaryAddress;
+    const lastCheckedAt = latestCheck(report?.addresses);
     const sortedAddresses: AppAddress[] = (report?.addresses ? [...report.addresses] : []).sort((x, y) => {
         const xIsMain = x.address === primary || (!primary && x.source === 'public-address');
         const yIsMain = y.address === primary || (!primary && y.source === 'public-address');
@@ -402,6 +513,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                         {isOwner && (
                             <button
                                 type="button"
+                                aria-expanded={showAddSection}
                                 onClick={() => setShowAddSection(!showAddSection)}
                                 data-testid="addresses-add-address-btn"
                                 className="px-3.5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-semibold text-bp-cta-on min-h-[44px] flex items-center gap-1.5 shadow-sm"
@@ -415,16 +527,17 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
 
                 {lastCheckedAt && (
                     <div className="text-[11px] text-nature-400 flex items-center gap-2" data-testid="addresses-last-checked">
-                        <span>🕒</span>
-                        <span>{t(W.checkedAt).replace('{time}', formatTime(lastCheckedAt))}</span>
-                        {tunnelDetail && <span className="text-nature-500">· Tunnel: {tunnelDetail}</span>}
+                        <span aria-hidden="true">🕒</span>
+                        <span>{t(W.checkedAt, { time: formatTime(lastCheckedAt) })}</span>
                     </div>
                 )}
 
                 {actionMessage && (
                     <div
-                        role="status"
-                        aria-live="polite"
+                        ref={messageRef}
+                        role={actionMessage.type === 'error' ? 'alert' : 'status'}
+                        aria-live={actionMessage.type === 'error' ? 'assertive' : 'polite'}
+                        data-testid="addresses-action-message"
                         className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 ${
                             actionMessage.type === 'error'
                                 ? 'bg-bp-chip-danger-tint border-nature-700 text-bp-chip-danger-ink'
@@ -433,21 +546,30 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                                 : 'bg-bp-chip-ok-tint border-nature-700 text-bp-chip-ok-ink'
                         }`}
                     >
-                        <span>{actionMessage.text}</span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{actionMessage.text}</span>
                         <button
                             type="button"
                             onClick={() => setActionMessage(null)}
-                            className="text-nature-400 hover:text-white font-bold px-1"
-                            aria-label="Dismiss message"
+                            className="shrink-0 text-nature-400 hover:text-white font-bold min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
+                            aria-label={t('Dismiss message')}
                         >
-                            ✕
+                            <span aria-hidden="true">✕</span>
                         </button>
                     </div>
                 )}
 
                 {error && (
-                    <div role="alert" className="p-3 rounded-xl border border-nature-700 bg-bp-chip-danger-tint text-bp-chip-danger-ink text-xs font-semibold">
-                        {error}
+                    <div role="alert" className="p-3 rounded-xl border border-nature-700 bg-bp-chip-danger-tint text-bp-chip-danger-ink text-xs font-semibold flex flex-wrap items-center justify-between gap-2">
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{error}</span>
+                        <button
+                            type="button"
+                            onClick={() => loadData()}
+                            disabled={loading}
+                            data-testid="addresses-retry"
+                            className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white border border-nature-700 disabled:opacity-50 min-h-[44px]"
+                        >
+                            {t('Try again')}
+                        </button>
                     </div>
                 )}
 
@@ -465,9 +587,11 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                         <button
                             type="button"
                             onClick={() => setShowAddSection(false)}
-                            className="text-nature-400 hover:text-white text-xs px-2 py-1"
+                            aria-label={t('Close Add an address')}
+                            data-testid="add-address-close"
+                            className="text-nature-400 hover:text-white text-xs min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg"
                         >
-                            ✕
+                            <span aria-hidden="true">✕</span>
                         </button>
                     </div>
 
@@ -475,8 +599,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                     <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
-                            onClick={() => setAddKind('beanpool')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[40px] ${
+                            aria-pressed={addKind === 'beanpool'}
+                            onClick={() => { setAddKind('beanpool'); setFormError(null); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[44px] ${
                                 addKind === 'beanpool'
                                     ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40'
                                     : 'bg-nature-900 text-nature-300 hover:text-white border border-nature-800'
@@ -486,8 +611,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                         </button>
                         <button
                             type="button"
-                            onClick={() => setAddKind('ip')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[40px] ${
+                            aria-pressed={addKind === 'ip'}
+                            onClick={() => { setAddKind('ip'); setFormError(null); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[44px] ${
                                 addKind === 'ip'
                                     ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40'
                                     : 'bg-nature-900 text-nature-300 hover:text-white border border-nature-800'
@@ -497,8 +623,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                         </button>
                         <button
                             type="button"
-                            onClick={() => setAddKind('domain')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[40px] ${
+                            aria-pressed={addKind === 'domain'}
+                            onClick={() => { setAddKind('domain'); setFormError(null); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[44px] ${
                                 addKind === 'domain'
                                     ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40'
                                     : 'bg-nature-900 text-nature-300 hover:text-white border border-nature-800'
@@ -508,52 +635,83 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                         </button>
                     </div>
 
+                    {formError && (
+                        <div role="alert" className="p-3 rounded-xl bg-bp-chip-danger-tint border border-nature-700 text-xs font-semibold text-bp-chip-danger-ink">
+                            {formError}
+                        </div>
+                    )}
+
                     <form onSubmit={handleAddSubmit} className="space-y-4" data-testid="claim-form">
                         {addKind === 'beanpool' && (
                             <div className="space-y-3">
                                 <div>
                                     <label htmlFor={subdomainId} className="block text-xs font-bold text-nature-300 mb-1">
-                                        Subdomain Prefix
+                                        {t('Subdomain Prefix')}
                                     </label>
-                                    <div className="flex items-center gap-1 font-mono text-sm">
+                                    <div className="flex flex-wrap items-center gap-1 font-mono text-sm">
                                         <input
                                             id={subdomainId}
                                             type="text"
                                             value={beanpoolSubdomain}
-                                            onChange={(e) => setBeanpoolSubdomain(e.target.value)}
-                                            placeholder="my-community"
-                                            className="bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px] flex-1"
+                                            onChange={(e) => { setBeanpoolSubdomain(cleanSubdomain(e.target.value)); setFormError(null); }}
+                                            placeholder={t('e.g. cairns')}
+                                            autoCapitalize="none"
+                                            autoCorrect="off"
+                                            spellCheck={false}
+                                            className="bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px] flex-1 min-w-0"
                                         />
                                         <span className="text-nature-400 font-mono text-xs">.beanpool.org</span>
+                                    </div>
+                                    <div className="mt-1.5 p-2 rounded-lg bg-nature-900 border border-nature-800 text-[11px] font-mono text-bp-ink-success flex items-center gap-1 break-all">
+                                        <span>{t('URL:')}</span>
+                                        <strong className="font-bold">{`https://${cleanSubdomain(beanpoolSubdomain) || 'cairns'}.beanpool.org`}</strong>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
                                         <label htmlFor={communityNameId} className="block text-xs font-bold text-nature-300 mb-1">
-                                            Community Name (Optional)
+                                            {t('Community / Pool Name')}
                                         </label>
                                         <input
                                             id={communityNameId}
                                             type="text"
                                             value={communityName}
                                             onChange={(e) => setCommunityName(e.target.value)}
-                                            placeholder="Riverbend Exchange"
+                                            placeholder={t('e.g. Cairns Community')}
                                             className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                                         />
+                                        <span className="text-[10px] text-nature-400 block mt-1">
+                                            {t('Displayed in public directory and browser title')}
+                                        </span>
                                     </div>
                                     <div>
                                         <label htmlFor={contactId} className="block text-xs font-bold text-nature-300 mb-1">
-                                            Contact Email or Phone (Optional)
+                                            {t('Operator Contact (Email or Handle)')}
                                         </label>
                                         <input
                                             id={contactId}
                                             type="text"
                                             value={contact}
                                             onChange={(e) => setContact(e.target.value)}
-                                            placeholder="owner@example.org"
+                                            placeholder={t('e.g. name@yourdomain.org')}
                                             className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                                         />
+                                        <span className="text-[10px] text-nature-400 block mt-1">
+                                            {t("Optional. Only the BeanPool project sees it, to reach you about this name; it is never checked, and it is deleted when the name's hold ends.")}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <span id={modeLabelId} className="block text-xs font-bold text-nature-300 mb-1">
+                                        {t('Reachability Mode')}
+                                    </span>
+                                    <div aria-labelledby={modeLabelId} data-testid="pubaddr-mode" className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white min-h-[44px] flex items-center">
+                                        🛡️ {t('Tunnel')}
+                                    </div>
+                                    <div className="text-[10px] text-nature-400 mt-1 leading-normal">
+                                        {t('The server dials out to Cloudflare itself. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.')}
                                     </div>
                                 </div>
 
@@ -562,7 +720,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                                     data-testid="recovery-code-reminder"
                                     className="p-3 rounded-xl bg-nature-900 border border-nature-800 text-xs text-nature-300 flex items-start gap-2.5"
                                 >
-                                    <span className="text-base select-none">🛡️</span>
+                                    <span className="text-base select-none" aria-hidden="true">🛡️</span>
                                     <div className="space-y-1">
                                         <p className="m-0 leading-relaxed font-medium">
                                             {t(W.recoveryReminder)}
@@ -572,10 +730,10 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
 
                                 <button
                                     type="submit"
-                                    disabled={submittingAdd || !beanpoolSubdomain.trim()}
+                                    disabled={submittingAdd}
                                     className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-semibold text-bp-cta-on disabled:opacity-50 min-h-[44px]"
                                 >
-                                    {submittingAdd ? 'Claiming…' : 'Claim BeanPool Name'}
+                                    {submittingAdd ? t('Registering with Registrar…') : t('Go public · Claim Web Address')}
                                 </button>
                             </div>
                         )}
@@ -584,18 +742,21 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                             <div className="space-y-3">
                                 <div>
                                     <label htmlFor={ipInputId} className="block text-xs font-bold text-nature-300 mb-1">
-                                        Public IPv4 Address
+                                        {t("This server's public IP address")}
                                     </label>
                                     <input
                                         id={ipInputId}
                                         type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        spellCheck={false}
                                         value={ipInput}
                                         onChange={(e) => setIpInput(e.target.value)}
-                                        placeholder="203.0.113.5"
+                                        placeholder={t('e.g. 203.0.113.5')}
                                         className="bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px] w-full max-w-md"
                                     />
                                     <p className="text-[11px] text-nature-400 mt-1 m-0">
-                                        For a server with open ports 80 and 443. The server gets its own certificate automatically.
+                                        {t('The one your hosting company gave this server. Ports 80 and 443 must reach it.')}
                                     </p>
                                 </div>
 
@@ -604,7 +765,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                                     disabled={submittingAdd || !ipInput.trim()}
                                     className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-semibold text-bp-cta-on disabled:opacity-50 min-h-[44px]"
                                 >
-                                    {submittingAdd ? 'Saving…' : 'Set Server IP'}
+                                    {t('Use this IP address')}
                                 </button>
                             </div>
                         )}
@@ -613,27 +774,31 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                             <div className="space-y-3">
                                 <div>
                                     <label htmlFor={domainInputId} className="block text-xs font-bold text-nature-300 mb-1">
-                                        Domain Name
+                                        {t('Your own domain name')}
                                     </label>
                                     <input
                                         id={domainInputId}
                                         type="text"
+                                        inputMode="url"
+                                        autoCapitalize="none"
+                                        autoComplete="off"
+                                        spellCheck={false}
                                         value={domainInput}
                                         onChange={(e) => setDomainInput(e.target.value)}
-                                        placeholder="community.example.org"
+                                        placeholder={t('e.g. beans.example.org')}
                                         className="bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px] w-full max-w-md"
                                     />
                                     <p className="text-[11px] text-nature-400 mt-1 m-0">
-                                        Point an A or CNAME record to this server first. The server will request a TLS certificate automatically.
+                                        {t("Point an A record for it at this server's public IP address first.")}
                                     </p>
                                 </div>
 
                                 <button
                                     type="submit"
-                                    disabled={submittingAdd || !domainInput.trim()}
+                                    disabled={submittingAdd || !domainOf(domainInput)}
                                     className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-semibold text-bp-cta-on disabled:opacity-50 min-h-[44px]"
                                 >
-                                    {submittingAdd ? 'Saving…' : 'Set Domain'}
+                                    {t('Use this domain')}
                                 </button>
                             </div>
                         )}
@@ -643,14 +808,20 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
 
             {/* The Unified Addresses List (§5.2) */}
             <div className="space-y-3" data-testid="addresses-list">
-                <div className="flex items-center justify-between text-xs font-semibold text-nature-400 uppercase tracking-wider px-1">
-                    <span>Configured Addresses</span>
-                    <span>{sortedAddresses.length} {sortedAddresses.length === 1 ? 'address' : 'addresses'}</span>
+                <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-semibold text-nature-400 uppercase tracking-wider px-1">
+                    <span>{t('Configured Addresses')}</span>
+                    {report && <span>{tn(sortedAddresses.length, '{n} address', '{n} addresses')}</span>}
                 </div>
 
-                {sortedAddresses.length === 0 && !loading && (
+                {!report && loading && (
+                    <div className="p-6 rounded-2xl bg-nature-950 border border-nature-800 text-center text-xs text-nature-400" data-testid="addresses-loading">
+                        {t('Reading addresses…')}
+                    </div>
+                )}
+
+                {report && sortedAddresses.length === 0 && !loading && (
                     <div className="p-6 rounded-2xl bg-nature-950 border border-nature-800 text-center text-xs text-nature-400">
-                        No addresses configured yet. Press &quot;Add an address&quot; above to set one up.
+                        {isOwner ? t('No addresses configured yet. Press "Add an address" above to set one up.') : t('No addresses configured yet.')}
                     </div>
                 )}
 
@@ -658,15 +829,18 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                     const isMain = a.address === primary || (!primary && a.source === 'public-address');
                     const isInactive = a.former || a.lost;
                     const kind = addressKind(a.address);
-                    const points = pointsAtText(a.address, a.reach, tunnelStatus);
+                    const points = pointsAtText(a.address, a.reach, tunnelStateOf(a.address, addressStatus));
                     const answers = answersText(a.reach);
                     const apps = appsTodayText(a.today);
                     const sign = signingText(a);
-                    const nextStep = a.reach?.nextStep
-                        ? addressNextStep(a.reach.step, a.reach.minutes, { t, tn: (n, one, other) => (n === 1 ? one.replace('{n}', '1') : other.replace('{n}', String(n))) })
-                        : a.standing
-                        ? standingText(a)?.text ?? null
-                        : null;
+                    // Standing first, whenever there is one: what a check found never hides what the name's state means.
+                    const standing = standingText(a);
+                    const nextStep = a.reach ? reachSentence(a.reach, !!standing) : null;
+                    // A BeanPool name is released, only by the community that isn't living at it now; anything else an owner
+                    // confirmed is removed, as the community's own address too.
+                    const canRemove = isOwner && !a.lost && (isBeanPoolName(a.address) ? !isMain && (a.former || a.source === 'owner') : a.source === 'owner');
+                    // A lost name now leads to another community, and a home-network one leads nowhere from a phone.
+                    const canCheckFromPhone = !a.lost && a.reach?.step !== 'home-network';
 
                     return (
                         <div
@@ -700,38 +874,44 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                                                 <span>{t(W.mainBadge)}</span>
                                             </span>
                                         )}
-                                        {a.former && (
+                                        {a.former && !a.lost && (
                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-900 text-nature-400 border border-nature-800">
-                                                Former
+                                                {t(W.badgeFormer)}
                                             </span>
                                         )}
                                         {a.lost && (
                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-nature-800">
-                                                Lost
+                                                {t(W.badgeLost)}
                                             </span>
                                         )}
                                     </div>
 
-                                    <div className="flex items-center gap-3 text-xs text-nature-400">
-                                        <span title="Apps that reached this community at this address today">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-nature-400">
+                                        <span title={t('Apps that reached this community at this address today')}>
                                             📱 {apps}
                                         </span>
-                                        <span title="Whether apps can sign for this address">
+                                        <span title={t('Whether apps can sign for this address')}>
                                             ✍️ {sign}
                                         </span>
                                     </div>
                                 </div>
 
-                                {/* Line 2: Points at + Answers from outside */}
+                                {/* Where it comes from, and the busiest day, as the panel this list replaces said */}
+                                <p className="m-0 text-xs text-nature-400 [overflow-wrap:anywhere]" data-testid="address-source">
+                                    {addressSourceText(a)} · {t('most in one day this week: {n}', { n: a.busiestDay })}
+                                </p>
+
+                                {/* Line 2: Points at + Answers from outside. Label above value on a narrow screen: a value's
+                                    word can be wider than what a label beside it would leave. */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    <div className="flex items-baseline gap-1.5 min-w-0">
-                                        <span className="text-nature-400 shrink-0">{t(W.colPointsAtLabel)}</span>
-                                        <span className="font-mono text-nature-200 break-words">{points}</span>
+                                    <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-1.5 min-w-0" data-testid="address-points-at">
+                                        <span className="text-nature-400 sm:shrink-0">{t(W.colPointsAtLabel)}</span>
+                                        <span className="font-mono text-nature-200 min-w-0 [overflow-wrap:anywhere]">{points}</span>
                                     </div>
-                                    <div className="flex items-baseline gap-1.5 min-w-0">
-                                        <span className="text-nature-400 shrink-0">{t(W.colAnswersLabel)}</span>
+                                    <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-1.5 min-w-0" data-testid="address-answers">
+                                        <span className="text-nature-400 sm:shrink-0">{t(W.colAnswersLabel)}</span>
                                         <span
-                                            className={`font-medium break-words ${
+                                            className={`font-medium min-w-0 [overflow-wrap:anywhere] ${
                                                 a.reach?.answers === 'own'
                                                     ? 'text-bp-ink-success'
                                                     : a.reach?.answers === 'tls' || a.reach?.answers === 'other'
@@ -746,10 +926,19 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
 
                                 {/* Line 3: Next step + Actions */}
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                                    <div className="text-xs text-nature-300 min-w-0 pr-2">
+                                    <div className="text-xs text-nature-300 min-w-0 pr-2 space-y-1">
+                                        {standing && (
+                                            <p
+                                                className={`m-0 leading-relaxed [overflow-wrap:anywhere] ${standing.lost ? 'text-bp-ink-danger' : 'text-bp-ink-warning'}`}
+                                                data-testid="app-address-standing"
+                                                data-state={standing.lost ? 'lost' : a.standing?.state}
+                                            >
+                                                {standing.text}
+                                            </p>
+                                        )}
                                         {nextStep && (
                                             <p className="m-0 leading-relaxed font-normal" data-testid="next-step-text">
-                                                👉 {nextStep}
+                                                <span aria-hidden="true">👉 </span>{nextStep}
                                             </p>
                                         )}
                                     </div>
@@ -757,42 +946,48 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                                     {/* Action buttons */}
                                     <div className="flex flex-wrap items-center gap-2 shrink-0">
                                         {/* Check from your phone (§5.3: opens /check) */}
-                                        <a
-                                            href={`https://${a.address}/check`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            role="button"
-                                            data-testid={`check-phone-link-${a.address}`}
-                                            className="px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-nature-800 text-xs font-semibold text-bp-ink-terra hover:text-white border border-nature-700 min-h-[48px] inline-flex items-center gap-1"
-                                        >
-                                            <span>📱</span>
-                                            <span>{t(W.checkFromPhone)}</span>
-                                        </a>
+                                        {canCheckFromPhone && (
+                                            <a
+                                                href={`https://${a.address}/check`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                data-testid={`check-phone-link-${a.address}`}
+                                                className="px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-nature-800 text-xs font-semibold text-bp-ink-terra hover:text-white border border-nature-700 min-h-[48px] inline-flex items-center gap-1"
+                                            >
+                                                <span aria-hidden="true">📱</span>
+                                                <span>{t(W.checkFromPhone)}</span>
+                                            </a>
+                                        )}
 
                                         {/* Make main (§5.2) */}
-                                        {!isMain && !a.lost && isOwner && (
+                                        {!isMain && !a.lost && isOwner && canBecomeMain(a.address, primary) && (
                                             <button
                                                 type="button"
+                                                disabled={busy !== null}
+                                                aria-busy={busy === a.address}
+                                                aria-label={`${t(W.makeMain)} ${a.address}`}
                                                 onClick={() => handleMakeMain(a)}
                                                 data-testid={`make-main-btn-${a.address}`}
-                                                className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white border border-nature-600 min-h-[40px] inline-flex items-center gap-1"
+                                                className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white border border-nature-600 disabled:opacity-50 min-h-[44px] inline-flex items-center gap-1"
                                             >
-                                                <span>★</span>
+                                                <span aria-hidden="true">{busy === a.address ? '⏳' : '★'}</span>
                                                 <span>{t(W.makeMain)}</span>
                                             </button>
                                         )}
 
                                         {/* Remove / Release */}
-                                        {isOwner && !isMain && !a.lost && (a.former || a.source === 'owner') && (
+                                        {canRemove && (
                                             <button
                                                 type="button"
+                                                disabled={busy !== null}
+                                                aria-busy={busy === a.address}
                                                 onClick={() => handleRemoveOrRelease(a)}
                                                 data-testid={`remove-release-btn-${a.address}`}
-                                                aria-label={isBeanPoolName(a.address) ? `Release ${a.address}` : `Remove ${a.address}`}
-                                                className="px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-bp-danger-fill hover:text-bp-danger-on text-xs font-semibold text-bp-ink-danger border border-nature-800 min-h-[40px] inline-flex items-center gap-1"
+                                                aria-label={`${isBeanPoolName(a.address) ? t(W.release) : t(W.remove)} ${a.address}`}
+                                                className="px-2.5 py-1.5 rounded-lg bg-nature-900 hover:bg-bp-danger-fill hover:text-bp-danger-on text-xs font-semibold text-bp-ink-danger border border-nature-800 disabled:opacity-50 min-h-[44px] inline-flex items-center gap-1"
                                             >
-                                                <span>🗑️</span>
-                                                <span>{isBeanPoolName(a.address) ? 'Release' : 'Remove'}</span>
+                                                <span aria-hidden="true">{busy === a.address ? '⏳' : '🗑️'}</span>
+                                                <span>{isBeanPoolName(a.address) ? t(W.release) : t(W.remove)}</span>
                                             </button>
                                         )}
                                     </div>
@@ -803,38 +998,22 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { role: 'ow
                 })}
             </div>
 
-            {/* Unconfirmed address offers (from AppAddressesPanel) */}
-            {report?.unconfirmed && report.unconfirmed.length > 0 && isOwner && (
-                <div className="p-4 rounded-2xl bg-nature-950 border border-nature-800 space-y-3" data-testid="unconfirmed-offers">
-                    <div className="text-xs font-bold text-bp-ink-warning uppercase tracking-wider flex items-center gap-1.5">
-                        <span>⚠️</span>
-                        <span>Confirm address from members&apos; apps</span>
-                    </div>
-                    {report.unconfirmed.map((u: AddressSighting) => (
-                        <div key={u.address} className="flex flex-wrap items-center justify-between gap-3 text-xs text-nature-300">
-                            <div>
-                                <span className="font-mono text-white font-bold">{u.address}</span>
-                                <span className="text-nature-400 ml-2">({u.busiestDay} apps reached this week)</span>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    try {
-                                        await confirmAppAddress(activeNode.url, u.address, cred, getTfaSessionToken(activeNode.id));
-                                        setActionMessage({ text: `Confirmed ${u.address}`, type: 'success' });
-                                        await loadData();
-                                    } catch (err: unknown) {
-                                        setActionMessage({ text: err instanceof Error ? err.message : 'Confirmation failed', type: 'error' });
-                                    }
-                                }}
-                                className="px-3 py-1.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-semibold text-bp-cta-on"
-                            >
-                                Confirm
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
+            {/* The lower halves of the panels this list replaces (design §5.2): nothing an owner has goes. */}
+            <SectionErrorBoundary sectionName="Public Address" resetKey={activeNode.id}>
+                <PublicAddressPanel
+                    key={activeNode.id}
+                    activeNode={activeNode}
+                    onRefreshDiag={onRefreshDiag}
+                    viewer={viewer}
+                    onStatus={readAddressStatus}
+                    onChanged={loadData}
+                    refreshSignal={changes}
+                    claiming={claiming}
+                />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary sectionName="App addresses" resetKey={activeNode.id}>
+                <AppAddressesPanel key={activeNode.id} activeNode={activeNode} onChanged={loadData} refreshSignal={changes} />
+            </SectionErrorBoundary>
 
             {confirmation}
         </div>

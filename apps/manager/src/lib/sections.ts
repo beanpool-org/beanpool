@@ -34,7 +34,7 @@ export const SECTION_SUB_TABS: Record<SettingsSection, { id: string; label: stri
         { id: 'diagnostics', label: 'Diagnostics & Logs' },
         { id: 'backups', label: 'Backups & Restore' },
         { id: 'gateway', label: 'Gateway & Peers' },
-        { id: 'network', label: 'Public Address' },
+        { id: 'network', label: 'Addresses' },
         { id: 'identity', label: 'Node Identity' },
         { id: 'access', label: 'Access & Security' },
     ],

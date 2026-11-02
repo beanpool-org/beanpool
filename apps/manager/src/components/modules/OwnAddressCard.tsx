@@ -1,5 +1,5 @@
 /**
- * Settings → Public Address → "Your own address" (HTTPS S4; design scratch/global-node/DESIGN-https-anywhere-fable.md §4):
+ * Settings → Addresses → "Your own address" (HTTPS S4; design scratch/global-node/DESIGN-https-anywhere-fable.md §4):
  * this server's public IP address, or a domain the owner points at it, without a .beanpool.org name or a Cloudflare
  * account. Owner-only, as every address change is: drawn only when the node answers GET /api/local/admin/tls/status
  * (an admin's 403, or an older server without the route, draws nothing). A read that fails any other way (a 5xx, no
@@ -8,8 +8,7 @@
  *
  *   - see: every address the server holds a certificate for, or asks one for, with the certificate's dates (valid until,
  *     renews about) or why the last try failed and when it is tried next, in the server's own words;
- *   - add: POST /public-address/own { ip } or { domain }. Moving the community's live own address to another of its kind
- *     asks an owner's fresh proof (the box opens in this card);
+ *   - add: under "Add an address" on the Addresses screen (AddressesPanel), since design §5.2 folded the forms together;
  *   - try again: the same address given again, which the server takes as the owner's retry past its back-off (as
  *     `beanpool claim --ip` run again). Offered only where the server says that is all it does (retryOnly): one kept beside
  *     the community's address that would take its place, given again, is not offered it (#2148 review 4306126212);
@@ -23,7 +22,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
     getTfaSessionToken, getTlsStatus, removeAppAddress, setOwnAddress,
-    type OwnAddressInput, type TlsIdentifierStatus, type TlsStatus,
+    type TlsIdentifierStatus, type TlsStatus,
 } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
@@ -56,11 +55,16 @@ function sourceText(id: TlsIdentifierStatus): string {
 
 type Message = { text: string; type: 'success' | 'error' | 'info' };
 
-export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfile; enabled: boolean }) {
+export function OwnAddressCard({ activeNode, enabled, onChanged, refreshSignal = 0 }: {
+    activeNode: NodeProfile;
+    enabled: boolean;
+    /** An address was removed here: the Addresses list reads again. */
+    onChanged?: () => void;
+    /** Raised each time an address changed above: this card reads again. */
+    refreshSignal?: number;
+}) {
     const [status, setStatus] = useState<TlsStatus | null>(null);
     const [loading, setLoading] = useState(false);
-    const [ip, setIp] = useState('');
-    const [domain, setDomain] = useState('');
     const [busy, setBusy] = useState<string | null>(null);
     const [message, setMessage] = useState<Message | null>(null);
     /** Why the last read failed: shown beside `message`, so a change that went through keeps its own words. */
@@ -87,27 +91,21 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
     // Another address or sign-in for this node: nothing read through the last one is kept.
     useEffect(() => { setStatus(null); setLoadError(null); void load(); }, [load]);
 
-    const give = async (input: OwnAddressInput, again: boolean, code?: string) => {
-        const address = 'ip' in input ? input.ip : input.domain;
-        setBusy(address);
+    // A change above: read again, keeping what is on the card until the answer comes.
+    useEffect(() => { if (refreshSignal) void load(); }, [refreshSignal, load]);
+
+    // The same address given again: the server takes it as the owner's retry past its back-off.
+    const tryAgain = async (id: TlsIdentifierStatus, code?: string) => {
+        setBusy(id.identifier);
         setMessage(null);
         try {
+            const input = id.kind === 'ip' ? { ip: id.identifier } : { domain: id.identifier };
             const got = await setOwnAddress(activeNode.url, input, credential, getTfaSessionToken(activeNode.id), code);
             proof.close();
-            if (again) {
-                setMessage({ type: 'info', text: t('{address} is being tried again now. Refresh in a minute to see how it went.', { address: got.address }) });
-            } else {
-                setMessage({
-                    type: 'success',
-                    text: got.communityAddress
-                        ? t("{address} is this community's address now, and the server is asking {ca} for its certificate. This takes a minute or two once the address leads to this server.", { address: got.address, ca: status?.ca ?? 'the CA' })
-                        : t('{address} added, and the server is asking {ca} for its certificate. This takes a minute or two once the address leads to this server.', { address: got.address, ca: status?.ca ?? 'the CA' }),
-                });
-                if ('ip' in input) setIp(''); else setDomain('');
-            }
+            setMessage({ type: 'info', text: t('{address} is being tried again now. Refresh in a minute to see how it went.', { address: got.address }) });
             await load();
         } catch (e) {
-            if (proof.checkError(e, (c) => give(input, again, c), code)) return;
+            if (proof.checkError(e, (c) => tryAgain(id, c), code)) return;
             setMessage({ type: 'error', text: e instanceof Error ? e.message : String(e) });
         } finally {
             setBusy(null);
@@ -135,6 +133,7 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
             proof.close();
             setMessage({ type: 'success', text: t('{address} removed.', { address }) });
             await load();
+            onChanged?.();
         } catch (e) {
             if (proof.checkError(e, (c) => remove(id, c), code)) return;
             setMessage({ type: 'error', text: e instanceof Error ? e.message : String(e) });
@@ -147,7 +146,6 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
     if (!enabled || (!status && !loadError)) return null;
 
     const button = 'min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50 max-w-full break-words';
-    const field = 'w-full min-w-0 bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px]';
     const messageClass = message?.type === 'error' ? 'text-bp-ink-danger' : message?.type === 'success' ? 'text-bp-ink-success' : 'text-bp-ink-info';
 
     const heading = (ca: string) => (
@@ -217,7 +215,7 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
 
             {status.identifiers.length === 0 ? (
                 <p className="text-sm text-nature-400 m-0 break-words" data-testid="own-address-none">
-                    {t("This server has no address of its own yet. Give its public IP address below, or your own domain name.")}
+                    {t('This server has no address of its own yet. Press Add an address above to give its public IP address, or your own domain name.')}
                 </p>
             ) : (
                 <ul className="m-0 p-0 list-none space-y-3">
@@ -275,7 +273,7 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
                                             <button
                                                 type="button"
                                                 disabled={busy !== null}
-                                                onClick={() => give(id.kind === 'ip' ? { ip: id.identifier } : { domain: id.identifier }, true)}
+                                                onClick={() => tryAgain(id)}
                                                 className={`${button} bg-nature-800 hover:bg-nature-700 border-nature-700 text-nature-200`}
                                             >
                                                 {busy === id.identifier ? t('Trying…') : t('Try again now')}
@@ -306,69 +304,6 @@ export function OwnAddressCard({ activeNode, enabled }: { activeNode: NodeProfil
             )}
             {loadErrorBlock}
 
-            {status.orders && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-nature-800">
-                    <form
-                        className="space-y-2 min-w-0"
-                        onSubmit={(e) => { e.preventDefault(); if (ip.trim()) void give({ ip: ip.trim() }, false); }}
-                    >
-                        <label htmlFor="own-ip-input" className="block text-xs font-bold text-nature-300 uppercase tracking-wider">
-                            {t("This server's public IP address")}
-                        </label>
-                        <input
-                            id="own-ip-input"
-                            type="text"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={ip}
-                            onChange={(e) => setIp(e.target.value)}
-                            placeholder={t('e.g. 203.0.113.5')}
-                            className={field}
-                        />
-                        <p className="text-xs text-nature-400 m-0 break-words">
-                            {t('The one your hosting company gave this server. Ports 80 and 443 must reach it.')}
-                        </p>
-                        <button
-                            type="submit"
-                            disabled={busy !== null || !ip.trim()}
-                            className={`${button} w-full sm:w-auto bg-bp-cta-fill hover:bg-bp-cta-hover border-bp-cta-fill text-bp-cta-on`}
-                        >
-                            {t('Use this IP address')}
-                        </button>
-                    </form>
-                    <form
-                        className="space-y-2 min-w-0"
-                        onSubmit={(e) => { e.preventDefault(); const d = domainOf(domain); if (d) void give({ domain: d }, false); }}
-                    >
-                        <label htmlFor="own-domain-input" className="block text-xs font-bold text-nature-300 uppercase tracking-wider">
-                            {t('Your own domain name')}
-                        </label>
-                        <input
-                            id="own-domain-input"
-                            type="text"
-                            inputMode="url"
-                            autoCapitalize="none"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={domain}
-                            onChange={(e) => setDomain(e.target.value)}
-                            placeholder={t('e.g. beans.example.org')}
-                            className={field}
-                        />
-                        <p className="text-xs text-nature-400 m-0 break-words">
-                            {t("Point an A record for it at this server's public IP address first.")}
-                        </p>
-                        <button
-                            type="submit"
-                            disabled={busy !== null || !domainOf(domain)}
-                            className={`${button} w-full sm:w-auto bg-bp-cta-fill hover:bg-bp-cta-hover border-bp-cta-fill text-bp-cta-on`}
-                        >
-                            {t('Use this domain')}
-                        </button>
-                    </form>
-                </div>
-            )}
             {confirmation}
         </div>
     );

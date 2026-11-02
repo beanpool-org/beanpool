@@ -31,6 +31,8 @@ export interface PublicAddressStatus {
     cached?: boolean;
     error?: string;
     communityName?: string;
+    /** The registrar's own spelling of communityName, as its answers carry it. */
+    community_name?: string;
     contact?: string;
     warning?: string;
     /** With `paused` (and the address service's other states): why. */
@@ -173,6 +175,14 @@ export interface PublicAddressPanelProps {
     onRefreshDiag?: () => void;
     /** Who is signed in: a new tunnel key is an owner's (server B4), so an admin's key session is not offered it. */
     viewer?: RolesViewer;
+    /** Each status read, for the Addresses list above: this panel is the one place that asks the address service. */
+    onStatus?: (status: PublicAddressStatus) => void;
+    /** An address changed here: the Addresses list reads again. */
+    onChanged?: () => void;
+    /** Raised each time an address changed above: this panel reads again. */
+    refreshSignal?: number;
+    /** A claim runs above (Add an address, Make main): the monitor streams it. */
+    claiming?: boolean;
 }
 
 /** A name this community's key holds besides its address (GET /api/local/admin/public-address/extra-names). */
@@ -184,7 +194,7 @@ interface ExtraName { name: string; hostname?: string; state?: string | null; re
  */
 const stillWorks = (n: ExtraName): boolean => n.state === 'live' && !n.fromInstall;
 
-export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind: 'password' } }: PublicAddressPanelProps) {
+export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind: 'password' }, onStatus, onChanged, refreshSignal = 0, claiming = false }: PublicAddressPanelProps) {
     const isOwnerViewer = viewer.kind === 'password' || viewer.role === 'owner';
     // Take offline, Release and a claim while the node publishes an address ask an owner's fresh proof each time (server requireFreshProof).
     const proof = useFreshProof();
@@ -193,14 +203,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
     const [logs, setLogs] = useState<ProbeLogEntry[]>([]);
     const [isPollingLogs, setIsPollingLogs] = useState(false);
 
-    // Form inputs for claim
-    const [claimName, setClaimName] = useState('');
-    const [communityName, setCommunityName] = useState('');
-    const [contact, setContact] = useState('');
-    const [formError, setFormError] = useState<string | null>(null);
-
     // Action status & states
-    const [submittingClaim, setSubmittingClaim] = useState(false);
     const [restarting, setRestarting] = useState(false);
     const [rotating, setRotating] = useState(false);
     const [takingOffline, setTakingOffline] = useState(false);
@@ -311,9 +314,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
             const data: PublicAddressStatus = await res.json().catch(() => ({ status: 'error', error: 'Invalid JSON response' }));
             if (res.ok) {
                 setStatusData(data);
-                if (data.communityName) setCommunityName((prev) => prev || String(data.communityName));
-                if (data.contact) setContact((prev) => prev || String(data.contact));
-                if (data.name) setClaimName((prev) => prev || String(data.name));
+                onStatus?.(data);
             } else {
                 setStatusData({
                     status: 'error',
@@ -330,7 +331,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
             fetchLogs();
             loadNotices();
         }
-    }, [activeNode.url, nodeCredential(activeNode), activeNode.id, fetchLogs, loadNotices]);
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id, fetchLogs, loadNotices, onStatus]);
 
     // Owner-only: an admin gets 403, and nothing is shown.
     const loadExtraNames = useCallback(async () => {
@@ -360,7 +361,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
             });
             if (await proof.check(res, (c) => releaseExtraName(name, c), code)) return;
             const data = await res.json().catch(() => ({}));
-            if (res.ok) setActionMessage({ text: `✓ ${name}.beanpool.org released. This community's address is unchanged.`, type: 'success' });
+            if (res.ok) {
+                setActionMessage({ text: `✓ ${name}.beanpool.org released. This community's address is unchanged.`, type: 'success' });
+                onChanged?.();
+            }
             else setActionMessage({ text: typeof data.error === 'string' ? data.error : `${name}.beanpool.org was not released`, type: 'error' });
         } catch (e: unknown) {
             setActionMessage({ text: e instanceof Error ? e.message : `${name}.beanpool.org was not released`, type: 'error' });
@@ -388,6 +392,20 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         };
     }, [loadStatus]);
 
+    // A change above: the same reads as on opening.
+    useEffect(() => {
+        if (!refreshSignal) return;
+        void loadStatus();
+        void loadExtraNames();
+    }, [refreshSignal, loadStatus, loadExtraNames]);
+
+    // A claim running above streams here, as one started on this panel did.
+    useEffect(() => {
+        if (!claiming) return;
+        startLogMonitor();
+        return () => stopLogMonitor();
+    }, [claiming, startLogMonitor, stopLogMonitor]);
+
     // Auto scroll log terminal to bottom on new logs
     useEffect(() => {
         if (logTerminalRef.current) {
@@ -406,96 +424,6 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [confirmModal.isOpen]);
-
-    // Subdomain sanitization and preview
-    const cleanSubdomain = (val: string) => {
-        return val.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '');
-    };
-
-    const handleSubdomainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const cleaned = cleanSubdomain(e.target.value);
-        setClaimName(cleaned);
-        if (formError) setFormError(null);
-    };
-
-    const previewUrl = `https://${cleanSubdomain(claimName) || 'cairns'}.beanpool.org`;
-
-    // Handle Claim Web Address
-    const handleClaim = async (e: React.FormEvent | null, code?: string) => {
-        e?.preventDefault();
-        const trimmedName = cleanSubdomain(claimName);
-        if (!trimmedName) {
-            setFormError('Subdomain name is required');
-            return;
-        }
-        if (!/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/.test(trimmedName)) {
-            setFormError('Invalid name (3–32 chars: a–z, 0–9, hyphen, no leading/trailing hyphen)');
-            return;
-        }
-
-        setFormError(null);
-        setSubmittingClaim(true);
-        setActionMessage({ text: '⏳ Claiming domain & registering with beanpool.org...', type: 'info' });
-        startLogMonitor();
-
-        try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim');
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
-                    name: trimmedName,
-                    // Always a tunnel: a direct name needs this server's public IPv4 address, which Settings can't know
-                    // (SEC-REG-01, verified 2026-10-16). Direct stays for operators who set PUBLIC_ADDRESS_MODE=direct
-                    // and PUBLIC_ADDRESS_IP themselves.
-                    mode: 'tunnel',
-                    communityName: communityName.trim() || undefined,
-                    contact: contact.trim() || undefined,
-                    ...proofField(code),
-                }),
-            });
-            if (await proof.check(res, (c) => handleClaim(null, c), code)) {
-                setActionMessage(null);
-                return;
-            }
-
-            const data = await res.json().catch(() => ({}));
-            if (res.ok) {
-                if (data.status === 'live') {
-                    setActionMessage({
-                        text: data.warning
-                            ? '⏳ Address claimed! It can take a few minutes for the Cloudflare Tunnel to connect globally.'
-                            : '🟢 Address Live & Verified!',
-                        type: data.warning ? 'warning' : 'success',
-                    });
-                } else {
-                    setActionMessage({
-                        text: '⏳ Claimed — awaiting registrar approval',
-                        type: 'success',
-                    });
-                }
-                await loadStatus();
-                onRefreshDiag?.();
-            } else {
-                setActionMessage({
-                    text: typeof data.error === 'string' ? data.error : 'Claim failed',
-                    type: 'error',
-                });
-            }
-        } catch (e: unknown) {
-            setActionMessage({
-                text: e instanceof Error ? e.message : 'Claim request failed',
-                type: 'error',
-            });
-        } finally {
-            setSubmittingClaim(false);
-            stopLogMonitor();
-        }
-    };
 
     // Trigger confirmation modal
     const requestRestartConfirmation = () => {
@@ -578,6 +506,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                     : { text: '✓ Public address released. Node is offline.', type: 'success' });
                 setStatusData({ status: 'none' });
                 await loadStatus();
+                onChanged?.();
                 onRefreshDiag?.();
             } else {
                 setActionMessage({ text: typeof data.error === 'string' ? data.error : 'Failed to take offline', type: 'error' });
@@ -720,7 +649,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                             <span>Public Address &amp; DNS Tunnel</span>
                         </h3>
                         <p className="text-xs text-nature-400 m-0 mt-0.5">
-                            Connect your node to a memorable <code className="text-bp-ink-terra font-mono">&lt;name&gt;.beanpool.org</code> address for browser access and mobile invite deep-links without SSH.
+                            What the address service holds for this community, the tunnel inside this server, and what the BeanPool project wrote.
                         </p>
                     </div>
                     <button
@@ -942,7 +871,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                         </div>
                     ) : isNone ? (
                         <div className="text-xs text-nature-400">
-                            No public address currently assigned. Set <code className="text-bp-ink-terra font-mono">PUBLIC_ADDRESS_NAME</code> on your container or claim a domain below.
+                            No public address currently assigned. Set <code className="text-bp-ink-terra font-mono">PUBLIC_ADDRESS_NAME</code> on your container, or press Add an address above.
                         </div>
                     ) : (
                         <div className="text-xs text-red-400">
@@ -1014,7 +943,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
             </div>
 
             {/* This server's own IP or domain, each with its own certificate (HTTPS S4): owner-only, drawn by the node's answer. */}
-            <OwnAddressCard key={activeNode.id} activeNode={activeNode} enabled={isOwnerViewer} />
+            <OwnAddressCard key={activeNode.id} activeNode={activeNode} enabled={isOwnerViewer} onChanged={onChanged} refreshSignal={refreshSignal} />
 
             {/* Real-time Propagation Monitor Terminal */}
             <div className="p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-3">
@@ -1074,113 +1003,6 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                         })
                     )}
                 </div>
-            </div>
-
-            {/* Claim Public Web Address Form (Available when status is 'none' or 'error' or operator wants to claim) */}
-            <div className="p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                <div className="border-b border-nature-800 pb-3">
-                    <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                        <span>🌐</span>
-                        <span>Claim a Public Web Address (.beanpool.org)</span>
-                    </h3>
-                    <p className="text-xs text-nature-400 m-0 mt-0.5">
-                        Register a custom <strong className="text-bp-ink-terra font-bold">.beanpool.org</strong> subdomain for your node so members can discover and access your community securely from any browser.
-                    </p>
-                </div>
-
-                {formError && (
-                    <div role="alert" className="p-3 rounded-xl bg-red-950/70 border border-red-800 text-xs font-semibold text-red-200">
-                        {formError}
-                    </div>
-                )}
-
-                <form onSubmit={handleClaim} className="space-y-4" data-testid="claim-form">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Subdomain Input */}
-                        <div>
-                            <label htmlFor="pubaddr-subdomain-input" className="block text-xs font-bold text-nature-300 uppercase tracking-wider mb-1">
-                                Subdomain Prefix
-                            </label>
-                            <input
-                                id="pubaddr-subdomain-input"
-                                type="text"
-                                value={claimName}
-                                onChange={handleSubdomainChange}
-                                placeholder="e.g. cairns"
-                                maxLength={32}
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px]"
-                            />
-                            {/* Live Preview Bar */}
-                            <div className="mt-1.5 p-2 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] font-mono text-emerald-300 flex items-center gap-1 break-all">
-                                <span>🌐 URL:</span>
-                                <strong className="text-emerald-200 font-bold">{previewUrl}</strong>
-                            </div>
-                        </div>
-
-                        {/* Community Name */}
-                        <div>
-                            <label htmlFor="pubaddr-community-name-input" className="block text-xs font-bold text-nature-300 uppercase tracking-wider mb-1">
-                                Community / Pool Name
-                            </label>
-                            <input
-                                id="pubaddr-community-name-input"
-                                type="text"
-                                value={communityName}
-                                onChange={(e) => setCommunityName(e.target.value)}
-                                placeholder="e.g. Cairns Community"
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
-                            />
-                            <span className="text-[10px] text-nature-400 block mt-1">
-                                Displayed in public directory and browser title
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Operator Contact */}
-                        <div>
-                            <label htmlFor="pubaddr-contact-input" className="block text-xs font-bold text-nature-300 uppercase tracking-wider mb-1">
-                                Operator Contact (Email or Handle)
-                            </label>
-                            <input
-                                id="pubaddr-contact-input"
-                                type="text"
-                                value={contact}
-                                onChange={(e) => setContact(e.target.value)}
-                                placeholder="e.g. name@yourdomain.org"
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
-                            />
-                            <span className="text-[10px] text-nature-400 block mt-1">
-                                Optional. Only the BeanPool project sees it, to reach you about this name; it is never checked, and it is deleted when the name&apos;s hold ends.
-                            </span>
-                        </div>
-
-                        {/* Reachability Mode (per docs/node-dns-registrar.md) */}
-                        <div>
-                            <span id="pubaddr-mode-label" className="block text-xs font-bold text-nature-300 uppercase tracking-wider mb-1">
-                                Reachability Mode
-                            </span>
-                            <div aria-labelledby="pubaddr-mode-label" data-testid="pubaddr-mode" className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 text-xs text-white min-h-[44px] flex items-center">
-                                🛡️ Tunnel
-                            </div>
-                            <div className="text-[10px] text-nature-400 mt-1 leading-normal">
-                                <span>
-                                    The server dials out to Cloudflare itself. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="pt-2">
-                        <button
-                            type="submit"
-                            disabled={submittingClaim}
-                            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover active:scale-95 text-xs font-bold text-bp-cta-on transition-all shadow-lg disabled:opacity-50 min-h-[44px]"
-                        >
-                            {submittingClaim ? 'Registering with Registrar…' : 'Go public · Claim Web Address'}
-                        </button>
-                    </div>
-                </form>
             </div>
 
             {/* Confirmation Modal for Destructive Actions */}

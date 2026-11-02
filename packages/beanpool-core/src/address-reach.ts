@@ -111,6 +111,17 @@ export const ADDRESS_SCREEN_WORDS = {
     choiceNumber: word("this server's number"),
     choiceDomain: word('your own domain'),
     recoveryReminder: word("A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost."),
+    badgeFormer: word('Former'),
+    badgeLost: word('Lost'),
+    release: word('Release'),
+    remove: word('Remove'),
+    checkedFromOutside: word('Addresses checked from outside.'),
+    stillChecking: word('Still checking, press again in a moment.'),
+    checkedAlready: word('Already checked at {time}. Press again in half a minute for a new check.'),
+    nothingChecked: word('Nothing could be checked from this server yet.'),
+    /** Said in place of the full sentence beside a name's standing, which says what to do: never "Nothing to do" there. */
+    reachFine: word('Answers as this server.'),
+    reachNoLonger: word("No longer this community's address."),
 } as const;
 
 /** The next step's sentence. `minutes`: how long ago a `new-name` was made. */

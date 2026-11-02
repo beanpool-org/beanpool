@@ -1,12 +1,13 @@
 /**
- * Network → "Addresses members' apps use" (request binding).
+ * Addresses → "Addresses members' apps use" (request binding).
  *
  * A member's app signs every request for the address it reaches the community at, and the node accepts only its own
  * addresses, so a request someone copied from another community can't be used here (apps/server
- * engine/own-addresses.ts, engine/member-signature.ts). This lists those addresses with where each comes from and how
- * many apps used it; how many apps still reach it by a name it had before, and where it lives now (lost-name L4); lets
- * the owner confirm an address the node doesn't know (a self-hoster's custom domain behind a proxy); and says how many
- * apps too old to name a community still reach it before the switch date.
+ * engine/own-addresses.ts, engine/member-signature.ts). The addresses themselves are the Addresses list above this panel
+ * (AddressesPanel, design §5.2), which draws each row's source and standing with the words here. This panel says how many
+ * apps still reach it by a name it had before, and where it lives now (lost-name L4); lets the owner confirm an address
+ * the node doesn't know (a self-hoster's custom domain behind a proxy); and says how many apps too old to name a community
+ * still reach it before the switch date.
  *
  * An owner or admin confirms; nothing here is ever learned from a request by itself. Only the address this page is
  * open at is offered with one tap (apps/server engine/address-offers.ts): members' keys can all be one person's, and
@@ -16,7 +17,7 @@
  * as a community's is named and warned about too, on a node that holds the directory. Another community's
  * beanpool.org name can't be confirmed here at all.
  *
- * A BeanPool name the address service no longer gives this community says so (design
+ * A BeanPool name the address service no longer gives this community says so, on its row (standingText; design
  * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.4): still accepted while it may be this community's, and why;
  * or lost (another community holds it and answers there, or this community released it and the hold is over), with how
  * many apps were refused there today and what to do.
@@ -25,11 +26,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { audienceOf } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import {
-    confirmAppAddress, getAppAddresses, getTfaSessionToken, removeAppAddress,
+    confirmAppAddress, getAppAddresses, getTfaSessionToken,
     type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
-import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 const SOURCE_TEXT: Record<AppAddress['source'], string> = {
     'public-address': "this community's web address",
@@ -37,6 +37,11 @@ const SOURCE_TEXT: Record<AppAddress['source'], string> = {
     owner: 'confirmed in Settings',
     registrar: 'its BeanPool name',
 };
+
+/** Where an address comes from, or what became of it, for its row in the Addresses list. */
+export function addressSourceText(a: AppAddress): string {
+    return a.lost ? 'no longer accepted' : a.former ? 'a BeanPool name it had before, still accepted' : SOURCE_TEXT[a.source] ?? a.source;
+}
 
 const apps = (n: number) => `${n} app${n === 1 ? '' : 's'}`;
 const membersApps = (n: number) => (n === 1 ? "1 member's app" : `${n} members' apps`);
@@ -145,14 +150,19 @@ function offerable(host: string | null): host is string {
     return !/^(10|127)\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\.|^169\.254\./.test(host);
 }
 
-export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
+export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: {
+    activeNode: NodeProfile;
+    /** An address was confirmed here: the Addresses list reads again. */
+    onChanged?: () => void;
+    /** Raised each time an address changed above: this panel reads again. */
+    refreshSignal?: number;
+}) {
     const [report, setReport] = useState<AppAddressesReport | null>(null);
     const [loadFailed, setLoadFailed] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     // The addresses the owner ticked as this community's: only then can one other than this page's be confirmed.
     const [sure, setSure] = useState<Record<string, boolean>>({});
-    const proof = useFreshProof();
 
     const load = useCallback(async () => {
         try {
@@ -164,20 +174,16 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
         }
     }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => { void load(); }, [load, refreshSignal]);
 
-    // Removing asks an owner's fresh proof each time (server requireFreshProof): members' apps that use it are refused after.
-    const act = async (address: string, how: 'confirm' | 'remove', code?: string) => {
+    const confirm = async (address: string) => {
         setBusy(address);
         setActionError(null);
         try {
-            const got = asReport(how === 'confirm'
-                ? await confirmAppAddress(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
-                : await removeAppAddress(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code));
-            if (how === 'remove') proof.close();
+            const got = asReport(await confirmAppAddress(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
             if (got) setReport(got); else await load();
+            onChanged?.();
         } catch (e) {
-            if (how === 'remove' && proof.checkError(e, (c) => act(address, how, c), code)) return;
             setActionError(e instanceof Error ? e.message : String(e));
         } finally {
             setBusy(null);
@@ -219,7 +225,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
             <h3 className="text-base font-bold text-white m-0 flex items-center gap-2 break-words">🌐 Addresses members&apos; apps use</h3>
             <p className="text-sm text-nature-300 m-0 leading-relaxed">
                 A member&apos;s app signs every request for the address it reaches this community at. This community
-                accepts only the addresses below, so a request copied from another community can&apos;t be used here.
+                accepts only the addresses listed above, so a request copied from another community can&apos;t be used here.
             </p>
 
             {!named && (
@@ -228,48 +234,12 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
                     {report.unboundSignaturesAccepted ? `, so until ${switchDay} it accepts any address. After that it refuses addresses it doesn't know, so confirm yours below.` : ', so it refuses apps that reach it by name. Confirm its address below.'}
                 </p>
             )}
-            {report.addresses.length > 0 && (
-                <ul className="m-0 p-0 list-none space-y-3">
-                    {report.addresses.map((a) => {
-                        const standing = standingText(a);
-                        return (
-                            <li key={a.address} className="text-sm text-nature-200 break-words" data-testid="app-address">
-                                <strong className="text-white break-all">{a.address}</strong>
-                                <span className="text-nature-400"> · {a.lost ? 'no longer accepted' : a.former ? 'a BeanPool name it had before, still accepted' : SOURCE_TEXT[a.source] ?? a.source}</span>
-                                <span className="block text-xs text-nature-400">
-                                    used by {apps(a.today)} today · most in one day this week: {a.busiestDay}
-                                </span>
-                                {standing && (
-                                    <span
-                                        className={`block mt-1 text-sm leading-relaxed break-words ${standing.lost ? 'text-red-300' : 'text-amber-300'}`}
-                                        data-testid="app-address-standing"
-                                        data-state={standing.lost ? 'lost' : a.standing?.state}
-                                    >
-                                        {standing.text}
-                                    </span>
-                                )}
-                                {a.source === 'owner' && (
-                                    <button
-                                        type="button"
-                                        className={`${button} mt-2 bg-nature-950 border-nature-700 text-nature-200 hover:bg-nature-800`}
-                                        disabled={busy !== null}
-                                        onClick={() => act(a.address, 'remove')}
-                                    >
-                                        Remove {a.address}
-                                    </button>
-                                )}
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
-
             {formerLine && <p className="text-sm text-nature-300 m-0 leading-relaxed break-words" data-testid="former-apps">{formerLine}</p>}
 
             {pageOffered && pageHost && (
                 <div className="p-3 rounded-xl bg-nature-950/60 border border-amber-700/60 space-y-2" data-testid="app-address-offer">
                     <p className="text-sm text-nature-200 m-0 break-words">{pageOfferText(pageHost, pageSighting)}</p>
-                    <button type="button" className={confirmButton} disabled={busy !== null} onClick={() => act(pageHost, 'confirm')}>
+                    <button type="button" className={confirmButton} disabled={busy !== null} onClick={() => confirm(pageHost)}>
                         Yes, {pageHost} is its address
                     </button>
                 </div>
@@ -304,7 +274,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
                         />
                         <span className="min-w-0 [overflow-wrap:anywhere]">{h.directory?.name ? `${h.directory.name} is this community` : 'That community is this one'}</span>
                     </label>
-                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => act(h.address, 'confirm')}>
+                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => confirm(h.address)}>
                         Yes, {h.address} is its address
                     </button>
                 </div>
@@ -328,13 +298,12 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
                         />
                         <span className="min-w-0 [overflow-wrap:anywhere]">This is this community&apos;s address</span>
                     </label>
-                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => act(h.address, 'confirm')}>
+                    <button type="button" className={confirmButton} disabled={busy !== null || !sure[h.address]} onClick={() => confirm(h.address)}>
                         Yes, {h.address} is its address
                     </button>
                 </div>
             ))}
 
-            <FreshProofBox proof={proof} testId="app-address-proof" />
             {actionError && <p className="text-sm text-red-300 m-0 break-words" role="alert">{actionError}</p>}
 
             <p className="text-sm text-nature-300 m-0 leading-relaxed" data-testid="old-apps">

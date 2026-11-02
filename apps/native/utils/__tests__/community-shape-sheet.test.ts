@@ -168,7 +168,8 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
             stubRule({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null });
             await render(createElement(CommunityShapeSheet, { features: { ...FULL_FEATURES, debtLinePct: 50, quietDays: 60 }, visible: true, onClose: vi.fn() }));
             expect(sheetText()).toContain(`(the known floor)${SOURCE}`);
-            expect([...host.querySelectorAll('button')].map(b => b.getAttribute('data-testid'))).not.toContain('confirmed-step-back');
+            // The sheet's own two, and the backdrop that puts it away.
+            expect(Array.from(host.querySelectorAll('button')).map(b => b.getAttribute('data-testid'))).toEqual([null, 'community-shape-close', 'community-shape-read-more']);
         });
 
         it('a tightened line says when it applies, from the public route', async () => {

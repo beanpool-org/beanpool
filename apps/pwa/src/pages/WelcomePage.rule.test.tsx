@@ -55,7 +55,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe('the join step', () => {
     it('states the rule in the community\'s numbers, with nothing to tick', async () => {
         stubNode(KNOWN);
-        render(<WelcomePage onComplete={() => {}} onRestore={() => {}} />);
+        render(<WelcomePage onComplete={() => {}} />);
         await fillIn();
         const box = await screen.findByTestId('join-rule');
         expect(within(box).getByText(/can owe up to 1,000 Beans \(the known floor\)/)).toBeInTheDocument();
@@ -65,14 +65,14 @@ describe('the join step', () => {
 
     it('a line other than 50 says its number', async () => {
         stubNode({ ...KNOWN, debtLinePct: 30, quietDays: 90 });
-        render(<WelcomePage onComplete={() => {}} onRestore={() => {}} />);
+        render(<WelcomePage onComplete={() => {}} />);
         await fillIn();
         expect(await within(await screen.findByTestId('join-rule')).findByText(/owe more than 30% of their credit line, or stay in debit for 90 days/)).toBeInTheDocument();
     });
 
     it('joining asks and sends no consent', async () => {
         const node = stubNode(KNOWN);
-        render(<WelcomePage onComplete={() => {}} onRestore={() => {}} />);
+        render(<WelcomePage onComplete={() => {}} />);
         await fillIn();
         await screen.findByTestId('join-rule');
         join();
@@ -84,7 +84,7 @@ describe('the join step', () => {
     for (const [name, rule] of [['an older node (404)', 404], ['a plain community', { known: false }]] as const) {
         it(`${name}: no rule line, and the join goes on`, async () => {
             const node = stubNode(rule);
-            render(<WelcomePage onComplete={() => {}} onRestore={() => {}} />);
+            render(<WelcomePage onComplete={() => {}} />);
             await fillIn();
             await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/community/known-rule', expect.anything()));
             await new Promise(r => setTimeout(r, 0));

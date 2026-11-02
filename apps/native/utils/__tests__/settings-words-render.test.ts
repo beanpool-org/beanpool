@@ -445,7 +445,6 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         await click(row('Sign out everywhere'), 'Sign out everywhere');
         expect(alerts.said.length).toBeGreaterThan(8);
         expect(bypassing()).toEqual([]);
-        OTHERS.splice(OTHERS.indexOf('Admins can see your balance.'), 1);
     });
 
     it('Account Protection: My key code, the vault\'s word when it can\'t say, the 12 words shown, copied and put away', async () => {

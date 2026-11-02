@@ -16,16 +16,15 @@
  *   POST   /api/names/confirmations/:id/revoke      → { id, status }
  *   GET    /api/names/log?limit&offset              → { log, total, limit, offset }
  *   POST   /api/names/settings                      { twoAdminsToConfirm?, namesShownToMembers? } (an owner)
- *   GET    /api/names/health                        → the Community health panel: the totals, the two lines, the consent text
- *   GET    /api/names/health/exceptions             → known mode only: confirmed, consented members past a line, by key and
- *                                                     entry id (never a name), and the open debts of members who left (logged)
+ *   GET    /api/names/health                        → the Community health panel: the totals, the two lines, when the rule starts
+ *   GET    /api/names/health/exceptions             → known mode only: confirmed members past a line, and members who stepped
+ *                                                     back owing past their ordinary line, by key and entry id (never a name),
+ *                                                     and the open debts of members who left (logged)
  *   GET    /api/names/health/log?limit              → who opened the exceptions, and when
  *   POST   /api/names/health/settings               { debtLinePct?, quietDays? } (an owner; each change in the known floor's log)
- *   GET    /api/names/consent                       → a member's own: the terms, and whether they consented (any member)
- *   POST   /api/names/consent                       { version } → the member's consent to the terms they were shown;
- *                                                   { withdraw: true } → withdraws it (GDPR Art. 7(3)), at once
- *   DELETE /api/names/consent                       → withdraws it too
- *   GET    /api/community/consent-terms             → the join screen's text, before joining (anyone)
+ *   POST   /api/names/step-back                     → { id, status, owing }: the signer steps back from being confirmed, signed
+ *                                                     with their own key; no parameter names a member (any member)
+ *   GET    /api/community/known-rule                → a known community's rule in its numbers, before joining (anyone)
  *   GET    /api/names/copy                          → { header, signature, box } of the signer's own locked copy (logged:
  *                                                     copy_restored) | 404 no_copy
  *   PUT    /api/names/copy                          { header, signature, box } → { seq } | { seq, code: exists }; 400 bad_copy |
@@ -39,7 +38,7 @@
  * are no admin now (reconcileHolders).
  */
 import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js';
-import { HealthError, healthSummary, openExceptions, readHealthAccessLog, setHealthSettings, consentTerms, myConsent, recordConsent, withdrawConsent } from '../engine/community-health.js';
+import { HealthError, healthSummary, knownRule, openExceptions, readHealthAccessLog, setHealthSettings, stepBackFromConfirmed } from '../engine/community-health.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
 import { getMember, isVisitorKey, generateInvite } from '../state-engine.js';
@@ -123,7 +122,7 @@ async function asAdmin(ctx: any, fn: (actor: string, body: Record<string, unknow
     }
 }
 
-/** Runs `fn` for the signing member (any active member, for their own consent). */
+/** Runs `fn` for the signing member (any member, for their own step-back). */
 async function asMember(ctx: any, fn: (actor: string, body: Record<string, unknown>) => unknown): Promise<void> {
     ctx.set('Cache-Control', 'no-store');
     if (getNodeProfile() === 'global') return answer(ctx, 404, GLOBAL_NAMES, 'feature_off');
@@ -211,15 +210,17 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         return setHealthSettings(actor, body);
     }));
 
-    // The consent at joining: a member's own, signed with their key; the terms themselves are public (the join screen).
-    router.get('/api/community/consent-terms', (ctx) => {
+    // A known community's rule, in its own numbers: public, for the join screen; the words are core's, in the reader's language.
+    router.get('/api/community/known-rule', (ctx) => {
         ctx.set('Cache-Control', 'no-store');
-        const { known, debtLinePct, quietDays, version, text } = consentTerms();
-        ctx.body = { known, debtLinePct, quietDays, version, text };
+        ctx.body = knownRule();
     });
-    router.get('/api/names/consent', (ctx) => asMember(ctx, (actor) => myConsent(actor)));
-    router.post('/api/names/consent', (ctx) => asMember(ctx, (actor, body) => body.withdraw === true ? withdrawConsent(actor) : recordConsent(actor, body)));
-    router.delete('/api/names/consent', (ctx) => asMember(ctx, (actor) => withdrawConsent(actor)));
+    // A member stepping back from being confirmed: the signer's own, and nobody else's. Nothing here names a member, and a
+    // body that does is refused rather than read as the signer's own: an admin who means someone else steps nobody back.
+    router.post('/api/names/step-back', (ctx) => asMember(ctx, (actor, body) => {
+        if (Object.keys(body).length > 0) throw new NamesListError(403, 'not_yours', word('Each member steps back for themselves.'));
+        return stepBackFromConfirmed(actor);
+    }));
 
     // The signer's own locked copy, and nobody else's: no parameter names an owner.
     router.get('/api/names/copy', (ctx) => asAdmin(ctx, (actor) => readNamesCopyOf(actor)));

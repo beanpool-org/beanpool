@@ -605,15 +605,15 @@ async function main(): Promise<void> {
         const features = after.me?.features ?? {};
         const nodeBase = { ...np.getNodeFeatures(), door: getDoor() };
         const expectsFloor = Boolean(np.getNodeFeatures().beans && confirmationDialOn(db));
-        const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: 1000 } : nodeBase).sort();
+        const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: 1000, debtLinePct: 50, quietDays: 60 } : nodeBase).sort();
         assert(isDeepStrictEqual(Object.keys(features).sort(), want),
             `${label}: a member's features carry expected fields (${Object.keys(features).length} fields)`);
         if (expectsFloor) {
-            assert(features.knownFloor === 1000, `${label}: knownFloor is 1000 for member`);
+            assert(features.knownFloor === 1000 && features.debtLinePct === 50 && features.quietDays === 60, `${label}: knownFloor is 1000 for member, with the rule's two lines beside it`);
         } else {
             assert(!('knownFloor' in features), `${label}: no knownFloor when dial or beans off`);
         }
-        assert(!('knownFloor' in (after.info?.features ?? {})), `${label}: public info never carries knownFloor`);
+        assert(!['knownFloor', 'debtLinePct', 'quietDays'].some((k) => k in (after.info?.features ?? {})), `${label}: public info never carries knownFloor or the lines: the join screen reads /api/community/known-rule`);
         assert(isDeepStrictEqual(Object.keys(after.homeFeatures ?? {}).sort(), want), `${label}: and so do Home's`);
         assert(after.nodeConfig?.acceptKnocks === np.getProfileSwitches().knocks && after.nodeConfig?.door === getDoor(),
             `${label}: node/config still answers acceptKnocks and door (${after.nodeConfig?.acceptKnocks}, ${after.nodeConfig?.door})`);
@@ -643,7 +643,7 @@ async function main(): Promise<void> {
         for (const path of ['/api/community/me', '/api/home']) {
             const r = await call('GET', sam, path);
             assert(r.status === 200 && r.body?.features?.knownFloor === 1000
-                && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor'].sort()),
+                && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor', 'debtLinePct', 'quietDays'].sort()),
                 `${view}: an active member's ${path} carries knownFloor 1000 beside the node's features (${show(r)})`);
         }
 

@@ -13,7 +13,7 @@
  *   over, it could lock the owners out of the Settings they need right then.
  * - node_config rows: the accepted audit baseline and its note, the pricing guide's source and seasonality, the snapshot
  *   schedule, the door (who may invite, config/door.ts), whether a confirmation against the names list needs two
- *   admins (engine/names-list.ts), the listing promise's ticked lines and closing day (engine/directory-promise.ts), and where members' copies go (config/recovery-copies.ts). The baseline travels only where the main server has one (every main server writes one at its first
+ *   admins (engine/names-list.ts), the listing promise's ticked lines and closing day (engine/directory-promise.ts), where members' copies go (config/recovery-copies.ts), and when the rule on what the admins can see starts (config/balance-rule.ts). The baseline travels only where the main server has one (every main server writes one at its first
  *   boot): installing "none" would make the next audit accept whatever the ledger sums to, and hide a drift.
  * - The `node_config` row's object: the service area and the town or area its card names, the four directory switches and
  *   how often the directory is told.
@@ -49,6 +49,7 @@ import { cleanStartCommunityUrl } from './start-community.js';
 import { cleanPromiseRow } from '../engine/directory-promise.js';
 import { REMOVED_GATEWAY_SWITCHES } from './gateway.js';
 import { upgradeLegacyShape, type ShapeUpgrade } from './community-shape-upgrade.js';
+import { readRuleInstant } from './balance-rule.js';
 
 export type { SyncCommunitySettings };
 
@@ -63,7 +64,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
     'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
-    'directory_promise', 'recovery_copies',
+    'directory_promise', 'recovery_copies', 'balance_rule_from',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -242,6 +243,8 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     directory_promise: orNull((v) => cleanPromiseRow(v) ?? BAD),
     // Where members' copies go (config/recovery-copies.ts): only a rule that isn't the default is stored, as the door's.
     recovery_copies: orNull(oneOf('server', 'none')),
+    // When the rule on what the admins can see starts (config/balance-rule.ts): a take-over keeps the community's date.
+    balance_rule_from: orNull((v) => readRuleInstant(v) === null ? BAD : v as string),
 };
 
 /**

@@ -447,6 +447,16 @@ async function main(): Promise<void> {
     const listed = (await entries(ada)).body.confirmations;
     assert(listed.length === 2 && listed.filter((c: any) => c.status === 'revoked').length === 1 && listed.find((c: any) => c.status === 'confirmed')?.callsign === 'Mel',
         `5. the list shows both, the revoked one as history (${JSON.stringify(listed.map((c: any) => c.status))})`);
+    // Stepping back frees the entry, and an admin may confirm the member again without asking them first (Marty's Q-F).
+    const niaFirst = await confirm(owen, nia, zeb.entryId);
+    const niaBack = await call(nia, 'POST', '/api/names/step-back', {});
+    assert(niaFirst.status === 201 && niaBack.status === 200 && niaBack.body?.status === 'revoked' && niaBack.body?.id === niaFirst.body?.id, `5. Nia steps back from her confirmation herself (${show(niaBack)})`);
+    const niaAgain = await confirm(ada, nia, zeb.entryId);
+    const niaRows = db.prepare('SELECT revoke_reason, revoked_by FROM confirmations WHERE member_pubkey = ? ORDER BY confirmed_at, rowid').all(nia.pk) as any[];
+    assert(niaAgain.status === 201 && niaAgain.body?.status === 'confirmed' && niaAgain.body?.id !== niaFirst.body?.id
+        && niaRows[0]?.revoke_reason === 'member' && niaRows[0]?.revoked_by === nia.pk && niaRows[1]?.revoke_reason === null,
+        `5. an admin confirms her again on the same entry, without asking her, and the first stays as history (${show(niaAgain)} ${JSON.stringify(niaRows)})`);
+    db.prepare('DELETE FROM confirmations WHERE member_pubkey = ?').run(nia.pk);
     const adaSets = await call(ada, 'POST', '/api/names/settings', { twoAdminsToConfirm: true });
     assert(adaSets.status === 403 && adaSets.body?.code === 'owner_only', `5. an admin can't change the settings: owner only (${show(adaSets)})`);
     const shownToMembers = await call(owen, 'POST', '/api/names/settings', { namesShownToMembers: true });

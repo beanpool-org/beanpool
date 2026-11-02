@@ -176,6 +176,8 @@ async function onGlobal(member: Id, db: any): Promise<void> {
         [`${POSTS}?id=`, 'GET'], [`${POSTS}?id`, 'GET'], [`${POSTS}?%69d=`, 'GET'], [`${POSTS}?id=%20`, 'GET'], [`${POSTS}?id=+`, 'GET'], [`${POSTS}?id=%09`, 'GET'],
         [`${POSTS}?id=&id=`, 'GET'], [`${POSTS}?id=&ids=`, 'GET'], [`${POSTS}?ids=`, 'GET'], [`${POSTS}?ids`, 'GET'], [`${POSTS}?ids=,`, 'GET'], [`${POSTS}?ids=%20`, 'GET'],
         [`${POSTS}?ids=%20,%20`, 'GET'], [`${POSTS}?ids=&ids=`, 'GET'],
+        // And the same read by another name or method: none of these is the listings' read by id.
+        [`${POSTS}?ID=`, 'GET'], [`${POSTS}?ID=x`, 'GET'], [`${POSTS}?id[]=`, 'GET'], [`${POSTS}?id[]=x`, 'GET'], [`${POSTS}/?id=`, 'GET'], [`${POSTS}/?id=x`, 'GET'], [`${POSTS}?id=x`, 'HEAD'],
     ] as const) {
         const closed = await preflight(path, method);
         assert(acao(closed) === null && closed.headers.get('access-control-allow-headers') === null, `${method} ${path}: no allowance (${acao(closed)})`);

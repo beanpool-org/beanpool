@@ -149,6 +149,7 @@ export const SUITES = [
     'test-names-debts-http',
     'test-commons-pay-idempotent-http',
     'test-community-health-http',
+    'test-time-to-first-trade',
     'test-demurrage-window',
     'test-crowdfund-delete-refund',
     'test-money-pledge-and-hourly-price',

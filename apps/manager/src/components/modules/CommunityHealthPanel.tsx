@@ -1,9 +1,11 @@
 import React, { useEffect, useId, useState } from 'react';
+import { FIRST_TRADE_WORDS as W } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { GATED_LOOK, gatedProps, guardGated } from '../../lib/gated-control';
 import { buildAdminHeaders, getTfaSessionToken, resolveNodeApiUrl, passwordField } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
+import { t as say, tn } from '../../lib/fresh-proof';
 
 /**
  * People & Safety → "Community health" (community modes slice 6; apps/server engine/community-health.ts).
@@ -11,12 +13,15 @@ import { nodeCredential } from '../../lib/profiles';
  * The community's totals, which are public by rule; the two lines that make a confirmed, consenting member an exception
  * in a known community (an owner moves them); and who opened the exceptions, when. The exceptions themselves open on an
  * admin's phone, where the names list is: this page never shows a balance of one member, and there is no export. A node
- * older than the panel answers 404, and nothing is shown.
+ * older than the panel answers 404, and nothing is shown. How far new members get reads as its own part, for owners and
+ * admins, in counts and medians (engine/time-to-first-trade.ts); a node older than that part sends none, and it isn't shown.
  *
  * Operator manual text: packages/beanpool-guide/operators/people/running-a-known-community.md.
  */
 
-type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: number; membersInDebit: number; commonsPot: number; tradesThisMonth: number };
+type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: number; membersInDebit: number; commonsPot: number; tradesThisMonth: number; newMembers?: NewMembers | null };
+export type FirstTradeWindow = { joined: number; firstListing: number; firstTrade: number | null; daysToFirstListing: number | null; daysFromListingToTrade: number | null };
+export type NewMembers = { beans: boolean; anyTrades: boolean; minGroup: number; last90Days: FirstTradeWindow; allTime: FirstTradeWindow };
 type Lines = { debtLinePct: number; quietDays: number };
 type LogLine = {
     id: string; actorCallsign: string | null; actor: string; action?: string; subjectCallsign?: string | null;
@@ -50,6 +55,25 @@ export type Health = { totals: Totals; settings: Lines; known: boolean; log: Log
 type Status = { kind: 'saved' | 'error'; text: string };
 
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+const numOrNull = (v: unknown) => (num(v) ? v as number : null);
+
+function readWindow(v: unknown): FirstTradeWindow | null {
+    const w = v as Partial<FirstTradeWindow> | null | undefined;
+    if (!w || !num(w.joined) || !num(w.firstListing)) return null;
+    return {
+        joined: w.joined!, firstListing: w.firstListing!, firstTrade: numOrNull(w.firstTrade),
+        daysToFirstListing: numOrNull(w.daysToFirstListing), daysFromListingToTrade: numOrNull(w.daysFromListingToTrade),
+    };
+}
+
+/** How far new members get, or null on a node older than it. Whatever isn't a number reads as held back, never as 0. */
+export function readNewMembers(v: unknown): NewMembers | null {
+    const o = v as Partial<NewMembers> | null | undefined;
+    const last90Days = readWindow(o?.last90Days);
+    const allTime = readWindow(o?.allTime);
+    if (!o || !last90Days || !allTime || typeof o.beans !== 'boolean') return null;
+    return { beans: o.beans, anyTrades: o.anyTrades === true, minGroup: num(o.minGroup) ? o.minGroup! : 5, last90Days, allTime };
+}
 
 export function readHealth(v: unknown): Health | null {
     const o = v as Partial<Health> | null;
@@ -60,6 +84,7 @@ export function readHealth(v: unknown): Health | null {
         totals: {
             beansInCirculation: num(t.beansInCirculation) ? t.beansInCirculation! : 0, sumOfCredit: t.sumOfCredit!, sumOfDebt: t.sumOfDebt!,
             membersInDebit: t.membersInDebit!, commonsPot: num(t.commonsPot) ? t.commonsPot! : 0, tradesThisMonth: num(t.tradesThisMonth) ? t.tradesThisMonth! : 0,
+            newMembers: readNewMembers(t.newMembers),
         },
         settings: { debtLinePct: s.debtLinePct!, quietDays: s.quietDays! },
         known: o.known === true,
@@ -69,6 +94,57 @@ export function readHealth(v: unknown): Health | null {
 }
 
 const beans = (n: number) => `${Math.round(n).toLocaleString('en')} Beans`;
+
+const waited = (days: number | null) => (days === null ? say(W.heldBack) : days === 0 ? say(W.underADay) : tn(days, W.days.one, W.days.other));
+
+/** One window's rows. With no Beans there are no trade rows at all, so no zero can read as a measure. */
+export function firstTradeRows(w: FirstTradeWindow, n: NewMembers): Array<[string, string]> {
+    const rows: Array<[string, string]> = [
+        [say(W.joined), w.joined.toLocaleString('en')],
+        [say(W.firstListing), w.firstListing.toLocaleString('en')],
+        [say(W.toListing), waited(w.daysToFirstListing)],
+    ];
+    if (!n.beans) return rows;
+    const noTrades = say(W.noTrades);
+    rows.push(
+        [say(W.firstTrade), !n.anyTrades ? noTrades : w.firstTrade === null ? say(W.heldBack) : say(W.atLeast, { n: w.firstTrade })],
+        [say(W.listingToTrade), !n.anyTrades ? noTrades : waited(w.daysFromListingToTrade)],
+    );
+    return rows;
+}
+
+function FirstTradeSection({ data }: { data: NewMembers }) {
+    const windows: Array<[string, string, FirstTradeWindow]> = [
+        ['first-trade-90-days', say(W.last90Days), data.last90Days],
+        ['first-trade-all-time', say(W.allTime), data.allTime],
+    ];
+    return (
+        <div data-testid="first-trade" className="space-y-2">
+            <h4 className="text-sm font-bold text-white m-0 break-words">{say(W.title)}</h4>
+            <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.intro)}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+                {windows.map(([testId, heading, w]) => (
+                    <section key={testId} aria-label={heading} data-testid={testId} className="rounded-xl border border-nature-800 bg-nature-950 p-3 min-w-0 space-y-2">
+                        <h5 className="text-xs font-bold text-nature-300 m-0 break-words">{heading}</h5>
+                        <dl className="m-0 space-y-2">
+                            {firstTradeRows(w, data).map(([label, value]) => (
+                                <div key={label} className="min-w-0">
+                                    <dt className="text-xs text-nature-400 break-words">{label}</dt>
+                                    <dd className="m-0 text-sm font-bold text-white break-words">{value}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </section>
+                ))}
+            </div>
+            {!data.beans && <p data-testid="first-trade-no-beans" className="text-xs text-nature-300 m-0 leading-relaxed break-words">{say(W.beansOff)}</p>}
+            <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.typical)}</p>
+            <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.smallGroup, { n: data.minGroup })}</p>
+            {data.beans && <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.listedFirst)}</p>}
+            {data.beans && <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(W.steps, { n: data.minGroup })}</p>}
+        </div>
+    );
+}
 
 export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [health, setHealth] = useState<Health | null>(null);
@@ -150,13 +226,15 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
     };
 
     const t = health.totals;
+    const noBeans = t.newMembers?.beans === false;
     const rows: Array<[string, string]> = [
         ['Beans in circulation', beans(t.beansInCirculation)],
         ['Credit held (all balances above 0)', beans(t.sumOfCredit)],
         ['Debt owed (all balances below 0)', beans(t.sumOfDebt)],
         ['Members in debit', t.membersInDebit.toLocaleString('en')],
         ['Commons pot', beans(t.commonsPot)],
-        ['Trades this month', t.tradesThisMonth.toLocaleString('en')],
+        // No Beans, no trades: a 0 here would read as a measure (the part below says why there is none).
+        ...(noBeans ? [] : [['Trades this month', t.tradesThisMonth.toLocaleString('en')] as [string, string]]),
     ];
     const input = `w-full min-h-[48px] rounded-xl border border-nature-800 bg-nature-950 px-3 text-sm text-white ${blocked ? GATED_LOOK : ''}`;
     return (
@@ -176,6 +254,8 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
                     </div>
                 ))}
             </dl>
+
+            {t.newMembers && <FirstTradeSection data={t.newMembers} />}
 
             <div className="space-y-2">
                 <h4 className="text-sm font-bold text-white m-0 break-words">When admins may see a member&apos;s balance</h4>

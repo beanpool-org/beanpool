@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
@@ -61,7 +61,7 @@ import { exampleListingsOn, showExampleListings } from '../../utils/example-list
 import { MarketCircleLine } from '../../components/MarketCircleLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, type WordKey } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, type WordKey } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
@@ -547,7 +547,7 @@ export default function MarketScreen() {
     }, [filter, loadMyEvents]);
 
     // Fresh listings banner dismissal. The banner is the list's first row, so it scrolls away with it.
-    const [dismissedFreshCount, setDismissedFreshCount] = useState<number>(0);
+    const [dismissedFresh, setDismissedFresh] = useState<string | null>(null);
     const listRef = useRef<FlatList>(null);
 
     const [refreshing, setRefreshing] = useState(false);
@@ -581,10 +581,10 @@ export default function MarketScreen() {
     }, []));
 
     useEffect(() => {
-        // Load dismissed fresh postings count
+        // Load dismissed fresh postings state
         AsyncStorage.getItem('bp_dismissed_fresh_count').then(val => {
             if (val) {
-                setDismissedFreshCount(parseInt(val, 10));
+                setDismissedFresh(val);
             }
         }).catch(() => {});
     }, []);
@@ -1111,21 +1111,23 @@ export default function MarketScreen() {
     });
 
     // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
+    // Own posts left out: "fresh" is news to you (parity with web).
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active' || post.type === 'event') return false;
+        if (identity?.publicKey && (post.author_pubkey === identity.publicKey || post.authorPublicKey === identity.publicKey)) return false;
         const postTime = new Date(post.created_at || post.createdAt).getTime();
         return Number.isFinite(postTime) && localDaysAgo(postTime, Date.now()) === 0;
     }).length;
 
-    // Display banner only if fresh postings count is greater than the dismissed count
-    const shouldShowFreshBanner = freshTodayCount > 0 && freshTodayCount > dismissedFreshCount;
+    // Display banner according to core freshBanner helper (dismissal lasts the day, more listings bring it back)
+    const shouldShowFreshBanner = freshBanner.shouldShow(dismissedFresh, freshTodayCount);
 
     const dismissFreshBanner = async () => {
-        const { LayoutAnimation } = require('react-native');
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setDismissedFreshCount(freshTodayCount);
+        const stored = recordFreshBannerDismissal(freshTodayCount);
+        setDismissedFresh(stored);
         try {
-            await AsyncStorage.setItem('bp_dismissed_fresh_count', String(freshTodayCount));
+            await AsyncStorage.setItem('bp_dismissed_fresh_count', stored);
         } catch (e) {}
     };
 

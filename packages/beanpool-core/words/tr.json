@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct core); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct core); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -868,5 +868,27 @@
   "No public address currently assigned. An owner of this community can add one.": "Şu anda atanmış genel adres yok. Bu topluluğun bir sahibi ekleyebilir.",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} henüz ana adres değil: adres servisi {status} diyor. Bu sunucu ona geçti ve istemeye devam ediyor, bu yüzden aşağıdaki panel artık onu gösteriyor. Üyeler bu topluluğa hâlâ {current} üzerinden ulaşıyor.",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "Bu artık bu topluluğun adresi. Bundan sonra yeni üyeler, varsa başka bir adresine gönderilir. Bu topluluk {address} adresinin tanıtımını bırakır ve hiçbir ad bırakılmaz. Anahtarı {address} adresini tuttuğu sürece, onu kullanan üye uygulamaları kabul edilmeye devam eder. Anahtar onu tutmuyorsa, bundan sonra reddedilirler.",
+  "From joining to a first trade": "Katılmaktan ilk takasa",
+  "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "Yeni üyelerin ne kadar ilerlediği, yalnızca bu topluluğun sahipleri ve yöneticileri için. Tüm topluluğun sayıları: isim yok, tek bir kişi hakkında hiçbir şey yok.",
+  "Last 90 days": "Son 90 gün",
+  "All time": "Tüm zamanlar",
+  "Joined": "Katılanlar",
+  "Made a first listing": "İlk ilanını verenler",
+  "Completed a first trade": "İlk takasını tamamlayanlar",
+  "At least {n}": "En az {n}",
+  "Typical time from joining to a first listing": "Katılmaktan ilk ilana tipik süre",
+  "Typical time from a first listing to a first trade": "İlk ilandan ilk takasa tipik süre",
+  "Held back": "Gizlendi",
+  "No trades yet": "Henüz takas yok",
+  "Under a day": "Bir günden az",
+  "This community has no Beans, so there are no trades to measure.": "Bu toplulukta fasulye yok, bu yüzden ölçülecek takas yok.",
+  "{n} day|{n} days": {
+    "one": "{n} gün",
+    "other": "{n} gün"
+  },
+  "Typical means the middle person: half were quicker, half slower.": "Tipik, ortadaki kişi demektir: yarısı daha hızlı, yarısı daha yavaştı.",
+  "The wait for a first trade counts only people who listed before they traded.": "İlk takas için bekleme yalnızca takastan önce ilan verenleri sayar.",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Bir sayının arkasında {n} kişiden az varsa ya da iki sütun arasındaki fark {n} kişiden azsa o sayı gizlenir.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "İlk takaslar {n}'lik adımlarla artar, böylece sayı hiçbir zaman tek bir kişiyi göstermez.",
   "{n} at this spot": "Bu noktada {n}"
 }

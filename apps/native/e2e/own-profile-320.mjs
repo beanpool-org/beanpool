@@ -123,9 +123,7 @@ const STUBS = {
     'ReviewModal': `export const ReviewModal = () => null;`,
     'ArchetypeQuizModal': `export const ArchetypeQuizModal = () => null;`,
     'canonical-profile': `export const getCanonicalProfile = async () => null;`,
-    'working-style': `export const keepQuizResult = async () => {};`,
-    'nodes': `export const isGuestNode = async () => false;`,
-    'pending-profile-sync': `export const keepWaitingArchetype = async () => {};`,
+    'working-style': `export const keepQuizResult = async () => {}, keepWaitingArchetype = async () => {}, onGuestVisit = async () => false;`,
     'ChannelChips': `export const ChannelChips = () => null;`,
     'channels': `export const fetchPublicChannels = async () => [];`,
     'use-node-profile': `export const useNodeProfile = () => ({ profile: 'local', features: { beans: true }, checkedAt: '' });`,
@@ -135,7 +133,7 @@ const STUBS = {
     'LocalCommunityMark': `export const LocalCommunityMark = () => null;`,
 };
 const STUBBED_FILES = ['ThemeContext', 'IdentityContext', 'db', 'NeedsYouIcons', 'pillar-sync', 'crypto', 'blocklist', 'ReviewModal',
-    'ArchetypeQuizModal', 'canonical-profile', 'working-style', 'nodes', 'pending-profile-sync', 'ChannelChips', 'channels', 'use-node-profile', 'members-lookup', 'use-reader-features',
+    'ArchetypeQuizModal', 'canonical-profile', 'working-style', 'ChannelChips', 'channels', 'use-node-profile', 'members-lookup', 'use-reader-features',
     'reads-own', 'LocalCommunityMark'];
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {

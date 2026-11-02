@@ -11,9 +11,7 @@ import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { keepQuizResult } from '../utils/working-style';
-import { isGuestNode } from '../utils/nodes';
-import { keepWaitingArchetype } from '../utils/pending-profile-sync';
+import { keepQuizResult, keepWaitingArchetype, onGuestVisit } from '../utils/working-style';
 import { parseArchetype, calculateSynergy, newestArchetype, publicArchetype, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
@@ -561,7 +559,7 @@ export default function PublicProfileScreen() {
         await keepQuizResult(quizResult, identity.publicKey, url).catch((e) => console.warn('[Archetype] Device copy best effort:', e));
 
         // A guest visit keeps it on the phone: the member isn't in that community, so nothing goes to it.
-        if (!url || await isGuestNode(url).catch(() => true)) return;
+        if (!url || await onGuestVisit(url)) return;
         const archetype = publicArchetype(quizResult);
         let landed = false;
         try {

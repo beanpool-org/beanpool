@@ -20,6 +20,11 @@ import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from '.
  *   - the heal at that community's own next sync, carrying only the result (db.ts pushWaitingArchetype).
  */
 
+export { keepWaitingArchetype };
+
+/** Whether the phone is only visiting `community`: no answer counts as a visit, so nothing goes on a guess. */
+export const onGuestVisit = (community: string): Promise<boolean> => isGuestNode(community).catch(() => true);
+
 /** How long a community is given to answer: as long as the delete's own ask (delete-here.ts). */
 const MEMBERSHIP_TIMEOUT_MS = 8000;
 
@@ -35,7 +40,7 @@ export async function keepQuizResult(result: QuizResult, publicKey: string, open
     const archetype = publicArchetype(result);
     for (const node of await getSavedNodes()) {
         if (plainOriginOf(node.url) === plainOriginOf(openCommunity)) continue;
-        if (await isGuestNode(node.url).catch(() => true)) continue;
+        if (await onGuestVisit(node.url)) continue;
         await keepWaitingArchetype(node.url, publicKey, archetype);
     }
 }
@@ -58,7 +63,7 @@ export async function archetypeToSend(community: string, identity: Signer, row: 
     const waiting = await waitingArchetype(community, publicKey);
     const deviceCopy = (await getCanonicalProfile())?.archetype;
     if (!waiting && !archetypeToCarry(deviceCopy, row)) return null;
-    if (await isGuestNode(community).catch(() => true)) return null;
+    if (await onGuestVisit(community)) return null;
     const member = await saysMember(community, publicKey);
     if (member === false && waiting) await clearWaitingArchetype(community, waiting);
     if (member !== true) return null;

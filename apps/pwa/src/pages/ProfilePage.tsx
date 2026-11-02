@@ -106,9 +106,10 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
     }
 
     const handleQuizComplete = async (quizResult: QuizResult) => {
-        setArchetype(keepQuizResult(identity.publicKey, quizResult));
+        const taken = keepQuizResult(identity.publicKey, quizResult);
         try {
-            await publishQuizResult(identity.publicKey, quizResult);
+            // Only once it is there: this holds what the community holds, so a publish that failed is still newer at a Save.
+            if (await publishQuizResult(identity.publicKey, quizResult)) setArchetype(taken);
         } catch (e) {
             console.warn('[Archetype] Save failed:', e);
             throw e;

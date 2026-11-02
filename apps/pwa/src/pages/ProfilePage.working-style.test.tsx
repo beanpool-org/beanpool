@@ -19,7 +19,7 @@ vi.mock('../components/ReportModal', () => ({ ReportModal: () => null }));
 vi.mock('../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../components/ArchetypeQuizModal', () => ({
     ArchetypeQuizModal: ({ visible, onComplete }: { visible: boolean; onComplete: (r: unknown) => Promise<void> }) => (
-        visible ? <button onClick={() => { void onComplete(quizDone.result); }}>Finish quiz</button> : null
+        visible ? <button onClick={() => { onComplete(quizDone.result).catch(() => {}); }}>Finish quiz</button> : null
     ),
 }));
 vi.mock('../lib/blocklist', () => ({
@@ -109,6 +109,17 @@ describe('the quiz on the web', () => {
         fireEvent.click(await screen.findByText('Finish quiz'));
         await waitFor(() => expect(sentArchetypes()).toEqual([newerSent]));
         expect(JSON.parse(readWorkingStyle(ME.publicKey)!).scores.spark).toBe(9);
+    });
+
+    it('a publish that failed: the next Save sends it, because the community still doesn\'t hold it', async () => {
+        await openProfile(older);
+        vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+        fireEvent.click(screen.getByLabelText('Retake community working style quiz'));
+        fireEvent.click(await screen.findByText('Finish quiz'));
+        await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByText('Save Profile Changes'));
+        await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(2));
+        expect(sentArchetypes()).toEqual([newerSent, newerSent]);
     });
 
     it('PublicProfilePage: the same', async () => {

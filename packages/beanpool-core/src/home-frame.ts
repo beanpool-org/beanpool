@@ -25,6 +25,7 @@ import { isTagId } from './tags/index.js';
 import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { toolHomeCardTypes } from './tools/index.js';
 import { word, type WordKey } from './words.js';
+import type { CardHue } from './brand-colours.js';
 
 // ── The shape ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -123,6 +124,8 @@ export const HOME_CARD_GROUPS: readonly { id: HomeCardGroup; name: WordKey }[] =
 
 export interface HomeCardType {
     id: string;
+    /** The card's hue (S1): brand accent sage for frame cards, a type-specific hue for others. */
+    hue: CardHue;
     /** Its caption, its row in the picker and Edit home. Fixed words, never member text: shown through t(). */
     name: WordKey;
     /** On the worldwide community, where it says something else ("Near you"). */
@@ -314,63 +317,63 @@ const notGlobal = (a: HomeNodeFacts) => a.profile !== 'global';
  * apps read a node's features; the worldwide community has no Beans, deals, enterprise, Decide or invites (§1.2).
  */
 export const HOME_CARD_TYPES: readonly HomeCardType[] = [
-    { id: 'needs', name: word('Needs you'), line: word('Things waiting on you, first.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
+    { id: 'needs', hue: 'sage', name: word('Needs you'), line: word('Things waiting on you, first.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
     {
-        id: 'safety', name: word('Your way back in'), line: word('A reminder to keep your 12 words safe.'), group: 'start', asks: 'node',
+        id: 'safety', hue: 'sage', name: word('Your way back in'), line: word('A reminder to keep your 12 words safe.'), group: 'start', asks: 'node',
         onNode: (a) => a.features.wordsDoor !== false || !!a.cards?.safety,
     },
-    { id: 'find', name: word('Find your community'), line: word('Communities near you, to join.'), group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
+    { id: 'find', hue: 'sage', name: word('Find your community'), line: word('Communities near you, to join.'), group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
     // A newcomer's Home until the tour ends (tour.ts): drawn by the apps while the account's `tour` says neither done nor skipped.
-    { id: 'start', name: word('Getting started'), line: word('A one-minute look at the other tabs.'), group: 'start', asks: 'none', onNode: everywhere },
-    { id: 'steps', name: word('First steps'), globalName: word('Your first week'), line: word('Things to do in your first weeks.'), group: 'start', asks: 'node', onNode: everywhere },
-    { id: 'tips', name: word('Tips'), line: word('One tip at a time on how things work.'), group: 'start', asks: 'none', onNode: everywhere },
-    { id: 'interests', name: word('What are you into?'), line: word('Star what you like to see it first.'), group: 'start', asks: 'none', onNode: everywhere },
-    { id: 'deals', name: word('Your deals'), line: word('Open deals and ones waiting on you.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.escrow !== false },
+    { id: 'start', hue: 'sky', name: word('Getting started'), line: word('A one-minute look at the other tabs.'), group: 'start', asks: 'none', onNode: everywhere },
+    { id: 'steps', hue: 'sky', name: word('First steps'), globalName: word('Your first week'), line: word('Things to do in your first weeks.'), group: 'start', asks: 'node', onNode: everywhere },
+    { id: 'tips', hue: 'indigo', name: word('Tips'), line: word('One tip at a time on how things work.'), group: 'start', asks: 'none', onNode: everywhere },
+    { id: 'interests', hue: 'pink', name: word('What are you into?'), line: word('Star what you like to see it first.'), group: 'start', asks: 'none', onNode: everywhere },
+    { id: 'deals', hue: 'teal', name: word('Your deals'), line: word('Open deals and ones waiting on you.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.escrow !== false },
     {
-        id: 'enterprise', name: word('Your enterprise'), line: word('Requests for the enterprise you keep.'), group: 'you', asks: 'node',
+        id: 'enterprise', hue: 'clay', name: word('Your enterprise'), line: word('Requests for the enterprise you keep.'), group: 'you', asks: 'node',
         onNode: (a) => notGlobal(a) && a.features.enterprises !== false,
     },
     // The member's own shop and their tools (DESIGN-shops-and-tools-fable.md §8, slice S4′): on every node, since a shop is
     // no enterprise and works where Beans are off. Built by the node from the member's own shop row.
-    { id: 'shop', name: word('Your shop and tools'), line: word('Your shop, and things you can do on your own.'), group: 'you', asks: 'node', onNode: everywhere },
-    { id: 'events', name: word('Coming up'), line: word('Events coming up soon.'), group: 'around', asks: 'node', onNode: everywhere },
-    { id: 'market', name: word('New in the Market'), globalName: word('Near you'), line: word('The newest listings near you.'), group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'shop', hue: 'clay', name: word('Your shop and tools'), line: word('Your shop, and things you can do on your own.'), group: 'you', asks: 'node', onNode: everywhere },
+    { id: 'events', hue: 'violet', name: word('Coming up'), line: word('Events coming up soon.'), group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'market', hue: 'orange', name: word('New in the Market'), globalName: word('Near you'), line: word('The newest listings near you.'), group: 'around', asks: 'node', onNode: everywhere },
     {
-        id: 'search', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
+        id: 'search', hue: 'orange', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
         multiple: { max: 5 }, asks: 'node', onNode: everywhere, readSettings: readSearchSettings,
     },
     {
-        id: 'decide', name: word('Decide'), line: word('Open Decisions and polls.'), group: 'you', asks: 'node',
+        id: 'decide', hue: 'plum', name: word('Decide'), line: word('Open Decisions and polls.'), group: 'you', asks: 'node',
         onNode: (a) => notGlobal(a) && a.features.decisions !== false, readSettings: readDecideSettings,
     },
-    { id: 'groups', name: word('Your groups'), line: word("What's new in your groups."), group: 'you', asks: 'node', onNode: everywhere },
+    { id: 'groups', hue: 'rose', name: word('Your groups'), line: word("What's new in your groups."), group: 'you', asks: 'node', onNode: everywhere },
     // A chat the member picked, its last lines opened on the device (DESIGN-home-chosen-chat-fable.md §1): on every node,
     // since every node has chats. Asked only once a chat is picked; the node answers only a chat the member is in now.
     {
-        id: 'chat', name: word('A chat'), line: word('The last lines of one chat you choose.'), group: 'you',
+        id: 'chat', hue: 'sage', name: word('A chat'), line: word('The last lines of one chat you choose.'), group: 'you',
         multiple: { max: 3 }, asks: 'node', onNode: everywhere, readSettings: readChatSettings, asksWith: homeChatPicked,
     },
-    { id: 'joined', name: word('Who joined'), line: word('People who joined this week.'), group: 'around', asks: 'node', onNode: everywhere },
-    { id: 'pulse', name: word('The Pulse'), line: word('Links your neighbours shared.'), group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'joined', hue: 'lime', name: word('Who joined'), line: word('People who joined this week.'), group: 'around', asks: 'node', onNode: everywhere },
+    { id: 'pulse', hue: 'blue', name: word('The Pulse'), line: word('Links your neighbours shared.'), group: 'around', asks: 'node', onNode: everywhere },
     // Worked out on the device (sky.ts) from the community's place or the member's, which every node can have: never asked.
     {
-        id: 'sky', name: word('Sun and moon'), line: word('Sunrise, sunset and the moon tonight.'), group: 'around', asks: 'none', onNode: everywhere,
+        id: 'sky', hue: 'yellow', name: word('Sun and moon'), line: word('Sunrise, sunset and the moon tonight.'), group: 'around', asks: 'none', onNode: everywhere,
         readSettings: readSkySettings,
     },
-    { id: 'beans', name: word('Your Beans'), line: word('Your balance and room to spend.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.beans !== false },
-    { id: 'notices', name: word('From your community'), line: word("Notices from your community's admins."), group: 'you', asks: 'node', onNode: everywhere },
+    { id: 'beans', hue: 'green', name: word('Your Beans'), line: word('Your balance and room to spend.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.beans !== false },
+    { id: 'notices', hue: 'sand', name: word('From your community'), line: word("Notices from your community's admins."), group: 'you', asks: 'node', onNode: everywhere },
     {
-        id: 'invite', name: word('Grow your community'), line: word('Ways to invite people you know.'), group: 'start', asks: 'none',
+        id: 'invite', hue: 'green', name: word('Grow your community'), line: word('Ways to invite people you know.'), group: 'start', asks: 'none',
         onNode: (a, role) => notGlobal(a) && homeInvitesForReader(a.features, role),
     },
     // The member's tools card (slice home-tools-card): tools the member chose to keep on Home.
     {
-        id: 'tools', name: word('Your tools'), line: word('A card you fill with the tools you use.'),
+        id: 'tools', hue: 'sand', name: word('Your tools'), line: word('A card you fill with the tools you use.'),
         group: 'you', asks: 'none', onNode: everywhere, readSettings: readToolsSettings,
     },
     // Each tool's card, worked out on the device from its document (tools/index.ts): one spread, so a tool needs no line here.
     ...toolHomeCardTypes(),
-    { id: 'community', name: word('Your community'), line: word('Your community at a glance.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
+    { id: 'community', hue: 'sage', name: word('Your community'), line: word('Your community at a glance.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
 ];
 
 const TYPES: ReadonlyMap<string, HomeCardType> = new Map(HOME_CARD_TYPES.map((t) => [t.id, t]));
@@ -378,6 +381,12 @@ const RANK: ReadonlyMap<string, number> = new Map(HOME_CARD_TYPES.map((t, i) => 
 
 /** The registry's entry for a type, or undefined for one this build doesn't know (kept, not drawn, not built). */
 export const homeCardType = (type: string): HomeCardType | undefined => TYPES.get(type);
+
+/**
+ * A card's hue (S1): the type's hue from the catalogue.
+ * Sage for an unknown type or instance.
+ */
+export const homeCardHue = (instance: Pick<HomeCardInstance, 'type'>): CardHue => TYPES.get(instance.type)?.hue ?? 'sage';
 
 /** The types always drawn and never in a member's list. */
 export const HOME_FIXED_TYPES: readonly string[] = HOME_CARD_TYPES.filter((t) => t.fixed).map((t) => t.id);

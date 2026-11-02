@@ -68,6 +68,7 @@ export const toolHomeCardType = (id: string): string => `tool-${id}`;
 export function toolHomeCardTypes(tools: readonly ToolManifest[] = TOOLS): HomeCardType[] {
     return tools.filter((t) => t.homeCard).map((t) => ({
         id: toolHomeCardType(t.id),
+        hue: 'sand',
         name: t.name,
         line: t.homeCard!.line,
         group: 'you',

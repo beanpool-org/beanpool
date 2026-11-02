@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     HOME_CARD_TYPES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS,
     HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardSettings,
-    cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard, readChatSettings, readDecideSettings, readHomeLayout,
+    cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeCardHue, homeColumns, moveCard, readChatSettings, readDecideSettings, readHomeLayout,
     readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 import { t } from '../words.js';
@@ -461,3 +461,20 @@ describe('a chosen chat (C0, scratch/fable-design/DESIGN-home-chosen-chat-fable.
         }
     });
 });
+
+describe('card hues (S1, scratch/fable-design/DESIGN-home-look-fable.md §2.2)', () => {
+    it('every registered type has a hue in the group, and none is amber', () => {
+        for (const card of HOME_CARD_TYPES) {
+            expect(card.hue, `${card.id} hue defined`).toBeDefined();
+            expect(card.hue, `${card.id} must not be amber`).not.toBe('amber');
+        }
+    });
+
+    it('homeCardHue(instance) returns the type hue', () => {
+        expect(homeCardHue({ type: 'market' })).toBe('orange');
+        expect(homeCardHue({ type: 'events' })).toBe('violet');
+        expect(homeCardHue({ type: 'needs' })).toBe('sage');
+        expect(homeCardHue({ type: 'unknown-type' })).toBe('sage');
+    });
+});
+

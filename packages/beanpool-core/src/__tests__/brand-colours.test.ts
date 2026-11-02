@@ -57,14 +57,15 @@ describe('brand colours are readable in both themes', () => {
         for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'sage', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
             expect(roles, role).toContain(role);
         }
-        // fills: on/fill + on/hover; chips: ink/tint; tiles: ink/tint; inks: one per ground of that theme (a web-only ink, the web's grounds).
+        // fills: on/fill + on/hover; chips: ink/tint; tiles: ink/tint; cards: ink/tint; inks: one per ground of that theme (a web-only ink, the web's grounds).
         const inkNames = Object.keys(BRAND_COLOURS.ink);
         const chips = Object.keys(BRAND_COLOURS.chip).length;
         const tiles = Object.keys(BRAND_COLOURS.tile).length;
-        const fills = Object.keys(BRAND_COLOURS).length - 4;
+        const cards = Object.keys(BRAND_COLOURS.card).length;
+        const fills = Object.keys(BRAND_COLOURS).length - 5;
         const deals = Object.keys(BRAND_COLOURS.deal).length;
         for (const theme of ['light', 'dark'] as const) {
-            expect(pairs.filter((p) => p.theme === theme).length, theme).toBe(fills * 2 + chips + tiles + deals * WEB_INK_GROUNDS[theme].length + inkNames.reduce((n, name) => n + (WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS : INK_GROUNDS)[theme].length, 0));
+            expect(pairs.filter((p) => p.theme === theme).length, theme).toBe(fills * 2 + chips + tiles + cards + deals * WEB_INK_GROUNDS[theme].length + inkNames.reduce((n, name) => n + (WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS : INK_GROUNDS)[theme].length, 0));
         }
     });
 
@@ -76,6 +77,16 @@ describe('brand colours are readable in both themes', () => {
             'general', 'event', 'pulse',
         ]) {
             expect(roles).toContain(`tile.${cat}`);
+        }
+    });
+
+    it('covers every card role for the fifteen hues plus amber, in both themes', () => {
+        const roles = new Set(pairs.map((p) => p.role));
+        for (const hue of [
+            'sage', 'sky', 'blue', 'indigo', 'violet', 'plum', 'pink', 'rose',
+            'clay', 'orange', 'yellow', 'lime', 'green', 'teal', 'sand', 'amber',
+        ]) {
+            expect(roles).toContain(`card.${hue}`);
         }
     });
 
@@ -128,7 +139,7 @@ describe('brand colours are readable in both themes', () => {
     it('presses darker, never lighter, on white-word fills', () => {
         // Option C: hover/pressed deepens a white-word fill. Gold (charcoal words) is the one that lightens.
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
-            if (role === 'chip' || role === 'tile' || role === 'ink' || role === 'deal' || role === 'gold') continue;
+            if (role === 'chip' || role === 'tile' || role === 'card' || role === 'ink' || role === 'deal' || role === 'gold') continue;
             const fill = node as { fill: { light: string }; hover: { light: string } };
             expect(contrastRatio('#ffffff', fill.hover.light), role).toBeGreaterThan(contrastRatio('#ffffff', fill.fill.light));
         }
@@ -137,7 +148,7 @@ describe('brand colours are readable in both themes', () => {
     it('presses toward more contrast with its own words, in both themes', () => {
         // Darker under white words, lighter under charcoal (gold; the sage accent in dark, Marty 14 Oct 2026).
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
-            if (role === 'chip' || role === 'tile' || role === 'ink' || role === 'deal') continue;
+            if (role === 'chip' || role === 'tile' || role === 'card' || role === 'ink' || role === 'deal') continue;
             const fill = node as { fill: Record<'light' | 'dark', string>; hover: Record<'light' | 'dark', string>; on: Record<'light' | 'dark', string> };
             for (const theme of ['light', 'dark'] as const) {
                 expect(contrastRatio(fill.on[theme], fill.hover[theme]), `${theme} ${role}`).toBeGreaterThan(contrastRatio(fill.on[theme], fill.fill[theme]));

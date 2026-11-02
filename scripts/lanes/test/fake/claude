@@ -1,6 +1,8 @@
 #!/bin/zsh
 # Fake headless Claude for selftest.sh — never talks to a model. FAKE_CLAUDE_MODE picks the behaviour; every call is
-# appended to $FAKE_STATE/claude.calls.
+# appended to $FAKE_STATE/claude.calls. $FAKE_STATE/ci-reads-at-run-<n> says how many times the required check had been read
+# when run n started. During a review: $FAKE_STATE/review-push moves the PR to the commit it names (empty: GitHub stops giving
+# the head), and $FAKE_STATE/review-breaks-comments makes the comment count stop answering.
 S=${FAKE_STATE:?}
 prompt= model= wt=none perm= fmt= verbose=no
 while (( $# )); do
@@ -20,7 +22,12 @@ n=$(( $(cat "$S/claude.runs" 2>/dev/null || print 0) + 1 )); print $n > "$S/clau
 rules=no; [[ "$prompt" == *"RULES FOR THIS HEADLESS RUN"* ]] && rules=yes
 print -r -- "run $n model=$model worktree=$wt perm=$perm format=$fmt verbose=$verbose cwd=$PWD rules=$rules" >> "$S/claude.calls"
 print -r -- "$prompt" > "$S/claude.prompt-$n"
-[[ "$prompt" == *"STAGE FIX-CI"* ]] && [ -s "$S/pushes" ] && { sed -n 1p "$S/pushes" > "$S/head"; sed -i '' 1d "$S/pushes"; }
+grep -c 'check_name=' "$S/gh.calls" > "$S/ci-reads-at-run-$n" 2>/dev/null
+[[ "$prompt" == *"STAGE FIX-CI"* || "$prompt" == *"SYNC STAGE"* ]] && [ -s "$S/pushes" ] && { sed -n 1p "$S/pushes" > "$S/head"; sed -i '' 1d "$S/pushes"; }
+if [[ "$prompt" == *"Review pull request"* ]]; then
+  [ -f "$S/review-push" ] && mv "$S/review-push" "$S/head"
+  [ -f "$S/review-breaks-comments" ] && mv "$S/review-breaks-comments" "$S/comments-down"
+fi
 if [ "$wt" != none ]; then mkdir -p ".claude/worktrees/$wt" && cd ".claude/worktrees/$wt"; fi
 print -r -- "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"$PWD\"}"
 result(){ print -r -- "{\"type\":\"result\",\"subtype\":\"$1\",\"is_error\":$2,\"result\":\"$3\"}"; }
@@ -41,5 +48,7 @@ case "${FAKE_CLAUDE_MODE:-success}" in
   fail_fable)
     if [ "$model" = claude-fable-5-1 ]; then print -u2 "API Error: 500 internal"; exit 1; fi
     sleep 1; result success false "No new defects.";;
+  hang) sleep 600 & wait;;   # never answers: the idle watchdog has to kill it
+  empty) ;;                  # exits 0 with no result at all
   *) print -u2 "fake claude: unknown mode $FAKE_CLAUDE_MODE"; exit 2;;
 esac

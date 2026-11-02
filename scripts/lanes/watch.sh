@@ -5,6 +5,7 @@
 #   DECIDING REVIEW DOWNGRADED   a deciding pass retried on a fallback model; the PR needs a human read
 #   READY FOR DECIDING REVIEW / HELD   a PR is waiting for the in-session deciding review or the maintainer
 #   NOT REVIEWED          GitHub was not green on a PR's head and the lane has stopped trying; its deciding pass never ran
+#   REVIEW AND CI BACK    a Claude-built lane's deciding pass and GitHub have both come back, not clean and green; the line has both
 #   LANE DONE             a run script's last line, "LANE <name> DONE (clean=… pr=…) — HELD for the director"
 #   ALL LANES STOPPED     every lane it saw running has exited
 # Silence is the failure mode: without this, a lane stuck at 02:00 is found at 09:00.
@@ -37,6 +38,8 @@ while :; do
           *"VERIFY THIS PR BY HAND"*)      print "DECIDING REVIEW DOWNGRADED on lane $lane at $(date +%H:%M) — the strong model did not answer";;
           *"ready for the in-session"*)    print "READY FOR DECIDING REVIEW on lane $lane at $(date +%H:%M)";;
           *"HELD for the maintainer"*)     print "PR HELD FOR THE MAINTAINER on lane $lane at $(date +%H:%M)";;
+          # Before the next one: this hold says LEFT FOR THE DIRECTOR too, and its pass did run.
+          *"review and CI back: "*)        print -r -- "REVIEW AND CI BACK on lane $lane at $(date +%H:%M) — ${ev#*review and CI back: }";;
           *"LEFT FOR THE DIRECTOR"*)       print "NOT REVIEWED on lane $lane at $(date +%H:%M) — GitHub not green, PR left for the director";;
         esac
       fi

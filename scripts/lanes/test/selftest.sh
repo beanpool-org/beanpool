@@ -3,7 +3,7 @@
 #
 # Touches no real model, PR, GitHub repo or node: the fakes in test/fake/ are first on PATH (and named explicitly
 # via LANE_AGY_BIN / LANE_CLAUDE_BIN), the git "origin" is a bare repo in a temp dir, and deploy.sh is a fake
-# committed to that temp repo. Timings are shrunk so the whole run takes about two minutes.
+# committed to that temp repo. Timings are shrunk so the whole run takes about four minutes.
 #
 #   zsh scripts/lanes/test/selftest.sh          (LANE_SELFTEST_KEEP=1 keeps the temp dir for inspection)
 HERE=${0:A:h}
@@ -48,7 +48,7 @@ scenario(){ # TITLE — resets the fakes' state; the scenario's lane log goes to
   print; print -r -- "━━ $1"
   rm -rf "$FAKE_STATE"; mkdir -p "$FAKE_STATE"
   LOG=$T/scenario-$((++SCEN)).log; : > "$LOG"
-  unset FAKE_AGY_MODE FAKE_AGY_PROBE_FAILS FAKE_CLAUDE_MODE FAKE_CLAUDE_PROBE_FAILS FAKE_GH_DOWN FAKE_GH_COMMENTS_DOWN FAKE_GH_RUNS_DOWN FAKE_GH_PR FAKE_REVIEW_POSTS FAKE_EARLY_POSTS FAKE_SSH_REVISION FAKE_SSH_SYMBOL
+  unset FAKE_AGY_MODE FAKE_AGY_PROBE_FAILS FAKE_CLAUDE_MODE FAKE_CLAUDE_PROBE_FAILS FAKE_GH_DOWN FAKE_GH_COMMENTS_DOWN FAKE_GH_RUNS_DOWN FAKE_GH_LABEL_DOWN FAKE_GH_PR FAKE_REVIEW_POSTS FAKE_EARLY_POSTS FAKE_SSH_REVISION FAKE_SSH_SYMBOL
   unset LANE_DECIDE_FALLBACK_MODEL LANE_DECIDE_MODEL
   LANE_BUILD_BACKEND=agy; LANE_REVIEW_BACKEND=agy; LANE_DECIDE_BACKEND=claude
   LANE_GREEN_TRIES=6; LANE_GREEN_NONE_TRIES=3
@@ -385,15 +385,15 @@ check "... and so does one with no URL, which costs the others nothing" brief_ha
 check "the fix brief names the red head"         brief_has agy.prompt-1 "is RED on the head aaa1"
 check "the review brief names the pushed head, not the red one" eval 'brief_has claude.prompt-1 "head aaa2" && ! brief_has claude.prompt-1 "aaa1"'
 
-scenario "29. a headless Claude build backend with an AGY deciding backend: same flow, each stage on its own backend"
+scenario "29. a headless Claude build backend with an AGY deciding backend: the pass is on agy, and it is a Claude-built lane, so it runs beside GitHub"
 LANE_BUILD_BACKEND=claude LANE_DECIDE_BACKEND=agy LANE_DECIDE_MODEL=gemini-decide
 LANE_WT=$T/repo/.claude/worktrees/lane-mix; mkdir -p "$LANE_WT"
-head_is aaa1; ci aaa1 failure; print aaa2 > "$FAKE_STATE/pushes"
+head_is aaa1; ci aaa1 pending failure; print aaa2 > "$FAKE_STATE/pushes"
 decide
-check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
-check "the fix stage ran on claude, the deciding pass on agy" [ "$(reviews):$(fixes)" = 1:1 ]
-check "the fix stage is the claude run"          brief_has claude.prompt-1 "STAGE FIX-CI"
-check "the agy deciding brief says green on the pushed head" brief_has agy.prompt-1 "is GREEN on this PR's head aaa2"
+check "CLEAN=0: red"                             [ "$CLEAN" = 0 ]
+check "the deciding pass ran on agy, and claude ran no fix stage" [ "$(reviews):$(fixes)" = 0:1 ]
+check "the pass started before the wait for GitHub" [ "$(line_of 'CCR-feat/x-3 started')" -lt "$(line_of 'waiting for GitHub on #42')" ]
+check "the agy deciding brief makes no claim about CI" eval 'brief_has agy.prompt-1 "may still be running" && ! brief_has agy.prompt-1 "GREEN"'
 
 scenario "30. director deciding backend: 'ready' only once green; a held PR never reads as ready"
 LANE_DECIDE_BACKEND=director
@@ -406,6 +406,12 @@ check "one fix stage"                            [ "$n" = 1 ]
 : > "$LOG"; head_is bbb1; ci bbb1 cancelled
 decide
 check "cancelled: not ready, left for the director" eval 'not_logged "ready for the in-session" && logged "LEFT FOR THE DIRECTOR"'
+: > "$LOG"; rm -f "$FAKE_STATE/agy.calls" "$FAKE_STATE/agy.runs"
+LANE_BUILD_BACKEND=claude LANE_WT=$T/repo/.claude/worktrees/lane-mix; mkdir -p "$LANE_WT"
+head_is ccc1; ci ccc1 failure; print ccc2 > "$FAKE_STATE/pushes"
+decide
+check "a Claude-built lane decided in session keeps the old order: no run beside GitHub, 'ready' only once green" eval 'logged "PR #42 ready for the in-session deciding review" && logged "#42 is green on ccc2"'
+check "... and its fix stage is the claude run"  brief_has claude.prompt-1 "STAGE FIX-CI"
 
 scenario "31. still red after both fix stages → stops, no review, PR left for the director"
 head_is aaa1; ci aaa1 failure; ci aaa2 failure; ci aaa3 failure; print -l aaa2 aaa3 aaa4 > "$FAKE_STATE/pushes"
@@ -664,38 +670,49 @@ check "AGY brief carries PRE-FLIGHT"             ab_has "PRE-FLIGHT (Marty, 1 No
 check "AGY brief carries the heavy-test wait"    ab_has 'while [ -d /Users/marty/.cache/heavy-test.lock ]; do sleep 30; done'
 check "no stage is told to run the full suite"   eval '! ab_has "test-all.sh LAST" && ab_has "Do NOT run scripts/test-all.sh"'
 
-# Below, an agy run is an early pass or a FIX stage on an AGY-built lane, and a claude run the deciding pass or a FIX stage on a Claude-built one.
-scenario "48. a Claude-built lane: one early pass, no FIX stage, no second pass; its comments are not defects, and the deciding pass weighs them"
-LANE_BUILD_BACKEND=claude LANE_WT=$T/repo/.claude/worktrees/lane-opus; mkdir -p "$LANE_WT"
+# Below, an agy run is an early pass or a FIX stage on an AGY-built lane. On a Claude-built lane a claude run is the deciding pass, and an agy run must not happen.
+opus(){ LANE_BUILD_BACKEND=claude LANE_WT=$T/repo/.claude/worktrees/lane-opus; mkdir -p "$LANE_WT"; }
+again(){ : > "$LOG"; rm -f "$FAKE_STATE"/claude.calls "$FAKE_STATE"/claude.runs "$FAKE_STATE"/claude.probes "$FAKE_STATE"/agy.calls "$FAKE_STATE"/agy.runs "$FAKE_STATE"/ci-read-in-the-slot; }
+holds(){ grep -c "LEFT FOR THE DIRECTOR" "$LOG"; }
+held(){ logged "LEFT FOR THE DIRECTOR, review and CI back: verdict $1"; }
+
+scenario "48. a Claude-built lane: no early pass, no Flash and no FIX stage; the deciding pass is the only review"
+opus
 FAKE_GH_PR=42 FAKE_EARLY_POSTS=3; print 5 > "$FAKE_STATE/comments"
 { review feat/x; } >> "$LOG" 2>&1
 show
-check "CLEAN=1: three early comments and none from the deciding pass" [ "$CLEAN" = 1 ]
-check "one early pass, one deciding pass, no other stage" [ "$(fixes):$(reviews)" = 1:1 ]
-check "the early comments were counted"          logged "review feat/x pass 1: comments 5 → 8"
-check "no FIX stage, no second pass"             eval 'not_logged "FIX-feat/x" && not_logged "CCR-feat/x-2"'
-check "the log says who weighs them"             logged "3 early comment(s) left for the deciding pass to weigh"
-check "the gate's count starts after the early comments" logged "#42 comments before the deciding pass: 8"
-check "the brief tells it to weigh them, and from when" eval 'brief_has claude.prompt-1 "WEIGH each one" && grep -qE "created after [0-9]{4}-[0-9]{2}-[0-9]{2}T" "$FAKE_STATE/claude.prompt-1"'
-check "... a real one is posted as a new comment, whatever the brief below says about repeating" eval 'brief_has claude.prompt-1 "post it as your own new inline comment" && brief_has claude.prompt-1 "overrides any line below"'
-check "... a false one gets no reply, which would read as a defect" brief_has claude.prompt-1 "not even a reply"
-check "... the summary says which are real"      brief_has claude.prompt-1 "as REAL or NOT REAL"
-check "... and a -fix lane's pass still checks the verdict before it was acted on" brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
+check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
+check "one deciding pass, and nothing on agy"    [ "$(fixes):$(reviews)" = 0:1 ]
+check "no early pass, no FIX stage, no second pass" eval 'not_logged "CCR-feat/x-1" && not_logged "FIX-feat/x" && not_logged "CCR-feat/x-2"'
+check "the gate's count starts from what was there" logged "#42 comments before the deciding pass: 5"
+check "the brief asks for no verdict on an early pass that did not run" eval '! brief_has claude.prompt-1 "WEIGH" && ! brief_has claude.prompt-1 "as REAL or NOT REAL"'
+check "a -fix lane's pass still checks the earlier findings" brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
 check "the lane's own deciding brief still follows" brief_has claude.prompt-1 "DECIDING pass — the code merges"
-: > "$LOG"; rm -f "$FAKE_STATE/claude.calls" "$FAKE_STATE/claude.runs" "$FAKE_STATE/agy.calls" "$FAKE_STATE/agy.runs"
-FAKE_EARLY_POSTS=; print 5 > "$FAKE_STATE/comments"
-{ review feat/x; } >> "$LOG" 2>&1
-check "an early pass with no comments goes straight on too" eval '[ "$CLEAN:$(fixes):$(reviews)" = 1:1:1 ] && not_logged "left for the deciding pass"'
-check "... and its brief asks for no verdict on comments that do not exist" eval '! brief_has claude.prompt-1 "WEIGH" && ! brief_has claude.prompt-1 "as REAL or NOT REAL"'
-check "... it still checks the earlier findings"  brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
 
-scenario "49. a Claude-built lane: an early comment the deciding pass finds real counts, because it posts it again"
-LANE_BUILD_BACKEND=claude LANE_WT=$T/repo/.claude/worktrees/lane-opus
-FAKE_GH_PR=42 FAKE_EARLY_POSTS=3 FAKE_REVIEW_POSTS=1; print 5 > "$FAKE_STATE/comments"
-{ review feat/x; } >> "$LOG" 2>&1
-show
-check "CLEAN=0"                                  [ "$CLEAN" = 0 ]
-check "said why"                                 logged "deciding pass found new defects"
+scenario "49. a Claude-built lane: the pass starts while GitHub is pending and says so; the wait comes after it, outside the slot; the slot and the probe still hold"
+opus
+head_is aaa1; ci aaa1 pending pending success
+decide
+check "CLEAN=1, one review, no fix stage"        [ "$CLEAN:$(reviews):$(fixes)" = 1:1:0 ]
+check "GitHub had not been read when the pass started" [ "$(cat "$FAKE_STATE/ci-reads-at-run-1")" = 0 ]
+check "the lane read it three times after the pass" [ "$(reads aaa1)" = 3 ]
+check "the wait shows in the log, after the pass" [ "$(line_of 'CCR-feat/x-3 exit')" -lt "$(line_of 'waiting for GitHub on #42, head aaa1: pending (poll 1 of 6)')" ]
+check "no CI read happened inside the slot"      [ ! -e "$FAKE_STATE/ci-read-in-the-slot" ]
+check "the model was probed first"               grep -q "probe 1 model=claude-fable-5-1" "$FAKE_STATE/claude.calls"
+check "the brief says CI may still be running"   brief_has claude.prompt-1 "may still be running on it"
+check "... do not wait, do not poll, do not claim" brief_has claude.prompt-1 "Do not wait for it, do not poll it, and do not claim CI passed"
+check "... names the head, and asserts no green"  eval 'brief_has claude.prompt-1 "head aaa1" && ! brief_has claude.prompt-1 "GREEN"'
+again; head_is bbb1
+mkdir -p "$LANE_LOCK_DIR/decide.lock"; print $$ > "$LANE_LOCK_DIR/decide.lock/pid"
+( sleep 2; rm -rf "$LANE_LOCK_DIR/decide.lock" ) &
+{ decide_review 42 feat/x 3 1; } >> "$LOG" 2>&1
+wait 2>/dev/null
+check "a busy deciding slot is still waited for" eval 'logged "waiting for the decide lock" && [ "$CLEAN:$(reviews)" = 1:1 ]'
+again; head_is ccc1; FAKE_CLAUDE_PROBE_FAILS=99
+{ decide_review 42 feat/x 3 1; } >> "$LOG" 2>&1
+unset FAKE_CLAUDE_PROBE_FAILS
+check "a model that does not answer the probe is still not decided on" eval '[ "$CLEAN:$(reviews)" = 0:0 ] && logged "left open for the maintainer"'
+check "... and no CI read happened"              [ "$(reads ccc1)" = 0 ]
 
 scenario "50. an AGY-built lane keeps both early passes and both FIX stages, and its deciding pass checks the fixes"
 FAKE_GH_PR=42 FAKE_EARLY_POSTS=2; print 5 > "$FAKE_STATE/comments"
@@ -735,6 +752,200 @@ for r in "$LANE_AGY_RULES" "$LANE_CLAUDE_RULES"; do
   check "${r:t} no longer says push every step without saying when" eval '! grep -qE "^- Push to origin after EVERY|\\. Push after each logical step\\.$" "$r"'
 done
 show
+
+scenario "52. the control: the same PR on an AGY-built lane keeps both early passes, both FIX stages, and the wait before its deciding pass"
+FAKE_GH_PR=42 FAKE_EARLY_POSTS=2; head_is aaa1; print 5 > "$FAKE_STATE/comments"; ci aaa1 pending pending success
+{ review feat/x; } >> "$LOG" 2>&1
+show
+check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
+check "two passes and two FIX stages on agy, then one deciding pass" [ "$(fixes):$(reviews)" = 4:1 ]
+check "the deciding pass started only once GitHub was green" [ "$(cat "$FAKE_STATE/ci-reads-at-run-1")" = 3 ]
+check "its brief says green on that head, and nothing about CI still running" eval 'brief_has claude.prompt-1 "is GREEN on this PR'"'"'s head aaa1" && ! brief_has claude.prompt-1 "may still be running"'
+check "nothing is read after the pass"           [ "$(reads aaa1)" = 3 ]
+again; FAKE_EARLY_POSTS=; head_is bbb1; ci bbb1 failure; print bbb2 > "$FAKE_STATE/pushes"
+{ review feat/x; } >> "$LOG" 2>&1
+check "a red still gets its FIX-CI stage before any deciding pass" eval '[ "$CLEAN" = 1 ] && [ "$(line_of "FIX-CI-feat/x-1 started")" -lt "$(line_of "CCR-feat/x-3 started")" ]'
+check "... and the pass reads the pushed head"   eval 'brief_has claude.prompt-1 "head bbb2" && ! brief_has claude.prompt-1 "bbb1"'
+
+scenario "53. a Claude-built lane: clean and green is CLEAN, about the head the pass read, and no hold"
+opus
+head_is aaa1
+decide
+check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
+check "the log says what was clean and green"    logged "#42 is clean and green on aaa1"
+check "no hold line"                             [ "$(holds)" = 0 ]
+check "the required check was read on that exact commit" grep -qF 'commits/aaa1/check-runs?check_name=' "$FAKE_STATE/gh.calls"
+
+scenario "54. a Claude-built lane: clean and red holds, with no FIX-CI stage, and a red is not lost behind a clean verdict"
+opus
+head_is aaa1; ci aaa1 failure; print aaa2 > "$FAKE_STATE/pushes"
+decide
+check "CLEAN=0"                                  [ "$CLEAN" = 0 ]
+check "one review, no fix stage, and the head stayed" eval '[ "$(reviews):$(fixes)" = 1:0 ] && [ "$(cat "$FAKE_STATE/head")" = aaa1 ] && not_logged "FIX-CI"'
+check "one hold line, with the verdict and the red" eval '[ "$(holds)" = 1 ] && held "CLEAN; CI red on aaa1"'
+check "it does not say the pass never ran"       not_logged "no deciding pass"
+
+scenario "55. a Claude-built lane: NOT CLEAN and red make one hold line with both; NOT CLEAN and green holds too"
+opus
+FAKE_REVIEW_POSTS=2
+head_is aaa1; ci aaa1 failure; print aaa2 > "$FAKE_STATE/pushes"
+decide
+check "CLEAN=0, one review, no fix stage"        [ "$CLEAN:$(reviews):$(fixes)" = 0:1:0 ]
+check "exactly one hold line"                    [ "$(holds)" = 1 ]
+check "it carries both results"                  held "NOT CLEAN (2 new comment(s)); CI red on aaa1"
+again; head_is bbb1
+decide
+check "NOT CLEAN and green: held, with both"     eval '[ "$CLEAN" = 0 ] && [ "$(holds)" = 1 ] && held "NOT CLEAN (2 new comment(s)); CI green on bbb1"'
+again; head_is ccc1; ci ccc1 pending pending failure
+decide
+check "the verdict waits for GitHub: a finding does not go back before the red it sits beside" eval '[ "$(reads ccc1)" = 3 ] && [ "$(holds)" = 1 ] && held "NOT CLEAN (2 new comment(s)); CI red on ccc1"'
+again; FAKE_REVIEW_POSTS=1 FAKE_GH_PR=42; head_is ddd1
+{ review feat/x; } >> "$LOG" 2>&1
+check "review() allows no new comment: one finding is NOT CLEAN" eval '[ "$CLEAN" = 0 ] && held "NOT CLEAN (1 new comment(s)); CI green on ddd1"'
+again; head_is eee1
+decide
+check "a caller's allowance still counts: the one comment decide_pass allows is clean" [ "$CLEAN" = 1 ]
+
+scenario "56. a Claude-built lane: a head that moved voids the verdict, whenever it moved and whatever GitHub says"
+opus
+head_is aaa1; print aaa2 > "$FAKE_STATE/review-push"; ci aaa2 pending
+decide
+check "moved during the review: CLEAN=0, though the review was clean and the old head green" [ "$CLEAN" = 0 ]
+check "no second review and no fix stage: it holds" [ "$(reviews):$(fixes)" = 1:0 ]
+check "one hold line saying so, and what the old review said" eval '[ "$(holds)" = 1 ] && held "VOID (the head moved from aaa1 to aaa2, and the review of the old head said CLEAN); CI pending on the new head aaa2"'
+check "the old head's green is never read as this round's" [ "$(reads aaa1)" = 0 ]
+again; head_is bbb1; ci bbb1 pending+push; print bbb2 > "$FAKE_STATE/pushes"; ci bbb2 success
+decide
+check "moved during the wait for GitHub, to a green head: still void" eval '[ "$CLEAN" = 0 ] && held "VOID (the head moved from bbb1 to bbb2"'
+again; head_is ccc1; ci ccc1 success+push; print ccc2 > "$FAKE_STATE/pushes"; ci ccc2 success
+decide
+check "moved as green was read: a green on a commit already replaced does not count" eval '[ "$CLEAN" = 0 ] && held "VOID (the head moved from ccc1 to ccc2"'
+again; FAKE_REVIEW_POSTS=2; head_is ddd1; print ddd2 > "$FAKE_STATE/review-push"; ci ddd2 failure
+decide
+unset FAKE_REVIEW_POSTS
+check "a NOT CLEAN verdict is voided the same way, in one line" eval '[ "$(holds)" = 1 ] && held "VOID (the head moved from ddd1 to ddd2, and the review of the old head said NOT CLEAN (2 new comment(s))); CI red on the new head ddd2"'
+again; head_is eee1; : > "$FAKE_STATE/review-push"
+decide
+check "GitHub stops giving the head after the review: not clean" eval '[ "$CLEAN" = 0 ] && held "CLEAN; CI unread: GitHub did not give the head commit"'
+again; : > "$FAKE_STATE/head"
+decide
+check "GitHub gives no head before the pass: no review, held" eval '[ "$CLEAN:$(reviews)" = 0:0 ] && logged "LEFT FOR THE DIRECTOR, no deciding pass: GitHub did not give its head commit"'
+check "... and the slot is free again"           [ ! -e "$LANE_LOCK_DIR/decide.lock" ]
+
+scenario "57. a Claude-built lane: a pass that did not really run is never clean, whatever GitHub says"
+opus
+head_is aaa1; FAKE_CLAUDE_MODE=fail_fable LANE_DECIDE_FALLBACK_MODEL=claude-sonnet-5-5
+decide
+check "downgraded, and green: CLEAN=0"           [ "$STAGE_DOWNGRADED:$CLEAN" = 1:0 ]
+check "... held with both"                       eval '[ "$(holds)" = 1 ] && held "NOT CLEAN (the review did not run properly); CI green on aaa1"'
+again; unset LANE_DECIDE_FALLBACK_MODEL; head_is bbb1
+decide
+check "errored on every attempt, and green: CLEAN=0" eval '[ "$STAGE_OK:$CLEAN" = 0:0 ] && held "NOT CLEAN (the review did not run properly); CI green on bbb1"'
+check "... with the slot released"               [ ! -e "$LANE_LOCK_DIR/decide.lock" ]
+again; FAKE_CLAUDE_MODE=empty; head_is ccc1
+decide
+check "empty, and green: CLEAN=0"                eval '[ "$CLEAN" = 0 ] && held "NOT CLEAN (the review did not run properly); CI green on ccc1"'
+again; FAKE_CLAUDE_MODE=hang; head_is ddd1
+decide
+check "idle-killed, and green: CLEAN=0"          eval '[ "$STAGE_IDLEKILL:$CLEAN" = 1:0 ] && held "NOT CLEAN (the review did not run properly); CI green on ddd1"'
+again; FAKE_CLAUDE_MODE=success; head_is eee1; print > "$FAKE_STATE/review-breaks-comments"
+decide
+rm -f "$FAKE_STATE/comments-down"
+check "the count stops answering after the pass, and green: CLEAN=0" eval '[ "$CLEAN" = 0 ] && held "NOT CLEAN (its comment count was unavailable); CI green on eee1"'
+
+scenario "58. a Claude-built lane: anything but green is not clean, holds with its name, and costs no fix stage"
+opus
+head_is aaa1; ci aaa1 cancelled
+decide
+check "cancelled"                                eval '[ "$CLEAN:$(fixes)" = 0:0 ] && held "CLEAN; CI cancelled on aaa1"'
+again; FAKE_GH_RUNS_DOWN=1; head_is bbb1; ci bbb1 none
+decide
+unset FAKE_GH_RUNS_DOWN
+check "unknown: GitHub silent is not 'no run'"   eval '[ "$CLEAN:$(fixes)" = 0:0 ] && held "CLEAN; CI unknown: GitHub did not answer about bbb1"'
+again; head_is ccc1; ci ccc1 none
+decide
+check "no run, after the no-run limit"           eval '[ "$CLEAN:$(fixes):$(reads ccc1)" = 0:0:3 ] && held "CLEAN; CI no run started on ccc1 after 3 polls"'
+again; LANE_GREEN_TRIES=3; head_is ddd1; ci ddd1 pending
+decide
+check "pending past the limit is never green"    eval '[ "$CLEAN:$(fixes):$(reads ddd1)" = 0:0:3 ] && held "CLEAN; CI \"Run BeanPool Test-All Pipeline\" still pending on ddd1 after 3 polls"'
+check "each of them one hold line"               [ "$(holds)" = 1 ]
+again; head_is eee1; ci eee1 none; print success > "$FAKE_STATE/run-eee1"
+decide
+check "a finished run with no required check never reads as green" eval '[ "$CLEAN" = 0 ] && held "CLEAN; CI \"Run BeanPool Test-All Pipeline\" still pending on eee1"'
+again; LANE_GREEN_TRIES=6; head_is fff1; ci fff1 failure; print cancelled > "$FAKE_STATE/run-fff1"
+decide
+check "required check failed, run cancelled: reads cancelled" eval '[ "$CLEAN" = 0 ] && held "CLEAN; CI cancelled on fff1"'
+
+scenario "59. a Claude-built lane: a PR of only .md files has no run to wait for; guide pages do get one"
+opus
+head_is aaa1; ci aaa1 none; print -l README.md docs/notes.md > "$FAKE_STATE/files"
+decide
+check "CLEAN=1, one review, one read"            [ "$CLEAN:$(reviews):$(reads aaa1)" = 1:1:1 ]
+check "no hold line"                             [ "$(holds)" = 0 ]
+again; LANE_GREEN_NONE_TRIES=5; head_is bbb1; ci bbb1 none none success; print -l README.md packages/beanpool-guide/content/x.md > "$FAKE_STATE/files"
+decide
+check "guide pages: the lane waited for the run" [ "$CLEAN:$(reviews):$(reads bbb1)" = 1:1:3 ]
+again; LANE_GREEN_NONE_TRIES=2; head_is ccc1; ci ccc1 none; print -l README.md src/a.ts > "$FAKE_STATE/files"
+decide
+check "Markdown plus code still needs a run"     eval '[ "$CLEAN" = 0 ] && held "CLEAN; CI no run started on ccc1"'
+
+scenario "60. a Claude-built lane: decide_pass and land's post-sync pass take the same path"
+opus
+FAKE_GH_PR=42
+head_is aaa1; ci aaa1 pending success
+{ decide_pass 42 feat/x; } >> "$LOG" 2>&1
+show
+check "decide_pass: runs beside GitHub, clean and green, then land holds it" eval '[ "$CLEAN" = 1 ] && [ "$(cat "$FAKE_STATE/ci-reads-at-run-1")" = 0 ] && logged "PR #42 is green and clean — HELD for the maintainer"'
+again; head_is bbb1; ci bbb1 failure
+{ decide_pass 42 feat/x; } >> "$LOG" 2>&1
+check "decide_pass: a red goes no further than the hold" eval '[ "$CLEAN" = 0 ] && [ "$(holds)" = 1 ] && held "CLEAN; CI red on bbb1" && logged "PR #42 NOT clean — left open" && not_logged "HELD for the maintainer"'
+again; head_is ccc1; ci ccc1 none; ci ccc2 pending success; print ccc2 > "$FAKE_STATE/pushes"
+{ land 42 hold; } >> "$LOG" 2>&1
+check "land: the sync stage ran, then the post-sync pass" eval 'logged "syncing with main" && [ "$(line_of "SYNC-feat-x started")" -lt "$(line_of "CCR-feat/x-sync started")" ]'
+check "... on the pushed head, before GitHub had read it" eval 'brief_has claude.prompt-2 "head ccc2" && brief_has claude.prompt-2 "just synced" && [ "$(reads ccc2)" -ge 2 ]'
+check "... then both came back, and land held it" eval '[ "$CLEAN" = 1 ] && logged "#42 is clean and green on ccc2" && logged "HELD for the maintainer"'
+again; head_is ddd1; ci ddd1 none; ci ddd2 failure; print ddd2 > "$FAKE_STATE/pushes"
+{ land 42 hold; } >> "$LOG" 2>&1
+check "land: a red after the sync holds with both, and goes no further" eval '[ "$(holds)" = 1 ] && held "CLEAN; CI red on ddd2" && logged "post-sync review of #42 did not come back clean" && not_logged "HELD for the maintainer"'
+
+scenario "61. watch.sh wakes on a round coming back, with both results in its headline; the lane's last line shows in the same wake"
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'round_hold 45 "NOT CLEAN (2 new comment(s))" "red on aaa1"' 'CLEAN=0 PR=45' "$done_line" > "$T/run-selftestround.sh"
+zsh "${HERE:h}/start.sh" "$T/run-selftestround.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-round.out"; woke_round=$WOKE
+watch_now "$T/w-round2.out"; woke_round2=$WOKE
+wait 2>/dev/null
+cat "$T/w-round.out" >> "$LOG"
+show
+check "woke, once"                               [ "$woke_round:$woke_round2" = 1:0 ]
+check "the headline has the verdict and CI"      grep -qE "REVIEW AND CI BACK on lane selftestround at [0-9:]+ — verdict NOT CLEAN \(2 new comment\(s\)\); CI red on aaa1" "$T/w-round.out"
+check "it does not say the PR was not reviewed"  eval '! grep -q "NOT REVIEWED" "$T/w-round.out"'
+check "the lane's last line wakes with it"       grep -qE "selftestround at [0-9:]+ — clean=0, PR #45, held for the director" "$T/w-round.out"
+check "printed no shell errors"                  eval '! grep -qE "bad option|bad pattern|command not found|parse error|read-only" "$T/w-round.out"'
+
+scenario "62. a Claude-built lane labels its PR tier-A, so board.sh sends it first; a failed label costs a log line, never the lane; an AGY-built lane gets none"
+label_calls(){ calls gh.calls '^gh pr edit'; }
+opus
+FAKE_GH_PR=42; head_is aaa1
+{ review feat/x; } >> "$LOG" 2>&1
+show
+check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
+check "the label went on its PR, once"           eval 'grep -qxF "gh pr edit 42 -R example/fake --add-label tier-A" "$FAKE_STATE/gh.calls" && [ "$(label_calls)" = 1 ]'
+check "the name is the one board.sh reads"       grep -q 'tier-a' "${HERE:h:h}/merge-queue/board.sh"
+again; rm -f "$FAKE_STATE/gh.calls"; FAKE_GH_LABEL_DOWN=1; head_is bbb1
+{ review feat/x; } >> "$LOG" 2>&1
+check "a label GitHub refuses: tried as any read, then a log line" eval '[ "$(label_calls)" = 4 ] && logged "could not add tier-A to #42"'
+check "... and the lane carries on to its review, and to CLEAN" [ "$CLEAN:$(reviews)" = 1:1 ]
+unset FAKE_GH_LABEL_DOWN
+again; rm -f "$FAKE_STATE/gh.calls"; FAKE_GH_PR=
+{ review feat/x; } >> "$LOG" 2>&1
+check "no PR: nothing to label"                  eval '[ "$(label_calls)" = 0 ] && logged "no PR for feat/x"'
+again; rm -f "$FAKE_STATE/gh.calls"; head_is ddd1
+{ decide_pass 42 feat/x; } >> "$LOG" 2>&1
+check "a lane that goes straight to decide_pass gets it too" [ "$(label_calls)" = 1 ]
+again; rm -f "$FAKE_STATE/gh.calls"; LANE_BUILD_BACKEND=agy LANE_WT=$T/repo/.claude/worktrees/lane-selftest; FAKE_GH_PR=42; head_is ccc1
+{ review feat/x; } >> "$LOG" 2>&1
+check "the control: an AGY-built lane's review ran, and it got no label" eval '[ "$CLEAN" = 1 ] && [ "$(label_calls)" = 0 ]'
 
 print
 print "selftest: $PASS passed, $FAILS failed"

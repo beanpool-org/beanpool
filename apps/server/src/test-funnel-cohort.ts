@@ -18,7 +18,7 @@
  *      every one of those members sees their initials.
  *   3. Somebody who joined BEFORE the window is absent even if they posted inside it. A
  *      cohort is a group of people, not a span of activity.
- *   4. Federation visitors and the genesis operator are not in the cohort.
+ *   4. Federation visitors and the first owner, by genesis or by claim code, are not in the cohort.
  *   5. The response carries counts only — no public key, in any row, ever (M2).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-funnel-cohort.ts
@@ -141,6 +141,14 @@ async function main(): Promise<void> {
         && total('cohort_photo') === basePhoto + 3
         && total('cohort_posted') === basePosted + 1,
         'the operator seeding themselves is not somebody joining');
+
+    const claimed = '3'.repeat(64);
+    addMember(claimed, 'ClaimedOwner', yesterday, 'data:image/png;base64,FFFF', { inviteCode: 'claim:abc123' });
+    addPost('claimed-post', claimed, yesterday);
+    assert(total('member_created') === baseJoined + 5
+        && total('cohort_photo') === basePhoto + 3
+        && total('cohort_posted') === basePosted + 1,
+        "a claimed node's first owner seeding themselves is not somebody joining");
 
     // A federated post by a cohort member is not them getting started here.
     addPost('federated-post', withPhoto, yesterday, 'https://peer.example.org');

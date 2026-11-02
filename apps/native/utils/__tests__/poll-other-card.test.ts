@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { POLL_OTHER_WORDS_MAX } from '@beanpool/core';
+import { POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX } from '@beanpool/core';
 
 type Props = { children?: ReactNode; testID?: string; accessibilityLabel?: string; onPress?: () => void; disabled?: boolean; value?: string; maxLength?: number; onChangeText?: (s: string) => void };
 vi.mock('react-native', () => {
@@ -101,6 +101,13 @@ describe('the card', () => {
     it("this phone's own record of its answer locks it too", async () => {
         await mount(createElement(PollCard, { post: poll({ userVotedOptionId: 'opt_1' }), currentPubkey: 'me' }));
         expect(q('poll-answered')).not.toBeNull();
+        expect(button(/your vote/)).toBeDefined();
+    });
+
+    it('an answer given elsewhere reads as answered, with none ticked', async () => {
+        await mount(createElement(PollCard, { post: poll({ userVotedOptionId: POLL_BALLOT_SEALED }), currentPubkey: 'me' }));
+        expect(q('poll-answered')).not.toBeNull();
+        expect(button(/your vote/)).toBeUndefined();
     });
 
     it('an open vote keeps its re-vote', async () => {

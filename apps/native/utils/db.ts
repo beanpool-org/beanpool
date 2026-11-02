@@ -33,7 +33,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { eventCopyColumn, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags } from '@beanpool/core';
+import { eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -3825,6 +3825,18 @@ function syncedPhotosColumn(p: any): string | null {
 }
 
 /**
+ * The node says this member has answered a sealed poll, perhaps on the web or before a reinstall, and that is all it can say
+ * (@beanpool/core poll-other). Kept as this phone keeps its own votes, so the card says so with no answer ticked: no answer
+ * has this id. An answer this phone gave stays as it is.
+ */
+async function noteSealedAnswer(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    if (p?.pollAnswered !== true) return;
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return;
+    await txn.runAsync('INSERT OR IGNORE INTO poll_votes (post_id, voter_pubkey, option_id, signature) VALUES (?, ?, ?, ?)', [p.id, me, POLL_BALLOT_SEALED, '']);
+}
+
+/**
  * One listing as the node sends it, written to the cache. The only row writer the delta sync, a pushed change and
  * the by-id refresh in getPost use. It names every column the node sends: INSERT OR REPLACE does not keep a column
  * it leaves out, it puts it back to the table default, which is how every sync once cleared the 💸 marker and
@@ -3832,6 +3844,7 @@ function syncedPhotosColumn(p: any): string | null {
  * sends it and nothing reads it.
  */
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
         'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, shown_from, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',

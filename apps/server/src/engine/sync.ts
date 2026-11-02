@@ -3024,8 +3024,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     } finally {
         currentImportOrigin = null;
     }
-    // A line this copy blanked (a chat's, or a poll's typed answer) is zeroed in state.db, but state.db-wal still holds it as it was, on this standby as on its
-    // main server after a delete account (data-at-rest report F2, db/wal-truncate.ts): emptied now the import has committed.
+    // A line this copy blanked (a chat's, or a poll's typed answer) is zeroed in state.db, but state.db-wal still holds it as
+    // it was, on this standby as on its main server after a delete account (data-at-rest report F2, db/wal-truncate.ts):
+    // emptied now the import has committed.
     if (blankedLines > 0) truncateWalAfterDelete('a copy blanked lines members wrote');
 
     // Updates and tombstones count, not just inserts. This was guarded on `newMembers > 0 ||

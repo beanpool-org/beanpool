@@ -75,7 +75,11 @@ const FLOWS = [
         overrides: { '/api/local/admin/public-address/status': () => ({ status: 'none' }) },
         refuses: (p, m) => m === 'POST' && p === '/api/local/admin/public-address/claim',
         press: async (page) => {
-            // The Claim form itself: the own-address card (HTTPS S4) sits above it with a form of its own.
+            // The Claim form itself: in the unified Addresses screen (S2), click "Add an address" to reveal it.
+            const addBtn = page.getByTestId('addresses-add-address-btn');
+            if (await addBtn.count() > 0 && await page.getByTestId('claim-form').count() === 0) {
+                await addBtn.click();
+            }
             const claim = page.getByTestId('claim-form');
             const f = claim.locator('input[type="text"], input:not([type])').first();
             await f.scrollIntoViewIfNeeded();

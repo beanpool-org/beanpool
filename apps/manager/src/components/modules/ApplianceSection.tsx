@@ -20,8 +20,7 @@ import {
 } from '../../lib/node-client';
 import { restoreDoneWords } from '../../lib/restore-words';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
-import { PublicAddressPanel } from './PublicAddressPanel';
-import { AppAddressesPanel } from './AppAddressesPanel';
+import { AddressesPanel } from './AddressesPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import { ReplicationAccessPanel } from './ReplicationAccessPanel';
@@ -725,7 +724,7 @@ export function ApplianceSection({
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        Public Address
+                        Addresses
                     </button>
                     <button
                         onClick={() => setSubTab('identity')}
@@ -1409,19 +1408,16 @@ export function ApplianceSection({
                 </div>
             )}
 
-            {/* Subtab: Public Address & Tunnel */}
+            {/* Subtab: Addresses */}
             {subTab === 'network' && (
                 <div className="space-y-6">
-                    <SectionErrorBoundary sectionName="Public Address" resetKey={activeNode.id}>
-                        <PublicAddressPanel
+                    <SectionErrorBoundary sectionName="Addresses" resetKey={activeNode.id}>
+                        <AddressesPanel
                             key={activeNode.id}
                             activeNode={activeNode}
                             onRefreshDiag={onRefreshDiag}
                             viewer={rolesViewer}
                         />
-                    </SectionErrorBoundary>
-                    <SectionErrorBoundary sectionName="App addresses" resetKey={activeNode.id}>
-                        <AppAddressesPanel key={activeNode.id} activeNode={activeNode} />
                     </SectionErrorBoundary>
                 </div>
             )}

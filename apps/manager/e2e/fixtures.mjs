@@ -1356,6 +1356,80 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/public-address/offline') return ok({ success: true });
     if (pathname === '/api/local/admin/tls/status') return ok(TLS_STATUS);
     if (pathname === '/api/local/admin/public-address/own') return ok({ success: true, address: '203.0.113.5', kind: 'ip', communityAddress: false, primaryAddress: OWN_DOMAIN });
+    const APP_ADDRESSES_FIXTURE = {
+        primaryAddress: 'byron.beanpool.org',
+        named: true,
+        addresses: [
+            {
+                address: 'byron.beanpool.org',
+                source: 'public-address',
+                today: 14,
+                busiestDay: 28,
+                reach: {
+                    answers: 'own',
+                    dns: { outcome: 'answers', a: ['104.21.93.179'], aaaa: [], cname: ['edge.cloudflare.example.org'] },
+                    step: 'fine',
+                    minutes: null,
+                    nextStep: 'Answers as this server. Nothing to do.',
+                    checkedAt: '2026-11-02T05:02:00.000Z',
+                    ownAt: '2026-11-02T05:02:00.000Z',
+                },
+            },
+            {
+                address: '203.0.113.5',
+                source: 'owner',
+                today: 3,
+                busiestDay: 5,
+                reach: {
+                    answers: 'tls',
+                    dns: null,
+                    step: 'certificate',
+                    minutes: null,
+                    nextStep: 'Answers, but not with a certificate phones trust. Check that port 80 is open and this address points at this server.',
+                    checkedAt: '2026-11-02T05:02:00.000Z',
+                    ownAt: null,
+                },
+            },
+            {
+                address: 'byron.example.org',
+                source: 'owner',
+                today: 0,
+                busiestDay: 1,
+                reach: {
+                    answers: 'silence',
+                    dns: { outcome: 'no-such-name', a: [], aaaa: [], cname: [] },
+                    step: 'no-dns-own',
+                    minutes: null,
+                    nextStep: "No DNS answer for this name. Add or fix its A record where you run your domain's DNS.",
+                    checkedAt: '2026-11-02T05:02:00.000Z',
+                    ownAt: null,
+                },
+            },
+            {
+                address: 'mullum.beanpool.org',
+                source: 'registrar',
+                former: true,
+                today: 2,
+                busiestDay: 4,
+                reach: {
+                    answers: 'silence',
+                    dns: { outcome: 'no-such-name', a: [], aaaa: [], cname: [] },
+                    step: 'no-longer-ours',
+                    minutes: null,
+                    nextStep: "No longer this community's address. Nothing to do.",
+                    checkedAt: '2026-11-02T05:02:00.000Z',
+                    ownAt: null,
+                },
+            },
+        ],
+        unconfirmed: [],
+        heldBack: [],
+        oldApps: { today: 0, busiestDay: 0 },
+        unboundSignaturesUntil: null,
+        unboundSignaturesAccepted: false,
+    };
+    if (pathname === '/api/local/admin/app-addresses') return ok(APP_ADDRESSES_FIXTURE);
+    if (pathname === '/api/local/admin/app-addresses/check') return ok({ ...APP_ADDRESSES_FIXTURE, checking: false });
     if (pathname === '/api/local/admin/app-addresses/remove') return ok({ addresses: [], unconfirmed: [], heldBack: [], oldApps: { today: 0, busiestDay: 0 }, unboundSignaturesUntil: null, unboundSignaturesAccepted: false });
 
     // ---- connectors ----

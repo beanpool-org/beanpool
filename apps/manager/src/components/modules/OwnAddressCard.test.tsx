@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { PublicAddressPanel } from './PublicAddressPanel';
-import { AppAddressesPanel } from './AppAddressesPanel';
+import { AddressesPanel } from './AddressesPanel';
 import { domainOf } from './OwnAddressCard';
 import type { NodeProfile } from '../../lib/profiles';
 import type { TlsStatus } from '../../lib/node-client';
@@ -76,6 +76,11 @@ function mockNode(status: () => unknown, posts: Record<string, Array<[number, un
 }
 
 const card = () => screen.findByTestId('own-address-card');
+/** Add an address, on the choice that shows the form asked for: the forms were folded together there (design §5.2). */
+const openAdd = (choice: 'number' | 'domain') => {
+    if (!screen.queryByTestId('add-address-section')) fireEvent.click(screen.getByTestId('addresses-add-address-btn'));
+    fireEvent.click(screen.getByRole('button', { name: choice === 'number' ? "this server's number" : 'your own domain' }));
+};
 const row = (address: string) => screen.getAllByTestId('own-address').find((li) => li.getAttribute('data-address') === address)!;
 
 describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
@@ -223,13 +228,15 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
             '/public-address/own': [[200, { success: true, address: '203.0.113.5', kind: 'ip', communityAddress: true, primaryAddress: '203.0.113.5' }],
                 [200, { success: true, address: 'beans.example.org', kind: 'own', communityAddress: true, primaryAddress: 'beans.example.org' }]],
         }, sent);
-        render(<PublicAddressPanel activeNode={node} />);
+        render(<AddressesPanel activeNode={node} />);
         await card();
         expect(screen.getByTestId('own-address-none')).toBeInTheDocument();
+        openAdd('number');
         fireEvent.change(screen.getByLabelText("This server's public IP address"), { target: { value: ' 203.0.113.5 ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this IP address' }));
-        await waitFor(() => expect(screen.getByTestId('own-address-message')).toHaveTextContent("203.0.113.5 is this community's address now"));
+        await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent("203.0.113.5 is this community's address now"));
         expect(sent[0]).toEqual({ path: '/public-address/own', body: { ip: '203.0.113.5', password: 'pw' } });
+        openAdd('domain');
         fireEvent.change(screen.getByLabelText('Your own domain name'), { target: { value: 'https://beans.example.org/settings' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
         await waitFor(() => expect(sent).toHaveLength(2));
@@ -241,30 +248,33 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         const sent: Sent[] = [];
         const why = '192.168.1.20 is on a home network or this machine: nothing on the internet can reach it, so no certificate can be issued for it';
         mockNode(() => tlsStatus({ identifiers: [] }), { '/public-address/own': [[400, { error: why }]] }, sent);
-        render(<PublicAddressPanel activeNode={node} />);
+        render(<AddressesPanel activeNode={node} />);
         await card();
+        openAdd('number');
         fireEvent.change(screen.getByLabelText("This server's public IP address"), { target: { value: '192.168.1.20' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this IP address' }));
-        await waitFor(() => expect(screen.getByTestId('own-address-message')).toHaveTextContent(why));
-        expect(screen.getByTestId('own-address-message').className).toContain('text-bp-ink-danger');
+        await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent(why));
+        expect(screen.getByTestId('addresses-action-message').className).toContain('text-bp-chip-danger-ink');
+        expect(screen.getByRole('alert')).toHaveTextContent(why);
     });
 
-    it('moving the live address to another asks the fresh proof in the card; Confirm re-sends it with the code', async () => {
+    it('moving the live address to another asks the fresh proof on the screen; Confirm re-sends it with the code', async () => {
         const sent: Sent[] = [];
         mockNode(() => tlsStatus(), {
             '/public-address/own': [[401, { error: "Enter a current code from your authenticator app (or a backup code) to replace this community's live address", totpRequired: true }],
                 [200, { success: true, address: 'coop.example.net', kind: 'own', communityAddress: true, primaryAddress: 'coop.example.net' }]],
         }, sent);
-        render(<PublicAddressPanel activeNode={node} />);
+        render(<AddressesPanel activeNode={node} />);
         await card();
+        openAdd('domain');
         fireEvent.change(screen.getByLabelText('Your own domain name'), { target: { value: 'coop.example.net' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
-        const input = await screen.findByTestId('own-address-proof-input');
+        const input = await screen.findByTestId('address-proof-input');
         fireEvent.change(input, { target: { value: '123456' } });
-        fireEvent.click(screen.getByTestId('own-address-proof-confirm'));
-        await waitFor(() => expect(screen.getByTestId('own-address-message')).toHaveTextContent("coop.example.net is this community's address now"));
+        fireEvent.click(screen.getByTestId('address-proof-confirm'));
+        await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent("coop.example.net is this community's address now"));
         expect(sent.map((s) => s.body.code)).toEqual([undefined, '123456']);
-        expect(screen.queryByTestId('own-address-proof-input')).toBeNull();
+        expect(screen.queryByTestId('address-proof-input')).toBeNull();
     });
 
     it('Try again now gives the same address again (the owner\'s retry past the back-off)', async () => {
@@ -334,25 +344,27 @@ describe('AppAddressesPanel: Remove asks an owner\'s fresh proof (HTTPS S4)', ()
 
     it('the box opens on the node\'s ask; Confirm re-sends the removal once, with the code', async () => {
         const sent: Sent[] = [];
-        const report = { addresses: [{ address: 'community.example.org', source: 'owner', today: 1, busiestDay: 2 }], unconfirmed: [], heldBack: [], named: true,
+        let report = { addresses: [{ address: 'community.example.org', source: 'owner', today: 1, busiestDay: 2 }], unconfirmed: [], heldBack: [], named: true,
             oldApps: { today: 0, busiestDay: 0 }, unboundSignaturesUntil: null, unboundSignaturesAccepted: false };
         vi.spyOn(global, 'fetch').mockImplementation(async (url, opts) => {
             if (opts?.method === 'POST' && String(url).includes('/app-addresses/remove')) {
                 sent.push({ path: 'remove', body: JSON.parse(String(opts.body || '{}')) });
-                return sent.length === 1 ? json(401, { ...CODE_ASK, error: CODE_ASK.error.replace('203.0.113.5', 'community.example.org') })
-                    : json(200, { ...report, addresses: [], named: false });
+                if (sent.length === 1) return json(401, { ...CODE_ASK, error: CODE_ASK.error.replace('203.0.113.5', 'community.example.org') });
+                report = { ...report, addresses: [], named: false };
+                return json(200, report);
             }
             return json(200, report);
         });
-        render(<AppAddressesPanel activeNode={node} />);
+        render(<AddressesPanel activeNode={node} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Remove community.example.org' }));
-        const input = await screen.findByTestId('app-address-proof-input');
+        fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+        const input = await screen.findByTestId('address-proof-input');
         expect(screen.getByText(/to remove community\.example\.org/)).toBeInTheDocument();
         expect(screen.queryByRole('alert')).toBeNull();
         fireEvent.change(input, { target: { value: '112233' } });
-        fireEvent.click(screen.getByTestId('app-address-proof-confirm'));
-        await waitFor(() => expect(screen.queryByTestId('app-address')).toBeNull());
+        fireEvent.click(screen.getByTestId('address-proof-confirm'));
+        await waitFor(() => expect(screen.queryByTestId('address-row-community.example.org')).toBeNull());
         expect(sent.map((s) => s.body)).toEqual([{ address: 'community.example.org' }, { address: 'community.example.org', code: '112233' }]);
-        expect(screen.queryByTestId('app-address-proof-input')).toBeNull();
+        expect(screen.queryByTestId('address-proof-input')).toBeNull();
     });
 });

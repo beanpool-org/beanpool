@@ -103,7 +103,7 @@ export function isPublicIpv4Host(host: string): boolean {
 export function ownAddressProblem(host: string): string | null {
     if (isCertifiableHost(host)) return null;
     if (normalizeAddress(host) !== host) return `"${host}" is not an address: a name like beans.example.org, or this server's public IPv4 address`;
-    if (isBeanPoolName(host)) return `${host} is a BeanPool name: ask for it with beanpool claim --name, or in Settings → Public Address`;
+    if (isBeanPoolName(host)) return `${host} is a BeanPool name: ask for it with beanpool claim --name, or in Settings → Addresses`;
     if (isLocalNetworkHost(host)) return `${host} is on a home network or this machine: nothing on the internet can reach it, so no certificate can be issued for it`;
     if (isIpLiteral(host)) return `${host} is not a public IP address: nothing on the internet can reach it, so no certificate can be issued for it`;
     return `${host} is not a name a public certificate authority can check: a name like beans.example.org, under a real top-level domain`;

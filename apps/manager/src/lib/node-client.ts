@@ -2,7 +2,7 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
-import { audienceOf } from '@beanpool/core';
+import { audienceOf, type AddressReach } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
 import { freshProofRefusal, proofField, proofHeader, statusSentence, t, throwIfFreshProof, type FreshProofRefusal } from './fresh-proof';
 
@@ -3509,8 +3509,14 @@ export interface AppAddress {
     lost?: boolean;
     /** With `lost`: members' apps refused there, today and on the busiest day of the last 7. */
     tried?: { today: number; busiestDay: number };
+    /** Set by hand on the server (CF_RECORD_NAME): no claim of it is held. */
+    hardCoded?: boolean;
+    /** A BeanPool name the project blocked or paused, from the node's record: only the project lifts that. */
+    stopped?: boolean;
     /** A BeanPool name the address service no longer gives this community, and what that means here. */
     standing?: NameStanding;
+    /** What a node found when it checked this address from outside. */
+    reach?: AddressReach;
 }
 
 /** apps/server services/registrar-name-watch.ts NameStanding. */
@@ -3606,6 +3612,13 @@ export function confirmAppAddress(nodeUrl: string, address: string, adminPasswor
     return appAddressesCall(nodeUrl, '/api/local/admin/app-addresses/confirm', {
         method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({ address }),
     });
+}
+
+/** Check all configured addresses from outside right now. */
+export function checkAppAddresses(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AppAddressesReport & { checking?: boolean }> {
+    return appAddressesCall(nodeUrl, '/api/local/admin/app-addresses/check', {
+        method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken),
+    }) as Promise<AppAddressesReport & { checking?: boolean }>;
 }
 
 /**

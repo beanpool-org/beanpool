@@ -451,6 +451,49 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         expect(classes).toContain('md:max-w-[calc(100vw-17.5rem)]');
     });
 
+    it('caps the map preview card to 28rem on wide screens and leaves phone full width less margins', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} />);
+        });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
+        const postMarker = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        act(() => { postMarker.listeners['click']?.(); });
+
+        const previewWrapper = await view!.findByTestId('map-preview-card');
+        const wrapperClasses = previewWrapper.className.split(/\s+/);
+        // Centered horizontally on wide screens so it leaves the bottom-left controls free
+        expect(wrapperClasses).toContain('items-center');
+        expect(wrapperClasses).toContain('md:pb-4');
+        expect(previewWrapper.style.paddingBottom).toBe('');
+
+        // The card itself is capped at 28rem on wide windows and uses responsive width less margins on phone
+        const innerCard = previewWrapper.firstElementChild as HTMLElement;
+        const cardClasses = innerCard.className.split(/\s+/);
+        expect(cardClasses).toContain('max-w-[28rem]');
+        expect(cardClasses).toContain('w-[calc(100%-2rem)]');
+    });
+
+    it('the member map preview places the price beside the title and does not collide with the close button', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} />);
+        });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
+        const postMarker = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        act(() => { postMarker.listeners['click']?.(); });
+
+        const previewWrapper = await view!.findByTestId('map-preview-card');
+        const titleEl = view!.getByTestId('map-preview-title');
+        // The price sits in the same row container beside the title
+        const row = titleEl.parentElement as HTMLElement;
+        expect(row).toHaveTextContent(post.title);
+        expect(row).toHaveTextContent(`${post.credits}B`);
+        // The close button is positioned separately and has an accessible label
+        const closeBtn = previewWrapper.querySelector('button[aria-label="Close preview"]');
+        expect(closeBtn).toBeInTheDocument();
+    });
+
     it("the New Post panel in the member's language: its title, the reach chooser and the submit button for an Offer, an Event and a Poll", async () => {
         const { bypassing } = await import('../words-xx.test-support');
         setLanguage('xx');

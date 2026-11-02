@@ -46,6 +46,8 @@ import { getAlertsStatus } from './services/alerts.js';
 import { sweepTakedowns, takedownsToday, TAKEDOWN } from './engine/agent-takedowns.js';
 import { muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
 import { setAgentPostsPerDay } from './agent/limits.js';
+import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
+import type { AgentGrant, ToolResult } from './agent/tools.js';
 import { getNodeRole, setNodeRole } from './config/node-role.js';
 
 let BASE = '';
@@ -225,7 +227,13 @@ async function main(): Promise<void> {
         const noReason = await a.callTool({ name: 'take_down', arguments: { post_id: closedPost, reason: 'I said so', why: WHY } });
         const noWhy = await a.callTool({ name: 'take_down', arguments: { post_id: closedPost, reason: 'spam', why: '  ' } });
         const both = await a.callTool({ name: 'take_down', arguments: { post_id: closedPost, report_id: closed, reason: 'spam', why: WHY } });
-        assert(noReason.isError === true && noWhy.isError === true && both.isError === true && !row(closedPost).hidden_by_reports_at, `a reason off the list, no why, or both ids is refused (${errorText(noReason)})`);
+        assert(noReason.isError === true && /reason must be one of spam, offensive, misleading, unsafe, rules/.test(errorText(noReason)) && noWhy.isError === true && both.isError === true && !row(closedPost).hidden_by_reports_at,
+            `a reason off the list, no why, or both ids is refused in words (${errorText(noReason)})`);
+        // The list keeps an unticked grant off the tools; the tool says no by itself too, and to an admin's grant ticked by any means.
+        const toolRow = OWNER_TAKEDOWN_TOOLS.find(t => t.name === 'take_down')!;
+        const asGrant = (over: Partial<AgentGrant>): AgentGrant => ({ id: 'x', name: 'x', member: owner.pub, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: false, ...over });
+        const direct = (over: Partial<AgentGrant>) => toolRow.run(asGrant(over), { post_id: closedPost, reason: 'spam', why: WHY }, 'b0b0b0b0') as ToolResult;
+        assert(!direct({ canModerate: false }).ok && !direct({}).ok && !direct({ role: 'admin', canModerate: true }).ok && !row(closedPost).hidden_by_reports_at, 'the tool itself refuses a grant not ticked, and an admin\'s');
 
         // ── 4. By report ─────────────────────────────────────────────────────────────────────────────
         const reported = post('Fake tickets', sam.pub);
@@ -236,8 +244,9 @@ async function main(): Promise<void> {
         assert(statusOf(r1) === 'actioned' && statusOf(r2) === 'actioned', 'both open reports on it close as actioned');
         assert(noticesOf(rae.pub).some(n => /The post you reported was removed/.test(n.body)) && noticesOf(goer.pub).some(n => /The post you reported was removed/.test(n.body)), 'both reporters are told it was removed');
         assert(!JSON.stringify([...noticesOf(rae.pub), ...noticesOf(goer.pub), ...noticesOf(sam.pub)]).includes('SECRET-WHY'), '`why` reaches no author or reporter');
-        const injected = await readOnly.listTools();
-        assert(injected.tools.every(t => t.name !== 'put_back'), 'the injected text has no tool to reach for');
+        // The report's words asked for everything put back: nothing reads them, so one logged takedown is all that happened.
+        assert(!!row(spam).removed_by_moderator_at && !!row(spam).hidden_by_reports_at && (await a.listTools()).tools.every(t => !/put_back|restore|dismiss/.test(t.name)),
+            'an injected report changes nothing beyond the one takedown: what was down stays down, and there is no tool to reach for');
         // A report filed while it is hidden, then dismissed: reports did not hide it, so it stays down.
         const late = report(reported, rae.pub, 'filed after the takedown');
         dismissReport(late);
@@ -275,6 +284,17 @@ async function main(): Promise<void> {
         await a.callTool({ name: 'take_down', arguments: { post_id: restored, reason: 'spam', why: WHY } });
         const viaRestore = await call('POST', `/api/local/admin/posts/${restored}/restore`, { headers: adminHeaders, body: {} });
         assert(viaRestore.status === 200 && !row(restored).hidden_by_reports_at && !row(restored).removed_by_moderator_at, `the restore route clears both stamps too (${show(viaRestore)})`);
+        const restoredLine = (await call('GET', PATH, { headers: session })).body?.takedowns?.flatMap((t: any) => t.posts).find((p: any) => p.id === restored);
+        assert(restoredLine?.state === 'put_back', `and Settings reads it as put back (${JSON.stringify(restoredLine)})`);
+        // Remove now for one post is the delete route: it closes the record, and keeps the takedown's time.
+        const removedNow = post('Removed now by a person', sam.pub);
+        await a.callTool({ name: 'take_down', arguments: { post_id: removedNow, reason: 'spam', why: WHY } });
+        const stampedAt = row(removedNow).removed_by_moderator_at;
+        await new Promise(r => setTimeout(r, 5));
+        const viaDelete = await call('POST', `/api/local/admin/posts/${removedNow}/delete`, { headers: adminHeaders, body: {} });
+        const removedLine = (await call('GET', PATH, { headers: session })).body?.takedowns?.flatMap((t: any) => t.posts).find((p: any) => p.id === removedNow);
+        assert(viaDelete.status === 200 && row(removedNow).status === 'cancelled' && row(removedNow).removed_by_moderator_at === stampedAt && removedLine?.state === 'final',
+            `Remove now is final at once, and moves no stamp (${show(viaDelete)}, ${JSON.stringify(removedLine)})`);
         // A mute the takedown brought goes when it is put back; one older stays.
         process.env.NODE_PROFILE = 'global';
         {

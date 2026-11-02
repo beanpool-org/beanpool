@@ -146,7 +146,7 @@ Your community's server has owners and admins. They look after it.
 - You can have one open Poll at a time. Your community can have 5 open Polls at once.
 - A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.
 - Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.
-- A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts, and can't be changed after the Poll is posted.
+- A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts, and can't be changed in the app after the Poll is posted. An owner's AI assistant can change it on a Poll it made, only until the first vote.
 - On the global community, a closed anonymous Poll also says how many of its votes came from new or 12-word accounts, if any did. Every vote still counts.
 
 ## Enterprises and keepers

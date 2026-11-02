@@ -1,22 +1,23 @@
 /**
- * The Community health panel and the consent at joining (community modes slice 6, engine/community-health.ts) over
- * HTTPS, through the real middleware:
+ * The Community health panel and the rule on what the admins can see (community modes slice 6, engine/community-health.ts;
+ * scratch/fable-design/DESIGN-balance-rule-fable.md) over HTTPS, through the real middleware:
  *
  *   1. the totals: every owner and admin reads them (credit, debt, in debit, the Commons pot, this month's trades); a
  *      member, an unsigned request and a key that isn't a member's are refused
  *   2. the dial off (on by default, so the owner switches it off first): no exceptions at all (409 not_known), and
  *      nothing logged
- *   3. the dial on: only a confirmed member who consented is an exception: past the debt line (50% of their floor), or in
- *      debit with no sale for 60 days; an unconfirmed member who consented, a confirmed one who didn't, a revoked one and a
- *      new one are not; the open debts of members who left are listed; no callsign or name on the wire
- *   4. the owner sets the two lines (an admin can't); each change is a line in the known floor's log; the consent text
- *      follows them, and a member's consent to the old text is still theirs but a new consent needs the new one
+ *   3. the dial on: the rule's numbers are public; for the 14 days only a member confirmed since is listed, and from the
+ *      start every confirmed member past the debt line (50% of their floor), or in debit with no sale for 60 days, consent
+ *      or none; an unconfirmed, a revoked and a new one are not; the open debts of members who left are listed; no callsign
+ *      or name on the wire
+ *   4. the owner sets the two lines (an admin can't); each change is a line in the known floor's log
  *   5. every opening of the exceptions writes a line; every admin and the owner reads the log; a member can't
- *   6b. a tightened line reaches only a member who agreed to it: each is seen within the less intrusive of their lines and now
+ *   6. a member steps back: their own, signed, refused for an unconfirmed member and for an admin acting for someone else;
+ *      who stepped back owing past their ordinary line stays listed until back within it, and only they do
+ *   6b. a tightened line waits 14 days; a loosened one applies at once
+ *   6c. the list fails closed: a start it can't read lists nobody; an opening it can't log answers nothing
  *   7. Settings (the manager): every owner and admin reads the totals, the lines and the access log; only an owner moves the
  *      lines; the exceptions are not in it (they open on an admin's phone, where the names are)
- *   6. the consent: the terms are public before joining; a member consents to the version they were shown; a stale
- *      version, a guest and an unsigned request are refused
  *   8b. a vote on removing a member: its balance and debt reach only those who can vote in it, through the admin
  *      Decisions list too; an admin or the owner who can't vote in it gets the Decision without them (balanceHidden)
  *
@@ -48,6 +49,7 @@ import { db } from './db/db.js';
 import { getNodeRole, setNodeRole } from './config/node-role.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
+import { dropNamesListHoldOf } from './engine/names-list.js';
 import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -130,18 +132,29 @@ async function main(): Promise<void> {
     const bea = makeMember('Bea');
     grantNodeRole(bea.pk, 'admin', 'SYSTEM');
     const sam = makeMember('Samwise');    // sells; never in debit
-    const kim = makeMember('Kimberly');   // confirmed, consents, 600 in debit: past the line
-    const una = makeMember('Unaleigh');   // confirmed, never consents, 600 in debit
-    const lea = makeMember('Leander');    // confirmed long ago, consents, 100 in debit, no sale: quiet
-    const neo = makeMember('Neopolis');   // confirmed yesterday, consents, 100 in debit: too new to be quiet
-    const ugo = makeMember('Ugolino');    // unconfirmed, consents, 600 in debit
-    const rex = makeMember('Rexford');    // confirmed then revoked, consents, 600 in debit
-    for (const m of [kim, una, lea, neo, ugo, rex]) createPost('offer', 'produce', `${m.name} mends things`, 'Repairs', 10, 'fixed', m.pk);
+    const kim = makeMember('Kimberly');   // confirmed, 600 in debit: past the line
+    const una = makeMember('Unaleigh');   // confirmed, said no to the old consent, 600 in debit: past the line all the same
+    const lea = makeMember('Leander');    // confirmed long ago, 100 in debit, no sale: quiet
+    const neo = makeMember('Neopolis');   // confirmed yesterday, 100 in debit: too new to be quiet
+    const ned = makeMember('Nedward');    // confirmed 20 days ago, 100 in debit: quiet only at a line under 20 days
+    const ugo = makeMember('Ugolino');    // unconfirmed, 600 in debit
+    const rex = makeMember('Rexford');    // confirmed then revoked by an admin, 600 in debit
+    const tia = makeMember('Tiana');      // confirmed after the stamp, 600 in debit: listed from the first day
+    const vic = makeMember('Vicenza');    // confirmed long ago, steps back in the 14 days, 800 in debit on a 200 line
+    const zed = makeMember('Zephyrine');  // confirmed, steps back after the start, 800 in debit on a 200 line
+    const wes = makeMember('Wesley');     // confirmed, steps back within their line, 100 in debit on a 200 line
+    const ordinaryLine = (m: Id, beans: number) => db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(beans, m.pk);
+    for (const m of [vic, zed, wes]) ordinaryLine(m, 200);
+    for (const m of [kim, una, lea, neo, ned, ugo, rex, tia, vic, zed, wes]) createPost('offer', 'produce', `${m.name} mends things`, 'Repairs', 10, 'fixed', m.pk);
     const kimEntry = confirm(kim, ada);
     confirm(una, ada);
     const leaEntry = confirm(lea, ada);
     confirm(neo, ada, 1);
+    confirm(ned, ada, 20);
     confirm(rex, ada);
+    confirm(vic, ada);
+    confirm(zed, ada);
+    confirm(wes, ada);
     // A member who left owing 300: the open record on their entry (engine/names-debts.ts).
     const goneEntry = crypto.randomBytes(16).toString('hex');
     db.prepare("INSERT INTO names_debts (id, entry_id, amount, reason, removed_at) VALUES (?, ?, 300, 'removed', ?)").run('debt-gone', goneEntry, ago(10 * DAY));
@@ -178,6 +191,11 @@ async function main(): Promise<void> {
     const off = await exceptions(ada);
     assert(off.status === 409 && off.body?.code === 'not_known', `no exceptions while the community doesn't confirm members (${show(off)})`);
     assert(logRows() === 0, 'and nothing is logged');
+    const meOff = await call('GET', kim, '/api/community/me');
+    assert(meOff.status === 200 && meOff.body?.confirmed === false && meOff.body?.confirmedAt === null && !('debtLinePct' in (meOff.body?.features ?? {})) && !('quietDays' in (meOff.body?.features ?? {})),
+        `with the dial off the rule reaches nobody: a member confirmed against the names list isn't told it does (${show(meOff)})`);
+    const ruleOff = await call('GET', null, '/api/community/known-rule');
+    assert(ruleOff.status === 200 && Object.keys(ruleOff.body ?? {}).join() === 'known' && ruleOff.body?.known === false, `and the join screen reads no rule (${show(ruleOff)})`);
 
     // ── 3. the dial on ────────────────────────────────────────────────────────────────────────────
     console.log('── 3. the dial on ──');
@@ -185,7 +203,8 @@ async function main(): Promise<void> {
     assert(dial.status === 200 && dial.body?.shape?.settings?.knownFloor?.value?.on === true, `the owner turns the dial on (${show(dial)})`);
     // Each buys from Samwise through the marketplace, on their known floor; Ugolino and Rexford lose their confirmation after.
     const ugoConf = confirm(ugo, ada);
-    for (const [m, beans] of [[kim, 600], [una, 600], [ugo, 600], [rex, 600], [lea, 100], [neo, 100]] as Array<[Id, number]>) {
+    confirm(tia, ada, 0);
+    for (const [m, beans] of [[kim, 600], [una, 600], [ugo, 600], [rex, 600], [tia, 600], [lea, 100], [neo, 100], [ned, 100], [vic, 800], [zed, 800], [wes, 100]] as Array<[Id, number]>) {
         const post = createPost('offer', 'produce', `Samwise's ${beans}-Bean basket for ${m.name}`, 'Veg', beans, 'fixed', sam.pk)!;
         const buy = await call('POST', m, '/api/marketplace/posts/accept', { postId: post.id, buyerPublicKey: m.pk });
         assert(buy.status === 200 && getBalance(m.pk).balance === -beans, `${m.name} buys a ${beans}-Bean basket (${show(buy)})`);
@@ -193,26 +212,54 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM confirmations WHERE entry_id = ?').run(ugoConf);
     db.prepare('UPDATE confirmations SET revoked_at = ?, revoked_by = ? WHERE member_pubkey = ?').run(ago(DAY), ada.pk, rex.pk);
     assert(getBalance(kim.pk).balance === -600 && getBalance(kim.pk).floor !== 0, `Kimberly is 600 in debit with a known floor (${JSON.stringify(getBalance(kim.pk)).slice(0, 120)})`);
-    const terms = await call('GET', null, '/api/community/consent-terms');
-    assert(terms.status === 200 && terms.body?.known === true && /50%/.test(terms.body?.text) && /60 days/.test(terms.body?.text) && /any admin can see some of your trades: /.test(terms.body?.text) && /Every look at one of those trades is logged/.test(terms.body?.text) && /a look at the alerts that name you is logged the first time each admin opens them, and again at that admin's first look after 24 hours/.test(terms.body?.text),
-        `the join screen's text, before joining, from the two settings (${show(terms)})`);
-    for (const m of [kim, lea, neo, ugo, rex]) {
-        const c = await call('POST', m, '/api/names/consent', { version: terms.body.version });
-        assert(c.status === 200 && c.body?.consentedVersion === terms.body.version, `${m.name} consents (${show(c)})`);
-    }
+    const rule = await call('GET', null, '/api/community/known-rule');
+    assert(rule.status === 200 && rule.body?.known === true && rule.body?.knownFloor === 1000 && rule.body?.debtLinePct === 50 && rule.body?.quietDays === 60
+        && typeof rule.body?.ruleFrom === 'string' && rule.body?.debtLineFrom === null && rule.body?.quietDaysFrom === null
+        && Object.keys(rule.body).sort().join() === 'debtLineFrom,debtLinePct,known,knownFloor,quietDays,quietDaysFrom,ruleFrom',
+        `the join screen reads the rule's numbers before joining, and no sentence: the words are the app's (${show(rule)})`);
+    assert((await call('GET', kim, '/api/community/consent-terms')).status === 404 && (await call('GET', kim, '/api/names/consent')).status === 404
+        && (await call('POST', kim, '/api/names/consent', { version: '6:50:60' })).status === 404 && (await call('DELETE', kim, '/api/names/consent')).status === 404,
+        'the consent\'s routes are gone');
     const none = await exceptions(sam);
     assert(none.status === 403, `a member can't open the exceptions (${show(none)})`);
     assert(logRows() === 0, 'and a refused opening is no line');
+
+    // The 14 days: the dial went on just now and the stamp was written at this boot, so everyone above but Tiana was
+    // confirmed before them.
+    const stamp = () => (db.prepare("SELECT value FROM node_config WHERE key = 'balance_rule_from'").get() as { value: string } | undefined)?.value;
+    const stamped = stamp();
+    assert(!!stamped && Date.parse(stamped) > Date.now() + 13 * DAY && Date.parse(stamped) <= Date.now() + 14 * DAY, `the boot wrote the start, 14 days on (${stamped})`);
+    const early = await exceptions(ada);
+    assert(early.status === 200 && early.body?.rule?.started === false && early.body?.rule?.from === rule.body?.ruleFrom && Date.parse(early.body?.rule?.from) >= Date.parse(stamped!),
+        `the answer says when the rule starts, and that it hasn't (${show(early)})`);
+    assert((early.body?.exceptions ?? []).map((e: any) => e.memberPubkey).join() === tia.pk,
+        `before the start, only a member confirmed after the stamp is listed: Tiana, and none of the 600s from before it (${show(early)})`);
+    assert((early.body?.departed ?? []).some((d: any) => d.id === 'debt-gone'), 'and the debts of members who left, as before');
+    const vicBack = await call('POST', vic, '/api/names/step-back', {});
+    assert(vicBack.status === 200 && vicBack.body?.owing === true, `Vicenza steps back in the 14 days, owing past her ordinary line (${show(vicBack)})`);
+    assert(!((await exceptions(ada)).body?.exceptions ?? []).some((e: any) => e.memberPubkey === vic.pk),
+        'and is not listed while the 14 days run: she was confirmed before the stamp');
+    // Day 15: the stamp and the dial's line where a clock would have them.
+    const startRule = () => {
+        db.prepare("UPDATE node_config SET value = ? WHERE key = 'balance_rule_from'").run(ago(DAY));
+        db.prepare("UPDATE known_floor_log SET at = ? WHERE action = 'confirmation'").run(ago(15 * DAY));
+    };
+    startRule();
+    // In the old record, Unaleigh said no. The record stays and nothing reads it (Q-C).
+    db.prepare("INSERT INTO known_consent_log (id, member_pubkey, action, version) VALUES ('old-no', ?, 'withdrawn', '6:50:60')").run(una.pk);
+    assert(!(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'known_consents'").get()), 'there is no consent table left to read');
     const ex = await exceptions(ada);
     const byKey = new Map<string, any>((ex.body?.exceptions ?? []).map((e: any) => [e.memberPubkey, e]));
-    assert(ex.status === 200 && byKey.get(kim.pk)?.reasons?.includes('past_debt_line') && byKey.get(kim.pk)?.entryId === kimEntry,
-        `Kimberly, confirmed and consenting, 600 past half her floor, is listed by key and entry id (${show(ex)})`);
+    assert(ex.status === 200 && ex.body?.rule?.started === true && byKey.get(kim.pk)?.reasons?.includes('past_debt_line') && byKey.get(kim.pk)?.entryId === kimEntry,
+        `Kimberly, confirmed, 600 past half her floor, is listed by key and entry id (${show(ex)})`);
     assert(byKey.get(lea.pk)?.reasons?.join() === 'quiet_in_debit' && byKey.get(lea.pk)?.entryId === leaEntry,
         'Leander, 100 in debit with no sale in 60 days, is listed as quiet');
     assert((ex.body?.exceptions ?? []).every((e: any) => Object.keys(e).sort().join() === 'balance,entryId,floor,memberPubkey,reasons'),
         `an exception says only which line was crossed: no trade fact (a last sale) on the wire (${show(ex)})`);
-    assert(!byKey.has(una.pk), 'Unaleigh, confirmed but never consenting, is not listed');
-    assert(!byKey.has(ugo.pk), 'Ugolino, consenting but never confirmed, is not listed');
+    assert(byKey.get(una.pk)?.reasons?.includes('past_debt_line'), 'Unaleigh, confirmed with no consent to her name, is listed past the line: being confirmed is enough');
+    assert(byKey.get(vic.pk)?.reasons?.join() === 'stepped_back_owing' && byKey.get(vic.pk)?.balance === -800 && byKey.get(vic.pk)?.floor === 200,
+        `Vicenza, who stepped back in the 14 days owing 800 on a 200 line, is listed from the start, as the step-back told her (${JSON.stringify(byKey.get(vic.pk))})`);
+    assert(!byKey.has(ugo.pk), 'Ugolino, never confirmed, is not listed');
     assert(!byKey.has(rex.pk), 'Rexford, whose confirmation was revoked, is not listed');
     assert(!byKey.has(neo.pk), 'Neopolis, confirmed yesterday, is not yet quiet');
     assert(!byKey.has(sam.pk), 'Samwise, in credit, is not listed');
@@ -221,9 +268,26 @@ async function main(): Promise<void> {
     const names = [kim, una, lea, neo, ugo, rex, sam, ada].map(m => m.name);
     assert(!names.some(n => ex.text.includes(n)), 'no callsign or name of anyone is on the wire');
     assert(!/callsign|name"/i.test(ex.text), 'nor a field that could carry one');
+    // Turning the dial on is the rule arriving, for whoever was confirmed while it was off and never told.
+    await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }, owner);
+    const dialAgain = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
+    const afterDial = await exceptions(ada);
+    assert(dialAgain.status === 200 && afterDial.status === 200 && afterDial.body?.rule?.started === false && Date.parse(afterDial.body?.rule?.from) > Date.now() + 13 * DAY
+        && (afterDial.body?.exceptions ?? []).length === 0,
+        `the dial going back on starts the 14 days again: nobody confirmed before it is listed (${show(afterDial)})`);
+    const dot = makeMember('Dorothea');
+    createPost('offer', 'produce', `${dot.name} mends things`, 'Repairs', 10, 'fixed', dot.pk);
+    confirm(dot, ada, 0);
+    const dotPost = createPost('offer', 'produce', `Samwise's 600-Bean basket for ${dot.name}`, 'Veg', 600, 'fixed', sam.pk)!;
+    await call('POST', dot, '/api/marketplace/posts/accept', { postId: dotPost.id, buyerPublicKey: dot.pk });
+    assert(((await exceptions(ada)).body?.exceptions ?? []).map((e: any) => e.memberPubkey).join() === dot.pk,
+        'and a member confirmed after it is listed from the first day, as Tiana was');
+    startRule();
 
     // ── 4. the owner's two lines ──────────────────────────────────────────────────────────────────
     console.log('── 4. the two lines ──');
+    const before5 = logRows();
+    await exceptions(ada);
     const byAdmin = await call('POST', ada, '/api/names/health/settings', { debtLinePct: 90 });
     assert(byAdmin.status === 403 && byAdmin.body?.code === 'owner_only', `an admin can't move the lines (${show(byAdmin)})`);
     const bad = await call('POST', founder, '/api/names/health/settings', { debtLinePct: 90, quietDays: 3 });
@@ -238,96 +302,186 @@ async function main(): Promise<void> {
     const ex2 = await exceptions(bea);
     const by2 = new Map<string, any>((ex2.body?.exceptions ?? []).map((e: any) => [e.memberPubkey, e]));
     assert(ex2.status === 200 && by2.get(kim.pk)?.reasons?.join() === 'quiet_in_debit' && by2.get(lea.pk)?.reasons?.join() === 'quiet_in_debit',
-        `at 90%, Kimberly's 600 is past no line, only quiet (no sale in 30 days); Leander stays quiet (${show(ex2)})`);
-    const terms2 = await call('GET', null, '/api/community/consent-terms');
-    assert(/90%/.test(terms2.body?.text) && /30 days/.test(terms2.body?.text) && terms2.body?.version !== terms.body.version,
-        `the consent text follows the lines, with a new version (${show(terms2)})`);
-    const stale = await call('POST', una, '/api/names/consent', { version: terms.body.version });
-    assert(stale.status === 409 && stale.body?.code === 'stale_text', `consenting to the old text is refused (${show(stale)})`);
+        `at 90%, Kimberly's 600 is past no line, only quiet; Leander stays quiet (${show(ex2)})`);
+    const rule2 = await call('GET', null, '/api/community/known-rule');
+    assert(rule2.body?.debtLinePct === 90 && rule2.body?.quietDays === 30 && rule2.body?.debtLineFrom === null && Date.parse(rule2.body?.quietDaysFrom) > Date.now() + 13 * DAY,
+        `the rule's numbers follow the lines, and the tightened one says when it applies (${show(rule2)})`);
 
     // ── 5. the access log ─────────────────────────────────────────────────────────────────────────
     console.log('── 5. the access log ──');
-    assert(logRows() === 2, `two openings, two lines (${logRows()})`);
+    assert(logRows() === 2 + before5, `two openings, two lines (${logRows()})`);
     const logA = await call('GET', ada, '/api/names/health/log');
     const logO = await call('GET', founder, '/api/names/health/log');
-    assert(logA.status === 200 && logA.body?.log?.length === 2 && logA.body.log[0].actor === bea.pk && logA.body.log[1].actor === ada.pk
+    assert(logA.status === 200 && logA.body?.log?.length === 2 + before5 && logA.body.log[0].actor === bea.pk && logA.body.log[1].actor === ada.pk
         && logA.body.log.every((l: any) => l.action === 'exceptions_opened' && l.at),
         `an admin reads who opened them and when, newest first (${show(logA)})`);
-    assert(logO.status === 200 && logO.body?.log?.length === 2, `and the owner reads it (${show(logO)})`);
+    assert(logO.status === 200 && logO.body?.log?.length === 2 + before5, `and the owner reads it (${show(logO)})`);
     const logM = await call('GET', kim, '/api/names/health/log');
     assert(logM.status === 403, `a member can't (${show(logM)})`);
     const exportTry = await call('GET', ada, '/api/names/health/exceptions?format=csv');
     assert(exportTry.status === 200 && !/text\/csv/.test(exportTry.text) && typeof exportTry.body === 'object', 'there is no CSV of balances: the same JSON answer, and it is logged');
-    assert(logRows() === 3, 'that opening is a line too');
+    assert(logRows() === 3 + before5, 'that opening is a line too');
 
-    // ── 6. the consent ────────────────────────────────────────────────────────────────────────────
-    console.log('── 6. the consent ──');
-    const mine = await call('GET', una, '/api/names/consent');
-    assert(mine.status === 200 && mine.body?.confirmed === true && mine.body?.consentedAt === null && mine.body?.known === true,
-        `a member who joined before the consent existed sees they haven't consented, and is offered it (${show(mine)})`);
-    const now = await call('POST', una, '/api/names/consent', { version: terms2.body.version });
-    assert(now.status === 200 && typeof now.body?.consentedAt === 'string', `Unaleigh consents to the current text (${show(now)})`);
-    const ex3 = await exceptions(ada);
-    assert((ex3.body?.exceptions ?? []).some((e: any) => e.memberPubkey === una.pk), 'and from then she can be an exception (600 in debit, no sale in 30 days)');
-    const guest = await call('POST', keypair('Guest'), '/api/names/consent', { version: terms2.body.version });
-    assert(guest.status === 403, `a key that isn't a member's can't consent (${show(guest)})`);
-    const unsigned = await call('POST', null, '/api/names/consent', { version: terms2.body.version });
-    assert(unsigned.status === 401, `nor can an unsigned request (${show(unsigned)})`);
-    const row = db.prepare('SELECT version, consented_at FROM known_consents WHERE member_pubkey = ?').get(una.pk) as any;
-    assert(row?.version === terms2.body.version && !!row?.consented_at, 'the consent row: the text version and when');
+    // ── 6. stepping back ──────────────────────────────────────────────────────────────────────────
+    console.log('── 6. stepping back ──');
+    const stepBack = (who: Id | null, body: unknown = {}, extra: Record<string, string> = {}) => call('POST', who, '/api/names/step-back', body, extra);
+    const listed = async () => new Map<string, any>(((await exceptions(ada)).body?.exceptions ?? []).map((e: any) => [e.memberPubkey, e]));
+    const confirmedRow = (m: Id) => db.prepare('SELECT * FROM confirmations WHERE member_pubkey = ? ORDER BY confirmed_at DESC LIMIT 1').get(m.pk) as any;
+    // /api/community/me says who the rule reaches, for the card on Home.
+    const meKim = await call('GET', kim, '/api/community/me');
+    assert(meKim.status === 200 && meKim.body?.confirmed === true && meKim.body?.confirmedAt === confirmedRow(kim).confirmed_at, `a confirmed member's own standing says so, and since when (${show(meKim)})`);
+    const meSam = await call('GET', sam, '/api/community/me');
+    assert(meSam.status === 200 && meSam.body?.confirmed === false && meSam.body?.confirmedAt === null, `and an unconfirmed member's says that (${show(meSam)})`);
+    assert((await call('GET', kim, '/api/community/me')).body?.features?.debtLinePct === 90 && (await call('GET', kim, '/api/community/me')).body?.features?.quietDays === 30,
+        "the two lines reach a member beside the known floor, as the owner set them");
 
-    // ── 6b. tightened lines reach only who agreed to them ────────────────────────────────────────
+    const unsignedBack = await stepBack(null);
+    assert(unsignedBack.status === 401, `an unsigned step-back is refused (${show(unsignedBack)})`);
+    const unconfirmedBack = await stepBack(sam);
+    assert(unconfirmedBack.status === 409 && unconfirmedBack.body?.code === 'not_confirmed', `an unconfirmed member has nothing to step back from (${show(unconfirmedBack)})`);
+    const stranger = await stepBack(keypair('Stranger'));
+    assert(stranger.status === 409 && stranger.body?.code === 'not_confirmed', `nor has a key that isn't a member's (${show(stranger)})`);
+    const hanging = makeMember('Hyacinth');   // an admin confirmed them, and a second admin hasn't yet
+    db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 1)')
+        .run(crypto.randomBytes(16).toString('hex'), hanging.pk, crypto.randomBytes(16).toString('hex'), ada.pk);
+    const hangingBack = await stepBack(hanging);
+    assert(hangingBack.status === 409 && hangingBack.body?.code === 'not_confirmed' && !confirmedRow(hanging).revoked_at, `nor has a member still waiting for a second admin (${show(hangingBack)})`);
+    confirm(bea, ada);   // an admin who is confirmed herself: naming someone else must not step her back instead
+    const forZed = await stepBack(ada, { memberPubkey: zed.pk });
+    const forZedConfirmed = await stepBack(bea, { memberPubkey: zed.pk });
+    assert(forZed.status === 403 && forZed.body?.code === 'not_yours' && forZedConfirmed.status === 403 && forZedConfirmed.body?.code === 'not_yours',
+        `an admin can't step a member back (${show(forZed)} ${show(forZedConfirmed)})`);
+    const adminSession = { 'X-Admin-Session': consumeHandshakeToken(mintHandshakeToken(ada.pk, 'admin').handshakeToken).sessionId! };
+    const bySession = await stepBack(null, {}, adminSession);
+    const byPassword = await stepBack(null, {}, owner);
+    assert(bySession.status === 401 && byPassword.status === 401, `nor can an admin's session or the node password: it is signed with the member's own key (${show(bySession)} ${show(byPassword)})`);
+    assert(!confirmedRow(zed).revoked_at && !confirmedRow(bea).revoked_at, 'Zephyrine stays confirmed, and so does the admin who named her');
+    const role6 = getNodeRole();
+    setNodeRole('backup');
+    const onStandby = await stepBack(zed);
+    setNodeRole(role6);
+    assert(onStandby.status === 409 && onStandby.body?.code === 'standby' && !confirmedRow(zed).revoked_at, `a standby takes no step-back (${show(onStandby)})`);
+
+    const zedFloor = getBalance(zed.pk).floor;
+    assert(zedFloor === -1200, `Zephyrine holds the known floor on her ordinary line (${zedFloor})`);
+    const zedBack = await stepBack(zed);
+    const zedRow = confirmedRow(zed);
+    assert(zedBack.status === 200 && zedBack.body?.status === 'revoked' && zedBack.body?.owing === true && zedBack.body?.id === zedRow.id,
+        `Zephyrine steps back, owing 800 on a 200 ordinary line (${show(zedBack)})`);
+    assert(zedRow.revoke_reason === 'member' && zedRow.revoked_by === zed.pk && !!zedRow.revoked_at && zedRow.stepped_back_owing === 1, `her row says it was her own (${JSON.stringify(zedRow)})`);
+    const zedLog = db.prepare("SELECT actor_pubkey, entry_id, subject_pubkey FROM names_access_log WHERE action = 'revoke' ORDER BY at DESC, rowid DESC LIMIT 1").get() as any;
+    assert(zedLog?.actor_pubkey === zed.pk && zedLog?.subject_pubkey === zed.pk && zedLog?.entry_id === zedRow.entry_id, `the names log has her own line, beside the admins' (${JSON.stringify(zedLog)})`);
+    const zedBalance = getBalance(zed.pk);
+    assert(zedBalance.floor === -200 && zedBalance.frozen === true && zedBalance.balance === -800, `the floor is her ordinary line, and she is spend-frozen below it (${zedBalance.floor}, ${zedBalance.frozen})`);
+    const zedMe = await call('GET', zed, '/api/community/me');
+    assert(zedMe.body?.confirmed === false && zedMe.body?.confirmedAt === null, 'her own standing says she is not confirmed now');
+    const again = await stepBack(zed);
+    assert(again.status === 409 && again.body?.code === 'not_confirmed', `stepping back twice is refused (${show(again)})`);
+    const zedListed = (await listed()).get(zed.pk);
+    assert(zedListed?.reasons?.join() === 'stepped_back_owing' && zedListed?.balance === -800 && zedListed?.floor === 200 && zedListed?.entryId === zedRow.entry_id,
+        `she is listed with the new reason, her line the ordinary one (${JSON.stringify(zedListed)})`);
+    transfer('genesis', zed.pk, 599, 'a sale, say', 'direct', true);
+    assert((await listed()).get(zed.pk)?.balance === -201, 'at 201 she is still past her line, and still listed');
+    transfer('genesis', zed.pk, 1, 'a sale, say', 'direct', true);
+    assert(getBalance(zed.pk).balance === -200 && !(await listed()).has(zed.pk), 'at 200 she is back within it, and off the list');
+    ordinaryLine(zed, 0);
+    assert(getBalance(zed.pk).floor === 0 && !(await listed()).has(zed.pk), 'and she stays off it when her line falls later: she came back within it once');
+
+    const wesBack = await stepBack(wes);
+    assert(wesBack.status === 200 && wesBack.body?.owing === false && confirmedRow(wes).stepped_back_owing === 0, `Wesley steps back owing 100 on a 200 line, within it (${show(wesBack)})`);
+    assert(!(await listed()).has(wes.pk), 'and the admins do not see him');
+    ordinaryLine(wes, 0);
+    assert(getBalance(wes.pk).floor === 0 && !(await listed()).has(wes.pk),
+        'nor when his line falls below what he owes: he stepped back within it, and was told nothing else (an admin freezing a line can\'t bring a member back into view)');
+
+    // Q-F: an admin may confirm a member again, without asking; a member who stepped back with a debt then reads as confirmed.
+    db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 1)')
+        .run(crypto.randomBytes(16).toString('hex'), vic.pk, crypto.randomBytes(16).toString('hex'), ada.pk);
+    assert((await listed()).get(vic.pk)?.reasons?.join() === 'stepped_back_owing', 'a new confirmation waiting for a second admin changes nothing yet: she stays listed as stepped back');
+    const vicNew = confirmedRow(vic).id;
+    db.prepare("UPDATE confirmations SET seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), seconded_by = ? WHERE id = ?").run(bea.pk, vicNew);
+    assert(getBalance(vic.pk).floor === -1200, `confirmed again, she holds the known floor (${getBalance(vic.pk).floor})`);
+    assert((await call('GET', vic, '/api/community/me')).body?.confirmedAt === confirmedRow(vic).seconded_at, 'her confirmedAt is new, so her app shows the card again');
+    // Her limit set under what she owes, so that "back within it" can't take the old step-back off the list on its own.
+    db.prepare("INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, 100, 0, ?)").run(vic.pk, ada.pk);
+    const vicLines = ((await exceptions(ada)).body?.exceptions ?? []).filter((e: any) => e.memberPubkey === vic.pk);
+    assert(getBalance(vic.pk).floor === -300 && vicLines.length === 1 && !vicLines[0].reasons.includes('stepped_back_owing'),
+        `owing past even that, she is one line, read as confirmed: the step-back before it is over (${JSON.stringify(vicLines)})`);
+    db.prepare("UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoked_by = ?, revoke_reason = 'admin' WHERE id = ?").run(ada.pk, vicNew);
+    assert(!(await listed()).has(vic.pk), 'an admin revoking that one ends it: her older step-back is not read again');
+
+    // Stepping back before leaving keeps nothing off the entry (design §1: today's path runs unchanged).
+    const lou = makeMember('Louisa');
+    const louEntry = confirm(lou, ada);
+    assert((await stepBack(lou)).status === 200, 'Louisa steps back');
+    dropNamesListHoldOf(lou.pk, 'account_deleted', -350);
+    assert((db.prepare("SELECT amount, reason FROM names_debts WHERE entry_id = ? AND status = 'open'").get(louEntry) as any)?.amount === 350,
+        'and leaves owing 350: the debt note goes on the entry she stepped back from, as if she had stayed confirmed');
+    const mae = makeMember('Maelys');
+    const maeEntry = confirm(mae, ada);
+    assert((await stepBack(mae)).status === 200, 'Maelys steps back');
+    const maeLater = confirm(mae, ada, 0);
+    db.prepare("UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = 'admin' WHERE member_pubkey = ? AND revoked_at IS NULL").run(mae.pk);
+    dropNamesListHoldOf(mae.pk, 'account_deleted', -350);
+    assert(!db.prepare('SELECT 1 FROM names_debts WHERE entry_id IN (?, ?)').get(maeEntry, maeLater), 'but an older step-back behind an admin\'s later revoke is no reason for a note, on either entry, as for any revoked member');
+
+    // A work-off ends with the step-back, as with an admin's revoke: the debt stays open on the entry, with nobody repaying.
+    const wyn = makeMember('Wynifred');
+    const wynEntry = confirm(wyn, ada);
+    db.prepare("INSERT INTO names_debts (id, entry_id, amount, reason, removed_at, repaying_pubkey, work_off_confirmation_id) VALUES ('debt-wyn', ?, 40, 'removed', ?, ?, ?)")
+        .run(wynEntry, ago(DAY), wyn.pk, confirmedRow(wyn).id);
+    assert((await stepBack(wyn)).status === 200, 'Wynifred, working a debt off, steps back');
+    const wynDebt = db.prepare("SELECT status, repaying_pubkey, work_off_confirmation_id FROM names_debts WHERE id = 'debt-wyn'").get() as any;
+    assert(wynDebt?.status === 'open' && wynDebt?.repaying_pubkey === null && wynDebt?.work_off_confirmation_id === null, `the repayment ends and the debt stays open (${JSON.stringify(wynDebt)})`);
+
+    // ── 6b. a tightened line waits, a loosened one applies at once ─────────────────────────────────
+    console.log('── 6b. the lines change ──');
     const tight = await call('POST', founder, '/api/names/health/settings', { debtLinePct: 5, quietDays: 7 });
-    assert(tight.status === 200 && tight.body?.debtLinePct === 5, `the owner tightens the line to 5% (${show(tight)})`);
+    assert(tight.status === 200 && tight.body?.debtLinePct === 5, `the owner tightens the lines to 5% and 7 days (${show(tight)})`);
     const ex4 = await exceptions(ada);
-    const lea4 = (ex4.body?.exceptions ?? []).find((e: any) => e.memberPubkey === lea.pk);
-    assert(lea4?.reasons?.join() === 'quiet_in_debit',
-        `Leander agreed to 50%: his 100 of 1,000 is still no past-the-line exception at 5%, only quiet (${JSON.stringify(lea4)})`);
-    const neo4 = (ex4.body?.exceptions ?? []).find((e: any) => e.memberPubkey === neo.pk);
-    assert(!neo4, 'Neopolis, who agreed to 60 days, is not quiet after 7 days in debit');
-    // Two wordings: Leander's row says he agreed to another text (wording 0) with the same lines. What he agreed to is
-    // what that text said, not today's, so he is in no exception until he agrees to today's wording.
-    const leaRow = db.prepare('SELECT version FROM known_consents WHERE member_pubkey = ?').get(lea.pk) as { version: string };
-    const [wordingNow, ...leaLines] = leaRow.version.split(':');
-    assert(wordingNow === '6', `he agreed to wording 6, so the one before is wording 5, the text that said "Every look at your balance is logged" (${leaRow.version})`);
-    db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run([Number(wordingNow) - 1, ...leaLines].join(':'), lea.pk);
-    const ex5 = await exceptions(ada);
-    const leaMine = await call('GET', lea, '/api/names/consent');
-    assert(leaMine.status === 200 && leaMine.body?.consentedVersion === [Number(wordingNow) - 1, ...leaLines].join(':') && String(leaMine.body?.version).startsWith(`${wordingNow}:`),
-        `his app reads that he agreed to wording ${Number(wordingNow) - 1}, not today's, so it asks him again (${show(leaMine)})`);
-    assert(ex5.status === 200 && !(ex5.body?.exceptions ?? []).some((e: any) => e.memberPubkey === lea.pk),
-        `Leander, who agreed to wording ${Number(wordingNow) - 1} and not today's ${wordingNow}, is not listed (${show(ex5)})`);
-    db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run(leaRow.version, lea.pk);
-    const ex6 = await exceptions(ada);
-    assert((ex6.body?.exceptions ?? []).some((e: any) => e.memberPubkey === lea.pk), 'with his consent to today\'s wording, he is listed again');
+    const by4 = new Map<string, any>((ex4.body?.exceptions ?? []).map((e: any) => [e.memberPubkey, e]));
+    // The log's lines: 50 → 90 and 60 → 30, then 90 → 5 and 30 → 7: the loosest value left in the last 14 days of each.
+    assert(ex4.body?.settings?.debtLinePct === 90 && ex4.body?.settings?.quietDays === 60 && ex4.body?.rule?.debtLinePct === 90 && ex4.body?.rule?.quietDays === 60
+        && Date.parse(ex4.body?.rule?.debtLineFrom) > Date.now() + 13 * DAY && Date.parse(ex4.body?.rule?.quietDaysFrom) > Date.now() + 13 * DAY,
+        `for 14 days the list reads the old lines, and says when the new ones apply (${JSON.stringify(ex4.body?.rule)})`);
+    assert(by4.get(lea.pk)?.reasons?.join() === 'quiet_in_debit', `Leander's 100 of 1,000 is no past-the-line exception yet at 5%, only quiet (${JSON.stringify(by4.get(lea.pk))})`);
+    assert(!by4.has(ned.pk), 'Nedward, 20 days confirmed, is not quiet: 7 days doesn\'t apply yet');
+    db.prepare("UPDATE known_floor_log SET at = ? WHERE action IN ('health_debt_line', 'health_quiet_days')").run(ago(13 * DAY));
+    const ex13 = await exceptions(ada);
+    assert(ex13.body?.rule?.debtLinePct === 90 && ex13.body?.rule?.quietDays === 60 && !(ex13.body?.exceptions ?? []).some((e: any) => e.memberPubkey === ned.pk), 'on day 13 the old lines still hold');
+    db.prepare("UPDATE known_floor_log SET at = ? WHERE action IN ('health_debt_line', 'health_quiet_days')").run(ago(15 * DAY));
+    const ex15 = await exceptions(ada);
+    const by15 = new Map<string, any>((ex15.body?.exceptions ?? []).map((e: any) => [e.memberPubkey, e]));
+    assert(ex15.body?.rule?.debtLinePct === 5 && ex15.body?.rule?.quietDays === 7 && ex15.body?.rule?.debtLineFrom === null && ex15.body?.rule?.quietDaysFrom === null,
+        `after 14 days the new lines apply (${JSON.stringify(ex15.body?.rule)})`);
+    assert(by15.get(lea.pk)?.reasons?.includes('past_debt_line') && by15.get(ned.pk)?.reasons?.join() === 'past_debt_line,quiet_in_debit',
+        `and Leander is past the 5% line, and Nedward with him, and quiet at 7 days (${JSON.stringify(by15.get(ned.pk))})`);
+    const loose = await call('POST', founder, '/api/names/health/settings', { debtLinePct: 60 });
+    const ex16 = await exceptions(ada);
+    assert(loose.status === 200 && ex16.body?.rule?.debtLinePct === 60 && ex16.body?.rule?.debtLineFrom === null
+        && !(ex16.body?.exceptions ?? []).some((e: any) => e.memberPubkey === lea.pk && e.reasons.includes('past_debt_line')),
+        `a loosened line applies at once, though its old value is in the log (${JSON.stringify(ex16.body?.rule)})`);
 
-    // ── 6c. withdrawing consent: as easy as giving it, and at once ─────────────────────────────────
-    console.log('── 6c. withdrawing ──');
-    const listed = async () => new Set(((await exceptions(ada)).body?.exceptions ?? []).map((e: any) => e.memberPubkey));
-    assert((await listed()).has(kim.pk), 'Kimberly, who consented, is listed before she withdraws');
-    const withdrew = await call('POST', kim, '/api/names/consent', { withdraw: true });
-    assert(withdrew.status === 200 && withdrew.body?.consentedAt === null && withdrew.body?.consentedVersion === null && typeof withdrew.body?.withdrawnAt === 'string',
-        `Kimberly withdraws her consent with one signed request (${show(withdrew)})`);
-    assert(!(await listed()).has(kim.pk), 'and from that moment she is in no exception');
-    const mineOff = await call('GET', kim, '/api/names/consent');
-    assert(mineOff.status === 200 && mineOff.body?.consentedAt === null && typeof mineOff.body?.withdrawnAt === 'string',
-        `her Settings reads that she withdrew, and when (${show(mineOff)})`);
-    const del = await call('DELETE', lea, '/api/names/consent');
-    assert(del.status === 200 && del.body?.consentedAt === null, `DELETE withdraws too (Leander) (${show(del)})`);
-    assert(!(await listed()).has(lea.pk), 'and Leander is out at once');
-    const history = db.prepare('SELECT action, version FROM known_consent_log WHERE member_pubkey = ? ORDER BY at, rowid').all(kim.pk) as any[];
-    assert(history.map(h => h.action).join() === 'agreed,withdrawn' && history[0].version === terms.body.version,
-        `the withdrawal is kept in the consent history, after the agreement (${JSON.stringify(history)})`);
-    const termsNow = await call('GET', null, '/api/community/consent-terms');
-    assert(/take this back at any time/.test(termsNow.body?.text ?? ''), `the text a member agrees to says they can take it back (${show(termsNow)})`);
-    const again = await call('POST', kim, '/api/names/consent', { version: termsNow.body.version });
-    assert(again.status === 200 && again.body?.consentedVersion === termsNow.body.version && again.body?.withdrawnAt === null,
-        `Kimberly can consent again (${show(again)})`);
-    assert((await listed()).has(kim.pk), 'and she is listed again');
-    assert((db.prepare('SELECT COUNT(*) AS n FROM known_consent_log WHERE member_pubkey = ?').get(kim.pk) as any).n === 3,
-        'the history keeps all three: agreed, withdrawn, agreed');
-    const guestOff = await call('POST', null, '/api/names/consent', { withdraw: true });
-    assert(guestOff.status === 401, `an unsigned withdrawal is refused (${show(guestOff)})`);
+    // ── 6c. the list fails closed ──────────────────────────────────────────────────────────────────
+    console.log('── 6c. failing closed ──');
+    const stampNow = stamp()!;
+    const nobody = (r: Res) => r.status === 200 && (r.body?.exceptions ?? []).length === 0 && r.body?.rule?.from === null && r.body?.rule?.started === false
+        && (r.body?.departed ?? []).some((d: any) => d.id === 'debt-gone');
+    db.prepare("DELETE FROM node_config WHERE key = 'balance_rule_from'").run();
+    const noStamp = await exceptions(ada);
+    assert(nobody(noStamp), `with no start to read, nobody is listed, the debts of members who left apart (${show(noStamp)})`);
+    for (const garbage of ['0', '2020', 'soon', '', '2020-01-01']) {
+        db.prepare("INSERT INTO node_config (key, value) VALUES ('balance_rule_from', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(garbage);
+        const r = await exceptions(ada);
+        assert(nobody(r), `nor with a start of ${JSON.stringify(garbage)}, which is no date this reads (${show(r)})`);
+    }
+    db.prepare("UPDATE node_config SET value = ? WHERE key = 'balance_rule_from'").run(stampNow);
+    assert(((await exceptions(ada)).body?.exceptions ?? []).length > 0, 'with the start back, the list is back');
+    // The access log is the rule's safeguard: an opening it can't write answers nothing.
+    db.prepare("CREATE TEMP TRIGGER t6_no_log BEFORE INSERT ON health_access_log BEGIN SELECT RAISE(ABORT, 't6: no log'); END").run();
+    const unlogged = await exceptions(ada);
+    db.prepare('DROP TRIGGER t6_no_log').run();
+    assert(unlogged.status >= 500 && !unlogged.text.includes(kim.pk) && !('exceptions' in (unlogged.body ?? {})), `an opening that can't be logged shows nobody (${show(unlogged)})`);
 
     // ── 7. Settings (the manager) ────────────────────────────────────────────────────────────────
     console.log('── 7. Settings ──');
@@ -335,7 +489,8 @@ async function main(): Promise<void> {
     const s = consumeHandshakeToken(handshakeToken);
     const adaSession = { 'X-Admin-Session': s.sessionId! };
     const mgr = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
-    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 5 && mgr.body?.log?.length === 11
+    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 60 && mgr.body?.log?.length === logRows()
+        && mgr.body?.rule?.started === true && typeof mgr.body?.rule?.from === 'string' && mgr.body?.consent === undefined
         && mgr.body?.exceptions === undefined, `an admin's Settings reads the totals, the lines and the access log, and no exceptions (${show(mgr)})`);
     const mgrO = await call('GET', null, '/api/local/admin/community-health', undefined, owner);
     assert(mgrO.status === 200 && mgrO.body?.known === true, `and the owner's (${show(mgrO)})`);
@@ -477,9 +632,7 @@ async function main(): Promise<void> {
     assert(builtInPage.split('Show who the alerts name (your first look at each member in 24 hours is logged)').length === 3
         && !builtInPage.includes('(this look is logged)'),
         "the built-in page's two buttons that show who the alerts name say an admin's first look at each member in 24 hours is logged");
-    const terms9 = await call('GET', null, '/api/community/consent-terms');
-    const consentText = String(terms9.body?.text ?? '');
-    assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => notSeen.test(t)),
+    assert(![policy, guide, operatorPage, privacyPage].some((t) => notSeen.test(t)),
         'no text says an admin never sees a trade: every admin sees some (disputes, memberStats, fraud flags)');
     // Wording 3 (round 4): memberStats' posts and messages counts, the ring alert (names, no Beans), the inactivity alert,
     // the pair's one-to-one chat only, and the operator's whole database with its backups, snapshots and standby copies.
@@ -496,11 +649,11 @@ async function main(): Promise<void> {
         'the policy lists what any admin sees of trades (the stranded escrows too), says every look at a trade is logged and an alerts look once in 24 hours per admin and member, the owner sees the log, member stats carry only totals, every member sees the trust profile, and nothing else');
     assert(operatorPage.includes(`What every admin can see of trades, in any community, is: ${tradeList}. ${loggedTrades}; ${loggedAlerts}. Both go in Community health, as a list of its own beside the one where the owner and the admins see who opened the exceptions and who looked at a balance; a background check of the alerts, which shows no names, isn't a look and isn't logged. The member stats show how many posts each member has up and messages they have sent, and of trades only the whole community's totals, never one member's. ${trustProfile}`),
         'the operator page lists the same, logged in its own list where the owner reads it, the background check unlogged, totals only in member stats, the trust profile');
-    assert(![policy, operatorPage, guide].some((t) => /how many trades each member has finished or cancelled/.test(t)) && !/how many trades you have finished or cancelled/.test(consentText + privacyPage),
+    assert(![policy, operatorPage, guide].some((t) => /how many trades each member has finished or cancelled/.test(t)) && !/how many trades you have finished or cancelled/.test(privacyPage),
         'no text says an admin sees one member\'s finished or cancelled trades any more');
     // Confirmation 2 (r4177813681): "how many they cancelled" read as the members or admins cancelling. The trust profile
     // counts the member's own trades that were cancelled, whoever cancelled them.
-    assert(![policy, operatorPage, guide, consentText, privacyPage].some((t) => /how many they cancelled|the share they finished/.test(t)),
+    assert(![policy, operatorPage, guide, privacyPage].some((t) => /how many they cancelled|the share they finished/.test(t)),
         'no text says "how many they cancelled": the trust profile counts how many of the member\'s trades were cancelled, whoever cancelled them');
     assert(/## What any admin can see of your trades/.test(guide) && /\*\*A trade that isn't finished yet, or that an admin settled\.\*\* Both members, the listing, the price, and the messages in the one-to-one chat of the two members\./.test(guide)
         && /\*\*Fraud alerts that name members,\*\* with Beans\. One names two members who buy from each other back and forth, about evenly, past a limit\. It shows the Beans in total and how evenly they went each way\. Another names a member and the members they invited, when those members send them Beans past a limit within a set number of days\. It shows the Beans in total and how many of the members they invited have traded with no one but them\./.test(guide)
@@ -517,13 +670,6 @@ async function main(): Promise<void> {
     const wholeDb = /holds its whole database, (balances and trades|your balance and trades) included, and its backups, snapshots and standby copies/;
     assert(wholeDb.test(policy) && wholeDb.test(guide) && /holds its whole database, with its backups, snapshots and standby copies/.test(privacyPage),
         'the policy and both guide pages say whoever runs the server holds the whole database, with its backups, snapshots and standby copies');
-    assert(/any admin can see some of your trades: a trade that isn't finished yet or that an admin settled \(who with, the listing, the price, and your one-to-one chat with them, which they can't read if it is private\), so a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server \(the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note\); a fraud alert/.test(consentText)
-        && /a fraud alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of the members you invited have traded with no one but you, if members you invited send you Beans past a limit within a set number of days, or if you are one of those members;/.test(consentText)
-        && /one that names you, with how much of the group's trading is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly with each other;/.test(consentText)
-        && /an alert that names you if no Beans have moved in or out of your account for a set number of days\. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts that name you is logged the first time each admin opens them, and again at that admin's first look after 24 hours, and the looks in between add no line\. The owner and the admins can see that log\. The member stats the admins see show how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours\. Every member, admins included, sees your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points\. That isn't logged, because every member can see it\. Nothing else of your trades\. Whoever runs/.test(consentText)
-        && /Nothing else of your trades\. Whoever runs this community's server holds its whole database, your balance and trades included, and its backups, snapshots and standby copies\.$/.test(consentText)
-        && /Every time an admin opens the list of members past those lines, and every time an admin looks at your balance while removing you, it is logged\. In a vote on removing you, everyone who can vote in it sees your balance and any debt, in that vote only, and those looks are not logged\. You can take this back at any time in Settings\./.test(consentText),
-        `the wording a member agrees to says what any admin sees of trades, that every look is logged and the owner sees the log, that member stats carry only the community's totals, which looks at a balance are logged and that the looks in a vote on removing them are not, and that whoever runs the server holds it all (${show(terms9)})`);
     // Wording 4 and the texts beside it said an admin's looks at trades were not logged; since queue item 29 every one is
     // (section 9's log lines). #1613's deciding review: the check is for those sentences, in any spelling, in all five
     // texts, not for the words "not logged", which a true sentence about a removal vote uses (section 8b writes no line).
@@ -532,12 +678,12 @@ async function main(): Promise<void> {
         /Nothing else of (your|anyone's|anyone’s) trades\. These looks (are not|aren't|aren’t) logged/i,
         /nobody can see who looked/i,
     ];
-    assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => tradesNotLogged.some((r) => r.test(t))),
+    assert(![policy, guide, operatorPage, privacyPage].some((t) => tradesNotLogged.some((r) => r.test(t))),
         'no text says the looks at trades are not logged, as wording 4, the policy and the guide did: every look at a trade is');
     // #1610's deciding review, Question 2: wording 5 said "Every look at your balance is logged", and the looks in a vote on
     // removing a member (section 8b) write no line. Every text now names the voters, says no other admin or owner sees it
     // there, and says those looks are not logged.
-    assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => /every look at your balance is logged/i.test(t)),
+    assert(![policy, guide, operatorPage, privacyPage].some((t) => /every look at your balance is logged/i.test(t)),
         'no text says every look at a balance is logged: a look in a vote on removing a member is not');
     const notThere = "An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.";
     assert(policy.includes(`<li><strong>When the community votes on removing you:</strong> everyone who can vote in it sees your balance and any debt, in that vote only. ${notThere}</li>`)
@@ -548,9 +694,6 @@ async function main(): Promise<void> {
         && operatorPage.includes("In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks are not logged.")
         && operatorPage.includes("Every time an admin sees a member's balance while removing them, it writes who, whose and when."),
         'both guide pages and the operator page say the same, and the operator page says a look while removing a member is logged');
-    const quoted = consentText.replace(/past \d+% of/, 'past 50% of').replace(/debit for \d+ days/, 'debit for 60 days');
-    assert(guide.includes(`"${quoted}"`), 'the guide quotes the wording a member agrees to, word for word (at 50% and 60 days)');
-    assert(String(terms9.body?.version ?? '').startsWith('6:'), `the wording is version 6, so a member who agreed to wording 5 ("Every look at your balance is logged") is asked again (${show(terms9)})`);
     // Queue item 29 (Marty, 4 Oct: "Keep disputes, log every look, totals only in member stats").
     const lastLines = (n: number) => db.prepare('SELECT actor_pubkey, action, subject_pubkey, detail FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(n) as any[];
     const before9 = logRows();

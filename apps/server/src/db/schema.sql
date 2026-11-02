@@ -1764,8 +1764,12 @@ CREATE TABLE IF NOT EXISTS confirmations (
     revoked_by     TEXT,
     revoked_at     DATETIME,
     -- `admin`: an admin revoked it; `removed`: the community or an admin removed the member; `account_deleted`: the member
-    -- deleted their account.
-    revoke_reason  TEXT CHECK (revoke_reason IS NULL OR revoke_reason IN ('admin', 'removed', 'account_deleted')),
+    -- deleted their account; `member`: the member stepped back from being confirmed (engine/names-list.ts stepBack).
+    revoke_reason  TEXT CHECK (revoke_reason IS NULL OR revoke_reason IN ('admin', 'removed', 'account_deleted', 'member')),
+    -- 1 from a step-back while owing past their ordinary line until the admins' list reads them back within it
+    -- (engine/community-health.ts openExceptions). Read from here, never from today's balance alone: a member who stepped
+    -- back within their line and whose line later fell was never told they could be seen.
+    stepped_back_owing INTEGER NOT NULL DEFAULT 0 CHECK (stepped_back_owing IN (0, 1)),
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1856,19 +1860,9 @@ CREATE TABLE IF NOT EXISTS health_access_log (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- A member's consent at joining a known community (design §4.4, §7.5): when, and which text (`version` = wording:debt
--- line:days). Without a row, a member is in no exception. One row per member; consenting again replaces it.
-CREATE TABLE IF NOT EXISTS known_consents (
-    member_pubkey  TEXT PRIMARY KEY,
-    version        TEXT NOT NULL,
-    consented_at   DATETIME NOT NULL,
-    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
--- A member's consent history: every agreement and every withdrawal (GDPR Art. 7(3): a member withdraws at any time, as
--- easily as they agreed). Withdrawing deletes their known_consents row with its tombstone, so they are in no exception from
--- that moment, on a standby too;
--- this keeps that it happened, and to which text. Only the member reads their own.
+-- A member's consent history from before the rule on what the admins can see (scratch/fable-design/DESIGN-balance-rule-fable.md
+-- §5, Marty's Q-C): every agreement and every withdrawal, kept as a record. Nothing writes here now and no route reads it;
+-- it answers "did they agree before 2 November" for whoever runs the server.
 CREATE TABLE IF NOT EXISTS known_consent_log (
     id             TEXT PRIMARY KEY,
     member_pubkey  TEXT NOT NULL,

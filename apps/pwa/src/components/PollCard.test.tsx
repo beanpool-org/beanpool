@@ -106,6 +106,26 @@ describe('PollCard (PWA)', () => {
         });
     });
 
+    it('a card older than an edit: the node\'s refusal is said on the card, no vote is shown, and the answers can be tapped again', async () => {
+        // The real send, so the words are the ones lib/api.ts takes from the node's 400.
+        const { votePoll: realVotePoll } = await vi.importActual<typeof api>('../lib/api');
+        vi.mocked(api.votePoll).mockImplementationOnce(realVotePoll);
+        const node = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => (String(url).endsWith('/api/marketplace/posts/post_poll_123/vote')
+            ? new Response(JSON.stringify({ error: 'Invalid poll option' }), { status: 400 })
+            : new Response('{}', { status: 200 })));
+        const onVoteSuccess = vi.fn();
+
+        render(<PollCard post={mockPost} identity={mockIdentity} onVoteSuccess={onVoteSuccess} />);
+        const southBarnButton = screen.getByText('South Barn').closest('button') as HTMLButtonElement;
+        fireEvent.click(southBarnButton);
+
+        expect(await screen.findByText('Invalid poll option')).toBeInTheDocument();
+        expect(onVoteSuccess).not.toHaveBeenCalled();
+        expect(screen.getByText(/5 votes cast/)).toBeInTheDocument();
+        expect(southBarnButton.disabled).toBe(false);
+        node.mockRestore();
+    });
+
     it('toggles the open vote\'s voter list', () => {
         render(<PollCard post={mockPost} identity={mockIdentity} />);
 

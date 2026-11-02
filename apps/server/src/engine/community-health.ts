@@ -1,56 +1,39 @@
 /**
- * The Community health panel and the consent at joining (community modes slice 6; scratch/global-node/
- * DESIGN-community-modes-fable.md §4.4, §7.1, §7.5; Marty's answers 4 and 5).
+ * The Community health panel and the rule on what the admins can see (community modes slice 6; scratch/global-node/
+ * DESIGN-community-modes-fable.md §4.4, §7.1; scratch/fable-design/DESIGN-balance-rule-fable.md; Marty's answers 4 and 5,
+ * and Q-A to Q-F on 2 November).
  *
  * Every owner and admin reads the community's totals, which are public by rule (privacy defaults, 28 September): Beans
  * in circulation, the sum of credit, the sum of debt, how many are in debit, the Commons pot and this month's trades.
  *
- * Only in a known community (the confirmation dial on) and only for a CONFIRMED member who CONSENTED at joining: the
- * exceptions. A member past the debt line (default 50% of their floor), or in debit with no sale for N days (default 60).
- * The owner sets both; each change is a line in the known floor's log. The answer carries keys and entry ids only: the
- * names are sealed on the admins' phones, which overlay them. Every opening of the exceptions is a line in
- * health_access_log, which every owner and admin reads (the watchers are watched). No export of balances, ever.
+ * Only in a known community (the confirmation dial on): the exceptions. A CONFIRMED member past the debt line (default 50%
+ * of their floor), or in debit with no sale for N days (default 60); and a member who stepped back from being confirmed
+ * owing past their ordinary line, until they are back within it. The owner sets both lines; each change is a line in the
+ * known floor's log. The answer carries keys and entry ids only: the names are sealed on the admins' phones, which overlay
+ * them. Every opening of the exceptions is a line in health_access_log, which every owner and admin reads (the watchers
+ * are watched): that log is the rule's safeguard. No export of balances, ever.
  *
- * The consent: the join screen shows the text this file writes from the two settings, and the member's app records it
- * (when, which text). A member who joined before it existed is in no exception until they consent in their app.
+ * It is a rule of being confirmed, not a consent: the oversight belongs to the known floor, and a member who wants neither
+ * steps back (engine/names-list.ts stepBack). Nobody is listed on a basis they weren't told about, so:
+ *  - the rule starts 14 days after a node first runs it (config/balance-rule.ts), or after the dial last went on, and until
+ *    then only members confirmed since are listed ({@link ruleStart}); a start this can't read lists nobody;
+ *  - a tightened line waits 14 days and a loosened one applies at once ({@link effectiveLines});
+ *  - a member is listed for debt past their ordinary line only if they stepped back owing it, as the step-back says.
  */
 import crypto from 'node:crypto';
-import { db, deletePlainRows } from '../db/db.js';
-import { confirmationDialOn, isConfirmed } from '@beanpool/engine';
+import { db } from '../db/db.js';
+import { confirmationDialOn, isConfirmed, knownFloor } from '@beanpool/engine';
 import { getBalance, getCommonsBalance, getMember, isVisitorKey } from '../state-engine.js';
 import { listDebts } from './names-debts.js';
+import { stepBack } from './names-list.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
+import { BALANCE_RULE_FROM_KEY, RULE_NOTICE_MS, readRuleInstant } from '../config/balance-rule.js';
 
 export const DEBT_LINE_PCT_KEY = 'health_debt_line_pct';
 export const QUIET_DAYS_KEY = 'health_quiet_days';
 export const DEBT_LINE_PCT_DEFAULT = 50;
 export const QUIET_DAYS_DEFAULT = 60;
-/**
- * The consent's wording; a new wording is a new version, and the member's record says which one they saw. Wording 2
- * (review r4176931267) names what every admin sees of trades, unlogged, whatever the member agrees to: a trade not yet
- * finished or one an admin settled (/api/local/admin/disputes), each member's trade counts and total (/admin/data
- * memberStats), and the fraud alerts that name members (getCommunityHealth flags). Wording 1 said "They can't see your
- * trades", so a member who agreed to it is asked again. Wording 3 (fix round 4) names the rest of what an admin sees:
- * memberStats' posts and messages counts, the ring alert (names, no Beans), the inactivity alert, the one-to-one chat
- * only, and that whoever runs the server holds the whole database with its backups, snapshots and standby copies.
- * Wording 4 (review r4177156495) says what the two named-with-Beans alerts fire on: a pair who buy from each other back
- * and forth, about evenly, past the volume cap (wash_trading, which shows the total and how evenly it went), and members
- * who send the member who invited them Beans past a limit in a window (sybil_funnel); not "trade mostly with one member".
- * Wording 5 (queue item 29, Marty 4 Oct: "Keep disputes, log every look, totals only in member stats"): every admin
- * look at the disputes and at an alert that names a member is logged (health_access_log), the owner and the admins
- * read that log, and memberStats carries no member's trades, only the community's totals (tradeTotals). Fix round 1
- * (reviews r4177560405, r4177560417; wording 5 unreleased, so no bump): every member, admins included, sees each
- * member's trust profile (POST /api/trust/profile: finished and cancelled trades, the share finished, how many
- * different members, the trades with the viewer, Trust Points), unlogged, as Marty decided on 2026-09-29; and the
- * stranded escrows list (an escrow left stuck by a removal on an older node) is a logged look of its own
- * (stranded_escrows_read).
- * Wording 6 (#1610's deciding review, Question 2): wording 5 said "Every look at your balance is logged", and a vote on
- * removing a member shows their balance and debt to everyone who can vote in it, unlogged. It now says what is logged
- * (every opening of the list of members past the lines, every look at a balance while removing that member) and that the
- * looks in a removal vote, by those who can vote in it and nobody else (decisionForReader, decisionForAdmin), are not.
- */
-export const CONSENT_WORDING_VERSION = 6;
 
 export class HealthError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -80,30 +63,76 @@ export function isKnownCommunity(): boolean {
     return getNodeProfile() !== 'global' && confirmationDialOn(db);
 }
 
-/** The consent text, in the app's plain default, from this community's two settings. Its version: wording + settings. */
-export function consentTerms() {
+/**
+ * When the rule starts here, and since when a confirmation counts as made under it: null when the stamp can't be read, and
+ * then nobody is listed on the rule (fails closed). Turning the dial on is the rule arriving for a community that had none,
+ * for whoever an admin confirmed while it was off and was never told, so it starts the same notice.
+ */
+export function ruleStart(): { from: number; since: number } | null {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(BALANCE_RULE_FROM_KEY) as { value: string } | undefined;
+    const stamped = readRuleInstant(row?.value);
+    if (stamped === null) return null;
+    const dial = db.prepare("SELECT MAX(at) AS at FROM known_floor_log WHERE action = 'confirmation' AND new_value = 'on'").get() as { at: string | null };
+    const dialOn = dial.at ? Date.parse(dial.at) : NaN;
+    const from = Number.isFinite(dialOn) ? Math.max(stamped, dialOn + RULE_NOTICE_MS) : stamped;
+    return { from, since: from - RULE_NOTICE_MS };
+}
+
+/**
+ * The two lines the list reads now: each the loosest of its current value and every value it left in the last 14 days
+ * (the known floor's log), so a tightened line waits and a loosened one applies at once. `…From`: when the line as the
+ * owner set it applies, while it waits.
+ */
+export function effectiveLines(now = Date.now()) {
     const { debtLinePct, quietDays } = healthSettings();
-    const text = `In this community, the admins can see your balance if it goes past ${debtLinePct}% of your credit line `
-        + `or if you stay in debit for ${quietDays} days without a sale. That's how a LETS has always worked. `
-        + `Every time an admin opens the list of members past those lines, and every time an admin looks at your balance while `
-        + `removing you, it is logged. In a vote on removing you, everyone who can vote in it sees your balance and any debt, `
-        + `in that vote only, and those looks are not logged. You can take this back at any time in Settings. `
-        + `Whatever you choose, any admin can see some of your trades: a trade that isn't `
-        + `finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which `
-        + `they can't read if it is private), so a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note); a fraud `
-        + `alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with `
-        + `the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of `
-        + `the members you invited have traded with no one but you, if members you invited send you Beans past a limit within `
-        + `a set number of days, or if you are one of those members; one that names you, with how much of the group's trading `
-        + `is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly `
-        + `with each other; and an alert that names you if no Beans have moved in or out of your account for a set number `
-        + `of days. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts `
-        + `that name you is logged the first time each admin opens them, and again at that admin's first look after 24 hours, `
-        + `and the looks in between add no line. The owner and the admins can see that log. The member stats the admins see show how many posts you have up and messages `
-        + `you have sent, and of trades only the whole community's totals, not yours. Every member, admins included, sees your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. That isn't logged, because every member can see it. `
-        + `Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
-        + `and trades included, and its backups, snapshots and standby copies.`;
-    return { known: isKnownCommunity(), debtLinePct, quietDays, version: `${CONSENT_WORDING_VERSION}:${debtLinePct}:${quietDays}`, text };
+    const rows = db.prepare("SELECT action, old_value, at FROM known_floor_log WHERE action IN ('health_debt_line', 'health_quiet_days') AND at > ?")
+        .all(new Date(now - RULE_NOTICE_MS).toISOString()) as Array<{ action: string; old_value: string | null; at: string }>;
+    const line = (action: string, current: number) => {
+        const waiting = rows.filter(r => r.action === action && Number(r.old_value) > current);
+        return {
+            value: Math.max(current, ...waiting.map(r => Number(r.old_value))),
+            from: waiting.length ? new Date(Math.max(...waiting.map(r => Date.parse(r.at))) + RULE_NOTICE_MS).toISOString() : null,
+        };
+    };
+    const pct = line('health_debt_line', debtLinePct);
+    const days = line('health_quiet_days', quietDays);
+    return { debtLinePct: pct.value, quietDays: days.value, debtLineFrom: pct.from, quietDaysFrom: days.from };
+}
+
+/** The rule as the panel and the exceptions state it: when it starts, whether it has, and the lines the list reads now. */
+function ruleNow(now = Date.now()) {
+    const start = ruleStart();
+    return { from: start ? new Date(start.from).toISOString() : null, started: !!start && now >= start.from, ...effectiveLines(now) };
+}
+
+/**
+ * A known community's rule in its own numbers, for the join screen, before joining: numbers and dates only. The sentences
+ * are core's, drawn in the reader's language. The lines are as the owner set them, with when each applies while it waits.
+ */
+export function knownRule(now = Date.now()) {
+    if (!isKnownCommunity()) return { known: false as const };
+    const { debtLinePct, quietDays } = healthSettings();
+    const { from, debtLineFrom, quietDaysFrom } = ruleNow(now);
+    return { known: true as const, knownFloor: knownFloor(db), debtLinePct, quietDays, ruleFrom: from, debtLineFrom, quietDaysFrom };
+}
+
+/**
+ * A member's own standing under the rule: confirmed, in a known community, and since when (the second admin's agreement
+ * where one was needed). `confirmedAt` is a new value on each new confirmation, which is how an app knows to tell them.
+ */
+export function confirmationOf(pubkey: string): { confirmed: boolean; confirmedAt: string | null } {
+    if (!isKnownCommunity()) return { confirmed: false, confirmedAt: null };
+    const row = db.prepare(`SELECT confirmed_at, seconded_at FROM confirmations
+        WHERE member_pubkey = ? AND revoked_at IS NULL AND (needs_second = 0 OR seconded_at IS NOT NULL)`).get(pubkey) as { confirmed_at: string; seconded_at: string | null } | undefined;
+    return { confirmed: !!row, confirmedAt: row ? row.seconded_at ?? row.confirmed_at : null };
+}
+
+/** A member's step-back, reading their balance against the line they hold once the known grant has gone. */
+export function stepBackFromConfirmed(member: string) {
+    return stepBack(member, () => {
+        const b = getBalance(member);
+        return b.balance < b.floor;
+    });
 }
 
 function logChange(actor: string, action: string, oldValue: number, newValue: number): void {
@@ -163,65 +192,71 @@ export function communityTotals(now = new Date()) {
     };
 }
 
-/** What the panel opens with: the totals, the settings, and whether this community has exceptions at all. */
+/** What the panel opens with: the totals, the settings, whether this community has exceptions at all, and the rule's dates. */
 export function healthSummary() {
-    return { totals: communityTotals(), settings: healthSettings(), known: isKnownCommunity(), consent: consentTerms() };
-}
-
-function consentOf(pubkey: string): { consented_at: string; version: string } | undefined {
-    return db.prepare('SELECT consented_at, version FROM known_consents WHERE member_pubkey = ?').get(pubkey) as { consented_at: string; version: string } | undefined;
+    return { totals: communityTotals(), settings: healthSettings(), known: isKnownCommunity(), rule: ruleNow() };
 }
 
 export interface HealthException {
-    memberPubkey: string; entryId: string; balance: number; floor: number; reasons: Array<'past_debt_line' | 'quiet_in_debit'>;
+    memberPubkey: string; entryId: string; balance: number; floor: number; reasons: Array<'past_debt_line' | 'quiet_in_debit' | 'stepped_back_owing'>;
 }
 
 /**
- * The exceptions: only in a known community, only confirmed members who consented. Keys and entry ids, never a name.
- * Each call is an opening, and writes its line first: the read is not answered unless the line is written.
+ * The exceptions: only in a known community, and only members the rule reaches. Keys and entry ids, never a name. Each
+ * call is an opening, and writes its line first: the read is not answered unless the line is written.
  */
 export function openExceptions(actor: string, now = Date.now()) {
     if (!isKnownCommunity()) throw new HealthError(409, 'not_known', 'Only a community that confirms its members (a known community) has exceptions.');
     assertPlainTablesWritable();
     db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action) VALUES (?, ?, 'exceptions_opened')").run(crypto.randomBytes(16).toString('hex'), actor);
-    const { debtLinePct, quietDays } = healthSettings();
-    const rows = db.prepare(`SELECT c.member_pubkey, c.entry_id, c.confirmed_at, k.version FROM confirmations c
-        JOIN known_consents k ON k.member_pubkey = c.member_pubkey
+    const rule = ruleNow(now);
+    const { debtLinePct, quietDays } = rule;
+    const start = ruleStart();
+    // Told: the rule has started, or they were confirmed under it. No readable start, nobody: a member is never listed on
+    // a basis they weren't told about.
+    const told = (confirmedAt: string) => !!start && (now >= start.from || Date.parse(confirmedAt) > start.since);
+    const rows = db.prepare(`SELECT c.member_pubkey, c.entry_id, c.confirmed_at FROM confirmations c
         JOIN members m ON m.public_key = c.member_pubkey AND m.status = 'active'
         WHERE c.revoked_at IS NULL AND (c.needs_second = 0 OR c.seconded_at IS NOT NULL)`).all() as
-        Array<{ member_pubkey: string; entry_id: string; confirmed_at: string; version: string }>;
+        Array<{ member_pubkey: string; entry_id: string; confirmed_at: string }>;
     const lastSale = db.prepare("SELECT MAX(completed_at) AS at FROM marketplace_transactions WHERE seller_pubkey = ? AND status = 'completed'");
+    const quietSince = new Date(now - quietDays * 86_400_000).toISOString();
     const exceptions: HealthException[] = [];
     for (const r of rows) {
-        if (!isConfirmed(db, r.member_pubkey) || isVisitorKey(r.member_pubkey)) continue;
+        if (!told(r.confirmed_at) || !isConfirmed(db, r.member_pubkey) || isVisitorKey(r.member_pubkey)) continue;
         const b = getBalance(r.member_pubkey);
         if (!(b.balance < 0)) continue;
         const floor = Math.abs(b.floor);
-        // A member is seen only within what they agreed to AND what the community says now: the less intrusive of the
-        // two lines. An owner who tightens the lines reaches a member only once they consent to the new text.
-        const [agreedWording, agreedPct, agreedDays] = r.version.split(':').map(Number);
-        // A consent counts only for the wording it was given to: a member who agreed to another text (say, one that let
-        // the admins see less) is in no exception until they agree to today's.
-        if (agreedWording !== CONSENT_WORDING_VERSION) continue;
-        const pct = Math.max(debtLinePct, Number.isInteger(agreedPct) ? agreedPct : 100);
-        const days = Math.max(quietDays, Number.isInteger(agreedDays) ? agreedDays : 3650);
-        const quietSince = new Date(now - days * 86_400_000).toISOString();
         const reasons: HealthException['reasons'] = [];
-        if (-b.balance > (floor * pct) / 100) reasons.push('past_debt_line');
+        if (-b.balance > (floor * debtLinePct) / 100) reasons.push('past_debt_line');
         const saleAt = (lastSale.get(r.member_pubkey) as { at: string | null }).at;
         // Quiet: no sale since the window opened, and confirmed before it opened (a new member has had no chance yet).
         if ((!saleAt || saleAt < quietSince) && r.confirmed_at < quietSince) reasons.push('quiet_in_debit');
-        // Only which line was crossed: never a trade fact (when the last sale was), which the member did not agree to show.
+        // Only which line was crossed: never a trade fact (when the last sale was), which the rule doesn't show.
         if (reasons.length) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor, reasons });
+    }
+    // Who stepped back owing past their ordinary line, until they are back within it. Their step-back, not a later
+    // confirmation that never went live: one an admin got seconded takes them back into the list above.
+    const steppedBack = db.prepare(`SELECT c.id, c.member_pubkey, c.entry_id, c.confirmed_at FROM confirmations c
+        JOIN members m ON m.public_key = c.member_pubkey AND m.status = 'active'
+        WHERE c.stepped_back_owing = 1 AND NOT EXISTS (SELECT 1 FROM confirmations later
+            WHERE later.member_pubkey = c.member_pubkey AND later.confirmed_at > c.confirmed_at AND (later.needs_second = 0 OR later.seconded_at IS NOT NULL))`).all() as
+        Array<{ id: string; member_pubkey: string; entry_id: string; confirmed_at: string }>;
+    for (const r of steppedBack) {
+        if (isVisitorKey(r.member_pubkey)) continue;
+        const b = getBalance(r.member_pubkey);
+        // Back within it, they are off the list for good: a line that falls later is no reason to see them again.
+        if (b.balance >= b.floor) { db.prepare('UPDATE confirmations SET stepped_back_owing = 0 WHERE id = ?').run(r.id); continue; }
+        if (told(r.confirmed_at)) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor: Math.abs(b.floor), reasons: ['stepped_back_owing'] });
     }
     const departed = listDebts().filter(d => d.status === 'open')
         .map(d => ({ id: d.id, entryId: d.entry_id, amount: d.amount, reason: d.reason, removedAt: d.removed_at, repaid: d.repaid, repaying: !!d.repaying_pubkey }));
-    return { settings: { debtLinePct, quietDays }, exceptions, departed };
+    return { settings: { debtLinePct, quietDays }, rule, exceptions, departed };
 }
 
 /**
- * An admin's look at one member's balance outside that member's consent: while removing them (the offboarding preview,
- * and the balance the removal settled). Written before the answer: a look that can't be logged isn't answered.
+ * An admin's look at one member's balance outside the rule's lines: while removing them (the offboarding preview, and
+ * the balance the removal settled). Written before the answer: a look that can't be logged isn't answered.
  */
 export function logBalanceLook(actor: string, subject: string, action: 'offboard_preview' | 'offboard_settled', token: LookToken | null = null): void {
     assertPlainTablesWritable();
@@ -287,54 +322,4 @@ export function readHealthAccessLog(limit = 100, kind: 'balance' | 'trades' = 'b
             subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null,
             tradeIds: tradeIdsOf(r.detail), token: r.token_id ? { id: r.token_id, name: r.token_name ?? '' } : null, at: r.at,
         }));
-}
-
-/** A member's own consent: what the app shows and records. `version` must be the text the app showed. */
-export function recordConsent(pubkey: string, body: { version?: unknown }) {
-    const m = getMember(pubkey);
-    if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(pubkey)) throw new HealthError(403, 'not_member', 'Not an active member of this community.');
-    const terms = consentTerms();
-    if (!terms.known) throw new HealthError(409, 'not_known', 'This community does not confirm its members, so there is nothing to agree to.');
-    if (body.version !== terms.version) throw new HealthError(409, 'stale_text', 'The community changed what admins can see. Read it again.');
-    assertPlainTablesWritable();
-    db.transaction(() => {
-        db.prepare(`INSERT INTO known_consents (member_pubkey, version, consented_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-            ON CONFLICT(member_pubkey) DO UPDATE SET version = excluded.version, consented_at = excluded.consented_at`).run(pubkey, terms.version);
-        logConsent(pubkey, 'agreed', terms.version);
-    })();
-    return myConsent(pubkey);
-}
-
-/**
- * A member withdraws their consent (GDPR Art. 7(3)): at any time, with one signed request, whatever the community's
- * settings. Their row goes, so they are in no exception from the next opening; the consent history keeps that they
- * withdrew. Withdrawing with nothing to withdraw changes nothing.
- */
-export function withdrawConsent(pubkey: string) {
-    assertPlainTablesWritable();
-    db.transaction(() => {
-        const c = consentOf(pubkey);
-        if (!c) return;
-        // With its tombstone: a delta carries a delete only so, and a standby that kept the row would put them back in
-        // the exceptions on a take-over (review r4176631105; test-standby-known-consents).
-        deletePlainRows('known_consents', 'member_pubkey = ?', pubkey);
-        logConsent(pubkey, 'withdrawn', c.version);
-    })();
-    return myConsent(pubkey);
-}
-
-function logConsent(pubkey: string, action: 'agreed' | 'withdrawn', version: string): void {
-    db.prepare('INSERT INTO known_consent_log (id, member_pubkey, action, version) VALUES (?, ?, ?, ?)')
-        .run(crypto.randomBytes(16).toString('hex'), pubkey, action, version);
-}
-
-/** A member's own view: the terms, and whether (and to which version) they consented. */
-export function myConsent(pubkey: string) {
-    const c = consentOf(pubkey);
-    const terms = consentTerms();
-    // When they last withdrew, while they have no consent now: Settings says so, and offers the text again.
-    const withdrawn = c ? undefined : db.prepare("SELECT at FROM known_consent_log WHERE member_pubkey = ? AND action = 'withdrawn' ORDER BY at DESC, rowid DESC LIMIT 1")
-        .get(pubkey) as { at: string } | undefined;
-    return { ...terms, confirmed: isConfirmed(db, pubkey), consentedAt: c?.consented_at ?? null, consentedVersion: c?.version ?? null,
-        withdrawnAt: withdrawn?.at ?? null };
 }

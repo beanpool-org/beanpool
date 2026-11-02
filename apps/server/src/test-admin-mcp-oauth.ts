@@ -263,7 +263,7 @@ async function main(): Promise<void> {
         assert(!!page && page.status === 200 && page.id.length === 64 && page.html.includes('assistant.example')
             && /calling itself “Claude”, at assistant\.example/.test(page.html) && /Everything it reads goes to assistant\.example/.test(page.html),
         'the consent page names the assistant only beside the host its answers go to, and says everything it reads goes there');
-        assert(!!page && /If you are an owner, it can also take a backup; and, only if you tick “May post for me” below, post Offers, Needs and events for you \(as you, or as an enterprise you keep\), at once, with no approval\./.test(page.html)
+        assert(!!page && /If you are an owner, it can also take a backup; and, only if you tick “May post for me” below, post Offers, Needs and events for you \(as you, or as an enterprise you keep\) and polls \(as you\), at once, with no approval\./.test(page.html)
             && /Anything else it can only SUGGEST/.test(page.html) && !/It can take a backup \(owners only\) and SUGGEST actions/.test(page.html)
             && /<input type="checkbox" id="canpost">/.test(page.html) && !/id="canpost" checked/.test(page.html),
             "the consent page says, before anyone approves, that an owner's assistant takes a backup and, ticked \"May post for me\" (off until ticked), posts at once with no approval (MCP-OWNER-POSTS)");

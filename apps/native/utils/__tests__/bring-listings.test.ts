@@ -548,6 +548,14 @@ describe('a Need on a community that wants an Offer first', () => {
             expect(await planBring(offer, identity, fakes(needs, [anOffer({ status: 'cancelled', active: false })]).deps)).toMatchObject({ bring: needs });
         });
 
+        it('a copy of an Offer there opens nothing: the node counts no copy, so the same refusal would come', async () => {
+            await noted();
+            await settleBringOffer({ ...OFFER, accepted: true }, refused, 2_000);
+            const offer = (await stored(tomorrow))!;
+            expect(await planBring(offer, identity, fakes(needs, [anOffer({ shownCopy: true })]).deps)).toBe('waiting');
+            expect(await planBring(offer, identity, fakes(needs, [anOffer({ shownCopy: true }), anOffer()]).deps)).toMatchObject({ bring: needs });
+        });
+
         it('an Offer still to bring can open the way itself: a photo that missed every try, say, so the question comes back', async () => {
             const offer = { ...OFFER, waitsForOffer: true };
             const [need] = needs;

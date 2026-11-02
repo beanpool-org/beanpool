@@ -35,7 +35,7 @@ export function welcomeInstructions(f: WelcomeFacts): string {
         'read the moderation queue (reports), the join requests and what needs the admin now',
     ];
     if (f.canBackup) can.push('take a backup');
-    if (f.canPost) can.push(`post Offers, Needs and events as ${f.callsign} (or as an enterprise they keep), live at once with no approval`);
+    if (f.canPost) can.push(`post Offers, Needs and events as ${f.callsign} (or as an enterprise they keep) and polls as ${f.callsign}, live at once with no approval`);
     if (f.canSuggest) {
         can.push(`SUGGEST actions (${SUGGESTABLE_WORDS})`);
     }
@@ -186,7 +186,7 @@ export function promptText(p: PromptDef, args: Record<string, string>, f: Welcom
 export function agentConnectedWords(name: string, role: 'owner' | 'admin', canBackup: boolean, canSuggest: boolean, canPost = false): string {
     const can = ['read health, backups, totals, reports and join requests'];
     if (canBackup) can.push('take a backup');
-    if (canPost) can.push(`post Offers, Needs and events as that ${role}`);
+    if (canPost) can.push(`post Offers, Needs, events and polls as that ${role}`);
     if (canSuggest) can.push('suggest actions it cannot take');
     const list = can.length === 1 ? can[0] : `${can.slice(0, -1).join(', ')}, and ${can[can.length - 1]}`;
     return `An AI assistant (${name}) was connected by an ${role}: it can ${list}.`;

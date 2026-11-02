@@ -455,7 +455,7 @@ export const TABLES: Record<string, TableEntry> = {
     // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
     names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
     // A confirmation names a key, an entry and the admins, never a name.
-    confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason updated_at'),
+    confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason stepped_back_owing updated_at'),
     // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
     known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
@@ -464,7 +464,6 @@ export const TABLES: Record<string, TableEntry> = {
     // log is, and a server that takes over shows the same lines and carries on the same ids.
     community_settings_log: plain('id actor_pubkey actor_role setting old_value new_value note at updated_at'),
     health_access_log: plain('id actor_pubkey action subject_pubkey detail token_id token_name at updated_at'),
-    known_consents: plain('member_pubkey version consented_at updated_at'),
     known_consent_log: plain('id member_pubkey action version at updated_at'),
     names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at hardship_held updated_at'),
     names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
@@ -741,6 +740,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
     health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
     health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
+    balance_rule_from: { kind: 'community-settings', reason: "when the rule on what the admins can see starts here, written once (config/balance-rule.ts)" },
     startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     directory_promise: { kind: 'community-settings', reason: "the listing promise's two ticked lines and the closing day (engine/directory-promise.ts)" },
     recovery_copies: { kind: 'community-settings', reason: "where members' copies go: BeanPool's key vault, this server, or nowhere (config/recovery-copies.ts)" },

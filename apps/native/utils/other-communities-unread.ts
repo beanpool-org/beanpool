@@ -17,8 +17,8 @@
  * round.
  *
  * **What is asked, and of whom.** Only communities the phone keeps and may send alerts from (push-registrations.ts
- * `communitiesForAlerts`: not one with alerts off, not a guest's look, not an address that isn't plain), one of each however
- * it is spelled (push-pins.ts `sameCommunity`). Being kept isn't belonging, and no mark says which it is, so the first
+ * `communitiesForAlerts`: not one with alerts off, not an address that isn't plain, and not a guest's look except that a
+ * closed round asks the community in use, as sync does), one of each however it is spelled (push-pins.ts `sameCommunity`). Being kept isn't belonging, and no mark says which it is, so the first
  * question is the test, as the membership probe is: it carries no push token, and a community that says the account isn't
  * theirs is left alone for {@link NOT_THEIRS_WAIT_MS}. Each request is signed by the member's key for that community's own
  * host, carries nothing of any other community, and no community is told of another.
@@ -58,7 +58,7 @@ import { communityName } from './community-name';
 import type { BeanPoolIdentity } from './identity';
 import { dropCounts, noteServerUnread, noticeCountsSum } from './notice-counts';
 import { LOCAL_NOTICE_DATA, UNREAD_NOTICE_TYPE } from './push-notice-check';
-import { communityAddress, readKeptCommunities, sameCommunity } from './push-pins';
+import { readKeptCommunities, sameCommunity } from './push-pins';
 import { communitiesForAlerts } from './push-registrations';
 import { SAVED_NODES_STORE_KEY, UNREAD_ROUNDS_STORE_KEY } from './storage-keys';
 import { bounded, postAllNoticesFromSync, pushLandedAt, signedAnswer, SYNC_NOTICES_TIMEOUT_MS, type LocalNotice } from './sync-notices';

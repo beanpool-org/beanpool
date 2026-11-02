@@ -14,6 +14,8 @@
  *      nothing; a phone and a browser on one account post one copy.
  *   4. The screens at 320 px with 1.3x text, light and dark: the tick, the join door, the row in each state. Shots to
  *      GLOBAL_TICK_SHOTS. Fails on sideways scroll, a tap target under 44 px, a policy violation, or a host but this machine.
+ *   5. The door on a copy (slice GD), in the same screens: off, a reader on global reads no name; on, they do, and their first line
+ *      arrives behind the author's one Message requests row at their own community, by Chromium's own CORS; off again, the name goes.
  *
  * Run: pnpm --filter @beanpool/pwa global-tick-check
  */
@@ -429,12 +431,105 @@ async function firstCases(ctx) {
     check((await pairs(page)).length === 0, 'signing out leaves no pair in this browser');
 }
 
+/** Off, on, a request, off: the author's own page at their community and a reader's on global, both real, each in one browser. */
+async function doorOnWeb(ctx, { page, shot, tall, noSideways, post, dark }) {
+    const { browser, global_, local, readers } = ctx;
+    const mode = dark ? 'dark' : 'light';
+    // One reader a theme: a first line is one line, so the second run's chat would rightly have no composer.
+    const reader = readers[mode];
+    const door = page.getByTestId('take-questions-tick');
+    await door.waitFor({ timeout: 15000 });
+    await door.scrollIntoViewIfNeeded();
+    check(!(await door.locator('input').isChecked()), 'the door is off until it is ticked');
+    await tall('take-questions-tick');
+    await noSideways('the door, off');
+    await shot('door-off');
+    const [{ id: copyId }] = await upOf(global_, post.id);
+    check((await row(global_, copyId)).shown_takes_questions === null, 'global holds it shut');
+
+    const reading = await openContext(browser, global_.origin, reader, { dark });
+    const r = reading.page;
+    const readerShot = async (name) => {
+        const file = path.join(SHOTS, `${name}-${mode}.png`);
+        await r.screenshot({ path: file });
+        ctx.shop.push(file);
+    };
+    const openCopy = async () => {
+        await r.goto(`${global_.origin}/app?post=${copyId}`, { waitUntil: 'load' });
+        await r.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
+        await r.getByTestId('listing-copy-report').waitFor({ timeout: 20000 });
+    };
+    await openCopy();
+    check(await r.getByTestId('listing-copy-ask').count() === 0 && !(await r.locator('body').innerText()).includes('River'), 'door off: a reader on global reads no name, and has nothing to write to');
+    await r.getByTestId('listing-copy-report').scrollIntoViewIfNeeded();
+    await readerShot('reader-door-off');
+
+    await door.locator('input').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="take-questions-tick"] input')?.checked === true, undefined, { timeout: 15000 });
+    check((await row(global_, copyId)).shown_takes_questions === 1, 'the tick opens it on global, from another origin');
+    await door.scrollIntoViewIfNeeded();
+    await noSideways('the door, on');
+    await shot('door-on');
+
+    await openCopy();
+    const ask = r.getByTestId('listing-copy-ask');
+    await ask.waitFor({ timeout: 15000 });
+    check((await ask.innerText()).includes('River takes questions about this'), 'door on: a reader on global reads the name');
+    await ask.scrollIntoViewIfNeeded();
+    const over = await r.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(over <= 0, `the reader's page: no sideways scroll (${over})`);
+    const button = await r.getByTestId('listing-copy-ask-button').boundingBox();
+    check(!!button && button.height >= 44, `its button is at least 44 px tall (${button?.height})`);
+    await readerShot('reader-door-on');
+
+    await r.getByTestId('listing-copy-ask-button').click();
+    const words = r.locator('textarea').last();
+    await words.waitFor({ timeout: 20000 });
+    await words.fill('Are the loaves still warm?');
+    await r.getByTitle('Send message').last().click();
+    await r.getByText(/Sent as a request/).waitFor({ timeout: 20000 });
+    await readerShot('reader-request-sent');
+    const waiting = await global_.ask({ op: 'sql', sql: "SELECT COUNT(*) AS c FROM dm_requests WHERE state = 'pending'", all: true });
+    check(waiting[0].c >= 1, `the first line waits as a request on global (${waiting[0].c})`);
+
+    await ctx.fresh();
+    await page.goto(`${local.origin}/app`, { waitUntil: 'load' });
+    await page.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
+    await page.getByRole('button', { name: /Chat/ }).last().click({ timeout: 15000 });
+    await page.getByTestId('message-requests-row').waitFor({ timeout: 15000 });
+    await noSideways('Chat, with the row');
+    await shot('requests-row');
+    await page.getByTestId('message-requests-row').click();
+    const elsewhere = page.getByTestId('message-requests-on-global');
+    await elsewhere.waitFor({ timeout: 15000 });
+    check((await elsewhere.getAttribute('href'))?.startsWith(global_.origin), 'the row inside goes to global, where the line is read');
+    check((await elsewhere.innerText()).includes('on the global community'), 'and says where from');
+    await noSideways('Message requests, one on global');
+    await shot('requests-on-global');
+
+    await ctx.fresh();
+    await page.goto(`${local.origin}/app?post=${post.id}`, { waitUntil: 'load' });
+    await page.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
+    await door.waitFor({ timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector('[data-testid="take-questions-tick"] input')?.checked === true, undefined, { timeout: 15000 });
+    await door.locator('input').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="take-questions-tick"] input')?.checked === false, undefined, { timeout: 15000 });
+    check((await row(global_, copyId)).shown_takes_questions === null, 'Off shuts it on global');
+    await openCopy();
+    check(await r.getByTestId('listing-copy-ask').count() === 0 && !(await r.locator('body').innerText()).includes('River'), 'off again: the reader\'s next read has no name and no door');
+    const answer = await global_.ask({ op: 'sql', sql: "SELECT COUNT(*) AS c FROM dm_requests WHERE state = 'pending'", all: true });
+    check(answer[0].c >= 1, 'the request already sent is still the member\'s to answer');
+    await reading.context.close();
+    await ctx.fresh();
+}
+
 async function screens(ctx, dark) {
     const { browser, local, global_, member, stranger, shop } = ctx;
     const mode = dark ? 'dark' : 'light';
     console.log(`4. the screens, ${mode}`);
     // Every request here comes from one address, and the walk above has spent its minute's allowance.
     const fresh = () => Promise.all([local.ask({ op: 'resetLimits' }), global_.ask({ op: 'resetLimits' })]);
+    ctx.fresh = fresh;
     await fresh();
     const opened = await openContext(browser, local.origin, member, { dark });
     const { page, seen, context } = opened;
@@ -474,6 +569,7 @@ async function screens(ctx, dark) {
         await page.getByTestId('show-on-global-host').scrollIntoViewIfNeeded();
         await noSideways('the listing, shown');
         await shot('row-shown');
+        await doorOnWeb(ctx, { page, shot, tall, noSideways, post, dark });
         await page.getByTestId('show-on-global-act').click();
         await page.getByText('Also show this on the global community').first().waitFor({ timeout: 15000 });
         check((await upOf(global_, post.id)).length === 0, 'Stop showing takes it down');
@@ -548,8 +644,9 @@ async function main() {
         });
         const member = memberIdentity('River');
         const stranger = memberIdentity('Sparrow');
+        const readers = { light: memberIdentity('Sam'), dark: memberIdentity('Tess') };
         const members = [{ publicKey: member.publicKey, callsign: 'River', joinedDaysAgo: 30, avatar: true }];
-        const global_ = await startNode(root, 'global', members);
+        const global_ = await startNode(root, 'global', [...members, ...Object.values(readers).map((r) => ({ publicKey: r.publicKey, callsign: r.callsign, joinedDaysAgo: 30, avatar: true }))]);
         nodes.push(global_);
         // Another host, as it always is: a community's address is compared without its port, so two `localhost`s read as one.
         global_.origin = `https://127.0.0.1:${global_.port}`;
@@ -562,7 +659,7 @@ async function main() {
         browser = await chromium.launch();
         const { context } = await openContext(browser, local.origin, member);
         const page = await harness(context, local.origin);
-        const ctx = { browser, context, page, global_, local, listed, member, stranger, shop: [] };
+        const ctx = { browser, context, page, global_, local, listed, member, stranger, readers, shop: [] };
         if (process.env.GLOBAL_TICK_ONLY !== 'screens') {
             await corsAndRequest(ctx);
             await firstCases(ctx);

@@ -74,17 +74,22 @@ const phoneNotices: PhoneNotices = {
 
 /**
  * The app-icon badge set to the sum over the phone's communities, from what it already knows, while the app is open (utils/
- * other-communities-unread.ts). Nothing on a phone with one community. Never throws.
+ * other-communities-unread.ts): the community in use isn't in that sum, so never while it's closed, when iOS can start it in
+ * the background with the root layout running, and the sync's round sets the badge. Nothing on a phone with one community.
+ * Never throws.
  */
-export function showBadgeSum(): Promise<void> {
-    return showUnreadSum(AsyncStorage, phoneNotices.setBadge);
+export async function showBadgeSum(): Promise<void> {
+    if (AppState.currentState !== 'active') return;
+    await showUnreadSum(AsyncStorage, phoneNotices.setBadge);
 }
 
 /**
  * A round of the phone's other communities, as the app opens or comes back and with the 5-minute sync (app/_layout.tsx): at
- * most six are asked for their unread counts, at most every 5 minutes. Never asks for permission. Never throws.
+ * most six are asked for their unread counts, at most every 5 minutes. Only while the app is open, as {@link showBadgeSum}:
+ * the background sync has its own ({@link postNoticesAfterSync}). Never asks for permission. Never throws.
  */
 export async function askOtherCommunitiesNow(): Promise<void> {
+    if (AppState.currentState !== 'active') return;
     try {
         await roundWhileOpen(AsyncStorage, await loadIdentity(), phoneNotices);
     } catch (e) {

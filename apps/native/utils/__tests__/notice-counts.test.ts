@@ -330,14 +330,14 @@ describe('a community\'s own word beside the push tally: the `server` field and 
         expect(await noticeCountsSum(storage)).toBe(3);
     });
 
-    it('a tap on the app\'s own notice counts nothing: its number is the community\'s own', async () => {
-        await noteServerUnread(storage, BYRON, 2);
+    it('a tap on the app\'s own notice counts nothing: it is no notice of that community\'s', async () => {
+        await noteServerUnread(storage, BYRON, 0);
         const { openNoticeIn } = await import('../push-notice-switch');
         await openNoticeIn(BYRON, null, async () => '/(tabs)/chats', {
             storage, publicKey: kim.publicKey, joinUnderWay: async () => true, switchUnderWay: () => false,
             switchTo: async () => {}, recheck: async () => 'member',
         });
-        expect(await counts()).toEqual({ [BYRON]: 2 });
+        expect(await counts()).toEqual({});
     });
 });
 

@@ -132,7 +132,9 @@ beforeEach(() => {
     }));
 });
 
-afterEach(() => {
+afterEach(async () => {
+    // A test that stopped part-way lets its round reach its deadline: one left waiting would hold up every later round.
+    if (vi.isFakeTimers()) await vi.runOnlyPendingTimersAsync();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -182,6 +184,45 @@ describe('bounded work on an old phone', () => {
         await round({ timeoutMs: 200 });
         expect(unreadAsks()).toHaveLength(6);
         expect(Date.now() - started).toBeLessThan(700);
+    });
+
+    it('the deadline shared with the sync\'s notices ends the round when it ends, well before the round\'s own', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(CASTLEMAINE, 'never');
+        const shared = new AbortController();
+        vi.useFakeTimers({ now: clock });
+        const settled = vi.fn();
+        void round({ signal: shared.signal }).then(settled);
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(settled).not.toHaveBeenCalled();
+        shared.abort();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toHaveBeenCalledWith(0);
+    });
+
+    it('the whole background sync still ends at 8 seconds with every read hanging: the round adds nothing to the ceiling', async () => {
+        keep(HOME, CASTLEMAINE);
+        answers.set(CASTLEMAINE, 'never');
+        // The sync's own reads hang as well.
+        const hanging = vi.mocked(fetch).getMockImplementation()!;
+        let syncReads = 0;
+        vi.mocked(fetch).mockImplementation(async (input, init) => {
+            if (!String(input).startsWith(HOME)) return hanging(input, init);
+            syncReads++;
+            return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+            });
+        });
+        const phone: PhoneNotices = { mayNotify: async () => true, post: async () => {}, setBadge: async () => {} };
+        vi.useFakeTimers({ now: clock });
+        const settled = vi.fn();
+        void noticesAfterSync({ storage: AsyncStorage, account: kim, phone, activeUnread: async () => 0 }).then(settled);
+        await vi.advanceTimersByTimeAsync(7999);
+        expect(askedOf(CASTLEMAINE)).toHaveLength(1);
+        expect(syncReads).toBeGreaterThan(0);
+        expect(settled).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toHaveBeenCalledWith(0);
     });
 
     it('a slow community doesn\'t hold back a quick one\'s notice', async () => {
@@ -484,8 +525,10 @@ describe('what is asked, and of whom', () => {
     it('an account that left the phone while they answered leaves nothing behind: no notice, no number, no list of who said no', async () => {
         keep(HOME, CASTLEMAINE, BYRON);
         const answering = vi.fn(async (input: RequestInfo | URL) => {
+            // Sign Out's wipe (identity.ts wipeIdentityScopedStorage), the rounds' own note with the rest.
             mem.async.delete(ANCHOR);
             mem.async.delete(SAVED_NODES_STORE_KEY);
+            mem.async.delete(UNREAD_ROUNDS_STORE_KEY);
             return String(input).startsWith(CASTLEMAINE)
                 ? new Response(JSON.stringify({ unread: 5, requests: 0 }), { status: 200 })
                 : new Response(JSON.stringify({ code: 'not_a_member' }), { status: 403 });
@@ -494,7 +537,8 @@ describe('what is asked, and of whom', () => {
         await round();
         expect(answering).toHaveBeenCalledTimes(2);
         expect(posted).toEqual([]);
-        expect(mem.async.get(UNREAD_ROUNDS_STORE_KEY)).not.toContain('notTheirs":{"');
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({});
+        expect(mem.async.has(UNREAD_ROUNDS_STORE_KEY)).toBe(false);
     });
 
     it('Sign Out takes what the rounds kept: it names where the account belongs', async () => {
@@ -680,6 +724,13 @@ describe('the app-icon badge is the sum', () => {
         expect(service).toContain('const pushBadge = show && !await keepsOtherCommunities(AsyncStorage);');
         expect(service).toContain('shouldSetBadge: pushBadge');
         expect(service).not.toContain('shouldSetBadge: show');
+    });
+
+    it('only while the app is really open: iOS can start it in the background, and the root layout runs then too', () => {
+        const service = fs.readFileSync(path.resolve(__dirname, '../../services/push-notifications.ts'), 'utf8');
+        const body = (name: string) => service.slice(service.indexOf(`export ${name}`), service.indexOf('\n}\n', service.indexOf(`export ${name}`)));
+        expect(body('async function showBadgeSum')).toContain("AppState.currentState !== 'active'");
+        expect(body('async function askOtherCommunitiesNow')).toContain("AppState.currentState !== 'active'");
     });
 });
 

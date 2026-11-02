@@ -44,7 +44,7 @@ import { communityName } from './community-name';
 import type { BeanPoolIdentity } from './identity';
 import { dropCounts, noteServerUnread, noticeCountsSum } from './notice-counts';
 import { LOCAL_NOTICE_DATA, UNREAD_NOTICE_TYPE } from './push-notice-check';
-import { readKeptCommunities } from './push-pins';
+import { communityAddress, readKeptCommunities } from './push-pins';
 import { communitiesForAlerts } from './push-registrations';
 import { SAVED_NODES_STORE_KEY, UNREAD_ROUNDS_STORE_KEY } from './storage-keys';
 import { bounded, postAllNoticesFromSync, pushLandedAt, signedAnswer, SYNC_NOTICES_TIMEOUT_MS, type LocalNotice } from './sync-notices';
@@ -134,11 +134,9 @@ function savedRows(raw: string | null): { url?: unknown; alias?: unknown; reques
     }
 }
 
-const bare = (url: unknown) => (typeof url === 'string' ? url.trim().replace(/\/+$/, '') : null);
-
 /** The name the phone saved for `community`, on one line and cut short, or its host. A notice carries no other. */
 function savedName(saved: ReturnType<typeof savedRows>, community: string): string {
-    const row = saved.find((n) => bare(n.url) === community);
+    const row = saved.find((n) => communityAddress(n.url) === community);
     const name = communityName({ url: community, alias: typeof row?.alias === 'string' ? row.alias : null }).replace(/\s+/g, ' ');
     return name.length > NAME_MAX ? `${name.slice(0, NAME_MAX - 1)}…` : name;
 }
@@ -202,7 +200,7 @@ async function round(deps: RoundDeps): Promise<number> {
 
     const saved = savedRows(await storage.getItem(SAVED_NODES_STORE_KEY));
     const oldSigning = (c: string) => {
-        const said = saved.find((n) => bare(n.url) === c)?.requestSigning;
+        const said = saved.find((n) => communityAddress(n.url) === c)?.requestSigning;
         return typeof said === 'number' && said < REQUEST_SIGNING_VERSION;
     };
     const forAlerts = await communitiesForAlerts(storage);
@@ -276,9 +274,9 @@ export async function roundWhileOpen(storage: Storage, account: Account | null, 
 }
 
 /**
- * All the background sync posts: the sync's notices and the round, under one deadline. With no leave to notify, the round
- * alone: its numbers and the badge are still worth having, and it posts nothing. Returns how many were posted. Throws only
- * what `phone.mayNotify` throws.
+ * All the background sync posts: the sync's notices and the round, under one deadline. Where the phone doesn't let the app
+ * notify, the round alone: its numbers and the badge are still worth having, and it posts nothing. Returns how many were
+ * posted. Throws only what `phone.mayNotify` throws.
  */
 export async function noticesAfterSync(deps: {
     storage: Storage;

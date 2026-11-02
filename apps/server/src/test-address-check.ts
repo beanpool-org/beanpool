@@ -413,12 +413,6 @@ async function main(): Promise<void> {
             const blocked = (await P.send('reaches', {}))['gone.beanpool.org'];
             assert(blocked?.step === 'stopped' && blocked?.nextStep === STOPPED, `blocked: stopped (${blocked?.step})`);
             assert((await stoppedFlag()) === true, 'and the report says so');
-            // A former name never reads `stopped` (nobody is sent after it), and the record says so all the same: Settings must
-            // not offer to move the community to it. The row stays a former one.
-            await P.send('registrarNames', { set: entry('paused', 'admin', 'former') });
-            const former = (await P.send('reaches', {}))['gone.beanpool.org'];
-            assert(former?.step === 'no-longer-ours', `a former name the project paused still reads as let go (${former?.step})`);
-            assert((await stoppedFlag()) === true, 'and the report still says it is stopped, whatever the step');
             // An old node: the name stored as its address, not yet on the record, which stamps such a name as made now.
             await P.send('registrarNames', { set: [], publicAddress: { name: 'gone', hostname: 'gone.beanpool.org', status: 'live' } });
             const stored = (await P.send('reaches', {}))['gone.beanpool.org'];
@@ -598,6 +592,23 @@ async function main(): Promise<void> {
             assert(at('stillhere.beanpool.org')?.reach?.step === 'fine', `this server's key still answering at a former name is still said (${at('stillhere.beanpool.org')?.reach?.step})`);
             assert(at('otherkey.beanpool.org')?.reach?.step === 'another-server' && at('gone.beanpool.org')?.reach?.step === 'no-dns-beanpool',
                 `a name in use, with the same answers, keeps its next step (${at('otherkey.beanpool.org')?.reach?.step}, ${at('gone.beanpool.org')?.reach?.step})`);
+
+            // The project's stop comes from the record, whatever the step: a former name never reads `stopped`, as nobody is sent
+            // after it, and neither does a name something still answers at. Settings must not offer to move the community to one.
+            await P.send('registrarNames', {
+                set: [
+                    entry('letgo.beanpool.org', 'former', 'paused', { reason: 'admin' }),
+                    entry('otherkey.beanpool.org', 'former', 'blocked'),
+                    entry('takenover.beanpool.org', 'former', 'paused', { reason: 'impostor' }),
+                ],
+            });
+            const stoppedList = (await call(setup.https, 'GET', '/api/local/admin/app-addresses', pAdmin)).body?.addresses ?? [];
+            const stoppedAt = (host: string) => stoppedList.find((a: any) => a.address === host);
+            assert(stoppedAt('letgo.beanpool.org')?.reach?.step === 'no-longer-ours' && stoppedAt('letgo.beanpool.org')?.stopped === true,
+                `a former name the project paused reads as let go, and the report says it is stopped (${JSON.stringify(stoppedAt('letgo.beanpool.org') ?? null)})`);
+            assert(stoppedAt('otherkey.beanpool.org')?.reach?.step === 'another-server' && stoppedAt('otherkey.beanpool.org')?.stopped === true,
+                `a blocked name something still answers at: the same (${JSON.stringify(stoppedAt('otherkey.beanpool.org') ?? null)})`);
+            assert(stoppedAt('takenover.beanpool.org')?.stopped === undefined, 'a pause that is not the project\'s is not called stopped');
             await P.send('registrarNames', { set: [] });
         });
     } finally {

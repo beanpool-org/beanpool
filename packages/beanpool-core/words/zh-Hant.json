@@ -825,9 +825,9 @@
   },
   "Paused by the address service: something else answered at this name. Your server asks for it back by itself.": "已被地址服務暫停：此名稱處有其他內容回應。你的伺服器會自動要回它。",
   "This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "此社群不再公布 {address}，也不會放棄任何名稱。只要其金鑰持有 {address}，使用它的成員應用程式仍被接受。如果金鑰不持有它，此後這些應用程式將被拒絕。",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one.": "它現在是此社群的地址。此後，新成員會被引導到此社群的其他地址（如果有）。",
   "{address} is no longer advertised. No name was given up.": "{address} 不再公布。未放棄任何名稱。",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} 還不是主要地址：地址服務的回答是 {status}。此伺服器已轉到它並繼續請求，因此下方面板現在顯示它。",
-  "Members still reach this community at {current}.": "成員仍可透過 {current} 存取此社群。",
-  "No public address currently assigned. An owner of this community can add one.": "目前未指派公開地址。此社群的擁有者可以新增一個。"
+  "No public address currently assigned. An owner of this community can add one.": "目前未指派公開地址。此社群的擁有者可以新增一個。",
+  "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} 還不是主要地址：地址服務的回答是 {status}。此伺服器已轉到它並繼續請求，因此下方面板現在顯示它。成員仍可透過 {current} 存取此社群。",
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "它現在是此社群的地址。此後，新成員會被引導到此社群的其他地址（如果有）。此社群不再公布 {address}，也不會放棄任何名稱。只要其金鑰持有 {address}，使用它的成員應用程式仍被接受。如果金鑰不持有它，此後這些應用程式將被拒絕。"
 }

@@ -825,9 +825,9 @@
   },
   "Paused by the address service: something else answered at this name. Your server asks for it back by itself.": "アドレスサービスにより一時停止されました。この名前で別のものが応答しました。サーバーが自動で取り戻しを要求します。",
   "This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "このコミュニティは {address} の案内をやめますが、名前は手放しません。鍵が {address} を保持している間は、これを使うメンバーのアプリは引き続き受け入れられます。鍵が保持していない場合、この後は拒否されます。",
-  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one.": "これは現在このコミュニティのアドレスです。この後、新しいメンバーは別のアドレスがあればそちらに案内されます。",
   "{address} is no longer advertised. No name was given up.": "{address} は案内されなくなりました。名前は手放していません。",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.": "{address} はまだメインアドレスではありません。アドレスサービスの回答は {status} です。このサーバーはそちらに移り、要求を続けています。そのため下のパネルにはそのアドレスが表示されます。",
-  "Members still reach this community at {current}.": "メンバーは引き続き {current} でこのコミュニティにアクセスできます。",
-  "No public address currently assigned. An owner of this community can add one.": "公開アドレスはまだ割り当てられていません。このコミュニティのオーナーが追加できます。"
+  "No public address currently assigned. An owner of this community can add one.": "公開アドレスはまだ割り当てられていません。このコミュニティのオーナーが追加できます。",
+  "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} はまだメインアドレスではありません。アドレスサービスの回答は {status} です。このサーバーはそちらに移り、要求を続けています。そのため下のパネルにはそのアドレスが表示されます。メンバーは引き続き {current} でこのコミュニティにアクセスできます。",
+  "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "これは現在このコミュニティのアドレスです。この後、新しいメンバーは別のアドレスがあればそちらに案内されます。このコミュニティは {address} の案内をやめますが、名前は手放しません。鍵が {address} を保持している間は、これを使うメンバーのアプリは引き続き受け入れられます。鍵が保持していない場合、この後は拒否されます。"
 }

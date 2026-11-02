@@ -310,11 +310,11 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                 if (body?.status !== 'live') {
                     proof.close();
                     const current = report?.primaryAddress;
-                    const notYet = t(W.notMainYet, { address: a.address, status: String(body?.status ?? 'nothing') });
+                    const said = { address: a.address, status: String(body?.status ?? 'nothing') };
                     setActionMessage({
                         text: body?.status === 'pending'
                             ? t('Requested {address}, awaiting approval by the BeanPool project.', { address: a.address })
-                            : current ? `${notYet} ${t(W.membersStillAt, { current })}` : notYet,
+                            : current ? t(W.notMainYetMembersAt, { ...said, current }) : t(W.notMainYet, said),
                         type: 'warning',
                     });
                     await afterChange();
@@ -369,8 +369,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
         const main = a.address === report?.primaryAddress;
         const title = t('Remove {address}?', { address: a.address });
         if (isBeanPoolName(a.address)) {
-            const body = t(W.removeNameQuestion, { address: a.address });
-            return { title, body: main ? `${t(W.removeNameMain)} ${body}` : body };
+            return { title, body: main ? t(W.removeMainNameQuestion, { address: a.address }) : t(W.removeNameQuestion, { address: a.address }) };
         }
         return {
             title,

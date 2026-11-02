@@ -127,11 +127,11 @@ export const ADDRESS_SCREEN_WORDS = {
     reachNoLonger: word("No longer this community's address."),
     /** Remove on a BeanPool name: it only leaves what this community advertises. Release is what gives a name up. */
     removeNameQuestion: word("This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this."),
-    removeNameMain: word("It is this community's address now. After this, new members are sent to another of its addresses, if it has one."),
+    removeMainNameQuestion: word("It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this."),
     removedName: word('{address} is no longer advertised. No name was given up.'),
     /** Make main answered with anything but live: a claim stores the answer (routes/public-address.ts), so this server has moved. */
     notMainYet: word('{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it.'),
-    membersStillAt: word('Members still reach this community at {current}.'),
+    notMainYetMembersAt: word('{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.'),
     /** What an admin reads where an owner is told to press Add an address, which is an owner's. */
     noAddressOwnerAdds: word('No public address currently assigned. An owner of this community can add one.'),
 } as const;

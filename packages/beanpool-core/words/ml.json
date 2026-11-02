@@ -890,5 +890,15 @@
   "The wait for a first trade counts only people who listed before they traded.": "ആദ്യ ഇടപാടിനുള്ള കാത്തിരിപ്പ് ഇടപാടിന് മുമ്പ് ലിസ്റ്റ് ചെയ്തവരെ മാത്രമേ കണക്കാക്കൂ.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "ഒരു സംഖ്യയ്ക്ക് പിന്നിൽ {n} പേരിൽ കുറവാണെങ്കിൽ, അല്ലെങ്കിൽ രണ്ട് കോളങ്ങൾ തമ്മിലുള്ള വ്യത്യാസം {n} പേരിൽ കുറവാണെങ്കിൽ, അത് മറച്ചുവെക്കും.",
   "First trades go up in steps of {n}, so the number never points at one person.": "ആദ്യ ഇടപാടുകൾ {n} വീതം ഉയരുന്നു, അതിനാൽ എണ്ണം ഒരിക്കലും ഒരാളെ ചൂണ്ടിക്കാണിക്കില്ല.",
-  "{n} at this spot": "ഈ സ്ഥലത്ത് {n}"
+  "{n} at this spot": "ഈ സ്ഥലത്ത് {n}",
+  "Calendar": "കലണ്ടർ",
+  "Nothing on {date}": "{date}-ൽ പരിപാടികളൊന്നുമില്ല",
+  "Nothing on in {month}.": "{month}-ൽ പരിപാടികളൊന്നുമില്ല.",
+  "Next: {date} ›": "അടുത്തത്: {date} ›",
+  "No events coming up yet.": "ഇതുവരെ വരാനിരിക്കുന്ന ഇവന്റുകളൊന്നുമില്ല.",
+  "Start one ›": "ഒന്ന് ആരംഭിക്കുക ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} ഇവന്റ്",
+    "other": "{date}: {n} ഇവന്റുകൾ"
+  }
 }

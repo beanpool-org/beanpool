@@ -890,5 +890,15 @@
   "The wait for a first trade counts only people who listed before they traded.": "انتظار برای نخستین معامله فقط کسانی را می‌شمارد که پیش از معامله آگهی گذاشتند.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "یک عدد نمایش داده نمی‌شود اگر کمتر از {n} نفر پشت آن باشند یا اختلاف دو ستون کمتر از {n} نفر باشد.",
   "First trades go up in steps of {n}, so the number never points at one person.": "نخستین معامله‌ها با گام‌های {n}تایی بالا می‌روند تا عدد هرگز به یک نفر اشاره نکند.",
-  "{n} at this spot": "{n} مورد در این نقطه"
+  "{n} at this spot": "{n} مورد در این نقطه",
+  "Calendar": "تقویم",
+  "Nothing on {date}": "چیزی در {date} نیست",
+  "Nothing on in {month}.": "در {month} برنامه‌ای نیست.",
+  "Next: {date} ›": "بعدی: {date} ›",
+  "No events coming up yet.": "هنوز رویدادی در پیش نیست.",
+  "Start one ›": "شروع کنید ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} رویداد",
+    "other": "{date}: {n} رویداد"
+  }
 }

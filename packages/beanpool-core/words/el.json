@@ -890,5 +890,15 @@
   "The wait for a first trade counts only people who listed before they traded.": "Η αναμονή για την πρώτη συναλλαγή μετρά μόνο όσους δημοσίευσαν καταχώριση πριν από τη συναλλαγή τους.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Ένας αριθμός δεν εμφανίζεται όταν πίσω του βρίσκονται λιγότερα από {n} άτομα ή όταν οι δύο στήλες διαφέρουν κατά λιγότερα από {n} άτομα.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Οι πρώτες συναλλαγές αυξάνονται ανά {n}, ώστε ο αριθμός να μη δείχνει ποτέ ένα άτομο.",
-  "{n} at this spot": "{n} σε αυτό το σημείο"
+  "{n} at this spot": "{n} σε αυτό το σημείο",
+  "Calendar": "Ημερολόγιο",
+  "Nothing on {date}": "Τίποτα στις {date}",
+  "Nothing on in {month}.": "Τίποτα τον μήνα {month}.",
+  "Next: {date} ›": "Επόμενο: {date} ›",
+  "No events coming up yet.": "Δεν υπάρχουν προσεχείς εκδηλώσεις ακόμα.",
+  "Start one ›": "Ξεκινήστε μία ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} εκδήλωση",
+    "other": "{date}: {n} εκδηλώσεις"
+  }
 }

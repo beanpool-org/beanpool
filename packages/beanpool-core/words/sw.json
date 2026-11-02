@@ -890,5 +890,15 @@
   "The wait for a first trade counts only people who listed before they traded.": "Kusubiri biashara ya kwanza kunahesabu tu watu walioweka tangazo kabla ya kufanya biashara.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Nambari huzuiwa ikiwa watu walio nyuma yake ni chini ya {n}, au ikiwa tofauti kati ya safu mbili ni chini ya watu {n}.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Biashara za kwanza hupanda kwa hatua za {n}, ili nambari isimwonyeshe mtu mmoja kamwe.",
-  "{n} at this spot": "{n} mahali hapa"
+  "{n} at this spot": "{n} mahali hapa",
+  "Calendar": "Kalenda",
+  "Nothing on {date}": "Hakuna chochote tarehe {date}",
+  "Nothing on in {month}.": "Hakuna chochote mwezi wa {month}.",
+  "Next: {date} ›": "Inayofuata: {date} ›",
+  "No events coming up yet.": "Bado hakuna matukio yajayo.",
+  "Start one ›": "Anzisha moja ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: tukio {n}",
+    "other": "{date}: matukio {n}"
+  }
 }

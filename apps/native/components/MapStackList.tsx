@@ -12,10 +12,11 @@ const PHOTO = 56;
  * third of the map, every pin a compact row, whether 3 or 100, so the bubble stays in view above it. It scrolls on a FlatList,
  * so 100 rows mount a screenful at a time. A row opens that post; ✕ or a tap on the map closes the panel.
  */
-export function MapStackList({ posts, onOpen, onClose }: {
+export function MapStackList({ posts, onOpen, onClose, heading: headingProp }: {
     posts: readonly any[];
     onOpen: (id: string) => void;
     onClose: () => void;
+    heading?: string;
 }) {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         panel: {
@@ -45,7 +46,7 @@ export function MapStackList({ posts, onOpen, onClose }: {
     }));
 
     const rows = useMemo(() => posts.map(stackRow), [posts]);
-    const heading = stackHeading(rows.length);
+    const heading = headingProp ?? stackHeading(rows.length);
 
     // Opening does not move a screen reader's focus, so the count is said aloud as the panel comes up.
     useEffect(() => { AccessibilityInfo.announceForAccessibility?.(heading); }, []);

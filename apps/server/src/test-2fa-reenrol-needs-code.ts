@@ -30,7 +30,7 @@ import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
-import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt, tryAdmit, sourceClosedUntil, sourceBrakeState } from './password-brake.js';
+import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt, sourceClosedUntil } from './password-brake.js';
 import { limiterKeyForIp } from './client-ip.js';
 
 let run = 0, passed = 0;
@@ -245,7 +245,14 @@ async function main() {
             const waits: number[] = [];
             const took401: number[] = [];
             const started = Date.now();
-            let lastBrakedAt = 0;
+            let lastClosedUntil = 0;
+            const waitOutClosure = async () => {
+                const remaining = sourceClosedUntil(key) - Date.now();
+                if (remaining > 0) {
+                    assert(remaining <= 10_000, `${label}: sourceClosedUntil wait exceeds safety ceiling (${remaining} ms)`);
+                    await sleep(remaining + 20);
+                }
+            };
             while (waits.length < 2 && statuses.length < 20) {
                 const t0 = Date.now();
                 const r = await send();
@@ -254,20 +261,19 @@ async function main() {
                 if (r.status === 429) {
                     if (!/from your network/.test(r.body.error || '')) break;
                     waits.push(r.retryAfter);
-                    while (sourceClosedUntil(key) >= Date.now()) await sleep(10);
-                    await sleep(10);
+                    await waitOutClosure();
                 } else if (r.status === 401) {
-                    const s = sourceBrakeState(key);
-                    if (s && s.closedUntil > s.lastFailureAt && s.lastFailureAt > lastBrakedAt) {
-                        lastBrakedAt = s.lastFailureAt;
-                        const admission = tryAdmit(key, s.lastFailureAt);
-                        const retryAfter = admission !== 'wait' && !admission.admitted
-                            ? admission.retryAfter
-                            : Math.max(1, Math.ceil((s.closedUntil - s.lastFailureAt) / 1000));
-                        statuses.push(429);
-                        waits.push(retryAfter);
-                        while (sourceClosedUntil(key) >= Date.now()) await sleep(10);
-                        await sleep(10);
+                    const closedUntil = sourceClosedUntil(key);
+                    // If this failure closed the brake and the closure is still active, verify the server returns 429:
+                    if (closedUntil > Date.now() && closedUntil > lastClosedUntil) {
+                        lastClosedUntil = closedUntil;
+                        const probe = await send();
+                        statuses.push(probe.status);
+                        if (probe.status === 429) {
+                            if (!/from your network/.test(probe.body.error || '')) break;
+                            waits.push(probe.retryAfter);
+                            await waitOutClosure();
+                        }
                     }
                 }
             }

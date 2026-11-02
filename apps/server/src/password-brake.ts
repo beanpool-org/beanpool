@@ -454,8 +454,3 @@ export function sourceClosedUntil(key: string): number {
     return sources.get(key)?.closedUntil ?? 0;
 }
 
-/** Tests only: a source's failure count, closedUntil, and lastFailureAt. */
-export function sourceBrakeState(key: string): { failures: number; closedUntil: number; lastFailureAt: number } | undefined {
-    const s = sources.get(key);
-    return s ? { failures: s.failures, closedUntil: s.closedUntil, lastFailureAt: s.lastFailureAt } : undefined;
-}

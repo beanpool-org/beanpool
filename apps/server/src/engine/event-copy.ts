@@ -158,8 +158,8 @@ export function readOfCopy(post: MarketplacePost, reader: string | null | undefi
 
 /**
  * The tick. Null for anything but the signer's own copy, whatever it is and whether it exists: this goes by the signer alone, so
- * a key in a request tests nothing. Off is never refused, a mute included: it is the member closing a door. Moves the copy's
- * stamp and no other row's, so the next read of every reader, a delta's too, has it.
+ * a key in a request tests nothing. Off is never refused, a mute included: it is the member closing a door. The table's touch
+ * trigger moves this row's stamp and no other's, so the next read of every reader, a delta's too, has it.
  */
 export function setCopyQuestions(broadcast: (event: any) => void, id: string, signer: string, on: boolean): boolean | null {
     const row = db.prepare('SELECT type, shown_takes_questions FROM posts WHERE id = ? AND author_pubkey = ? AND shown_from_host IS NOT NULL').get(id, signer) as { type: string; shown_takes_questions: number | null } | undefined;
@@ -170,8 +170,8 @@ export function setCopyQuestions(broadcast: (event: any) => void, id: string, si
         if (!getProfileSwitches().dmRequests) throw Object.assign(new Error(QUESTIONS_NEED_REQUESTS), { status: 409 });
     }
     if ((row.shown_takes_questions === 1) === on) return on;
-    db.prepare('UPDATE posts SET shown_takes_questions = ?, updated_at = ? WHERE id = ?').run(on ? 1 : null, new Date().toISOString(), id);
-    bumpPostsVersion();
+    db.prepare('UPDATE posts SET shown_takes_questions = ? WHERE id = ?').run(on ? 1 : null, id);
+    // The doorbell moves the tags on every read of the posts (state-engine.ts broadcast), as a write's must.
     const post = getPosts(db, { id, viewerPubkey: signer, includeVoters: true })[0];
     if (post) broadcast({ type: 'post_updated', post: publicBroadcastPost(post) });
     return on;

@@ -87,7 +87,7 @@ async function main() {
     const { OWNER_READ_TOOLS } = await import('./agent/owner-reads.js');
     const { setMemberArea } = await import('./engine/member-area.js');
     const { closeCopyDoors } = await import('./engine/event-copy.js');
-    const { setMemberPhoto } = await import('@beanpool/engine');
+    const { guestPost, setMemberPhoto } = await import('@beanpool/engine');
     const { moveMemberKeyRows } = await import('./engine/key-move.js');
     const { scrubPostsOf } = await import('./engine/post-scrub.js');
     const { applyShapeChanges } = await import('./config/community-shape-write.js');
@@ -246,12 +246,25 @@ async function main() {
     const visitorRead = await byId(plainCopy, null);
     const memberRead = await byId(plainCopy, sam);
     assert(memberRead?.authorPublicKey === robin.pubKeyHex && memberRead?.authorCallsign === 'RobinSeller' && memberRead?.takesQuestions === true, 'a member reads the name and key to write to');
+    const { readOfCopy } = await import('./engine/event-copy.js');
+    const raw = { ...stored(plainCopy) };
+    const engineRow = (over: Record<string, unknown> = {}) => ({ id: plainCopy, type: 'offer', authorPublicKey: robin.pubKeyHex, authorCallsign: 'RobinSeller', status: 'active', active: true, shownFromHost: raw.shown_from_host, takesQuestions: true, ...over }) as any;
+    assert(readOfCopy(engineRow(), sam.pubKeyHex).authorPublicKey === robin.pubKeyHex, 'the read by hand, the control: a member gets the name');
+    assert(readOfCopy(engineRow(), stranger.pubKeyHex).authorPublicKey === 'hidden', 'a signed stranger reaching this read by any route gets none: the visitors\' view is not all that holds it');
+    assert(readOfCopy(engineRow(), null).authorPublicKey === 'hidden' && readOfCopy(engineRow(), undefined).authorPublicKey === 'hidden', 'nor does a read for nobody in particular');
+    assert(readOfCopy(engineRow({ status: 'paused' }), sam.pubKeyHex).authorPublicKey === 'hidden', 'off the board there is nothing to ask about');
+    assert(readOfCopy(engineRow({ active: false }), sam.pubKeyHex).authorPublicKey === 'hidden', 'nor taken down');
+    assert(readOfCopy(engineRow({ hiddenByReportsAt: new Date().toISOString() }), sam.pubKeyHex).authorPublicKey === 'hidden', 'a moderator\'s read of a hidden copy names nobody here either: the queue has the author, from a report');
+    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(sam.pubKeyHex);
+    assert(readOfCopy(engineRow(), sam.pubKeyHex).authorPublicKey === 'hidden', 'a suspended member reads nothing as a member, this included');
+    db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(sam.pubKeyHex);
     const added = Object.keys(memberRead ?? {}).filter((k) => !(k in (visitorRead ?? {})));
     assert(added.join() === 'takesQuestions', `field by field, a member's read is the visitor's and one more field (${added})`);
     const changed = Object.keys(visitorRead ?? {}).filter((k) => JSON.stringify(visitorRead[k]) !== JSON.stringify(memberRead?.[k]));
     assert(changed.sort().join() === 'authorCallsign,authorPublicKey', `and only the name and key differ (${changed})`);
     assert(memberRead?.authorAvatarUrl === null && memberRead?.lat === ROUNDED.lat && !('hiddenByReportsAt' in memberRead) && !('createdVia' in memberRead), 'no face, no place, nothing of moderation');
     assert(!('takesQuestions' in visitorRead) && visitorRead?.authorPublicKey === 'hidden' && visitorRead?.authorCallsign === '', 'a visitor reads what they read before: no name, no sign of a door');
+    assert(!('takesQuestions' in guestPost(engineRow())), 'nor does the visitors\' shape itself carry the sign, for a read that reaches it by another way (peek)');
     const own = await byId(plainCopy, robin);
     assert(own?.takesQuestions === true && own?.authorPublicKey === robin.pubKeyHex, 'its author reads the tick back');
     const untouchedRead = await byId(untouched, sam);
@@ -347,7 +360,9 @@ async function main() {
 
     // ── 8. Off ──
     console.log('\n── 8. Off ──');
-    const beforeOff = await call('GET', `/api/marketplace/posts?id=${plainCopy}`, sam);
+    const SYNC = '/api/marketplace/posts?sync=true&types=offer,need';
+    const beforeOff = await call('GET', SYNC, sam);
+    assert(!!beforeOff.etag && (await call('GET', SYNC, sam, undefined, { 'If-None-Match': beforeOff.etag })).status === 304, 'setup, the control: the same tag on the same read is a 304');
     const offStamp = stored(plainCopy)?.updated_at;
     const othersBefore = (db.prepare('SELECT id, updated_at FROM posts WHERE author_pubkey = ? AND id != ? ORDER BY id').all(robin.pubKeyHex, plainCopy) as any[]).map((r) => `${r.id}:${r.updated_at}`).join();
     const deltaFrom = new Date(Date.now() - 1).toISOString();
@@ -358,7 +373,7 @@ async function main() {
     assert((db.prepare('SELECT id, updated_at FROM posts WHERE author_pubkey = ? AND id != ? ORDER BY id').all(robin.pubKeyHex, plainCopy) as any[]).map((r) => `${r.id}:${r.updated_at}`).join() === othersBefore, 'and no other row of theirs: a stamp in step would tie them');
     await sweep(plainCopy, 'a member, after Off', sam, false);
     assert((await byId(plainCopy, sam))?.authorPublicKey === 'hidden', 'a read by id names nobody at once');
-    const validated = await call('GET', `/api/marketplace/posts?sync=true&types=offer,need`, sam, undefined, { 'If-None-Match': beforeOff.etag ?? '' });
+    const validated = await call('GET', SYNC, sam, undefined, { 'If-None-Match': beforeOff.etag ?? '' });
     assert(validated.status === 200 && !namesRobin(JSON.stringify(copyRow(validated.body, plainCopy))), `a client holding the old tag isn't told 304 (${validated.status})`);
     const offDelta = await call('GET', `/api/marketplace/posts?sync=true&types=offer,need&updatedAfter=${encodeURIComponent(deltaFrom)}`, sam);
     const offRow = copyRow(offDelta.body, plainCopy);
@@ -411,8 +426,10 @@ async function main() {
     const noDoorBefore = await postCopy(carol, 'Door off before requests went off');
     const before = stored(noDoorBefore)?.updated_at;
     await new Promise((r) => setTimeout(r, 5));
+    const tagBefore = (await call('GET', SYNC, sam)).etag;
     applyShapeChanges({ actor: carol.pubKeyHex, actorRole: 'owner' }, { changes: { dmRequests: false } });
     assert(stored(open)?.shown_takes_questions === null, 'Settings turns requests off: nothing would hold a first line, so the doors close with it');
+    assert((await call('GET', SYNC, sam, undefined, { 'If-None-Match': tagBefore ?? '' })).status === 200, 'and no client is told 304 for a list that named them');
     assert(closeCopyDoors() === 0, 'and there is none left to close');
     assert(stored(noDoorBefore)?.updated_at === before, 'a shut copy isn\'t touched');
     assert((await tick(carol, noDoorBefore, true)).status === 409 && stored(noDoorBefore)?.shown_takes_questions === null, 'and none opens');

@@ -773,8 +773,8 @@ export default function NamesListScreen() {
                     <>
                         <Text style={styles.body}>
                             {tn(mode.body.settings.quietDays,
-                                'Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days, and anyone who stepped back still owing past their ordinary line. Their trades are never shown.',
-                                'Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days, and anyone who stepped back still owing past their ordinary line. Their trades are never shown.',
+                                'Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
+                                'Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
                                 { pct: mode.body.settings.debtLinePct })}
                         </Text>
                         {[ruleStartsLine(mode.body.rule), ...waitingLineSentences(mode.waiting)].filter((line): line is string => !!line).map((line) => (
@@ -786,7 +786,6 @@ export default function NamesListScreen() {
                             <View key={r.key} style={styles.entry}>
                                 <Text style={styles.entryName}>{r.name}</Text>
                                 <Text style={styles.entryNote}>{r.detail}</Text>
-                                {r.note ? <Text style={styles.entryNote}>{say(r.note)}</Text> : null}
                             </View>
                         ))}
                         <Text style={styles.label}>{t('LEFT WITH A DEBT')}</Text>

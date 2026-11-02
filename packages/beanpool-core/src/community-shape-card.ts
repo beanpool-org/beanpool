@@ -71,8 +71,6 @@ export const COMMUNITY_SHAPE_CARD_WORDS = {
     // the language's own plural, so each line is one sentence to translate however long the wait.
     ruleLineHalf: word("The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for {days} without a sale. Each look is logged."),
     ruleLinePct: word("The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or stay in debit for {days} without a sale. Each look is logged."),
-    yourRuleLineHalf: word('If you owe more than half your credit line, or stay in debit for {days} without a sale, the admins can see your balance. Each look is logged.'),
-    yourRuleLinePct: word('If you owe more than {pct}% of your credit line, or stay in debit for {days} without a sale, the admins can see your balance. Each look is logged.'),
     debtLineFrom: word('The line of {pct}% applies from {date}.'),
     quietDaysFrom: word('The line of {days} applies from {date}.'),
     dmRequestsOnLine: word('**Messages:** a first message from someone new waits until you accept it'),
@@ -128,17 +126,6 @@ export function joinRuleLines(rule: KnownRuleLines & { knownFloor?: number } | n
     const line = knownRuleLine(rule);
     if (!line || typeof rule?.knownFloor !== 'number') return [];
     return [t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatCount(rule.knownFloor) }), line];
-}
-
-/** The same rule said to the member it reaches: the card and the Settings row. */
-export function yourRuleLine(lines: KnownRuleLines | null | undefined): string | null {
-    const pct = lines?.debtLinePct;
-    const quiet = lines?.quietDays;
-    if (typeof pct !== 'number' || typeof quiet !== 'number') return null;
-    const days = daysWords(quiet);
-    return pct === 50
-        ? t(COMMUNITY_SHAPE_CARD_WORDS.yourRuleLineHalf, { days })
-        : t(COMMUNITY_SHAPE_CARD_WORDS.yourRuleLinePct, { pct: formatCount(pct), days });
 }
 
 /** "The line of 30% applies from 16 November.", one per line waiting out its notice (design §4). */

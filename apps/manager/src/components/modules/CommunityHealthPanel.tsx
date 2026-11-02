@@ -200,7 +200,7 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
                 <h4 className="text-sm font-bold text-white m-0 break-words">When admins may see a member&apos;s balance</h4>
                 <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">
                     {health.known
-                        ? 'In this known community, a confirmed member shows on an admin\'s phone if they pass either line, and so does a member who stepped back owing past their ordinary line, until they are back within it. Admins never see anyone\'s trades. Every time an admin opens that list, it is written below.'
+                        ? 'In this known community, a confirmed member shows on an admin\'s phone if they pass either line. Admins never see anyone\'s trades. Every time an admin opens that list, it is written below.'
                         : 'Only a community that confirms its members has these exceptions. Until confirmation is on, nobody\'s balance is shown to an admin.'}
                 </p>
                 {health.known && health.rule && !health.rule.started && health.rule.from && (

@@ -8,7 +8,8 @@
 import type { WaitingLines } from '@beanpool/core';
 import type { OpenedEntry } from './names-list';
 
-export type HealthReason = 'past_debt_line' | 'quiet_in_debit' | 'stepped_back_owing';
+export type HealthReason = 'past_debt_line' | 'quiet_in_debit';
+const REASONS: readonly string[] = ['past_debt_line', 'quiet_in_debit'] satisfies HealthReason[];
 
 export interface HealthException {
     memberPubkey: string;
@@ -64,8 +65,6 @@ export interface HealthRow {
     key: string;
     name: string;
     detail: string;
-    /** A fixed sentence the screen says in the member's language: why a member who stepped back is here. */
-    note?: string;
 }
 
 /** A name only this phone can give: the entry it opened, or a plain word where it couldn't open that entry. */
@@ -76,7 +75,7 @@ export function nameFor(entryId: string | null, entries: Pick<OpenedEntry, 'id' 
 
 const beans = (n: number) => `${Math.round(n * 100) / 100} Beans`;
 
-export function reasonText(r: Exclude<HealthReason, 'stepped_back_owing'>, settings: HealthExceptionsBody['settings']): string {
+export function reasonText(r: HealthReason, settings: HealthExceptionsBody['settings']): string {
     return r === 'past_debt_line'
         ? `past ${settings.debtLinePct}% of their floor`
         : `in debit with no sale for ${settings.quietDays} days`;
@@ -84,13 +83,14 @@ export function reasonText(r: Exclude<HealthReason, 'stepped_back_owing'>, setti
 
 export function exceptionRows(body: HealthExceptionsBody, entries: Pick<OpenedEntry, 'id' | 'text'>[]): HealthRow[] {
     return body.exceptions.map((e) => {
-        const crossed = e.reasons.filter((r): r is Exclude<HealthReason, 'stepped_back_owing'> => r !== 'stepped_back_owing');
+        // A reason this phone has no words for gets the balance and the floor alone, never the wrong line: reasonText
+        // says "in debit with no sale" of anything else, and the node has a third (S1's step-back, which no app calls).
+        const crossed = e.reasons.filter((r) => REASONS.includes(r));
         const base = `${beans(e.balance)} of a ${beans(e.floor)} floor`;
         return {
             key: e.memberPubkey,
             name: nameFor(e.entryId, entries),
             detail: crossed.length ? `${base} · ${crossed.map((r) => reasonText(r, body.settings)).join(', and ')}` : base,
-            ...(e.reasons.includes('stepped_back_owing') ? { note: HEALTH_COPY.steppedBackOwing } : {}),
         };
     });
 }
@@ -245,8 +245,6 @@ export interface HealthLogSection {
 }
 
 export const HEALTH_COPY = {
-    /** A member who stepped back while owing past their ordinary line, listed until they are back within it. */
-    steppedBackOwing: 'Stepped back while owing past their ordinary line',
     totalsHeading: 'THE WHOLE COMMUNITY',
     totalsHint: 'Any member may know these. Nobody’s own balance or trades are in them.',
     totalsMissing: 'The totals couldn’t be read just now.',

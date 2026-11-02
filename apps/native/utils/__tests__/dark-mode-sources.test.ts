@@ -192,7 +192,7 @@ describe('dark mode: themed screens draw with the theme', () => {
     });
 
     it('the Settings protection cards follow the theme', () => {
-        for (const file of ['components/ConfirmedCard.tsx', 'components/ConfirmedSettingsRow.tsx', 'components/StepBackSheet.tsx', 'components/VaultMoveCard.tsx', 'components/RadiusPickerModal.tsx', 'components/ReviewModal.tsx']) {
+        for (const file of ['components/VaultMoveCard.tsx', 'components/RadiusPickerModal.tsx', 'components/ReviewModal.tsx']) {
             const src = ALL.find(s => s.file === file)!.src;
             expect(src, file).toMatch(/useStyles\(makeStyles\)/);
             expect(src, file).not.toMatch(/import \{[^}]*\bcolors\b(?!\s+as)[^}]*\} from '\.\.\/constants\/colors'/);

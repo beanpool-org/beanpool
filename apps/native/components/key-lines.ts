@@ -206,7 +206,6 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Any member may know these. Nobody’s own balance or trades are in them.': word('Any member may know these. Nobody’s own balance or trades are in them.'),
     'The totals couldn’t be read just now.': word('The totals couldn’t be read just now.'),
     'This community’s server doesn’t give these totals yet: it needs an update.': word('This community’s server doesn’t give these totals yet: it needs an update.'),
-    'Stepped back while owing past their ordinary line': word('Stepped back while owing past their ordinary line'),
 };
 
 /** Placeholders read back as a number (and given to t() as one, so the language writes its digits). */

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    exceptionRows, departedRows, readWaitingLines, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, notOnThisNode, healthFailure, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody,
+    exceptionRows, departedRows, readWaitingLines, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, notOnThisNode, healthFailure, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody, type HealthReason,
 } from '../community-health';
 
 const entries = [
@@ -221,21 +221,20 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
     });
 });
 
-describe('a member who stepped back owing past their ordinary line', () => {
-    const ROW = { memberPubkey: 'k', entryId: 'e1', balance: -800, floor: 200, reasons: ['stepped_back_owing' as const] };
+describe('a reason this phone has no words for (the node still has S1\'s step-back reason, which no app can cause)', () => {
+    const ROW = { memberPubkey: 'k', entryId: 'e1', balance: -800, floor: 200, reasons: ['stepped_back_owing'] as unknown as HealthReason[] };
     const SETTINGS = { debtLinePct: 50, quietDays: 60 };
 
-    it('is shown with the reason in its own words, not as "in debit with no sale" (S1\'s author notes)', () => {
+    it('shows the balance and the floor alone, never "in debit with no sale", which would be untrue', () => {
         const [row] = exceptionRows({ settings: SETTINGS, exceptions: [ROW], departed: [] }, entries);
         expect(row.name).toBe('Ada Lovelace');
         expect(row.detail).toBe('-800 Beans of a 200 Beans floor');
-        expect(row.note).toBe('Stepped back while owing past their ordinary line');
     });
 
-    it('a member listed for a line crossed keeps that reason, and carries no note', () => {
-        const [row] = exceptionRows({ settings: SETTINGS, exceptions: [{ ...ROW, reasons: ['past_debt_line'] }], departed: [] }, entries);
-        expect(row.detail).toBe('-800 Beans of a 200 Beans floor · past 50% of their floor');
-        expect(row.note).toBeUndefined();
+    it('a line crossed keeps its reason, with or without the other', () => {
+        const row = (reasons: unknown[]) => exceptionRows({ settings: SETTINGS, exceptions: [{ ...ROW, reasons: reasons as HealthReason[] }], departed: [] }, entries)[0];
+        expect(row(['past_debt_line']).detail).toBe('-800 Beans of a 200 Beans floor · past 50% of their floor');
+        expect(row(['past_debt_line', 'stepped_back_owing']).detail).toBe('-800 Beans of a 200 Beans floor · past 50% of their floor');
     });
 });
 

@@ -67,6 +67,8 @@ vi.mock('expo-router', () => ({
     },
 }));
 
+vi.mock('../node-post', async (importOriginal) => ({ ...(await importOriginal<object>()), anchorUrl: async () => 'https://node.example' }));
+
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors: light, darkColors: dark } = await import('../../constants/colors');
@@ -154,6 +156,42 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         }));
         const sheet = host.querySelector('[data-testid="community-shape-sheet"]');
         expect(sheet).not.toBeNull();
+    });
+
+    describe('the rule, on "How this community works"', () => {
+        const SOURCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.";
+        const stubRule = (rule: unknown) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rule), { status: rule ? 200 : 404 })));
+        afterEach(() => vi.unstubAllGlobals());
+        const sheetText = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
+
+        it('states it right after the floor, in the numbers features carries, with nothing to tap', async () => {
+            stubRule({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null });
+            await render(createElement(CommunityShapeSheet, { features: { ...FULL_FEATURES, debtLinePct: 50, quietDays: 60 }, visible: true, onClose: vi.fn() }));
+            expect(sheetText()).toContain(`(the known floor)${SOURCE}`);
+            expect([...host.querySelectorAll('button')].map(b => b.getAttribute('data-testid'))).not.toContain('confirmed-step-back');
+        });
+
+        it('a tightened line says when it applies, from the public route', async () => {
+            stubRule({ known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 60, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
+            await render(createElement(CommunityShapeSheet, { features: { ...FULL_FEATURES, debtLinePct: 30, quietDays: 60 }, visible: true, onClose: vi.fn() }));
+            await vi.waitFor(() => expect(sheetText()).toContain('The line of 30% applies from 16 November.'));
+            expect(fetch).toHaveBeenCalledWith('https://node.example/api/community/known-rule', expect.anything());
+        });
+
+        it('an older node with the floor and no lines: the floor line alone, and a 404 changes nothing', async () => {
+            stubRule(null);
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn() }));
+            await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+            expect(sheetText()).toContain('(the known floor)');
+            expect(sheetText()).not.toContain('admins can see');
+        });
+
+        it('a community with no floor asks nothing', async () => {
+            stubRule(null);
+            await render(createElement(CommunityShapeSheet, { features: { door: 'members', beans: true }, visible: true, onClose: vi.fn() }));
+            await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+            expect(fetch).not.toHaveBeenCalled();
+        });
     });
 
     it('handles an old node that says nothing (produces empty facts list)', async () => {

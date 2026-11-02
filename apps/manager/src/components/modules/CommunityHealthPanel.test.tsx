@@ -140,6 +140,7 @@ describe('CommunityHealthPanel: the rule of being confirmed (balance rule S2)', 
         const panel = await screen.findByTestId('community-health-panel');
         expect(panel.textContent).toMatch(/a confirmed member shows on an admin's phone if they pass either line/);
         expect(panel.textContent).not.toMatch(/agreed/);
+        expect(panel.textContent).not.toMatch(/stepped back/i);
         expect(screen.queryByTestId('health-rule-starts')).toBeNull();
     });
 

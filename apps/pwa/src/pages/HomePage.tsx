@@ -92,7 +92,6 @@ import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../com
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
-import { ConfirmedCard } from '../components/ConfirmedCard';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
@@ -2703,8 +2702,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
                     </p>
                 )}
-                {/* The rule of being confirmed: once when it reaches this member, with the way out (balance rule S2). */}
-                {publicKey && !visitor && <ConfirmedCard publicKey={publicKey} onOpenGuide={() => onNavigate('guide', 'what-the-admins-can-see')} />}
                 {!notesUnderFirst && firstNotes(false)}
                 {/* The "Use the phone app" card (front doors S4): after the first post or a week */}
                 {(() => {

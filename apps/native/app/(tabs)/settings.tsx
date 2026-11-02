@@ -46,7 +46,6 @@ import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../../utils/words-put-away';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { CommunityAdminsRow } from '../../components/CommunityAdminsRow';
-import { ConfirmedSettingsRow } from '../../components/ConfirmedSettingsRow';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../../components/WordsOnScreen';
@@ -1861,9 +1860,6 @@ export default function SettingsScreen() {
                 />
             }
         >
-            {/* A confirmed member only: the rule that reaches them, and the way out of it. */}
-            <ConfirmedSettingsRow />
-
             {/* ─── Identity Dashboard Card ─── */}
             <View style={styles.identityCard}>
                 <View style={styles.identityInner}>

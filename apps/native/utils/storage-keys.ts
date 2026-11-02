@@ -299,14 +299,6 @@ export function copiesRuleSeenStoreKey(publicKey: string): string {
     return `beanpool_copies_rule_seen:${publicKey.toLowerCase()}`;
 }
 
-/**
- * What one account last put away of a known community's rule in each of its communities (utils/known-rule.ts), as JSON
- * `{ <community address>: { confirmedAt, ruleKey } }`: a newer confirmation or a tightened line shows Home's card again.
- */
-export function ruleSeenStoreKey(publicKey: string): string {
-    return `beanpool_rule_seen:${publicKey.toLowerCase()}`;
-}
-
 /** The key vault holds one account said "Yes, it's me" to on this phone (utils/vault.ts `approvedHolds`). */
 export function vaultApprovedHoldsStoreKey(publicKey: string): string {
     return `beanpool_vault_approved_holds:${publicKey.toLowerCase()}`;

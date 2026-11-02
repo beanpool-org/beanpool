@@ -7,10 +7,21 @@
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
   },
+  "A typed answer is at most {n} characters": "Uma resposta escrita tem no máximo {n} caracteres",
   "Add a photo first": "Adicione uma foto primeiro",
+  "Failed to read the typed answers": "Não foi possível ler as respostas escritas",
+  "Failed to remove the typed answer": "Não foi possível remover a resposta escrita",
+  "Failed to report the typed answer": "Não foi possível denunciar a resposta escrita",
+  "Only Other takes a typed answer": "Só Outro aceita resposta escrita",
   "Only a pending message request can be cancelled.": "Apenas um pedido de mensagem pendente pode ser cancelado.",
+  "Only an owner can remove a typed answer": "Só um dono pode remover uma resposta escrita",
   "Only the person who sent a message request can cancel it.": "Apenas a pessoa que enviou um pedido de mensagem pode cancelá-lo.",
+  "Typed answers are for the poll's maker and the owners": "As respostas escritas são para quem criou a enquete e os donos",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envie conversationId, o chat, e decision, 'accept', 'ignore' ou 'cancel'.",
+  "That typed answer is not here": "Essa resposta escrita não está aqui",
   "This community has a new address": "Esta comunidade tem um novo endereço",
-  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando."
+  "This community is also at {address}. The old address keeps working.": "Esta comunidade também está em {address}. O endereço antigo continua funcionando.",
+  "This poll already offers Other: leave it out of the answers": "Esta enquete já oferece Outro: tire-o das respostas",
+  "To answer Other, type your answer. If there is nowhere to type, update the app.": "Para responder Outro, escreva sua resposta. Se não houver onde escrever, atualize o app.",
+  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Você já respondeu a esta enquete, e nada liga sua resposta a você, por isso não pode ser alterada."
 }

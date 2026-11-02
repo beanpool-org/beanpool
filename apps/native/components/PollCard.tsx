@@ -27,13 +27,15 @@ import {
     Pressable,
     ActivityIndicator,
     Alert,
+    TextInput,
 } from 'react-native';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
-import { votePoll, closePoll } from '../utils/db';
+import { votePoll, closePoll, isOwnerHere } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
-import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSealed, pollOtherLines, pollOtherOption, POLL_OTHER_WORDS_MAX, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
+import { PollOtherAnswers } from './PollOtherAnswers';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { signedRequestWords } from './signed-request-lines';
 
@@ -44,6 +46,8 @@ export interface PollOption {
     percentage?: number;
     /** Of this option's votes, how many came from new or 12-word accounts, where the node gives the split. */
     newOrWordsVotes?: number;
+    /** This answer is Other, which takes typed words (@beanpool/core poll-other). Only the node sets it. */
+    other?: boolean;
 }
 
 export interface PollVoteRecord {
@@ -74,6 +78,9 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
     const [showVoters, setShowVoters] = useState(false);
+    const [typingOther, setTypingOther] = useState(false);
+    const [otherWords, setOtherWords] = useState('');
+    const [ownerHere, setOwnerHere] = useState(false);
 
     // Keep livePost in sync if prop changes
     React.useEffect(() => {
@@ -116,7 +123,20 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
     const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
 
-    const handleVote = async (optionId: string) => {
+    const offersOther = pollOtherOption(options) !== null;
+    const sealed = pollIsSealed(options, openFlag);
+    // The node's word on a card it sent, or this phone's own record of its answer (utils/db.ts votePoll).
+    const answered = sealed && (livePost.pollAnswered === true || !!userVotedOptionId);
+    // Only a card with words to offer asks; a member's card asks nothing. The node decides who reads.
+    const asksRole = offersOther && !isAuthor && Boolean(currentPubkey);
+    React.useEffect(() => {
+        if (!asksRole) return;
+        let cancelled = false;
+        void isOwnerHere().then(owner => { if (!cancelled && owner) setOwnerHere(true); });
+        return () => { cancelled = true; };
+    }, [asksRole]);
+
+    const handleVote = async (optionId: string, typed?: string) => {
         if (isClosed) {
             Alert.alert(t('Poll Closed'), t('This poll has ended and can no longer receive votes.'));
             return;
@@ -128,10 +148,12 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
 
         setVotingOptionId(optionId);
         try {
-            const res = await votePoll(livePost.id, optionId);
+            const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
             if (res?.post) {
                 setLivePost(res.post);
             }
+            setTypingOther(false);
+            setOtherWords('');
             onVoteSuccess?.();
         } catch (err: any) {
             Alert.alert(t('Voting Error'), err.message ? signedRequestWords(err.message) : t('Could not record your vote.'));
@@ -240,24 +262,25 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
                     const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
+                    const optionText = opt.other ? pollOtherLines.other() : opt.text;
                     // One sentence for a screen reader, in the member's language: the option, its share, its votes, then
                     // where they came from and whether it is the member's own, each said after the last.
-                    let optionLabel = tn(count, '{option}, {pct} percent, {n} vote', '{option}, {pct} percent, {n} votes', { option: opt.text, pct });
+                    let optionLabel = tn(count, '{option}, {pct} percent, {n} vote', '{option}, {pct} percent, {n} votes', { option: optionText, pct });
                     if (optionOrigins) optionLabel = t('{label}, {origins}', { label: optionLabel, origins: optionOrigins });
                     if (isVoted) optionLabel = t('{label}, your vote', { label: optionLabel });
 
                     return (
                         <Pressable
                             key={opt.id || String(idx)}
-                            disabled={isClosed || Boolean(votingOptionId)}
-                            onPress={() => handleVote(opt.id)}
+                            disabled={isClosed || Boolean(votingOptionId) || answered}
+                            onPress={() => (opt.other ? setTypingOther(v => !v) : handleVote(opt.id))}
                             style={[
                                 styles.optionRow,
                                 isVoted && styles.optionRowVoted,
                                 isClosed && styles.optionRowClosed,
                             ]}
                             accessibilityRole="button"
-                            accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) }}
+                            accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) || answered }}
                             accessibilityLabel={optionLabel}
                         >
                             {/* Background percentage fill bar */}
@@ -279,7 +302,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                                         </View>
                                     ) : null}
                                     <Text style={[styles.optionText, isVoted && styles.optionTextVoted]} numberOfLines={2}>
-                                        {opt.text}
+                                        {optionText}
                                     </Text>
                                 </View>
                                 <View style={styles.optionRight}>
@@ -300,6 +323,41 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     );
                 })}
             </View>
+
+            {/* Other: a line to type, and what becomes of it. */}
+            {typingOther && !isClosed && !answered && (
+                <View style={styles.otherBox} testID="poll-other-box">
+                    <TextInput
+                        value={otherWords}
+                        onChangeText={setOtherWords}
+                        maxLength={POLL_OTHER_WORDS_MAX}
+                        placeholder={pollOtherLines.placeholder()}
+                        placeholderTextColor={colors.text.muted}
+                        accessibilityLabel={pollOtherLines.placeholder()}
+                        style={styles.otherInput}
+                        testID="poll-other-words"
+                    />
+                    <Text style={styles.otherNoName} testID="poll-other-no-name">{pollOtherLines.noName()}</Text>
+                    {sealed && <Text style={styles.openBallotNote}>{pollOtherLines.sealedNote()}</Text>}
+                    <View style={styles.otherActions}>
+                        <Pressable
+                            onPress={() => handleVote(pollOtherOption(options)!.id, otherWords.trim())}
+                            disabled={!otherWords.trim() || Boolean(votingOptionId)}
+                            style={[styles.otherSend, (!otherWords.trim() || Boolean(votingOptionId)) && styles.otherSendOff]}
+                            accessibilityRole="button"
+                            accessibilityLabel={pollOtherLines.send()}
+                            testID="poll-other-send"
+                        >
+                            <Text style={styles.otherSendText}>{pollOtherLines.send()}</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setTypingOther(false)} style={styles.otherCancel} accessibilityRole="button" accessibilityLabel={pollOtherLines.cancel()}>
+                            <Text style={styles.otherCancelText}>{pollOtherLines.cancel()}</Text>
+                        </Pressable>
+                        <Text style={styles.otherCount}>{otherWords.length}/{POLL_OTHER_WORDS_MAX}</Text>
+                    </View>
+                </View>
+            )}
+            {answered && <Text style={styles.answeredNote} testID="poll-answered">{t('✓ {line}', { line: pollOtherLines.answered() })}</Text>}
 
             {/* On the worldwide community: a show of opinion, never a decision. */}
             {informal && (
@@ -326,6 +384,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     {t('🔒 Anonymous: everyone sees only the totals')}
                 </Text>
             )}
+            {sealed && !answered && !isClosed && !typingOther && <Text style={styles.openBallotNote}>{pollOtherLines.sealedNote()}</Text>}
 
             {/* Turnout Tally */}
             <View style={styles.turnoutRow}>
@@ -355,7 +414,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     </Text>
                     {votesList.map((v, i) => {
                         const matchedOpt = optionsById.get(v.optionId);
-                        const optText = matchedOpt ? matchedOpt.text : v.optionId;
+                        const optText = matchedOpt ? (matchedOpt.other ? pollOtherLines.other() : matchedOpt.text) : v.optionId;
                         const voterName = v.voterCallsign || (v.voterPubkey ? v.voterPubkey.slice(0, 8) : t('Member'));
 
                         return (
@@ -368,12 +427,42 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     })}
                 </View>
             )}
+
+            {/* The words, for the poll's maker and the owners. */}
+            {offersOther && (isAuthor || ownerHere) && <PollOtherAnswers postId={livePost.id} />}
         </View>
     );
 }
 
 const makeStyles = ({ colors, theme }: ThemeContextType) =>
     StyleSheet.create({
+        otherBox: {
+            marginBottom: 10,
+            padding: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: theme === 'dark' ? palette.violet500 : palette.violet200,
+            backgroundColor: colors.surface.card,
+        },
+        otherInput: {
+            minHeight: 44,
+            borderWidth: 1,
+            borderRadius: 8,
+            borderColor: theme === 'dark' ? palette.gray700 : palette.gray300,
+            backgroundColor: colors.surface.app,
+            color: colors.text.body,
+            paddingHorizontal: 10,
+            fontSize: 15,
+        },
+        otherNoName: { marginTop: 6, fontSize: 12, fontWeight: '700', color: colors.text.body },
+        otherActions: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+        otherSend: { minHeight: 44, paddingHorizontal: 14, borderRadius: 8, justifyContent: 'center', backgroundColor: palette.violet600 },
+        otherSendOff: { opacity: 0.5 },
+        otherSendText: { fontSize: 13, fontWeight: '800', color: palette.white },
+        otherCancel: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
+        otherCancelText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
+        otherCount: { marginLeft: 'auto', fontSize: 11, color: colors.text.muted },
+        answeredNote: { marginBottom: 6, fontSize: 12, fontWeight: '700', color: theme === 'dark' ? palette.violet300 : palette.violet700 },
         card: {
             backgroundColor: colors.surface.card,
             borderRadius: 16,

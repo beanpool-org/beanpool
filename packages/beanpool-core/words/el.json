@@ -900,5 +900,22 @@
   "{date}: {n} event|{date}: {n} events": {
     "one": "{date}: {n} εκδήλωση",
     "other": "{date}: {n} εκδηλώσεις"
-  }
+  },
+  "Your answer": "Η απάντησή σας",
+  "Don't put your name": "Μη γράφετε το όνομά σας",
+  "Send my answer": "Αποστολή της απάντησής μου",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Η απάντησή σας είναι οριστική: τίποτα δεν τη συνδέει με εσάς, οπότε δεν μπορεί να αλλάξει.",
+  "You have answered this poll.": "Απαντήσατε σε αυτή τη δημοσκόπηση.",
+  "Offer \"Other\" with a typed answer": "Προσφορά «Άλλο» με γραπτή απάντηση",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Τα μέλη μπορούν να γράψουν τη δική τους απάντηση. Όλοι βλέπουν πόσοι επέλεξαν Άλλο· τα λόγια τα διαβάζετε μόνο εσείς και οι ιδιοκτήτες της κοινότητας.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Σε ανώνυμη δημοσκόπηση κάθε απάντηση είναι οριστική, και τα λόγια εμφανίζονται όταν κλείσει η δημοσκόπηση.",
+  "Read the typed answers": "Ανάγνωση γραπτών απαντήσεων",
+  "The typed answers show here once the poll closes.": "Οι γραπτές απαντήσεις θα εμφανιστούν εδώ όταν κλείσει η δημοσκόπηση.",
+  "No typed answers to read.": "Δεν υπάρχουν γραπτές απαντήσεις.",
+  "Only the poll's maker and the owners can read these.": "Μόνο ο δημιουργός της δημοσκόπησης και οι ιδιοκτήτες μπορούν να τις διαβάσουν.",
+  "Report": "Αναφορά",
+  "Reported": "Αναφέρθηκε",
+  "Cancel": "Ακύρωση",
+  "The typed answers could not be read.": "Οι γραπτές απαντήσεις δεν μπόρεσαν να διαβαστούν.",
+  "Remove this typed answer? The vote still counts.": "Αφαίρεση αυτής της γραπτής απάντησης; Η ψήφος εξακολουθεί να μετρά."
 }

@@ -23,6 +23,7 @@ While a poll is open it says nothing about this. If it did, someone checking the
 - Add **Context / Notes** if it helps. This is optional.
 - Write 2 to 4 **Options**. Tap **+ Add Option** for more.
 - Choose how long it runs: **3 Days**, **7 Days** or **14 Days**.
+- If you want to hear what you didn't think of, tick **Offer "Other" with a typed answer**. It adds **Other** after your options, where a member types their own line. It is off unless you tick it, and your community's server must be new enough to offer it.
 - Choose whether it is an **Open vote** before you tap **Create**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can't change it in the app after the poll is posted. An owner's AI assistant can change it on a poll it made, only until the first vote.
 - Tap **Create**.
 
@@ -36,6 +37,9 @@ Polls are in the Market. Tap **Polls** in the top row to see only polls.
 
 - Tap an answer to choose it. Tap another to change your mind, until the poll closes.
 - The card shows how many chose each answer.
+- If a poll offers **Other**, tap it, type a short line (at most 140 characters) and tap **Send my answer**. Don't put your name.
+
+On an anonymous poll that offers Other, your answer is final, whichever you choose. Nothing links it to you, so nothing can find it to change it. The phone you answered on remembers which you chose. The web app and any other device can say only that you have answered.
 
 ## Who can see how you voted
 
@@ -44,7 +48,17 @@ Each poll says which kind it is, above the turnout:
 - **Anonymous** (the usual kind): everyone sees only how many chose each answer. Nobody sees who chose what, the person who started it included.
 - **Open vote:** the person who started it chose to show the voters. Members can tap **View voters** (**Show Voters** in the web app) to see who chose what. A member who is suspended sees only the totals, until the suspension ends.
 
-The owners and admins who run your community's server can still see every vote stored there.
+The owners and admins who run your community's server can still see every vote stored there, except on an anonymous poll that offers Other, where the server keeps no link between a person and an answer.
+
+## Who reads a typed answer
+
+Everyone who can see the poll sees how many chose **Other**. Only the person who started the poll and the community's owners can read the words. Admins, moderators and other members can't.
+
+On an anonymous poll the words stay hidden until the poll closes, then show with no name, no time and in no order, so nobody can match a line to who was around when it came in. The server keeps them apart from who answered: it holds that you answered, and separately what was answered, with nothing that leads from one to the other. If only one person answers, that one answer is still theirs, so keep names and details out of it. If you delete your account, a typed answer stays, because nothing says it was yours. An owner can remove it.
+
+On an open vote the words can be read at once. Changing your vote takes them away, and so does deleting your account.
+
+If you started the poll and a line is abusive, tap **Report** beside it. The report goes to the owners and names nobody. An owner can tap **Remove**: the words go for good, and the vote still counts. If the poll itself is removed, or the person who started it leaves while it's still open, its typed answers go with it, and even an owner can't read them after that. A poll that has closed keeps them if the person who started it leaves.
 
 ## Closing a poll early
 

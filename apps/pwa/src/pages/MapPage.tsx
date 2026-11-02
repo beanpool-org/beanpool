@@ -10,7 +10,7 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS } from '@beanpool/core';
+import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines } from '@beanpool/core';
 import { copyPriceLine, eventCopyOf } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -303,6 +303,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
     // Polls are anonymous unless their creator makes them an open vote, fixed once someone votes (2026-09-28).
     const [pollOpenVote, setPollOpenVote] = useState(false);
+    // A typed Other, off unless the maker asks, and offered only where the node says it can (@beanpool/core poll-other).
+    const [pollOther, setPollOther] = useState(false);
+    const [nodeHasPollOther, setNodeHasPollOther] = useState(false);
     // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
     // poll is shown there, or, to an author with none, that members nearby won't see it in their list.
     const nearbyLimits = useNearbyLimits(!!identity && showNewPost && newPostType === 'poll');
@@ -359,6 +362,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             .catch(() => {});
         return () => { cancelled = true; };
     }, [showNewPost, visitorNote, identity]);
+    useEffect(() => {
+        if (!showNewPost || nodeHasPollOther) return;
+        let cancelled = false;
+        communityInfoOnce()
+            .then(info => { if (!cancelled && (info as { pollOther?: unknown }).pollOther === true) setNodeHasPollOther(true); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [showNewPost, nodeHasPollOther]);
     /** A failed save: the node's refusal in the form, anything else as before. */
     function showPostError(e: any, fallback: string) {
         const refusal = nodeRefusal(e);
@@ -1323,11 +1334,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
                     durationDays: pollDurationDays,
                     pollOpenVote,
+                    ...(pollOther && nodeHasPollOther ? { pollOther: true } : {}),
                     audienceScope,
                     ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 });
                 setNewPostTitle('');
                 setNewPostDescription('');
+                setPollOther(false);
                 setPollOptions(['', '']);
                 setPollDurationDays(7);
                 setPollOpenVote(false);
@@ -3076,6 +3089,22 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 </span>
                             </span>
                         </label>
+                        {nodeHasPollOther && (
+                        <label className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800 text-xs text-nature-800 dark:text-nature-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={pollOther}
+                                onChange={(e) => setPollOther(e.target.checked)}
+                                className="mt-0.5 w-5 h-5 shrink-0 accent-purple-600"
+                                data-testid="poll-other"
+                            />
+                            <span className="min-w-0" style={{ overflowWrap: 'anywhere' }}>
+                                <span className="block font-bold mb-0.5">{pollOtherLines.tick()}</span>
+                                <span className="block leading-relaxed">{pollOtherLines.tickHint()}</span>
+                                {!pollOpenVote && <span className="block leading-relaxed mt-1">{pollOtherLines.tickHintAnonymous()}</span>}
+                            </span>
+                        </label>
+                        )}
                         {pollPlacelessNote && (
                             <p data-testid="poll-placeless-note" role="status" className="text-xs leading-relaxed text-nature-700 dark:text-nature-300" style={{ overflowWrap: 'anywhere' }}>
                                 📍 {pollPlacelessNote}

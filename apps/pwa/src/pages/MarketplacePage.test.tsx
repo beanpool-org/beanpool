@@ -482,9 +482,10 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('gives the poll two of the columns from md up, and lays its answers out in two', async () => {
+    it('gives the poll two of the columns at every width, and lays its answers out in two from md up', async () => {
         await openGrid();
-        expect(pollCard().parentElement!.className).toContain('md:col-span-2');
+        // At 320 px with 1.3x text one column of two clipped "Other": the whole row on a phone, two columns from md up.
+        expect(pollCard().parentElement!.className.split(/\s+/)).toContain('col-span-2');
         expect(pollOptions().className).toContain('md:grid-cols-2');
     });
 

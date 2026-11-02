@@ -86,7 +86,7 @@ const MIN = 60_000;
  * nothing in a staging database, P2, 8 listing photos by reference, P4, 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events); the one before this
  * change's, a standby to re-seed.
  */
-const FORMAT = '12';
+const FORMAT = '13';
 const FORMAT_BEFORE = '5';
 /**
  * The standby's cap on the rows of any one table in a copy (engine/sync.ts MAX_IMPORT_ROWS_PER_CATEGORY, 250,000 by

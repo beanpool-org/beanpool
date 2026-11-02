@@ -32,7 +32,7 @@ import { palette } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost } from '../utils/db';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
-import { placelessListingNote, t, tn } from '@beanpool/core';
+import { placelessListingNote, pollOtherLines, t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 import { signedRequestWords } from './signed-request-lines';
@@ -60,10 +60,13 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     ]);
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
     const [openVote, setOpenVote] = useState(false);
+    // A typed Other, off unless the maker asks, and offered only where the node says it can (@beanpool/core poll-other).
+    const [offerOther, setOfferOther] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
     // poll is shown there, or, to an author with none, that members nearby won't see it in their list.
     const nodeProfile = useNodeProfile();
+    const nodeHasOther = nodeProfile?.features?.pollOther === true;
     const byArea = nearbyListingsOn(nodeProfile?.features);
     const placelessNote = placelessListingNote(byArea, useMyArea(visible && byArea, identity));
 
@@ -132,6 +135,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                 poll_options: JSON.stringify(cleanOptionsObj),
                 durationDays,
                 pollOpenVote: openVote,
+                ...(offerOther && nodeHasOther ? { pollOther: true } : {}),
             });
 
             // Reset form
@@ -140,6 +144,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             setOptions([{ id: '1', text: '' }, { id: '2', text: '' }]);
             setDurationDays(7);
             setOpenVote(false);
+            setOfferOther(false);
 
             Alert.alert(t('Poll Created'), t('Your poll has been published to the community feed!'));
             onSuccess?.();
@@ -322,6 +327,23 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                 </Text>
                             </View>
                         </Pressable>
+                        {nodeHasOther && (
+                            <Pressable
+                                onPress={() => setOfferOther(v => !v)}
+                                style={[styles.openVoteRow, offerOther && styles.openVoteRowActive]}
+                                accessibilityRole="checkbox"
+                                accessibilityState={{ checked: offerOther }}
+                                accessibilityLabel={pollOtherLines.tick()}
+                                testID="poll-other"
+                            >
+                                <Text style={styles.openVoteBox}>{offerOther ? '☑' : '☐'}</Text>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={styles.openVoteTitle}>{pollOtherLines.tick()}</Text>
+                                    <Text style={styles.openVoteHint}>{pollOtherLines.tickHint()}</Text>
+                                    {!openVote && <Text style={styles.openVoteHint}>{pollOtherLines.tickHintAnonymous()}</Text>}
+                                </View>
+                            </Pressable>
+                        )}
                         {placelessNote && (
                             <Text style={styles.openVoteHint} testID="poll-placeless-note" accessibilityLiveRegion="polite">{t('📍 {note}', { note: t(placelessNote) })}</Text>
                         )}

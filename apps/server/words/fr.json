@@ -7,10 +7,21 @@
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
   },
+  "A typed answer is at most {n} characters": "Une réponse écrite compte au plus {n} caractères",
   "Add a photo first": "Ajoutez d'abord une photo",
+  "Failed to read the typed answers": "Impossible de lire les réponses écrites",
+  "Failed to remove the typed answer": "Impossible de retirer la réponse écrite",
+  "Failed to report the typed answer": "Impossible de signaler la réponse écrite",
+  "Only Other takes a typed answer": "Seul Autre accepte une réponse écrite",
   "Only a pending message request can be cancelled.": "Seule une demande de message en attente peut être annulée.",
+  "Only an owner can remove a typed answer": "Seul un propriétaire peut retirer une réponse écrite",
   "Only the person who sent a message request can cancel it.": "Seule la personne qui a envoyé une demande de message peut l'annuler.",
+  "Typed answers are for the poll's maker and the owners": "Les réponses écrites sont réservées à l'auteur du sondage et aux propriétaires",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envoyez conversationId, le chat, et decision, 'accept', 'ignore' ou 'cancel'.",
+  "That typed answer is not here": "Cette réponse écrite n'est pas ici",
   "This community has a new address": "Cette communauté a une nouvelle adresse",
-  "This community is also at {address}. The old address keeps working.": "Cette communauté est aussi à l'adresse {address}. L'ancienne adresse continue de fonctionner."
+  "This community is also at {address}. The old address keeps working.": "Cette communauté est aussi à l'adresse {address}. L'ancienne adresse continue de fonctionner.",
+  "This poll already offers Other: leave it out of the answers": "Ce sondage propose déjà Autre : retirez-le des réponses",
+  "To answer Other, type your answer. If there is nowhere to type, update the app.": "Pour répondre Autre, écrivez votre réponse. S'il n'y a nulle part où écrire, mettez l'application à jour.",
+  "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Vous avez déjà répondu à ce sondage, et rien ne relie votre réponse à vous : elle ne peut donc pas être modifiée."
 }

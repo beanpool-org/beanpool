@@ -392,9 +392,25 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     -- Where the node keeps it (probation on: the global profile), whether the voter was a new or 12-word account when
     -- they first voted: 1 yes, 0 no, NULL not kept (engine/probation.ts pollVoterNewOrWords). Never changed after.
     voter_new_or_words INTEGER,
+    -- On an open vote only: the poll_answers row holding this voter's typed Other. Never set on an anonymous poll.
+    other_answer_id TEXT,
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
+-- A poll's answers that name nobody (engine/poll-other.ts). On an anonymous poll that offers Other, poll_votes says only
+-- that a member has answered (option_id 'sealed', no signature), and the choice and any typed words are here. There is no
+-- voter column and no time, the id is random, and WITHOUT ROWID keeps no insertion order, so nothing here leads to a
+-- person or says who came first. On an open vote this holds only the typed words, reached from poll_votes.other_answer_id.
+-- words is NULL on a plain answer, and once it is removed (words_removed 1: the vote still counts): by an owner, with its
+-- poll, or with an open vote's voter's account.
+CREATE TABLE IF NOT EXISTS poll_answers (
+    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    id TEXT NOT NULL,
+    option_id TEXT NOT NULL,
+    words TEXT,
+    words_removed INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (post_id, id)
+) WITHOUT ROWID;
 -- A plain index, under the name the unique one had (db.ts makeActivePollIndexPlain): how many active polls an author may
 -- have is engine/posts.ts createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
 CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';

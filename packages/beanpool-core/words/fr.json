@@ -915,5 +915,22 @@
   "{date}: {n} event|{date}: {n} events": {
     "one": "{date} : {n} événement",
     "other": "{date} : {n} événements"
-  }
+  },
+  "Your answer": "Votre réponse",
+  "Don't put your name": "Ne mettez pas votre nom",
+  "Send my answer": "Envoyer ma réponse",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Votre réponse est définitive : rien ne la relie à vous, elle ne peut donc pas être modifiée.",
+  "You have answered this poll.": "Vous avez répondu à ce sondage.",
+  "Offer \"Other\" with a typed answer": "Proposer « Autre » avec une réponse à écrire",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Les membres peuvent écrire leur propre réponse. Tout le monde voit combien ont choisi Autre ; seuls vous et les propriétaires de la communauté lisez les mots.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Sur un sondage anonyme, chaque réponse est définitive et les mots s'affichent à la clôture du sondage.",
+  "Read the typed answers": "Lire les réponses écrites",
+  "The typed answers show here once the poll closes.": "Les réponses écrites s'afficheront ici à la clôture du sondage.",
+  "No typed answers to read.": "Aucune réponse écrite à lire.",
+  "Only the poll's maker and the owners can read these.": "Seuls l'auteur du sondage et les propriétaires peuvent les lire.",
+  "Report": "Signaler",
+  "Reported": "Signalée",
+  "Cancel": "Annuler",
+  "The typed answers could not be read.": "Impossible de lire les réponses écrites.",
+  "Remove this typed answer? The vote still counts.": "Retirer cette réponse écrite ? Le vote compte toujours."
 }

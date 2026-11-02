@@ -860,5 +860,22 @@
   "Start one ›": "Mulai satu ›",
   "{date}: {n} event|{date}: {n} events": {
     "other": "{date}: {n} acara"
-  }
+  },
+  "Your answer": "Jawaban Anda",
+  "Don't put your name": "Jangan tulis nama Anda",
+  "Send my answer": "Kirim jawaban saya",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Jawaban Anda bersifat final: tidak ada yang menautkannya dengan Anda, jadi tidak bisa diubah.",
+  "You have answered this poll.": "Anda sudah menjawab jajak pendapat ini.",
+  "Offer \"Other\" with a typed answer": "Tawarkan \"Lainnya\" dengan jawaban tertulis",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Anggota dapat menulis jawaban sendiri. Semua orang melihat berapa yang memilih Lainnya; hanya Anda dan pemilik komunitas yang membaca kata-katanya.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Pada jajak pendapat anonim setiap jawaban bersifat final, dan kata-katanya muncul setelah jajak pendapat ditutup.",
+  "Read the typed answers": "Baca jawaban tertulis",
+  "The typed answers show here once the poll closes.": "Jawaban tertulis muncul di sini setelah jajak pendapat ditutup.",
+  "No typed answers to read.": "Tidak ada jawaban tertulis untuk dibaca.",
+  "Only the poll's maker and the owners can read these.": "Hanya pembuat jajak pendapat dan pemilik yang dapat membacanya.",
+  "Report": "Laporkan",
+  "Reported": "Dilaporkan",
+  "Cancel": "Batal",
+  "The typed answers could not be read.": "Jawaban tertulis tidak dapat dibaca.",
+  "Remove this typed answer? The vote still counts.": "Hapus jawaban tertulis ini? Suaranya tetap dihitung."
 }

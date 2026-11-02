@@ -900,5 +900,22 @@
   "{date}: {n} event|{date}: {n} events": {
     "one": "{date}: {n} ഇവന്റ്",
     "other": "{date}: {n} ഇവന്റുകൾ"
-  }
+  },
+  "Your answer": "നിങ്ങളുടെ ഉത്തരം",
+  "Don't put your name": "നിങ്ങളുടെ പേര് എഴുതരുത്",
+  "Send my answer": "എന്റെ ഉത്തരം അയയ്ക്കുക",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "നിങ്ങളുടെ ഉത്തരം അന്തിമമാണ്: അതിനെ നിങ്ങളുമായി ഒന്നും ബന്ധിപ്പിക്കുന്നില്ല, അതിനാൽ മാറ്റാനാവില്ല.",
+  "You have answered this poll.": "നിങ്ങൾ ഈ പോളിന് ഉത്തരം നൽകി.",
+  "Offer \"Other\" with a typed answer": "എഴുതുന്ന ഉത്തരത്തോടെ \"മറ്റുള്ളവ\" നൽകുക",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "അംഗങ്ങൾക്ക് സ്വന്തം ഉത്തരം എഴുതാം. എത്ര പേർ മറ്റുള്ളവ തിരഞ്ഞെടുത്തു എന്ന് എല്ലാവരും കാണും; വാക്കുകൾ നിങ്ങളും കമ്മ്യൂണിറ്റി ഉടമകളും മാത്രം വായിക്കും.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "അജ്ഞാത പോളിൽ ഓരോ ഉത്തരവും അന്തിമമാണ്, പോൾ അവസാനിക്കുമ്പോൾ വാക്കുകൾ കാണിക്കും.",
+  "Read the typed answers": "എഴുതിയ ഉത്തരങ്ങൾ വായിക്കുക",
+  "The typed answers show here once the poll closes.": "പോൾ അവസാനിക്കുമ്പോൾ എഴുതിയ ഉത്തരങ്ങൾ ഇവിടെ കാണിക്കും.",
+  "No typed answers to read.": "വായിക്കാൻ എഴുതിയ ഉത്തരങ്ങളൊന്നുമില്ല.",
+  "Only the poll's maker and the owners can read these.": "പോൾ ഉണ്ടാക്കിയ ആൾക്കും ഉടമകൾക്കും മാത്രമേ ഇവ വായിക്കാനാകൂ.",
+  "Report": "റിപ്പോർട്ട് ചെയ്യുക",
+  "Reported": "റിപ്പോർട്ട് ചെയ്തു",
+  "Cancel": "റദ്ദാക്കുക",
+  "The typed answers could not be read.": "എഴുതിയ ഉത്തരങ്ങൾ വായിക്കാനായില്ല.",
+  "Remove this typed answer? The vote still counts.": "ഈ എഴുതിയ ഉത്തരം നീക്കണോ? വോട്ട് തുടർന്നും എണ്ണും."
 }

@@ -37,6 +37,8 @@ export interface NodeFeatures {
     autoHideReports?: boolean;
     autoMute?: boolean;
     guestListingsOnly?: boolean;
+    /** A poll here can offer a typed Other (apps/server engine/poll-other.ts). An older node says nothing, and the maker isn't asked. */
+    pollOther?: boolean;
     /** A nearly empty Market shows a few example cards (utils/example-listings.ts). */
     exampleListings?: boolean;
     /** Members propose and vote on formal Decisions here. Off on the worldwide community (Marty, 2026-09-27). */
@@ -110,6 +112,7 @@ export type NodeDoor = 'open' | 'members' | 'admins';
 const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'knownFloor'>> = [
+    'pollOther',
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'dmRequests', 'shareOutside',
@@ -193,9 +196,11 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
     const b = body as {
         profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown; addresses?: unknown; primaryAddress?: unknown;
-        recoveryCopies?: unknown;
+        recoveryCopies?: unknown; pollOther?: unknown;
     };
     const features: NodeFeatures = {};
+    // Said beside `features` by the node (routes/community.ts), kept among them here.
+    if (b.pollOther === true) features.pollOther = true;
     if (b.features && typeof b.features === 'object') {
         const f = b.features as Record<string, unknown>;
         for (const key of FEATURE_KEYS) {

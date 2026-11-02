@@ -900,5 +900,22 @@
   "{date}: {n} event|{date}: {n} events": {
     "one": "{date}: {n} etkinlik",
     "other": "{date}: {n} etkinlik"
-  }
+  },
+  "Your answer": "Yanıtınız",
+  "Don't put your name": "Adınızı yazmayın",
+  "Send my answer": "Yanıtımı gönder",
+  "Your answer is final: nothing links it to you, so it cannot be changed.": "Yanıtınız kesindir: onu sizinle ilişkilendiren hiçbir şey yoktur, bu yüzden değiştirilemez.",
+  "You have answered this poll.": "Bu anketi yanıtladınız.",
+  "Offer \"Other\" with a typed answer": "Yazılı yanıtla “Diğer” seçeneği sun",
+  "Members can write their own answer. Everyone sees how many chose Other; only you and the community's owners read the words.": "Üyeler kendi yanıtlarını yazabilir. Herkes kaçının Diğer'i seçtiğini görür; yazılanları yalnızca siz ve topluluğun sahipleri okur.",
+  "On an anonymous poll each answer is final, and the words show once the poll closes.": "Anonim bir ankette her yanıt kesindir ve yazılanlar anket kapanınca görünür.",
+  "Read the typed answers": "Yazılı yanıtları oku",
+  "The typed answers show here once the poll closes.": "Yazılı yanıtlar anket kapanınca burada görünür.",
+  "No typed answers to read.": "Okunacak yazılı yanıt yok.",
+  "Only the poll's maker and the owners can read these.": "Bunları yalnızca anketi oluşturan kişi ve sahipler okuyabilir.",
+  "Report": "Bildir",
+  "Reported": "Bildirildi",
+  "Cancel": "İptal",
+  "The typed answers could not be read.": "Yazılı yanıtlar okunamadı.",
+  "Remove this typed answer? The vote still counts.": "Bu yazılı yanıt kaldırılsın mı? Oy sayılmaya devam eder."
 }

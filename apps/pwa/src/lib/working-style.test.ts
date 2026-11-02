@@ -9,13 +9,16 @@ import { memoryIndexedDB } from './memory-indexeddb';
 import { clearAccountStorage } from './device-prefs';
 import { endAccountEpoch, resetAccountEpochForTest } from './account-epoch';
 import { resetGroupChatLockStoreForTest } from './group-chat-lock-store';
-import { keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from './working-style';
+import {
+    adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle, reconcileWorkingStyleAtOpen, workingStyleToCarry,
+} from './working-style';
 import * as api from './api';
 
 vi.mock('./api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./api')>()),
     checkMembership: vi.fn(async () => ({ isMember: true, callsign: 'Alice' })),
     updateMemberProfile: vi.fn(async () => ({ success: true, profile: { publicKey: ME } })),
+    getMemberProfile: vi.fn(async () => ({ publicKey: ME, avatar: null, bio: '', contact: null })),
 }));
 
 const ME = 'my-user-pubkey';
@@ -85,5 +88,43 @@ describe('a quiz\'s publish', () => {
         vi.mocked(api.checkMembership).mockResolvedValue({ isMember: false, callsign: null });
         expect(await publishQuizResult(ME, quiz('2026-11-03'))).toBeNull();
         expect(api.updateMemberProfile).not.toHaveBeenCalled();
+    });
+});
+
+describe('adopting a newer row into the browser copy', () => {
+    it('adopts a newer row into localStorage', () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        expect(adoptWorkingStyle(ME, row('2026-11-03'))).toBe(true);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ primary: 'guardian', takenOn: '2026-11-03' });
+    });
+
+    it('orders old millisecond stamps and adopts if newer', () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        const oldStamped = JSON.stringify({ primary: 'spark', secondary: 'weaver', mode: 'quick', updatedAt: '2026-11-04T12:00:00.000Z' });
+        expect(adoptWorkingStyle(ME, oldStamped)).toBe(true);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ primary: 'spark', takenOn: '2026-11-04' });
+    });
+
+    it('never an older row, and a tie changes nothing', () => {
+        keepQuizResult(ME, quiz('2026-11-03'));
+        expect(adoptWorkingStyle(ME, row('2026-11-01'))).toBe(false);
+        expect(adoptWorkingStyle(ME, row('2026-11-03'))).toBe(false);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ takenOn: '2026-11-03' });
+    });
+});
+
+describe('at web open', () => {
+    it('adopts a newer row from the node into the browser copy', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, archetype: row('2026-11-03') } as any);
+        await reconcileWorkingStyleAtOpen(ME);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ takenOn: '2026-11-03' });
+    });
+
+    it('an older row from the node changes nothing', async () => {
+        keepQuizResult(ME, quiz('2026-11-03'));
+        vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, archetype: row('2026-11-01') } as any);
+        await reconcileWorkingStyleAtOpen(ME);
+        expect(JSON.parse(readWorkingStyle(ME)!)).toMatchObject({ takenOn: '2026-11-03' });
     });
 });

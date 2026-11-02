@@ -26,15 +26,15 @@ import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
-import { saveCanonicalProfile } from './canonical-profile';
+import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
 import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
-import { archetypeToSend } from './working-style';
+import { adoptNewerRowIntoDevice, archetypeToSend, firstRunWorkingStyle } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
+import { archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -4195,8 +4195,11 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         // and awaiting it between SQLite statements would hold the write transaction open on
         // unrelated I/O. `ownRowChanged` is declared out here so it survives to after the
         // commit, which is the only point at which it is safe to tell the UI to re-read.
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
         let ownRowChanged = false;
+        let ownSyncedArchetype: string | null = null;
+        let selfMemberFound = false;
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth
@@ -4247,6 +4250,18 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             const arch = m.archetype || null;
+            let finalArch = arch;
+            if (pk === selfPubkey) {
+                selfMemberFound = true;
+                if (arch) ownSyncedArchetype = arch;
+                const localRow = await txn.getFirstAsync<{ archetype?: string | null }>(
+                    'SELECT archetype FROM members WHERE public_key = ?',
+                    [pk]
+                );
+                if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
+                    finalArch = localRow.archetype;
+                }
+            }
             if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -4261,7 +4276,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                    archetype = COALESCE(excluded.archetype, members.archetype)`,
                 // The CASE placeholder is the 9th `?` in the statement text, so it binds AFTER
                 // the eight VALUES parameters.
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch, avatarNullClears ? 1 : 0]
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, avatarNullClears ? 1 : 0]
             );
         }
 
@@ -4499,6 +4514,18 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         });
         // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
         if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
+        if (selfMemberFound && anchorUrl) {
+            const plain = anchorUrl.replace(/\/+$/, '');
+            for (const u of new Set([anchorUrl, plain, `${plain}/`])) {
+                await clearGuestNode(u).catch(() => {});
+            }
+        }
+        if (ownSyncedArchetype && selfPubkey) {
+            const deviceCopy = (await getCanonicalProfile())?.archetype ?? null;
+            if (archetypeIsNewer(ownSyncedArchetype, deviceCopy)) {
+                await adoptNewerRowIntoDevice(selfPubkey, ownSyncedArchetype, anchorUrl);
+            }
+        }
         return true;
     } finally {
         releaseSyncLock();

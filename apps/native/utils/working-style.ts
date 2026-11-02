@@ -1,9 +1,11 @@
-import { archetypeIsNewer, archetypeToCarry, publicArchetype, type QuizResult } from '@beanpool/core';
+import { archetypeIsNewer, archetypeToCarry, parseArchetype, publicArchetype, type QuizResult } from '@beanpool/core';
+import * as SQLite from 'expo-sqlite';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { buildSignedHeaders } from './crypto';
+import { loadIdentity } from './identity';
 import { fetchMembership } from './membership-probe';
 import { plainOriginOf } from './node-url';
-import { getSavedNodes, isGuestNode } from './nodes';
+import { clearGuestNode, getDatabaseFilenameForNode, getSavedNodes, isGuestNode } from './nodes';
 import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from './pending-profile-sync';
 
 /**
@@ -21,6 +23,107 @@ import { clearWaitingArchetype, keepWaitingArchetype, waitingArchetype } from '.
  */
 
 export { clearWaitingArchetype, keepWaitingArchetype };
+
+/**
+ * Adopt a newer archetype row into the device copy and mark every other saved community
+ * so the phone carries it on at their next sync (scratch/fable-design/DESIGN-archetype-across-fable.md §3 S2).
+ */
+export async function adoptNewerRowIntoDevice(publicKey: string, rowArchetype: string, openCommunity?: string | null): Promise<void> {
+    await saveCanonicalProfile({ archetype: rowArchetype });
+    const parsed = parseArchetype(rowArchetype);
+    if (!parsed) return;
+    const publicForm = publicArchetype(parsed);
+    for (const node of await getSavedNodes()) {
+        if (await onGuestVisit(node.url)) continue;
+        if (openCommunity && plainOriginOf(node.url) === plainOriginOf(openCommunity)) continue;
+        await keepWaitingArchetype(node.url, publicKey, publicForm);
+    }
+}
+
+/**
+ * First run across saved communities (scratch/fable-design/DESIGN-archetype-across-fable.md §3, slice S2):
+ * - Reads each saved community's local members row for this key, plus the device copy.
+ * - Orders results (including old millisecond stamps), adopting the newest into the device copy.
+ * - Marks each older community's pending entry with core's publicArchetype (reducing any millisecond stamp to a date).
+ * - Heals any guest mark on a community where the member has a row or the node says member.
+ * Safe to run twice; a tie changes nothing.
+ */
+export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> {
+    const identity = await loadIdentity().catch(() => null);
+    const publicKey = explicitKey ?? identity?.publicKey;
+    if (!publicKey) return;
+
+    const nodes = await getSavedNodes();
+    if (nodes.length === 0) return;
+
+    let newestRaw: string | null = null;
+    let newestParsed: QuizResult | null = null;
+    let newestOrigin: string | null = null;
+
+    const deviceCopy = (await getCanonicalProfile())?.archetype ?? null;
+    if (deviceCopy) {
+        const parsed = parseArchetype(deviceCopy);
+        if (parsed) {
+            newestRaw = deviceCopy;
+            newestParsed = parsed;
+        }
+    }
+
+    const rowsByCommunity = new Map<string, string | null>();
+
+    for (const node of nodes) {
+        const filename = getDatabaseFilenameForNode(node.url);
+        let handle: any = null;
+        try {
+            handle = await SQLite.openDatabaseAsync(filename, { useNewConnection: true });
+            const row = await handle.getFirstAsync(
+                'SELECT archetype FROM members WHERE public_key = ?',
+                [publicKey]
+            ) as { archetype?: string | null } | null;
+
+            if (row) {
+                // The member is present in this community's directory: heal any stale guest mark
+                const plain = node.url.replace(/\/+$/, '');
+                for (const u of new Set([node.url, plain, `${plain}/`])) {
+                    await clearGuestNode(u).catch(() => {});
+                }
+                const arch = row.archetype ?? null;
+                rowsByCommunity.set(node.url, arch);
+                if (arch && archetypeIsNewer(arch, newestRaw)) {
+                    const parsed = parseArchetype(arch);
+                    if (parsed) {
+                        newestRaw = arch;
+                        newestParsed = parsed;
+                        newestOrigin = node.url;
+                    }
+                }
+            }
+        } catch {
+            // Database not created or unreadable
+        } finally {
+            await handle?.closeAsync().catch(() => {});
+        }
+    }
+
+    if (!newestParsed || !newestRaw) return;
+
+    // Adopt into canonical profile if newer
+    if (archetypeIsNewer(newestRaw, deviceCopy)) {
+        await saveCanonicalProfile({ archetype: newestRaw });
+    }
+
+    // Mark older communities: publicArchetype cuts any millisecond stamp to a date
+    const publicForm = publicArchetype(newestParsed);
+    for (const node of nodes) {
+        if (await onGuestVisit(node.url)) continue;
+        if (newestOrigin && plainOriginOf(node.url) === plainOriginOf(newestOrigin)) continue;
+        const row = rowsByCommunity.get(node.url);
+        if (row === undefined) continue; // Not a member there
+        if (archetypeIsNewer(newestRaw, row)) {
+            await keepWaitingArchetype(node.url, publicKey, publicForm);
+        }
+    }
+}
 
 /** Whether the phone is only visiting `community`: no answer counts as a visit, so nothing goes on a guess. */
 export const onGuestVisit = (community: string): Promise<boolean> => isGuestNode(community).catch(() => true);

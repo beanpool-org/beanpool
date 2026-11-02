@@ -67,6 +67,14 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
                 : answer.kind === 'closed' ? 'closed'
                 : answer.recovering ? 'recovering' : 'stranger';
             if (mounted.current) setRecognition(result);
+            if (result === 'member') {
+                const plain = url.replace(/\/+$/, '');
+                for (const u of new Set([url, plain, `${plain}/`])) {
+                    void import('../utils/nodes')
+                        .then(({ clearGuestNode }) => clearGuestNode(u))
+                        .catch(() => {});
+                }
+            }
             // No member here, so this community keeps no block list for the key (a removed account's went with it): the
             // phone counts none of its blocks as on it, and sends them again once the key is a member here (blocklist.ts).
             if (result === 'closed' || result === 'stranger') {

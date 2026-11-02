@@ -56,7 +56,7 @@ import { ModerationPauseCard } from '../components/ModerationPauseCard';
 import { KnownConsentCard } from '../components/KnownConsentCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
-import { keepQuizResult, publishQuizResult, readWorkingStyle } from '../lib/working-style';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle } from '../lib/working-style';
 import { parseArchetype, newestArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
 import { BoldWords } from '../components/BoldWords';
@@ -707,7 +707,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     };
 
     useEffect(() => {
-        getMemberProfile(identity.publicKey).then(setProfile).catch(() => {});
+        getMemberProfile(identity.publicKey).then(p => {
+            setProfile(p);
+            if (p?.archetype) adoptWorkingStyle(identity.publicKey, p.archetype);
+        }).catch(() => {});
     }, [identity.publicKey, mode]);
 
     const fingerprint = identity.publicKey.slice(0, 16) + '…';

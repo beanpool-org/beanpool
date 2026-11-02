@@ -80,11 +80,11 @@ import { publicArchetype, type QuizResult } from '@beanpool/core';
 import { retireParkedPickAfterPublish } from '../avatar-value';
 import { getCanonicalProfile, saveCanonicalProfile } from '../canonical-profile';
 import { closeDB, getDb, getMemberProfile, pushProfileToServer, pushWaitingArchetype, updateMemberProfile } from '../db';
-import { addSavedNode, clearGuestNode, markGuestNode, removeSavedNode } from '../nodes';
+import { addSavedNode, clearGuestNode, isGuestNode, markGuestNode, removeSavedNode } from '../nodes';
 import {
     carryPendingProfileChange, clearPendingProfileChange, clearWaitingArchetype, keepPendingProfileChange, keepWaitingArchetype, pendingProfileChange, waitingArchetype,
 } from '../pending-profile-sync';
-import { keepQuizResult } from '../working-style';
+import { firstRunWorkingStyle, keepQuizResult } from '../working-style';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from '../storage-keys';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
@@ -444,6 +444,19 @@ describe('nothing goes to a community the member isn\'t in', () => {
         await pushProfileToServer();
         expect(sentTo(A)[0]).not.toHaveProperty('archetype');
     });
+
+    it('a guest mark heals when the node says member, letting the result reach it', async () => {
+        await addSavedNode(B);
+        await markGuestNode(B);
+        await saveCanonicalProfile({ archetype: JSON.stringify(quiz('2026-11-03')) });
+        nodeAt(B).member = 'yes';
+        await openCommunity(B);
+        await performSync();
+        expect(await isGuestNode(B)).toBe(false);
+        await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x' });
+        await pushProfileToServer();
+        expect(sentTo(B)[0]?.archetype).toBe(publicOf(quiz('2026-11-03')));
+    });
 });
 
 describe('never over a newer result the community already holds', () => {
@@ -507,6 +520,74 @@ describe('the device copy', () => {
         await openCommunity(A);
         await performSync();
         expect((await getCanonicalProfile())?.archetype).toBe(taken);
+    });
+
+    it('adopts a newer row when the members sync brings it, and carries it on to the other community', async () => {
+        await memberOfBoth();
+        await saveCanonicalProfile({ archetype: JSON.stringify(quiz('2026-11-01', 'guardian')) });
+        nodeAt(A).held.archetype = publicOf(quiz('2026-11-03', 'spark'));
+        await openCommunity(A);
+        await performSync();
+        expect((await getCanonicalProfile())?.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
+        expect(await waitingArchetype(B, ME)).toBe(publicOf(quiz('2026-11-03', 'spark')));
+    });
+
+    it('two rows, two days: the device copy is the newer, the older community\'s entry is marked', async () => {
+        await memberOfBoth();
+        await openCommunity(A);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(quiz('2026-11-01', 'guardian')) });
+        await openCommunity(B);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(quiz('2026-11-02', 'spark')) });
+
+        await saveCanonicalProfile({ archetype: null });
+
+        await firstRunWorkingStyle();
+
+        expect((await getCanonicalProfile())?.archetype).toBe(publicOf(quiz('2026-11-02', 'spark')));
+        expect(await waitingArchetype(A, ME)).toBe(publicOf(quiz('2026-11-02', 'spark')));
+        expect(await waitingArchetype(B, ME)).toBeNull();
+    });
+
+    it('orders the old millisecond stamps and cuts them to a date before marking', async () => {
+        await memberOfBoth();
+        await openCommunity(A);
+        await updateMemberProfile(ME, {
+            callsign: 'Marty',
+            archetype: JSON.stringify({ primary: 'guardian', secondary: 'weaver', mode: 'quick', updatedAt: '2026-10-01T12:00:00.000Z' }),
+        });
+        await openCommunity(B);
+        await updateMemberProfile(ME, {
+            callsign: 'Marty',
+            archetype: JSON.stringify({ primary: 'spark', secondary: 'weaver', mode: 'quick', updatedAt: '2026-10-02T15:30:00.000Z' }),
+        });
+
+        await saveCanonicalProfile({ archetype: null });
+
+        await firstRunWorkingStyle();
+
+        expect((await getCanonicalProfile())?.archetype).toContain('spark');
+        const marked = await waitingArchetype(A, ME);
+        expect(marked).toBe(JSON.stringify({ primary: 'spark', secondary: 'weaver', mode: 'quick', takenOn: '2026-10-02' }));
+        expect(marked).not.toContain('updatedAt');
+        expect(marked).not.toContain('15:30');
+    });
+
+    it('the first run is safe to run twice and leaves ties alone', async () => {
+        await memberOfBoth();
+        await openCommunity(A);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(quiz('2026-11-02', 'guardian')) });
+        await openCommunity(B);
+        await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(quiz('2026-11-02', 'spark')) });
+
+        await saveCanonicalProfile({ archetype: null });
+
+        await firstRunWorkingStyle();
+        expect(await waitingArchetype(A, ME)).toBeNull();
+        expect(await waitingArchetype(B, ME)).toBeNull();
+
+        await firstRunWorkingStyle();
+        expect(await waitingArchetype(A, ME)).toBeNull();
+        expect(await waitingArchetype(B, ME)).toBeNull();
     });
 });
 

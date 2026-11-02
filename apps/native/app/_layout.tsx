@@ -1106,6 +1106,11 @@ export default function RootLayout() {
             .then(() => registerPillarSync())
             // Trigger Immediate foreground sync
             .then(() => requestSync())
+            .then(() => {
+                void import('../utils/working-style')
+                    .then(({ firstRunWorkingStyle }) => firstRunWorkingStyle())
+                    .catch(() => {});
+            })
             .catch(err => {
                 console.error('[Init DB] Error:', err);
                 Alert.alert(t('DB Error'), String(err));

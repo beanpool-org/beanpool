@@ -1021,6 +1021,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="treasury-post" options={sheetOptions} />
                 <Stack.Screen name="suggest-change" options={sheetOptions} />
                 <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="calendar" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="community-card" options={{ animation: 'slide_from_right' }} />

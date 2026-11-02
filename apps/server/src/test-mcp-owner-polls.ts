@@ -356,7 +356,7 @@ async function main(): Promise<void> {
         }
         const readBack = (await (async () => (structured(await tool('my_posts', { limit: 50 }))?.posts as any[]))()).find((p) => p.postId === editId);
         assert(readBack?.kind === 'poll' && /Saturday morning/.test(fenced(readBack?.options?.[0]?.text)) && readBack?.options?.length === 3 && readBack?.options?.[0]?.id === 'opt_1',
-            `my_posts reads a poll's answers back, fenced (${JSON.stringify(readBack?.options?.[0]).slice(0, 120)})`);
+            `my_posts reads a poll's answers back, fenced (${String(JSON.stringify(readBack?.options?.[0])).slice(0, 120)})`);
         assert(readBack?.openVote === false && readBack?.closesAt === row(editId)?.poll_closes_at && readBack?.closed === false && readBack?.totalVotes === 0 && readBack?.answersFixed === false,
             `and its ballot, its closing time, its votes, and that its answers can still change (${JSON.stringify({ o: readBack?.openVote, c: readBack?.closed, t: readBack?.totalVotes, f: readBack?.answersFixed })})`);
         assert(readBack?.lat === undefined && readBack?.photoCount === undefined && readBack?.beans === undefined && readBack?.category === undefined, 'and no field a poll does not take');

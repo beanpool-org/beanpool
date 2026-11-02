@@ -173,6 +173,8 @@ const browser = await chromium.launch();
 const problems = [];
 try {
     const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 1.5 });
+    // November 2026 has a sixth row, the case the last-week check is for, and the events below are in it.
+    await context.clock.setFixedTime(new Date('2026-11-03T10:00:00'));
     await context.route('**/*', (route) => (route.request().url().startsWith(base) || route.request().url().startsWith('data:') ? route.continue() : route.abort()));
     const page = await context.newPage();
     const errors = [];
@@ -215,7 +217,8 @@ try {
             // The day's list lies over the screen's bottom: the month must scroll clear of it, last week included.
             const scroller = document.querySelector('[data-testid="calendar-month-scroll"]');
             const days = [...document.querySelectorAll('[data-testid^="month-day-"]')];
-            if (stackPanel && days.length) {
+            if (!stackPanel || !days.length) out.push('no day open: the last-week check read nothing');
+            else {
                 if (scroller) scroller.scrollTop = scroller.scrollHeight;
                 const last = days[days.length - 1].getBoundingClientRect();
                 const top = stackPanel.getBoundingClientRect().top;

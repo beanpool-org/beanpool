@@ -73,7 +73,7 @@ export interface TableHashes {
  * 11: posts gains shown_price (DESIGN-reaching-across-fable.md §1 row 4, slice G1′). Raised for the same reason as 8.
  */
 /**
- * 13: poll_votes gains other_answer_id, and poll_answers is hashed too (a poll's typed Other, REPLICA_FORMAT 13). Raised for
+ * 13: poll_votes gains other_answer_id, and a poll's answers are hashed too (a typed Other, REPLICA_FORMAT 13). Raised for
  * the same reason as 4.
  */
 /**

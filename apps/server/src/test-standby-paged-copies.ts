@@ -142,7 +142,7 @@ async function main(): Promise<void> {
                 `S's own log line, its other cursor, its node role, a setting of its own and its copy record's id came through the swap (${JSON.stringify({ before: own0, after: own1, id: [rec0.id, rec1.id] })})`);
             const s1 = await snapS();
             const m1 = await snapM();
-            assert(s1.format === '12' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
+            assert(s1.format === '13' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
                 `S's copy is format 13, with its cursor, and all ${m1.tables.messages.count} of M's chat lines (${JSON.stringify({ format: s1.format, cursor: s1.cursor })}; ${counts(s1, 'messages')})`);
             const d1 = await standby.send('pull', {});
             const st1b = await standby.send('staging');

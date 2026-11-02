@@ -492,7 +492,7 @@ async function main(): Promise<void> {
         const tool = AGENT_TOOLS.find(t => t.name === 'community_totals')!;
         const answer = await tool.run({ role: 'admin' } as never, {}, 'x') as unknown as { ok: boolean; result: { newMembers: { allTime: { firstTrade: number } } } };
         assert(answer.ok && answer.result.newMembers.allTime.firstTrade === 10, `the assistant's community_totals carries it (${JSON.stringify(answer.result.newMembers.allTime)})`);
-        assert(/first trade/.test(tool.reads) && /held back/.test(tool.reads), `and its description says what it reads and what a null means`);
+        assert(/first trade/.test(tool.reads) && /say it is held back/.test(tool.reads), `and its description says what it reads and what a null means`);
         // 10 of 10 traded in the window, and the window reads null (the two-windows scene in part 5): "under 5 people" alone would be false.
         assert(/between the two windows/.test(tool.reads) && /can hide a large number/.test(tool.reads) && /never read it as 0 or as a small number/.test(tool.reads),
             `and a null can't be told to an owner as a small number: it can be a window held back beside another`);

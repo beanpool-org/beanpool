@@ -840,7 +840,7 @@
   "At least {n}": "Setidaknya {n}",
   "Typical time from joining to a first listing": "Waktu umum dari bergabung hingga iklan pertama",
   "Typical time from a first listing to a first trade": "Waktu umum dari iklan pertama hingga transaksi pertama",
-  "Held back": "Ditahan",
+  "Held back": "Disembunyikan",
   "No trades yet": "Belum ada transaksi",
   "Under a day": "Kurang dari sehari",
   "This community has no Beans, so there are no trades to measure.": "Komunitas ini tidak memakai kacang, jadi tidak ada transaksi untuk diukur.",
@@ -849,7 +849,7 @@
   },
   "Typical means the middle person: half were quicker, half slower.": "Umumnya berarti orang di tengah: separuh lebih cepat, separuh lebih lambat.",
   "The wait for a first trade counts only people who listed before they traded.": "Waktu tunggu transaksi pertama hanya menghitung orang yang memasang iklan sebelum bertransaksi.",
-  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Angka ditahan jika di baliknya ada kurang dari {n} orang, atau jika selisih kedua kolom kurang dari {n} orang.",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Angka disembunyikan jika di baliknya ada kurang dari {n} orang, atau jika selisih kedua kolom kurang dari {n} orang.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Transaksi pertama naik per {n}, sehingga angkanya tidak pernah menunjuk satu orang.",
   "{n} at this spot": "{n} di tempat ini"
 }

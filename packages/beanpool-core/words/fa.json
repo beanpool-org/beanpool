@@ -878,7 +878,7 @@
   "At least {n}": "دست‌کم {n}",
   "Typical time from joining to a first listing": "زمان معمول از پیوستن تا نخستین آگهی",
   "Typical time from a first listing to a first trade": "زمان معمول از نخستین آگهی تا نخستین معامله",
-  "Held back": "نگه داشته شده",
+  "Held back": "پنهان",
   "No trades yet": "هنوز معامله‌ای نیست",
   "Under a day": "کمتر از یک روز",
   "This community has no Beans, so there are no trades to measure.": "این جامعه لوبیا ندارد، پس معامله‌ای برای اندازه‌گیری نیست.",
@@ -888,7 +888,7 @@
   },
   "Typical means the middle person: half were quicker, half slower.": "معمول یعنی نفر وسط: نیمی سریع‌تر و نیمی کندتر بودند.",
   "The wait for a first trade counts only people who listed before they traded.": "انتظار برای نخستین معامله فقط کسانی را می‌شمارد که پیش از معامله آگهی گذاشتند.",
-  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "یک عدد نگه داشته می‌شود اگر کمتر از {n} نفر پشت آن باشند یا اختلاف دو ستون کمتر از {n} نفر باشد.",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "یک عدد نمایش داده نمی‌شود اگر کمتر از {n} نفر پشت آن باشند یا اختلاف دو ستون کمتر از {n} نفر باشد.",
   "First trades go up in steps of {n}, so the number never points at one person.": "نخستین معامله‌ها با گام‌های {n}تایی بالا می‌روند تا عدد هرگز به یک نفر اشاره نکند.",
   "{n} at this spot": "{n} مورد در این نقطه"
 }

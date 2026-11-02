@@ -852,6 +852,15 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "対象が{n}人未満のとき、または2つの列の差が{n}人未満のとき、その数値は表示されません。",
   "First trades go up in steps of {n}, so the number never points at one person.": "初めての取引は {n} 件単位で増えるため、数字が特定の人を指すことはありません。",
   "{n} at this spot": "この場所に{n}件",
+  "Calendar": "カレンダー",
+  "Nothing on {date}": "{date}には何もありません",
+  "Nothing on in {month}.": "{month}月には何もありません。",
+  "Next: {date} ›": "次: {date} ›",
+  "No events coming up yet.": "今後のイベントはまだありません。",
+  "Start one ›": "作成する ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "other": "{date}: {n}件のイベント"
+  },
   "Your answer": "あなたの回答",
   "Don't put your name": "名前を書かないでください",
   "Send my answer": "回答を送信",

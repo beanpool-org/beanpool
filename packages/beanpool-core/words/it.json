@@ -891,6 +891,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Un dato viene nascosto quando dietro ci sono meno di {n} persone, o quando meno di {n} persone separano le due colonne.",
   "First trades go up in steps of {n}, so the number never points at one person.": "I primi scambi salgono a gruppi di {n}, così il numero non indica mai una persona.",
   "{n} at this spot": "{n} in questo punto",
+  "Calendar": "Calendario",
+  "Nothing on {date}": "Niente il {date}",
+  "Nothing on in {month}.": "Niente in programma a {month}.",
+  "Next: {date} ›": "Prossimo: {date} ›",
+  "No events coming up yet.": "Nessun evento in programma al momento.",
+  "Start one ›": "Creane uno ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} evento",
+    "other": "{date}: {n} eventi"
+  },
   "Your answer": "La tua risposta",
   "Don't put your name": "Non scrivere il tuo nome",
   "Send my answer": "Invia la mia risposta",

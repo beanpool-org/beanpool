@@ -127,3 +127,4 @@ export type {
 } from './group-crypto.js';
 export { activityTarget } from './activity-target.js';
 export type { ActivityTarget, ActivityTargetItem } from './activity-target.js';
+export * from './calendar-month.js';

@@ -852,6 +852,15 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "해당 인원이 {n}명 미만이거나 두 열의 차이가 {n}명 미만이면 그 수치는 표시되지 않습니다.",
   "First trades go up in steps of {n}, so the number never points at one person.": "첫 거래는 {n}건 단위로 늘어나서 숫자가 한 사람을 가리키는 일은 없어요.",
   "{n} at this spot": "이 장소에 {n}개",
+  "Calendar": "캘린더",
+  "Nothing on {date}": "{date}에는 일정이 없습니다",
+  "Nothing on in {month}.": "{month}에는 일정이 없습니다.",
+  "Next: {date} ›": "다음: {date} ›",
+  "No events coming up yet.": "아직 예정된 이벤트가 없습니다.",
+  "Start one ›": "만들기 ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "other": "{date}: {n}개의 이벤트"
+  },
   "Your answer": "내 답변",
   "Don't put your name": "이름을 쓰지 마세요",
   "Send my answer": "내 답변 보내기",

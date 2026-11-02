@@ -194,6 +194,12 @@ export const PENDING_PROFILE_STORE_PREFIX = 'beanpool_pending_profile:';
 export const PENDING_PROFILE_REFUSAL_STORE_PREFIX = `${PENDING_PROFILE_STORE_PREFIX}refused:`;
 
 /**
+ * The working style waiting to reach a community (utils/pending-profile-sync.ts keepWaitingArchetype): this prefix and the
+ * community's address in one spelling. It starts with PENDING_PROFILE_STORE_PREFIX, so Sign Out wipes it with the changes.
+ */
+export const PENDING_ARCHETYPE_STORE_PREFIX = `${PENDING_PROFILE_STORE_PREFIX}archetype:`;
+
+/**
  * This phone's push token as last registered for the account on it (services/push-notifications.ts; SecureStore, not
  * AsyncStorage). The account unregisters it on its communities as it leaves the phone (utils/account-leaves-phone.ts).
  */

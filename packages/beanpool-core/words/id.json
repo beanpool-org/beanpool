@@ -852,6 +852,15 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Angka disembunyikan jika di baliknya ada kurang dari {n} orang, atau jika selisih kedua kolom kurang dari {n} orang.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Transaksi pertama naik per {n}, sehingga angkanya tidak pernah menunjuk satu orang.",
   "{n} at this spot": "{n} di tempat ini",
+  "Calendar": "Kalender",
+  "Nothing on {date}": "Tidak ada acara pada {date}",
+  "Nothing on in {month}.": "Tidak ada acara di bulan {month}.",
+  "Next: {date} ›": "Berikutnya: {date} ›",
+  "No events coming up yet.": "Belum ada acara mendatang.",
+  "Start one ›": "Mulai satu ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "other": "{date}: {n} acara"
+  },
   "Your answer": "Jawaban Anda",
   "Don't put your name": "Jangan tulis nama Anda",
   "Send my answer": "Kirim jawaban saya",

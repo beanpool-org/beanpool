@@ -891,6 +891,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "कोई संख्या तब रोकी जाती है जब उसके पीछे {n} से कम लोग हों, या दोनों कॉलम के बीच {n} से कम लोगों का अंतर हो।",
   "First trades go up in steps of {n}, so the number never points at one person.": "पहले लेन-देन {n} के चरणों में बढ़ते हैं, ताकि संख्या कभी किसी एक व्यक्ति की ओर इशारा न करे।",
   "{n} at this spot": "इस जगह पर {n}",
+  "Calendar": "कैलेंडर",
+  "Nothing on {date}": "{date} को कुछ नहीं",
+  "Nothing on in {month}.": "{month} में कुछ नहीं है।",
+  "Next: {date} ›": "अगला: {date} ›",
+  "No events coming up yet.": "अभी कोई आगामी कार्यक्रम नहीं है।",
+  "Start one ›": "एक शुरू करें ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} कार्यक्रम",
+    "other": "{date}: {n} कार्यक्रम"
+  },
   "Your answer": "आपका जवाब",
   "Don't put your name": "अपना नाम न लिखें",
   "Send my answer": "मेरा जवाब भेजें",

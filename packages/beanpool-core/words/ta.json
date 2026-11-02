@@ -891,6 +891,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "ஒரு எண்ணுக்குப் பின்னால் {n} பேருக்குக் குறைவாக இருந்தால், அல்லது இரண்டு நெடுவரிசைகளுக்கும் இடையே {n} பேருக்குக் குறைவான வேறுபாடு இருந்தால், அது மறைக்கப்படும்.",
   "First trades go up in steps of {n}, so the number never points at one person.": "முதல் வர்த்தகங்கள் {n} படிகளாக உயர்கின்றன, எனவே எண் ஒருபோதும் ஒரு நபரைச் சுட்டாது.",
   "{n} at this spot": "இந்த இடத்தில் {n}",
+  "Calendar": "நாட்காட்டி",
+  "Nothing on {date}": "{date} அன்று நிகழ்வுகள் இல்லை",
+  "Nothing on in {month}.": "{month} இல் எதுவும் இல்லை.",
+  "Next: {date} ›": "அடுத்தது: {date} ›",
+  "No events coming up yet.": "வரவிருக்கும் நிகழ்வுகள் எதுவும் இதுவரை இல்லை.",
+  "Start one ›": "ஒன்றைத் தொடங்குங்கள் ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} நிகழ்வு",
+    "other": "{date}: {n} நிகழ்வுகள்"
+  },
   "Your answer": "உங்கள் பதில்",
   "Don't put your name": "உங்கள் பெயரை எழுத வேண்டாம்",
   "Send my answer": "என் பதிலை அனுப்பு",

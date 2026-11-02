@@ -1405,7 +1405,8 @@ export default function WelcomeScreen() {
                             body: bodyString,
                         });
                         if (res.ok) {
-                            await clearPendingProfileChange(url);
+                            // A working style waiting here stays: this publish said nothing of it.
+                            await clearPendingProfileChange(url, undefined, undefined, true);
                         } else {
                             await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
                         }
@@ -2281,7 +2282,8 @@ export default function WelcomeScreen() {
                         body: bodyString,
                     });
                     if (res.ok) {
-                        await clearPendingProfileChange(url);
+                        // A working style waiting here stays: this publish said nothing of it.
+                        await clearPendingProfileChange(url, undefined, undefined, true);
                     } else {
                         await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
                     }

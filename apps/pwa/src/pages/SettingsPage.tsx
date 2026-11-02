@@ -16,7 +16,7 @@ import {
     webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, WEB_VAULT_COPY_LINE, type WebDeletePlan,
 } from '../lib/delete-here';
 import {
-    getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getFriends, removeFriendApi,
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, getSignInRecovery, request, getCommunityMe,
@@ -56,7 +56,8 @@ import { ModerationPauseCard } from '../components/ModerationPauseCard';
 import { KnownConsentCard } from '../components/KnownConsentCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
-import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
+import { keepQuizResult, publishQuizResult, readWorkingStyle } from '../lib/working-style';
+import { parseArchetype, newestArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
 import { BoldWords } from '../components/BoldWords';
 import { Sentence } from '../components/Sentence';
@@ -634,14 +635,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
 
     const handleQuizComplete = async (quizResult: QuizResult) => {
-        const publicArchetype = JSON.stringify({
-            primary: quizResult.primary,
-            secondary: quizResult.secondary,
-            mode: quizResult.mode,
-            updatedAt: quizResult.updatedAt,
-        });
+        keepQuizResult(identity.publicKey, quizResult);
         try {
-            const res = await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+            const res = await publishQuizResult(identity.publicKey, quizResult);
             if (res?.profile) {
                 setProfile(res.profile);
             } else {
@@ -860,7 +856,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 {t('COMMUNITY WORKING STYLE')}
                             </div>
                             {(() => {
-                                const parsed = parseArchetype(profile?.archetype);
+                                const parsed = parseArchetype(newestArchetype(profile?.archetype, readWorkingStyle(identity.publicKey)));
                                 const primary = parsed ? ARCHETYPES[parsed.primary] : null;
                                 const secondary = parsed ? ARCHETYPES[parsed.secondary] : null;
 

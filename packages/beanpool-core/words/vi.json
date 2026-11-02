@@ -852,6 +852,15 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Một con số được ẩn khi có dưới {n} người đứng sau nó, hoặc khi hai cột chênh nhau dưới {n} người.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Giao dịch đầu tiên tăng theo từng bước {n}, nên con số không bao giờ chỉ ra một người.",
   "{n} at this spot": "{n} tại địa điểm này",
+  "Calendar": "Lịch",
+  "Nothing on {date}": "Không có gì vào {date}",
+  "Nothing on in {month}.": "Không có gì trong {month}.",
+  "Next: {date} ›": "Tiếp theo: {date} ›",
+  "No events coming up yet.": "Chưa có sự kiện nào sắp tới.",
+  "Start one ›": "Tạo một sự kiện ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "other": "{date}: {n} sự kiện"
+  },
   "Your answer": "Câu trả lời của bạn",
   "Don't put your name": "Đừng ghi tên bạn",
   "Send my answer": "Gửi câu trả lời của tôi",

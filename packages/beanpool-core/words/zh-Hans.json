@@ -852,6 +852,15 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "当一个数字背后不足 {n} 人，或两列相差不足 {n} 人时，该数字不显示。",
   "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 递增，因此这个数字绝不会指向某一个人。",
   "{n} at this spot": "此处有 {n} 项",
+  "Calendar": "日历",
+  "Nothing on {date}": "{date}无活动",
+  "Nothing on in {month}.": "{month}无活动。",
+  "Next: {date} ›": "下一个：{date} ›",
+  "No events coming up yet.": "暂无即将举行的活动。",
+  "Start one ›": "发起一个 ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "other": "{date}：{n} 场活动"
+  },
   "Your answer": "你的回答",
   "Don't put your name": "不要写你的名字",
   "Send my answer": "发送我的回答",

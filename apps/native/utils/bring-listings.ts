@@ -85,6 +85,7 @@ export interface OwnListing {
     credits?: number;
     priceType?: string;
     authorPublicKey: string;
+    shownCopy?: boolean;
     createdAt?: string;
     active?: boolean;
     status?: string;
@@ -303,8 +304,9 @@ export async function planBring(offer: BringOffer, identity: BeanPoolIdentity, d
     }
     if (typeof there === 'string') return 'unreachable';
     const held = new Set(there.map((p) => p.id));
-    // Their own, for everyone, written here: never a group's, one for one person, or a copy of another community's.
-    const mine = rows.filter((p) => p.authorPublicKey === identity.publicKey && !p.originNode && (p.type === 'offer' || p.type === 'need')
+    // Their own, for everyone, written here: never a group's, one for one person, or a copy of another community's, and
+    // never their own copy of a listing from home (utils/show-on-global.ts): that one has its price at home.
+    const mine = rows.filter((p) => p.authorPublicKey === identity.publicKey && !p.originNode && !p.shownCopy && (p.type === 'offer' || p.type === 'need')
         && (p.audienceScope ?? 'public') === 'public');
     const isUp = (p: OwnListing) => p.status === 'active' && p.active !== false && !p.hiddenByReportsAt;
     const bring = mine.filter(isUp).filter((p) => !held.has(broughtId(p.id, offer.to)))

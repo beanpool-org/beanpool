@@ -69,7 +69,10 @@ export interface TableHashes {
  * 10: posts gains shown_from_host and shown_from_post_id (DESIGN-list-on-global-fable.md §3, slice G2′). Raised for the same
  * reason as 8.
  */
-export const TABLE_HASHES_VERSION = 10;
+/**
+ * 11: posts gains shown_price (DESIGN-reaching-across-fable.md §1 row 4, slice G1′). Raised for the same reason as 8.
+ */
+export const TABLE_HASHES_VERSION = 11;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

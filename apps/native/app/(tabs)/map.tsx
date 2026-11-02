@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, 
 import * as Location from 'expo-location';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { t, upperCase } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, t, upperCase } from '@beanpool/core';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts } from '../../utils/db';
@@ -324,6 +324,7 @@ export default function MapScreen() {
         previewCategory: { fontSize: 12, fontWeight: '700', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, flex: 1 },
         previewCredits: { fontSize: 14, fontWeight: '800', color: colors.brand.primary },
         previewTitle: { fontSize: 18, fontWeight: '800', color: colors.text.heading, marginBottom: 4 },
+        previewCopyLine: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 12 },
         previewAuthor: { fontSize: 14, fontWeight: '500', color: colors.text.secondary },
         previewActionBtn: { paddingVertical: 7, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
         previewActionText: { color: '#fff', fontSize: 14, fontWeight: '700' },
@@ -362,6 +363,8 @@ export default function MapScreen() {
 
     // Map UI State
     const [selectedPostPreview, setSelectedPostPreview] = useState<any>(null);
+    // A copy of a listing from another community names nobody here: its line stands where the author would (eventCopyOf).
+    const previewCopy = selectedPostPreview ? eventCopyOf(selectedPostPreview) : null;
     const [markersReady, setMarkersReady] = useState(false);
     const [clustersReady, setClustersReady] = useState(false);
 
@@ -768,7 +771,7 @@ export default function MapScreen() {
                                 <Text style={styles.previewCategory} numberOfLines={1}>
                                     {upperCase(categoryLabel(selectedPostPreview.category))}
                                 </Text>
-                                {showsBeans && (
+                                {showsBeans && !previewCopy && (
                                 <CurrencyDisplay
                                     asView={true}
                                     style={styles.previewCredits}
@@ -779,23 +782,27 @@ export default function MapScreen() {
                             <Text style={styles.previewTitle} numberOfLines={1}>
                                 {selectedPostPreview.title}
                             </Text>
-                            <Pressable
-                                accessibilityRole="button"
-                                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}
-                                onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: selectedPostPreview.author_pubkey, callsign: selectedPostPreview.author_callsign || t('Unknown') } })}
-                            >
-                                <MemberAvatar 
-                                    avatarUrl={selectedPostPreview.author_avatar}
-                                    pubkey={selectedPostPreview.author_pubkey || ''}
-                                    callsign={selectedPostPreview.author_callsign || '?'}
-                                    size={20}
-                                />
-                                <Text style={[styles.previewAuthor, { color: colors.brand.primary }]} numberOfLines={1}>
-                                    {selectedPostPreview.author_energy_cycled && selectedPostPreview.author_energy_cycled >= 10000
-                                        ? t('{name} ✨ Elder', { name: selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown') })
-                                        : selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown')}
-                                </Text>
-                            </Pressable>
+                            {previewCopy ? (
+                                <Text style={styles.previewCopyLine} testID="map-preview-copy-line">{copyPriceLine(previewCopy)}</Text>
+                            ) : (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}
+                                    onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: selectedPostPreview.author_pubkey, callsign: selectedPostPreview.author_callsign || t('Unknown') } })}
+                                >
+                                    <MemberAvatar 
+                                        avatarUrl={selectedPostPreview.author_avatar}
+                                        pubkey={selectedPostPreview.author_pubkey || ''}
+                                        callsign={selectedPostPreview.author_callsign || '?'}
+                                        size={20}
+                                    />
+                                    <Text style={[styles.previewAuthor, { color: colors.brand.primary }]} numberOfLines={1}>
+                                        {selectedPostPreview.author_energy_cycled && selectedPostPreview.author_energy_cycled >= 10000
+                                            ? t('{name} ✨ Elder', { name: selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown') })
+                                            : selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown')}
+                                    </Text>
+                                </Pressable>
+                            )}
                             <Pressable
                                 accessibilityRole="button"
                                 style={[styles.previewActionBtn, { backgroundColor: selectedPostPreview.type === 'offer' ? colors.brand.fill : colors.action.fab }]}

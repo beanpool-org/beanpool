@@ -11,6 +11,7 @@
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -2308,16 +2309,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <span className="text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider truncate mr-2 flex-1">
                                 {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
                             </span>
-                            <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
-                                {t('{amount}B', { amount: previewPost.credits })}
-                            </span>
+                            {/* A member's copy has no price here: `credits` is 0, and its line below says what it is at home. */}
+                            {!eventCopyOf(previewPost) && (
+                                <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
+                                    {t('{amount}B', { amount: previewPost.credits })}
+                                </span>
+                            )}
                         </div>
                         <span className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors">
                             {previewPost.title}
                         </span>
-                        <span className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 truncate transition-colors">
-                            {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? <> ⛰️ <span>{t(TIER_WORDS.Elder)}</span></> : ''}
-                        </span>
+                        {eventCopyOf(previewPost)
+                            ? <span data-testid="map-copy-line" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 break-words transition-colors">{copyPriceLine(eventCopyOf(previewPost)!)}</span>
+                            : (
+                                <span className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 truncate transition-colors">
+                                    {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? <> ⛰️ <span>{t(TIER_WORDS.Elder)}</span></> : ''}
+                                </span>
+                            )}
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                             className={`py-2 px-4 rounded-xl border-none font-bold text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${

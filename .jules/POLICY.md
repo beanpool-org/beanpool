@@ -1244,3 +1244,13 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** RE-FILE (see #2494)
 - **Claim:** fix `test-door-signal` failure by widening the Retry-After bound to 580.
 - **Why not to re-file:** re-file of #2494. Unreproduced on main. Keep the bound tight; derive it from the tick time (`Date.now() - tick`) rather than widening.
+
+### 2026-11-03 — Expo: string|string[] params in join-open-door.tsx (#2759) — CLOSED, DECIDED (#2454)
+- **Category:** RE-FILE (see #2454)
+- **Claim:** `useLocalSearchParams` in `apps/native/app/join-open-door.tsx` can return `string[]`; take `[0]` for `then` and `from`.
+- **Why not to re-file:** same decision as #2454. An array `from` is not the link marker, so a repeated param fails closed; taking `[0]` makes `from=link&from=x` start the link-opened flow.
+
+### 2026-11-03 — Bolt: batch callsign queries in readHealthAccessLog (#2756) — CLOSED, NO MEASURED GAIN
+- **Category:** CLAIM FALSE (no measured gain), RECURRING (the #1364 shape)
+- **Claim:** `getMember()` per row makes `readHealthAccessLog` an N+1.
+- **Why not to re-file:** the read is capped at its limit, default 100, on an owner-only screen, and each `getMember()` is one indexed read. The PR gave no timing and added a second hand-kept read of `members` beside the engine's. Bolt: file a batched read only with a timing that shows a gain someone would notice.

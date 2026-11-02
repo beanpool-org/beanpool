@@ -1041,8 +1041,9 @@ function postsWithAnswers(db: Db, rows: any[]): MarketplacePost[] {
     }
     return rows.map((row) => {
         const post = postOfRow(row);
+        const answers = answersOf.get(row.id);
         // Said even when it is none: the importer replaces a poll's rows with this list, so a last line taken back goes there too.
-        return pollOtherOption(post.pollOptions) ? { ...post, pollAnswers: answersOf.get(row.id) ?? [] } as MarketplacePost : post;
+        return answers || pollOtherOption(post.pollOptions) ? { ...post, pollAnswers: answers ?? [] } as MarketplacePost : post;
     });
 }
 

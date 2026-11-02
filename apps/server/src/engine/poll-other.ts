@@ -57,7 +57,7 @@ function pollForWords(postId: string, reader: string): MarketplacePost {
     }
     // A pruned account's or an old key's row still says it made the poll: only someone who reads as a member here reads on.
     if (!readsAsMember(db, reader) || (post.authorPublicKey !== reader && !isNodeOwner(reader))) {
-        throw new PollOtherError(403, word("Only the poll's maker and the owners can read its typed answers"));
+        throw new PollOtherError(403, word("Typed answers are for the poll's maker and the owners"));
     }
     return post;
 }

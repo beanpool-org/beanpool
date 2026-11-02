@@ -21,7 +21,7 @@
   "A typed answer is at most {n} characters": "Una respuesta escrita tiene como máximo {n} caracteres",
   "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Ya has respondido a esta encuesta, y nada vincula tu respuesta contigo, así que no se puede cambiar.",
   "This poll already offers Other: leave it out of the answers": "Esta encuesta ya ofrece Otro: quítalo de las respuestas",
-  "Only the poll's maker and the owners can read its typed answers": "Solo quien creó la encuesta y los dueños pueden leer sus respuestas escritas",
+  "Typed answers are for the poll's maker and the owners": "Las respuestas escritas son para quien creó la encuesta y los dueños",
   "That typed answer is not here": "Esa respuesta escrita no está aquí",
   "Only an owner can remove a typed answer": "Solo un dueño puede quitar una respuesta escrita",
   "Failed to read the typed answers": "No se pudieron leer las respuestas escritas",

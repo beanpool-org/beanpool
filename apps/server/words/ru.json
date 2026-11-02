@@ -16,7 +16,7 @@
   "Only a pending message request can be cancelled.": "Можно отменить только ожидающий запрос сообщения.",
   "Only an owner can remove a typed answer": "Удалить написанный ответ может только владелец",
   "Only the person who sent a message request can cancel it.": "Только отправитель запроса сообщения может отменить его.",
-  "Only the poll's maker and the owners can read its typed answers": "Написанные ответы могут читать только автор опроса и владельцы",
+  "Typed answers are for the poll's maker and the owners": "Написанные ответы доступны только автору опроса и владельцам",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Отправьте conversationId, чат, и decision, 'accept', 'ignore' или 'cancel'.",
   "That typed answer is not here": "Этого написанного ответа здесь нет",
   "This community has a new address": "У этого сообщества новый адрес",

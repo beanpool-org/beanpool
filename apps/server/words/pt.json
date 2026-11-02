@@ -16,7 +16,7 @@
   "Only a pending message request can be cancelled.": "Apenas um pedido de mensagem pendente pode ser cancelado.",
   "Only an owner can remove a typed answer": "Só um dono pode remover uma resposta escrita",
   "Only the person who sent a message request can cancel it.": "Apenas a pessoa que enviou um pedido de mensagem pode cancelá-lo.",
-  "Only the poll's maker and the owners can read its typed answers": "Só quem criou a enquete e os donos podem ler as respostas escritas",
+  "Typed answers are for the poll's maker and the owners": "As respostas escritas são para quem criou a enquete e os donos",
   "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envie conversationId, o chat, e decision, 'accept', 'ignore' ou 'cancel'.",
   "That typed answer is not here": "Essa resposta escrita não está aqui",
   "This community has a new address": "Esta comunidade tem um novo endereço",

@@ -7,7 +7,7 @@
  * so this file stays pure and the vitest cases prove them (home-layout.test.ts):
  *
  * - **Add, remove, move, reset**; nothing is dragged. `needs` stays at the top and `community` at the bottom (it carries
- *   Add a card and Edit home): neither is in the list. A card of a type this build doesn't know is kept through every
+ *   Add a card and Arrange): neither is in the list. A card of a type this build doesn't know is kept through every
  *   save, byte for byte, never drawn and never asked for.
  * - **Which copy wins** ({@link pickLayout}): a version-1 account copy never wins over this browser's on a tie, an empty
  *   one never at all, and with no copy here an empty one is unknown (the newcomer's list, marked as this browser's only).
@@ -31,7 +31,7 @@ export type { HomeCardInstance, HomeLayoutV2 };
 /** A card type's id, as core's registry names it (`beans`, `search`, …), or a newer app's that this build doesn't know. */
 export type HomeCardType = string;
 
-/** First and last, always: the one card that costs a member something if missed, and the one that holds Edit home. */
+/** First and last, always: the one card that costs a member something if missed, and the one that holds Arrange. */
 export const FIXED_FIRST = 'needs';
 export const FIXED_LAST = 'community';
 const FIXED: ReadonlySet<string> = new Set([FIXED_FIRST, FIXED_LAST]);
@@ -65,7 +65,7 @@ export type HomeRole = 'owner' | 'admin' | 'moderator' | null | undefined;
 // ── Names ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * A type's name: its caption, its row in the picker and Edit home. Fixed words, never a member's: core's word() keys, in
+ * A type's name: its caption, its row in the picker and its band in Arrange. Fixed words, never a member's: core's word() keys, in
  * the member's language (the phone's utils/home-cards.ts cardName).
  */
 export function cardName(type: HomeCardType, profile?: string): string {
@@ -78,7 +78,7 @@ export function cardName(type: HomeCardType, profile?: string): string {
 export const CARD_WORDS_MAX = 24;
 
 /**
- * One card's name for the screen reader: its "…" and Edit home's labels, and the "added" and "removed" lines. A saved
+ * One card's name for the screen reader: its "…", Arrange's arrows, and the "added" and "removed" lines. A saved
  * search is named by its words, in quotes and bounded, and its kind when it isn't Both (`"eggs"`, `"eggs" (Needs)`), so
  * two of them never sound alike (review of #1699, finding 4; review of #1716); every other card by its type's name.
  * Never the caption: a caption is fixed words, never a member's.
@@ -104,7 +104,7 @@ function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string 
 }
 
 /**
- * One card's row name in Edit home: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
+ * One card's name on its band in Arrange: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
  * so two searches are two rows even with the same words; else its name.
  */
 export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
@@ -318,6 +318,22 @@ export const canRemoveCard = (type: HomeCardType, pinned: readonly string[] = []
 /** Whether a card can be moved: the same cards; `needs` stays first, a pinned card under it, and `community` last. */
 export const canMoveCard = canRemoveCard;
 
+/**
+ * The cards Arrange folds, in `order` (DESIGN-home-layout-fable.md §3.2): whatever is drawn now, and every other card on
+ * the list that this node can show, so a card with nothing to say can still be moved, set up or removed.
+ */
+export function arrangeCards(
+    order: readonly HomeCardInstance[], drawn: readonly Pick<HomeCardInstance, 'id'>[], onNode: (type: HomeCardType) => boolean, pinned: readonly string[] = [],
+): HomeCardInstance[] {
+    return order.filter(c => drawn.some(d => d.id === c.id) || (canMoveCard(c.type, pinned) && onNode(c.type)));
+}
+
+/** A card's one line when it is folded: the catalogue's. */
+export const cardLine = (type: HomeCardType): string => {
+    const entry = homeCardType(type);
+    return entry ? t(entry.line) : '';
+};
+
 // ── The member's edits ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** An edit's moment: this browser's clock, but always after the layout it was made from. */
@@ -354,8 +370,7 @@ export function changeCardSettings(layout: HomeLayoutV2 | null, id: string, sett
 }
 
 /**
- * Up or down past the card next to it in `among` (the cards on screen, for the "…" menu; every card Edit home lists,
- * there), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
+ * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
  */
 export function moveCard(
     layout: HomeLayoutV2 | null, id: string, dir: 'up' | 'down', among: readonly Pick<HomeCardInstance, 'id' | 'type'>[], now: number,
@@ -406,7 +421,7 @@ export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2
 /** These three are word() keys: Home shows them through t(). */
 export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.');
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or hold a card to arrange.');
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
 export const SEARCH_OFFLINE_LINE = word('Shows when your community answers');
 
@@ -423,7 +438,7 @@ export function searchEmptyLine(q: string, km: number | null): string {
     if (words) return km ? t('No {words} within {km} km right now', { words, km }) : t('No {words} right now', { words });
     return km ? t('No listings within {km} km right now', { km }) : t('No listings right now');
 }
-/** Edit home's line while a node before the frame can't keep the member's cards (§2.3). A word() key: shown through t(). */
+/** Arrange's line while a node before the frame can't keep the member's cards (§2.3). A word() key: shown through t(). */
 export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");
 
 // ── The picker (§1.2) ─────────────────────────────────────────────────────────────────────────────────────────────

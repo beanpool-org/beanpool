@@ -1,6 +1,6 @@
 /**
  * Add a card (scratch/home/CARD-FRAME-DESIGN-fable.md §1.2, slice F3): the picker, opened from the community card's
- * "Add a card ›" and Edit home's first row. Three groups (For you · Around you · Getting started), each type this node
+ * "Add a card ›" and Arrange's + Add a card tile. Three groups (For you · Around you · Getting started), each type this node
  * can show (lib/home-layout.ts `pickerGroups`), in the catalogue's order. A row is the type's name and one line of what
  * it shows, with an Add button, "On Home" for a one-of-a-kind already there, or "2 of 5 on Home" under an instance
  * type's line. Nothing is ever shown as locked: a type this node can't show is simply not listed.
@@ -8,7 +8,7 @@
  * A type with settings (a saved search) opens its settings ({@link CardSettingsDialog}) on Add, whose last button is
  * "Add to Home". The same settings open from a card's "…" → Settings…, with Save.
  *
- * A real dialog, as Edit home's: `role="dialog"`, labelled by its heading, focus moved in and kept there, Escape closes
+ * A real dialog: `role="dialog"`, labelled by its heading, focus moved in and kept there, Escape closes
  * it, focus goes back to what opened it (or where the page sends it after an add; components/dialog-focus.ts). Every
  * control is at least 44 px.
  */
@@ -54,7 +54,7 @@ interface PickerProps {
     /** Add this type (with its settings, for a type that has them). The page closes the picker and moves focus. */
     onAdd: (type: string, settings?: Record<string, unknown>) => void;
     onClose: () => void;
-    /** Where focus goes on close when what opened the picker has gone (Edit home's ＋ Add a card). */
+    /** Where focus goes on close when what opened the picker has gone (a tile Arrange took with it). */
     returnFocus?: () => HTMLElement | null | undefined;
     /** For a saved search's distance chips: see {@link CardSettingsDialog}. */
     hasPoint?: boolean;

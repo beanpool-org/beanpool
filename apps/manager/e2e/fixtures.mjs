@@ -1250,7 +1250,14 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     // ---- community health (People & Safety → Invites & QR): long numbers and a long name, to hold at 320px ----
     if (pathname === '/api/local/admin/community-health') {
         return ok({
-            totals: { beansInCirculation: 1234567, sumOfCredit: 1234567, sumOfDebt: 987654, membersInDebit: 1234, commonsPot: 300000, tradesThisMonth: 4100 },
+            totals: {
+                beansInCirculation: 1234567, sumOfCredit: 1234567, sumOfDebt: 987654, membersInDebit: 1234, commonsPot: 300000, tradesThisMonth: 4100,
+                newMembers: {
+                    beans: true, anyTrades: true, minGroup: 5,
+                    last90Days: { joined: 1234, firstListing: 412, firstTrade: 95, daysToFirstListing: 3, daysFromListingToTrade: null },
+                    allTime: { joined: 12340, firstListing: 9412, firstTrade: 7295, daysToFirstListing: 11, daysFromListingToTrade: 142 },
+                },
+            },
             settings: { debtLinePct: 50, quietDays: 60 }, known: true,
             log: [
                 { id: 'hl1', actor: pubkey('admin-ada'), actorCallsign: 'Ada_Lovelace_With_A_Long_Name', action: 'exceptions_opened', at: '2026-10-04T06:00:00.000Z' },

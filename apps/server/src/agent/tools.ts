@@ -31,6 +31,7 @@ import { getAdminQueue } from '../engine/admin-queue.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
 import { communityTotals } from '../engine/community-health.js';
+import { FIRST_TRADE_MIN_GROUP } from '../engine/time-to-first-trade.js';
 import { listOpenKnocks } from '../engine/knocks.js';
 import { listNodeRoles, nodeRoleOf } from '../engine/node-roles.js';
 import { getAlertsStatus, readAlertChannel } from '../services/alerts.js';
@@ -123,6 +124,7 @@ const FENCED_OR_NULL = {
     required: ['untrusted', 'text'],
 };
 const ARR = { type: 'array' };
+const FIRST_TRADE_WINDOW = OBJ({ joined: NUM, firstListing: NUM, firstTrade: NUM_OR_NULL, daysToFirstListing: NUM_OR_NULL, daysFromListingToTrade: NUM_OR_NULL });
 
 function clampLimit(v: unknown, def = 20): number {
     const n = Math.floor(Number(v));
@@ -377,12 +379,17 @@ export const AGENT_TOOLS: AgentTool[] = [
         name: 'community_totals',
         title: 'Community totals',
         reads: 'Beans in circulation, the sums of credit and debt, how many members are in debit, the Commons pot, trades this month, '
-            + 'new members in the last 7 and 30 days, and the number of posts',
-        never: "any member's balance, per-member figures, or the list of members in debit",
+            + 'new members in the last 7 and 30 days, the number of posts, and how far members who joined got (newMembers, for the last '
+            + `90 days and all time): how many joined and made a first listing, how many completed a first trade (at least this many, in steps of ${FIRST_TRADE_MIN_GROUP}), `
+            + 'and the median days from joining to a first listing and from a first listing to a first trade. '
+            + `A null there means held back: under ${FIRST_TRADE_MIN_GROUP} people in that group, or under ${FIRST_TRADE_MIN_GROUP} between the two windows, so it can hide a large number: say it is held back, never read it as 0 or as a small number. `
+            + 'beans false means this community has no Beans, so no trades to measure; anyTrades false means no trade has been finished here yet',
+        never: "any member's balance, per-member figures, any member's dates, names or keys, or the list of members in debit",
         inputSchema: NO_ARGS,
         outputSchema: OBJ({
             beansInCirculation: NUM, sumOfCredit: NUM, sumOfDebt: NUM, membersInDebit: NUM, accounts: NUM, commonsPot: NUM,
             tradesThisMonth: NUM, newMembers7Days: NUM, newMembers30Days: NUM, posts: NUM,
+            newMembers: OBJ({ beans: BOOL, anyTrades: BOOL, minGroup: NUM, last90Days: FIRST_TRADE_WINDOW, allTime: FIRST_TRADE_WINDOW }),
         }),
         run: () => {
             const t = communityTotals();
@@ -393,6 +400,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                     membersInDebit: t.membersInDebit, accounts: t.accounts, commonsPot: t.commonsPot, tradesThisMonth: t.tradesThisMonth,
                     newMembers7Days: newMembersSince(7), newMembers30Days: newMembersSince(30),
                     posts: communityCountsCached().postCount,
+                    newMembers: t.newMembers,
                 },
             };
         },

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -868,5 +868,27 @@
   "No public address currently assigned. An owner of this community can add one.": "अभी कोई सार्वजनिक पता निर्धारित नहीं है। इस समुदाय का कोई स्वामी एक पता जोड़ सकता है।",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} अभी मुख्य पता नहीं है: पता सेवा कहती है {status}। यह सर्वर उस पर चला गया है और उसे माँगता रहता है, इसलिए नीचे का पैनल अब उसे दिखाता है। सदस्य अभी भी {current} पर इस समुदाय तक पहुँचते हैं।",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "अब यह इस समुदाय का पता है। इसके बाद, नए सदस्यों को इसके किसी अन्य पते पर भेजा जाता है, यदि कोई हो। यह समुदाय {address} का प्रचार बंद करता है, और कोई नाम नहीं छोड़ा जाता। जब तक इसकी कुंजी के पास {address} है, इसका उपयोग करने वाले सदस्यों के ऐप स्वीकार किए जाते रहेंगे। यदि कुंजी के पास यह नहीं है, तो इसके बाद उन्हें अस्वीकार कर दिया जाएगा।",
+  "From joining to a first trade": "जुड़ने से लेकर पहले लेन-देन तक",
+  "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "नए सदस्य कितना आगे बढ़ते हैं, सिर्फ़ इस समुदाय के मालिकों और एडमिन के लिए। पूरे समुदाय की संख्याएँ: कोई नाम नहीं, और किसी एक व्यक्ति के बारे में कुछ नहीं।",
+  "Last 90 days": "पिछले 90 दिन",
+  "All time": "अब तक",
+  "Joined": "जुड़े",
+  "Made a first listing": "पहली लिस्टिंग की",
+  "Completed a first trade": "पहला लेन-देन पूरा किया",
+  "At least {n}": "कम से कम {n}",
+  "Typical time from joining to a first listing": "जुड़ने से पहली लिस्टिंग तक का सामान्य समय",
+  "Typical time from a first listing to a first trade": "पहली लिस्टिंग से पहले लेन-देन तक का सामान्य समय",
+  "Held back": "रोका गया",
+  "No trades yet": "अभी कोई लेन-देन नहीं",
+  "Under a day": "एक दिन से कम",
+  "This community has no Beans, so there are no trades to measure.": "इस समुदाय में फलियाँ नहीं हैं, इसलिए मापने के लिए कोई लेन-देन नहीं है।",
+  "{n} day|{n} days": {
+    "one": "{n} दिन",
+    "other": "{n} दिन"
+  },
+  "Typical means the middle person: half were quicker, half slower.": "सामान्य का मतलब बीच वाला व्यक्ति है: आधे ज़्यादा तेज़ थे, आधे धीमे।",
+  "The wait for a first trade counts only people who listed before they traded.": "पहले लेन-देन के इंतज़ार में सिर्फ़ वे गिने जाते हैं जिन्होंने लेन-देन से पहले लिस्टिंग की।",
+  "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "कोई संख्या तब रोकी जाती है जब उसके पीछे {n} से कम लोग हों, या दोनों कॉलम के बीच {n} से कम लोगों का अंतर हो।",
+  "First trades go up in steps of {n}, so the number never points at one person.": "पहले लेन-देन {n} के चरणों में बढ़ते हैं, ताकि संख्या कभी किसी एक व्यक्ति की ओर इशारा न करे।",
   "{n} at this spot": "इस जगह पर {n}"
 }

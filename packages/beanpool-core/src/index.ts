@@ -39,6 +39,7 @@ export * from './geo.js';
 export * from './member-area-words.js';
 export * from './community-card.js';
 export * from './address-reach.js';
+export * from './first-trade-words.js';
 export * from './event-copy.js';
 export * from './show-on-global.js';
 export * from './peek-ticket.js';
@@ -98,10 +99,12 @@ export * from './deal-step.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';
 export * from './market-fill.js';
+export * from './fresh-banner.js';
 export * from './map-stack.js';
 export * from './map-area-ring.js';
 export * from './refresh-gate.js';
 export * from './dm-requests.js';
+export * from './messaging.js';
 export * from './community-shape-card.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made
 // a wrap nor the key inside it) stays out of the apps' reach; openGroupKeyWrap checks the key against its record's

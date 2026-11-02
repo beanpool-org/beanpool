@@ -386,7 +386,8 @@ export const homeCardType = (type: string): HomeCardType | undefined => TYPES.ge
  * A card's hue (S1): the type's hue from the catalogue.
  * Sage for an unknown type or instance.
  */
-export const homeCardHue = (instance: Pick<HomeCardInstance, 'type'>): CardHue => TYPES.get(instance.type)?.hue ?? 'sage';
+export const homeCardHue = (instance?: Pick<HomeCardInstance, 'type'> | null): CardHue =>
+    (instance?.type ? TYPES.get(instance.type)?.hue : undefined) ?? 'sage';
 
 /** The types always drawn and never in a member's list. */
 export const HOME_FIXED_TYPES: readonly string[] = HOME_CARD_TYPES.filter((t) => t.fixed).map((t) => t.id);

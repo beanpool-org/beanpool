@@ -73,7 +73,7 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
                 <p>body</p>
             </HomeCard>,
         );
-        const band = container.querySelector('[data-testid="home-card-market-band"]') as HTMLElement;
+        const band = container.querySelector('[data-testid="card-band-market"]') as HTMLElement;
         expect(band).toBeInTheDocument();
         expect(band.style.backgroundColor).toBe('var(--bp-card-orange-tint)');
         expect(band.style.color).toBe('var(--bp-card-orange-ink)');
@@ -87,7 +87,7 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
                 <p>body</p>
             </HomeCard>,
         );
-        const sageBand = sageCard.querySelector('[data-testid="home-card-needs-band"]') as HTMLElement;
+        const sageBand = sageCard.querySelector('[data-testid="card-band-needs"]') as HTMLElement;
         expect(sageBand).toBeInTheDocument();
         expect(sageBand.style.backgroundColor).toBe('var(--bp-card-sage-tint)');
         expect(sageBand.style.color).toBe('var(--bp-card-sage-ink)');
@@ -99,7 +99,7 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
                 <p>body</p>
             </HomeCard>,
         );
-        const amberBand = amberCard.querySelector('[data-testid="home-card-needs-band"]') as HTMLElement;
+        const amberBand = amberCard.querySelector('[data-testid="card-band-needs"]') as HTMLElement;
         expect(amberBand).toBeInTheDocument();
         expect(amberBand.style.backgroundColor).toBe('var(--bp-card-amber-tint)');
         expect(amberBand.style.color).toBe('var(--bp-card-amber-ink)');

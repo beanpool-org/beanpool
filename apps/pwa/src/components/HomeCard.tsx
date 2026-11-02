@@ -165,7 +165,7 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                 className={`bg-bg-card rounded-2xl shadow-sm border p-4 mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
             >
                 <div
-                    data-testid={`home-card-${id}-band`}
+                    data-testid={`card-band-${id}`}
                     className="-mx-4 -mt-4 px-4 mb-3 py-1 rounded-t-2xl flex items-start justify-between min-h-[48px] gap-2 min-w-0"
                     style={{
                         backgroundColor: `var(--bp-card-${cardHue}-tint)`,

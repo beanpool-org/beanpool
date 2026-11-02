@@ -88,7 +88,7 @@ export const SLOW_SPAN_MS = 24 * 60 * 60_000;
 export const SLOW_MIN_ROUNDS = 6;
 /** Decision D-B: a name this node released is accepted for the registrar's 30-day hold (RELEASE_COOLOFF_S), then not. */
 export const OWN_RELEASE_HOLD_MS = 30 * 86_400_000;
-const EDGE_ASKS = 3;
+export const EDGE_ASKS = 3;
 const EDGE_TIMEOUT_MS = 10_000;
 const SELF_TIMEOUT_MS = 5_000;
 /** At most one round per name this often from refused requests. */
@@ -243,7 +243,7 @@ async function askHolder(label: string, ours: string): Promise<HolderAnswer> {
     }
 }
 
-interface Answer { status: number; headers: Headers; text: string }
+export interface Answer { status: number; headers: Headers; text: string }
 
 async function readCapped(res: Response): Promise<string> {
     if (!res.body) return '';
@@ -305,7 +305,7 @@ const CLOUDFLARE_PAGE = /error code:\s*1\d{3}\b|cf-error-details|cf-wrapper|Clou
 /** The answers other than 200 that can only be an origin's: nothing else counts as one (anything unsure is silence). */
 const ORIGIN_STATUSES = new Set([400, 404, 405, 410]);
 
-function classify(got: Answer | null, nonce: string, ours: string, holderKey: string | null): EdgeSeen {
+export function classify(got: Answer | null, nonce: string, ours: string, holderKey: string | null): EdgeSeen {
     if (!got) return 'silence';
     if (got.headers.get('cf-mitigated') || CLOUDFLARE_PAGE.test(got.text)) return 'silence';
     if (got.status === 200) {
@@ -324,7 +324,7 @@ function classify(got: Answer | null, nonce: string, ours: string, holderKey: st
     return 'silence';
 }
 
-function edgeUrl(host: string, nonce: string): string {
+export function edgeUrl(host: string, nonce: string): string {
     const query = `/api/attest?nonce=${encodeURIComponent(nonce)}`;
     // Tests only: the suite's stand-in for Cloudflare's edge, the name as the first path segment. Unset in every real
     // deployment.

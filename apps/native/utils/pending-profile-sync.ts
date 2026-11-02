@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { plainOriginOf } from './node-url';
-import { PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from './storage-keys';
+import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from './storage-keys';
 
 /**
  * A profile change waiting to reach a community, kept for THAT community.
@@ -33,6 +33,12 @@ import { PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } fr
  * publishes to) and cleared only when that community has accepted it, when the community leaves the phone (nodes.ts
  * removeSavedNode, delete-here.ts, update-block-escape.ts), or with the account (identity.ts wipeIdentityScopedStorage).
  * A community followed to its new address takes its entry there (address-follow.ts).
+ *
+ * The member's working style waits beside the entry, not in it, one for each community (keepWaitingArchetype): a quiz
+ * taken in one community is for all of them, and that is no change to this community's profile. An entry says "publish
+ * this community's row", and a row the phone last synced may be older than what the node holds (a bio changed on the
+ * web), so a result waiting there must not set that off. Its publish carries the result and nothing else (db.ts
+ * pushWaitingArchetype). It goes as an entry does: with the community, with the account, and to a new address.
  *
  * A phone updated from a build with the one flag: the flag moves to the entry of the community its anchor names
  * (`pending_profile_sync_anchor`), or is dropped when it names none. The anchor proves less than where the flag was
@@ -87,6 +93,9 @@ function keyOf(community: string | null | undefined, prefix = PENDING_PROFILE_ST
 
 /** The key of what `community` said when it refused a name for good (takeNameRefusal). */
 const refusalKeyOf = (community: string | null | undefined) => keyOf(community, PENDING_PROFILE_REFUSAL_STORE_PREFIX);
+
+/** The key of the working style waiting to reach `community` (keepWaitingArchetype). */
+const archetypeKeyOf = (community: string | null | undefined) => keyOf(community, PENDING_ARCHETYPE_STORE_PREFIX);
 
 async function readEntry(key: string, storage: PendingProfileStorage): Promise<PendingProfileChange | null> {
     try {
@@ -176,21 +185,63 @@ export async function keepPendingProfileChange(community: string | null | undefi
  * `community` accepted everything that waited there, or left the phone: its entry goes. With `onlyIf` (the entry the
  * publish was built from, null for none), only while the entry is still that one: a change kept while the publish was
  * out (an offline Save meanwhile) waits for the next. What the community said of a refused name goes too, except with
- * `onlyIf`: the retry's own publish, which no one watched, leaves it for Settings to say (takeNameRefusal).
+ * `onlyIf`: the retry's own publish, which no one watched, leaves it for Settings to say (takeNameRefusal). So does a
+ * working style waiting there, except with `onlyIf` or `keepArchetype`: a publish that said nothing of it.
  */
 export async function clearPendingProfileChange(
     community: string | null | undefined,
     onlyIf?: PendingProfileChange | null,
     storage: PendingProfileStorage = AsyncStorage,
+    keepArchetype = false,
 ): Promise<void> {
     if (!community) return;
     const key = keyOf(community);
     if (key) {
         if (onlyIf !== undefined && !sameEntry(await readEntry(key, storage), onlyIf)) return;
         await storage.removeItem(key);
-        if (onlyIf === undefined) await storage.removeItem(refusalKeyOf(community)!);
+        if (onlyIf === undefined) {
+            await storage.removeItem(refusalKeyOf(community)!);
+            if (!keepArchetype) await storage.removeItem(archetypeKeyOf(community)!);
+        }
     }
     await dropOlderFlagAt(community, storage);
+}
+
+/**
+ * The member's working style waits to reach `community`, in its public form (core publicArchetype), over any that waited
+ * there: the quiz was taken elsewhere, or its publish here didn't land. The community's next sync sends it. Nothing is
+ * kept for an address that isn't plain, nor with no account.
+ */
+export async function keepWaitingArchetype(community: string | null | undefined, publicKey: string, archetype: string): Promise<void> {
+    const key = archetypeKeyOf(community);
+    if (!key || !publicKey) return;
+    await AsyncStorage.setItem(key, JSON.stringify({ publicKey, archetype }));
+}
+
+/** The working style waiting to reach `community` for `publicKey`, or null: none, or one of another account's. */
+export async function waitingArchetype(community: string | null | undefined, publicKey: string): Promise<string | null> {
+    const key = archetypeKeyOf(community);
+    if (!key || !publicKey) return null;
+    try {
+        const held: { publicKey?: unknown; archetype?: unknown } | null = JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
+        return held?.publicKey === publicKey && typeof held.archetype === 'string' ? held.archetype : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * `archetype` reached `community`, or the community says the key is no member there: it stops waiting. Only while it is
+ * still that one: a retake while the publish was out waits for the next.
+ */
+export async function clearWaitingArchetype(community: string | null | undefined, archetype: string): Promise<void> {
+    const key = archetypeKeyOf(community);
+    if (!key) return;
+    try {
+        const held: { archetype?: unknown } | null = JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
+        if (held?.archetype !== archetype) return;
+    } catch { /* unreadable: it goes */ }
+    await AsyncStorage.removeItem(key);
 }
 
 /**
@@ -285,6 +336,12 @@ export async function carryPendingProfileChange(from: string, to: string): Promi
         if (said !== null) {
             await AsyncStorage.setItem(refusalKeyOf(to)!, said);
             await AsyncStorage.removeItem(refusalKeyOf(from)!);
+        }
+        // The working style waiting there: an entry may wait without one, and one without an entry.
+        const archetype = await AsyncStorage.getItem(archetypeKeyOf(from)!);
+        if (archetype !== null) {
+            if ((await AsyncStorage.getItem(archetypeKeyOf(to)!)) === null) await AsyncStorage.setItem(archetypeKeyOf(to)!, archetype);
+            await AsyncStorage.removeItem(archetypeKeyOf(from)!);
         }
         const waiting = await AsyncStorage.getItem(fromKey);
         if (waiting === null) return;

@@ -26,16 +26,17 @@ import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
-import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
+import { saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
-import { clearPendingProfileChange, nameRefusedForGood, pendingNameRefused, pendingProfileChange } from './pending-profile-sync';
+import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
+import { archetypeToSend } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { eventCopyColumn, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags } from '@beanpool/core';
 import { dealAction } from './deal-rows';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
+import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -2074,7 +2075,8 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
                 bio: data.bio,
                 contactValue: data.contact_value,
                 contactVisibility: data.contact_visibility,
-                archetype: data.archetype,
+                // Not the working style: a row can be older than the device's result, and writing it here put a community's
+                // old result over a retake (utils/working-style.ts). Only the quiz writes the device's copy.
             });
         }
     } catch { /* canonical mirror is best-effort */ }
@@ -7367,8 +7369,6 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     // another community's, and none of it goes to this one (#2461 review).
     if (!(await stillOnCommunity(anchorUrl))) return false;
 
-    // Still read for the bio, contact and archetype below; the picture is never taken from it (Profile S2).
-    const canonical = await getCanonicalProfile();
     // Since #725 the members sync writes the node's own `/api/avatar/<pk>?size=thumb` string
     // into the local row, and `profile?.avatar_url` happily offered that — so this function
     // published the node's URL back to the node as the member's avatar, and from then on
@@ -7393,30 +7393,22 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     const bio = profile?.bio ?? '';
     const contactValue = profile?.contact_value ?? null;
     const contactVisibility = profile?.contact_visibility ?? undefined;
-    const archetypeRaw = profile?.archetype ?? canonical?.archetype ?? null;
+    // What waits for this community, or a device copy newer than its row: never its own row sent back, and never to a
+    // community that doesn't say this key is a member (utils/working-style.ts).
+    const publicArchetype = await archetypeToSend(anchorUrl, identity.publicKey, profile?.archetype);
 
     // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this
     // published. It now carries bio, contact and archetype too, so keying it on the avatar
     // dropped a quiz result on the floor for anyone who hadn't uploaded a photo — and cleared
     // the pending flag on the way out, so it never retried. Only give up when there is
     // genuinely nothing anywhere to publish. A new name waiting here is something to publish.
-    if (!avatar && !bio && !contactValue && !archetypeRaw && !pending?.callsign) {
+    if (!avatar && !bio && !contactValue && !publicArchetype && !pending?.callsign) {
         // Safe to drop this community's change here, parked value and all, and the only place it
         // is dropped unsent: `avatar` being null means the rule found nothing publishable, so
         // anything still parked is a value that is not portable and can never be published — a
         // portable pick would have been chosen above and kept this code out of this branch.
         await clearPendingProfileChange(anchorUrl, pending);
         return false;
-    }
-    let publicArchetype: string | null = null;
-    if (archetypeRaw) {
-        const parsed = parseArchetype(archetypeRaw);
-        publicArchetype = parsed ? JSON.stringify({
-            primary: parsed.primary,
-            secondary: parsed.secondary,
-            mode: parsed.mode,
-            updatedAt: parsed.updatedAt,
-        }) : archetypeRaw;
     }
 
     // ADDITIVE ONLY. The server reads `update.avatar !== undefined ? update.avatar : existing`
@@ -7476,12 +7468,13 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
         // `return false` above leaves it for the next retry, and a change kept while this was out
         // waits for the next.
         await clearPendingProfileChange(anchorUrl, pending);
+        if (publicArchetype) await clearWaitingArchetype(anchorUrl, publicArchetype);
         // The local mirror writes the copy open now (getDb): after a switch while the update was out, that is another
         // community's, and this one's profile stays out of it. This community's next members sync brings it home.
         if (!(await stillOnCommunity(anchorUrl))) return true;
         // Mirror what was just published into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
-        if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
+        if (!profile?.avatar_url || publicArchetype) {
             try {
                 await updateMemberProfile(identity.publicKey, {
                     callsign: rowCallsign ?? profile?.callsign ?? identity.callsign,
@@ -7489,7 +7482,7 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
                     bio: bio || undefined,
                     contact_value: contactValue || undefined,
                     contact_visibility: contactVisibility,
-                    archetype: archetypeRaw || undefined,
+                    archetype: publicArchetype || undefined,
                 });
             } catch { /* local mirror is best-effort */ }
         } else if (rowCallsign !== undefined && rowCallsign !== profile?.callsign) {
@@ -7503,6 +7496,37 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
         return true;
     } catch {}
     return false;
+}
+
+/**
+ * The working style waiting for `community`, sent at its own sync and nothing else with it: no name, bio, contact or
+ * photo. The phone's copy of those can be older than the node's (a bio changed on the web), and a quiz taken in another
+ * community is no reason to send them back. Only while the phone is on `community`, and only as archetypeToSend allows.
+ * What waits stays for the next sync unless the community took it. Answers whether it did.
+ */
+export async function pushWaitingArchetype(opts: { community: string }): Promise<boolean> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const identity = await loadIdentity();
+    if (!anchorUrl || !identity || plainOriginOf(opts.community) !== plainOriginOf(anchorUrl)) return false;
+    if (!(await waitingArchetype(anchorUrl, identity.publicKey))) return false;
+    const row = await getMemberProfile(identity.publicKey);
+    if (!(await stillOnCommunity(anchorUrl))) return false;
+    const archetype = await archetypeToSend(anchorUrl, identity.publicKey, row?.archetype);
+    if (!archetype) return false;
+    const bodyString = JSON.stringify({ publicKey: identity.publicKey, archetype });
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
+    try {
+        const res = await fetch(`${anchorUrl}/api/profile/update`, { method: 'POST', headers, body: bodyString });
+        if (!res.ok) return false;
+    } catch {
+        return false;
+    }
+    await clearWaitingArchetype(anchorUrl, archetype);
+    // Into this community's row at once, as pushProfileToServer does; after a switch, its next members sync brings it home.
+    if (row?.callsign && (await stillOnCommunity(anchorUrl))) {
+        await updateMemberProfile(identity.publicKey, { callsign: row.callsign, archetype }).catch(() => {});
+    }
+    return true;
 }
 
 /** Whether the phone is still on `community`: the copy getDb opens is that community's (pillar-sync's mid-sync check). */

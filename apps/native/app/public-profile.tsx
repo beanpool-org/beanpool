@@ -11,7 +11,10 @@ import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
+import { keepQuizResult } from '../utils/working-style';
+import { isGuestNode } from '../utils/nodes';
+import { keepWaitingArchetype } from '../utils/pending-profile-sync';
+import { parseArchetype, calculateSynergy, newestArchetype, publicArchetype, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
 import { fetchPublicChannels } from '../utils/channels';
@@ -513,7 +516,8 @@ export default function PublicProfileScreen() {
                 const canonical = await getCanonicalProfile().catch(() => null);
                 if (vp) {
                     // Profile S2-W: bio and contact belong to this community alone; no fallback to canonical across communities.
-                    if (!vp.archetype && canonical?.archetype) vp.archetype = canonical.archetype;
+                    // The working style is the member's, not the community's: the device's result when it is the newer.
+                    vp.archetype = newestArchetype(vp.archetype, canonical?.archetype);
                     setViewerProfile(vp);
                 } else if (canonical) {
                     setViewerProfile({
@@ -534,13 +538,6 @@ export default function PublicProfileScreen() {
         const jsonStr = JSON.stringify(quizResult);
         setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
 
-        const publicArchetype = JSON.stringify({
-            primary: quizResult.primary,
-            secondary: quizResult.secondary,
-            mode: quizResult.mode,
-            updatedAt: quizResult.updatedAt,
-        });
-
         // Profile S2-W: publish this community's name, not the phone-wide name (identity.callsign).
         // Same mechanism #2617 used: ownRowOf(row).callsign, falling back to viewerProfile/own,
         // and identity.callsign only if this community holds no row yet.
@@ -559,25 +556,33 @@ export default function PublicProfileScreen() {
             setProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
         }
 
+        // The device's result now, waiting for every other community on the phone (utils/working-style.ts).
+        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+        await keepQuizResult(quizResult, identity.publicKey, url);
+
+        // A guest visit keeps it on the phone: the member isn't in that community, so nothing goes to it.
+        if (!url || await isGuestNode(url).catch(() => true)) return;
+        const archetype = publicArchetype(quizResult);
+        let landed = false;
         try {
-            const url = await AsyncStorage.getItem('beanpool_anchor_url');
-            if (url) {
-                const payloadObj: any = {
-                    publicKey: identity.publicKey,
-                    ...(nameToUse ? { callsign: nameToUse } : {}),
-                    archetype: publicArchetype,
-                };
-                const bodyString = JSON.stringify(payloadObj);
-                const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
-                await fetch(`${url}/api/profile/update`, {
-                    method: 'POST',
-                    headers,
-                    body: bodyString,
-                });
-            }
+            const payloadObj: any = {
+                publicKey: identity.publicKey,
+                ...(nameToUse ? { callsign: nameToUse } : {}),
+                archetype,
+            };
+            const bodyString = JSON.stringify(payloadObj);
+            const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
+            const res = await fetch(`${url}/api/profile/update`, {
+                method: 'POST',
+                headers,
+                body: bodyString,
+            });
+            landed = res.ok;
         } catch (e) {
             console.warn('[Archetype] Profile push best effort:', e);
         }
+        // The row here holds it already, so nothing else would send it: it waits for this community's next sync.
+        if (!landed) await keepWaitingArchetype(url, identity.publicKey, archetype);
     };
 
     useEffect(() => {
@@ -1462,7 +1467,7 @@ export default function PublicProfileScreen() {
                     your own archetype had no home — which also made the "take the quiz on your
                     profile" chat nudge point at a screen that had no quiz on it. */}
                 {isSelf && (() => {
-                    const mine = parseArchetype(profile?.archetype) || parseArchetype(viewerProfile?.archetype);
+                    const mine = parseArchetype(newestArchetype(profile?.archetype, viewerProfile?.archetype));
                     const primary = mine ? ARCHETYPES[mine.primary] : null;
                     const secondary = mine ? ARCHETYPES[mine.secondary] : null;
 

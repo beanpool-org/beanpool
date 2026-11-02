@@ -1386,6 +1386,45 @@ describe('a copy global\'s reports hold: a rest at home waits, so nothing comes 
         expect((await copyRow(id)).status).toBe('active');
     }, START_MS);
 
+    describe('a first send landed but its answer was lost, so the pair has nothing in sent', () => {
+        const sentUnanswered = async (name: string, title: string) => {
+            const me = await memberOfBoth(name);
+            const home = await listingAtHome(me, title);
+            const lostAnswer: CopyDeps = { ...deps(), post: (async (url: string, ...rest: any[]) => {
+                const answer = await (signedPost as any)(url, ...rest);
+                if (String(url).startsWith(global_.url)) throw new Error('timed out');
+                return answer;
+            }) as any };
+            await showOnGlobal(home, local.url, me, lostAnswer);
+            const id = await copyIdOf(home.id, me);
+            expect((await pairOf(home.id, me.publicKey))?.sent).toBe('');
+            expect(await copyCount(me)).toBe(1);
+            await holdByReports(id);
+            return { me, home, id };
+        };
+
+        it('a tend\'s rest still waits for a hold', async () => {
+            const { me, home, id } = await sentUnanswered('Holly Unheard', 'Bullaces');
+            const [, off, on] = homeRests[0];
+            await off(me, home);
+            await tendCopies(me, deps());
+            await on(me, home);
+            await tendCopies(me, deps());
+            expect(await copyCount(me)).toBe(1);
+            expect((await copyRow(id)).status).toBe('active');
+        }, START_MS);
+
+        it('the rest asked for from a screen still waits for a hold', async () => {
+            const { me, home, id } = await sentUnanswered('Holly Asked', 'Greengages');
+            const [, off] = homeRests[0];
+            await off(me, home);
+            expect(await showOnGlobal({ ...home, status: 'paused' }, local.url, me, deps())).toBe('later');
+            expect(await copyCount(me)).toBe(1);
+            expect(await copyIdOf(home.id, me)).toBe(id);
+            expect((await copyRow(id)).status).toBe('active');
+        }, START_MS);
+    });
+
     it('a moderator\'s takedown of a held copy doesn\'t keep a rest\'s retry waiting: the stamp is on a cancelled row', async () => {
         const me = await memberOfBoth('Holly Taken');
         const home = await listingAtHome(me, 'Mulberries');

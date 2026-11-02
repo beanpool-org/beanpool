@@ -68,6 +68,7 @@ import { ListingCopyDetail } from '../../components/ListingCopy';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
 import { ShowOnGlobalHostRow, ShowOnGlobalTick, listingForCopy, showListingOnGlobalHint, showOnGlobalHint } from '../../components/ShowOnGlobalRow';
 import { darkColors, lightColors } from '../../constants/colors';
+import { deletePost } from '../db';
 
 const LONG_NAME = 'Mullumbimby and the Brunswick Valley Community Exchange';
 const FROM = { host: 'mullum.example.org', postId: 'p1', name: LONG_NAME, url: 'https://mullum.example.org', door: 'ask' as const };
@@ -379,6 +380,17 @@ describe('a copy of an Offer or a Need', () => {
         expect(byId('listing-copy-own')).not.toBeNull();
         expect(byId('event-copy-door')).toBeNull();
         expect(byId('listing-copy-report')).toBeNull();
+    });
+
+    it('a double tap on Stop showing asks once', async () => {
+        const remove = vi.mocked(deletePost);
+        remove.mockReset();
+        remove.mockImplementation(() => new Promise(() => {}) as any);
+        await draw(createElement(ListingCopyDetail, { post: { ...POST, author_pubkey: world.identity.publicKey } }));
+        await press('listing-copy-remove');
+        await press('listing-copy-remove');
+        expect(remove).toHaveBeenCalledTimes(1);
+        remove.mockReset();
     });
 
     it('the tick says what goes of a listing, not of an event', async () => {

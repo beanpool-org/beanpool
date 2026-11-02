@@ -890,6 +890,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         fireEvent.click(await screen.findByTestId('addresses-add-address-btn'));
         const subdomainInput = screen.getByLabelText(/Subdomain Prefix/i);
         fireEvent.change(subdomainInput, { target: { value: 'Byron-Bay' } });
+        expect(subdomainInput).toHaveValue('byron-bay');
         // Preview updates automatically
         expect(screen.getByText('https://byron-bay.beanpool.org')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /Go public · Claim Web Address/i }));

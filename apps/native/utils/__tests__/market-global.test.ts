@@ -288,7 +288,7 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         const map = read('../../app/(tabs)/map.tsx').split('\n');
         const currency = map.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
         expect(currency.length).toBe(1);
-        for (const i of currency) expect(map.slice(Math.max(0, i - 3), i).join('\n')).toContain('{showsBeans && (');
+        for (const i of currency) expect(map.slice(Math.max(0, i - 3), i).join('\n')).toMatch(/\{showsBeans && (!previewCopy && )?\(/);
         const src = read('../../app/new-listing.tsx');
         const lines = src.split('\n');
         expect(lines.some(l => l.includes('<CurrencyDisplay'))).toBe(false);

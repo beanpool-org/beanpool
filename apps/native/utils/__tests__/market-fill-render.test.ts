@@ -212,6 +212,29 @@ const fill = () => host.querySelector('[data-testid="market-fill"]');
 const tick = async () => { await act(async () => { DeviceEventEmitter.emit('sync_data_updated'); }); await settle(); };
 const count = (title: string) => (text().match(new RegExp(`${title}(?!\\d)`, 'g')) ?? []).length;
 
+describe('a member\'s copy on a card where Beans are on (#2718): its price is its line, never a 0 beside it', () => {
+    const LINE = "20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.";
+    const fromHome = JSON.stringify({ host: 'mullum.example', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask', price: '20 fixed' });
+
+    it('in the list, the grid and the compact row; a plain listing keeps its price (the control)', async () => {
+        rememberProfile('local', { beans: true });
+        holds([
+            listing('copy-1', 'Sourdough loaves', { credits: 0, author_pubkey: 'hidden', author_callsign: '', shown_from: fromHome }),
+            listing('plain-1', 'Pottery course', { credits: 7 }),
+        ]);
+        await render();
+        for (const next of ['Grid view', 'Compact view', 'List view']) {
+            expect(text()).toContain(LINE);
+            expect(text()).toContain('7 Beans');
+            expect(text()).not.toMatch(/(^|\D)0 Beans/);
+            const toggle = host.querySelector('[data-testid="market-view-mode-toggle"]') as HTMLElement;
+            expect(toggle.getAttribute('aria-label')).toBe(next);
+            await act(async () => { toggle.click(); });
+            await settle();
+        }
+    });
+});
+
 describe('a tag filter on a short nearby list (review of #2663)', () => {
     const LEMON = 'food.fruit.lemon';
     const lemon = (id: string, title: string) => listing(id, title, { tags: LEMON });

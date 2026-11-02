@@ -217,7 +217,7 @@ export const TABLES: Record<string, TableEntry> = {
     // postFreeTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags free_tags shown_from_host shown_from_post_id'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags free_tags shown_from_host shown_from_post_id shown_price'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -757,6 +757,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     photoKeysSince: { kind: 'per-server', reason: "when this server's listing-photo URLs last changed shape; a phone's sync from before it is answered whole (engine/photo-keys.ts)" },
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
+    addressChecks: { kind: 'per-server', reason: "what answered at each of this server's addresses when it last looked; each main server looks for itself (services/address-check.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
     knockAnswersNoneSince: { kind: 'per-server', reason: "when this server's measure of how it answers requests to join began saying 'none' (engine/knocks.ts knockAnswersForDirectory); a standby that takes over starts its own count, which only delays the directory's demotion" },
     friendsAddedYouSince: { kind: 'per-server', reason: "when this server began telling members who added them; an add from before it is never news (engine/friends-added-you.ts)" },

@@ -1,15 +1,15 @@
 /**
- * Where Going and Interested stand on a member's copy on the global community (DESIGN-list-on-global-fable.md §6): the door's
- * words, and the way through it. `/?ask=<host>` is the Find card on that community for a member (App takes it), and for
+ * Where Going and Interested stand on a member's copy on the global community, and where a listing's buttons stand with its
+ * `line` (DESIGN-list-on-global-fable.md §6): the door's words, and the way through it. `/?ask=<host>` is the Find card on that community for a member (App takes it), and for
  * a visitor the lobby, which keeps it across the join. Nothing is sent before Ask to join is tapped there.
  */
 import { copyDoorButton, copyDoorLine, type EventCopy } from '@beanpool/core';
 
-export function EventCopyDoor({ copy }: { copy: EventCopy }) {
+export function EventCopyDoor({ copy, line }: { copy: EventCopy; line?: string }) {
     const button = copyDoorButton(copy);
     return (
         <div data-testid="event-copy-door" className="flex flex-col gap-2 min-w-0">
-            <p className="m-0 text-sm font-semibold text-nature-800 dark:text-nature-200 break-words">{copyDoorLine(copy)}</p>
+            <p className="m-0 text-sm font-semibold text-nature-800 dark:text-nature-200 break-words">{line ?? copyDoorLine(copy)}</p>
             {button && copy.from && (
                 <a
                     data-testid="event-copy-ask"

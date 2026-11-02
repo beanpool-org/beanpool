@@ -11,12 +11,11 @@
  * malformed or endless rules can never spin the CPU.
  */
 
-import { currentLanguage, DATE_WORDS, formatDate, t, tn, wordsFor, type DateWords, type UiLang } from './words.js';
-import { type RepeatPattern, type RepeatWeekdayCode, REPEAT_WEEKDAYS } from './event-repeat.js';
+import { currentLanguage, DATE_WORDS, formatDate, t, tn, type DateWords, type UiLang } from './words.js';
+import { type RepeatWeekdayCode, REPEAT_WEEKDAYS } from './event-repeat.js';
 import { eventRepeatOf } from './show-on-global.js';
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /** Maximum candidates to walk during repeating series expansion (bounded to prevent infinite loops). */
 export const MAX_SERIES_STEPS = 500;
@@ -419,20 +418,146 @@ export function groupEventsByLocalDay<T extends CalendarEventInput>(
     return result;
 }
 
-/** Find the earliest event date occurring strictly after `afterDate`. */
+/**
+ * Find the earliest occurrence of an event strictly after `afterDate`.
+ * For a one-off event, returns its local date if > afterDate.
+ * For a repeating series, steps directly to its first occurrence after `afterDate`
+ * rather than walking a fixed window, honouring until and skips, bounded by MAX_SERIES_STEPS
+ * so malformed or endless rules can never spin the CPU.
+ */
+export function findNextOccurrenceAfter<T extends CalendarEventInput>(
+    event: T,
+    afterDate: string
+): string | null {
+    const anchorDate = eventLocalDate(event);
+    if (!anchorDate) return null;
+
+    const { rule, until } = eventRepeatOf(event);
+
+    // If not repeating or invalid rule, treat as single occurrence
+    if (!rule) {
+        return anchorDate > afterDate ? anchorDate : null;
+    }
+
+    // If series ends on or before afterDate, no occurrence can follow afterDate
+    if (until && until <= afterDate) {
+        return null;
+    }
+
+    const interval = typeof rule.interval === 'number' && Number.isInteger(rule.interval) && rule.interval >= 1
+        ? Math.min(rule.interval, 52)
+        : 1;
+
+    const skips = readEventSkips(event);
+
+    if (rule.freq === 'weekly') {
+        const byDay = (REPEAT_WEEKDAYS as readonly string[]).includes(rule.byDay) ? rule.byDay : weekdayCodeOf(anchorDate);
+        let currDate = anchorDate;
+        while (weekdayCodeOf(currDate) !== byDay) {
+            currDate = addDays(currDate, 1);
+        }
+        const stepDays = interval * 7;
+        if (afterDate >= currDate) {
+            const diffDays = daysBetween(currDate, afterDate);
+            const steps = Math.floor(diffDays / stepDays);
+            currDate = addDays(currDate, steps * stepDays);
+            while (currDate <= afterDate) {
+                currDate = addDays(currDate, stepDays);
+            }
+        }
+        for (let step = 0; step < MAX_SERIES_STEPS; step++) {
+            if (until && currDate > until) break;
+            if (currDate > afterDate && !skips.has(currDate)) {
+                return currDate;
+            }
+            currDate = addDays(currDate, stepDays);
+        }
+        return null;
+    }
+
+    if (rule.freq === 'monthly' && 'byMonthDay' in rule) {
+        const day = rule.byMonthDay;
+        if (typeof day !== 'number' || !Number.isInteger(day) || day < 1 || day > 31) {
+            return null;
+        }
+        const anchorParsed = parseLocalDate(anchorDate);
+        if (!anchorParsed) return null;
+        const anchorY = anchorParsed.year;
+        const anchorM0 = anchorParsed.month - 1;
+
+        let kStart = 0;
+        const afterParsed = parseLocalDate(afterDate);
+        if (afterParsed && afterDate > anchorDate) {
+            const afterTotalM = (afterParsed.year - anchorY) * 12 + (afterParsed.month - 1);
+            kStart = Math.max(0, Math.floor((afterTotalM - anchorM0) / interval));
+        }
+
+        for (let step = 0; step < MAX_SERIES_STEPS; step++) {
+            const k = kStart + step;
+            const totalM = anchorM0 + k * interval;
+            const y = anchorY + Math.floor(totalM / 12);
+            const m0 = totalM % 12;
+            const dim = daysInMonth(y, m0 + 1);
+            if (day <= dim) {
+                const cand = formatLocalDate(y, m0 + 1, day);
+                if (cand >= anchorDate) {
+                    if (until && cand > until) break;
+                    if (cand > afterDate && !skips.has(cand)) {
+                        return cand;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    if (rule.freq === 'monthly' && 'pos' in rule && 'byDay' in rule) {
+        const pos = rule.pos;
+        const byDay = rule.byDay;
+        if (![1, 2, 3, 4, -1].includes(pos) || !(REPEAT_WEEKDAYS as readonly string[]).includes(byDay)) {
+            return null;
+        }
+        const anchorParsed = parseLocalDate(anchorDate);
+        if (!anchorParsed) return null;
+        const anchorY = anchorParsed.year;
+        const anchorM0 = anchorParsed.month - 1;
+
+        let kStart = 0;
+        const afterParsed = parseLocalDate(afterDate);
+        if (afterParsed && afterDate > anchorDate) {
+            const afterTotalM = (afterParsed.year - anchorY) * 12 + (afterParsed.month - 1);
+            kStart = Math.max(0, Math.floor((afterTotalM - anchorM0) / interval));
+        }
+
+        for (let step = 0; step < MAX_SERIES_STEPS; step++) {
+            const k = kStart + step;
+            const totalM = anchorM0 + k * interval;
+            const y = anchorY + Math.floor(totalM / 12);
+            const m0 = totalM % 12;
+            const cand = nthWeekdayOfMonth(y, m0, byDay, pos);
+            if (cand && cand >= anchorDate) {
+                if (until && cand > until) break;
+                if (cand > afterDate && !skips.has(cand)) {
+                    return cand;
+                }
+            }
+        }
+        return null;
+    }
+
+    return null;
+}
+
+/** Find the earliest event date occurring strictly after `afterDate` across all events. */
 export function findNextEventDateAfter<T extends CalendarEventInput>(
     events: readonly T[],
     afterDate: string
 ): string | null {
-    const nextStart = addDays(afterDate, 1);
-    const horizonEnd = addDays(afterDate, 365);
     let soonest: string | null = null;
     for (const event of events) {
-        const occurrences = expandEventSeries(event, { start: nextStart, end: horizonEnd });
-        for (const occ of occurrences) {
-            if (occ.date > afterDate && (!soonest || occ.date < soonest)) {
-                soonest = occ.date;
-            }
+        const nextDate = findNextOccurrenceAfter(event, afterDate);
+        if (nextDate && (!soonest || nextDate < soonest)) {
+            soonest = nextDate;
         }
     }
     return soonest;
@@ -452,7 +577,7 @@ export interface BuildCalendarMonthOptions<T extends CalendarEventInput = Calend
     now: string | Date;
     /** Events to display and expand in this month. */
     events?: readonly T[];
-    /** Language to format headings and labels (defaults to active words language). */
+    /** Language to format month and weekday headings (date tables only; defaults to active words language). */
     lang?: UiLang;
 }
 
@@ -577,17 +702,16 @@ export function buildCalendarMonth<T extends CalendarEventInput = CalendarEventI
 // ── Words & Headings ──────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Return date words for a language (or English fallback).
+ * Return date words for the active language (or English fallback).
  */
-function dateWordsForLang(lang?: UiLang): DateWords {
-    const target = lang ?? currentLanguage();
-    const wordsTable = DATE_WORDS;
-    return (target && wordsTable[target as keyof typeof wordsTable]) ?? wordsTable.en!;
+function dateWordsForActiveLang(): DateWords {
+    const lang = currentLanguage();
+    return (DATE_WORDS as Record<string, DateWords>)[lang] ?? DATE_WORDS.en!;
 }
 
 /**
  * The month heading: e.g. "November 2026".
- * Uses core's `formatDate` 'month-year' pattern, available in all 25 languages.
+ * Uses core's `formatDate` 'month-year' pattern, available in all 25 languages via DATE_WORDS.
  */
 export function calendarMonthHeading(year: number, month: number, lang?: UiLang): string {
     const d = new Date(Date.UTC(year, month - 1, 1));
@@ -596,7 +720,7 @@ export function calendarMonthHeading(year: number, month: number, lang?: UiLang)
 
 /**
  * The 7 weekday labels starting from Monday (Mo Tu We Th Fr Sa Su).
- * Formatted with `formatDate` 'weekday', available in all 25 languages.
+ * Formatted with `formatDate` 'weekday', available in all 25 languages via DATE_WORDS.
  */
 export function calendarWeekdayLabels(lang?: UiLang, width: 'short' | 'long' = 'short'): string[] {
     // 5 Oct 2026 is a Monday (5=Mon, 6=Tue, 7=Wed, 8=Thu, 9=Fri, 10=Sat, 11=Sun)
@@ -608,23 +732,17 @@ export function calendarWeekdayLabels(lang?: UiLang, width: 'short' | 'long' = '
     return labels;
 }
 
-function activeTranslator(lang?: UiLang): { t: typeof t; tn: typeof tn } {
-    if (!lang || lang === currentLanguage()) {
-        return { t, tn };
-    }
-    const w = wordsFor(lang);
-    return { t: w.t, tn: w.tn };
-}
-
 /**
  * Heading for a day's list in the calendar:
  * When count > 0: "Sat 7 Nov: 2 events" (or "Sat 7 Nov: 1 event")
  * When count = 0: "Nothing on Tue 11 Nov"
+ *
+ * Uses the active device words language for both the formatted date and sentence template,
+ * guaranteeing every sentence on screen is in one language.
  */
-export function calendarDayHeading(date: string, count: number, lang?: UiLang): string {
+export function calendarDayHeading(date: string, count: number): string {
     const d = new Date(utcOf(date));
-    const formattedDate = formatDate(d, 'weekday-day-month', { utc: true, lang });
-    const { t, tn } = activeTranslator(lang);
+    const formattedDate = formatDate(d, 'weekday-day-month', { utc: true });
     if (count <= 0) {
         return t('Nothing on {date}', { date: formattedDate });
     }
@@ -633,38 +751,39 @@ export function calendarDayHeading(date: string, count: number, lang?: UiLang): 
 
 /**
  * Text shown under weekday row when a month has no events: "Nothing on in November."
+ *
+ * Uses the active device words language for both the month name and sentence template,
+ * guaranteeing every sentence on screen is in one language.
  */
-export function calendarMonthEmptyText(year: number, month: number, lang?: UiLang): string {
-    const w = dateWordsForLang(lang);
+export function calendarMonthEmptyText(year: number, month: number): string {
+    const w = dateWordsForActiveLang();
     const monthName = w.monthsStandalone[month - 1] ?? w.monthsLong[month - 1];
-    const { t } = activeTranslator(lang);
     return t('Nothing on in {month}.', { month: monthName });
 }
 
 /**
  * Text for jumping to the next upcoming event: "Next: Sat 6 Dec ›".
+ *
+ * Uses the active device words language for both the formatted date and sentence template,
+ * guaranteeing every sentence on screen is in one language.
  */
-export function calendarNextEventLabel(date: string, lang?: UiLang): string {
+export function calendarNextEventLabel(date: string): string {
     const d = new Date(utcOf(date));
-    const formattedDate = formatDate(d, 'weekday-day-month', { utc: true, lang });
-    const { t } = activeTranslator(lang);
+    const formattedDate = formatDate(d, 'weekday-day-month', { utc: true });
     return t('Next: {date} ›', { date: formattedDate });
 }
 
-/** Text shown when no events are coming up at all. */
-export function calendarNoEventsComingUpText(lang?: UiLang): string {
-    const { t } = activeTranslator(lang);
+/** Text shown when no events are coming up at all (in active device words language). */
+export function calendarNoEventsComingUpText(): string {
     return t('No events coming up yet.');
 }
 
-/** Link text to start an event from the empty calendar state. */
-export function calendarStartOneText(lang?: UiLang): string {
-    const { t } = activeTranslator(lang);
+/** Link text to start an event from the empty calendar state (in active device words language). */
+export function calendarStartOneText(): string {
     return t('Start one ›');
 }
 
-/** Screen title / button accessibility label: "Calendar". */
-export function calendarTitle(lang?: UiLang): string {
-    const { t } = activeTranslator(lang);
+/** Screen title / button accessibility label: "Calendar" (in active device words language). */
+export function calendarTitle(): string {
     return t('Calendar');
 }

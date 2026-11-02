@@ -12,10 +12,12 @@ import {
     calendarStartOneText,
     calendarTitle,
     calendarWeekdayLabels,
+    addDays,
     daysInMonth,
     eventLocalDate,
     expandEventSeries,
     findNextEventDateAfter,
+    findNextOccurrenceAfter,
     groupEventsByLocalDay,
     isLeapYear,
     weekdayCodeOf,
@@ -393,11 +395,11 @@ describe('calendar-month: series expansion (pattern, until, skips)', () => {
 
 describe('calendar-month: day heading & empty states in words layer', () => {
     it('calendarDayHeading in English: count 0, 1, 2', () => {
-        expect(calendarDayHeading('2026-11-10', 0, 'en')).toBe('Nothing on Tue 10 Nov');
-        expect(calendarDayHeading('2026-11-11', 0, 'en')).toBe('Nothing on Wed 11 Nov');
-        expect(calendarDayHeading('2026-11-07', 1, 'en')).toBe('Sat 7 Nov: 1 event');
-        expect(calendarDayHeading('2026-11-07', 2, 'en')).toBe('Sat 7 Nov: 2 events');
-        expect(calendarDayHeading('2026-11-07', 5, 'en')).toBe('Sat 7 Nov: 5 events');
+        expect(calendarDayHeading('2026-11-10', 0)).toBe('Nothing on Tue 10 Nov');
+        expect(calendarDayHeading('2026-11-11', 0)).toBe('Nothing on Wed 11 Nov');
+        expect(calendarDayHeading('2026-11-07', 1)).toBe('Sat 7 Nov: 1 event');
+        expect(calendarDayHeading('2026-11-07', 2)).toBe('Sat 7 Nov: 2 events');
+        expect(calendarDayHeading('2026-11-07', 5)).toBe('Sat 7 Nov: 5 events');
     });
 
     it('calendarDayHeading and month strings in Spanish (es)', () => {
@@ -411,10 +413,6 @@ describe('calendar-month: day heading & empty states in words layer', () => {
             expect(calendarNoEventsComingUpText()).toBe('Aún no hay eventos próximos.');
             expect(calendarStartOneText()).toBe('Crear uno ›');
             expect(calendarTitle()).toBe('Calendario');
-            // When lang is explicitly passed matching currentLanguage(), translations are preserved
-            expect(calendarDayHeading('2026-11-07', 1, 'es')).toBe('sáb, 7 nov: 1 evento');
-            expect(calendarMonthEmptyText(2026, 11, 'es')).toBe('Nada en noviembre.');
-            expect(calendarTitle('es')).toBe('Calendario');
         } finally {
             setLanguage('en');
         }
@@ -492,12 +490,12 @@ describe('calendar-month: day heading & empty states in words layer', () => {
     });
 
     it('month empty states and next event jumping in English', () => {
-        expect(calendarMonthEmptyText(2026, 11, 'en')).toBe('Nothing on in November.');
-        expect(calendarNextEventLabel('2026-12-06', 'en')).toBe('Next: Sun 6 Dec ›');
-        expect(calendarNextEventLabel('2025-12-06', 'en')).toBe('Next: Sat 6 Dec ›');
-        expect(calendarNoEventsComingUpText('en')).toBe('No events coming up yet.');
-        expect(calendarStartOneText('en')).toBe('Start one ›');
-        expect(calendarTitle('en')).toBe('Calendar');
+        expect(calendarMonthEmptyText(2026, 11)).toBe('Nothing on in November.');
+        expect(calendarNextEventLabel('2026-12-06')).toBe('Next: Sun 6 Dec ›');
+        expect(calendarNextEventLabel('2025-12-06')).toBe('Next: Sat 6 Dec ›');
+        expect(calendarNoEventsComingUpText()).toBe('No events coming up yet.');
+        expect(calendarStartOneText()).toBe('Start one ›');
+        expect(calendarTitle()).toBe('Calendar');
     });
 
     it('findNextEventDateAfter correctly finds upcoming date after month', () => {
@@ -527,5 +525,132 @@ describe('calendar-month: day heading & empty states in words layer', () => {
         expect(grouped['2026-11-10'][0].eventStartLocal).toBe('2026-11-10T09:00');
         expect(grouped['2026-11-10'][1].eventStartLocal).toBe('2026-11-10T12:00');
         expect(grouped['2026-11-10'][2].eventStartLocal).toBe('2026-11-10T16:00');
+    });
+
+    it('findNextEventDateAfter sees one-off event more than 365 days past viewed month', () => {
+        // Event 14 months past November 2026 (> 365 days)
+        const events: CalendarEventInput[] = [
+            { id: 'ev-far-oneoff', eventStartLocal: '2028-01-15T10:00' },
+        ];
+        // Must not be capped at 365 days; empty month is never a dead end
+        expect(findNextEventDateAfter(events, '2026-11-30')).toBe('2028-01-15');
+
+        // And in buildCalendarMonth model
+        const month = buildCalendarMonth({
+            year: 2026,
+            month: 11,
+            now: '2026-11-01',
+            events,
+        });
+        expect(month.nextEventDate).toBe('2028-01-15');
+    });
+
+    it('findNextOccurrenceAfter steps repeating series directly to first occurrence after date', () => {
+        // Weekly series starting long ago (2025-01-01 was Wednesday)
+        const weeklySeries: CalendarEventInput = {
+            id: 'ev-weekly',
+            eventStartLocal: '2025-01-01T10:00',
+            eventRepeat: { freq: 'weekly', byDay: 'WE' },
+        };
+        // Stepping directly past 2026-11-30 (Monday) -> first Wednesday is 2026-12-02
+        expect(findNextOccurrenceAfter(weeklySeries, '2026-11-30')).toBe('2026-12-02');
+
+        // Series with skips on the first candidate steps to the next
+        const weeklyWithSkip: CalendarEventInput = {
+            ...weeklySeries,
+            eventRepeatSkips: ['2026-12-02'],
+        };
+        expect(findNextOccurrenceAfter(weeklyWithSkip, '2026-11-30')).toBe('2026-12-09');
+
+        // Series with until capped before afterDate returns null
+        const expiredSeries: CalendarEventInput = {
+            ...weeklySeries,
+            eventRepeatUntil: '2026-11-20',
+        };
+        expect(findNextOccurrenceAfter(expiredSeries, '2026-11-30')).toBeNull();
+
+        // Monthly by day starting long ago
+        const monthlyByDay: CalendarEventInput = {
+            id: 'ev-month-day',
+            eventStartLocal: '2025-05-15T14:00',
+            eventRepeat: { freq: 'monthly', byMonthDay: 15 },
+        };
+        expect(findNextOccurrenceAfter(monthlyByDay, '2026-11-30')).toBe('2026-12-15');
+
+        // Monthly nth weekday (2nd Thursday)
+        const monthlyNthWeekday: CalendarEventInput = {
+            id: 'ev-nth-weekday',
+            eventStartLocal: '2025-05-01T10:00',
+            eventRepeat: { freq: 'monthly', pos: 2, byDay: 'TH' },
+        };
+        // 2nd Thursday of December 2026 is 2026-12-10
+        expect(findNextOccurrenceAfter(monthlyNthWeekday, '2026-11-30')).toBe('2026-12-10');
+
+        // Repeating series starting > 365 days in future
+        const futureSeries: CalendarEventInput = {
+            id: 'ev-future-series',
+            eventStartLocal: '2028-03-01T10:00',
+            eventRepeat: { freq: 'weekly', byDay: 'WE' },
+        };
+        expect(findNextOccurrenceAfter(futureSeries, '2026-11-30')).toBe('2028-03-01');
+    });
+
+    it('findNextOccurrenceAfter keeps bad or endless series bounded and returns null', () => {
+        // Endless series with 600 skipped dates (exceeds MAX_SERIES_STEPS = 500)
+        const allSkippedSeries: CalendarEventInput = {
+            id: 'ev-endless-skip',
+            eventStartLocal: '2026-11-01T10:00',
+            eventRepeat: { freq: 'weekly', byDay: 'SU' },
+            eventRepeatSkips: Array.from({ length: 600 }, (_, i) => addDays('2026-11-01', i * 7)),
+        };
+        // Must terminate bounded without hanging and return null
+        expect(findNextOccurrenceAfter(allSkippedSeries, '2026-11-30')).toBeNull();
+
+        // Malformed series rules
+        const malformedPos: CalendarEventInput = {
+            id: 'ev-malformed-pos',
+            eventStartLocal: '2026-11-01T10:00',
+            eventRepeat: { freq: 'monthly', pos: 99 as unknown as 1, byDay: 'SU' },
+        };
+        expect(findNextOccurrenceAfter(malformedPos, '2026-11-30')).toBeNull();
+
+        const malformedDay: CalendarEventInput = {
+            id: 'ev-malformed-day',
+            eventStartLocal: '2026-11-01T10:00',
+            eventRepeat: { freq: 'monthly', byMonthDay: 40 },
+        };
+        expect(findNextOccurrenceAfter(malformedDay, '2026-11-30')).toBeNull();
+    });
+
+    it('sentence helpers do not offer lang parameter and guarantee single language from active device words', () => {
+        // Lang is dropped from sentence helpers so they always use active device words
+        expect(calendarTitle.length).toBe(0);
+        expect(calendarDayHeading.length).toBe(2);
+        expect(calendarMonthEmptyText.length).toBe(2);
+        expect(calendarNextEventLabel.length).toBe(1);
+        expect(calendarNoEventsComingUpText.length).toBe(0);
+        expect(calendarStartOneText.length).toBe(0);
+
+        // With active language English
+        setLanguage('en');
+        expect(calendarTitle()).toBe('Calendar');
+        expect(calendarDayHeading('2026-11-07', 2)).toBe('Sat 7 Nov: 2 events');
+        expect(calendarMonthEmptyText(2026, 11)).toBe('Nothing on in November.');
+        expect(calendarNextEventLabel('2026-12-06')).toBe('Next: Sun 6 Dec ›');
+        expect(calendarNoEventsComingUpText()).toBe('No events coming up yet.');
+        expect(calendarStartOneText()).toBe('Start one ›');
+
+        // With active language Spanish
+        try {
+            setLanguage('es', [loadCatalog('es')]);
+            expect(calendarTitle()).toBe('Calendario');
+            expect(calendarDayHeading('2026-11-07', 2)).toBe('sáb, 7 nov: 2 eventos');
+            expect(calendarMonthEmptyText(2026, 11)).toBe('Nada en noviembre.');
+            expect(calendarNextEventLabel('2026-12-06')).toBe('Siguiente: dom, 6 dic ›');
+            expect(calendarNoEventsComingUpText()).toBe('Aún no hay eventos próximos.');
+            expect(calendarStartOneText()).toBe('Crear uno ›');
+        } finally {
+            setLanguage('en');
+        }
     });
 });

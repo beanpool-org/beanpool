@@ -75,7 +75,7 @@ import {
     openDeals as coreOpenDeals, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
     type ShopCounts, type TourRecord,
 } from '@beanpool/core';
-import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, ON_HOLIDAY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
+import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
     getMember, getPosts, getBalance, getMarketplaceTransactions, getConversationsByMember, getListedUnreadCounts,
@@ -1267,12 +1267,12 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
     const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members
                                    WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                      AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(iso(c.now - JOINED_DAYS * DAY_MS)) as { c: number }).c;
-    const eventsSoon = (db.prepare(`SELECT COUNT(*) AS c FROM posts
+    const eventsSoon = (db.prepare(`SELECT COUNT(*) AS c FROM posts p
                                      WHERE type = 'event' AND event_start_at IS NOT NULL AND event_start_at <= ? AND COALESCE(event_end_at, event_start_at) > ?
                                        AND active = 1 AND status = 'active'
                                        AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL
                                        AND COALESCE(event_state, '') != 'cancelled'
-                                       AND (shown_from_host IS NOT NULL OR (author_pubkey NOT IN (${ON_HOLIDAY_SQL})
+                                       AND (${UNNAMED_COPY_SQL} OR (author_pubkey NOT IN (${ON_HOLIDAY_SQL})
                                             AND author_pubkey NOT IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))))`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
     return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot: Math.round(commonsBalance) } : {}) };
 }

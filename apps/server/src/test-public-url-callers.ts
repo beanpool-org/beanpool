@@ -336,6 +336,14 @@ async function main(): Promise<void> {
         const row = (host: string) => (appAddressesReport().addresses as any[]).find((r) => r.address === host);
         assert(row(FLEET)?.hardCoded === true, `the Addresses report marks the fleet name hard-coded (${show(row(FLEET))})`);
         assert(!row(REG)?.hardCoded, `and not the claimed name (${show(row(REG))})`);
+        const record = (status: string) => {
+            updateNodeConfig({ registrarNames: [{ ...lostEntry(FLEET), role: 'former', status, lost: null }] } as any);
+            forgetOwnAddresses();
+        };
+        record('live');
+        assert(!configuredAddresses().find((a) => a.address === FLEET)?.hardCoded, 'a fleet name this key holds at the registrar is not hard-coded: Make main is its way back');
+        record('released');
+        assert(configuredAddresses().find((a) => a.address === FLEET)?.hardCoded === true, 'one it has let go is');
     }
     assert(configuredAddresses().filter((a) => a.source === 'public-address').map((a) => a.address).join() === `${REG},${FLEET}`,
         `each once, the stored name first (${show(configuredAddresses())})`);

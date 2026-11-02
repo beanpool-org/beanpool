@@ -62,7 +62,7 @@
 
 import { domainToASCII } from 'node:url';
 import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES } from '../state-engine.js';
-import { registrarNames, registrarNamesVersion } from './registrar-names.js';
+import { HOLDING_STATUSES, registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { isCertifiableHost, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress } from './host-kinds.js';
 import { logger } from '../logger.js';
 
@@ -78,7 +78,7 @@ export interface OwnAddress {
     former?: true;
     /** Lost (see above): refused and never published, still one of this community's names. */
     lost?: true;
-    /** The host CF_RECORD_NAME sets (2): by hand on the server, so no claim of it is held. */
+    /** The host CF_RECORD_NAME sets (2), by hand on the server, with no claim of it held. */
     hardCoded?: true;
 }
 
@@ -155,7 +155,9 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     // Per host, whichever source names it.
     const lost = new Set(names.filter((r) => r.lost).map((r) => r.address));
     const given = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null });
-    const hardCoded = given ? normalizeAddress(given) : null;
+    const set = given ? normalizeAddress(given) : null;
+    // A fleet name this key also claimed is a name it holds: Make main there is the way back after a rename.
+    const hardCoded = names.some((r) => r.address === set && HOLDING_STATUSES.has(r.status)) ? null : set;
     const add = (address: string | null, source: AddressSource, former = false) => {
         if (!address || list.some((a) => a.address === address)) return;
         list.push({
@@ -165,7 +167,7 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     };
     const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
     add(url ? normalizeAddress(url) : null, 'public-address');
-    add(hardCoded, 'public-address');
+    add(set, 'public-address');
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');
     for (const r of names) add(r.address, 'registrar', r.role === 'former');

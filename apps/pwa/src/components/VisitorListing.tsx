@@ -12,7 +12,7 @@ import { formatEventWhen } from '../lib/events';
 import { VISITOR_WORDS, visitorDistanceText, visitorKmText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
 import { CategoryTile } from './CategoryTile';
-import { copyFromLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
+import { copyCardLine, copyFromLine, copyPriceLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
 import { EventCopyDoor } from './EventCopyDoor';
 import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
@@ -47,7 +47,8 @@ interface CardProps {
  */
 export function visitorCardName(post: MarketplacePost, beans: boolean, distanceKm: number | null): string {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
-    const parts = [post.title.trim(), typeLabel(post), visitorPriceText(post, beans), cat ? t(cat.label) : post.category];
+    const copy = post.type !== 'event' ? eventCopyOf(post) : null;
+    const parts = [post.title.trim(), typeLabel(post), copy ? copyPriceLine(copy) : visitorPriceText(post, beans), cat ? t(cat.label) : post.category];
     if (distanceKm != null) parts.push(visitorDistanceText(distanceKm));
     return parts.filter(Boolean).map((p) => (/[.!?]$/.test(p) ? p : `${p}.`)).join(' ');
 }
@@ -57,6 +58,9 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const photo = post.photos && post.photos.length > 0 ? post.photos[0] : null;
     const typeColor = POST_TYPE_COLORS[post.type] || '#888';
+    const copy = eventCopyOf(post);
+    // A member's copy of an Offer or a Need says its price at home, and where (@beanpool/core copyPriceLine): never "Free, a swap, or ask".
+    const listingCopy = post.type !== 'event' ? copy : null;
     return (
         <button
             type="button"
@@ -73,7 +77,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
             <span className="flex-1 min-w-0 flex flex-col gap-1">
                 <span className="font-extrabold text-base leading-snug text-nature-950 dark:text-white break-words">{post.title}</span>
                 <span data-testid="visitor-card-terms" className="text-sm font-bold text-nature-700 dark:text-nature-200 break-words">
-                    {visitorPriceText(post, beans)}
+                    {listingCopy ? copyPriceLine(listingCopy) : visitorPriceText(post, beans)}
                 </span>
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-xs font-black uppercase tracking-wide" style={{ color: `var(--post-type-${post.type}, ${typeColor})` }}>{typeLabel(post)}</span>
@@ -185,7 +189,10 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                             <p className="text-base text-nature-700 dark:text-nature-200 leading-relaxed mb-4 whitespace-pre-wrap break-words">{post.description}</p>
                         )}
 
-                        {post.type !== 'event' && (
+                        {post.type !== 'event' && copy?.from && (
+                            <p data-testid="visitor-detail-from" className="m-0 mb-2 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyCardLine(copy.from)}</p>
+                        )}
+                        {post.type !== 'event' && !copy && (
                             <p data-testid="visitor-detail-terms" className="m-0 mb-2 text-sm">
                                 <span className="font-bold uppercase tracking-wide text-xs text-nature-500 dark:text-nature-400">{beans ? t('Price:') : t('In return:')}</span>{' '}
                                 <span className="font-bold text-nature-900 dark:text-white">{visitorPriceText(post, beans)}</span>
@@ -203,7 +210,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
 
             {footer ?? (
                 <>
-                    {copy ? <EventCopyDoor copy={copy} /> : (
+                    {copy ? <EventCopyDoor copy={copy} line={post.type === 'event' ? undefined : copyPriceLine(copy)} /> : (
                         <button
                             type="button"
                             data-testid="visitor-join"

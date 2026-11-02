@@ -158,7 +158,7 @@ vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDA
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)));
 
-import { pseudoLocalise, setLanguage, upperCase, type UiLang } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, pseudoLocalise, setLanguage, upperCase, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { bracketed, bypassing as bypassingIn, unfit, widthOf, SCALE } from './profile-events-words-harness';
@@ -195,6 +195,12 @@ const POSTS = [
 /** Two partner communities: one with a name, one known only by its id. */
 const PEERS = [{ peerId: 'peer-byron-0001', callsign: 'Byron Bay' }, { peerId: 'peer-0000000099999999', callsign: null }];
 /** Everything members and communities wrote: shown as written, in every language. */
+const COPY = {
+    id: 'p-copy', type: 'offer', status: 'active', title: 'Quince paste', description: 'A jar', category: 'food', author_pubkey: 'hidden',
+    credits: 0, price_type: 'fixed', photos: [], lat: -28.68, lng: 153.63, created_at: iso(now - DAY),
+    shown_from: JSON.stringify({ host: 'byron.beanpool.org', name: 'Mullumbimby', url: 'https://byron.beanpool.org', door: 'ask', price: { amount: 20, unit: 'fixed' } }),
+};
+POSTS.push(COPY as any);
 const WRITTEN = [...POSTS.flatMap((p: any) => [p.title, p.description, p.author_callsign, p.event_place_name]), 'Byron Bay', ME.callsign]
     .filter((s): s is string => typeof s === 'string');
 
@@ -306,6 +312,16 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(byLabel(xx('Close preview'))).not.toBeNull();
         expect(byLabel(xx('Close'))).not.toBeNull();
         expect(bypassing()).toEqual([]);
+    });
+
+    it('a copy\'s preview: its community line where the author would be, no name, no profile, no 0', async () => {
+        await renderIn('xx');
+        await click(marker(COPY as any), 'the copy pin');
+        expect(host.querySelector('[data-testid="map-preview-copy-line"]')?.textContent).toBe(copyPriceLine(eventCopyOf(COPY as any)!));
+        expect(host.textContent).not.toContain('hidden');
+        expect(host.textContent).not.toContain(xx('Unknown'));
+        const preview = host.querySelector('[data-testid="map-preview-copy-line"]')?.parentElement?.textContent ?? '';
+        expect(preview.replace(copyPriceLine(eventCopyOf(COPY as any)!), '')).not.toMatch(/\d/);
     });
 
     it('an event\'s preview: its date, UPDATED, how many are going, View event', async () => {

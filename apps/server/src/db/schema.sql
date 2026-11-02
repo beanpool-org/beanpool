@@ -359,13 +359,16 @@ CREATE TABLE IF NOT EXISTS posts (
     -- freeTagCondition). '' on every row without. No trigger, index or default here calls a connection function, so an
     -- older image boots on this file. Added to an older database by db.ts.
     free_tags TEXT NOT NULL DEFAULT '',
-    -- A member's copy of an in-person event from their own community (DESIGN-list-on-global-fable.md §3, slice G2′), on a node
-    -- that keeps the directory: `shown_from_host` is set on every copy and on nothing else. It holds the community's host
-    -- while that was a shown row of the directory when the copy was written, else '' (an unlisted community's host is never
-    -- kept). `shown_from_post_id` is the event's id there, or NULL. engine/event-copy.ts reads both. No trigger, index or
-    -- default here calls a connection function, so an older image boots on this file. Added to an older database by db.ts.
+    -- A member's copy of an in-person event, an Offer or a Need from their own community (DESIGN-list-on-global-fable.md §3,
+    -- slices G2′ and G1′), on a node that keeps the directory: `shown_from_host` is set on every copy and on nothing else. It
+    -- holds the community's host while that was a shown row of the directory when the copy was written, else '' (an unlisted
+    -- community's host is never kept). `shown_from_post_id` is the home listing's id there, or NULL. `shown_price` is an Offer's
+    -- or Need's price at home, as '<beans> <unit>' (@beanpool/core copyPriceOf), for its words alone: `credits` stays 0, and
+    -- nothing adds, compares or pays it. engine/event-copy.ts reads all three. No trigger, index or default here calls a
+    -- connection function, so an older image boots on this file. Added to an older database by db.ts.
     shown_from_host TEXT,
     shown_from_post_id TEXT,
+    shown_price TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

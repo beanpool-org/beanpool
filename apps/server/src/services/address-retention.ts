@@ -3,11 +3,13 @@
  * server keeps no one's IP address for more than 7 days, and its logs never record one"; this file makes the first half
  * true, and log-address.ts with sanitize-message.ts the second.
  *
- * Addresses are kept in three node_config rows, each so an owner can tell who copies this server, and spot a stranger
- * trying to:
+ * Addresses are kept in four node_config rows, three so an owner can tell who copies this server, and spot a stranger
+ * trying to, and one so an owner can see where the server's own names point:
  *   - `replication_access` (state-engine.ts): the address of each pull on the copying routes, and of each refused try;
  *   - `standby_health` (services/standby-health.ts): each standby's address, which tells one standby from another;
- *   - `takeover_envelope_holders` (services/takeover-envelope.ts): which standby, by its address, holds which take-over keys.
+ *   - `takeover_envelope_holders` (services/takeover-envelope.ts): which standby, by its address, holds which take-over keys;
+ *   - `addressChecks` (services/address-check.ts): what each of this server's own names pointed at, public in DNS but, for
+ *     a server at home, the owner's home address.
  * An entry older than 7 days keeps its time and outcome, and its address becomes null, which the screens show as
  * "address no longer kept". Kept rather than dropped: the counts, times and outcomes are what spot an attacker (refused
  * tries a fortnight ago) or a standby that still holds old keys, and none of them is anyone's.
@@ -32,7 +34,7 @@
  *     expired them): the boot run scrubs each snapshot, and each readable backup a fleet harvester holds, in the
  *     background (`forgetAddressesInStoredCopies`). Each keeps its name, mode and times, so the snapshot list and
  *     its rotation are unchanged.
- * None of the three rows is copied to a standby or carried in the take-over keys (engine/replication-manifest.ts,
+ * None of the four rows is copied to a standby or carried in the take-over keys (engine/replication-manifest.ts,
  * 'per-server'), and nor is an `ip_hash`, so a standby's copy and a take-over bring none back either.
  *
  * The boot run also takes addresses out of log lines written before this version (`forgetAddressesInLogs`): lines
@@ -64,7 +66,7 @@ const SWEEP_EVERY_MS = 60 * 60_000;
 const expired = (at: unknown, cutoff: number) => !(typeof at === 'number' && Number.isFinite(at) && at >= cutoff);
 
 /** The node_config rows that hold an address. A literal, so test-replication-manifest.ts can read each key written. */
-export const ADDRESS_ROWS = ['replication_access', 'standby_health', 'takeover_envelope_holders'] as const;
+export const ADDRESS_ROWS = ['replication_access', 'standby_health', 'takeover_envelope_holders', 'addressChecks'] as const;
 export type AddressRow = typeof ADDRESS_ROWS[number];
 
 /** Clears, in place, each address in `value` (the row's parsed JSON) whose entry is older than `cutoff`. True if any. */
@@ -92,6 +94,14 @@ const ROWS: Record<AddressRow, Forget> = {
         let changed = false;
         for (const h of Array.isArray(list) ? list : []) {
             if (h && typeof h === 'object' && h.ip != null && expired(h.lastFetchAt, cutoff)) { h.ip = null; changed = true; }
+        }
+        return changed;
+    },
+    // The name itself stays (a CNAME's target is a name too): only the numbers it pointed at go.
+    addressChecks: (checks, cutoff) => {
+        let changed = false;
+        for (const c of Object.values(checks) as any[]) {
+            if (c?.dns && (c.dns.a?.length || c.dns.aaaa?.length) && expired(c.checkedAt, cutoff)) { c.dns.a = []; c.dns.aaaa = []; changed = true; }
         }
         return changed;
     },
@@ -183,7 +193,7 @@ function holdsAddresses(conn: Database.Database): boolean {
 }
 
 /**
- * Every address out of a copy of the database, in place, whatever its age: the three rows', the limiters' address
+ * Every address out of a copy of the database, in place, whatever its age: the four rows', the limiters' address
  * hashes and any in a log line; and the open door's key, where an older database kept it (`openJoinSalt`). What it
  * frees is zeroed, but free space the file already had (free pages, a page's gap) is not touched: make the copy with `copyWithoutAddresses`, whose VACUUM INTO leaves none. True when it is done. Never
  * throws: a copy is a recovery point, and one that failed here still holds only what this server keeps anyway (7 days

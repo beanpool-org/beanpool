@@ -35,6 +35,7 @@ import { changeEnterpriseFace, EnterpriseFaceRefusal, shopfrontOf } from '../eng
 import { memberShop, newListingCategory, shopOf, visitorShop } from '../engine/shops.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
+import { LISTING_COPY_CODE } from '../engine/escrow.js';
 import { pledgesReturnedAt as pledgesReturnedAtFor } from '../engine/unfunded-pledges.js';
 import { db, pledgeToProject, getCrowdfundProject, mayCancelProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -1008,7 +1009,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
-            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT), ...(e?.code === LISTING_COPY_CODE ? { code: LISTING_COPY_CODE } : {}) };
         }
     });
 

@@ -5,6 +5,7 @@
  * Each category's name is a word() key, shown through t(cat.label) where a member reads it (the phone's
  * constants/categories.ts keys where the words are the same: 'Services', 'Tools', …). The id is what the node stores.
  */
+import type { ShownFromLine } from '@beanpool/core';
 import { word } from '@beanpool/core';
 
 export const MARKETPLACE_CATEGORIES = [
@@ -59,6 +60,11 @@ export interface PollVoteRecord {
 
 export interface MarketplacePost {
     id: string;
+    /** A member's copy on the global community (@beanpool/core eventCopyOf): no author, no RSVP, no deal. */
+    shownCopy?: boolean;
+    shownFrom?: ShownFromLine;
+    /** Its price at home, for its words alone (core copyPriceLine). */
+    shownPrice?: string;
     type: PostType;
     category: string;
     title: string;

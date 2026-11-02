@@ -48,8 +48,8 @@ export interface Fenced {
  * One field of member text, fenced with the call's boundary. `what` is the server's own words (which report or knock,
  * which field), never the member's. Null when there is no text.
  */
-export function fence(boundary: string, what: string, value: unknown): Fenced | null {
-    const text = cleanMemberText(value);
+export function fence(boundary: string, what: string, value: unknown, max = MEMBER_TEXT_MAX): Fenced | null {
+    const text = cleanMemberText(value, max);
     if (!text) return null;
     return {
         untrusted: true,

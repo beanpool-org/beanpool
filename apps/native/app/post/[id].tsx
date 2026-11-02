@@ -32,6 +32,8 @@ import { blockUser } from '../../utils/blocklist';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
+import { ListingCopyDetail } from '../../components/ListingCopy';
+import { ShowOnGlobalHostRow, listingForCopy } from '../../components/ShowOnGlobalRow';
 import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -40,7 +42,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -902,6 +904,9 @@ export default function PostDetailModal() {
     if (post.type === 'event') {
         return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} />;
     }
+    // A member's copy on the global community has its own screen, so nothing of a deal or a person can be drawn on one: no
+    // price card, no author, no Message, no Accept (@beanpool/core eventCopyOf). The node refuses them all the same.
+    if (eventCopyOf(post)) return <ListingCopyDetail post={post} />;
 
     const isOperatorOfAuthor = !!(post.author_pubkey && operatedTreasuries.includes(post.author_pubkey));
     const isOwnPost = identity?.publicKey === post.author_pubkey || isOperatorOfAuthor;
@@ -1487,6 +1492,15 @@ export default function PostDetailModal() {
 
                 {/* Share with members, and outside the community where it allows it (front doors S6). */}
                 <SharePostButtons post={post} />
+
+                {!isOperatorOfAuthor && (
+                    <ShowOnGlobalHostRow
+                        event={listingForCopy(post, photos)}
+                        enabled={nodeProfile?.profile === 'local' && identity?.publicKey === post.author_pubkey && (post.audience_scope ?? 'public') === 'public' && !post.origin_node
+                            && typeof post.lat === 'number' && typeof post.lng === 'number' && ['active', 'paused', 'pending'].includes(post.status)}
+                        listing
+                    />
+                )}
 
                 {/* Action Buttons */}
 

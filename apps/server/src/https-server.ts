@@ -135,6 +135,7 @@ import { photoKeyMatches } from './engine/photo-keys.js';
 import { LISTINGS_MEMBERS_ONLY } from './listings-members-only.js';
 import { peekTicketOpens } from './engine/peek-tickets.js';
 import { createPeekRoutes } from './routes/peek.js';
+import { createCheckPageRoutes } from './routes/check-page.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
@@ -1953,6 +1954,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createCommunityRoutes(deps),
         createCommunityCardRoutes(deps),
         createPeekRoutes(deps),
+        createCheckPageRoutes(),
         createAdminRoutes(deps),
         createBackupRoutes(deps),
         createOffboxBackupRoutes(deps),

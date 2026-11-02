@@ -141,6 +141,13 @@ describe('Rules page only (Marty, 2 Nov): no card, no step-back, no tick, on eit
             return keys.filter(k => sentences.some(s => s.test(k))).map(k => `${relative(ROOT, p)}: ${k.slice(0, 80)}`);
         });
         expect(inCatalogs).toEqual([]);
+        // The guide is where a copy hid: joining.md kept the box after the screen lost it.
+        const guideRoot = join(ROOT, 'packages/beanpool-guide');
+        const pages = ['content', 'operators'].flatMap(d => (readdirSync(join(guideRoot, d), { recursive: true }) as string[])
+            .filter(f => f.endsWith('.md')).map(f => join(guideRoot, d, f)));
+        expect(pages.length).toBeGreaterThan(20);
+        const inGuide = pages.filter(p => /\bi agree\b/i.test(readFileSync(p, 'utf8'))).map(p => relative(ROOT, p));
+        expect(inGuide).toEqual([]);
     });
 });
 

@@ -121,7 +121,7 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
                     Suggested by an AI assistant ({items.length})
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-1 break-words">
-                    An assistant cannot act: it suggests, and nothing changes until its member approves. Read the report itself, not only the assistant&apos;s words.
+                    A suggestion changes nothing until its member approves. Read the report itself, not only the assistant&apos;s words.
                 </p>
             </div>
             {message && <p role="status" className="text-sm text-nature-200 m-0 break-words">{message}</p>}

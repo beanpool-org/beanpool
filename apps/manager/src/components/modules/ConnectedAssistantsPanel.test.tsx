@@ -149,6 +149,19 @@ describe('ConnectedAssistantsPanel', () => {
         expect(await screen.findByText('Claude on my laptop')).toBeInTheDocument();
     });
 
+    it('"May take down posts for me" is its own tick, off until ticked, and a ticked row says so with its count (MCP-MODERATION S1)', async () => {
+        const calls = fakeNode({ grants: [grant({ id: 'aaaaaaaaaaaa', name: 'Sweeper', canPost: false, canModerate: true, takedownsToday: 4 })] });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        expect(await screen.findByTestId('agent-grant-moderates')).toHaveTextContent('May take down · 4 today');
+        fireEvent.change(screen.getByLabelText('Assistant’s name'), { target: { value: 'Reader' } });
+        const tick = screen.getByRole('checkbox', { name: /May take down posts for me/ });
+        expect(tick).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /May post for me/ })).not.toBeChecked();
+        fireEvent.click(tick);
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Reader', days: 30, canPost: false, canModerate: true }));
+    });
+
     it('"May post for me" is ticked or not at connect, each row says which, and an owner sets the posts a day (MCP-OWNER-POSTS)', async () => {
         const calls = fakeNode({ grants: [grant({ id: 'aaaaaaaaaaaa', name: 'Reader', canPost: false, postsToday: 0 })] });
         render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);

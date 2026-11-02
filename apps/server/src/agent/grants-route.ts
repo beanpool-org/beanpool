@@ -175,9 +175,10 @@ function previewGrant(ctx: any, grantId: unknown): AgentGrant | { error: string 
         return { id: t.id, name: t.name, member: t.createdBy, role, via: 'token', createdAt: t.createdAt, expiresAt: t.expiresAt, canPost: t.canPost === true, canModerate: t.canModerate === true };
     }
     return {
-        // An owner's own preview lists every tool their assistant can be given, the posting ones ticked (none is run here).
+        // An owner's own preview lists the tools their assistant can be given, the posting ones ticked (none is run here). Not the
+        // takedown tools: a preview shows what an assistant reads, and those read nothing.
         id: 'preview', name: 'Preview', member: actorOf(ctx) ?? 'owner:password', role: roleOf(ctx), via: 'token',
-        createdAt: Date.now(), expiresAt: null, canPost: roleOf(ctx) === 'owner', canModerate: roleOf(ctx) === 'owner',
+        createdAt: Date.now(), expiresAt: null, canPost: roleOf(ctx) === 'owner',
     };
 }
 

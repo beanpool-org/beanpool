@@ -271,6 +271,18 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(detail).toHaveTextContent('Bindarrabi Hall');
     });
 
+    it('item and event detail pages use full width on narrow screens and cap at readable max-w-3xl on wide screens', async () => {
+        render(<MarketplacePage identity={identity} />);
+        const open = await screen.findByRole('button', { name: 'Open event: Working bee' });
+        await act(async () => { open.click(); });
+        const detail = await screen.findByTestId('event-detail');
+        const container = detail.parentElement as HTMLElement;
+        const classes = container.className.split(/\s+/);
+        expect(classes).toContain('w-full');
+        expect(classes).toContain('max-w-3xl');
+        expect(classes).toContain('mx-auto');
+    });
+
     it('Pricing Guide chip on Market: choosing an item carries its price into the form via onComposer', async () => {
         vi.spyOn(api, 'getPricingGuideApi').mockResolvedValue({ items: [], config: {} } as any);
         const onComposer = vi.fn();
@@ -1531,5 +1543,61 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         const [first, second] = screen.getAllByTestId('card-deal-chip');
         const pairs = [first, second].map(c => [c.textContent, /Held one/.test(cardOf(c)) && !/Asked one/.test(cardOf(c)) ? 'a' : /Asked one/.test(cardOf(c)) && !/Held one/.test(cardOf(c)) ? 'b' : '?']);
         expect(pairs.sort()).toEqual([['✋ ASKED', 'b'], ['🤝 IN TRUST', 'a']]);
+    });
+
+    describe('the listing page keeps its phone order and only moves columns on wide screens (#2744)', () => {
+        const order = () => {
+            const title = screen.getByRole('heading', { name: 'Listing' });
+            const words = screen.getByText('Words');
+            const photo = screen.getByRole('button', { name: /View enlarged photo 1 of 1/ });
+            const price = screen.getByText('Asking Price');
+            return { title, words, photo, price };
+        };
+        const after = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+        it('reads words, photos, price in the DOM, so Tab follows what a phone shows', async () => {
+            await open(listing({}), []);
+            const { title, words, photo, price } = order();
+            expect(after(title, words)).toBe(true);
+            expect(after(words, photo)).toBe(true);
+            expect(after(photo, price)).toBe(true);
+            expect(title.closest('.flex-col')?.parentElement?.innerHTML).not.toMatch(/\border-\d/);
+        });
+
+        it('places photos left and the rest right from md up, with the price under the words', async () => {
+            await open(listing({}), []);
+            const { title, photo, price } = order();
+            const photos = photo.parentElement as HTMLElement;
+            expect(photos.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-2']));
+            // The placements do nothing unless the block around them is the grid.
+            expect(photos.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:grid', 'md:grid-cols-2', 'md:grid-rows-[auto_1fr]', 'md:gap-x-6']));
+            expect(title.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1']));
+            const priceColumn = price.parentElement!.parentElement as HTMLElement;
+            expect(priceColumn.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
+        });
+
+        it('with no photos stays one column, with nothing placed', async () => {
+            await open(listing({ photos: [] }), []);
+            const title = screen.getByRole('heading', { name: 'Listing' });
+            expect(title.parentElement!.className).not.toMatch(/md:col-start/);
+            expect(title.parentElement!.parentElement!.className).not.toContain('md:grid');
+            const priceColumn = screen.getByText('Asking Price').parentElement!.parentElement as HTMLElement;
+            expect(priceColumn.className).not.toMatch(/md:col-start/);
+        });
+
+        it("keeps the phone's photo size and lets a wide photo scroll, as on main", async () => {
+            await open(listing({}), []);
+            const button = order().photo;
+            expect(button.className.split(/\s+/)).toContain('h-40');
+            expect(button.className).not.toContain('max-w-[85%]');
+            expect(button.querySelector('img')!.className.split(/\s+/)).toContain('h-40');
+        });
+
+        it('leaves the photo column at its full height on wide screens, with no inner scroll', async () => {
+            await open(listing({}), []);
+            const classes = order().photo.parentElement!.className.split(/\s+/);
+            expect(classes).toContain('md:overflow-visible');
+            expect(classes).not.toContain('md:overflow-y-auto');
+        });
     });
 });

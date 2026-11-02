@@ -2321,8 +2321,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
         {/* Map Preview Card — an event shows its own card (§3) */}
         {previewPost && previewPost.type === 'event' && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
-                <div className="m-3 pointer-events-auto relative flex flex-col gap-2 bg-white dark:bg-nature-900 rounded-[24px] p-2 shadow-[0_10px_20px_rgba(0,0,0,0.15)] border border-nature-200 dark:border-nature-800">
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+                <div className="m-3 w-[calc(100%-1.5rem)] max-w-[28rem] pointer-events-auto relative flex flex-col gap-2 bg-white dark:bg-nature-900 rounded-[24px] p-2 shadow-[0_10px_20px_rgba(0,0,0,0.15)] border border-nature-200 dark:border-nature-800">
                     <EventCard
                         post={previewPost}
                         identity={identity}
@@ -2359,8 +2359,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         {previewPost && previewPost.type !== 'event' && visitor && (
             // A visitor's pin card (G9a §7): the listing's title and "near here", since the pin is its area's centre, and
             // the way to its detail sheet. No price, no name, no badge.
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
-                <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+                <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
                     {/* A 44 px target, as the event card's ✕ (48 px) is: the small circle sits where it was, inside it. */}
                     <button
                         type="button"
@@ -2391,8 +2391,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             </div>
         )}
         {previewPost && previewPost.type !== 'event' && !visitor && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
-                <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+                <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
                         onClick={() => setPreviewPost(null)}
                         aria-label={t('Close preview')}
@@ -2422,21 +2422,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <span className="text-4xl">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>
                         </div>
                     )}
-                    <div className="flex-1 ml-4 flex flex-col justify-center">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider truncate mr-2 flex-1">
+                    <div className="flex-1 ml-4 min-w-0 flex flex-col justify-center">
+                        <div className="flex items-center mb-1 pr-7">
+                            <span className="text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider truncate flex-1">
                                 {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
+                            </span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                            <span data-testid="map-preview-title" className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors flex-1 min-w-0">
+                                {previewPost.title}
                             </span>
                             {/* A member's copy has no price here: `credits` is 0, and its line below says what it is at home. */}
                             {!eventCopyOf(previewPost) && (
-                                <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
+                                <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 shrink-0">
                                     {t('{amount}B', { amount: previewPost.credits })}
                                 </span>
                             )}
                         </div>
-                        <span className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors">
-                            {previewPost.title}
-                        </span>
                         {eventCopyOf(previewPost)
                             ? <span data-testid="map-copy-line" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 break-words transition-colors">{copyPriceLine(eventCopyOf(previewPost)!)}</span>
                             : (

@@ -211,6 +211,16 @@ try {
 
             const monthHeading = document.querySelector('[data-testid="month-heading"]')?.textContent || '';
             const stackPanel = document.querySelector('[data-testid="map-stack-list"]');
+
+            // The day's list lies over the screen's bottom: the month must scroll clear of it, last week included.
+            const scroller = document.querySelector('[data-testid="calendar-month-scroll"]');
+            const days = [...document.querySelectorAll('[data-testid^="month-day-"]')];
+            if (stackPanel && days.length) {
+                if (scroller) scroller.scrollTop = scroller.scrollHeight;
+                const last = days[days.length - 1].getBoundingClientRect();
+                const top = stackPanel.getBoundingClientRect().top;
+                if (last.bottom > top + 0.5) out.push(`the last day ends at ${Math.round(last.bottom)}, under the day's list from ${Math.round(top)}`);
+            }
             const stackHeading = stackPanel?.querySelector('[role="heading"]')?.textContent || '';
             const dayButtons = document.querySelectorAll('[data-testid^="month-day-"]').length;
             const stackRows = stackPanel?.querySelectorAll('[role="button"]').length ? stackPanel.querySelectorAll('[role="button"]').length - 1 : 0;

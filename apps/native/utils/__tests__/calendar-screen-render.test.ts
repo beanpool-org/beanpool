@@ -52,6 +52,8 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
+        ScrollView: ({ children, testID, contentContainerStyle }: any) => createElement('div', { 'data-testid': testID, 'data-pad-bottom': contentContainerStyle?.paddingBottom ?? 0 }, children),
+        useWindowDimensions: () => ({ width: 320, height: 568 }),
         FlatList: ({ data, renderItem, keyExtractor }: any) => createElement('div', { 'data-testid': 'flat-list' },
             (data || []).map((item: any, idx: number) => {
                 const key = keyExtractor ? keyExtractor(item, idx) : (item?.id ?? idx);
@@ -206,7 +208,11 @@ describe('CalendarScreen route component', () => {
         const activePanel = container.querySelector('[data-testid="map-stack-list"]');
         const closeBtn = activePanel?.querySelector('[aria-label="Close"]') as HTMLButtonElement;
         expect(closeBtn).toBeTruthy();
+        // The month leaves room for the day's list, so its last week can be reached, and takes it back when the list goes.
+        const monthScroll = () => container.querySelector('[data-testid="calendar-month-scroll"]')!;
+        expect(monthScroll().getAttribute('data-pad-bottom')).toBe(String(Math.ceil(568 / 3)));
         act(() => closeBtn.click());
+        expect(monthScroll().getAttribute('data-pad-bottom')).toBe('0');
 
         // Now MapStackList is closed
         expect(container.querySelector('[data-testid="map-stack-list"]')).toBeNull();

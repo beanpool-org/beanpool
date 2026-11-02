@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DeviceEventEmitter, Pressable, StyleSheet, Text, View } from 'react-native';
+import { DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -8,6 +8,7 @@ import {
     calendarTitle,
     formatLocalDate,
     parseLocalDate,
+    STACK_LIST_SHARE,
     t,
 } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
@@ -17,6 +18,7 @@ import { getPosts } from '../utils/db';
 import { eventStateOf } from '../utils/events';
 
 export default function CalendarScreen() {
+    const { height: screenHeight } = useWindowDimensions();
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
@@ -185,7 +187,12 @@ export default function CalendarScreen() {
                 </Text>
             </View>
 
-            <View style={styles.content}>
+            {/* The day's list lies over the bottom of the screen: the month scrolls clear of it, last week included. */}
+            <ScrollView
+                testID="calendar-month-scroll"
+                style={styles.content}
+                contentContainerStyle={selectedDate ? { paddingBottom: Math.ceil(screenHeight * STACK_LIST_SHARE) } : undefined}
+            >
                 <MonthGrid
                     month={monthModel}
                     selectedDate={selectedDate}
@@ -195,7 +202,7 @@ export default function CalendarScreen() {
                     onJumpToDate={handleJumpToDate}
                     onStartEvent={handleStartEvent}
                 />
-            </View>
+            </ScrollView>
 
             {selectedDate ? (
                 <MapStackList

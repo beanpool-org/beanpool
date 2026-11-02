@@ -117,15 +117,19 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     keyed on the date (event_reminders_sent.occurrence_at). An importer before this one drops them: a series would land
  *     as a one-off that never moves on after a take-over, every regular's old RSVP would count for the new date, and a
  *     second week's reminder mark would fold into the first's. OLDEST_STANDBY_FORMAT is 12 from here, as 10 and 11 were.
+ * 13. A poll's typed Other (schema.sql poll_answers): what an anonymous poll's members answered travels in the poll's row, and
+ *     an open vote's link to its words on its vote (poll_votes.other_answer_id). An importer before this one drops both: after
+ *     a take-over a sealed poll would count no answers and its words would be gone. OLDEST_STANDBY_FORMAT is 13 from here, as
+ *     10 to 12 were.
  */
-export const REPLICA_FORMAT = 12;
+export const REPLICA_FORMAT = 13;
 
 /**
  * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
  * reference, 10 event times, 11 the let-in, 12 repeating events; raise it with any format whose older importer drops a
  * column.
  */
-export const OLDEST_STANDBY_FORMAT = 12;
+export const OLDEST_STANDBY_FORMAT = 13;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only

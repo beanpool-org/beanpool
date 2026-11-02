@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CommunityHealthPanel, logWho, readHealth } from './CommunityHealthPanel';
+import { CommunityHealthPanel, firstTradeRows, logWho, readHealth, readNewMembers } from './CommunityHealthPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
@@ -35,6 +35,10 @@ function mockNode(read: { ok: boolean; status?: number; body: unknown } = { ok: 
     vi.stubGlobal('fetch', fetchMock);
     return fetchMock;
 }
+
+const WINDOW = { joined: 42, firstListing: 19, firstTrade: 10, daysToFirstListing: 3, daysFromListingToTrade: 12 };
+const NEW_MEMBERS = { beans: true, anyTrades: true, minGroup: 5, last90Days: { ...WINDOW, joined: 12, firstListing: 7, firstTrade: 5, daysToFirstListing: 0, daysFromListingToTrade: 1 }, allTime: WINDOW };
+const withNew = (newMembers: unknown) => ({ ok: true, body: { ...HEALTH, totals: { ...HEALTH.totals, newMembers } } });
 
 describe('CommunityHealthPanel', () => {
     beforeEach(() => { vi.unstubAllGlobals(); });
@@ -108,6 +112,105 @@ describe('CommunityHealthPanel', () => {
         expect(byPerson).toHaveTextContent('Ada opened a dispute on');
         expect(byPerson).not.toHaveTextContent('token');
         expect(screen.getByTestId('health-log')).toHaveTextContent("Ada by token nightly report saw Kim's balance while removing them on");
+    });
+
+    it('shows how far new members get, both windows, in plain words', async () => {
+        mockNode(withNew(NEW_MEMBERS));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        expect(await screen.findByRole('heading', { name: 'From joining to a first trade' })).toBeInTheDocument();
+        const all = screen.getByTestId('first-trade-all-time');
+        expect(all).toHaveTextContent('All time');
+        expect(all).toHaveTextContent('Joined42');
+        expect(all).toHaveTextContent('Made a first listing19');
+        expect(all).toHaveTextContent('Completed a first tradeAt least 10');
+        expect(all).toHaveTextContent('Typical time from joining to a first listing3 days');
+        expect(all).toHaveTextContent('Typical time from a first listing to a first trade12 days');
+        const recent = screen.getByTestId('first-trade-90-days');
+        expect(recent).toHaveTextContent('Last 90 days');
+        expect(recent).toHaveTextContent('Joined12');
+        expect(recent).toHaveTextContent('Typical time from joining to a first listingUnder a day');
+        expect(recent).toHaveTextContent('Typical time from a first listing to a first trade1 day');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('owners and admins only');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('Typical means the middle person');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('A figure is held back when fewer than 5 people are behind it, or fewer than 5 people separate the two columns.');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('The wait for a first trade counts only people who listed before they traded.');
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('First trades go up in steps of 5');
+    });
+
+    it('a figure the node holds back says so, and is never a 0', async () => {
+        mockNode(withNew({ ...NEW_MEMBERS,
+            last90Days: { joined: 3, firstListing: 1, firstTrade: null, daysToFirstListing: null, daysFromListingToTrade: null },
+            allTime: { joined: 3, firstListing: 1, firstTrade: null, daysToFirstListing: null, daysFromListingToTrade: null } }));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const recent = await screen.findByTestId('first-trade-90-days');
+        expect(recent).toHaveTextContent('Joined3');
+        expect(recent).toHaveTextContent('Made a first listing1');
+        expect(recent).toHaveTextContent('Completed a first tradeHeld back');
+        expect(recent).toHaveTextContent('Typical time from joining to a first listingHeld back');
+        expect(recent).toHaveTextContent('Typical time from a first listing to a first tradeHeld back');
+        expect(recent.textContent).not.toMatch(/At least|Under a day/);
+    });
+
+    it('a real 0 days reads as under a day, and only a held-back figure as held back', () => {
+        const rows = new Map(firstTradeRows({ ...WINDOW, daysToFirstListing: 0, daysFromListingToTrade: null }, NEW_MEMBERS as never));
+        expect(rows.get('Typical time from joining to a first listing')).toBe('Under a day');
+        expect(rows.get('Typical time from a first listing to a first trade')).toBe('Held back');
+    });
+
+    it('a figure held back in a large group never says there are too few people', async () => {
+        mockNode(withNew({ ...NEW_MEMBERS,
+            last90Days: { joined: 60, firstListing: 60, firstTrade: null, daysToFirstListing: null, daysFromListingToTrade: null },
+            allTime: { joined: 63, firstListing: 63, firstTrade: 60, daysToFirstListing: 2, daysFromListingToTrade: 8 } }));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const recent = await screen.findByTestId('first-trade-90-days');
+        expect(recent).toHaveTextContent('Joined60');
+        expect(recent).toHaveTextContent('Completed a first tradeHeld back');
+        expect(screen.getByTestId('first-trade').textContent).not.toMatch(/too few/i);
+    });
+
+    it('with no Beans it says there are no trades to measure, and shows no trade figure at all', async () => {
+        const off = { joined: 24, firstListing: 16, firstTrade: null, daysToFirstListing: 2, daysFromListingToTrade: null };
+        mockNode(withNew({ beans: false, anyTrades: false, minGroup: 5, last90Days: off, allTime: off }));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        expect(await screen.findByTestId('first-trade-no-beans')).toHaveTextContent('This community has no Beans, so there are no trades to measure.');
+        for (const id of ['first-trade-90-days', 'first-trade-all-time']) {
+            expect(screen.getByTestId(id)).toHaveTextContent('Joined24');
+            expect(screen.getByTestId(id)).toHaveTextContent('Made a first listing16');
+            expect(screen.getByTestId(id)).not.toHaveTextContent('first trade');
+            expect(screen.getByTestId(id)).not.toHaveTextContent('Too few');
+        }
+        expect(screen.getByTestId('community-health-panel')).not.toHaveTextContent('Trades this month');
+        // The typical time still shows, so its word is explained; nothing is said of trades that aren't there.
+        expect(screen.getByTestId('first-trade')).toHaveTextContent('Typical means the middle person');
+        expect(screen.getByTestId('first-trade')).not.toHaveTextContent('steps of');
+        expect(screen.getByTestId('first-trade')).not.toHaveTextContent('listed before they traded');
+    });
+
+    it('a node with no trades says so plainly', async () => {
+        const none = { joined: 31, firstListing: 9, firstTrade: 0, daysToFirstListing: 4, daysFromListingToTrade: null };
+        mockNode(withNew({ beans: true, anyTrades: false, minGroup: 5, last90Days: none, allTime: none }));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const all = await screen.findByTestId('first-trade-all-time');
+        expect(all).toHaveTextContent('Completed a first tradeNo trades yet');
+        expect(all).toHaveTextContent('Typical time from a first listing to a first tradeNo trades yet');
+        expect(all.textContent).not.toMatch(/Too few|At least/);
+        expect(screen.queryByTestId('first-trade-no-beans')).toBeNull();
+    });
+
+    it('a node older than the measure shows the panel without it, and Trades this month stays', async () => {
+        mockNode();
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const panel = await screen.findByTestId('community-health-panel');
+        expect(screen.queryByTestId('first-trade')).toBeNull();
+        expect(panel).toHaveTextContent('Trades this month41');
+    });
+
+    it('reads a half answer as none, and a field that is no number as held back', () => {
+        expect(readNewMembers({ beans: true, last90Days: WINDOW })).toBeNull();
+        expect(readNewMembers({ beans: 'yes', last90Days: WINDOW, allTime: WINDOW })).toBeNull();
+        expect(readNewMembers(NEW_MEMBERS)).toMatchObject({ beans: true, anyTrades: true, minGroup: 5 });
+        expect(readNewMembers({ ...NEW_MEMBERS, allTime: { ...WINDOW, firstTrade: '7', daysToFirstListing: 'soon' } })?.allTime)
+            .toMatchObject({ firstTrade: null, daysToFirstListing: null });
     });
 
     it('an owner saves the two lines', async () => {

@@ -29,7 +29,7 @@ import {
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
-    tagIndex,
+    tagIndex, freshBanner, recordFreshBannerDismissal,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -323,6 +323,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // so it persists across sessions.
     // Never for a visitor, whose list has no such chip to undo it.
     const [beansOnlyPicked, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
+    // Fresh listings banner dismissal. Stored under 'bp_dismissed_fresh_count' (parity with phone).
+    const [dismissedFresh, setDismissedFresh] = useState<string | null>(() => {
+        try {
+            return localStorage.getItem('bp_dismissed_fresh_count');
+        } catch {
+            return null;
+        }
+    });
     const [foundingOnlyPicked, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -3791,9 +3799,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 startOfToday.setHours(0, 0, 0, 0);
                 const freshTodayCount = posts.filter(post => {
                     if (post.status !== 'active' || post.type === 'event') return false;
-                    if (identity && post.authorPublicKey === identity.publicKey) return false;
-                    return new Date(post.createdAt).getTime() >= startOfToday.getTime();
+                    if (identity && (post.authorPublicKey === identity.publicKey || (post as any).author_pubkey === identity.publicKey)) return false;
+                    return new Date(post.createdAt || (post as any).created_at).getTime() >= startOfToday.getTime();
                 }).length;
+                const shouldShowFreshBanner = freshBanner.shouldShow(dismissedFresh, freshTodayCount);
+                const dismissFreshBanner = () => {
+                    const stored = recordFreshBannerDismissal(freshTodayCount);
+                    setDismissedFresh(stored);
+                    try {
+                        localStorage.setItem('bp_dismissed_fresh_count', stored);
+                    } catch {}
+                };
 
                 // A few example cards while the Market is nearly empty, where the node asks for them
                 // (lib/example-listings.ts): never under a search or a filter, and never in the posts themselves, so
@@ -4180,23 +4196,27 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
 
                         {/* Freshness Social Proof Banner */}
-                        {freshTodayCount > 0 && (
-                            <div className="mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 border border-orange-200/50 dark:border-orange-900/30 flex items-center justify-between shadow-sm animate-pulse-slow">
-                                <div className="flex items-center gap-2.5">
-                                    <span className="text-lg">🔥</span>
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-orange-950 dark:text-orange-400">
+                        {shouldShowFreshBanner && (
+                            <button
+                                type="button"
+                                onClick={dismissFreshBanner}
+                                className="w-full mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 border border-orange-200/50 dark:border-orange-900/30 flex items-center justify-between gap-3 shadow-sm text-left cursor-pointer transition-opacity active:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-nature-950 animate-pulse-slow"
+                            >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                    <span className="text-lg shrink-0">🔥</span>
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                        <span className="text-xs font-bold text-orange-950 dark:text-orange-400 break-words">
                                             {tn(freshTodayCount, '{n} fresh listing posted today!', '{n} fresh listings posted today!')}
                                         </span>
-                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-300 font-medium">
-                                            {t('Scroll down to explore what is new in the community.')}
+                                        <span className="text-[10px] text-orange-800 dark:text-orange-300 font-medium break-words">
+                                            {t('Tap to dismiss • Scroll down to explore')}
                                         </span>
                                     </div>
                                 </div>
-                                <span className="text-[10px] font-bold text-bp-chip-need-ink bg-bp-chip-need-tint px-2 py-0.5 rounded-full">
+                                <span className="text-[10px] font-bold text-bp-chip-need-ink bg-bp-chip-need-tint px-2 py-0.5 rounded-full shrink-0">
                                     {t('LIVE')}
                                 </span>
-                            </div>
+                            </button>
                         )}
 
                         {/* What you said you would be at, above what you might like: it is the one part of

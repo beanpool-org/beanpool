@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -245,12 +245,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "Kura za maoni huuliza watu wanafikiria nini na hazibadilishi chochote zenyewe. Zipate Sokoni chini ya Kura za maoni.",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "Ni wewe tu unayeweza kuona salio lako na biashara zako. Wanachama wengine huona jina lako, picha, kiwango na maoni.",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "Watu ambao hawajajiunga wanaweza kuona kile kinachotolewa na takriban wapi, kamwe hawawezi kuona jina lako, uso wako au eneo halisi.",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "Huo ndio kidokezo cha mwisho. Mwongozo mzima upo katika Mipangilio chini ya Msaada na jinsi inavyofanya kazi, na hufanya kazi bila mtandao; Hariri nyumbani, chini, hupanga kadi zako.",
   "Tips · {position} of {total}": "Vidokezo · {position} ya {total}",
   "Done with tips. The card goes.": "Nimemaliza kusoma vidokezo. Kadi inaondoka.",
   "Next tip": "Kidokezo kinachofuata",
   "Don't show tips again": "Usionyeshe vidokezo tena",
-  "Don't show tips again. Edit home brings them back.": "Usionyeshe vidokezo tena. Hariri nyumbani inavirudisha.",
   "All tips seen": "Vidokezo vyote vimeonekana",
   "or type your town": "au andika mji wako",
   "Not here? Type your town": "Haipo hapa? Andika mji wako",
@@ -924,5 +922,15 @@
   "Ask a question": "Uliza swali",
   "It will stop taking questions as soon as the global community answers.": "Itaacha kupokea maswali mara tu jumuiya ya kimataifa itakapojibu.",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "Yeyote huko anaweza kuiona, pamoja na picha zake, eneo la takriban, bei yake na jina la jumuiya hii. Si mahali hasa, na si jina lako isipokuwa ukipokea maswali kuhusu hili. Ili kuinunua au kuichukua, wanaomba kujiunga.",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Yeyote huko anaweza kuiona, pamoja na picha zake, eneo la takriban, bei yake na jina la jumuiya hii. Si mahali hasa, na si jina lako isipokuwa ukipokea maswali kuhusu hili. Ili kuijibu, wanaomba kujiunga."
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Yeyote huko anaweza kuiona, pamoja na picha zake, eneo la takriban, bei yake na jina la jumuiya hii. Si mahali hasa, na si jina lako isipokuwa ukipokea maswali kuhusu hili. Ili kuijibu, wanaomba kujiunga.",
+  "Arrange": "Panga",
+  "Arrange: move the cards on Home": "Panga: hamisha kadi za Nyumbani",
+  "Arrange Home: use the arrows. Done when you're happy.": "Panga Nyumbani: tumia mishale. Bonyeza Tayari ukiridhika.",
+  "Arrange Home. Use the arrows on each card.": "Panga Nyumbani. Tumia mishale kwenye kila kadi.",
+  "Stays here": "Inabaki hapa",
+  "Done arranging Home": "Maliza kupanga Nyumbani",
+  "{card} moved to {n} of {m}": "{card}: sasa {n} kati ya {m}",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Huo ndio kidokezo cha mwisho. Mwongozo mzima upo katika Mipangilio chini ya Msaada na jinsi inavyofanya kazi, na hufanya kazi bila mtandao; Panga, chini, huhamisha kadi zako.",
+  "Don't show tips again. Add a card brings them back.": "Usionyeshe vidokezo tena. «Ongeza kadi» inavirudisha.",
+  "Arrange ›": "Panga ›"
 }

@@ -1,6 +1,6 @@
 /**
  * The rest of web sweep W3 in the pseudo-locale (`xx`: every sentence accented, padded ~35 % and bracketed): Home's card
- * menu, Add a card and a card's settings, Edit home, the tour bar, the new-account card, "Posting paused", Start a
+ * menu, Add a card and a card's settings, Arrange's band, the tour bar, the new-account card, "Posting paused", Start a
  * community, Suggest a change, the radius picker, the install prompt, the header pill, the Commons preview's own
  * lines, and the guest lobby's Join card and tabs. Any text, label, title, placeholder or alert with letters outside a
  * bracket bypassed t().
@@ -13,7 +13,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultHomeLayout, starterCards, tourSteps, type TourStep } from '@beanpool/core';
 import { HomeCard } from './HomeCard';
 import { AddCardDialog, CardSettingsDialog } from './AddCardDialog';
-import { EditHomeDialog } from './EditHomeDialog';
 import { TourBar } from './TourBar';
 import { NewAccountCard } from './NewAccountCard';
 import { ModerationPauseCard } from './ModerationPauseCard';
@@ -24,7 +23,7 @@ import { InstallPrompt, DesktopInstallSteps } from './InstallPrompt';
 import { HeaderControls, SidebarControls } from './HeaderControls';
 import { CommonsPreview } from './ShowcasePreviews';
 import { GuestLobby } from '../pages/GuestLobby';
-import { cardLabelName, cardName, cardRowName, pickerGroups } from '../lib/home-layout';
+import { cardName, pickerGroups } from '../lib/home-layout';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { joinTakes, keyProblemSentence } from './WebJoin';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -73,10 +72,10 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-describe('Home\'s card menu, Add a card, a card\'s settings and Edit home in the pseudo-locale (words W3)', () => {
+describe('Home\'s card menu, Add a card, a card\'s settings and Arrange\'s band in the pseudo-locale (words W3)', () => {
     it('a card\'s "…" and its items, named by the card in the member\'s language', async () => {
         await showIn('xx');
-        render(<HomeCard id="events" title={cardName('events')} menu={{ label: cardName('events'), canMoveUp: true, canMoveDown: false, onRemove: () => {}, onSettings: () => {}, onMove: () => {} }}><p>{'·'}</p></HomeCard>);
+        render(<HomeCard id="events" title={cardName('events')} menu={{ label: cardName('events'), onRemove: () => {}, onSettings: () => {}, onArrange: () => {} }}><p>{'·'}</p></HomeCard>);
         fireEvent.click(screen.getByRole('button', { name: xx('Card options for {card}').replace('{card}', xx('Coming up')) }));
         expect(screen.getByRole('button', { name: xx('Remove {card} from Home').replace('{card}', xx('Coming up')) })).toBeInTheDocument();
         expect(unwrapped()).toEqual([]);
@@ -108,14 +107,21 @@ describe('Home\'s card menu, Add a card, a card\'s settings and Edit home in the
         expect(unwrapped()).toEqual([]);
     });
 
-    it('Edit home: its rows by their names (a saved search by its words), the arrows, the "…", Reset and Done', async () => {
+    it('Arrange\'s band: the arrows named by the card, up and down or earlier and later, and Stays here', async () => {
         await showIn('xx');
-        const rows = TWO_SEARCHES.cards.map((c) => ({ id: c.id, name: cardRowName(c), label: cardLabelName(c), hasSettings: c.type === 'search' }));
-        render(<EditHomeDialog rows={rows} notOnAccount onAdd={() => {}} onMove={() => {}} onSettings={() => {}} onRemove={() => {}} onReset={() => {}} onClose={() => {}} />);
-        fireEvent.click(screen.getByTestId('home-edit-menu-search-aaaa'));
-        expect(screen.getByTestId('home-edit-settings-search-aaaa')).toHaveTextContent(xx('Settings…'));
-        expect(screen.getByTestId('home-edit-not-on-account')).toBeInTheDocument();
-        expect(unwrapped(document.body, ['eggs', 'jam'])).toEqual([]);
+        const name = cardName('events');
+        render(<HomeCard id="events" title={name} arrange={{ label: name, canUp: true, canDown: true, across: true }}><p>{'·'}</p></HomeCard>);
+        expect(screen.getByRole('button', { name: xx('Move {card} earlier').replace('{card}', xx('Coming up')) })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: xx('Move {card} later').replace('{card}', xx('Coming up')) })).toBeInTheDocument();
+        expect(unwrapped()).toEqual([]);
+        cleanup();
+        render(<HomeCard id="events" title={name} arrange={{ label: name, canUp: true, canDown: true }}><p>{'·'}</p></HomeCard>);
+        expect(screen.getByRole('button', { name: xx('Move {card} up').replace('{card}', xx('Coming up')) })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: xx('Move {card} down').replace('{card}', xx('Coming up')) })).toBeInTheDocument();
+        cleanup();
+        render(<HomeCard id="community" title={name} arrange={{ label: name, stays: true }}><p>{'·'}</p></HomeCard>);
+        expect(screen.getByTestId('home-arrange-stays-community')).toBeInTheDocument();
+        expect(unwrapped()).toEqual([]);
     });
 });
 

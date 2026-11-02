@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -228,12 +228,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "民意調查旨在了解大家的想法，其本身不會改變既定規則。在市集的投票專區中可以找到。",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "只有你能查看自己的餘額和交易紀錄。其他成員只會看到你的姓名、相片、等級和評價。",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "未加入的人只能看到刊登了什麼與大致區域，絕不會看到你的姓名、面貌或精確位置。",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "這是最後一則提示。完整指南可在「設定」的「說明與運作方式」中離線查看；底部的「編輯首頁」可調整你的卡片版面。",
   "Tips · {position} of {total}": "提示 · 第 {position} 則（共 {total} 則）",
   "Done with tips. The card goes.": "已看完所有提示，卡片即將關閉。",
   "Next tip": "下一則提示",
   "Don't show tips again": "不再顯示提示",
-  "Don't show tips again. Edit home brings them back.": "不再顯示提示。你可以隨時透過「編輯首頁」重新找回。",
   "All tips seen": "已閱畢全部提示",
   "or type your town": "或輸入你的城鎮",
   "Not here? Type your town": "不在名單中？輸入你的城鎮",
@@ -884,5 +882,15 @@
   "Ask a question": "提問",
   "It will stop taking questions as soon as the global community answers.": "全球社群一回應，就會停止接受提問。",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "那裡的任何人都能看到它，包括照片、大致區域、價格和這個社群的名字。不包括確切地點；除非你接受有關此內容的提問，否則也不包括你的名字。要購買或領取，他們需申請加入。",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "那裡的任何人都能看到它，包括照片、大致區域、價格和這個社群的名字。不包括確切地點；除非你接受有關此內容的提問，否則也不包括你的名字。要回應，他們需申請加入。"
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "那裡的任何人都能看到它，包括照片、大致區域、價格和這個社群的名字。不包括確切地點；除非你接受有關此內容的提問，否則也不包括你的名字。要回應，他們需申請加入。",
+  "Arrange": "排列",
+  "Arrange: move the cards on Home": "排列：移動首頁上的卡片",
+  "Arrange Home: use the arrows. Done when you're happy.": "排列首頁：使用箭頭。滿意後點「完成」。",
+  "Arrange Home. Use the arrows on each card.": "排列首頁。使用每張卡片上的箭頭。",
+  "Stays here": "固定在此",
+  "Done arranging Home": "結束排列首頁",
+  "{card} moved to {n} of {m}": "{card} 已移至第 {n} 位，共 {m} 位",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "這是最後一則提示。完整指南可在「設定」的「說明與運作方式」中離線查看；底部的「排列」可移動你的卡片。",
+  "Don't show tips again. Add a card brings them back.": "不再顯示提示。你可以隨時透過「新增卡片」重新找回。",
+  "Arrange ›": "排列 ›"
 }

@@ -3,7 +3,7 @@ import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t, type HelpSheet as HelpSheetWords } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
-import { editHomeStyles } from './home/EditHomeSheet';
+import { sheetStyles } from './home/sheet-parts';
 
 /**
  * The "?"'s sheet (scratch/global-node/DESIGN-getting-started-fable.md §4): the guide page for the screen the member is
@@ -38,15 +38,15 @@ export function HelpSheet({ visible, sheet, tourOpen, canTour, colors, onReadPag
     );
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
-            <View style={editHomeStyles.backdrop}>
-                <View style={[editHomeStyles.sheet, helpStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom }]} testID="help-sheet">
-                    <View style={editHomeStyles.head}>
-                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header" testID="help-title">
+            <View style={sheetStyles.backdrop}>
+                <View style={[sheetStyles.sheet, helpStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom }]} testID="help-sheet">
+                    <View style={sheetStyles.head}>
+                        <Text style={[sheetStyles.title, { color: colors.text.heading }]} accessibilityRole="header" testID="help-title">
                             {/* The page's own title is the guide's (slice S5); the stand-in is ours. */}
                             {sheet.title ?? t('Help')}
                         </Text>
-                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel={t('Close help')} testID="help-close">
-                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>{t('Close')}</Text>
+                        <Pressable onPress={onClose} style={sheetStyles.done} accessibilityRole="button" accessibilityLabel={t('Close help')} testID="help-close">
+                            <Text style={[sheetStyles.doneText, { color: colors.text.link }]}>{t('Close')}</Text>
                         </Pressable>
                     </View>
                     <View style={helpStyles.body}>

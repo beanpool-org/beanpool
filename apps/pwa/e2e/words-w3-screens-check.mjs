@@ -1,7 +1,7 @@
 /**
  * Web sweep W3's screens at 320 px with 1.3× text, in a real browser (words slice S3; director amendment 1 item 7):
  * Settings and every screen it opens, a member's profile (another's and your own), the profile editor and wizard, the
- * how-it-works cards, the working style quiz, Add a card, a card's settings, Edit home, a card's "…", the tour bar, the
+ * how-it-works cards, the working style quiz, Add a card, a card's settings, Arrange's band, a card's "…", the tour bar, the
  * members' guide (its front page, a section and a page, whose titles and summaries the pseudo-locale pads too: slice S5a),
  * the
  * install prompt, the new-account card, Start a community, Suggest a change, the radius picker, the guest lobby, and the
@@ -130,7 +130,7 @@ const SCREENS = [
     } },
     { name: 'add-card', ready: '[data-testid="home-add-dialog"]' },
     { name: 'card-settings', ready: '[data-testid="home-settings-dialog"]' },
-    { name: 'edit-home', ready: '[data-testid="home-edit-dialog"]', act: async (page) => { await page.locator('[data-testid="home-edit-menu-search-aaaa"]').click(); } },
+    { name: 'arrange-band', ready: '[data-testid="home-arrange-up-events"]' },
     { name: 'home-card', ready: '[data-testid="home-card-menu"]', act: async (page) => { await page.locator('[data-testid="home-card-menu"]').click(); } },
     { name: 'tour', ready: '[data-testid="tour-bar"]' },
     { name: 'tour-step', ready: '[data-testid="tour-bar"]' },

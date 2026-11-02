@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, shop and tool shed top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, shop and tool shed top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -228,12 +228,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "Jajak pendapat menanyakan pendapat orang dan tidak mengubah apa pun secara langsung. Temukan di Pasar bagian Jajak Pendapat.",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "Hanya Anda yang dapat melihat saldo dan transaksi Anda. Anggota lain melihat nama, foto, level, dan ulasan Anda.",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "Orang yang belum bergabung dapat melihat apa yang ditawarkan dan perkiraan lokasinya, bukan nama, wajah, atau lokasi persis Anda.",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "Itu tips terakhir. Panduan lengkap ada di Pengaturan bagian Bantuan & cara kerja, dan dapat diakses tanpa koneksi internet; Edit beranda, di bagian bawah, mengatur kartu Anda.",
   "Tips · {position} of {total}": "Tips · {position} dari {total}",
   "Done with tips. The card goes.": "Selesai dengan tips. Kartu ditutup.",
   "Next tip": "Tips berikutnya",
   "Don't show tips again": "Jangan tampilkan tips lagi",
-  "Don't show tips again. Edit home brings them back.": "Jangan tampilkan tips lagi. Edit beranda dapat memunculkannya kembali.",
   "All tips seen": "Semua tips sudah dilihat",
   "or type your town": "atau ketik kota Anda",
   "Not here? Type your town": "Bukan di sini? Ketik kota Anda",
@@ -884,5 +882,15 @@
   "Ask a question": "Ajukan pertanyaan",
   "It will stop taking questions as soon as the global community answers.": "Penerimaan pertanyaan akan berhenti begitu komunitas global menjawab.",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "Siapa pun di sana bisa melihatnya, dengan foto, perkiraan area, harga, dan nama komunitas ini. Bukan tempat persisnya, dan bukan nama Anda kecuali Anda menerima pertanyaan tentang ini. Untuk membeli atau mengambilnya, mereka minta untuk bergabung.",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Siapa pun di sana bisa melihatnya, dengan foto, perkiraan area, harga, dan nama komunitas ini. Bukan tempat persisnya, dan bukan nama Anda kecuali Anda menerima pertanyaan tentang ini. Untuk menjawabnya, mereka minta untuk bergabung."
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Siapa pun di sana bisa melihatnya, dengan foto, perkiraan area, harga, dan nama komunitas ini. Bukan tempat persisnya, dan bukan nama Anda kecuali Anda menerima pertanyaan tentang ini. Untuk menjawabnya, mereka minta untuk bergabung.",
+  "Arrange": "Atur",
+  "Arrange: move the cards on Home": "Atur: pindahkan kartu di Beranda",
+  "Arrange Home: use the arrows. Done when you're happy.": "Atur Beranda: gunakan panah. Tekan Selesai jika sudah pas.",
+  "Arrange Home. Use the arrows on each card.": "Atur Beranda. Gunakan panah di setiap kartu.",
+  "Stays here": "Tetap di sini",
+  "Done arranging Home": "Selesai mengatur Beranda",
+  "{card} moved to {n} of {m}": "{card} dipindahkan ke {n} dari {m}",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Itu tips terakhir. Panduan lengkap ada di Pengaturan bagian Bantuan & cara kerja, dan dapat diakses tanpa koneksi internet; Atur, di bagian bawah, memindahkan kartu Anda.",
+  "Don't show tips again. Add a card brings them back.": "Jangan tampilkan tips lagi. «Tambah kartu» dapat memunculkannya kembali.",
+  "Arrange ›": "Atur ›"
 }

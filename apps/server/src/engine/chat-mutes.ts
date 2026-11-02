@@ -7,6 +7,7 @@
 // Copied to a standby verbatim (a plain table, design G4): the main server alone writes it, and a mute lifted there goes
 // from the standby by its tombstone.
 
+import { COUNTS_AS_UNREAD_SQL } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 
@@ -81,4 +82,43 @@ export function unmutedRecipients(conversationId: string, recipients: string[], 
     `).all(conversationId, nowIso) as { member_pubkey: string }[]).map(r => r.member_pubkey));
     const mentionedSet = new Set(mentioned);
     return recipients.filter(pk => !muted.has(pk) || mentionedSet.has(pk));
+}
+
+/**
+ * Of a member's unread lines, how many a push told them of (GET /api/me/unread `alerts`): the push paths' own rules read
+ * back over lines already stored, for a phone with no push to go by. `chats` are the chats their list shows, each with its
+ * unread lines; the Direct Messages switch is the caller's (state-engine.ts getUnreadAnswer).
+ *
+ * - An event's chat never pushes (engine/messaging.ts sendMessage, engine/event-thread.ts).
+ * - A chat they muted tells them nothing but, in a group's chat, a line that @mentions them ({@link unmutedRecipients}).
+ *   The mute is the one in force now, as that reads it, so lines that came during a mute that has since ended count.
+ * - In a group's chat a line of someone they blocked is pushed to nobody who blocked them, @mention or not
+ *   (state-engine.ts BLOCKED_AUTHORS_LINE_KINDS). Their direct lines are withheld before any of this, so they aren't here.
+ *
+ * Lines are read back only for a group's chat this can touch, so with no mute and no block this costs two small reads.
+ */
+export function linesPushedAbout(member: string, chats: readonly { id: string; type: string; unread: number }[], nowMs = Date.now()): number {
+    const mutes = getChatMutesFor(member, nowMs);
+    const blocks = !!db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? LIMIT 1').get(member);
+    const toldInGroup = db.prepare(`
+        SELECT COUNT(*) AS n FROM messages m
+        JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+        WHERE m.conversation_id = ?
+          AND m.author_pubkey != ?
+          AND (cp.last_read_at IS NULL OR m.timestamp > cp.last_read_at)
+          AND ${COUNTS_AS_UNREAD_SQL}
+          AND m.author_pubkey NOT IN (SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?)
+          AND (? = 0 OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(m.metadata) THEN m.metadata END, '$.mentions') WHERE value = ?))
+    `);
+    let told = 0;
+    for (const chat of chats) {
+        if (chat.type === 'event_thread') continue;
+        const muted = mutes.has(chat.id);
+        if (chat.type === 'group_thread' && (muted || blocks)) {
+            told += (toldInGroup.get(member, chat.id, member, member, member, muted ? 1 : 0, member) as { n: number }).n;
+        } else if (!muted) {
+            told += chat.unread;
+        }
+    }
+    return told;
 }

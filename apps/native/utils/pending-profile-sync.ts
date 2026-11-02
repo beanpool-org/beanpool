@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { archetypeIsNewer } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from './storage-keys';
 
@@ -212,22 +213,38 @@ export async function clearPendingProfileChange(
  * there: the quiz was taken elsewhere, or its publish here is out or didn't land. The community's next sync sends it.
  * Nothing is kept for an address that isn't plain, nor with no account.
  */
-export async function keepWaitingArchetype(community: string | null | undefined, publicKey: string, archetype: string): Promise<void> {
+export async function keepWaitingArchetype(community: string | null | undefined, publicKey: string, archetype: string, carried = false): Promise<void> {
     const key = archetypeKeyOf(community);
     if (!key || !publicKey) return;
-    await AsyncStorage.setItem(key, JSON.stringify({ publicKey, archetype }));
+    await AsyncStorage.setItem(key, JSON.stringify({ publicKey, archetype, ...(carried ? { carried } : {}) }));
+}
+
+/**
+ * The working style waits to reach `community`, carried on from another community's row: no retake made on this device,
+ * so on a tie with what the community holds, that row stands and nothing is sent (working-style.ts archetypeToSend). It
+ * goes over what waits there only when it is newer: on a tie that stays as it is, and a retake stays a retake.
+ */
+export async function keepCarriedArchetype(community: string | null | undefined, publicKey: string, archetype: string): Promise<void> {
+    const waiting = await waitingArchetype(community, publicKey);
+    if (waiting && !archetypeIsNewer(archetype, waiting)) return;
+    await keepWaitingArchetype(community, publicKey, archetype, true);
+}
+
+/** What waits to reach `community` for `publicKey`, and whether it was carried (keepCarriedArchetype), or null. */
+export async function waitingEntry(community: string | null | undefined, publicKey: string): Promise<{ archetype: string; carried: boolean } | null> {
+    const key = archetypeKeyOf(community);
+    if (!key || !publicKey) return null;
+    try {
+        const held: { publicKey?: unknown; archetype?: unknown; carried?: unknown } | null = JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
+        return held?.publicKey === publicKey && typeof held.archetype === 'string' ? { archetype: held.archetype, carried: held.carried === true } : null;
+    } catch {
+        return null;
+    }
 }
 
 /** The working style waiting to reach `community` for `publicKey`, or null: none, or one of another account's. */
 export async function waitingArchetype(community: string | null | undefined, publicKey: string): Promise<string | null> {
-    const key = archetypeKeyOf(community);
-    if (!key || !publicKey) return null;
-    try {
-        const held: { publicKey?: unknown; archetype?: unknown } | null = JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
-        return held?.publicKey === publicKey && typeof held.archetype === 'string' ? held.archetype : null;
-    } catch {
-        return null;
-    }
+    return (await waitingEntry(community, publicKey))?.archetype ?? null;
 }
 
 /**

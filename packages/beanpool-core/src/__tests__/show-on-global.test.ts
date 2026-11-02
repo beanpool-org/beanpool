@@ -1771,6 +1771,111 @@ describe('the door on a copy', () => {
             expect(await phone.tendOwedOffs(identity, w.deps, Date.now() + 600_000)).toBe(60_000);
         });
 
+        it("the `!on` guard: a wait asked of an On, with no answer between, is not charged to the Off that follows it", async () => {
+            const w = world();
+            const phone = w.device();
+            await phone.showOnGlobal(w.home, HOME, identity, w.deps, false);
+            w.doorAnswers(busy(429, '3000'));
+            expect(await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('later');
+            // Untick before global has answered anything: the Off meets a plain 503, and goes by the back-off alone.
+            w.doorAnswers(busy(503));
+            expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toBe('later');
+            w.doorSends.length = 0;
+            w.doorAnswers(null);
+            expect(await phone.tendOwedOffs(identity, w.deps, Date.now() + OFF_RETRY_FIRST_MS)).toBeNull();
+            expect(w.doorSends).toHaveLength(1);
+        });
+
+        /** The first answer is `first`, every one after it is `then`. */
+        const thenAnswers = (first: () => Response, then: () => Response) => {
+            let n = 0;
+            return () => (n++ === 0 ? first() : then());
+        };
+
+        describe('what a caller that sends an Off in passing does with global\'s answer', () => {
+            it('a tend whose pass over the pair meets a 5xx inside a wait global asked for does not set the next try earlier', async () => {
+                const w = world();
+                const phone = w.device();
+                await owed(w, phone);
+                // `sendOffs` meets the 429 and charges 10 minutes; the pair's own pass then meets a 503, which backs off by the tries.
+                w.doorAnswers(thenAnswers(busy(429, '600'), busy(503)));
+                const at = Date.now();
+                await phone.tendCopies(identity, w.deps, at);
+                expect(w.doorSends).toHaveLength(2);
+                w.doorSends.length = 0;
+                w.doorAnswers(null);
+                const left = (await phone.tendOwedOffs(identity, w.deps, at + 599_000)) as number;
+                expect(left).toBeGreaterThan(0);
+                expect(left).toBeLessThanOrEqual(1000);
+                expect(w.doorSends).toEqual([]);
+                expect(await phone.tendOwedOffs(identity, w.deps, at + 600_000)).toBeNull();
+                expect(w.doorSends).toHaveLength(1);
+            });
+
+            it('a tend\'s pass over the pair meets a 429 that nobody charged: the next try waits for it', async () => {
+                const w = world();
+                const phone = w.device();
+                await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+                // Global refuses the Off to `sendOffs` (an answer: what is left waits for a tend), then asks 10 minutes of the pair's pass.
+                w.doorAnswers(() => w.json({ error: 'Members only' }, 403));
+                expect(await phone.takeQuestions('home-1', false, identity, w.deps)).toMatchObject({ refused: 'Members only' });
+                w.doorAnswers(thenAnswers(() => w.json({ error: 'Members only' }, 403), busy(429, '600')));
+                const at = Date.now();
+                await phone.tendCopies(identity, w.deps, at);
+                w.doorSends.length = 0;
+                w.doorAnswers(null);
+                const left = (await phone.tendOwedOffs(identity, w.deps, at + 599_000)) as number;
+                expect(left).toBeGreaterThan(0);
+                expect(left).toBeLessThanOrEqual(1000);
+                expect(w.doorSends).toEqual([]);
+            });
+
+            it('a show that meets no answer to an Off owed weighs it: the next try is due by the back-off', async () => {
+                const w = world();
+                const phone = w.device();
+                await phone.showOnGlobal(w.home, HOME, identity, w.deps, true);
+                // A refused Off, and a pass of `sendOffs` that finds it still refused: what is left waits for a tend (`offDue` Infinity).
+                w.doorAnswers(() => w.json({ error: 'Members only' }, 403));
+                await phone.takeQuestions('home-1', false, identity, w.deps);
+                expect(await phone.tendOwedOffs(identity, w.deps, Date.now())).toBeNull();
+                w.doorAnswers(busy(503));
+                await phone.showOnGlobal(w.home, HOME, identity, w.deps, false);
+                const at = Date.now();
+                w.doorSends.length = 0;
+                w.doorAnswers(null);
+                expect(await phone.tendOwedOffs(identity, w.deps, at + OFF_RETRY_FIRST_MS + 1000)).toBeNull();
+                expect(w.doorSends).toHaveLength(1);
+                expect(up(w).takesQuestions).toBe(false);
+            });
+
+            it('a show that meets a 5xx inside a wait global asked for does not set the next try earlier', async () => {
+                const w = world();
+                const phone = w.device();
+                await owed(w, phone, busy(429, '600'));
+                const at = Date.now();
+                w.doorAnswers(busy(503));
+                await phone.showOnGlobal(w.home, HOME, identity, w.deps, false);
+                expect(w.doorSends).toHaveLength(1);
+                w.doorSends.length = 0;
+                expect(await phone.tendOwedOffs(identity, w.deps, at + 599_000)).toBeLessThanOrEqual(1000);
+                expect(w.doorSends).toEqual([]);
+            });
+
+            it('an answer from global ends a wait it asked for: a later no-answer goes by the back-off', async () => {
+                const w = world();
+                const phone = w.device();
+                await owed(w, phone, busy(429, '600'));
+                w.doorAnswers(null);
+                await phone.takeQuestions('home-1', true, identity, w.deps);
+                w.doorAnswers(busy(503));
+                await phone.takeQuestions('home-1', false, identity, w.deps);
+                w.doorSends.length = 0;
+                w.doorAnswers(null);
+                expect(await phone.tendOwedOffs(identity, w.deps, Date.now() + OFF_RETRY_MOST_MS)).toBeNull();
+                expect(w.doorSends).toHaveLength(1);
+            });
+        });
+
         it('a 429 with no Retry-After a browser can read waits the longest at once', async () => {
             const w = world();
             const phone = w.device();

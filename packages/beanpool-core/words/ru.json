@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -279,12 +279,10 @@
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "Опросы помогают узнать мнение людей и сами по себе ничего не меняют. Ищите их на Рынке в Опросах.",
   "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "Только вы видите свой баланс и сделки. Другие участники видят ваше имя, фото, уровень и отзывы.",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "Те, кто ещё не вступил, видят предложения и примерный район, но никогда не увидят ваше имя, лицо или точное место.",
-  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.": "Это последний совет. Полное руководство доступно в Настройках в разделе Помощь и принципы работы (работает офлайн); Настроить главную внизу организует карточки.",
   "Tips · {position} of {total}": "Советы · {position} из {total}",
   "Done with tips. The card goes.": "Советы просмотрены. Карточка скрыта.",
   "Next tip": "Следующий совет",
   "Don't show tips again": "Больше не показывать советы",
-  "Don't show tips again. Edit home brings them back.": "Больше не показывать советы. Настроить главную вернёт их обратно.",
   "All tips seen": "Все советы просмотрены",
   "or type your town": "или введите свой город",
   "Not here? Type your town": "Нет здесь? Введите свой город",
@@ -1004,5 +1002,15 @@
   "Ask a question": "Задать вопрос",
   "It will stop taking questions as soon as the global community answers.": "Приём вопросов прекратится, как только глобальное сообщество ответит.",
   "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To buy or take it, they ask to join.": "Там это может увидеть любой: с фото, примерным районом, ценой и названием этого сообщества. Но не точное место и не ваше имя, если только вы не принимаете вопросы об этом. Чтобы купить или взять это, нужно попроситься вступить.",
-  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Там это может увидеть любой: с фото, примерным районом, ценой и названием этого сообщества. Но не точное место и не ваше имя, если только вы не принимаете вопросы об этом. Чтобы ответить на это, нужно попроситься вступить."
+  "Anyone there can see it, with its photos, its rough area, its price and this community's name. Not the exact place, and not your name unless you take questions about it. To answer it, they ask to join.": "Там это может увидеть любой: с фото, примерным районом, ценой и названием этого сообщества. Но не точное место и не ваше имя, если только вы не принимаете вопросы об этом. Чтобы ответить на это, нужно попроситься вступить.",
+  "Arrange": "Упорядочить",
+  "Arrange: move the cards on Home": "Упорядочить: перемещайте карточки на главной",
+  "Arrange Home: use the arrows. Done when you're happy.": "Порядок на главной: используйте стрелки. Нажмите Готово, когда всё устроит.",
+  "Arrange Home. Use the arrows on each card.": "Порядок на главной. Используйте стрелки на каждой карточке.",
+  "Stays here": "Остаётся здесь",
+  "Done arranging Home": "Закончить упорядочивание главной",
+  "{card} moved to {n} of {m}": "{card}: теперь {n} из {m}",
+  "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Это последний совет. Полное руководство доступно в Настройках в разделе Помощь и принципы работы (работает офлайн); Упорядочить внизу перемещает карточки.",
+  "Don't show tips again. Add a card brings them back.": "Больше не показывать советы. «Добавить карточку» вернёт их обратно.",
+  "Arrange ›": "Упорядочить ›"
 }

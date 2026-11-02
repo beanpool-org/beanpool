@@ -97,7 +97,7 @@ function parseRows(body: unknown): Row[] | null {
 }
 
 /** Aborted after `timeoutMs`, or as soon as `outer` is (the sync's shared deadline). `done` stops the timer. */
-function bounded(timeoutMs: number, outer?: AbortSignal): { signal: AbortSignal; done: () => void } {
+export function bounded(timeoutMs: number, outer?: AbortSignal): { signal: AbortSignal; done: () => void } {
     const controller = new AbortController();
     const stop = () => controller.abort();
     const timer = setTimeout(stop, timeoutMs);
@@ -107,22 +107,27 @@ function bounded(timeoutMs: number, outer?: AbortSignal): { signal: AbortSignal;
 }
 
 /**
- * `url` read with a GET signed by `account`: its JSON body, or null for any refusal, no answer in `timeoutMs` (or by
- * `outer`), or an unreadable body. Never throws.
+ * `url` read with a GET signed by `account`: how it answered (`body` null when it can't be read), or null with no answer
+ * in `timeoutMs` (or by `outer`), which covers the body too. Never throws.
  */
-async function signedRead(url: string, account: Account, timeoutMs: number, outer?: AbortSignal): Promise<unknown> {
+export async function signedAnswer(url: string, account: Account, timeoutMs: number, outer?: AbortSignal): Promise<{ status: number; ok: boolean; body: unknown } | null> {
     const { signal, done } = bounded(timeoutMs, outer);
     try {
         const headers = await buildSignedHeaders('GET', url, '', account.privateKey, account.publicKey);
         const res = await fetch(url, { method: 'GET', headers, signal });
-        if (!res.ok) return null;
-        return await res.json().catch(() => null);
+        return { status: res.status, ok: res.ok, body: await res.json().catch(() => null) };
     } catch (e) {
         console.log(`[Notices] ${url} did not answer: ${e instanceof Error ? e.message : e}`);
         return null;
     } finally {
         done();
     }
+}
+
+/** {@link signedAnswer}'s body, or null for a refusal as well. Never throws. */
+async function signedRead(url: string, account: Account, timeoutMs: number, outer?: AbortSignal): Promise<unknown> {
+    const answer = await signedAnswer(url, account, timeoutMs, outer);
+    return answer?.ok ? answer.body : null;
 }
 
 /** The unseen notices `community` keeps for `account`, or null when it didn't answer with them. Never throws. */
@@ -277,7 +282,7 @@ export async function postKnockStatusNoticesFromSync(deps: SyncNoticeDeps): Prom
  * token for this phone, so a knock sends it no push and this floor must tell it (#2523 review 4383895745). Read here,
  * not through push-registrations.ts, so the background task doesn't load the key store and the token's own modules.
  */
-async function pushLandedAt(storage: Storage, community: string, publicKey: string): Promise<boolean> {
+export async function pushLandedAt(storage: Pick<Storage, 'getItem'>, community: string, publicKey: string): Promise<boolean> {
     try {
         const list = JSON.parse((await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY)) ?? '[]');
         if (!Array.isArray(list) || !list.some((c) => communityAddress(c) === community)) return false;
@@ -349,15 +354,18 @@ export async function postAdminKnockNoticesFromSync(deps: SyncNoticeDeps): Promi
 
 /**
  * Every notice the background sync posts (services/push-notifications.ts postNoticesAfterSync): the community's unseen
- * notices, the answers to this phone's requests to join, and new requests for an owner or admin without push, all asked
- * at once under one deadline (`timeoutMs`), so a slow or unreachable community can't take the task past iOS's ~30
- * seconds. Returns how many were posted. Never throws.
+ * notices, the answers to this phone's requests to join, new requests for an owner or admin without push, and `alongside`
+ * (the round that asks the phone's communities, other-communities-unread.ts, handed the deadline as a signal), all asked at
+ * once under one deadline (`timeoutMs`), so a slow or unreachable community can't take the task past iOS's ~30 seconds.
+ * Returns how many were posted. Never throws, as long as `alongside` doesn't.
  */
-export async function postAllNoticesFromSync(deps: Omit<SyncNoticeDeps, 'signal'>): Promise<number> {
+export async function postAllNoticesFromSync(deps: Omit<SyncNoticeDeps, 'signal'>, alongside?: (signal: AbortSignal) => Promise<number>): Promise<number> {
     const { signal, done } = bounded(deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS);
     try {
         const shared = { ...deps, signal };
-        const counts = await Promise.all([postNoticesFromSync(shared), postKnockStatusNoticesFromSync(shared), postAdminKnockNoticesFromSync(shared)]);
+        const counts = await Promise.all([
+            postNoticesFromSync(shared), postKnockStatusNoticesFromSync(shared), postAdminKnockNoticesFromSync(shared), alongside?.(signal) ?? 0,
+        ]);
         return counts.reduce((a, b) => a + b, 0);
     } finally {
         done();

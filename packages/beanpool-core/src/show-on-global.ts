@@ -351,6 +351,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     let offDue = 0;
     /** The wait global asked of an Off it hasn't answered: 0 once it has answered anything. */
     let offWaitAsked = 0;
+    /** When the wait global asked of its Offs ends, or 0. No try moves `offDue` earlier than this; any answer from global ends it. */
+    let offAskedUntil = 0;
 
     /** The pair as it is stored now: a tap may have changed it, or taken it away, since it was read. */
     async function storedPair(copyId: string): Promise<CopyPair | undefined> {
@@ -599,7 +601,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
             const said = await answerOf(res);
             // An answer of any kind ends a wait: global is back, so one from before can't be charged to a later Off, whichever path
             // took it. A length, not a time: only a tend's own clock says when it's up.
-            if (said !== 'later') offWaitAsked = 0;
+            if (said !== 'later') offWaitAsked = offAskedUntil = 0;
             else if (!on) offWaitAsked = Math.max(offWaitAsked, waitAskedOf(res));
             return said;
         });
@@ -643,11 +645,26 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         return result;
     }
 
-    /** Global didn't answer an Off: when the next try is due, by how many there have been, or by what global asked for. */
+    /**
+     * Global didn't answer an Off: when the next try is due, by how many there have been, or by what global asked for. A wait it
+     * asked for is kept (`offAskedUntil`): a no-answer met inside it, by a caller that sends an Off in passing, backs off by the
+     * tries and would otherwise set the next try earlier than global said.
+     */
     function offUnanswered(now: number): void {
         offTries++;
-        offDue = now + Math.max(Math.min(OFF_RETRY_FIRST_MS * 2 ** (offTries - 1), OFF_RETRY_MOST_MS), offWaitAsked);
+        if (offWaitAsked > 0) offAskedUntil = Math.max(offAskedUntil, now + offWaitAsked);
+        offDue = Math.max(now + Math.max(Math.min(OFF_RETRY_FIRST_MS * 2 ** (offTries - 1), OFF_RETRY_MOST_MS), offWaitAsked), offAskedUntil);
         offWaitAsked = 0;
+    }
+
+    /**
+     * What a caller does with `settleQuestions`' result where it sends an Off in passing (a show, a tend's pass over a pair): an
+     * Off global didn't answer is weighed as `takeQuestions` and `sendOffs` weigh it. An answer was weighed where it came.
+     */
+    async function weighOff(copyId: string, result: CopyResult | null, now: number): Promise<void> {
+        if (result !== 'later') return;
+        const pair = await storedPair(copyId);
+        if (pair && !pair.questions) offUnanswered(now);
     }
 
     /** Sends every Off this key owes. An answer ends the tries, whatever it was: a refusal stays owed, for the next tend to ask. */
@@ -662,6 +679,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         }
         if (later) return offUnanswered(now);
         offTries = 0;
+        offAskedUntil = 0;
         offDue = left ? Infinity : 0;
     }
 
@@ -718,8 +736,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         await savePair(pair);
         const result = await sendCopy(pair, home, identity, deps);
         // A first send that found the copy up made an edit of it, and an edit says nothing of the door.
-        const now = await pairOf(home.id, identity.publicKey);
-        if (now) await settleQuestions(now.copyId, identity, deps).catch(() => 'later' as const);
+        const landed = await pairOf(home.id, identity.publicKey);
+        if (landed) await weighOff(landed.copyId, await settleQuestions(landed.copyId, identity, deps).catch(() => 'later' as const), Date.now());
         return result;
     }
 
@@ -931,7 +949,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                 const current = await storedPair(copyId);
                 if (current?.sent) {
                     await repeatDates(current, home, identity, deps);
-                    await settleQuestions(copyId, identity, deps);
+                    await weighOff(copyId, await settleQuestions(copyId, identity, deps).catch(() => 'later' as const), now);
                 }
             } catch { /* the next time round */ }
         }

@@ -64,6 +64,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { tidyEndedPins } from './engine/pins.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
+import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
 import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
@@ -7198,31 +7199,44 @@ export function getUnreadCounts(pubkey: string): Record<string, number> {
  * carries both read this, so the number on the app icon is always one the member can open and clear.
  */
 export function getListedUnreadCounts(pubkey: string): Record<string, number> {
-    const counts = getUnreadCounts(pubkey);
+    return Object.fromEntries(listedUnreadChats(pubkey).map(c => [c.id, c.unread]));
+}
+
+/** {@link getListedUnreadCounts}, each chat with its type. */
+function listedUnreadChats(pubkey: string): { id: string; type: string; unread: number }[] {
     const typeOf = db.prepare('SELECT type FROM conversations WHERE id = ?');
     // A message request for them they haven't accepted is listed apart, with its own count (engine/dm-requests.ts).
     const held = heldFromUnread(pubkey);
-    for (const id of Object.keys(counts)) {
-        if (held.has(id)) { delete counts[id]; continue; }
-        const conv = typeOf.get(id) as { type: string } | undefined;
-        if (conv && chatHiddenFrom({ id, type: conv.type }, pubkey)) delete counts[id];
+    const chats: { id: string; type: string; unread: number }[] = [];
+    for (const [id, unread] of Object.entries(getUnreadCounts(pubkey))) {
+        if (held.has(id)) continue;
+        const type = (typeOf.get(id) as { type: string } | undefined)?.type ?? '';
+        if (!chatHiddenFrom({ id, type }, pubkey)) chats.push({ id, type, unread });
     }
-    return counts;
+    return chats;
 }
 
 /** The unread lines in the chats a member's list shows: the push's badge, and `unread` in GET /api/me/unread. */
 export function getListedUnreadTotal(pubkey: string): number {
-    return Object.values(getListedUnreadCounts(pubkey)).reduce((sum, count) => sum + count, 0);
+    return listedUnreadChats(pubkey).reduce((sum, chat) => sum + chat.unread, 0);
 }
 
 /**
  * What waits for a member here, in counts alone (GET /api/me/unread, @beanpool/core UnreadAnswer): the two numbers their
- * conversation list gives as `totalUnread` and `requests.count`, without building that list. `asOf` is taken first, so
- * no line it claims to cover came after the count.
+ * conversation list gives as `totalUnread` and `requests.count`, without building that list, and how many of those lines
+ * a push told them of: none with Direct Messages off, whichever kind of chat (dispatchPushNotification reads `notify_chat`
+ * for them all), and otherwise as engine/chat-mutes.ts `linesPushedAbout` says. A mention is a chat push too, so it stops
+ * there as well. `asOf` is taken first, so no line it claims to cover came after the count.
  */
 export function getUnreadAnswer(pubkey: string): UnreadAnswer {
     const now = Date.now();
-    return { unread: getListedUnreadTotal(pubkey), requests: countRequestsWaitingFor(pubkey, now), asOf: new Date(now).toISOString() };
+    const chats = listedUnreadChats(pubkey);
+    return {
+        unread: chats.reduce((sum, chat) => sum + chat.unread, 0),
+        alerts: getMemberPreference(pubkey, 'notify_chat') === 'false' ? 0 : linesPushedAbout(pubkey, chats, now),
+        requests: countRequestsWaitingFor(pubkey, now),
+        asOf: new Date(now).toISOString(),
+    };
 }
 
 export function ensureTransactionConversation(postId: string, buyerPubkey: string, sellerPubkey: string): string {

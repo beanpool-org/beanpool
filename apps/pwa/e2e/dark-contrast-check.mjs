@@ -408,7 +408,7 @@ const SCREENS = [
     { name: 'global-lobby-market', profile: 'global', who: null, check: true, go: lobbyTab('Market') },
     { name: 'global-lobby-map', profile: 'global', who: null, check: true, go: lobbyTab('Map') },
     { name: 'member-home', profile: 'local', who: 'member', check: true, ready: (p) => p.getByTestId('home-card-community').waitFor({ timeout: 30_000 }) },
-    { name: 'member-home-edit', profile: 'local', who: 'member', go: clickTestId('home-edit-open') },
+    { name: 'member-home-arrange', profile: 'local', who: 'member', go: clickTestId('home-arrange-open') },
     { name: 'member-home-add-card', profile: 'local', who: 'member', go: clickTestId('home-add-open') },
     { name: 'member-market', profile: 'local', who: 'member', check: true, go: tab('Market') },
     { name: 'member-market-listing', profile: 'local', who: 'member', go: steps(tab('Market'), clickText('Sourdough loaves')) },

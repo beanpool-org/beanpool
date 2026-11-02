@@ -26,7 +26,7 @@ The web app has the "needs you" icons too, where there is room for them:
 Tap the bean at the top left to open the **BeanPool** sheet. It shows:
 
 - **Your community:** its name at the top, and whether it can be reached right now.
-- **Your communities:** tap one to switch to it, or tap **Add a community**. A small number beside one shows how many alerts it has sent you since you last had it open. The **Global community** is always one of them: its second line says whether you can join it.
+- **Your communities:** tap one to switch to it, or tap **Add a community**. A small number beside one shows how many unread messages wait there, as far as your phone has heard. The **Global community** is always one of them: its second line says whether you can join it.
 - **Search the guide**, then **Guides** (how BeanPool works, the rules, common questions), **How to use the app** (this guide, section by section) and **The BeanPool project**, with **What's new**.
 - **beanpool.org:** the public website, with **Share** to send it to a friend.
 

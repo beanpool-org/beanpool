@@ -26,15 +26,15 @@ import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
-import { saveCanonicalProfile } from './canonical-profile';
+import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
 import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
-import { archetypeToSend } from './working-style';
+import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, healGuestMark } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
+import { archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -428,6 +428,7 @@ async function _doInitDB() {
             event_online INTEGER,
             event_repeat TEXT,
             event_repeat_until TEXT,
+            event_repeat_skips TEXT,
             carried_callsign TEXT,
             carried_avatar TEXT,
             carried_banner TEXT,
@@ -800,6 +801,7 @@ ${TOOL_DOCS_TABLE}
         // A repeating event's pattern and last date (DESIGN-event-times §8), for the cached card's ↻ caption.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT;`); } catch (e) {}
         // Lendable offers (S3): whether an Offer is lendable (tool store / lending)
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN lendable INTEGER DEFAULT 0;`); } catch (e) {}
         try {
@@ -2297,8 +2299,8 @@ export async function createPost(post: any) {
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     const tagsStr = post.tags ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : '';
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0,
@@ -2385,11 +2387,11 @@ export async function persistEventView(post: any, memberPubkey: string) {
     if (!post || post.type !== 'event' || !post.id) return;
     try {
         const database = await waitForInit();
-        const [, , , state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil] = eventCacheColumns(post);
+        const [, , , state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil, repeatSkips] = eventCacheColumns(post);
         await database.runAsync(
-            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, event_start_local = ?, event_end_local = ?, event_tz = ?, event_online = ?, event_repeat = ?, event_repeat_until = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
+            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, event_start_local = ?, event_end_local = ?, event_tz = ?, event_online = ?, event_repeat = ?, event_repeat_until = ?, event_repeat_skips = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
             [post.eventStartAt ?? post.event_start_at ?? null, post.eventEndAt ?? post.event_end_at ?? null,
-             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil,
+             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil, repeatSkips,
              post.status ?? null, post.updatedAt ?? post.updated_at ?? null, post.id]
         );
         if (post.myRsvp === 'going' || post.myRsvp === 'interested') {
@@ -3852,7 +3854,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
     await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, shown_from, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -4172,6 +4174,13 @@ export async function localPostTies(postId: string): Promise<{ authorPubkey: str
  * writes nothing and answers false, as for a switch.
  */
 export async function applyDelta(delta: any, expectedDbName?: string, generation?: number): Promise<boolean> {
+    let anchorUrl: string | null = null;
+    let selfPubkey: string | null = null;
+    let ownRowChanged = false;
+    let ownSyncedArchetype: string | null = null;
+    let ownRowAheadOfNode: string | null = null;
+    let selfMemberFound = false;
+
     await acquireSyncLock();
     try {
         const database = await getDb();
@@ -4195,8 +4204,8 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         // and awaiting it between SQLite statements would hold the write transaction open on
         // unrelated I/O. `ownRowChanged` is declared out here so it survives to after the
         // commit, which is the only point at which it is safe to tell the UI to re-read.
-        const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
-        let ownRowChanged = false;
+        anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth
@@ -4247,6 +4256,24 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             const arch = m.archetype || null;
+            let finalArch = arch;
+            if (pk === selfPubkey) {
+                selfMemberFound = true;
+                const localRow = await txn.getFirstAsync<{ archetype?: string | null }>(
+                    'SELECT archetype FROM members WHERE public_key = ?',
+                    [pk]
+                );
+                if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
+                    finalArch = localRow.archetype;
+                    // Null is a removal's to send (S3): only a row the node really holds older.
+                    if (arch && archetypeIsNewer(localRow.archetype, arch)) ownRowAheadOfNode = localRow.archetype;
+                } else if (arch) {
+                    ownSyncedArchetype = arch;
+                    if (!localRow?.archetype || archetypeIsNewer(arch, localRow.archetype)) {
+                        ownRowChanged = true;
+                    }
+                }
+            }
             if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -4261,7 +4288,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                    archetype = COALESCE(excluded.archetype, members.archetype)`,
                 // The CASE placeholder is the 9th `?` in the statement text, so it binds AFTER
                 // the eight VALUES parameters.
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch, avatarNullClears ? 1 : 0]
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, avatarNullClears ? 1 : 0]
             );
         }
 
@@ -4499,10 +4526,27 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         });
         // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
         if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
-        return true;
     } finally {
         releaseSyncLock();
     }
+    if (selfMemberFound && anchorUrl && selfPubkey) {
+        await healGuestMark(anchorUrl, selfPubkey).catch(e => console.warn('[DB] Failed to heal a guest mark:', e));
+    }
+    if (ownRowAheadOfNode && anchorUrl && selfPubkey) {
+        await carryRowToNode(selfPubkey, ownRowAheadOfNode, anchorUrl).catch(e => console.warn('[DB] Failed to keep a row the node is behind:', e));
+    }
+    if (ownSyncedArchetype && selfPubkey) {
+        try {
+            const canonical = await getCanonicalProfile().catch(() => null);
+            const deviceCopy = canonical?.archetype ?? null;
+            if (archetypeIsNewer(ownSyncedArchetype, deviceCopy)) {
+                await adoptNewerRowIntoDevice(selfPubkey, ownSyncedArchetype, anchorUrl);
+            }
+        } catch (e) {
+            console.warn('[DB] Failed to adopt newer archetype row:', e);
+        }
+    }
+    return true;
 }
 
 // Returns only the fetched messages that would actually change a local row: new ids

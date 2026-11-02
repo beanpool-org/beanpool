@@ -4,7 +4,7 @@
  * anonymous poll says the answer is final and then only that it was given; the panel of words is the maker's and the owners'.
  * The node decides who reads: these hold what the card asks and says.
  */
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { POLL_OTHER_WORDS_MAX } from '@beanpool/core';
 import { PollCard } from './PollCard';
@@ -137,6 +137,31 @@ describe('the words', () => {
         await screen.findByText('A Sunday bus');
         fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
         await waitFor(() => expect(api.removePollOtherAnswer).toHaveBeenCalledWith('poll_1', 'a1'));
+    });
+
+    it('an owner sees which line was reported, beside Remove', async () => {
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue('owner');
+        vi.mocked(api.getPollOtherAnswers).mockResolvedValue(read({
+            canRemove: true,
+            answers: [{ id: 'a1', words: 'A Sunday bus', reported: false }, { id: 'a2', words: 'A rude line', reported: true }],
+        }));
+        render(<PollCard post={poll({ status: 'completed' })} identity={me} />);
+        fireEvent.click(await screen.findByRole('button', { name: /Read the typed answers/ }));
+        await screen.findByText('A rude line');
+        const [plainLine, reportedLine] = screen.getAllByTestId('poll-other-line');
+        expect(plainLine!.textContent).not.toMatch(/Reported/);
+        expect(reportedLine!.textContent).toMatch(/Reported/);
+        expect(within(reportedLine!).getByRole('button', { name: 'Remove' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Report' })).toBeNull();
+    });
+
+    it('the maker sees a line they reported, and cannot report it twice', async () => {
+        vi.mocked(api.getPollOtherAnswers).mockResolvedValue(read({ answers: [{ id: 'a1', words: 'A rude line', reported: true }] }));
+        render(<PollCard post={poll({ authorPublicKey: 'me', status: 'completed' })} identity={me} />);
+        fireEvent.click(screen.getByRole('button', { name: /Read the typed answers/ }));
+        await screen.findByText('A rude line');
+        expect(screen.getByTestId('poll-other-line').textContent).toMatch(/Reported/);
+        expect(screen.queryByRole('button', { name: 'Report' })).toBeNull();
     });
 
     it('an admin gets no panel', async () => {

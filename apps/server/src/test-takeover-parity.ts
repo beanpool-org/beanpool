@@ -493,6 +493,19 @@ async function main(): Promise<void> {
             type: 'poll', title: 'Which hall?', description: 'Tell us', authorPublicKey: dee.pk, credits: 0, pollOptions: ['Old', 'New'], pollOther: true, pollOpenVote: true,
         })).post;
         built('Eve types an answer on that', await S_(eve, `/api/marketplace/posts/${removedPoll.id}/vote`, { optionId: removedPoll.pollOptions.find(isOther).id, otherWords: 'The barn' }));
+        // A line a delta swaps for another, and a group's poll with a report of its line, which its convenor deletes.
+        const rewritten = built('Hal posts an open vote with a typed Other', await S_(hal, '/api/marketplace/posts', {
+            type: 'poll', title: 'Which yarn?', description: 'Tell us', authorPublicKey: hal.pk, credits: 0, pollOptions: ['Wool', 'Cotton'], pollOther: true, pollOpenVote: true,
+        })).post;
+        built('Eve types an answer on it too', await S_(eve, `/api/marketplace/posts/${rewritten.id}/vote`, { optionId: rewritten.pollOptions.find(isOther).id, otherWords: 'The first draft' }));
+        const groupPoll = built('Ann posts a poll to the Gardeners', await S_(ann, '/api/marketplace/posts', {
+            type: 'poll', title: 'Which bed?', description: 'Tell us', authorPublicKey: ann.pk, credits: 0, pollOptions: ['North', 'South'], pollOther: true, pollOpenVote: true,
+            audienceScope: 'group', targetGroupId: groupId,
+        })).post;
+        built('Bo types an answer on it', await S_(bo, `/api/marketplace/posts/${groupPoll.id}/vote`, { optionId: groupPoll.pollOptions.find(isOther).id, otherWords: 'The gate bed' }));
+        const gateLine = (await api(m, 'GET', `/api/marketplace/posts/${groupPoll.id}/other-answers`, { as: ann })).body?.answers?.[0]?.id;
+        require_(!!gateLine, 'Ann reads the line on her poll');
+        built('Ann reports that line to the owners', await S_(ann, `/api/marketplace/posts/${groupPoll.id}/other-answers/${gateLine}/report`, {}));
         const disputed = await deal(eve, cy, cyOffer.id, false);
         built('the admin resolves a dispute over it', await A(`/api/local/admin/disputes/${disputed}/resolve`, { action: 'release_to_seller', reason: 'The repair was done' }));
         built('Bo recategorises his listing', await S_(bo, '/api/marketplace/posts/update', { id: boOffer.id, authorPublicKey: bo.pk, category: 'garden' }));
@@ -563,6 +576,12 @@ async function main(): Promise<void> {
 
         // ── 5. The last writes, then a last delta ──
         console.log('\n— 5. the last writes, then a last delta —');
+        // One line out and one in, in a delta with nothing else that would empty the WAL: the count of lines doesn't change.
+        built('Eve rewrites her typed answer', await S_(eve, `/api/marketplace/posts/${rewritten.id}/vote`, { optionId: rewritten.pollOptions.find(isOther).id, otherWords: 'A rewritten line' }));
+        await pull('a rewritten line');
+        const rewrittenLeft = await standby.send('on-disk', { needles: ['The first draft', 'A rewritten line'] }) as string[];
+        assert(rewrittenLeft.length === 1 && rewrittenLeft[0] === 'A rewritten line',
+            `a delta that swaps one typed line for another leaves the old one in neither the standby's database nor its WAL (${rewrittenLeft.join(', ')})`);
         const cursorBefore = new Date().toISOString();
         await sleep(Math.max(0, new Date(removal.closesAt).getTime() - Date.now() + 200));
         const tick = await main.send('decision-tick');
@@ -581,6 +600,7 @@ async function main(): Promise<void> {
         }));
         built('Eve changes her vote, and her typed line goes with it', await S_(eve, `/api/marketplace/posts/${takenBack.id}/vote`, { optionId: takenBack.pollOptions.find((o: { other?: boolean }) => !o.other).id }));
         built('Dee removes her poll, and its typed lines go with it', await S_(dee, '/api/marketplace/posts/remove', { id: removedPoll.id, authorPublicKey: dee.pk }));
+        built('Ann deletes the group\'s poll, and its typed line and the report of it go with it', await api(m, 'DELETE', `/api/groups/${groupId}/posts/${groupPoll.id}`, { as: ann }));
         await offer(hal, 'Dog walking', 2);
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;
         built('Cy rates Kip for the tune-up, with no comment', await S_(cy, '/api/ratings', { targetPubkey: kip.pk, stars: 5, transactionId: tuneUpDeal }));
@@ -602,9 +622,9 @@ async function main(): Promise<void> {
         const priced = await main.send('pricing-cycle');
         require_(priced.updatedCount > 0, `M: the pricing guide's hourly cycle prices items from the community's listings (${JSON.stringify(priced)})`);
         await pull('the last delta');
-        const typedLeft = await standby.send('on-disk', { needles: ['The one after', 'The barn', 'A bus on Sundays'] }) as string[];
+        const typedLeft = await standby.send('on-disk', { needles: ['The one after', 'The barn', 'The gate bed', 'A bus on Sundays'] }) as string[];
         assert(typedLeft.length === 1 && typedLeft[0] === 'A bus on Sundays',
-            `the standby keeps the line still standing, and neither its database nor its WAL holds the two the last delta took (${typedLeft.join(', ')})`);
+            `the standby keeps the line still standing, and neither its database nor its WAL holds the three the last delta took (${typedLeft.join(', ')})`);
 
         // ── 6. M dies; its twin T starts from its data directory ──
         console.log('\n— 6. the main server is killed; its twin starts from a copy of its data —');
@@ -761,8 +781,8 @@ async function main(): Promise<void> {
         const pullsLanded = pulls.every((p) => p.ok);
         const deltas = pulls.filter((p) => p.phase !== 'the whole copy' && !p.phase.startsWith('first copy'));
         // What the step-4 pull itself did, not what the first copy is assumed to be: a whole copy runs another import.
-        assert(pullsLanded && wholeCopy.whole === true && deltas.length === 3 && deltas.every((p) => !p.whole),
-            `every pull landed; step 4's was a whole copy and the other three deltas (${JSON.stringify(pulls)})`);
+        assert(pullsLanded && wholeCopy.whole === true && deltas.length === 4 && deltas.every((p) => !p.whole),
+            `every pull landed; step 4's was a whole copy and the other four deltas (${JSON.stringify(pulls)})`);
         for (const [key, examples] of [...differences.entries()].sort()) {
             const known = KNOWN_GAPS.find((g) => g.key === key);
             console.log(`  ${known ? `[${known.gap}]` : '[NEW]'} ${key}`);

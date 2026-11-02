@@ -19,7 +19,8 @@
  * takes the neutral title.
  *
  * A poll is left as it is: a closed poll is the community's record, its question and votes stay, and its author already
- * reads as Deleted Member. The tags its author typed are no part of that record, and go with their search words. An
+ * reads as Deleted Member. The tags its author typed are no part of that record, and go with their search words, and one still
+ * open when they left has lost its members' typed answers already (engine/poll-other.ts pollWordsGoWithThePoll). An
  * admin's removal (adminPruneUser) keeps the posts' words, photos and places: a vote can bring the member back.
  *
  * The copies of a title kept elsewhere go too: the event chat's name (engine/event-thread.ts ensureEventThread), the

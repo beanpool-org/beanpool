@@ -62,13 +62,12 @@ export function PollOtherAnswers({ postId }: { postId: string }) {
                     {read?.answers.map(answer => (
                         <View key={answer.id} style={styles.line} testID="poll-other-line">
                             <Text style={styles.words}>{answer.words}</Text>
+                            {answer.reported && <Text style={styles.reported}>{pollOtherLines.reported()}</Text>}
                             {read.canRemove ? (
                                 <Pressable onPress={() => confirmRemove(answer.id)} style={styles.action} accessibilityRole="button" accessibilityLabel={pollOtherLines.remove()}>
                                     <Text style={styles.remove}>{pollOtherLines.remove()}</Text>
                                 </Pressable>
-                            ) : answer.reported ? (
-                                <Text style={styles.reported}>{pollOtherLines.reported()}</Text>
-                            ) : (
+                            ) : !answer.reported && (
                                 <Pressable onPress={() => { void act(() => reportPollOtherAnswer(postId, answer.id)); }} style={styles.action} accessibilityRole="button" accessibilityLabel={pollOtherLines.report()}>
                                     <Text style={styles.report}>{pollOtherLines.report()}</Text>
                                 </Pressable>

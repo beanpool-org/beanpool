@@ -54,6 +54,7 @@ export function PollOtherAnswers({ postId }: { postId: string }) {
                     {read?.answers.map(answer => (
                         <div key={answer.id} data-testid="poll-other-line" className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-1 px-2 rounded bg-nature-50 dark:bg-nature-900/40">
                             <span className="min-w-0 flex-1 basis-3/5 text-nature-900 dark:text-white break-words" style={{ overflowWrap: 'anywhere' }}>{answer.words}</span>
+                            {answer.reported && <span className="text-[11px] font-semibold text-nature-500 dark:text-nature-400">{pollOtherLines.reported()}</span>}
                             {read.canRemove ? (
                                 <button
                                     type="button"
@@ -62,9 +63,7 @@ export function PollOtherAnswers({ postId }: { postId: string }) {
                                 >
                                     {pollOtherLines.remove()}
                                 </button>
-                            ) : answer.reported ? (
-                                <span className="text-[11px] font-semibold text-nature-500 dark:text-nature-400">{pollOtherLines.reported()}</span>
-                            ) : (
+                            ) : !answer.reported && (
                                 <button
                                     type="button"
                                     onClick={() => void act(() => reportPollOtherAnswer(postId, answer.id))}

@@ -10,12 +10,15 @@
 //
 // A report of a line names the poll and the line, never a person: nothing knows who wrote it on an anonymous poll, and an
 // open vote's report goes the same way, so the queue reads alike. Its row holds no words, because an admin reads that queue.
+//
+// A poll taken off takes its words, however it went: pollWordsGoWithThePoll, one trigger, so no path can leave them behind.
 
 import crypto from 'node:crypto';
 import { getPosts, readsAsMember, type MarketplacePost } from '@beanpool/engine';
 import { pollOtherOption, wordsFor, word } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
+import { getNodeRole } from '../config/node-role.js';
 import { bumpPostsVersion } from './versions.js';
 import { isNodeOwner } from './node-roles.js';
 import { marketplacePostOutOfSight } from './post-sight.js';
@@ -112,23 +115,58 @@ export function removePollOtherAnswer(postId: string, answerId: string, actor: s
     truncateWalAfterDelete('a typed answer was removed');
 }
 
-/** What waits on a poll's lines, done with: one line's reports, or with none named every line's. */
-function closeLineReports(postId: string, answerId: string | null = null): void {
-    db.prepare(`UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE json_valid(disclosure) AND json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.postId') = ?
-          AND (? IS NULL OR json_extract(disclosure, '$.answerId') = ?) AND (status = 'pending' OR status IS NULL)`).run(POLL_ANSWER_DISCLOSURE_KIND, postId, answerId, answerId);
+/** What waits on a poll's lines, done with, as SQL: `post` and `answer` are SQL too, and an answer of NULL means every line's. */
+const closeReportsSql = (post: string, answer: string) => `UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    WHERE json_valid(disclosure) AND json_extract(disclosure, '$.kind') = '${POLL_ANSWER_DISCLOSURE_KIND}' AND json_extract(disclosure, '$.postId') = ${post}
+      AND (${answer} IS NULL OR json_extract(disclosure, '$.answerId') = ${answer}) AND (status = 'pending' OR status IS NULL)`;
+
+function closeLineReports(postId: string, answerId: string): void {
+    db.prepare(closeReportsSql('@postId', '@answerId')).run({ postId, answerId });
 }
 
 /**
- * A poll taken down takes its words, in the caller's transaction. Nothing hard-deletes a poll and foreign keys are off (db/db.ts),
- * so they would otherwise stay in this table and on every standby, for nobody to read. The rows stay, as its ballots and its
- * counts do. The removal moves the poll, so a standby hears.
+ * An open vote changed: the voter's line goes with the answer it was, and a report of it waits for nobody. In the caller's
+ * transaction, which has moved the poll, so a standby hears.
  */
-export function dropPollOtherWords(postId: string): void {
-    const gone = db.prepare('UPDATE poll_answers SET words = NULL, words_removed = 1 WHERE post_id = ? AND words IS NOT NULL').run(postId);
-    if (gone.changes === 0) return;
-    closeLineReports(postId);
-    truncateWalAfterDelete('a poll went, with its typed answers');
+export function takeBackPollLine(postId: string, answerId: string): void {
+    db.prepare('DELETE FROM poll_answers WHERE post_id = ? AND id = ?').run(postId, answerId);
+    closeLineReports(postId, answerId);
+    truncateWalAfterDelete('a typed answer was taken back');
+}
+
+/**
+ * The one place a poll's words go with the poll. Run once at boot, outside any transaction, on the connection that writes.
+ *
+ * A poll goes off every reader's screen when `active` falls to 0, and many paths do that: its maker's removal, a moderator's, a
+ * convenor's, a group's close, its maker leaving (their own deletion, or an admin's or the community's removal). Each has its
+ * own SQL, one is in @beanpool/engine, which can't import this file, and past 0 no read finds the poll, so not even an owner can
+ * read or remove a line. Nothing hard-deletes a poll and foreign keys are off (db/db.ts), so without this the words would stay
+ * in the table and on every standby, for nobody to read (Marty, 2 Nov: a removed poll takes its typed answers). So the rule sits
+ * on the row, not on the paths: a path written later can't forget it.
+ *
+ * In the transaction that took the poll off: its words go, its rows stay, as its ballots and its counts do, and a report of any
+ * line closes. Each path has moved the poll (posts_touch_updated_at moves it for one that didn't), so a standby hears, and the
+ * WAL is emptied once it has committed. A closing keeps `active` at 1: the words are what it opens, and nothing here runs.
+ *
+ * Main server only: a standby takes the poll's lines from the copy, which names them all (engine/sync.ts replacePollAnswers), and
+ * its reports with them, so the two end up the same. TEMP, like the other triggers that call a connection function: nothing lands
+ * in the file, so an older image boots on it, and no copy carries it.
+ */
+export function pollWordsGoWithThePoll(): void {
+    db.function('poll_words_go_here', { deterministic: false }, () => (getNodeRole() === 'primary' ? 1 : 0));
+    db.function('poll_words_went', { deterministic: false }, () => {
+        const emptyTheWal = () => truncateWalAfterDelete('a poll went, with its typed answers');
+        // A statement on its own has no transaction to wait for, and a connection can't checkpoint inside its own statement.
+        if (db.inTransaction) emptyTheWal(); else setImmediate(emptyTheWal);
+        return null;
+    });
+    db.exec(`CREATE TEMP TRIGGER IF NOT EXISTS poll_off_takes_its_words AFTER UPDATE OF active ON main.posts
+        WHEN NEW.active = 0 AND NEW.type = 'poll' AND poll_words_go_here() = 1
+        BEGIN
+            SELECT poll_words_went() WHERE EXISTS (SELECT 1 FROM poll_answers WHERE post_id = NEW.id AND words IS NOT NULL);
+            UPDATE poll_answers SET words = NULL, words_removed = 1 WHERE post_id = NEW.id AND words IS NOT NULL;
+            ${closeReportsSql('NEW.id', 'NULL')};
+        END`);
 }
 
 /**

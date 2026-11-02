@@ -158,6 +158,29 @@ describe('the card', () => {
         expect(removePollOtherAnswer).toHaveBeenCalledWith('poll_1', 'a1');
         expect(closePoll).not.toHaveBeenCalled();
     });
+
+    it('an owner sees which line was reported, beside Remove', async () => {
+        vi.mocked(isOwnerHere).mockResolvedValue(true);
+        vi.mocked(getPollOtherAnswers).mockResolvedValue({
+            state: 'open', count: 2, removed: 0, canRemove: true,
+            answers: [{ id: 'a1', words: 'A Sunday bus', reported: false }, { id: 'a2', words: 'A rude line', reported: true }],
+        } as never);
+        await mount(createElement(PollCard, { post: poll({ status: 'completed' }), currentPubkey: 'me' }));
+        await click(button(/Read the typed answers/));
+        const [plainLine, reportedLine] = Array.from(host.querySelectorAll('[data-testid="poll-other-line"]'));
+        expect(plainLine!.textContent).not.toMatch(/Reported/);
+        expect(reportedLine!.textContent).toMatch(/Reported/);
+        expect(reportedLine!.textContent).toMatch(/Remove/);
+        expect(button(/^Report$/)).toBeUndefined();
+    });
+
+    it('the maker sees a line they reported, and cannot report it twice', async () => {
+        vi.mocked(getPollOtherAnswers).mockResolvedValue({ state: 'open', count: 2, removed: 0, canRemove: false, answers: [{ id: 'a1', words: 'A rude line', reported: true }] } as never);
+        await mount(createElement(PollCard, { post: poll({ author_pubkey: 'me', status: 'completed' }), currentPubkey: 'me' }));
+        await click(button(/Read the typed answers/));
+        expect(q('poll-other-line')?.textContent).toMatch(/Reported/);
+        expect(button(/^Report$/)).toBeUndefined();
+    });
 });
 
 describe('the composer', () => {

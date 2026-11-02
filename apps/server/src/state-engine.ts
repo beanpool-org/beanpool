@@ -22,7 +22,7 @@ import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
 import { readOfCopy, type CopyColumns } from './engine/event-copy.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
-import { dropOpenVoteWordsOf, POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
+import { dropOpenVoteWordsOf, pollWordsGoWithThePoll, POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
@@ -712,6 +712,7 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    pollWordsGoWithThePoll();
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
     try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
@@ -8838,8 +8839,9 @@ export function assertMayPrune(publicKey: string, actor: string, door: PruneDoor
  * The posts a closed account (adminPruneUser, purgeMemberSelf) leaves behind, as SQL lists. A post's status is one of
  * active, pending (a deal in escrow), paused, completed and cancelled. The last two are where a post ends; each of the
  * first three can come back up (pending when its deal is cancelled, paused when its author resumes it), so the account's
- * posts in those are cancelled, and its open or paused polls closed with their votes kept. Paused was missed until
- * 4109713263: its author, removed or self-deleted, put it back up and moved it.
+ * posts in those are cancelled, and its open or paused polls closed with their votes kept and their typed answers gone
+ * (engine/poll-other.ts pollWordsGoWithThePoll). Paused was missed until 4109713263: its author, removed or self-deleted, put
+ * it back up and moved it.
  */
 const PRUNE_CLOSES_POSTS_IN = "('active', 'pending', 'paused')";
 const POLLS_A_PRUNE_CLOSES = "('active', 'paused')";

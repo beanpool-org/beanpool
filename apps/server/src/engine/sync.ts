@@ -1525,19 +1525,20 @@ function replaceMemberPreferences(publicKey: string, preferences: Record<string,
 /**
  * A poll's answers as the main server holds them (`pollAnswers` in its row, @beanpool/engine sync.ts postsWithAnswers): the
  * copy names all of them, none included, so they replace what is here. A copy that doesn't carry the field (a main server
- * from before them, or a poll with no Other) leaves them. A malformed entry is left out. True when words went from here.
+ * from before them, or a poll with no Other) leaves them. A malformed entry is left out. True when words went from here: a line
+ * held that the copy doesn't bring back as it was, whatever else it brings.
  */
 function replacePollAnswers(postId: string, answers: unknown): boolean {
     if (!Array.isArray(answers)) return false;
-    const typedLines = () => (db.prepare('SELECT COUNT(*) AS c FROM poll_answers WHERE post_id = ? AND words IS NOT NULL').get(postId) as { c: number }).c;
-    const held = typedLines();
+    const held = db.prepare('SELECT id, words FROM poll_answers WHERE post_id = ? AND words IS NOT NULL').all(postId) as { id: string; words: string }[];
     db.prepare('DELETE FROM poll_answers WHERE post_id = ?').run(postId);
     const insert = db.prepare('INSERT OR IGNORE INTO poll_answers (post_id, id, option_id, words, words_removed) VALUES (?, ?, ?, ?, ?)');
     for (const a of answers as Array<{ id?: unknown; optionId?: unknown; words?: unknown; wordsRemoved?: unknown }>) {
         if (typeof a?.id !== 'string' || !a.id || typeof a.optionId !== 'string' || !a.optionId) continue;
         insert.run(postId, a.id, a.optionId, typeof a.words === 'string' ? a.words : null, a.wordsRemoved === 1 ? 1 : 0);
     }
-    return typedLines() < held;
+    const stillHere = db.prepare('SELECT 1 FROM poll_answers WHERE post_id = ? AND id = ? AND words = ?');
+    return held.some((line) => !stillHere.get(postId, line.id, line.words));
 }
 
 /**

@@ -58,7 +58,7 @@ On an anonymous poll the words stay hidden until the poll closes, then show with
 
 On an open vote the words can be read at once. Changing your vote takes them away, and so does deleting your account.
 
-If you started the poll and a line is abusive, tap **Report** beside it. The report goes to the owners and names nobody. An owner can tap **Remove**: the words go for good, and the vote still counts. If the poll itself is removed, its typed answers go with it.
+If you started the poll and a line is abusive, tap **Report** beside it. The report goes to the owners and names nobody. An owner can tap **Remove**: the words go for good, and the vote still counts. If the poll itself is removed, or the person who started it leaves while it's still open, its typed answers go with it, and even an owner can't read them after that. A poll that has closed keeps them if the person who started it leaves.
 
 ## Closing a poll early
 

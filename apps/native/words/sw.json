@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -212,7 +212,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "Simu hii haikuweza kusoma ni mazungumzo gani hapa ni ya faragha, kwa hivyo hakuna kilichotumwa. Jaribu tena; ikiendelea kushindwa, Mipangilio → Kumbukumbu ya gumzo inaweza kuweka upya ya jumuiya hii, ambayo hukagua tena kila gumzo hapa tangu mwanzo.",
   "Who your chats are with, and which are private.": "Mazungumzo yako ni ya nani, na yapi ni ya faragha.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "Simu hii inakumbuka kila gumzo lako katika jumuiya ni la nani, na ni mazungumzo gani huko ni ya faragha, ili jumuiya isiweze kubadilisha kimya kimya mtu anayehusika na gumzo au kugeuza gumzo la faragha kuwa la kikundi. Ikiwa simu hii haiwezi kusoma kumbukumbu hiyo, mazungumzo katika jumuiya hiyo hayawezi kutuma ujumbe. Kuiweka upya hukagua tena kila gumzo huko tangu mwanzo.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Gumzo lililositishwa kwa sababu ufunguo wake ulibadilika linaweza kufunguka na ufunguo mpya. Gumzo la faragha lililopotea kutoka kwa Mazungumzo linaweza kurudi kama gumzo la kikundi ambalo jumuiya inaweza kulisoma. Kagua msimbo wa ufunguo, au nani yuko kwenye gumzo, kabla ya kutuma.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Gumzo lililositishwa kwa sababu ufunguo wake ulibadilika linaweza kufunguka na ufunguo mpya. Gumzo la faragha lililopotea kutoka kwa Gumzo linaweza kurudi kama gumzo la kikundi ambalo jumuiya inaweza kulisoma. Kagua msimbo wa ufunguo, au nani yuko kwenye gumzo, kabla ya kutuma.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "Simu hii inakagua gumzo hili tangu mwanzo, kama inavyofanya baada ya kurejesha au kuisasisha programu.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "Kumbukumbu ya gumzo ya jumuiya hii iliwekwa upya, kwa hivyo simu hii inakagua gumzo hili tangu mwanzo.",
   "The key behind \"{name}\" changed.": "Ufunguo unaotumika na \"{name}\" umebadilika.",
@@ -309,14 +309,14 @@
   "Home\u0004tab": "Nyumbani",
   "Market\u0004tab": "Soko",
   "Map\u0004tab": "Ramani",
-  "Talk\u0004tab": "Gumzo",
+  "Chat\u0004tab": "Gumzo",
   "People\u0004tab": "Watu",
   "Pulse\u0004tab": "Mwenendo",
   "Commons\u0004tab": "Pamoja",
   "Ledger\u0004tab": "Leja",
   "Settings\u0004tab": "Mipangilio",
   "Home updated": "Nyumbani imesasishwa",
-  "This community's server needs an update before Home works. Market and Talk still work.": "Seva ya jumuiya hii inahitaji sasisho kabla ya Nyumbani kufanya kazi. Soko na Gumzo bado vinafanya kazi.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "Seva ya jumuiya hii inahitaji sasisho kabla ya Nyumbani kufanya kazi. Soko na Gumzo bado vinafanya kazi.",
   "Couldn't reach your community; showing what we had": "Haikuweza kuwasiliana na jumuiya yako; inaonyesha tulichokuwa nacho",
   "That was the last tip. Add a card brings them back.": "Huo ulikuwa kidokezo cha mwisho. Ongeza kadi inazirudisha.",
   "this community": "jumuiya hii",
@@ -325,7 +325,7 @@
   "Tune": "Rekebisha",
   "Home shows once you're a member of this community.": "Nyumbani inaonekana mara tu unapokuwa mwanachama wa jumuiya hii.",
   "Open the Market": "Fungua Soko",
-  "Open Talk": "Fungua Gumzo",
+  "Open Chat": "Fungua Gumzo",
   "Connect to a community to see your Home.": "Unganisha kwenye jumuiya ili kuona Nyumbani yako.",
   "Connect": "Unganisha",
   "Couldn't reach your community yet. Home fills in when it answers.": "Bado haikuweza kuwasiliana na jumuiya yako. Nyumbani itajazwa pindi itakapojibu.",
@@ -497,7 +497,7 @@
     "one": "Vikundi vyote {n}",
     "other": "Vikundi vyote {n}"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
     "one": "Vikundi vyako vyote {n}, kwenye Gumzo",
     "other": "Vikundi vyako vyote {n}, kwenye Gumzo"
   },
@@ -1383,7 +1383,7 @@
   "✕ Close": "✕ Funga",
   "No conversations yet.": "Bado hakuna mazungumzo.",
   "Browse Market": "Vinjari Soko",
-  "Talk": "Gumzo",
+  "Chat": "Gumzo",
   "Could not load your groups.": "Haikuweza kupakia vikundi vyako.",
   "Search chats, posts, partners": "Tafuta mazungumzo, machapisho, washirika",
   "Search chats, posts, partners...": "Tafuta mazungumzo, machapisho, washirika...",
@@ -6198,5 +6198,8 @@
   "\"{title}\" stayed behind: it has no photo, and {name} needs at least one.": "\"{title}\" limebaki nyuma: halina picha, na {name} inahitaji angalau moja.",
   "\"{title}\" stayed behind: {reason}": "\"{title}\" limebaki nyuma: {reason}",
   "{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.": "{name} inakubali Hitaji baada ya wewe kuorodhesha Ofa huko. Orodhesha moja, nawe utaulizwa tena.",
-  "Poll": "Kura ya maoni"
+  "Poll": "Kura ya maoni",
+  "Stop taking questions": "Acha kupokea maswali",
+  "on the global community": "kwenye jumuiya ya kimataifa",
+  "Open their requests there": "Fungua maombi yao huko"
 }

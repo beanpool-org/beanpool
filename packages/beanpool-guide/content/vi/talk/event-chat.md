@@ -13,7 +13,7 @@ Mỗi sự kiện đều có cuộc trò chuyện riêng. Người tổ chức v
 ## Mở cuộc trò chuyện
 
 - Mở sự kiện và nhấn **Mở trò chuyện sự kiện**.
-- Hoặc tìm sự kiện trong mục **Trò chuyện**, dưới phần **Nhóm**, được đánh dấu 📅 **Sự kiện**. Trong ứng dụng web, mục này nằm trong tab **Trò chuyện**, cùng với các cuộc trò chuyện khác của bạn.
+- Hoặc tìm sự kiện trong mục **Chat**, dưới phần **Nhóm**, được đánh dấu 📅 **Sự kiện**. Trong ứng dụng web, mục này nằm trong tab **Chat**, cùng với các cuộc trò chuyện khác của bạn.
 
 Ở trên cùng, một hộp được ghim sẽ hiển thị **Ghi chú cho những người tham gia** của người tổ chức, chẳng hạn như địa chỉ chính xác. Nhấn vào tên sự kiện ở trên cùng (trong ứng dụng web là **Xem sự kiện**) để quay lại sự kiện.
 

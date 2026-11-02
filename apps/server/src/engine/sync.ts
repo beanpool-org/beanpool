@@ -117,15 +117,19 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     keyed on the date (event_reminders_sent.occurrence_at). An importer before this one drops them: a series would land
  *     as a one-off that never moves on after a take-over, every regular's old RSVP would count for the new date, and a
  *     second week's reminder mark would fold into the first's. OLDEST_STANDBY_FORMAT is 12 from here, as 10 and 11 were.
+ * 13. A poll's typed Other (schema.sql poll_answers): what an anonymous poll's members answered travels in the poll's row, and
+ *     an open vote's link to its words on its vote (poll_votes.other_answer_id). An importer before this one drops both: after
+ *     a take-over a sealed poll would count no answers and its words would be gone. OLDEST_STANDBY_FORMAT is 13 from here, as
+ *     10 to 12 were.
  */
-export const REPLICA_FORMAT = 12;
+export const REPLICA_FORMAT = 13;
 
 /**
  * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
  * reference, 10 event times, 11 the let-in, 12 repeating events; raise it with any format whose older importer drops a
  * column.
  */
-export const OLDEST_STANDBY_FORMAT = 12;
+export const OLDEST_STANDBY_FORMAT = 13;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only
@@ -1230,11 +1234,12 @@ function postFreeTags(rp: any): [string] {
 }
 
 /** A member's copy from their own community (engine/event-copy.ts), plain assignment: none said is none. */
-function postShownFrom(rp: any): [string | null, string | null, string | null] {
+function postShownFrom(rp: any): [string | null, string | null, string | null, 1 | null] {
     return [
         typeof rp.shownFromHost === 'string' ? rp.shownFromHost : null,
         typeof rp.shownFromPostId === 'string' ? rp.shownFromPostId : null,
         typeof rp.shownPrice === 'string' ? rp.shownPrice : null,
+        rp.shownTakesQuestions === 1 ? 1 : null,
     ];
 }
 
@@ -1527,6 +1532,25 @@ function replaceMemberPreferences(publicKey: string, preferences: Record<string,
     const insert = db.prepare('INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)');
     for (const [key, value] of incoming) insert.run(publicKey, key, value);
     return true;
+}
+
+/**
+ * A poll's answers as the main server holds them (`pollAnswers` in its row, @beanpool/engine sync.ts postsWithAnswers): the
+ * copy names all of them, none included, so they replace what is here. A copy that doesn't carry the field (a main server
+ * from before them, or a poll with no Other) leaves them. A malformed entry is left out. True when words went from here: a line
+ * held that the copy doesn't bring back as it was, whatever else it brings.
+ */
+function replacePollAnswers(postId: string, answers: unknown): boolean {
+    if (!Array.isArray(answers)) return false;
+    const held = db.prepare('SELECT id, words FROM poll_answers WHERE post_id = ? AND words IS NOT NULL').all(postId) as { id: string; words: string }[];
+    db.prepare('DELETE FROM poll_answers WHERE post_id = ?').run(postId);
+    const insert = db.prepare('INSERT OR IGNORE INTO poll_answers (post_id, id, option_id, words, words_removed) VALUES (?, ?, ?, ?, ?)');
+    for (const a of answers as Array<{ id?: unknown; optionId?: unknown; words?: unknown; wordsRemoved?: unknown }>) {
+        if (typeof a?.id !== 'string' || !a.id || typeof a.optionId !== 'string' || !a.optionId) continue;
+        insert.run(postId, a.id, a.optionId, typeof a.words === 'string' ? a.words : null, a.wordsRemoved === 1 ? 1 : 0);
+    }
+    const stillHere = db.prepare('SELECT 1 FROM poll_answers WHERE post_id = ? AND id = ? AND words = ?');
+    return held.some((line) => !stillHere.get(postId, line.id, line.words));
 }
 
 /**
@@ -2012,8 +2036,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, pinned_until, pinned_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, pinned_until, pinned_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2127,6 +2151,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         shown_from_host = ?,
                         shown_from_post_id = ?,
                         shown_price = ?,
+                        shown_takes_questions = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2749,17 +2774,23 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             // A followed re-key's recovery copies: the ones the main server moved to the new key go from the old one.
             if (followedRekeys.length > 0) dropMovedRecoveryCopies(followedRekeys);
 
+            // A poll's answers travel in its row, and go in once its row is here (schema.sql poll_answers).
+            for (const rp of remote.posts ?? []) {
+                if (rp.type === 'poll' && replacePollAnswers(rp.id, (rp as { pollAnswers?: unknown }).pollAnswers)) blankedLines++;
+            }
+
             if (remote.pollVotes) {
                 // The vote's kind (new or 12-word account) as the main server stamped it; a main server from before the
                 // stamp sends none (NULL), as it holds none.
                 const importVote = db.prepare(`INSERT INTO poll_votes
-                    (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words, other_answer_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
                         option_id = excluded.option_id,
                         signature = excluded.signature,
                         created_at = excluded.created_at,
-                        voter_new_or_words = excluded.voter_new_or_words
+                        voter_new_or_words = excluded.voter_new_or_words,
+                        other_answer_id = excluded.other_answer_id
                     WHERE excluded.created_at IS NOT NULL
                       AND (poll_votes.created_at IS NULL OR excluded.created_at >= poll_votes.created_at)`);
                 for (const pv of remote.pollVotes) {
@@ -2770,7 +2801,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         pv.optionId,
                         pv.signature || '',
                         pv.createdAt || new Date().toISOString(),
-                        kind
+                        kind,
+                        typeof pv.otherAnswerId === 'string' ? pv.otherAnswerId : null
                     );
                 }
             }
@@ -3010,9 +3042,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     } finally {
         currentImportOrigin = null;
     }
-    // A line this copy blanked is zeroed in state.db, but state.db-wal still holds it as it was, on this standby as on its
-    // main server after a delete account (data-at-rest report F2, db/wal-truncate.ts): emptied now the import has committed.
-    if (blankedLines > 0) truncateWalAfterDelete('a copy blanked chat lines');
+    // A line this copy blanked (a chat's, or a poll's typed answer) is zeroed in state.db, but state.db-wal still holds it as
+    // it was, on this standby as on its main server after a delete account (data-at-rest report F2, db/wal-truncate.ts):
+    // emptied now the import has committed.
+    if (blankedLines > 0) truncateWalAfterDelete('a copy blanked lines members wrote');
 
     // Updates and tombstones count, not just inserts. This was guarded on `newMembers > 0 ||
     // newPosts > 0`, which was fine when the broadcast only woke up sockets — but it now also

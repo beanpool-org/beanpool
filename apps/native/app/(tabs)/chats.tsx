@@ -5,6 +5,8 @@ import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
+import { openGlobalRequests, requestsWaitingOnGlobal } from '../../utils/global-requests';
+import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
@@ -85,11 +87,15 @@ export default function ChatsScreen() {
     // (requests off on the node, a community not synced yet, or after Sign Out or Replace).
     const [requests, setRequests] = useState<{ count: number; conversations: any[] } | null | undefined>(undefined);
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
+    // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
+    const [onGlobal, setOnGlobal] = useState(0);
+    const { recheck } = useNodeStatus();
+    const requestsHere = requests ?? (onGlobal > 0 ? { count: 0, conversations: [] } : null);
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
-        if (requests === null && messagesFilter === 'requests') setMessagesFilter('all');
-    }, [requests, messagesFilter]);
+        if (requests === null && onGlobal === 0 && messagesFilter === 'requests') setMessagesFilter('all');
+    }, [requests, onGlobal, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
     // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
@@ -400,6 +406,9 @@ export default function ChatsScreen() {
                         .then(reqs => {
                             if (active) setRequests(prev => keepIfSame(prev, reqs));
                         })
+                        .catch(console.error);
+                    requestsWaitingOnGlobal(identity)
+                        .then(count => { if (active) setOnGlobal(count); })
                         .catch(console.error);
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
@@ -795,7 +804,7 @@ export default function ChatsScreen() {
                     contentContainerStyle={{ paddingBottom: 100 }}
                     refreshControl={<RefreshControl refreshing={false} onRefresh={yourGroupsLive.refresh} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
                 >
-                    <PageTitle title={t('Talk')} />
+                    <PageTitle title={t('Chat')} />
                     {talkSwitch}
                     {/* The empty state has its own "Find a group to join". */}
                     {(hasAny || (findGroups && paneState !== 'empty')) && (
@@ -817,7 +826,7 @@ export default function ChatsScreen() {
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
-                <PageTitle title={t('Talk')} testID="page-title-talk" />
+                <PageTitle title={t('Chat')} testID="page-title-talk" />
                 {talkSwitch}
                 <PeopleScreen />
             </View>
@@ -830,7 +839,7 @@ export default function ChatsScreen() {
                 and the search row sit over the list and ride away with it (QuickReturnBlock); the
                 compose button lives in the search row, so it comes back with the first scroll up. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Talk')} testID="page-title-talk" />} below={optionsDrawer}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Chat')} testID="page-title-talk" />} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>
@@ -878,7 +887,7 @@ export default function ChatsScreen() {
                 </Pressable>
             </View>
             {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
-            {requests && requests.count > 0 && messagesFilter !== 'requests' && (
+            {requestsHere && requestsHere.count + onGlobal > 0 && messagesFilter !== 'requests' && (
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={t('Message requests')}
@@ -891,10 +900,12 @@ export default function ChatsScreen() {
                 </Pressable>
             )}
             </QuickReturnBlock>
-            {messagesFilter === 'requests' && requests ? (
+            {messagesFilter === 'requests' && requestsHere ? (
                 <MessageRequestsPane
-                    entries={requests.conversations}
-                    count={requests.count}
+                    entries={requestsHere.conversations}
+                    count={requestsHere.count}
+                    onGlobal={onGlobal}
+                    onOpenGlobal={() => void openGlobalRequests(identity?.publicKey, recheck)}
                     identity={identity}
                     qr={qr}
                     onOpen={(entry) => router.push(`/chat/${entry.id}`)}

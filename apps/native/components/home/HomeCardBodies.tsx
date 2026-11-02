@@ -514,7 +514,7 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
                 );
             })}
             {card.total > card.items.length && (
-                <HomeLink id="groups:all" colors={colors} text={tn(card.total, 'All {n} group', 'All {n} groups')} a11y={tn(card.total, 'Your {n} group, in Talk', 'All {n} of your groups, in Talk')}
+                <HomeLink id="groups:all" colors={colors} text={tn(card.total, 'All {n} group', 'All {n} groups')} a11y={tn(card.total, 'Your {n} group, in Chat', 'All {n} of your groups, in Chat')}
                     onPress={() => router.push({ pathname: '/(tabs)/chats', params: { view: 'groups' } })} testID="home-groups-all" />
             )}
         </>

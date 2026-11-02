@@ -20,8 +20,9 @@ import { upgradeLegacyShapeAtBoot } from './config/community-shape-upgrade.js';
 import { placeAs, placeShownTo } from './config/community-place.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
-import { readOfCopy, type CopyColumns } from './engine/event-copy.js';
+import { closeCopyDoors, readOfCopy, setCopyQuestions as setCopyQuestionsEngine, type CopyColumns } from './engine/event-copy.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
+import { dropOpenVoteWordsOf, pollWordsGoWithThePoll, POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
@@ -712,6 +713,7 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    pollWordsGoWithThePoll();
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
     try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
@@ -1364,6 +1366,8 @@ export function loanNudgeBody(lenderCallsign: string | null | undefined, title: 
 export function runMarketplaceHygiene(): void {
     // A main server's alone (its timer starts only there, initStateEngine): it writes deals and the activity list, and pushes.
     if (getNodeRole() === 'backup') return;
+    // An operator's environment can turn requests off with no Settings write to close the doors (engine/event-copy.ts).
+    if (!getProfileSwitches().dmRequests) closeCopyDoors();
     // 1. Expire 'requested' transactions that nobody answered. No funds are locked
     // at the 'requested' stage, so expiry is purely a bookkeeping cleanup.
     const stale = db.prepare(`SELECT * FROM marketplace_transactions WHERE status='requested' AND created_at < datetime('now', ?)`)
@@ -1812,8 +1816,8 @@ interface ListingReach {
 function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
-    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in, shown_from_host FROM posts WHERE id = ?').get(id) as
-        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null; shown_from_host: string | null } | undefined;
+    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in, shown_from_host, shown_takes_questions FROM posts WHERE id = ?').get(id) as
+        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null; shown_from_host: string | null; shown_takes_questions: number | null } | undefined;
     if (!row) return null;
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
@@ -1822,7 +1826,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
-    const blockers = placed && row.shown_from_host == null ? blockersOfKept(row.author_pubkey) : null;
+    const blockers = placed && (row.shown_from_host == null || row.shown_takes_questions === 1) ? blockersOfKept(row.author_pubkey) : null;
     // Where anyone can join in a minute, each member's set measures another's listing from its neighbourhood
     // (engine getNearbySet, exactPlacesFor), so its copy reaches them as their set holds it: from the neighbourhood, or
     // from the place for those who have it exactly (exactPlaceReaders). Measured from the place for everyone, which
@@ -5674,6 +5678,7 @@ export function createPost(
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
         pollOpenVote?: unknown;
+        pollOther?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -5763,6 +5768,11 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     // The push dispatcher is handed in rather than imported by the engine module (it imports this one), so
     // cancelling an event can notify everyone going (docs/events-on-the-map.md §2.2, slice 5).
     return removePostEngine(broadcast, id, authorPublicKey, dispatchPushNotification);
+}
+
+/** A member's copy takes questions, or stops (engine/event-copy.ts). Null for anything but the signer's own copy. */
+export function setCopyQuestions(id: string, signer: string, on: boolean): boolean | null {
+    return setCopyQuestionsEngine(broadcast, id, signer, on);
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
@@ -6693,9 +6703,10 @@ export function votePoll(
     postId: string,
     voterPublicKey: string,
     optionId: string,
-    signature?: string
+    signature?: string,
+    otherWords?: unknown
 ): { success: boolean; post: MarketplacePost } {
-    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature);
+    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature, otherWords);
 }
 
 export function rsvpEvent(
@@ -7726,6 +7737,8 @@ export function undoBurst(actionId: string): UndoOutcome {
  * the report names. Null when it names nobody.
  */
 function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null }): string | null {
+    // A report of a poll's typed answer is about nobody (engine/poll-other.ts): no action on it reaches a member.
+    if (report.target_pubkey === POLL_ANSWER_REPORT_SUBJECT) return null;
     if (report.target_pulse_item_id) {
         const item = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ?').get(report.target_pulse_item_id) as { owner_pubkey: string | null } | undefined;
         return item?.owner_pubkey || report.target_pubkey || null;
@@ -8842,8 +8855,9 @@ export function assertMayPrune(publicKey: string, actor: string, door: PruneDoor
  * The posts a closed account (adminPruneUser, purgeMemberSelf) leaves behind, as SQL lists. A post's status is one of
  * active, pending (a deal in escrow), paused, completed and cancelled. The last two are where a post ends; each of the
  * first three can come back up (pending when its deal is cancelled, paused when its author resumes it), so the account's
- * posts in those are cancelled, and its open or paused polls closed with their votes kept. Paused was missed until
- * 4109713263: its author, removed or self-deleted, put it back up and moved it.
+ * posts in those are cancelled, and its open or paused polls closed with their votes kept and their typed answers gone
+ * (engine/poll-other.ts pollWordsGoWithThePoll). Paused was missed until 4109713263: its author, removed or self-deleted, put
+ * it back up and moved it.
  */
 const PRUNE_CLOSES_POSTS_IN = "('active', 'pending', 'paused')";
 const POLLS_A_PRUNE_CLOSES = "('active', 'paused')";
@@ -9109,6 +9123,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
         // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
         scrubPostsOf(publicKey, now);
+        // And what they typed on an open vote, where the vote says which line it was. An anonymous poll's can't be found.
+        dropOpenVoteWordsOf(publicKey, now);
         // And every line they wrote, in a group's, an enterprise's or an event's chat and their half of each DM, reads
         // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
         // Not in a try either, for the same reason.

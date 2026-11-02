@@ -79,12 +79,12 @@ Algunos de estos cambios residen en el servidor de tu comunidad. Los obtienes cu
 
 ### Grupos
 
-- **Cada grupo tiene un chat.** Charlas ahora tiene tres botones: **Mensajes**, **Grupos** y **Personas**. **Grupos** enumera tus grupos, los emprendimientos que custodias y los eventos a los que vas a asistir, cada uno con su mensaje más reciente y el recuento de no leídos.
-- **Una sola forma de iniciar un grupo.** **Nuevo grupo** en Charlas y **+** en Bienes comunes abren el mismo formulario, con **Círculo social** seleccionado por ti. Después de crearlo, llegas a su chat, que te pregunta a quién quieres invitar.
+- **Cada grupo tiene un chat.** Chat ahora tiene tres botones: **Mensajes**, **Grupos** y **Personas**. **Grupos** enumera tus grupos, los emprendimientos que custodias y los eventos a los que vas a asistir, cada uno con su mensaje más reciente y el recuento de no leídos.
+- **Una sola forma de iniciar un grupo.** **Nuevo grupo** en Chat y **+** en Bienes comunes abren el mismo formulario, con **Círculo social** seleccionado por ti. Después de crearlo, llegas a su chat, que te pregunta a quién quieres invitar.
 - **Invitaciones.** Los coordinadores pueden invitar a personas desde el menú del chat. Una invitación muestra quién la envió, y **Unirme al grupo** te lleva directo al chat.
 - **Silenciar un chat**: Durante 8 horas, Durante una semana o Siempre. En un grupo, las menciones con @ siguen llegando.
 - **Un encabezado para cada chat**: el nombre del grupo, emprendimiento o evento en la parte superior. Tócalo para ver el grupo, emprendimiento o evento.
-- Los antiguos chats grupales en Charlas han sido eliminados, junto con sus mensajes.
+- Los antiguos chats grupales en Chat han sido eliminados, junto con sus mensajes.
 - Cada grupo tiene ahora un **coordinador principal** (quien lo creó, para empezar). Cualquier coordinador sigue cuidando a los miembros y las publicaciones, pero solo el principal puede eliminar o degradar a un coordinador, y nadie puede eliminar al principal. El principal puede delegar el liderazgo en otra persona. Si el principal deja de responder durante 30 días, el grupo puede elegir uno nuevo, en la pantalla del grupo sobre la lista de miembros. Consulta "Reglas y cómo decidir".
 - **Votaciones en un grupo.** Los miembros de un grupo pueden votar sobre asuntos propios del grupo, como un nuevo coordinador o un nuevo principal: abre el grupo y busca en **Decisiones**.
 - **Elegir un nuevo líder para un grupo inactivo.** Solo las personas que estaban en el grupo antes de que su principal dejara de responder pueden votar. Las personas que se unieron o fueron nombradas coordinadores después no tienen voto, por lo que las cuentas nuevas no pueden tomar el control de un grupo cuyo líder está inactivo.

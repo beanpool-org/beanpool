@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -210,7 +210,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "Điện thoại này không đọc được những đoạn chat nào ở đây là riêng tư, nên không có gì được gửi. Hãy thử lại; nếu vẫn thất bại, Cài đặt → Bộ nhớ đoạn chat có thể đặt lại cho cộng đồng này để kiểm tra lại mọi đoạn chat từ đầu.",
   "Who your chats are with, and which are private.": "Các đoạn chat của bạn là với ai, và đoạn nào là riêng tư.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "Điện thoại này ghi nhớ từng đoạn chat trong cộng đồng là với ai và đoạn nào là riêng tư, để cộng đồng không thể âm thầm hoán đổi người trò chuyện hoặc biến đoạn chat riêng tư thành nhóm. Nếu điện thoại không thể đọc bộ nhớ đó, các đoạn chat trong cộng đồng đó sẽ không gửi được tin nhắn. Đặt lại sẽ giúp kiểm tra lại mọi đoạn chat ở đó từ đầu.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Một đoạn chat bị tạm dừng do khóa thay đổi có thể mở lại bằng khóa mới. Đoạn chat riêng tư từng biến mất khỏi Trò chuyện có thể quay lại dưới dạng chat nhóm mà cộng đồng đọc được. Hãy kiểm tra mã khóa hoặc người trong đoạn chat trước khi gửi.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "Một đoạn chat bị tạm dừng do khóa thay đổi có thể mở lại bằng khóa mới. Đoạn chat riêng tư từng biến mất khỏi Chat có thể quay lại dưới dạng chat nhóm mà cộng đồng đọc được. Hãy kiểm tra mã khóa hoặc người trong đoạn chat trước khi gửi.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "Điện thoại này đang kiểm tra đoạn chat này từ đầu, như thường làm sau khi bạn khôi phục hoặc cập nhật ứng dụng.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "Bộ nhớ đoạn chat của cộng đồng này đã được đặt lại, vì vậy điện thoại đang kiểm tra lại đoạn chat này từ đầu.",
   "The key behind \"{name}\" changed.": "Khóa của \"{name}\" đã thay đổi.",
@@ -305,14 +305,14 @@
   "Home\u0004tab": "Trang chủ",
   "Market\u0004tab": "Chợ",
   "Map\u0004tab": "Bản đồ",
-  "Talk\u0004tab": "Chat",
+  "Chat\u0004tab": "Chat",
   "People\u0004tab": "Mọi người",
   "Pulse\u0004tab": "Nhịp đập",
   "Commons\u0004tab": "Chung",
   "Ledger\u0004tab": "Sổ cái",
   "Settings\u0004tab": "Cài đặt",
   "Home updated": "Trang chủ đã cập nhật",
-  "This community's server needs an update before Home works. Market and Talk still work.": "Máy chủ của cộng đồng này cần cập nhật trước khi Trang chủ hoạt động. Chợ và Chat vẫn hoạt động bình thường.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "Máy chủ của cộng đồng này cần cập nhật trước khi Trang chủ hoạt động. Chợ và Chat vẫn hoạt động bình thường.",
   "Couldn't reach your community; showing what we had": "Không thể kết nối đến cộng đồng; đang hiển thị dữ liệu đã lưu",
   "That was the last tip. Add a card brings them back.": "Đó là mẹo cuối cùng. Thêm thẻ sẽ mang chúng trở lại.",
   "this community": "cộng đồng này",
@@ -321,7 +321,7 @@
   "Tune": "Tùy chỉnh",
   "Home shows once you're a member of this community.": "Trang chủ sẽ hiển thị khi bạn là thành viên của cộng đồng này.",
   "Open the Market": "Mở Chợ",
-  "Open Talk": "Mở Chat",
+  "Open Chat": "Mở Chat",
   "Connect to a community to see your Home.": "Kết nối với một cộng đồng để xem Trang chủ của bạn.",
   "Connect": "Kết nối",
   "Couldn't reach your community yet. Home fills in when it answers.": "Chưa thể kết nối tới cộng đồng của bạn. Trang chủ sẽ hiển thị khi có phản hồi.",
@@ -491,7 +491,7 @@
   "All {n} group|All {n} groups": {
     "other": "Tất cả {n} nhóm"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
     "other": "Tất cả {n} nhóm của bạn, trong Chat"
   },
   "{line} Opens People.": "{line} Mở mục Mọi người.",
@@ -1317,7 +1317,7 @@
   "✕ Close": "✕ Đóng",
   "No conversations yet.": "Chưa có cuộc trò chuyện nào.",
   "Browse Market": "Khám phá chợ",
-  "Talk": "Trò chuyện",
+  "Chat": "Chat",
   "Could not load your groups.": "Không thể tải các nhóm của bạn.",
   "Search chats, posts, partners": "Tìm cuộc trò chuyện, bài đăng, đối tác",
   "Search chats, posts, partners...": "Tìm cuộc trò chuyện, bài đăng, đối tác...",
@@ -5959,5 +5959,8 @@
   "\"{title}\" stayed behind: it has no photo, and {name} needs at least one.": "\"{title}\" đã ở lại: tin này không có ảnh, và {name} cần ít nhất một ảnh.",
   "\"{title}\" stayed behind: {reason}": "\"{title}\" đã ở lại: {reason}",
   "{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.": "{name} chỉ nhận Nhu cầu sau khi bạn đã đăng một Chia sẻ ở đó. Hãy đăng một Chia sẻ, bạn sẽ được hỏi lại.",
-  "Poll": "Thăm dò"
+  "Poll": "Thăm dò",
+  "Stop taking questions": "Ngừng nhận câu hỏi",
+  "on the global community": "trên cộng đồng toàn cầu",
+  "Open their requests there": "Mở các yêu cầu của họ ở đó"
 }

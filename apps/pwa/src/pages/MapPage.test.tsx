@@ -1865,6 +1865,32 @@ describe("the poll form's note for a placeless listing (S4)", () => {
         return { panel, me };
     }
 
+    // A typed Other (@beanpool/core poll-other): new app, old node.
+    it('a node that does not say it can: no tick, and a poll sent with no Other', async () => {
+        const { panel } = await openPoll({ ...BY_AREA, profile: 'local', features: { openJoin: false } }, null);
+        await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+        expect(within(panel).queryByTestId('poll-other')).toBeNull();
+    });
+
+    it('a node that says it can: the tick is there, off', async () => {
+        const { panel } = await openPoll({ ...BY_AREA, pollOther: true }, null);
+        const tick = await within(panel).findByTestId('poll-other') as HTMLInputElement;
+        expect(tick.checked).toBe(false);
+    });
+
+    it('ticked, the poll asks for Other', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ id: 'p' } as any);
+        const { panel } = await openPoll({ ...BY_AREA, pollOther: true }, null);
+        const tick = await within(panel).findByTestId('poll-other');
+        fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'What is missing?' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'Buses' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'Beans' } });
+        await act(async () => { fireEvent.click(tick); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        expect(create.mock.calls[0]![0]).toMatchObject({ pollOther: true });
+    });
+
     it('by area, no area set: the note says so', async () => {
         const { panel } = await openPoll(BY_AREA, null);
         await waitFor(() => expect(within(panel).getByTestId('poll-placeless-note').textContent).toBe(
@@ -1972,6 +1998,23 @@ describe('MapPage: where the pins are read from (S5)', () => {
         fireEvent.click(within(note).getByRole('button', { name: 'Show everywhere' }));
         await waitFor(() => expect(listReads().at(-1)).toEqual({ types: TYPES }));
         await waitFor(() => expect(view!.queryByTestId('map-near-empty')).toBeNull());
+    });
+
+    it('a far pin stays off the map: Nothing near and Show everywhere still show (pinning design §2.2)', async () => {
+        // The node hands a pin to the near read from anywhere, for the Market. The map is the circle it was read for.
+        const farPin = { ...post, id: 'far-pin', title: 'Pinned far away', lat: 51.5, lng: -0.12 };
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null ? [farPin] : []) as any);
+        const geo = await import('../lib/geo');
+        vi.mocked(geo.haversineDistance).mockImplementation((_lat, _lng, lat) => (lat === farPin.lat ? 16_000 : 0));
+        try {
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+            const note = await view!.findByTestId('map-near-empty');
+            expect(note).toHaveTextContent('Nothing within 250 km of your area yet.');
+            expect(within(note).getByRole('button', { name: 'Show everywhere' })).toBeInTheDocument();
+        } finally {
+            vi.mocked(geo.haversineDistance).mockImplementation(() => 0);
+        }
     });
 
     it('after Show everywhere, Near your area reads from the area again', async () => {

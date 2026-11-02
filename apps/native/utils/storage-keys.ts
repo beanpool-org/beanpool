@@ -39,6 +39,9 @@ export const BRING_LISTINGS_STORE_KEY = 'beanpool_bring_listings';
  */
 export const SHOWN_ON_GLOBAL_STORE_KEY = 'beanpool_shown_on_global';
 
+/** The key that has ticked "Take questions" on this phone (utils/global-requests.ts). Sign Out wipes it. */
+export const QUESTIONS_OPENED_STORE_KEY = 'beanpool_questions_opened';
+
 /** A town typed in "Find your community" (utils/typed-place.ts): where the member lives, roughly. Sign Out wipes it. */
 export const TYPED_PLACE_STORE_KEY = 'beanpool_find_typed_place';
 
@@ -192,6 +195,12 @@ export const PENDING_PROFILE_STORE_PREFIX = 'beanpool_pending_profile:';
  * PENDING_PROFILE_STORE_PREFIX, so Sign Out wipes it with the changes.
  */
 export const PENDING_PROFILE_REFUSAL_STORE_PREFIX = `${PENDING_PROFILE_STORE_PREFIX}refused:`;
+
+/**
+ * The working style waiting to reach a community (utils/pending-profile-sync.ts keepWaitingArchetype): this prefix and the
+ * community's address in one spelling. It starts with PENDING_PROFILE_STORE_PREFIX, so Sign Out wipes it with the changes.
+ */
+export const PENDING_ARCHETYPE_STORE_PREFIX = `${PENDING_PROFILE_STORE_PREFIX}archetype:`;
 
 /**
  * This phone's push token as last registered for the account on it (services/push-notifications.ts; SecureStore, not

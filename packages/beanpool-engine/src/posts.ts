@@ -22,7 +22,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { PINS_MAX, avatarUrlOf, lendBackAroundOf, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
+import { PINS_MAX, avatarUrlOf, lendBackAroundOf, pollIsSealed, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
@@ -43,6 +43,8 @@ export interface PollOption {
      * poll whose split may be shown (POLL_ORIGINS_SPLIT_MIN). Counted from the votes on each read, never from a stored copy.
      */
     newOrWordsVotes?: number;
+    /** This option is Other, which takes typed words (@beanpool/core poll-other). Only the node sets it. */
+    other?: true;
 }
 
 export interface PollVoteRecord {
@@ -158,6 +160,11 @@ export interface MarketplacePost {
      * price here: `credits` stays 0, and it can't be bought, taken or compared.
      */
     shownPrice?: string;
+    /**
+     * Its member takes questions about it (apps/server engine/event-copy.ts). Sent to its author, and to a member while it is
+     * up, with the name and key they write to. Never a visitor's.
+     */
+    takesQuestions?: boolean;
     /** This post is such a copy: it shows no author, and takes no RSVP and no deal. */
     shownCopy?: boolean;
     /** Where it is from, drawn from the directory row global holds for it at each read, never from the phone's words. */
@@ -199,6 +206,11 @@ export interface MarketplacePost {
      */
     pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
+    /**
+     * The reader has answered this sealed poll (@beanpool/core pollIsSealed), which is all the node knows of their answer, so
+     * `userVotedOptionId` is never set on one. The reader's own: never on a broadcast, never a visitor's.
+     */
+    pollAnswered?: boolean;
     pollVotes?: PollVoteRecord[];
     // Audience scoping (docs/the-commons.md §9, Item 10)
     audienceScope?: AudienceScope;
@@ -687,6 +699,17 @@ export function pollOriginsMayShow(row: { poll_open_vote?: unknown; status?: unk
     return typeof row.poll_closes_at === 'string' && row.poll_closes_at !== '' && row.poll_closes_at <= nowIso;
 }
 
+/** A poll row's stored answers, or none when the row holds no list that parses. */
+function pollOptionsOf(row: { poll_options?: unknown }): PollOption[] {
+    if (typeof row.poll_options !== 'string' || !row.poll_options) return [];
+    try {
+        const parsed = JSON.parse(row.poll_options) as unknown;
+        return Array.isArray(parsed) ? parsed as PollOption[] : [];
+    } catch {
+        return [];
+    }
+}
+
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
     if (ids.length === 0) return [];
     const results: T[] = [];
@@ -845,7 +868,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         lng: row.lng,
         photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at, row.audience_scope)),
         originNode: row.origin_node,
-        ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}), ...(row.shown_price ? { shownPrice: row.shown_price } : {}) } : {}),
+        ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}), ...(row.shown_price ? { shownPrice: row.shown_price } : {}), ...(row.shown_takes_questions === 1 ? { takesQuestions: true } : {}) } : {}),
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
         // what an absent value means — on a database upgraded before the column existed, it means "stays
         // home", and that is the answer the poster is entitled to.
@@ -988,8 +1011,14 @@ const ENTERPRISE_ON_BOARD_BY_KEY_SQL = `p.author_pubkey NOT IN (SELECT public_ke
  * stops at a copy: a block, a holiday, a paused account, a new name or face. The board's rule costs a copy nothing: it
  * is there because the author can't answer a request, and nobody answers on a copy. A report, a moderator's removal and
  * the author's own hand still reach it, as a post. Used by each read below that follows the author.
+ *
+ * A copy whose member takes questions names them to members, so nothing above is left to hide and it goes by its author's
+ * rules as any listing does: a block holds, and a card's change reaches it. `?author=` still leaves it out for anyone
+ * but its author: a visitor reads no name on it, and a list of one member's posts would be one.
  */
-const IS_COPY_SQL = 'p.shown_from_host IS NOT NULL';
+export const UNNAMED_COPY_SQL = '(p.shown_from_host IS NOT NULL AND COALESCE(p.shown_takes_questions, 0) = 0)';
+/** {@link UNNAMED_COPY_SQL} on a row read. */
+const isUnnamedCopy = (r: { shown_from_host?: string | null; shown_takes_questions?: number | null }): boolean => r.shown_from_host != null && r.shown_takes_questions !== 1;
 
 /**
  * A pinned post on the board, with `p` the post and `m` its author (two parameters: the time, for an event and a poll):
@@ -1001,11 +1030,11 @@ export const PIN_ON_BOARD_SQL = `p.active = 1 AND p.status = 'active'
     AND p.hidden_by_reports_at IS NULL AND p.removed_by_moderator_at IS NULL AND p.origin_node IS NULL
     AND NOT (p.type = 'event' AND (COALESCE(p.event_state, '') = 'cancelled' OR COALESCE(p.event_end_at, p.event_start_at, '~') <= ?))
     AND NOT (p.type = 'poll' AND COALESCE(p.poll_closes_at, '~') <= ?)
-    AND (${IS_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
-/** The reader's block list as a condition on a listing, its one parameter the list as JSON: a copy stays (IS_COPY_SQL). */
-const NOT_BLOCKED_SQL = ` AND (${IS_COPY_SQL} OR p.author_pubkey NOT IN (SELECT value FROM json_each(?)))`;
-/** A row's author as a read may follow them: NULL for a copy (IS_COPY_SQL). */
-const NAMED_AUTHOR_SQL = `CASE WHEN ${IS_COPY_SQL} THEN NULL ELSE p.author_pubkey END`;
+    AND (${UNNAMED_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
+/** The reader's block list as a condition on a listing, its one parameter the list as JSON: a copy stays (UNNAMED_COPY_SQL). */
+const NOT_BLOCKED_SQL = ` AND (${UNNAMED_COPY_SQL} OR p.author_pubkey NOT IN (SELECT value FROM json_each(?)))`;
+/** A row's author as a read may follow them: NULL for a copy (UNNAMED_COPY_SQL). */
+const NAMED_AUTHOR_SQL = `CASE WHEN ${UNNAMED_COPY_SQL} THEN NULL ELSE p.author_pubkey END`;
 
 /** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
 function authorsOffBoard(db: Db, authors: string[]): Set<string> {
@@ -1818,7 +1847,7 @@ export interface NearbySet {
  *   same rules, wherever they are. Neither holds a listing by an author the member blocked on the web (member_blocks,
  *   their own rows only): they asked not to see those. The phone keeps its own list on the device (apps/native
  *   utils/blocklist.ts never calls /api/blocks) and hides those itself, so for a phone-only member member_blocks is empty
- *   and this leaves out nothing (#1808 review, finding 6). A copy is never left out for its author (IS_COPY_SQL).
+ *   and this leaves out nothing (#1808 review, finding 6). A copy is never left out for its author (UNNAMED_COPY_SQL).
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
@@ -1967,7 +1996,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     if (ids.length > 0) {
         // The authors of S whose standing ever moved (idx_members_standing_by_key, schema.sql). One whose never has adds
         // nothing: a listing's author never changes, so the authors are fixed by `ids`, and a first change adds a line.
-        // A copy's author is none of them (IS_COPY_SQL): a tag that moved with their row would say whose it is.
+        // A copy's author is none of them (UNNAMED_COPY_SQL): a tag that moved with their row would say whose it is.
         const authors = [...new Set([...ranked, ...kept].flatMap(r => r.author_pubkey ?? []))];
         const standing = prepared(db, `SELECT public_key, board_standing_changed_at AS at FROM members
             WHERE board_standing_changed_at IS NOT NULL AND public_key IN (SELECT value FROM json_each(?)) ORDER BY public_key`).all(JSON.stringify(authors)) as Array<{ public_key: string; at: string }>;
@@ -2102,7 +2131,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            where += ` AND (${IS_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
+            where += ` AND (${UNNAMED_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
         } else if (!selfView && !filter?.includeInactive) {
             where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         }
@@ -2221,7 +2250,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // A search leaves out the listings of the authors the reader blocked on the web (member_blocks), as their nearby
         // set does (#1781): the web and Home would show them otherwise. The phone keeps its own list on the device and
         // hides those itself; it never writes member_blocks, so for a phone-only member this leaves out nothing (#1808
-        // review, finding 6). A read for nobody in particular has no list. A copy stays (IS_COPY_SQL).
+        // review, finding 6). A read for nobody in particular has no list. A copy stays (UNNAMED_COPY_SQL).
         const blocked = viewer && !filter?.includeAllScopes ? authorsBlockedBy(db, viewer) : [];
         if (blocked.length > 0) {
             where += NOT_BLOCKED_SQL;
@@ -2243,9 +2272,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
         // And, for a member, the listings a sync may no longer have the last word on (offBoardPostsToResend): the phone
         // wrote them from a read outside a sync, or its deal heal did. A search of the primary key, so the OR stays a
-        // MULTI-INDEX OR. A copy is sent again for neither its author's standing nor their card (IS_COPY_SQL): it would
+        // MULTI-INDEX OR. A copy is sent again for neither its author's standing nor their card (UNNAMED_COPY_SQL): it would
         // arrive beside their listings, with no change of its own to explain it.
-        where += ` AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))`;
+        where += ` AND (p.updated_at >= ? OR (p.origin_node IS NULL AND NOT ${UNNAMED_COPY_SQL} AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))`;
         params.push(filter.updatedAfter, filter.updatedAfter);
         // A member's set (`authorCardsChanged`): also each listing whose author changed their card since (a new name, a
         // new face), so a phone that keeps no card for its listings' authors gets the new name within a cycle
@@ -2253,10 +2282,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // member directory already gives every member: nothing a member could not read. On the members row the read already
         // LEFT JOINs (m), so the cost follows the set, not the members whose card changed since the cursor (#1847 review NB1).
         if (filter.authorCardsChanged) {
-            where += " OR (p.shown_from_host IS NULL AND m.profile_updated_at >= ?)";
+            where += ` OR (NOT ${UNNAMED_COPY_SQL} AND m.profile_updated_at >= ?)`;
             params.push(filter.updatedAfter);
         } else if (filter.localAuthorCardsChanged) {
-            where += " OR (p.origin_node IS NULL AND p.shown_from_host IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?))";
+            where += ` OR (p.origin_node IS NULL AND NOT ${UNNAMED_COPY_SQL} AND p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?))`;
             params.push(filter.updatedAfter);
         }
         resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);
@@ -2332,6 +2361,24 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             }
         } catch {
             // Safe fallback if poll_votes table does not exist in testing handle
+        }
+    }
+    // A sealed poll's counts (@beanpool/core pollIsSealed): its poll_votes rows say only that someone answered, so what was
+    // answered is counted from poll_answers, which names nobody. Only the counts are read here: the words never leave by
+    // this read, for any reader (apps/server engine/poll-other.ts is their one way out).
+    const sealedCounts = new Map<string, Map<string, number>>();
+    const sealedRows = pollRows.filter(r => pollIsSealed(pollOptionsOf(r), r.poll_open_vote));
+    if (sealedRows.length > 0) {
+        try {
+            const counts = selectInChunks(db, sealedRows.map(r => r.id), ph => `
+                SELECT post_id, option_id, COUNT(*) AS c FROM poll_answers WHERE post_id IN (${ph}) GROUP BY post_id, option_id
+            `);
+            for (const c of counts as any[]) {
+                if (!sealedCounts.has(c.post_id)) sealedCounts.set(c.post_id, new Map());
+                sealedCounts.get(c.post_id)!.set(c.option_id, c.c);
+            }
+        } catch {
+            // Table absent on an older test handle
         }
     }
     // Where the votes on the public board's closed anonymous polls came from, where the node says
@@ -2462,7 +2509,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // An off-board host's event, read for this reader as it is: their phone writes it into its cache as it is,
             // so their deltas send it again, as paused, for a while (noteEventReadOutsideSync). Only for a key with a
             // member row here, so a key that merely signs can't fill what the node keeps. A copy is never off the board.
-            if (readerView && viewer && r.author_pubkey !== viewer && r.shown_from_host == null && onBoardByStatus(post)
+            if (readerView && viewer && r.author_pubkey !== viewer && !isUnnamedCopy(r) && onBoardByStatus(post)
                 && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
                 && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
@@ -2507,11 +2554,17 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 post.status = 'completed';
             }
             const votes = pollVotesByPost.get(post.id) || [];
-            const totalVotes = votes.length;
+            const sealed = pollIsSealed(post.pollOptions, post.pollOpenVote);
+            const voteCounts = sealed ? (sealedCounts.get(post.id) ?? new Map<string, number>()) : new Map<string, number>();
+            let totalVotes = sealed ? 0 : votes.length;
+            if (sealed) for (const c of voteCounts.values()) totalVotes += c;
             post.totalVotes = totalVotes;
-            const voteCounts = new Map<string, number>();
             let userVotedOptionId: string | undefined;
             for (const v of votes) {
+                if (sealed) {
+                    if (viewer && v.voter_pubkey === viewer) post.pollAnswered = true;
+                    continue;
+                }
                 voteCounts.set(v.option_id, (voteCounts.get(v.option_id) || 0) + 1);
                 if (viewer && v.voter_pubkey === viewer) {
                     userVotedOptionId = v.option_id;
@@ -2529,7 +2582,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 for (const c of origins.values()) fromNew += c;
                 const rest = totalVotes - fromNew;
                 post.pollNewOrWordsVotes = fromNew;
-                split = fromNew >= POLL_ORIGINS_SPLIT_MIN && (rest === 0 || rest >= POLL_ORIGINS_SPLIT_MIN);
+                // A sealed poll's stamps sit on the ballots, which say nothing of how anyone answered: a total, and no split.
+                split = !sealed && fromNew >= POLL_ORIGINS_SPLIT_MIN && (rest === 0 || rest >= POLL_ORIGINS_SPLIT_MIN);
             }
             if (post.pollOptions) {
                 post.pollOptions = post.pollOptions.map((stored: any) => {
@@ -2552,7 +2606,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             }
         }
 
-        if (r.shown_from_host == null && offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
+        if (!isUnnamedCopy(r) && offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
             && !viewerDeals.has(r.id) && onBoardByStatus(post)) {
             post.status = 'paused';
         }
@@ -2614,7 +2668,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
     // A copy says it is one, where from when the directory says so, and its price at home in words. The stored host is never a
     // reader's.
-    shownCopy: 'keep', shownFrom: 'keep', shownPrice: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop',
+    shownCopy: 'keep', shownFrom: 'keep', shownPrice: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop', takesQuestions: 'drop',
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',
@@ -2657,7 +2711,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
     acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop', lendBackAround: 'drop',
-    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', myLastRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', pollAnswered: 'drop', myRsvp: 'drop', myLastRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop', myLetIn: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
@@ -2691,7 +2745,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
  */
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
     // What made it is its author's own read only (getPosts): never every socket's.
-    const { reachPeers: _peers, userVotedOptionId: _ownVote, createdVia: _via, ...shared } = post;
+    const { reachPeers: _peers, userVotedOptionId: _ownVote, pollAnswered: _ownAnswer, createdVia: _via, ...shared } = post;
     if (shared.type !== 'event') return shared;
     const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, myLastRsvp: _last, myLetIn: _letIn, ...rest } = shared;
     return rest;

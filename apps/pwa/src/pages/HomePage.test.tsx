@@ -3,6 +3,7 @@
  * and Edit home, interests that reorder the Market card in place, the doorbell's single re-read, offline, and the
  * visitor's Home. The node is lib/api.ts mocked; IndexedDB is the in-memory stand-in.
  */
+import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { HomeAnswer, HomeLayout, HomeLayoutV2 } from '../lib/home-cards';
@@ -3007,6 +3008,492 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(join.parentElement).toBe(grid().parentElement);
         expect(span('community')).toBe('1 / -1');
         expect(span('market')).toBe('');
+    });
+});
+
+describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
+    let width = 0;
+    let measured: { mockRestore(): void } | null = null;
+    let heights: Record<string, number> = {};
+    let offsetSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+        width = 0;
+        heights = {};
+        vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+        measured = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+            return this.getAttribute('data-testid') === 'home-page' ? width : 0;
+        });
+        offsetSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+            const testId = this.getAttribute('data-testid');
+            if (testId && heights[testId]) return heights[testId];
+            return 0;
+        });
+    });
+
+    afterEach(() => {
+        measured?.mockRestore();
+        offsetSpy?.mockRestore();
+    });
+
+    const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
+    const grid = () => screen.getByTestId('home-grid');
+    const SAFETY = { needs: NEEDS, safety: { words: true as const, signInLinked: false as const } };
+
+    async function landWithHeights(w: number, h: Record<string, number>, cards: HomeAnswer['cards'] = { needs: NEEDS }) {
+        width = w;
+        heights = h;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, cards)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+    }
+
+    it('gaps gone at 2 and 3 columns: cards pack under shortest column', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+
+        expect(grid().style.rowGap).toBe('0px');
+        expect(grid().style.gridAutoRows).toBe('4px');
+
+        const tips = screen.getByTestId('home-card-tips');
+        const events = screen.getByTestId('home-card-events');
+        const market = screen.getByTestId('home-card-market');
+
+        expect(tips.style.gridColumn).toBe('1');
+        expect(events.style.gridColumn).toBe('2');
+        expect(market.style.gridColumn).toBe('2');
+        // Needs (100px: span 29) + note-hint (0px: span 4) start at 1 -> row 34.
+        // Events (150px: span 42) -> ends at 34 + 42 = 76.
+        expect(market.style.gridRow).toBe('76 / span 34');
+
+        cleanup();
+
+        await landWithHeights(1400, {
+            'home-card-needs': 100,
+            'home-card-tips': 300,
+            'home-card-events': 100,
+            'home-card-market': 200,
+            'home-card-pulse': 50,
+            'home-card-beans': 60,
+            'home-card-community': 100,
+        });
+        expect(grid().style.rowGap).toBe('0px');
+        expect(grid().style.gridAutoRows).toBe('4px');
+        const pulse = screen.getByTestId('home-card-pulse');
+        expect(pulse.style.gridColumn).toBe('2');
+        // Needs + note-hint = row 1..34.
+        // Events in col 2: span (100) = 29 -> ends at 34 + 29 = 63.
+        expect(pulse.style.gridRow).toBe('63 / span 17');
+    });
+
+    it('order kept: DOM elements follow saved member order even when packed into different columns', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        const domIds = Array.from(grid().querySelectorAll('[data-testid^="home-card-"]'))
+            .map(e => e.getAttribute('data-testid')?.replace('home-card-', ''))
+            .filter(id => id !== 'menu');
+        expect(domIds).toEqual(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community']);
+    });
+
+    it('full-row cards: wait for every column and span 1 / -1', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        const needs = screen.getByTestId('home-card-needs');
+        const community = screen.getByTestId('home-card-community');
+
+        expect(needs.style.gridColumn).toBe('1 / -1');
+        expect(needs.style.gridRow).toBe('1 / span 29');
+
+        expect(community.style.gridColumn).toBe('1 / -1');
+        // Col 1 bottom: 34 + 54 (tips) + 24 (pulse) = 112.
+        // Col 2 bottom: 34 + 42 (events) + 34 (market) + 27 (beans) = 137.
+        // Deepest column is 137, so community starts at row 137!
+        expect(community.style.gridRow).toBe('137 / span 32');
+    });
+
+    it('one column unchanged: does not apply packing styles even when heights are reported', async () => {
+        await landWithHeights(360, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        expect(grid().style.gridAutoRows).toBe('');
+        const tips = screen.getByTestId('home-card-tips');
+        expect(tips.style.gridRow).toBe('');
+        expect(tips.style.gridColumn).toBe('');
+    });
+
+    it('no-ResizeObserver fallback keeps today\'s grid (gaps and all)', async () => {
+        vi.stubGlobal('ResizeObserver', undefined);
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        expect(grid().style.gridAutoRows).toBe('');
+        expect(grid().style.rowGap).toBe('4px');
+        const tips = screen.getByTestId('home-card-tips');
+        expect(tips.style.gridRow).toBe('');
+        expect(tips.style.gridColumn).toBe('');
+    });
+
+    it('safety card when not drawn is skipped by packing and leaves no gap', async () => {
+        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-safety': 180,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        }, SAFETY);
+
+        expect(screen.queryByTestId('home-card-safety')).toBeNull();
+        const tips = screen.getByTestId('home-card-tips');
+        const events = screen.getByTestId('home-card-events');
+        expect(tips.style.gridColumn).toBe('1');
+        expect(tips.style.gridRow).toBe('34 / span 54');
+        expect(events.style.gridColumn).toBe('2');
+        expect(events.style.gridRow).toBe('34 / span 42');
+    });
+
+    it('useLayoutEffect does not re-query DOM card heights when card set is unchanged across re-renders', async () => {
+        width = 800;
+        heights = {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { needs: NEEDS })));
+        const { rerender } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const callsBefore = offsetSpy?.mock.calls.length ?? 0;
+        expect(callsBefore).toBeGreaterThan(0);
+
+        // Re-rendering HomePage without card list changes (e.g. parent render with new callback):
+        rerender(<HomePage identity={ME} onNavigate={vi.fn()} />);
+
+        const callsAfter = offsetSpy?.mock.calls.length ?? 0;
+        // With stable shownKey memoization, useLayoutEffect does not re-query DOM heights:
+        expect(callsAfter).toBe(callsBefore);
+    });
+});
+
+describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layout-fable.md §3.1)', () => {
+    /** A ResizeObserver that delivers as a browser does: only for what changed since it last delivered, then quiet. */
+    class WatchingObserver {
+        static live = new Set<WatchingObserver>();
+        size = new Map<Element, string>();
+        constructor(private readonly callback: ResizeObserverCallback) { WatchingObserver.live.add(this); }
+        observe(el: Element) { this.size.set(el, ''); }
+        unobserve(el: Element) { this.size.delete(el); }
+        disconnect() { WatchingObserver.live.delete(this); }
+        deliver(): boolean {
+            const changed = Array.from(this.size.keys()).filter(el => {
+                const now = `${(el as HTMLElement).offsetHeight}x${el.clientWidth}`;
+                const was = this.size.get(el);
+                this.size.set(el, now);
+                return was !== now;
+            });
+            if (changed.length) this.callback(changed.map(target => ({ target })) as unknown as ResizeObserverEntry[], this as unknown as ResizeObserver);
+            return changed.length > 0;
+        }
+    }
+
+    let width = 0;
+    let heights: Record<string, number | (() => number)> = {};
+    let cardWidths: Record<string, () => number> = {};
+    let spies: { mockRestore(): void }[] = [];
+    let offsetReads = 0;
+    let commits = 0;
+
+    beforeEach(() => {
+        width = 800;
+        cardWidths = {};
+        offsetReads = 0;
+        commits = 0;
+        WatchingObserver.live.clear();
+        vi.stubGlobal('ResizeObserver', WatchingObserver);
+        spies = [
+            vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+                const id = this.getAttribute('data-testid') ?? '';
+                return id === 'home-page' ? width : cardWidths[id]?.() ?? 0;
+            }),
+            vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+                offsetReads += 1;
+                const h = heights[this.getAttribute('data-testid') ?? ''];
+                return typeof h === 'function' ? h() : h ?? 0;
+            }),
+        ];
+    });
+    afterEach(() => { spies.forEach(s => s.mockRestore()); });
+
+    const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
+    const CARDS = {
+        'home-card-needs': 100, 'home-hint': 44, 'home-card-tips': 200, 'home-card-events': 150, 'home-card-market': 120,
+        'home-card-pulse': 80, 'home-card-beans': 90, 'home-card-community': 110,
+    };
+    const card = (id: string) => screen.getByTestId(`home-card-${id}`);
+    /** Every observer that has news, once: what a browser does between two paints. */
+    const deliverOnce = () => {
+        let any = false;
+        act(() => { for (const ro of Array.from(WatchingObserver.live)) any = ro.deliver() || any; });
+        return any;
+    };
+    /** Paint after paint until nothing has news, as the browser would. Gives the number of paints it took, capped. */
+    const settle = (most = 200) => {
+        let rounds = 0;
+        while (rounds < most && deliverOnce()) rounds += 1;
+        return rounds;
+    };
+
+    async function land(cards: HomeAnswer['cards'] = { needs: NEEDS }, h: typeof heights = CARDS) {
+        heights = { ...h };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, cards)));
+        render(<Profiler id="home" onRender={() => { commits += 1; }}><HomePage identity={ME} onNavigate={vi.fn()} /></Profiler>);
+        await screen.findByTestId('home-card-community');
+        settle();
+    }
+
+    async function landWithSafety() {
+        vi.mocked(api.getCommunityMe).mockImplementation(async () => ({ probation: { rules: 'words', keptPosts: 0, ageEndsAt: null } }) as never);
+        await land({ needs: NEEDS, safety: { words: true, signInLinked: false } }, { ...CARDS, 'home-card-safety': 180 });
+        await screen.findByTestId('one-way-back-landing');
+        settle();
+    }
+
+    it('a card that grows after mount takes its new span, and the card under it moves down', async () => {
+        await land();
+        const tips = card('tips');
+        const pulse = card('pulse');
+        expect(tips.style.gridRow).toBe('45 / span 54');
+        expect(pulse.style.gridColumn).toBe('1');
+        expect(pulse.style.gridRow).toBe('99 / span 24');
+
+        heights['home-card-tips'] = 300;
+        settle();
+
+        expect(tips.style.gridRow).toBe('45 / span 79');
+        // Tips now reaches row 124 and the second column only 121, so the next card goes there.
+        expect(pulse.style.gridColumn).toBe('2');
+        expect(pulse.style.gridRow).toBe('121 / span 24');
+    });
+
+    it('a card that shrinks after mount gives the room back', async () => {
+        await land();
+        heights['home-card-tips'] = 60;
+        settle();
+        expect(card('tips').style.gridRow).toBe('45 / span 19');
+        // Column 1 is now the shortest, so the next card goes under Tips: no gap under it.
+        expect(card('market').style.gridColumn).toBe('1');
+        expect(card('market').style.gridRow).toBe('64 / span 34');
+    });
+
+    it('two cards reporting in one batch both land, and the second report of a card wins (the stale-ref finding)', async () => {
+        await land();
+        heights['home-card-tips'] = 240;
+        heights['home-card-events'] = 170;
+        deliverOnce();
+        expect(card('tips').style.gridRow).toBe('45 / span 64');
+        expect(card('events').style.gridRow).toBe('45 / span 47');
+
+        const tips = card('tips');
+        heights['home-card-tips'] = 280;
+        act(() => {
+            for (const ro of Array.from(WatchingObserver.live)) ro.deliver();
+            heights['home-card-tips'] = 320;
+            for (const ro of Array.from(WatchingObserver.live)) ro.deliver();
+        });
+        expect(tips.style.gridRow).toBe('45 / span 84');
+    });
+
+    it('a height that did not change commits nothing', async () => {
+        await land();
+        const before = commits;
+        // The browser reports a width change at the same height: every card is told, and nothing moves.
+        for (const ro of Array.from(WatchingObserver.live)) ro.size.forEach((_, el) => ro.size.set(el, 'other'));
+        settle();
+        expect(commits).toBe(before);
+    });
+
+    it('re-packing keeps every card mounted and the DOM in the saved order', async () => {
+        await land();
+        const before = ['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community'].map(card);
+        heights['home-card-tips'] = 500;
+        settle();
+        expect(card('market').style.gridColumn).toBe('2');
+        expect(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community'].map(card)).toEqual(before);
+        const order = Array.from(screen.getByTestId('home-grid').children).map(e => e.getAttribute('data-testid'));
+        expect(order).toEqual(['home-card-needs', 'home-hint', 'home-card-tips', 'home-card-events', 'home-card-market', 'home-card-pulse', 'home-card-beans', 'home-card-community']);
+    });
+
+    it('every packed child is watched: the "One way back" frame re-packs when it grows, with no other change on the page', async () => {
+        await landWithSafety();
+        const frame = card('safety');
+        const start = frame.style.gridRow;
+        expect(start).toMatch(/span 49$/);
+
+        heights['home-card-safety'] = 260;
+        settle();
+
+        expect(frame.style.gridRow).toBe(start.replace('span 49', 'span 69'));
+    });
+
+    it('every packed child is watched: a note that wraps re-packs', async () => {
+        await land();
+        const hint = screen.getByTestId('home-hint');
+        expect(hint.style.gridRow).toBe('30 / span 15');
+
+        heights['home-hint'] = 84;
+        settle();
+
+        expect(hint.style.gridRow).toBe('30 / span 25');
+        expect(card('tips').style.gridRow).toBe('55 / span 54');
+    });
+
+    it('every packed child is watched: the fewer-cards note too, by its own observer and before the paint', async () => {
+        heights = { ...CARDS, 'home-fewer': 44 };
+        nodeV2(answer({}, { needs: NEEDS }), null);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const fewer = await screen.findByTestId('home-fewer');
+        await screen.findByTestId('home-card-community');
+        settle();
+        expect(fewer.parentElement).toBe(screen.getByTestId('home-grid'));
+        expect(fewer.style.gridRow).toBe('30 / span 15');
+
+        heights['home-fewer'] = 84;
+        settle();
+        expect(fewer.style.gridRow).toBe('30 / span 25');
+
+        heights['home-fewer'] = 64;
+        width = 1400;
+        Array.from(WatchingObserver.live).find(ro => Array.from(ro.size.keys()).some(el => el.getAttribute('data-testid') === 'home-page'))!.deliver();
+        await waitFor(() => expect(fewer.style.gridRow).toBe('30 / span 20'));
+    });
+
+    it('the note stands on the packed row, not 4 px above it (no gap over 20 px under it)', async () => {
+        await land();
+        expect(screen.getByTestId('home-hint').style.marginTop).toBe('0px');
+    });
+
+    it('the "One way back" frame keeps its 12 px outside what is measured, as a HomeCard does', async () => {
+        await landWithSafety();
+        expect(card('safety').className.split(' ')).toEqual(expect.arrayContaining(['mb-3', '[&>section]:mb-0']));
+    });
+
+    it('a change of columns reads every card before the paint: no card has to report for the new widths to land', async () => {
+        await land({ needs: NEEDS }, { ...CARDS });
+        heights['home-card-tips'] = 260;
+        heights['home-hint'] = 84;
+        width = 1400;
+        // Only the page's own observer has told the page; the cards' observers have not run.
+        const page = Array.from(WatchingObserver.live).find(ro => Array.from(ro.size.keys()).some(el => el.getAttribute('data-testid') === 'home-page'))!;
+        act(() => { page.deliver(); });
+
+        expect(screen.getByTestId('home-page').dataset.columns).toBe('3');
+        expect(screen.getByTestId('home-hint').style.gridRow).toBe('30 / span 25');
+        expect(card('tips').style.gridRow).toBe('55 / span 69');
+    });
+
+    it('a window resize settles: one commit a step at most, and nothing after it stops', async () => {
+        await land();
+        const before = commits;
+        const steps = 30;
+        for (let i = 1; i <= steps; i += 1) {
+            width = 800 - i;
+            heights['home-card-tips'] = 200 + i * 4;
+            heights['home-card-events'] = 150 + i * 4;
+            deliverOnce();
+        }
+        expect(commits - before).toBeLessThanOrEqual(steps * 2);
+        const after = commits;
+        expect(settle()).toBe(0);
+        expect(commits).toBe(after);
+        expect(card('tips').style.gridRow).toBe(`45 / span ${Math.ceil((200 + steps * 4 + 16) / 4)}`);
+    });
+
+    it('a re-pack that changes the height it measures stops going round: bounded, stood at the taller height, no overlap', async () => {
+        // The one way round (lib/home-layout.ts settleHeights): the page's height brings the scrollbar, the scrollbar
+        // narrows the cards, and a card crossing `wide` goes the other way. Tall page, Tips short; short page, Tips tall.
+        const pageIsTall = () => Number(card('community').style.gridRow.split(' ')[0]) > 160;
+        await land({ needs: NEEDS }, { ...CARDS, 'home-card-tips': () => (pageIsTall() ? 200 : 400) });
+
+        const rounds = settle();
+
+        expect(rounds).toBeLessThan(20);
+        const span = Number(card('tips').style.gridRow.split('span ')[1]);
+        expect(span).toBe(Math.ceil((400 + 16) / 4));
+        const commitsThen = commits;
+        expect(settle()).toBe(0);
+        expect(commits).toBe(commitsThen);
+    });
+
+    it('a card crossing `wide` as the scrollbar comes and goes, through its real width: bounded the same way', async () => {
+        // Tall page: the scrollbar, 470 px, rows. Short page: no scrollbar, 490 px, tiles, which here are the taller.
+        const pageIsTall = () => Number(card('community').style.gridRow.split(' ')[0]) > 160;
+        cardWidths = { 'home-card-tips': () => (pageIsTall() ? 470 : 490) };
+        await land({ needs: NEEDS }, { ...CARDS, 'home-card-tips': () => (card('tips').dataset.cardWide === 'true' ? 400 : 200) });
+
+        const rounds = settle();
+
+        expect(rounds).toBeLessThan(40);
+        expect(Number(card('tips').style.gridRow.split('span ')[1])).toBe(Math.ceil((400 + 16) / 4));
+        // It stood at the taller height, so the page stays tall, the scrollbar stays and the card stays narrow: a gap at worst.
+        expect(card('tips').dataset.cardWide).toBe('false');
+        const commitsThen = commits;
+        expect(settle()).toBe(0);
+        expect(commits).toBe(commitsThen);
+    });
+
+    it('one column measures nothing and keeps nothing: a phone browser runs none of this', async () => {
+        width = 360;
+        await land();
+        expect(screen.getByTestId('home-grid').style.gridAutoRows).toBe('');
+        const before = { commits, offsetReads };
+        heights['home-card-tips'] = 900;
+        for (const ro of Array.from(WatchingObserver.live)) ro.size.forEach((_, el) => ro.size.set(el, 'other'));
+        act(() => { for (const ro of Array.from(WatchingObserver.live)) ro.deliver(); });
+        expect(commits).toBe(before.commits);
+        // The stub's own `deliver` reads each height once; HomeCard adds no read of its own.
+        const observed = Array.from(WatchingObserver.live).reduce((n, ro) => n + ro.size.size, 0);
+        expect(offsetReads - before.offsetReads).toBe(observed);
+        expect(card('tips').style.gridRow).toBe('');
     });
 });
 

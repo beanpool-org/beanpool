@@ -1438,6 +1438,8 @@ export async function startHttpsServer(port: number): Promise<number> {
                     ctx.set('Access-Control-Allow-Origin', '*');
                     ctx.set('Access-Control-Allow-Headers', SIGNED_COPY_HEADERS);
                     ctx.set('Access-Control-Allow-Methods', copyMethods);
+                    // A browser reads this on a 429 only if it is told it may: an Off owed waits as long as it asks.
+                    ctx.set('Access-Control-Expose-Headers', 'Retry-After');
                 }
             }
         }

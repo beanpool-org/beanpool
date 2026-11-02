@@ -2,8 +2,9 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
+import { takeBackPollLine } from './poll-other.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
@@ -49,6 +50,7 @@ import {
     publicBroadcastPost,
     CONTRIBUTION_REQUIRED_ERROR,
     type MarketplacePost,
+    type PollOption,
     type EventRsvpStatus,
     unauthorized,
 } from '@beanpool/engine';
@@ -501,6 +503,8 @@ export function createPost(
         durationDays?: number;
         /** A poll's ballot: true for an open vote (members see who chose what). Anything else, or absent, is anonymous. */
         pollOpenVote?: unknown;
+        /** A poll offers a typed Other: only `true` does (@beanpool/core poll-other). */
+        pollOther?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -639,7 +643,7 @@ export function createPost(
     const lend = lendColumnsOnCreate(type, priceType, options);
     if (lend.lendable === 1) repeatable = true;
 
-    let cleanPollOptions: Array<{ id: string; text: string }> | null = null;
+    let cleanPollOptions: PollOption[] | null = null;
     let pollClosesAt: string | null = null;
     let eventStartAt: string | null = null;
     let eventEndAt: string | null = null;
@@ -683,6 +687,7 @@ export function createPost(
             seenIds.add(optId);
             return { id: optId, text };
         });
+        if (options?.pollOther === true) cleanPollOptions = withPollOther(cleanPollOptions);
 
         const durationDays = options?.durationDays ? Number(options.durationDays) : 7;
         if (![3, 7, 14].includes(durationDays)) {
@@ -815,8 +820,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -841,6 +846,7 @@ export function createPost(
             options?.shownCopy?.host ?? null,
             options?.shownCopy?.postId ?? null,
             options?.shownCopy?.price ?? null,
+            options?.shownCopy?.takesQuestions ? 1 : null,
         );
 
         if (photoColumns.length > 0) {
@@ -1247,6 +1253,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             throw new Error(word('Cannot edit a closed poll'));
         }
         const voteCountRow = db.prepare("SELECT COUNT(*) as c FROM poll_votes WHERE post_id = ?").get(id) as any;
+        // Whether a poll offers Other decides how each ballot is kept, so it is as fixed as the ballot itself.
+        if (voteCountRow.c > 0 && (updates as any).pollOther !== undefined && ((updates as any).pollOther === true) !== (pollOtherOption(existingPost.pollOptions) !== null)) {
+            throw new Error(word('Cannot edit poll options once votes have been cast'));
+        }
         const hasVotes = (voteCountRow?.c || 0) > 0;
         if (hasVotes) {
             if (updates.title !== undefined && updates.title !== existingPost.title) {
@@ -1501,6 +1511,16 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         values.push(updates.pollOpenVote === true ? 1 : 0);
     }
 
+    // A ballot flipped, or Other switched, with no new answers sent: the same answers under new ids, so a card from before
+    // this edit can't cast a vote it would describe wrongly (a typed Other under a name it said was anonymous). Every path
+    // here: the assistant's update_post sends its own new ids, the signed route may send none.
+    const hadOther = pollOtherOption(existingPost.pollOptions) !== null;
+    const wantsOther = (updates as any).pollOther === undefined ? hadOther : (updates as any).pollOther === true;
+    const ballotFlips = updates.pollOpenVote !== undefined && (updates.pollOpenVote === true) !== (existingPost.pollOpenVote === true);
+    if (existingPost.type === 'poll' && updates.pollOptions === undefined && (ballotFlips || wantsOther !== hadOther)) {
+        const stamp = crypto.randomBytes(4).toString('hex');
+        updates.pollOptions = (existingPost.pollOptions ?? []).filter(o => o.other !== true).map((o, idx) => ({ id: `opt_${stamp}_${idx + 1}`, text: o.text }));
+    }
     if (existingPost.type === 'poll' && updates.pollOptions !== undefined) {
         const rawOpts = updates.pollOptions;
         if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
@@ -1521,7 +1541,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             return { id: optId, text };
         });
         fields.push('poll_options = ?');
-        values.push(JSON.stringify(cleanPollOptions));
+        // Other takes a new id with every edit of the answers, as they do (update_post's rule, #2733).
+        values.push(JSON.stringify(wantsOther ? withPollOther(cleanPollOptions) : cleanPollOptions));
     }
 
     // #143 step 4. BOTH columns always move together, through the same normaliser the create path uses —
@@ -2001,12 +2022,28 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
     return updated ? forActor(updated, authorPublicKey) : null;
 }
 
+/** Adds Other to a poll's answers, under an id of its own that no earlier copy of the card holds. Its words are the node's. */
+function withPollOther(options: PollOption[]): PollOption[] {
+    if (options.some(o => o.text.toLowerCase() === 'other')) {
+        throw new Error(word('This poll already offers Other: leave it out of the answers'));
+    }
+    return [...options, { id: `opt_other_${crypto.randomBytes(4).toString('hex')}`, text: 'Other', other: true }];
+}
+
+/** One row of poll_answers: a random id, and nothing that says who or when (schema.sql). */
+function addPollAnswer(postId: string, optionId: string, words: string | null): string {
+    const id = crypto.randomBytes(16).toString('hex');
+    db.prepare('INSERT INTO poll_answers (post_id, id, option_id, words) VALUES (?, ?, ?, ?)').run(postId, id, optionId, words);
+    return id;
+}
+
 export function votePoll(
     broadcast: BroadcastFn,
     postId: string,
     voterPublicKey: string,
     optionId: string,
-    signature?: string
+    signature?: string,
+    otherWords?: unknown
 ): { success: boolean; post: MarketplacePost } {
     assertMemberActive(voterPublicKey);
     const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(voterPublicKey) as any;
@@ -2052,9 +2089,22 @@ export function votePoll(
     }
 
     const options = post.pollOptions || [];
-    const validOption = options.some(opt => opt.id === optionId);
-    if (!validOption) {
+    const chosen = options.find(opt => opt.id === optionId);
+    if (!chosen) {
         throw new Error(word('Invalid poll option'));
+    }
+    const sealed = pollIsSealed(options, post.pollOpenVote);
+    // Typed words go with Other, and Other goes with typed words: an app too old to ask for them is told so, and its vote
+    // stores nothing. Held to the limit as sent, not cut: a member's sentence is theirs to shorten.
+    const typed = cleanPollOtherWords(otherWords);
+    if (chosen.other === true && !typed) {
+        throw new Error(word('To answer Other, type your answer. If there is nowhere to type, update the app.'));
+    }
+    if (chosen.other !== true && otherWords !== undefined && otherWords !== null && otherWords !== '') {
+        throw new Error(word('Only Other takes a typed answer'));
+    }
+    if (typed.length > POLL_OTHER_WORDS_MAX) {
+        throw new Error(tr('A typed answer is at most {n} characters', { n: POLL_OTHER_WORDS_MAX }));
     }
 
     if (signature) {
@@ -2089,19 +2139,41 @@ export function votePoll(
             throw new Error(word('This poll is closed'));
         }
 
+        // A sealed poll (@beanpool/core poll-other): the ballot says only that they answered, with no signature, which could
+        // be tested against each answer, and no answer can be found again to change. What was answered goes where nothing
+        // leads to them: a random id, no voter, no time.
+        if (sealed) {
+            const ballot = db.prepare(`INSERT OR IGNORE INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
+                VALUES (?, ?, ?, '', ?, ?)`).run(postId, voterPublicKey, POLL_BALLOT_SEALED, nowIso, pollVoterNewOrWords(voterPublicKey));
+            if (ballot.changes === 0) {
+                throw new Error(word('You have already answered this poll, and nothing links your answer to you, so it cannot be changed.'));
+            }
+            addPollAnswer(postId, optionId, chosen.other === true ? typed : null);
+            return;
+        }
+
+        // An open vote that offers Other: the vote names its voter anyway, so it can reach its words, and a changed vote
+        // takes them away.
+        const earlier = pollOtherOption(options)
+            ? db.prepare('SELECT other_answer_id FROM poll_votes WHERE post_id = ? AND voter_pubkey = ?').get(postId, voterPublicKey) as { other_answer_id: string | null } | undefined
+            : undefined;
+        if (earlier?.other_answer_id) takeBackPollLine(postId, earlier.other_answer_id);
+        const otherAnswerId = chosen.other === true ? addPollAnswer(postId, optionId, typed) : null;
+
         // Whether the voter is a new or 12-word account now, kept with the vote (engine/probation.ts pollVoterNewOrWords).
         // A changed vote keeps the first one's: nothing the voter does later moves where the poll says its votes came from.
         // Not on an open vote: it names its voters, so it never says where its votes came from, and keeps no kind to say it
         // with (whether a poll is an open vote can't change once a vote is in).
         db.prepare(`
-            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words, other_answer_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
                 option_id = excluded.option_id,
                 signature = excluded.signature,
                 created_at = excluded.created_at,
-                voter_new_or_words = COALESCE(poll_votes.voter_new_or_words, excluded.voter_new_or_words)
-        `).run(postId, voterPublicKey, optionId, signature || '', nowIso, post.pollOpenVote === true ? null : pollVoterNewOrWords(voterPublicKey));
+                voter_new_or_words = COALESCE(poll_votes.voter_new_or_words, excluded.voter_new_or_words),
+                other_answer_id = excluded.other_answer_id
+        `).run(postId, voterPublicKey, optionId, signature || '', nowIso, post.pollOpenVote === true ? null : pollVoterNewOrWords(voterPublicKey), otherAnswerId);
     })();
 
     bumpPostsVersion();

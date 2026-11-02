@@ -194,6 +194,10 @@ export function useRequestPreviews(): RequestPreviews {
 }
 
 interface ListProps {
+    /** What waits on the global community, and where (lib/show-on-global.ts). Their cards are there: this row is the way. */
+    onGlobal?: { count: number; href: string } | null;
+    /** The member has taken the card to global, where what they answer changes the count. */
+    onGoToGlobal?: () => void;
     entries: DmRequestEntry[];
     count: number;
     identity: BeanPoolIdentity;
@@ -218,7 +222,7 @@ interface ListProps {
  * Decline all when more than five wait. Each card's lines are read once per request (by its id and time) while the page is
  * open, three at a time.
  */
-export function MessageRequestsList({ entries, count, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport, onBack }: ListProps) {
+export function MessageRequestsList({ entries, count, onGlobal, onGoToGlobal, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport, onBack }: ListProps) {
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
     const { previews, setPreviews, asked } = store;
     const keyOf = (e: DmRequestEntry) => `${e.id}@${e.request.at}`;
@@ -275,7 +279,17 @@ export function MessageRequestsList({ entries, count, identity, store, avatar, j
             }}>
                 <span aria-hidden="true">‹ </span>{t('Back to chats')}
             </button>
-            {count === 0 ? (
+            {onGlobal && (
+                <a data-testid="message-requests-on-global" href={onGlobal.href} target="_blank" rel="noopener noreferrer" onClick={onGoToGlobal} style={{
+                    display: 'block', minHeight: '44px', padding: '1rem', marginBottom: '0.75rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
+                    borderRadius: '1rem', color: 'var(--text-primary)', fontWeight: 600, textDecoration: 'none', overflowWrap: 'anywhere',
+                }}>
+                    <span style={{ display: 'block' }}>{tn(onGlobal.count, '{n} person wants to message you', '{n} people want to message you')}</span>
+                    <span style={{ display: 'block', fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{t('on the global community')}</span>
+                    <span style={{ display: 'block', fontSize: '0.9rem', textDecoration: 'underline' }}>{t('Open their requests there')}</span>
+                </a>
+            )}
+            {count === 0 && onGlobal ? null : count === 0 ? (
                 <p style={{
                     textAlign: 'center', padding: '2rem 1.25rem', margin: 0, background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
                     borderRadius: '1rem', color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.45,

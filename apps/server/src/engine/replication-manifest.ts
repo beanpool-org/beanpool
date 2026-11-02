@@ -217,7 +217,7 @@ export const TABLES: Record<string, TableEntry> = {
     // postFreeTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at pinned_until pinned_at created_via tags free_tags shown_from_host shown_from_post_id shown_price'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at pinned_until pinned_at created_via tags free_tags shown_from_host shown_from_post_id shown_price shown_takes_questions'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -324,7 +324,14 @@ export const TABLES: Record<string, TableEntry> = {
     },
     poll_votes: {
         kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
-        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words'),
+        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words other_answer_id'),
+    },
+    // A poll's answers that name nobody, in each poll's row (`pollAnswers`): they keep no time of their own, on purpose
+    // (schema.sql), and every writer moves the poll's updated_at (engine/posts.ts votePoll, engine/poll-other.ts); the
+    // import replaces the poll's rows with the ones the copy names (engine/sync.ts replacePollAnswers).
+    poll_answers: {
+        kind: 'replicated', payload: 'posts', watermark: 'updated_at', inRowOf: { table: 'posts', field: 'pollAnswers' },
+        columns: cols('post_id id option_id words words_removed'), key: ['post_id', 'id'],
     },
     event_rsvps: {
         kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',

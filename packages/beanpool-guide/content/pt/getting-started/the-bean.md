@@ -19,7 +19,7 @@ No aplicativo web, fica no mesmo lugar: **Configurações**, depois **Ajuda e fu
 
 - **Sua comunidade:** o nome dela (o endereço dela no aplicativo web) e se o servidor dela pode ser alcançado agora. No celular, abaixo disso, **SUAS COMUNIDADES**: toque em uma para alternar para ela, ou toque em **Adicionar uma comunidade**. A **Comunidade global** é sempre uma das linhas, com uma segunda linha que diz se você é membro, se pode entrar nela ou o motivo pelo qual ela não pode ser usada agora. Consulte "Mais de uma comunidade".
 - **Guias:** como o BeanPool funciona, as regras e como as decisões são tomadas, além de perguntas frequentes.
-- **Como usar o app:** uma página curta para cada tarefa, agrupadas da mesma forma que o aplicativo: Primeiros passos, Mercado, Mapa, Conversas, Pulso, Bens comuns, Registro e Configurações e segurança.
+- **Como usar o app:** uma página curta para cada tarefa, agrupadas da mesma forma que o aplicativo: Primeiros passos, Mercado, Mapa, Bate-papo, Pulso, Bens comuns, Registro e Configurações e segurança.
 - **O projeto BeanPool:** o que há de novo nesta versão e um link para o site beanpool.org (no celular, com um botão **Compartilhar** para enviar a um amigo).
 
 ## Pesquisa

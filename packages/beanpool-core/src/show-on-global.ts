@@ -7,7 +7,8 @@
  *
  * - **What goes.** The times, the rounded pin, the words, the photos, and the community's host and the event's id. Never
  *   the exact pin, the typed place or the note ({@link CopyKeeper.copyFields}). Nothing of the member's name: a copy shows no
- *   author. An Offer or a Need sends its price as words (`shownPrice`), never as a price: nothing of a deal goes.
+ *   author, unless its member takes questions (below), and then global says it, not this file. An Offer or a Need sends its
+ *   price as words (`shownPrice`), never as a price: nothing of a deal goes.
  * - **Who says where it is from.** Global, from its own directory (apps/server engine/event-copy.ts). The host goes for it
  *   to look up; a community that isn't listed gets no line and no door, and the member is told once.
  * - **Staying in step.** An edit, a cancel and a cancelled date repeat at the moment, and {@link CopyKeeper.tendCopies} catches
@@ -26,6 +27,13 @@
  *   Stop or a moderator's takedown it can't see.
  * - **Off the board, nothing goes.** A listing is only ever sent on its community's own word ({@link CopyKeeper.showOnGlobal}):
  *   the device's own row can be behind, and has nothing of a hide by reports.
+ * - **Its door is global's word, and a tap's (slice GD).** "Take questions about this on the global community" goes by a request of
+ *   its own ({@link CopyKeeper.takeQuestions}), never with an edit: a device that fell behind must not open a door the member has
+ *   shut from the other one. A tap that didn't land stays owed, and `tendCopies` sends it, so an Off holds without an answer.
+ *   An Off needs nothing but global: a tend sends every one before it asks any community, and it goes after a copy that is up
+ *   whether or not this device heard it land. It is a name left up, so it doesn't wait for a tend's hour: each app tries it on
+ *   its own, with {@link CopyKeeper.tendOwedOffs}, while global hasn't answered. A rest reads the door from global first, and
+ *   the copy goes back up as global last had it: off, if it can't say.
  * - **Safe to run again.** A pair and its copy's id are written before anything is sent, and a first send reads first, so a
  *   lost answer posts nothing twice. Refused for now (a day's limit, no answer), it stays waiting. Refused outright, the
  *   pair goes only once global says the copy isn't up (`followCopy`): it is the device's only way to that copy.
@@ -45,6 +53,7 @@ import { t } from './words.js';
 
 const POSTS_PATH = '/api/marketplace/posts';
 const PREFERENCES_PATH = '/api/members/preferences';
+const QUESTIONS_PATH = `${POSTS_PATH}/takes-questions`;
 /** How long one request gets, its answer's body included. React Native's fetch never gives up by itself. */
 export const COPY_TIMEOUT_MS = 60_000;
 /** A copy unchanged this long is sent again, so global's retention (90 days without a change) only takes an untended one. */
@@ -57,6 +66,12 @@ export const COPY_IDS_LOOKED_AT = 16;
  * nothing for one, and the row stays for good, so its id is never free again.
  */
 export const POST_ID_TAKEN_CODE = 'post_id_taken';
+/** After an Off global didn't answer, the next try waits this long, and twice that each time after. */
+export const OFF_RETRY_FIRST_MS = 30_000;
+/** The longest of those waits: inside the phone's 5-minute timer, so each of its ticks tries. */
+export const OFF_RETRY_MOST_MS = 4 * 60_000;
+/** The longest a device holds an Off for a `Retry-After`: a tend goes by the hour whatever global said. */
+const OFF_WAIT_ASKED_MOST_MS = 60 * 60 * 1000;
 /** A listing carries at most this many photos (the node keeps five). */
 export const BRING_MOST_PHOTOS = 5;
 /** The node reads at most 2 MB of JSON (https-server.ts MAX_JSON_BODY_BYTES). Edits can build a listing past one body. */
@@ -121,6 +136,10 @@ export interface CopyPair {
     resting?: boolean;
     /** The ids its copy had before a rest: a page left open on one, or a row still cached, still reaches this pair. */
     earlierIds?: string[];
+    /** The member takes questions about it, as this device last asked or heard. Global holds the last word. */
+    questions?: boolean;
+    /** `questions` hasn't reached global yet: `tendCopies` sends it. */
+    questionsOwed?: boolean;
 }
 
 export type CopyResult = 'shown' | 'shown-no-name' | 'later' | { refused: string };
@@ -165,10 +184,12 @@ export interface CopyKeeper<I extends CopyIdentity> {
     pairOf(homeId: string, publicKey: string): Promise<CopyPair | null>;
     mayShowOnGlobal(home: Pick<HomeEvent, 'eventOnline' | 'audienceScope' | 'authorPublicKey'> & Partial<Pick<HomeEvent, 'type' | 'lat' | 'lng' | 'originNode'>>, publicKey: string): boolean;
     copyFields(home: HomeEvent, publicKey: string): Record<string, unknown>;
-    showOnGlobal(home: HomeEvent, homeUrl: string, identity: I, deps?: CopyDeps<I>): Promise<CopyResult>;
+    showOnGlobal(home: HomeEvent, homeUrl: string, identity: I, deps?: CopyDeps<I>, takesQuestions?: boolean): Promise<CopyResult>;
+    takeQuestions(homeId: string, on: boolean, identity: I, deps?: CopyDeps<I>): Promise<CopyResult>;
     repeatOnCopy(home: HomeEvent, identity: I, deps?: CopyDeps<I>): Promise<void>;
     stopShowing(id: string, identity: I, deps?: CopyDeps<I>): Promise<boolean>;
     tendCopies(identity: I, deps?: CopyDeps<I>, now?: number): Promise<void>;
+    tendOwedOffs(identity: I, deps?: CopyDeps<I>, now?: number): Promise<number | null>;
 }
 
 /** Online, from a node row (true) or a phone's cached one (1). */
@@ -237,6 +258,12 @@ export async function photosOf(post: { photos?: string[] }, from: string, deps: 
 
 const isListing = (home: Pick<HomeEvent, 'type'>): boolean => home.type === 'offer' || home.type === 'need';
 
+/**
+ * A door the member shut that global hasn't heard of yet, and one a request can shut: a pair on its way out or at rest has no door
+ * up, and one coming back carries what the tick says.
+ */
+export const owesOff = (p: CopyPair): boolean => !!p.questionsOwed && !p.questions && !p.leaving && !p.resting;
+
 /** Shown, waiting to be, or resting: it stays theirs to stop. */
 const stillTheirs = (p: CopyPair) => !p.leaving || !!p.resting;
 
@@ -273,6 +300,12 @@ async function answerOf(res: Response): Promise<{ done: any } | 'later' | { refu
     return typeof answer?.error === 'string' && answer.error ? { refused: answer.error, code: answer.code } : 'later';
 }
 
+/** The wait an answer asks of a device, in ms. A 429 with no `Retry-After` to read is told the longest of an Off's waits. */
+function waitAskedOf(res: Response): number {
+    const seconds = Number(res.headers.get('Retry-After'));
+    return seconds > 0 ? Math.min(seconds * 1000, OFF_WAIT_ASKED_MOST_MS) : res.status === 429 ? OFF_RETRY_MOST_MS : 0;
+}
+
 /** Nothing at home has stopped it. Whether its date has passed is another question (`rollsOn`). */
 const isOn = (home: HomeEvent) => home.status === 'active' && home.active !== false && home.eventState !== 'cancelled' && !home.hiddenByReportsAt;
 
@@ -296,6 +329,9 @@ function rollsOn(home: HomeEvent): boolean {
 /** What a Stop showing owes the member when `stopShowing` answers false: the copy may still be up, and the row can't say so. */
 export const stopLaterLine = () => t('It will come down from the global community as soon as it can.');
 
+/** What an Off owes the member when global didn't answer: it is still owed, and the tick says what they asked for. */
+export const questionsLaterLine = () => t('It will stop taking questions as soon as the global community answers.');
+
 /** The one line a run owes the member, or none. */
 export function copyResultLine(result: CopyResult): string | null {
     if (result === 'shown') return null;
@@ -309,6 +345,12 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     const { store, deps: liveDeps } = setup;
 
     const readPairs = () => store.read();
+
+    /** Tries of an Off global hasn't answered, and when the next is due. Infinity: it answered, and what is left waits for a tend. */
+    let offTries = 0;
+    let offDue = 0;
+    /** The wait global asked of an Off it hasn't answered: 0 once it has answered anything. */
+    let offWaitAsked = 0;
 
     /** The pair as it is stored now: a tap may have changed it, or taken it away, since it was read. */
     async function storedPair(copyId: string): Promise<CopyPair | undefined> {
@@ -428,7 +470,13 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      */
     async function restMustWait(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean> {
         const rows = await readJson(deps.global, `${POSTS_PATH}?id=${encodeURIComponent(pair.copyId)}`, identity, deps).catch(() => null);
-        return !Array.isArray(rows) || rows.some((row) => !!row?.hiddenByReportsAt && row?.status !== 'cancelled');
+        if (!Array.isArray(rows)) return true;
+        // What comes back after the rest is what global last had: the member's other device may have shut the door.
+        if (rows.length > 0 && !pair.questionsOwed) {
+            const open = rows.some((row) => row?.takesQuestions === true);
+            await store.change((pairs) => pairs.map((p) => (p.copyId === pair.copyId && !p.questionsOwed ? { ...p, questions: open } : p)));
+        }
+        return rows.some((row) => !!row?.hiddenByReportsAt && row?.status !== 'cancelled');
     }
 
     /**
@@ -450,10 +498,13 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      * A send landed, and the pair takes it in. If a Stop showing came while it was on its way the pair stays gone, and what just
      * landed comes down, asked again in case that Stop's own remove got there first. A pair going to rest is left to its rest.
      */
-    async function recordSend(sent: CopyPair, identity: I, deps: CopyDeps<I>): Promise<void> {
+    async function recordSend(sent: CopyPair, identity: I, deps: CopyDeps<I>, landedDoor?: boolean): Promise<void> {
         const stored = await storedPair(sent.copyId);
-        if (stored && !stored.leaving) await savePair(sent);
-        else if (!stored?.resting) await takeDown(sent, identity, deps);
+        if (stored && !stored.leaving) {
+            // A tap on the door can land while this was on its way: it stands, and what global took says what is still owed.
+            const owed = landedDoor === undefined ? stored.questionsOwed : !!stored.questions !== landedDoor;
+            await savePair({ ...sent, questions: stored.questions, questionsOwed: owed });
+        } else if (!stored?.resting) await takeDown(sent, identity, deps);
     }
 
     /**
@@ -464,7 +515,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     async function createCopy(first: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>, stepOn: boolean): Promise<CopyResult> {
         const { photos, later } = await photosOf({ photos: (home.photos ?? []).slice(0, BRING_MOST_PHOTOS) }, first.home, deps);
         if (photos.length === 0 && later) return 'later';
-        const fields = { ...copyFields(home, identity.publicKey), photos, shownFrom: { host: await deps.hostOf(first.home), postId: first.homeId } };
+        const door = first.questions ? { takesQuestions: true } : {};
+        const fields = { ...copyFields(home, identity.publicKey), photos, shownFrom: { host: await deps.hostOf(first.home), postId: first.homeId, ...door } };
         let pair = first;
         for (let tries = 1; ; tries++) {
             const body = { id: pair.copyId, ...fields };
@@ -477,7 +529,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                     await dropPair(pair);
                     return { refused: t("The global community can't show this yet.") };
                 }
-                await recordSend({ ...pair, sent: JSON.stringify(copyFields(home, identity.publicKey)), sentAt: Date.now(), photo: firstPhoto(home) }, identity, deps);
+                await recordSend({ ...pair, sent: JSON.stringify(copyFields(home, identity.publicKey)), sentAt: Date.now(), photo: firstPhoto(home) }, identity, deps, answer.done.post?.takesQuestions === true);
                 return answer.done.post?.shownFrom ? 'shown' : 'shown-no-name';
             }
             // Up all the same: this was a second send of the id (an edit made during the upload, or the member's other device),
@@ -539,6 +591,80 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         }
     }
 
+    /** What the pair owes global of its door. Refused, global's word stands: an Off that finds no copy has nothing to shut. */
+    async function sendQuestions(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<CopyResult> {
+        const on = !!pair.questions;
+        const answer = await withTimeout(async (signal) => {
+            const res = await deps.post(deps.global, QUESTIONS_PATH, { id: pair.copyId, on }, identity, signal);
+            const said = await answerOf(res);
+            // An answer of any kind ends a wait: global is back, so one from before can't be charged to a later Off, whichever path
+            // took it. A length, not a time: only a tend's own clock says when it's up.
+            if (said !== 'later') offWaitAsked = 0;
+            else if (!on) offWaitAsked = Math.max(offWaitAsked, waitAskedOf(res));
+            return said;
+        });
+        if (answer === 'later') return 'later';
+        if ('refused' in answer) {
+            // The member's other device may have moved the copy on: the door goes with the listing, not one id.
+            const followed = await followCopy(pair, identity, deps);
+            if (followed === 'later') return 'later';
+            if (followed && followed.copyId !== pair.copyId) return sendQuestions(followed, identity, deps);
+            // Up, and global wouldn't shut it: the door is still open, so the Off stays owed and the member hears why.
+            if (followed && !on) return answer;
+            await store.change((pairs) => pairs.map((p) => (p.copyId === pair.copyId ? { ...p, questions: false, questionsOwed: false } : p)));
+            return on ? answer : 'shown';
+        }
+        await store.change((pairs) => pairs.map((p) => (p.copyId === pair.copyId && !!p.questions === on ? { ...p, questionsOwed: false } : p)));
+        return 'shown';
+    }
+
+    /**
+     * Sends what a pair owes, if it stays up. A pair still to land carries it with the create, and a rest with its return. An Off
+     * can't wait for that: a first send whose answer was lost is up, door and all, so global is asked, and only global.
+     */
+    async function settleQuestions(copyId: string, identity: I, deps: CopyDeps<I>): Promise<CopyResult | null> {
+        const pair = await storedPair(copyId);
+        if (!pair?.questionsOwed || pair.resting || pair.leaving) return null;
+        if (pair.sent) return sendQuestions(pair, identity, deps);
+        if (pair.questions) return null;
+        const place = await placeOf(pair, identity, deps);
+        if (place === 'later') return 'later';
+        const placed = place.up ? await movedTo(pair, place) : null;
+        return placed ? sendQuestions(placed, identity, deps) : null;
+    }
+
+    /** The tick beside "Shown on the global community". `later`: global didn't answer, and it is tried again. */
+    async function takeQuestions(homeId: string, on: boolean, identity: I, deps: CopyDeps<I> = liveDeps): Promise<CopyResult> {
+        const pair = await pairOf(homeId, identity.publicKey);
+        if (!pair) return { refused: t("The global community can't show this yet.") };
+        await savePair({ ...pair, questions: on, questionsOwed: true });
+        const result = (await settleQuestions(pair.copyId, identity, deps).catch(() => 'later' as const)) ?? 'shown';
+        if (!on && result === 'later') offUnanswered(Date.now());
+        return result;
+    }
+
+    /** Global didn't answer an Off: when the next try is due, by how many there have been, or by what global asked for. */
+    function offUnanswered(now: number): void {
+        offTries++;
+        offDue = now + Math.max(Math.min(OFF_RETRY_FIRST_MS * 2 ** (offTries - 1), OFF_RETRY_MOST_MS), offWaitAsked);
+        offWaitAsked = 0;
+    }
+
+    /** Sends every Off this key owes. An answer ends the tries, whatever it was: a refusal stays owed, for the next tend to ask. */
+    async function sendOffs(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
+        let later = false;
+        let left = false;
+        for (const pair of await readPairs()) {
+            if (pair.publicKey !== identity.publicKey || !owesOff(pair)) continue;
+            const result = await settleQuestions(pair.copyId, identity, deps).catch(() => 'later' as const);
+            later = later || result === 'later';
+            left = left || result !== 'shown';
+        }
+        if (later) return offUnanswered(now);
+        offTries = 0;
+        offDue = left ? Infinity : 0;
+    }
+
     /** The dates cancelled at home, cancelled on the copy; a date brought back, brought back. */
     async function repeatDates(pair: CopyPair, home: HomeEvent, identity: I, deps: CopyDeps<I>): Promise<void> {
         const want = home.eventRepeatSkips ?? [];
@@ -562,14 +688,17 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      * a hide by reports. Off the board for now, nothing is sent and the tick rests until it is back; gone, it is refused. Home
      * not saying, it waits: `tendCopies` asks again before it sends.
      */
-    async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: I, deps: CopyDeps<I> = liveDeps): Promise<CopyResult> {
+    async function showOnGlobal(home: HomeEvent, homeUrl: string, identity: I, deps: CopyDeps<I> = liveDeps, takesQuestions = false): Promise<CopyResult> {
         const refused = { refused: t("The global community can't show this yet.") };
         if (!mayShowOnGlobal(home, identity.publicKey)) return refused;
         const kept = await pairOf(home.id, identity.publicKey);
         if (kept?.resting) return 'later';
-        const pair: CopyPair = kept ?? {
-            publicKey: identity.publicKey, home: setup.plainOrigin(homeUrl) ?? homeUrl, homeId: home.id,
-            copyId: await setup.copyId(home.id, 0, identity), generation: 0, sent: '', sentAt: 0, photo: '', skips: [],
+        const pair: CopyPair = {
+            ...(kept ?? {
+                publicKey: identity.publicKey, home: setup.plainOrigin(homeUrl) ?? homeUrl, homeId: home.id,
+                copyId: await setup.copyId(home.id, 0, identity), generation: 0, sent: '', sentAt: 0, photo: '', skips: [],
+            }),
+            ...(takesQuestions ? { questions: true, questionsOwed: true } : {}),
         };
         if (isListing(home)) {
             const atHome = await readHome(pair, identity, deps).catch(() => 'later' as const);
@@ -582,12 +711,16 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                 // A pair held may have a copy up to bring down, unless reports hold it. A new one has nothing up, which is what
                 // `resting` without `leaving` says.
                 if (kept && !kept.resting && await restMustWait(kept, identity, deps)) return 'later';
-                await (kept ? restCopy(kept, identity, deps) : savePair({ ...pair, resting: true }));
+                await (kept ? restCopy((await storedPair(kept.copyId)) ?? kept, identity, deps) : savePair({ ...pair, resting: true }));
                 return 'later';
             }
         }
         await savePair(pair);
-        return sendCopy(pair, home, identity, deps);
+        const result = await sendCopy(pair, home, identity, deps);
+        // A first send that found the copy up made an edit of it, and an edit says nothing of the door.
+        const now = await pairOf(home.id, identity.publicKey);
+        if (now) await settleQuestions(now.copyId, identity, deps).catch(() => 'later' as const);
+        return result;
     }
 
     /**
@@ -675,9 +808,10 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
             ...pair, leaving: false, resting: true, copyId: await setup.copyId(pair.homeId, generation, identity), generation,
             sent: '', sentAt: 0, photo: '', skips: [], earlierIds: [...(pair.earlierIds ?? []), pair.copyId],
         };
-        await store.change((pairs) => (pairs.find((p) => p.copyId === pair.copyId)?.resting
-            ? [...pairs.filter((p) => p.copyId !== pair.copyId), waiting]
-            : pairs));
+        await store.change((pairs) => {
+            const stored = pairs.find((p) => p.copyId === pair.copyId);
+            return stored?.resting ? [...pairs.filter((p) => p.copyId !== pair.copyId), { ...waiting, questions: stored.questions, questionsOwed: stored.questionsOwed }] : pairs;
+        });
     }
 
     /**
@@ -720,14 +854,34 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      * one long unchanged is sent again. A community that gives no answer changes nothing.
      */
     function tendCopies(identity: I, deps: CopyDeps<I> = liveDeps, now: number = Date.now()): Promise<void> {
-        const run = lastTend.then(() => tendPairs(identity, deps, now));
+        return afterLastTend(() => tendPairs(identity, deps, now));
+    }
+
+    function afterLastTend<T>(work: () => Promise<T>): Promise<T> {
+        const run = lastTend.then(work);
         lastTend = run.catch(() => {});
         return run;
     }
 
+    /**
+     * The Offs this key owes and nothing else, for an app to call between tends: a tend's hour is too long to leave a name up. It
+     * reads no community and tends no other pair, and asks nobody where nothing is owed or the wait isn't up. Gives the ms until
+     * another call is worth making, or null where none is, for an app with no timer of its own to go by.
+     */
+    function tendOwedOffs(identity: I, deps: CopyDeps<I> = liveDeps, now: number = Date.now()): Promise<number | null> {
+        return afterLastTend(async () => {
+            if (now >= offDue) await sendOffs(identity, deps, now);
+            return offTries > 0 ? offDue - now : null;
+        });
+    }
+
     async function tendPairs(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
         const holidays = new Map<string, Promise<boolean | 'later'>>();
-        for (const { copyId } of (await readPairs()).filter((p) => p.publicKey === identity.publicKey)) {
+        const mine = async () => (await readPairs()).filter((p) => p.publicKey === identity.publicKey);
+        // An Off needs nothing but global, so all of them go before any community is asked. In the loop below, a community that
+        // hangs would hold up the next pair's by a timeout for each pair before it.
+        await sendOffs(identity, deps, now);
+        for (const { copyId } of await mine()) {
             try {
                 let pair = await storedPair(copyId);
                 if (!pair) continue;
@@ -775,10 +929,13 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                     await sendCopy({ ...still, resting: false }, home, identity, deps, !backFromRest(still));
                 }
                 const current = await storedPair(copyId);
-                if (current?.sent) await repeatDates(current, home, identity, deps);
+                if (current?.sent) {
+                    await repeatDates(current, home, identity, deps);
+                    await settleQuestions(copyId, identity, deps);
+                }
             } catch { /* the next time round */ }
         }
     }
 
-    return { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, repeatOnCopy, stopShowing, tendCopies };
+    return { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions, repeatOnCopy, stopShowing, tendCopies, tendOwedOffs };
 }

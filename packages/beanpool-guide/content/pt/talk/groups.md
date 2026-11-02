@@ -15,7 +15,7 @@ As pessoas que cuidam de um grupo de bate-papo são seus **coordenadores**; um d
 
 ## Seus grupos
 
-Toque em **Conversas** e depois em **Grupos**. Todos os grupos dos quais você participa estão listados lá, com a mensagem mais recente primeiro, acompanhados dos projetos que você lidera ou nos quais trabalha (🎯), dos empreendimentos de que é custódio (🥖) e dos eventos que organiza ou aos quais vai comparecer (📅). A conversa de um empreendimento é a sua discussão pública: qualquer membro da sua comunidade pode lê-la. Veja "Mensagens". Cada item exibe a mensagem mais recente e quantas você ainda não leu. Em uma conversa criptografada, a linha exibe quem escreveu por último e **🔒 Mensagem**, não as palavras.
+Toque em **Bate-papo** e depois em **Grupos**. Todos os grupos dos quais você participa estão listados lá, com a mensagem mais recente primeiro, acompanhados dos projetos que você lidera ou nos quais trabalha (🎯), dos empreendimentos de que é custódio (🥖) e dos eventos que organiza ou aos quais vai comparecer (📅). A conversa de um empreendimento é a sua discussão pública: qualquer membro da sua comunidade pode lê-la. Veja "Mensagens". Cada item exibe a mensagem mais recente e quantas você ainda não leu. Em uma conversa criptografada, a linha exibe quem escreveu por último e **🔒 Mensagem**, não as palavras.
 
 - O número em **Grupos** no topo soma suas mensagens não lidas, exceto nas conversas que você silenciou.
 - Toque em um grupo para abrir a conversa dele. Isso a marca como lida.
@@ -25,7 +25,7 @@ No celular, a mesma lista fica em **Bens comuns**, sob **Grupos**, como **Seus g
 
 ## Criando um grupo
 
-- No celular, em **Conversas**, sob **Grupos**, toque em **Novo grupo**. Ou em **Bens comuns**, sob **Grupos**, toque no botão redondo **+**. Ambos abrem o mesmo formulário **Criar grupo**. (No chip **Projetos** ou **Empreendimentos**, o **+** inicia um projeto ou empreendimento em vez disso.)
+- No celular, em **Bate-papo**, sob **Grupos**, toque em **Novo grupo**. Ou em **Bens comuns**, sob **Grupos**, toque no botão redondo **+**. Ambos abrem o mesmo formulário **Criar grupo**. (No chip **Projetos** ou **Empreendimentos**, o **+** inicia um projeto ou empreendimento em vez disso.)
 - No app web, abra **Bens comuns**, depois **Grupos** e toque em **+ Criar grupo**. Você permanece em **Bens comuns** depois. Para convidar pessoas, abra o grupo e toque em **Convidar pessoas**. Você também pode abrir **Bate-papo**, tocar em **Grupos** e depois em **Novo grupo**: isso leva você diretamente para a conversa do novo grupo.
 - Dê um **Nome do grupo**, de até 60 caracteres, e, se desejar, um **Objetivo / Descrição**, de até 300: para que serve o grupo e a quem se destina.
 - Escolha uma **Categoria**: **Círculo social**, **Geral**, **Grupo de trabalho** ou **Guilda**. No celular, **Círculo social** já vem selecionado para você. No app web, **Grupo de trabalho** é o selecionado.
@@ -43,7 +43,7 @@ Você pode convidar pessoas no celular e no app web. No celular, a conversa de u
 - Toque em **Convidar pessoas**, marque as pessoas que deseja e toque no botão na parte inferior (por exemplo, **Convidar 2 pessoas**).
 - Ou toque em **Agora não** para pular essa etapa.
 
-Mais tarde, um coordenador pode convidar pessoas a partir do menu **⋮** da conversa, em **Convidar pessoas**. No app web, o coordenador abre o grupo e toca em **Convidar pessoas**, marca as pessoas e toca no botão na parte inferior da mesma forma. Cada pessoa convidada vê o grupo em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular (no celular, em uma comunidade sem a aba **Bens comuns**, em **Encontrar grupos** em **Conversas**). O app web ainda não marca convites: lá, a pessoa abre o grupo e toca em **Aceitar convite**. Quando a pessoa entra, a conversa avisa.
+Mais tarde, um coordenador pode convidar pessoas a partir do menu **⋮** da conversa, em **Convidar pessoas**. No app web, o coordenador abre o grupo e toca em **Convidar pessoas**, marca as pessoas e toca no botão na parte inferior da mesma forma. Cada pessoa convidada vê o grupo em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular (no celular, em uma comunidade sem a aba **Bens comuns**, em **Encontrar grupos** em **Bate-papo**). O app web ainda não marca convites: lá, a pessoa abre o grupo e toca em **Aceitar convite**. Quando a pessoa entra, a conversa avisa.
 
 ## A conversa do grupo
 
@@ -108,7 +108,7 @@ No celular, um grupo em que você pediu para entrar não aparece em nenhuma das 
 
 Um grupo **Apenas por convite** fica oculto para todos que não estão nele nem foram convidados para ele.
 
-No celular, uma comunidade local sem feijões não tem a aba **Bens comuns**. Lá, toque em **Conversas**, depois em **Grupos** e em **Encontrar grupos**: isso abre a mesma lista. Antes de você estar em qualquer grupo, o link exibido é **Encontrar um grupo para entrar**. A comunidade global possui a aba **Bens comuns**: os grupos dela ficam lá, abaixo de um exemplo de comunidade local (veja "Feijões e a comunidade global").
+No celular, uma comunidade local sem feijões não tem a aba **Bens comuns**. Lá, toque em **Bate-papo**, depois em **Grupos** e em **Encontrar grupos**: isso abre a mesma lista. Antes de você estar em qualquer grupo, o link exibido é **Encontrar um grupo para entrar**. A comunidade global possui a aba **Bens comuns**: os grupos dela ficam lá, abaixo de um exemplo de comunidade local (veja "Feijões e a comunidade global").
 
 Se um coordenador removeu você de um grupo, você não pode entrar nele novamente por conta própria.
 
@@ -116,7 +116,7 @@ Enquanto sua conta estiver suspensa, você não pode criar um grupo, entrar em u
 
 ## Entrando por convite
 
-Um grupo para o qual você foi convidado aparece em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular. No celular, em uma comunidade sem a aba **Bens comuns**, ele fica sob **Encontrar grupos** em **Conversas**. Toque nele para ver o convite: quem convidou você, o que é o grupo, quem participa (para um grupo apenas por convite, quantas pessoas) e quem pode ler a conversa dele. No celular:
+Um grupo para o qual você foi convidado aparece em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular. No celular, em uma comunidade sem a aba **Bens comuns**, ele fica sob **Encontrar grupos** em **Bate-papo**. Toque nele para ver o convite: quem convidou você, o que é o grupo, quem participa (para um grupo apenas por convite, quantas pessoas) e quem pode ler a conversa dele. No celular:
 
 - Toque em **Entrar no grupo**. Você é direcionado para a conversa dele.
 - Toque em **Agora não** para decidir mais tarde. O convite permanece.

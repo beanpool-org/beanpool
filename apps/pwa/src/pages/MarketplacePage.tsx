@@ -1504,7 +1504,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 distanceKm={distanceOf(selectedPost)}
                 onBack={() => setSelectedPost(null)}
                 onJoin={() => undefined}
-                footer={<ListingCopyFooter post={selectedPost} copy={listingCopy} reader={identity?.publicKey} />}
+                footer={<ListingCopyFooter post={selectedPost} copy={listingCopy} reader={identity?.publicKey} onOpenChat={(id) => onNavigate?.('messages', id)} />}
             />
         );
     }
@@ -2910,8 +2910,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 {[1, 2, 3, 4, 5].map(star => (
                                                     <button
                                                         key={star}
+                                                        type="button"
                                                         onClick={() => setMyRating(star)}
-                                                        className={`text-4xl leading-none transition-transform focus:outline-none ${
+                                                        aria-label={tn(star, 'Rate {n} star', 'Rate {n} stars')}
+                                                        className={`text-4xl leading-none transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg ${
                                                             star <= myRating ? 'text-amber-400 scale-110 drop-shadow-sm' : 'text-nature-300 scale-100'
                                                         }`}
                                                     >
@@ -3951,9 +3953,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     if (post.type === 'poll') {
                                         return (
                                             // A poll is the tallest thing in the grid: four answers, the open-ballot
-                                            // note and the turnout row. One column of a 3+ column grid is too narrow
-                                            // for its answers ("It's Am…"), so from `md` up it takes two.
-                                            <div key={post.id} className="h-full md:col-span-2">
+                                            // note and the turnout row. One column of the grid is too narrow for its
+                                            // answers ("It's Am…", and at 320 px with 1.3x text "Other"), so it takes two
+                                            // at every width: the whole row on a phone.
+                                            <div key={post.id} className="h-full col-span-2">
                                                 <PollCard
                                                     post={post}
                                                     identity={identity}

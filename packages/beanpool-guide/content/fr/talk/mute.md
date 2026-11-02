@@ -22,7 +22,7 @@ La mise en sourdine est disponible uniquement dans l'application pour téléphon
 - Elle arrête les alertes de cette discussion. Dans la discussion d'un groupe, une personne qui vous @mentionne vous joint toujours. Voir « Mentions (@nom) ».
 - La discussion d'une entreprise n'envoie aucune alerte, il n'y en a donc aucune à arrêter. La mettre en sourdine la maintient à l'écart des compteurs ci-dessous.
 - La discussion affiche toujours les nouveaux messages.
-- Dans **Échanges**, sous **Groupes**, une discussion en sourdine affiche une cloche barrée. Son compteur de messages non lus est gris et n'est pas ajouté au nombre affiché sur **Groupes**.
+- Dans **Chat**, sous **Groupes**, une discussion en sourdine affiche une cloche barrée. Son compteur de messages non lus est gris et n'est pas ajouté au nombre affiché sur **Groupes**.
 - Dans la discussion d'un groupe ou d'une entreprise, la barre supérieure n'en fait pas mention non plus. Une discussion en sourdine avec une seule personne y est toujours comptabilisée.
 - La mise en sourdine persiste lorsque vous quittez la discussion. Quand vous ouvrez à nouveau la discussion d'un groupe ou d'une entreprise, le haut indique **en sourdine**.
 

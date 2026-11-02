@@ -9,7 +9,7 @@
  * A phone on the same account keeps its own pairs and the two find one copy: core's header says what happens.
  */
 import {
-    audienceOf, copyResultLine, fetchedPhotoOf, makeCopyKeeper, type CopyDeps, type CopyPair, type CopyResult, type FetchedPhoto, type HomeEvent,
+    audienceOf, copyResultLine, fetchedPhotoOf, makeCopyKeeper, owesOff, type CopyDeps, type CopyPair, type CopyResult, type FetchedPhoto, type HomeEvent,
 } from '@beanpool/core';
 import { copyIdFor, getNodeApiUrl, signedCopyFetch } from './api';
 import { copyPairs } from './copy-pairs';
@@ -23,12 +23,19 @@ export { copyResultLine, stopLaterLine } from '@beanpool/core';
 /** What the global community last said of a key: the phone's global-entry words. */
 export type GlobalStanding = 'member' | 'stranger' | 'unknown';
 
+/** Message requests waiting on global, and where they are. */
+export interface GlobalRequests {
+    count: number;
+    href: string;
+}
+
 const TEND_EVERY_MS = 60 * 60 * 1000;
 const FETCH_PHOTO_TIMEOUT_MS = 20_000;
 const ASK_TIMEOUT_MS = 12_000;
 const STANDING_TTL_MS = 24 * 60 * 60 * 1000;
 const STANDING_KEY = 'beanpool_global_standing';
 const TENDED_KEY = 'beanpool_copies_tended';
+const QUESTIONS_KEY = 'beanpool_questions_opened';
 
 const homeAddress = () => getNodeApiUrl() || window.location.origin;
 /** This community's host, as a community's address is compared: a port is no part of it. */
@@ -84,7 +91,8 @@ const keeper = makeCopyKeeper<BeanPoolIdentity>({
     store: copyPairs,
     // Each call below hands in the global this community names.
     deps: depsFor(''),
-    copyId: copyIdFor,
+    // Read at the call, never as this file loads: Chat loads it for what waits on global, and only a tick needs a copy's id.
+    copyId: (homeId, generation, identity) => copyIdFor(homeId, generation, identity),
     plainOrigin: (url) => { try { return new URL(url).origin; } catch { return null; } },
     isEventEnded: (home: HomeEvent) => {
         const end = eventEndMs({ eventStartAt: home.eventStartAt, eventEndAt: home.eventEndAt });
@@ -101,9 +109,70 @@ async function withGlobal<T>(run: (deps: CopyDeps<BeanPoolIdentity>) => Promise<
 export const copyPairOf = (homeId: string, publicKey: string): Promise<CopyPair | null> => keeper.pairOf(homeId, publicKey);
 
 /** The tick, for a post as its community answered it. Never throws: it says what it owes the member, or nothing. */
-export async function showPostOnGlobal(post: HomeEvent, identity: BeanPoolIdentity): Promise<string | null> {
-    const result: CopyResult = await withGlobal((deps) => keeper.showOnGlobal(post, homeAddress(), identity, deps), 'later' as CopyResult).catch(() => 'later' as const);
+export async function showPostOnGlobal(post: HomeEvent, identity: BeanPoolIdentity, takesQuestions = false): Promise<string | null> {
+    if (takesQuestions) noteQuestionsOpened(identity.publicKey);
+    const result: CopyResult = await withGlobal((deps) => keeper.showOnGlobal(post, homeAddress(), identity, deps, takesQuestions), 'later' as CopyResult).catch(() => 'later' as const);
     return copyResultLine(result);
+}
+
+/** The door's tick. The pair is this browser's own, so an Off with no answer stays owed, and the next tend sends it. */
+export async function takeQuestions(homeId: string, on: boolean, identity: BeanPoolIdentity): Promise<CopyResult> {
+    if (on) noteQuestionsOpened(identity.publicKey);
+    const result = await withGlobal((deps) => keeper.takeQuestions(homeId, on, identity, deps), 'later' as CopyResult).catch(() => 'later' as const);
+    if (result === 'later') void keepTryingOffs(identity);
+    return result;
+}
+
+let offRetry: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * An Off global hasn't answered, tried again while this tab stays open: a tend can be an hour away, and a browser has no timer of
+ * the phone's to go by. It runs only while one is owed: nothing owed, it asks nobody and leaves no timer, and the keeper's wait
+ * holds it, a 429's included. A tab in the background goes on trying, since the name is up whether anyone is looking or not.
+ */
+async function keepTryingOffs(identity: BeanPoolIdentity): Promise<void> {
+    if (!(await copyPairs.read()).some((p) => p.publicKey === identity.publicKey && owesOff(p))) return;
+    const wait = await withGlobal((deps) => keeper.tendOwedOffs(identity, deps), null).catch(() => null);
+    if (wait === null || offRetry !== null) return;
+    offRetry = setTimeout(() => {
+        offRetry = null;
+        void keepTryingOffs(identity);
+    }, wait);
+}
+
+/**
+ * The key that has ticked a door in this browser: only then is global asked what waits there, so a door ticked elsewhere has no
+ * row here (apps/native utils/global-requests.ts says why). It stays after an Off, since a request already sent is still theirs
+ * to answer.
+ */
+function noteQuestionsOpened(publicKey: string): void {
+    try { localStorage.setItem(QUESTIONS_KEY, publicKey); } catch { /* storage off: no row here, and global's own has them */ }
+}
+
+/**
+ * How many wait on global for this key, in a count alone, and where they are. Null where nothing does. `kept` is what a page is
+ * showing: where global gives no answer it stands, as the phone's count does, so a blip doesn't take the row away.
+ */
+export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity, kept: GlobalRequests | null = null): Promise<GlobalRequests | null> {
+    try {
+        if (localStorage.getItem(QUESTIONS_KEY) !== identity.publicKey) return null;
+    } catch {
+        return null;
+    }
+    const global = await globalAddress();
+    if (!global || !identity.privateKey) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
+    try {
+        const res = await signedCopyFetch('GET', global, '/api/me/unread', undefined, identity, controller.signal);
+        const answer = res.ok ? await res.json() as { requests?: unknown } : null;
+        if (typeof answer?.requests !== 'number') return kept;
+        return answer.requests > 0 ? { count: answer.requests, href: `${global}/` } : null;
+    } catch {
+        return kept;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /** After an edit of an event or a cancelled date: the copy follows. A listing's edit goes by its community's word: a tend. */
@@ -125,15 +194,18 @@ export async function tendCopies(identity: BeanPoolIdentity): Promise<void> {
 
 /**
  * On load and when the tab comes back, as the phone does when it comes to the front: at most hourly, across reloads and tabs, and
- * never in anyone's way.
+ * never in anyone's way. Inside the hour only an Off global hasn't answered goes ({@link keepTryingOffs}): that is a name left up,
+ * and nothing else here is in a hurry.
  */
 export async function tendCopiesSoon(identity: BeanPoolIdentity | null | undefined, now: number = Date.now()): Promise<void> {
     if (!identity?.privateKey) return;
+    let due = true;
     try {
-        if (now - Number(localStorage.getItem(TENDED_KEY) ?? 0) < TEND_EVERY_MS) return;
-        localStorage.setItem(TENDED_KEY, String(now));
+        due = now - Number(localStorage.getItem(TENDED_KEY) ?? 0) >= TEND_EVERY_MS;
+        if (due) localStorage.setItem(TENDED_KEY, String(now));
     } catch { /* storage off: this load tends */ }
-    await tendCopies(identity).catch(() => {});
+    if (due) await tendCopies(identity).catch(() => {});
+    await keepTryingOffs(identity);
 }
 
 function keptStanding(publicKey: string, now: number): GlobalStanding {

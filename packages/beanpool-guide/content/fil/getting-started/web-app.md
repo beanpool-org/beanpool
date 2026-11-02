@@ -92,7 +92,7 @@ Kung sumali ka sa pandaigdigang komunidad gamit ang 12 salita, ang mga ito ang i
 ## Iba't ibang pangalan at lokasyon
 
 - **Pagsali gamit ang imbitasyon:** sinasabi ng button ng unang hakbang ang **Gumawa ng Identity at Sumali →**. Kung may ibang may hawak na ng pangalang pinili mo rito, makukuha mo ito na may idinagdag na numero. Ipinapakita ng **← Bumalik** sa **Larawan** ang iyong pangalan lamang, na may **Susunod →**: palitan ito (hanggang 20 character) o panatilihin ito, sa parehong account. Kung mayroon nang ganoong bagong pangalan ang iba, sinasabi ito ng pahina at nagmumungkahi ng iba.
-- **Mga Tab:** ang web app ay may **Home**, **Merkado**, **Mapa**, **Komun**, **Usapan**, **Mga Tao** at **Talaan**. Ang tinatawag ng app sa telepono na **Usapan** ay **Usapan** sa web, at may sariling tab ang **Mga Tao**.
+- **Mga Tab:** ang web app ay may **Home**, **Merkado**, **Mapa**, **Komun**, **Usapan**, **Mga Tao** at **Talaan**. Tinatawag ng dalawang app ang tab na ito na **Usapan**, at sa web ay may sariling tab ang **Mga Tao**.
 - **Mga Setting at ang iyong profile:** ang maliliit na button sa kanang itaas: ang iyong profile, ang **?**, pagkatapos ay Mga Setting. Sa isang malapad na screen ang mga ito ay nasa ibaba ng menu sa kaliwa.
 - **Pag-post ng Alok o Kahilingan:** gamitin ang **Bagong Post** sa pahina ng **Mapa**.
 - **Hitsura:** tinatawag ang pagpipilian na **Katulad ng device** sa halip na "Katulad ng telepono".

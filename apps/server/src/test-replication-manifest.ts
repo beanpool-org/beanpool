@@ -336,6 +336,12 @@ async function main(): Promise<void> {
     };
     // A parent row carrying its rows (`inRowOf`): one planted, with one of the rows it carries.
     const IN_ROW_OF: Partial<Record<string, () => (x: any) => boolean>> = {
+        poll_answers: () => {
+            db.prepare("INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row-poller', 'Manifest Poller')").run();
+            db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, poll_options) VALUES ('manifest-in-row-poll', 'poll', 'community', 'Q', '', 0, 'manifest-in-row-poller', '[]')").run();
+            db.prepare("INSERT INTO poll_answers (post_id, id, option_id, words) VALUES ('manifest-in-row-poll', 'a1', 'o1', 'typed')").run();
+            return (x) => x?.id === 'manifest-in-row-poll' && x?.pollAnswers?.[0]?.words === 'typed';
+        },
         member_preferences: () => {
             db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row', 'Manifest In Row')`).run();
             db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES ('manifest-in-row', 'notify_chat', 'false')`).run();
@@ -454,8 +460,9 @@ async function main(): Promise<void> {
     // member_photos, written by its one writer (@beanpool/engine members.ts setMemberPhoto): every change moves the member's
     // updated_at, a photo whose version and size stay the same included (here, the same bytes with the blanks moved). And
     // group_pictures by its one writer (@beanpool/engine groups.ts setGroupPicture), the group's (#1486).
-    assert([...inParentRow].every((t) => t === 'member_photos' || t === 'group_pictures'),
-        `the only tables written in place that travel in their parent's row are member_photos and group_pictures, each held to it below (${list(inParentRow)})`);
+    // And poll_answers (schema.sql), whose writers stamp the poll: test-poll-other holds a vote and an owner's removal to it.
+    assert([...inParentRow].every((t) => t === 'member_photos' || t === 'group_pictures' || t === 'poll_answers'),
+        `the only tables written in place that travel in their parent's row are member_photos, group_pictures and poll_answers, each held to it (${list(inParentRow)})`);
     {
         const pk = 'manifest-photo-stamp';
         const old = '2000-01-01T00:00:00.000Z';

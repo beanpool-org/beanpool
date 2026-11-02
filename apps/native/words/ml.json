@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-02",
@@ -212,7 +212,7 @@
   "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Chat memory can reset this community's, which re-checks every chat here from the start.": "ഇവിടെ ഏതൊക്കെ ചാറ്റുകളാണ് സ്വകാര്യം എന്ന് ഈ ഫോണിന് വായിക്കാൻ കഴിഞ്ഞില്ല, അതിനാൽ ഒന്നും അയച്ചില്ല. വീണ്ടും ശ്രമിക്കുക; വീണ്ടും പരാജയപ്പെടുകയാണെങ്കിൽ സെറ്റിങ്സ് → ചാറ്റ് മെമ്മറി വഴി ഈ കമ്മ്യൂണിറ്റിയുടേത് റീസെറ്റ് ചെയ്യാം; അത് ഇവിടെയുള്ള ഓരോ ചാറ്റും തുടക്കം മുതൽ വീണ്ടും പരിശോധിക്കും.",
   "Who your chats are with, and which are private.": "നിങ്ങളുടെ ചാറ്റുകൾ ആരുമായാണ്, ഏതെല്ലാമാണ് സ്വകാര്യം എന്നതിനെക്കുറിച്ച്.",
   "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.": "ഒരു കമ്മ്യൂണിറ്റിയിലെ നിങ്ങളുടെ ഓരോ ചാറ്റും ആരുമായാണ്, ഏതെല്ലാമാണ് സ്വകാര്യം എന്ന് ഈ ഫോൺ ഓർക്കുന്നു, അതിനാൽ കമ്മ്യൂണിറ്റിക്ക് രഹസ്യമായി ആളെ മാറ്റാനോ സ്വകാര്യ ചാറ്റ് ഗ്രൂപ്പാക്കി മാറ്റാനോ കഴിയില്ല. ഫോണിന് ഇത് വായിക്കാൻ കഴിഞ്ഞില്ലെങ്കിൽ ചാറ്റുകൾ അയക്കാൻ കഴിയില്ല. റീസെറ്റ് ചെയ്യുന്നത് എല്ലാ ചാറ്റുകളും തുടക്കം മുതൽ വീണ്ടും പരിശോധിക്കും.",
-  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "കീ മാറിയതിനാൽ താൽക്കാലികമായി നിർത്തിയ ചാറ്റ് പുതിയ കീ ഉപയോഗിച്ച് തുറക്കാം. സംഭാഷണങ്ങളിൽ നിന്ന് അപ്രത്യക്ഷമായ ഒരു സ്വകാര്യ ചാറ്റ് കമ്മ്യൂണിറ്റിക്ക് വായിക്കാൻ കഴിയുന്ന ഗ്രൂപ്പ് ചാറ്റായി തിരികെ വന്നേക്കാം. അയക്കുന്നതിന് മുൻപ് കീ കോഡോ പങ്കെടുക്കുന്നവരെയോ പരിശോധിക്കുക.",
+  "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.": "കീ മാറിയതിനാൽ താൽക്കാലികമായി നിർത്തിയ ചാറ്റ് പുതിയ കീ ഉപയോഗിച്ച് തുറക്കാം. ചാറ്റിൽ നിന്ന് അപ്രത്യക്ഷമായ ഒരു സ്വകാര്യ ചാറ്റ് കമ്മ്യൂണിറ്റിക്ക് വായിക്കാൻ കഴിയുന്ന ഗ്രൂപ്പ് ചാറ്റായി തിരികെ വന്നേക്കാം. അയക്കുന്നതിന് മുൻപ് കീ കോഡോ പങ്കെടുക്കുന്നവരെയോ പരിശോധിക്കുക.",
   "This phone is checking this chat from the start, as it does after you restore it or update the app.": "ആപ്പ് വീണ്ടെടുക്കുകയോ അപ്‌ഡേറ്റ് ചെയ്യുകയോ ചെയ്‌തതിനു ശേഷമുള്ളതുപോലെ ഈ ഫോൺ തുടക്കം മുതൽ ഈ ചാറ്റ് പരിശോധിക്കുന്നു.",
   "This community's chat memory was reset, so this phone is checking this chat from the start.": "ഈ കമ്മ്യൂണിറ്റിയുടെ ചാറ്റ് മെമ്മറി റീസെറ്റ് ചെയ്‌തു, അതിനാൽ ഈ ഫോൺ തുടക്കം മുതൽ ഈ ചാറ്റ് പരിശോധിക്കുന്നു.",
   "The key behind \"{name}\" changed.": "\"{name}\"ന്റെ പിന്നിലെ കീ മാറി.",
@@ -309,14 +309,14 @@
   "Home\u0004tab": "ഹോം",
   "Market\u0004tab": "മാർക്കറ്റ്",
   "Map\u0004tab": "മാപ്പ്",
-  "Talk\u0004tab": "ചാറ്റ്",
+  "Chat\u0004tab": "ചാറ്റ്",
   "People\u0004tab": "ആളുകൾ",
   "Pulse\u0004tab": "പൾസ്",
   "Commons\u0004tab": "പൊതു",
   "Ledger\u0004tab": "ലെഡ്ജർ",
   "Settings\u0004tab": "ക്രമീകരണങ്ങൾ",
   "Home updated": "ഹോം അപ്‌ഡേറ്റുചെയ്‌തു",
-  "This community's server needs an update before Home works. Market and Talk still work.": "ഹോം പ്രവർത്തിക്കുന്നതിന് മുമ്പ് ഈ കമ്മ്യൂണിറ്റിയുടെ സെർവറിന് അപ്‌ഡേറ്റ് ആവശ്യമാണ്. മാർക്കറ്റും ചാറ്റും തുടർന്നും പ്രവർത്തിക്കും.",
+  "This community's server needs an update before Home works. Market and Chat still work.": "ഹോം പ്രവർത്തിക്കുന്നതിന് മുമ്പ് ഈ കമ്മ്യൂണിറ്റിയുടെ സെർവറിന് അപ്‌ഡേറ്റ് ആവശ്യമാണ്. മാർക്കറ്റും ചാറ്റും തുടർന്നും പ്രവർത്തിക്കും.",
   "Couldn't reach your community; showing what we had": "കമ്മ്യൂണിറ്റിയുമായി ബന്ധപ്പെടാൻ കഴിഞ്ഞില്ല; നിലവിലുള്ളവ കാണിക്കുന്നു",
   "That was the last tip. Add a card brings them back.": "അതായിരുന്നു അവസാനത്തെ നുറുങ്ങ്. കാർഡ് ചേർക്കുക അവ തിരികെ കൊണ്ടുവരും.",
   "this community": "ഈ കമ്മ്യൂണിറ്റി",
@@ -325,7 +325,7 @@
   "Tune": "ട്യൂൺ ചെയ്യുക",
   "Home shows once you're a member of this community.": "ഈ കമ്മ്യൂണിറ്റിയിൽ അംഗമായാൽ ഹോം കാണിക്കും.",
   "Open the Market": "മാർക്കറ്റ് തുറക്കുക",
-  "Open Talk": "ചാറ്റ് തുറക്കുക",
+  "Open Chat": "ചാറ്റ് തുറക്കുക",
   "Connect to a community to see your Home.": "ഹോം കാണാൻ ഒരു കമ്മ്യൂണിറ്റിയുമായി ബന്ധിപ്പിക്കുക.",
   "Connect": "ബന്ധിപ്പിക്കുക",
   "Couldn't reach your community yet. Home fills in when it answers.": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുമായി ഇതുവരെ ബന്ധപ്പെടാൻ കഴിഞ്ഞില്ല. മറുപടി ലഭിക്കുമ്പോൾ ഹോം വിവരങ്ങൾ കാണിക്കും.",
@@ -497,7 +497,7 @@
     "one": "{n} ഗ്രൂപ്പും",
     "other": "എല്ലാ {n} ഗ്രൂപ്പുകളും"
   },
-  "Your {n} group, in Talk|All {n} of your groups, in Talk": {
+  "Your {n} group, in Chat|All {n} of your groups, in Chat": {
     "one": "ചാറ്റിൽ നിങ്ങളുടെ {n} ഗ്രൂപ്പ്",
     "other": "ചാറ്റിൽ നിങ്ങളുടെ എല്ലാ {n} ഗ്രൂപ്പുകളും"
   },
@@ -1383,7 +1383,7 @@
   "✕ Close": "✕ അടയ്ക്കുക",
   "No conversations yet.": "സംഭാഷണങ്ങളൊന്നുമില്ല.",
   "Browse Market": "മാർക്കറ്റ് കാണുക",
-  "Talk": "ചാറ്റ്",
+  "Chat": "ചാറ്റ്",
   "Could not load your groups.": "നിങ്ങളുടെ ഗ്രൂപ്പുകൾ ലഭ്യമാക്കാനായില്ല.",
   "Search chats, posts, partners": "ചാറ്റുകൾ, പോസ്റ്റുകൾ, പങ്കാളികൾ എന്നിവ തിരയുക",
   "Search chats, posts, partners...": "ചാറ്റുകൾ, പോസ്റ്റുകൾ, പങ്കാളികൾ എന്നിവ തിരയുക...",
@@ -6199,5 +6199,8 @@
   "\"{title}\" stayed behind: it has no photo, and {name} needs at least one.": "\"{title}\" പിന്നിൽ തുടർന്നു: ഫോട്ടോ ഇല്ല, {name}-ന് കുറഞ്ഞത് ഒന്ന് വേണം.",
   "\"{title}\" stayed behind: {reason}": "\"{title}\" പിന്നിൽ തുടർന്നു: {reason}",
   "{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.": "{name} ഒരു ആവശ്യം സ്വീകരിക്കുന്നത് നിങ്ങൾ അവിടെ ഒരു ഓഫർ ലിസ്റ്റ് ചെയ്ത ശേഷമാണ്. ഒന്ന് ലിസ്റ്റ് ചെയ്യുക, നിങ്ങളോട് വീണ്ടും ചോദിക്കും.",
-  "Poll": "പോൾ"
+  "Poll": "പോൾ",
+  "Stop taking questions": "ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നത് നിർത്തുക",
+  "on the global community": "ആഗോള കമ്മ്യൂണിറ്റിയിൽ",
+  "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക"
 }

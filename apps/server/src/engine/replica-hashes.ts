@@ -73,14 +73,21 @@ export interface TableHashes {
  * 11: posts gains shown_price (DESIGN-reaching-across-fable.md §1 row 4, slice G1′). Raised for the same reason as 8.
  */
 /**
+ * 13: poll_votes gains other_answer_id, and a poll's answers are hashed too (a typed Other, REPLICA_FORMAT 13). Raised for
+ * the same reason as 4.
+ */
+/**
  * 12: confirmations gains stepped_back_owing (the balance rule, S1). Raised for the same reason as 4: a standby updated before
  * its main server hashes `confirmations` over one more column. Every community with a known floor has rows there.
  */
 /**
- * 13: posts gains pinned_until and pinned_at (DESIGN-pinning-fable.md §4, slice 1). Raised for the same reason as 8. REPLICA_FORMAT
+ * 14: posts gains shown_takes_questions (DESIGN-reaching-across-fable.md §1 row 5, slice GD). Raised for the same reason as 8.
+ */
+/**
+ * 15: posts gains pinned_until and pinned_at (DESIGN-pinning-fable.md §4, slice 1). Raised for the same reason as 8. REPLICA_FORMAT
  * stays: what an older importer drops is a pin, a week at most, and it ages out by itself, so it is worth no re-seed.
  */
-export const TABLE_HASHES_VERSION = 13;
+export const TABLE_HASHES_VERSION = 15;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

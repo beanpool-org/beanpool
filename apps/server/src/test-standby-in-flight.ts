@@ -65,7 +65,7 @@ const LINK_PEER = '12D3KooWInFlightLinkedPeer00000000000000000000000';
  * whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4), 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events.
  * The one before G3's, a standby to re-seed.
  */
-const FORMAT = '12';
+const FORMAT = '13';
 const FORMAT_BEFORE = '4';
 
 /** The plain tables and their keys, as the manifest names them (engine/replication-manifest.ts). */

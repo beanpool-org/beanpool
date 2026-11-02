@@ -151,6 +151,10 @@ What removal can't do: someone determined can come back in about a minute with n
 
 Nor does removing an account take back its votes in polls: they still count, as every vote does. Instead, when an anonymous poll for everyone on the global community closes, it says how many of its votes came from new or 12-word accounts (see Polls in the members' guide), so a burst of votes from new accounts shows on the result, to everyone. It says nothing while the poll is open, since checking after each vote would show each vote's kind of account and its choice. An open vote, a group's poll and a poll for one person never say it.
 
+A report of a typed answer on a poll names the poll and nobody else: nothing knows who wrote it on an anonymous poll. It holds no words, because admins read this queue and only owners and the poll's maker read those. To see it, an owner opens the poll's card and taps **Read the typed answers**, where the reported line is marked, and **Remove** takes the words down for good. The vote still counts, and the report closes. Actioning the report itself pauses nobody.
+
+The words go by themselves, and the report closes with them, when the line stops existing: its voter on an open vote changes their vote or deletes their account, the poll is removed by anyone who can, its group closes, or its maker leaves while it is open. A removed poll's words can't be read again by anyone. Only a backup taken before they went still holds them.
+
 If a standby takes over from this server, the hidden posts stay hidden, but the list of actions and their **Undo** stay behind on the old server: restore those posts one at a time.
 
 ## Be fair

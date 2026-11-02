@@ -662,6 +662,7 @@ export default function TreasuryManageScreen() {
                 disabled={cancelling}
                 accessibilityRole="button"
                 accessibilityLabel={t('Cancel initiative and refund backers')}
+                accessibilityState={{ disabled: cancelling, busy: cancelling }}
             >
                 {cancelling ? (
                     <ActivityIndicator size="small" color={colors.feedback.danger.fg} />

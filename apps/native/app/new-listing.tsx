@@ -40,7 +40,7 @@ import { HAS_MAPS_KEY } from '../utils/maps';
 import { darkMapStyle, mapSchemeKey } from '../utils/map-scheme';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../constants/categories';
 import { useNodeProfile } from '../utils/use-node-profile';
-import { ShowOnGlobalTick, showEventOnGlobal } from '../components/ShowOnGlobalRow';
+import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestionsTick } from '../components/ShowOnGlobalRow';
 import { getCachedNodeProfile } from '../utils/node-profile';
 import {
     marketShowsBeans, postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules, composerNeedsProfilePhoto,
@@ -272,6 +272,7 @@ export default function NewListingScreen() {
     const nodeFeatures = nodeProfile?.features;
     // "Also show this on the global community": off, every time; never kept in a draft.
     const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
+    const [takesQuestions, setTakesQuestions] = useTakeQuestionsTick(alsoOnGlobal);
     const showsBeans = marketShowsBeans(nodeFeatures);
     const [postRepeatable, setPostRepeatable] = useState(false);
     const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
@@ -638,7 +639,7 @@ export default function NewListingScreen() {
                 ...(postTags.length > 0 ? { tags: postTags } : {}),
                 ...(postFreeTags.length > 0 ? { freeTags: postFreeTags } : {}),
             });
-            if (alsoOnGlobal && made?.post) void showEventOnGlobal(made.post, identity).catch(() => {});
+            if (alsoOnGlobal && made?.post) void showEventOnGlobal(made.post, identity, takesQuestions).catch(() => {});
             clearDraft();
             setTimeout(() => {
                 resetNewPost();
@@ -992,6 +993,7 @@ export default function NewListingScreen() {
                             )}
 
                             <ShowOnGlobalTick enabled={nodeProfile?.profile === 'local' && postLat !== null && postLng !== null} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} listing need={postType === 'need'} />
+                            {alsoOnGlobal && <TakeQuestionsTick checked={takesQuestions} onChange={setTakesQuestions} />}
 
                             {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
                                 trading partners: a reach chooser on a node with no peers is a decision about nothing.

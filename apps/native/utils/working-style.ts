@@ -39,6 +39,15 @@ export async function adoptNewerRowIntoDevice(publicKey: string, rowArchetype: s
 }
 
 /**
+ * The node's row is older than the phone's: a crash between the two writes, a node restored from a backup. Nothing else would
+ * ask it again, so it waits as a carried result: judged against what the node holds, a tie sends nothing, a retake stands.
+ */
+export async function carryRowToNode(publicKey: string, rowArchetype: string, community: string): Promise<void> {
+    const parsed = parseArchetype(rowArchetype);
+    if (parsed) await keepCarriedArchetype(community, publicKey, publicArchetype(parsed));
+}
+
+/**
  * First run across saved communities (scratch/fable-design/DESIGN-archetype-across-fable.md §3, slice S2):
  * - Reads each saved community's local members row for this key, plus the device copy.
  * - Orders results (including old millisecond stamps), adopting the newest into the device copy.

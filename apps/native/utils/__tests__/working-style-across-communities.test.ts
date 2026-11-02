@@ -693,6 +693,23 @@ describe('never over a newer result the community already holds', () => {
         expect(nodeAt(A).held.archetype).toBe(publicOf(quiz('2026-11-03', 'spark')));
     });
 
+    it('a node behind the phone\'s row catches up at the next Save, and one that holds the same day is left alone', async () => {
+        await memberOfBoth();
+        const now = quiz('2026-11-03', 'spark');
+        await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x', archetype: publicOf(now) });
+        await saveCanonicalProfile({ archetype: JSON.stringify(now) });
+        nodeAt(A).held.archetype = publicOf(quiz('2026-11-01', 'guardian'));
+        await performSync();
+        await pushProfileToServer();
+        expect(nodeAt(A).held.archetype).toBe(publicOf(now));
+
+        const sameDay = publicOf(quiz('2026-11-03', 'sage'));
+        nodeAt(A).held.archetype = sameDay;
+        await performSync();
+        await pushProfileToServer();
+        expect(nodeAt(A).held.archetype).toBe(sameDay);
+    });
+
     it('a same-day result on the node does not stop a retake made here', async () => {
         await memberOfBoth();
         await keepQuizResult(quiz('2026-11-03', 'spark'), ME, A);

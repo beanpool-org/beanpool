@@ -29,7 +29,7 @@ import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
 import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
-import { adoptNewerRowIntoDevice, archetypeToSend, healGuestMark } from './working-style';
+import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, healGuestMark } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
@@ -4176,6 +4176,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
     let selfPubkey: string | null = null;
     let ownRowChanged = false;
     let ownSyncedArchetype: string | null = null;
+    let ownRowAheadOfNode: string | null = null;
     let selfMemberFound = false;
 
     await acquireSyncLock();
@@ -4262,6 +4263,8 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 );
                 if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
                     finalArch = localRow.archetype;
+                    // Null is a removal's to send (S3): only a row the node really holds older.
+                    if (arch && archetypeIsNewer(localRow.archetype, arch)) ownRowAheadOfNode = localRow.archetype;
                 } else if (arch) {
                     ownSyncedArchetype = arch;
                     if (!localRow?.archetype || archetypeIsNewer(arch, localRow.archetype)) {
@@ -4526,6 +4529,9 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
     }
     if (selfMemberFound && anchorUrl && selfPubkey) {
         await healGuestMark(anchorUrl, selfPubkey).catch(e => console.warn('[DB] Failed to heal a guest mark:', e));
+    }
+    if (ownRowAheadOfNode && anchorUrl && selfPubkey) {
+        await carryRowToNode(selfPubkey, ownRowAheadOfNode, anchorUrl).catch(e => console.warn('[DB] Failed to keep a row the node is behind:', e));
     }
     if (ownSyncedArchetype && selfPubkey) {
         try {

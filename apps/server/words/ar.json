@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "ar",
+    "name": "Arabic",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "يمكن للمالك أو المشرف فقط تثبيت منشور.",
+  "Only an owner, an admin or the post's author can take a pin off.": "يمكن للمالك أو المشرف أو كاتب المنشور فقط إزالة التثبيت.",
+  "A pin lasts 1 day, 3 days or 1 week.": "يستمر التثبيت يومًا واحدًا أو 3 أيام أو أسبوعًا واحدًا.",
+  "That post is no longer here.": "لم يعد ذلك المنشور هنا.",
+  "Only a public post can be pinned.": "يمكن تثبيت المنشورات العامة فقط.",
+  "Only this community's own posts can be pinned.": "يمكن تثبيت منشورات هذا المجتمع فقط.",
+  "This post has ended, so it can't be pinned.": "انتهى هذا المنشور، لذا لا يمكن تثبيته.",
+  "Three posts are pinned already. Take one off first.": "هناك ثلاثة منشورات مثبتة بالفعل. أزل واحدًا أولًا."
+}

@@ -158,6 +158,13 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+/** The composer is up a beat before the chat's opening clears the draft: words typed in that beat are wiped, and no line goes. */
+async function composerOpen() {
+    const composer = await screen.findByPlaceholderText('Message...');
+    await act(async () => {});
+    return composer;
+}
+
 describe('Web instant chat message sending (optimistic)', () => {
     it('the line shows before the send resolves, marked as sending with no false success', async () => {
         let resolveSend!: (value: any) => void;
@@ -166,7 +173,7 @@ describe('Web instant chat message sending (optimistic)', () => {
 
         render(<MessagesPage identity={mockIdentity} openConversationId="conv-dm-1" />);
 
-        const composer = await screen.findByPlaceholderText('Message...');
+        const composer = await composerOpen();
         fireEvent.change(composer, { target: { value: 'Instant optimistic line' } });
         fireEvent.keyDown(composer, { key: 'Enter' });
 
@@ -208,7 +215,7 @@ describe('Web instant chat message sending (optimistic)', () => {
 
         render(<MessagesPage identity={mockIdentity} openConversationId="conv-dm-1" />);
 
-        const composer = await screen.findByPlaceholderText('Message...');
+        const composer = await composerOpen();
         fireEvent.change(composer, { target: { value: 'No duplicate message' } });
         fireEvent.keyDown(composer, { key: 'Enter' });
 
@@ -249,7 +256,7 @@ describe('Web instant chat message sending (optimistic)', () => {
 
         render(<MessagesPage identity={mockIdentity} openConversationId="conv-dm-1" />);
 
-        const composer = await screen.findByPlaceholderText('Message...') as HTMLTextAreaElement;
+        const composer = await composerOpen() as HTMLTextAreaElement;
         fireEvent.change(composer, { target: { value: 'Important unsent words' } });
         fireEvent.keyDown(composer, { key: 'Enter' });
 
@@ -319,7 +326,7 @@ describe('Web instant chat message sending (optimistic)', () => {
         });
 
         render(<MessagesPage identity={mockIdentity} openConversationId="conv-dm-1" />);
-        const composer = await screen.findByPlaceholderText('Message...');
+        const composer = await composerOpen();
 
         // First send
         currentGeneratedId = 'msg-first';
@@ -392,7 +399,7 @@ describe('Web instant chat message sending (optimistic)', () => {
 
         await screen.findByText('Community Garden');
         await screen.findByText(/End-to-end encrypted/i);
-        const composer = await screen.findByPlaceholderText('Message...');
+        const composer = await composerOpen();
 
         // 1. Send first line
         currentGeneratedId = 'group-pending-1';
@@ -469,7 +476,7 @@ describe('Web instant chat message sending (optimistic)', () => {
 
         render(<MessagesPage identity={mockIdentity} openConversationId="conv-dm-1" />);
 
-        const composer = await screen.findByPlaceholderText('Message...');
+        const composer = await composerOpen();
         currentGeneratedId = 'dm-pending-1';
         fireEvent.change(composer, { target: { value: 'DM line 1' } });
         fireEvent.keyDown(composer, { key: 'Enter' });

@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "hi",
+    "name": "Hindi",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "केवल मालिक या एडमिन ही किसी पोस्ट को पिन कर सकते हैं।",
+  "Only an owner, an admin or the post's author can take a pin off.": "केवल मालिक, एडमिन या पोस्ट का लेखक ही पिन हटा सकते हैं।",
+  "A pin lasts 1 day, 3 days or 1 week.": "पिन 1 दिन, 3 दिन या 1 सप्ताह तक रहता है।",
+  "That post is no longer here.": "वह पोस्ट अब यहाँ नहीं है।",
+  "Only a public post can be pinned.": "केवल सार्वजनिक पोस्ट को पिन किया जा सकता है।",
+  "Only this community's own posts can be pinned.": "केवल इस समुदाय की अपनी पोस्ट को पिन किया जा सकता है।",
+  "This post has ended, so it can't be pinned.": "यह पोस्ट समाप्त हो चुकी है, इसलिए इसे पिन नहीं किया जा सकता।",
+  "Three posts are pinned already. Take one off first.": "तीन पोस्ट पहले से पिन हैं। पहले एक हटाएँ।"
+}

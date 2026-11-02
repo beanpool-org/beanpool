@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "fil",
+    "name": "Filipino",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Ang may-ari o admin lang ang puwedeng mag-pin ng post.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Ang may-ari, admin o sumulat ng post lang ang puwedeng mag-alis ng pin.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Tumatagal ang pin nang 1 araw, 3 araw o 1 linggo.",
+  "That post is no longer here.": "Wala na rito ang post na iyon.",
+  "Only a public post can be pinned.": "Pampublikong post lang ang puwedeng i-pin.",
+  "Only this community's own posts can be pinned.": "Mga post lang ng komunidad na ito ang puwedeng i-pin.",
+  "This post has ended, so it can't be pinned.": "Tapos na ang post na ito, kaya hindi na ito mapi-pin.",
+  "Three posts are pinned already. Take one off first.": "May tatlong post nang naka-pin. Mag-alis muna ng isa."
+}

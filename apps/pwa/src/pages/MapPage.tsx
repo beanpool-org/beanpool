@@ -944,8 +944,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     // map has nothing to draw for them (review of #1952, finding 8).
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
-                const ownIds = new Set(localData.map(p => p.id));
-                let allPosts: MarketplacePost[] = [...localData, ...ownData.filter(p => !ownIds.has(p.id))];
+                // Pins come with the read from anywhere, for the Market. The map is the circle it was read for (design §2.2).
+                const inCircle = near ? localData.filter(fitsMap) : localData;
+                const ownIds = new Set(inCircle.map(p => p.id));
+                let allPosts: MarketplacePost[] = [...inCircle, ...ownData.filter(p => !ownIds.has(p.id))];
 
                 // Only fetch from peers the user has toggled on; never for a visitor, whose lobby reads this node's
                 // guest list and no other community's (G9a §7).

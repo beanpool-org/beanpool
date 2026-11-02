@@ -2000,6 +2000,23 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await waitFor(() => expect(view!.queryByTestId('map-near-empty')).toBeNull());
     });
 
+    it('a far pin stays off the map: Nothing near and Show everywhere still show (pinning design §2.2)', async () => {
+        // The node hands a pin to the near read from anywhere, for the Market. The map is the circle it was read for.
+        const farPin = { ...post, id: 'far-pin', title: 'Pinned far away', lat: 51.5, lng: -0.12 };
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null ? [farPin] : []) as any);
+        const geo = await import('../lib/geo');
+        vi.mocked(geo.haversineDistance).mockImplementation((_lat, _lng, lat) => (lat === farPin.lat ? 16_000 : 0));
+        try {
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+            const note = await view!.findByTestId('map-near-empty');
+            expect(note).toHaveTextContent('Nothing within 250 km of your area yet.');
+            expect(within(note).getByRole('button', { name: 'Show everywhere' })).toBeInTheDocument();
+        } finally {
+            vi.mocked(geo.haversineDistance).mockImplementation(() => 0);
+        }
+    });
+
     it('after Show everywhere, Near your area reads from the area again', async () => {
         vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author || f?.online ? [] : [post]) as any);
         let view: ReturnType<typeof render> | undefined;

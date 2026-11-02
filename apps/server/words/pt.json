@@ -26,5 +26,13 @@
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Para responder Outro, escreva sua resposta. Se não houver onde escrever, atualize o app.",
   "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Você já respondeu a esta enquete, e nada liga sua resposta a você, por isso não pode ser alterada.",
   "Only an Offer or Need shown on the global community can take questions.": "Só uma Oferta ou Necessidade mostrada na comunidade global pode receber perguntas.",
-  "This community isn't taking message requests right now, so this can't take questions.": "Esta comunidade não está a aceitar pedidos de mensagem agora, por isso isto não pode receber perguntas."
+  "This community isn't taking message requests right now, so this can't take questions.": "Esta comunidade não está a aceitar pedidos de mensagem agora, por isso isto não pode receber perguntas.",
+  "Only an owner or admin can pin a post.": "Só o proprietário ou um administrador pode fixar uma publicação.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Só o proprietário, um administrador ou quem fez a publicação pode remover a fixação.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Uma fixação dura 1 dia, 3 dias ou 1 semana.",
+  "That post is no longer here.": "Essa publicação não está mais aqui.",
+  "Only a public post can be pinned.": "Só uma publicação pública pode ser fixada.",
+  "Only this community's own posts can be pinned.": "Só as publicações desta comunidade podem ser fixadas.",
+  "This post has ended, so it can't be pinned.": "Esta publicação terminou, por isso não pode ser fixada.",
+  "Three posts are pinned already. Take one off first.": "Já há três publicações fixadas. Remova uma primeiro."
 }

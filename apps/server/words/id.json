@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "language": "id",
+    "name": "Indonesian",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "reviewed": false,
+    "updated": "2026-11-03",
+    "note": "Keys are the English sentences; a key that is missing shows the English."
+  },
+  "Only an owner or admin can pin a post.": "Hanya pemilik atau admin yang dapat menyematkan postingan.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Hanya pemilik, admin, atau penulis postingan yang dapat melepas sematan.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Sematan berlaku 1 hari, 3 hari, atau 1 minggu.",
+  "That post is no longer here.": "Postingan itu sudah tidak ada di sini.",
+  "Only a public post can be pinned.": "Hanya postingan publik yang dapat disematkan.",
+  "Only this community's own posts can be pinned.": "Hanya postingan komunitas ini yang dapat disematkan.",
+  "This post has ended, so it can't be pinned.": "Postingan ini sudah berakhir, jadi tidak dapat disematkan.",
+  "Three posts are pinned already. Take one off first.": "Sudah ada tiga postingan yang disematkan. Lepaskan satu dulu."
+}

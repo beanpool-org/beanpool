@@ -29,5 +29,13 @@
   "Failed to report the typed answer": "No se pudo denunciar la respuesta escrita",
   "Failed to remove the typed answer": "No se pudo quitar la respuesta escrita",
   "Only an Offer or Need shown on the global community can take questions.": "Solo una Oferta o Necesidad mostrada en la comunidad global puede recibir preguntas.",
-  "This community isn't taking message requests right now, so this can't take questions.": "Esta comunidad no acepta solicitudes de mensaje ahora mismo, así que esto no puede recibir preguntas."
+  "This community isn't taking message requests right now, so this can't take questions.": "Esta comunidad no acepta solicitudes de mensaje ahora mismo, así que esto no puede recibir preguntas.",
+  "Only an owner or admin can pin a post.": "Solo el propietario o un administrador puede fijar una publicación.",
+  "Only an owner, an admin or the post's author can take a pin off.": "Solo el propietario, un administrador o quien hizo la publicación puede quitar la fijación.",
+  "A pin lasts 1 day, 3 days or 1 week.": "Una fijación dura 1 día, 3 días o 1 semana.",
+  "That post is no longer here.": "Esa publicación ya no está aquí.",
+  "Only a public post can be pinned.": "Solo se puede fijar una publicación pública.",
+  "Only this community's own posts can be pinned.": "Solo se pueden fijar las publicaciones de esta comunidad.",
+  "This post has ended, so it can't be pinned.": "Esta publicación ha terminado, así que no se puede fijar.",
+  "Three posts are pinned already. Take one off first.": "Ya hay tres publicaciones fijadas. Quita una primero."
 }

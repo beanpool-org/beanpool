@@ -106,7 +106,7 @@ const FAQ_ITEMS = [
     },
     {
         q: word('Is my data private?'),
-        a: word("Your identity is an Ed25519 key made on your device. Your posts are shared within your community. Your balance and trades are not: a trade shows only its two people. Your key leaves your device only as a locked copy, if you join with a sign-in or link one, or when you copy your account to another device of yours. The locked copy is so that sign-in can bring your account back. The people who run your community's server can open that copy. Your 12 words are the way back that needs nobody."),
+        a: word("Your identity is an Ed25519 key made on your device. Your posts are shared within your community. Your balance and your trades are private. If your community has a rule on when the admins can see a balance, it's under How this community works. Your key leaves your device only as a locked copy, if you join with a sign-in or link one, or when you copy your account to another device of yours. The locked copy is so that sign-in can bring your account back. The people who run your community's server can open that copy. Your 12 words are the way back that needs nobody."),
     },
     {
         q: word('What are community credits?'),

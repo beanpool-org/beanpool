@@ -734,7 +734,7 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
  * opens there links at that community and names it, as does the notice once linked, never "the global community".
  */
 describe("a known community's rule on Join BeanPool (Marty, 2 Nov: a sentence, nothing to tick)", () => {
-    const HALF = "The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.";
+    const HALF = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
     const KNOWN = { known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, ruleFrom: '2026-11-16T04:00:00.000Z', debtLineFrom: null, quietDaysFrom: null };
     afterEach(() => vi.unstubAllGlobals());
 

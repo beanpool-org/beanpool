@@ -1467,7 +1467,7 @@ describe('Home\'s "How this community works": the floor and the rule, from what 
         expect(summary).toBeTruthy();
         await act(async () => { summary.click(); });
         expect(document.querySelector('[data-testid="community-shape-sheet"]')?.textContent)
-            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.");
+            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.");
     });
 });
 

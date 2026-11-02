@@ -730,7 +730,7 @@ describe('Settings → "How this community works": the floor and the rule throug
     // What GET /api/community/me says to a member of a known community (apps/server config/features-for.ts), through the
     // screen's real reader read, profile and sheet: nothing of the path is stubbed but the node.
     const WIRE = { beans: true, escrow: true, door: 'members', knownFloor: 1000, debtLinePct: 50, quietDays: 60 };
-    const RULE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.";
+    const RULE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
     const shapeSheet = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
     const open = () => click(host.querySelector('[data-testid="settings-how-this-community-works"]'), 'the row');
 
@@ -758,7 +758,7 @@ describe('Settings → "How this community works": the floor and the rule throug
         node.knownRule = { known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 90, ruleFrom: '2026-11-01T04:00:00.000Z', debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null };
         await renderIn('en');
         await open();
-        expect(shapeSheet()).toContain('more than 30% of their credit line, or stay in debit for 90 days');
+        expect(shapeSheet()).toContain('more than 30% of their credit line, or are in debit and haven't made a sale for 90 days');
         expect(shapeSheet()).toContain('The line of 30% applies from 16 November.');
     });
 

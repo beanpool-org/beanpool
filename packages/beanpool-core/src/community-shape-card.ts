@@ -68,9 +68,11 @@ export const COMMUNITY_SHAPE_CARD_WORDS = {
     beansOffLine: word('**Beans:** off — no prices, no credit here'),
     knownFloorLine: word('**Confirmed members** can owe up to {amount} Beans (the known floor)'),
     // The rule (DESIGN-balance-rule-fable.md §2). "Half" when the line is 50, as the design's Q-D; {days} is "60 days" in
-    // the language's own plural, so each line is one sentence to translate however long the wait.
-    ruleLineHalf: word("The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for {days} without a sale. Each look is logged."),
-    ruleLinePct: word("The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or stay in debit for {days} without a sale. Each look is logged."),
+    // the language's own plural, so each line is one sentence to translate however long the gap. {days} is since the last
+    // sale, never how long the debit has lasted: nothing records when a debit began (openExceptions), so a member who
+    // has bought and not sold is listed from their first Bean of debit, and no wording may promise them a wait.
+    ruleLineHalf: word("The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for {days}. Each look is logged."),
+    ruleLinePct: word("The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or are in debit and haven't made a sale for {days}. Each look is logged."),
     debtLineFrom: word('The line of {pct}% applies from {date}.'),
     quietDaysFrom: word('The line of {days} applies from {date}.'),
     dmRequestsOnLine: word('**Messages:** a first message from someone new waits until you accept it'),

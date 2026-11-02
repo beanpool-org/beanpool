@@ -121,7 +121,7 @@ describe('HomePage community shape line and modal (S5)', () => {
         render(<HomePage identity={ME} onNavigate={() => {}} onSeeWords={() => {}} />);
         fireEvent.click(await screen.findByTestId('home-community-shape-summary'));
         expect(screen.getByTestId('community-shape-modal').textContent)
-            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.");
+            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.");
     });
 
     it('does NOT render the shape summary line on an old node without shape features', async () => {

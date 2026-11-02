@@ -64,7 +64,7 @@ describe('CommunityShapeModal', () => {
     });
 
     describe('the rule, on "How this community works"', () => {
-        const SOURCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.";
+        const SOURCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
         const stubRule = (rule: unknown) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rule), { status: rule ? 200 : 404, headers: { 'Content-Type': 'application/json' } })));
         afterEach(() => vi.unstubAllGlobals());
 

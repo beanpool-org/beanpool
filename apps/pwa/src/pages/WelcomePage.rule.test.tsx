@@ -52,6 +52,19 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+describe('"Is my data private?"', () => {
+    const ANSWER = "Your balance and your trades are private. If your community has a rule on when the admins can see a balance, it's under How this community works.";
+
+    it.each([['a known community', KNOWN], ['a plain community', { known: false }], ['an older node', 404]])('says private, and where a rule would be, in %s', async (_name, rule) => {
+        stubNode(rule);
+        render(<WelcomePage onComplete={() => {}} />);
+        fireEvent.click(await screen.findByRole('button', { name: /Is my data private\?/ }));
+        const answer = await screen.findByText(/Your identity is an Ed25519 key/);
+        expect(answer.textContent).toContain(ANSWER);
+        expect(answer.textContent).not.toMatch(/trades are not/);
+    });
+});
+
 describe('the join step', () => {
     it('states the rule in the community\'s numbers, with nothing to tick', async () => {
         stubNode(KNOWN);
@@ -59,7 +72,7 @@ describe('the join step', () => {
         await fillIn();
         const box = await screen.findByTestId('join-rule');
         expect(within(box).getByText(/can owe up to 1,000 Beans \(the known floor\)/)).toBeInTheDocument();
-        expect(within(box).getByText("The admins can see a confirmed member's balance if they owe more than half their credit line, or stay in debit for 60 days without a sale. Each look is logged.")).toBeInTheDocument();
+        expect(within(box).getByText("The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.")).toBeInTheDocument();
         expect(within(box).queryByRole('checkbox')).toBeNull();
     });
 
@@ -67,7 +80,7 @@ describe('the join step', () => {
         stubNode({ ...KNOWN, debtLinePct: 30, quietDays: 90 });
         render(<WelcomePage onComplete={() => {}} />);
         await fillIn();
-        expect(await within(await screen.findByTestId('join-rule')).findByText(/owe more than 30% of their credit line, or stay in debit for 90 days/)).toBeInTheDocument();
+        expect(await within(await screen.findByTestId('join-rule')).findByText(/owe more than 30% of their credit line, or are in debit and haven't made a sale for 90 days/)).toBeInTheDocument();
     });
 
     it('joining asks and sends no consent', async () => {

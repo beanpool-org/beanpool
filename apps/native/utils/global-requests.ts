@@ -2,13 +2,17 @@
  * Message requests waiting on the global community, for the one "Message requests" row at the top of Chat (decision 4 of
  * DESIGN-reaching-across-fable.md, as Marty changed it: every kind of outside request behind one row, no alert or badge).
  * A question through a copy's door reaches its member on global, and no push rings for a request, so a phone set to their own
- * community would otherwise never show it.
+ * community would otherwise never show it. The row is for the device that ticked, not every device they have (below).
  *
  * - **Counts alone** (GET /api/me/unread): nothing of who wrote, and nothing of a line. Accept, Decline and Report are global's
  *   own list, one tap on: this phone's chats are kept per community, and a line is read where it is kept.
- * - **Nothing is asked of global until the member has asked for questions**: this phone holds a mark from the first tick
+ * - **Nothing is asked of global until the member has asked for questions on this device**, by the director's ruling on #2741: a
+ *   phone never tells global a key it holds unless the member ticked a door here. It keeps a mark from the first tick
  *   ({@link noteQuestionsOpened}), which stays after an Off or a Stop showing, since a request already sent is still theirs
  *   to answer. Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
+ * - **So a door can be open with no row.** A door outlives the mark: after a new phone, a Sign Out, or a tick in the browser
+ *   alone, this phone asks nothing and shows nothing until a door is ticked on it. What waits is on global's own Message
+ *   requests, and market/posting.md tells the member so.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { audienceOf } from '@beanpool/core';
@@ -44,11 +48,17 @@ export async function openGlobalRequests(publicKey: string | null | undefined, r
     }).catch((e) => console.warn('[Requests] Could not move to the global community', e));
 }
 
-/** How many wait on global for this key. 0 on a phone that has opened no door, and on global itself, whose own list has them. */
+/**
+ * How many wait on global for this key. 0 on a phone that has opened no door, and on global itself, whose own list has them: and
+ * whatever the member answers there changes the count, so the one kept here goes, or the row is still there when they get home.
+ */
 export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity | null | undefined, now: number = Date.now()): Promise<number> {
     if (!identity?.privateKey) return 0;
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-    if (!anchor || audienceOf(anchor) === audienceOf(GLOBAL_NODE_URL)) return 0;
+    if (!anchor || audienceOf(anchor) === audienceOf(GLOBAL_NODE_URL)) {
+        asked = null;
+        return 0;
+    }
     if ((await AsyncStorage.getItem(QUESTIONS_OPENED_STORE_KEY).catch(() => null)) !== identity.publicKey) return 0;
     if (asked?.key === identity.publicKey && now - asked.at < ASK_EVERY_MS) return asked.count;
     const controller = new AbortController();

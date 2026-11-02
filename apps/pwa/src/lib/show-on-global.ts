@@ -116,8 +116,9 @@ export async function takeQuestions(homeId: string, on: boolean, identity: BeanP
 }
 
 /**
- * The key that has ticked a door in this browser: only then is global asked what waits there (apps/native utils/global-requests.ts
- * says why). It stays after an Off, since a request already sent is still theirs to answer.
+ * The key that has ticked a door in this browser: only then is global asked what waits there, so a door ticked elsewhere has no
+ * row here (apps/native utils/global-requests.ts says why). It stays after an Off, since a request already sent is still theirs
+ * to answer.
  */
 function noteQuestionsOpened(publicKey: string): void {
     try { localStorage.setItem(QUESTIONS_KEY, publicKey); } catch { /* storage off: no row here, and global's own has them */ }

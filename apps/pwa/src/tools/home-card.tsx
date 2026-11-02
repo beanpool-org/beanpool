@@ -9,7 +9,7 @@
  * is drawn only for a tool with both a Home card and a web half.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TOOLS, TOOL_LIMITS, t, toolLineText, type CardHue, type ToolLine, type ToolManifest } from '@beanpool/core';
+import { TOOLS, TOOL_LIMITS, t, toolLineText, type CardHue, type ToolManifest } from '@beanpool/core';
 import { HomeCard, HomeLine } from '../components/HomeCard';
 import { TOOL_APPS } from './index';
 import { toolOfCard } from './cards';

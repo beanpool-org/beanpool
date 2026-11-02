@@ -96,6 +96,7 @@ import { announceVaultTicketKeysAtBoot } from './services/vault-ticket-keys.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
+import { startAddressCheck } from './services/address-check.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { startImageEvacuation } from './services/image-evacuation.js';
@@ -256,6 +257,10 @@ async function main() {
     // on every node: each tick reads the role, so only the main server asks, and only about names it has held. Its own
     // /api/attest over loopback is the plain-HTTP listener's, which serves /api as the tunnel reaches it.
     startRegistrarNameWatch({ loopbackOrigin: `http://127.0.0.1:${httpPort}` });
+
+    // Step 7.5: the address check round (services/address-check.ts): every 15 minutes the main server looks up each of its
+    // addresses and asks what answers there, for its owners to read. Only timers here: the boot never waits on the network.
+    startAddressCheck();
 
     // Step 8: Connector manager + Handshake + Federation protocols
     initConnectorManager(p2pNode);

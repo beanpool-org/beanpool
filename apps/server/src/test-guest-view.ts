@@ -1273,7 +1273,7 @@ async function main(): Promise<void> {
         const EVERY_ROUTE = new Set<string>([
             'GET /', 'GET /.well-known/apple-app-site-association', 'GET /.well-known/apple-developer-domain-association.txt',
             'GET /.well-known/assetlinks.json', 'GET /app', 'POST /app/auth/apple', 'GET /apple-app-site-association', 'GET /settings',
-            'GET /settings/(.*)', 'GET /trust',
+            'GET /settings/(.*)', 'GET /trust', 'GET /check',
             'GET /api/activity/feed',
             'POST /api/admin/check-update', 'POST /api/admin/reports', 'POST /api/admin/seed-invite', 'POST /api/admin/thresholds',
             'POST /api/admin/thresholds/get',
@@ -1342,7 +1342,7 @@ async function main(): Promise<void> {
             'GET /api/local/claim', 'POST /api/local/claim',
             'POST /api/local/admin/2fa/backup-codes', 'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
             'POST /api/local/admin/2fa/verify', 'POST /api/local/admin/announcements',
-            'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove',
+            'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/check', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove',
             'GET /api/local/admin/app-versions',
             'POST /api/local/admin/auth/break-glass-mode',
             'GET /api/local/admin/auth/break-glass-status', 'POST /api/local/admin/auth/break-glass/enrol', 'POST /api/local/admin/auth/break-glass/issue',

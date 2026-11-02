@@ -57,6 +57,9 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
  * the writers under these call too). Decisions and their ballots are above, with the Beans they can move.
  */
 export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
+    // A pin made or taken off (engine/pins.ts): counted against three on the main server's rows, and one written here would be
+    // one no delta replaces.
+    /^\/api\/marketplace\/posts\/[^/]+\/(pin|unpin)\/?$/,
     // An invite made, redeemed (a paper ticket's too), or made by answering a request to join with one.
     /^\/api\/invite\/(generate|redeem|redeem-offline)\/?$/,
     /^\/api\/admin\/seed-invite\/?$/,

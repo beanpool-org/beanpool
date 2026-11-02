@@ -60,6 +60,7 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { tidyEndedPins } from './engine/pins.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { dropToolStateOf } from './engine/tool-state.js';
@@ -1444,6 +1445,14 @@ export function runMarketplaceHygiene(): void {
         archiveStaleListings();
     } catch (e) {
         console.warn('[Retention] Listing archive failed:', e);
+    }
+
+    // 7. The pins that ended (engine/pins.ts): every read has already stopped treating them as pins, by the clock.
+    try {
+        const cleared = tidyEndedPins();
+        if (cleared > 0) console.log(`📌 Cleared ${cleared} pin(s) that ended`);
+    } catch (e) {
+        console.warn('[Pins] Hygiene tidy failed:', e);
     }
 }
 

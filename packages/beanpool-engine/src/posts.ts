@@ -22,7 +22,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlOf, lendBackAroundOf, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
+import { PINS_MAX, avatarUrlOf, lendBackAroundOf, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
@@ -124,6 +124,13 @@ export interface MarketplacePost {
      * featureOffer): one of the six the shopfront draws first. Only on a featured Offer; a visitor's copy never carries it.
      */
     featuredAt?: string;
+    /**
+     * A pin (DESIGN-pinning-fable.md §2; apps/server engine/pins.ts): when it ends, and when it was made. Only on a pinned
+     * post, so every other post reads byte for byte as before and an app that predates pins shows it as the post it is.
+     * Read through @beanpool/core pinLive: the stamp can outlast the pin by up to an hour, until the node tidies it.
+     */
+    pinnedUntil?: string;
+    pinnedAt?: string;
     /**
      * What made it when its author's own app did not: 'assistant:<grant id>' for an owner's AI assistant (apps/server
      * agent/owner-posts.ts). On the standby copy's payload (sync.ts postOfRow), and on its author's own read (or a keeper's of
@@ -386,6 +393,13 @@ export interface PostFilter {
      * it, the usual most-recently-updated order.
      */
     sortByDistance?: boolean;
+    /**
+     * The Market's own read (the route's plain read: no search, no tag, no radius, not one member's, not a shop's): the live
+     * pins that pass the read's other conditions come first, newest pin first, then the list in its order, nearest first
+     * or newest first (DESIGN-pinning-fable.md §2.9, §2.10; postRowsWithPins). A pin changes the order only: it passes
+     * every condition any row of the read passes, so nobody reads a post they weren't already shown. No other read has it.
+     */
+    pinsFirst?: boolean;
     /**
      * Every place read as its coarse area (geo.ts roundToArea, 0.1°), for a visitor on a node that shows them the
      * listings but not the people (guestPost). Inside the query, not on the way out: the distance, the nearest-first
@@ -816,6 +830,8 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         ...lendFieldsOf(db, row),
         ...(typeof row.shop_id === 'string' && row.shop_id ? { shopId: row.shop_id } : {}),
         ...(typeof row.featured_at === 'string' && row.featured_at ? { featuredAt: row.featured_at } : {}),
+        ...(typeof row.pinned_until === 'string' && row.pinned_until ? { pinnedUntil: row.pinned_until } : {}),
+        ...(typeof row.pinned_at === 'string' && row.pinned_at ? { pinnedAt: row.pinned_at } : {}),
         ...(typeof row.tags === 'string' && row.tags ? { tags: postTagsOf(row.tags) } : {}),
         ...(freeTags.length > 0 ? { freeTags } : {}),
         acceptedBy: row.accepted_by,
@@ -972,6 +988,18 @@ const ENTERPRISE_ON_BOARD_BY_KEY_SQL = `p.author_pubkey NOT IN (SELECT public_ke
  * the author's own hand still reach it, as a post. Used by each read below that follows the author.
  */
 const IS_COPY_SQL = 'p.shown_from_host IS NOT NULL';
+
+/**
+ * A pinned post on the board, with `p` the post and `m` its author (two parameters: the time, for an event and a poll):
+ * @beanpool/core pinLive's rule on the row, plus the author's standing, which a phone reads as the status a sync gives such a
+ * listing. Stricter than the listing's own rule: a post taken up, or a closed poll, stays on the board and holds no pin.
+ */
+export const PIN_ON_BOARD_SQL = `p.active = 1 AND p.status = 'active'
+    AND (p.audience_scope IS NULL OR p.audience_scope = 'public')
+    AND p.hidden_by_reports_at IS NULL AND p.removed_by_moderator_at IS NULL AND p.origin_node IS NULL
+    AND NOT (p.type = 'event' AND (COALESCE(p.event_state, '') = 'cancelled' OR COALESCE(p.event_end_at, p.event_start_at, '~') <= ?))
+    AND NOT (p.type = 'poll' AND COALESCE(p.poll_closes_at, '~') <= ?)
+    AND (${IS_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
 /** The reader's block list as a condition on a listing, its one parameter the list as JSON: a copy stays (IS_COPY_SQL). */
 const NOT_BLOCKED_SQL = ` AND (${IS_COPY_SQL} OR p.author_pubkey NOT IN (SELECT value FROM json_each(?)))`;
 /** A row's author as a read may follow them: NULL for a copy (IS_COPY_SQL). */
@@ -1381,6 +1409,8 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     guest: () => true,
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
+    // The pins are read apart from the circles, wherever they are (postRowsWithPins); the rest of the page is any other's.
+    pinsFirst: () => true,
     upcomingUntil: null,
     eventOnline: null,
     authorCardsChanged: null,
@@ -1655,6 +1685,67 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     return getPostsRankedBy(db, filter, postRowsNear);
 }
 
+/** A row's pin stands, with `p` the post and `m` its author: its time hasn't passed and the post is on the board. */
+const PIN_LIVE_SQL = `p.pinned_until > ? AND ${PIN_ON_BOARD_SQL}`;
+const pinLiveParams = (nowIso: string): string[] => [nowIso, nowIso, nowIso];
+/** Newest pin first, then a total order. */
+const PIN_ORDER = ' ORDER BY p.pinned_at DESC, p.id DESC';
+
+/**
+ * The live pins of this node, newest first: at most PINS_MAX ids, found on idx_posts_pinned_until for next to nothing.
+ * Every read's pins are among them. The route's ETag holds them, so a pin that ends by the clock ends a 304 with no write.
+ */
+export function livePinIds(db: Db, nowIso: string = new Date().toISOString()): string[] {
+    return (prepared(db, `
+        SELECT p.id FROM posts p LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE ${PIN_LIVE_SQL}${PIN_ORDER} LIMIT ?`).all(...pinLiveParams(nowIso), PINS_MAX) as Array<{ id: string }>).map(r => r.id);
+}
+
+/**
+ * Takes every pin off that no longer stands: its time passed, or its post is off the board for a reason no write to its
+ * row says (an event's end, a poll's close, its author on holiday or paused; posts_pin_ends_off_board takes the rest).
+ * Stamped, so a standby's delta carries it and a phone's sync hears it. The caller moves the listings' version. Returns
+ * how many it took off.
+ */
+export function clearEndedPins(db: Db, nowIso: string = new Date().toISOString()): number {
+    return prepared(db, `
+        UPDATE posts SET pinned_until = NULL, pinned_at = NULL, updated_at = ?
+        WHERE pinned_until IS NOT NULL AND id NOT IN (
+            SELECT p.id FROM posts p LEFT JOIN members m ON p.author_pubkey = m.public_key WHERE ${PIN_LIVE_SQL}
+        )`).run(nowIso, ...pinLiveParams(nowIso)).changes;
+}
+
+/** Which of a read's rows are pinned: the live pins that pass its conditions, in pin order. */
+function pinsOfRead(db: Db, where: string, whereParams: unknown[]): string[] {
+    const nowIso = new Date().toISOString();
+    // Most reads, on most nodes, on most days: nothing pinned, one index lookup, and the read is the one it always was.
+    if (livePinIds(db, nowIso).length === 0) return [];
+    return (db.prepare(`
+        SELECT p.id FROM posts p LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE ${PIN_LIVE_SQL}${where}${PIN_ORDER} LIMIT ?`).all(...pinLiveParams(nowIso), ...whereParams, PINS_MAX) as Array<{ id: string }>).map(r => r.id);
+}
+
+/**
+ * One page of a read with its pins first (PostFilter.pinsFirst). Not a term in the ORDER BY, as the design first had it:
+ * an expression there sorts every matching row, full row and trade counts included, where the plain read walks
+ * idx_posts_updated_at and stops at its page; and a nearest-first page read in circles never meets a pin outside them. So
+ * the pins are read by id, and the page is filled below them from the read as it always was, without them. `read` is that
+ * read, for a `where` and a page. The pins count towards the page, so `offset` runs on as a client pages.
+ */
+function postRowsWithPins(pins: string[], where: string, whereParams: unknown[], filter: PostFilter,
+    read: (where: string, whereParams: unknown[], filter: PostFilter) => any[]): any[] {
+    const offset = filter.offset || 0;
+    const onPage = filter.limit ? pins.slice(offset, offset + filter.limit) : pins.slice(offset);
+    const held = onPage.length === 0 ? [] : read(`${where} AND p.id IN (SELECT value FROM json_each(?))`,
+        [...whereParams, JSON.stringify(onPage)], { ...filter, limit: undefined, offset: undefined });
+    const byId = new Map(held.map(row => [row.id as string, row]));
+    const first = onPage.flatMap(id => byId.get(id) ?? []);
+    const room = filter.limit ? filter.limit - onPage.length : undefined;
+    if (room === 0) return first;
+    return [...first, ...read(`${where} AND p.id NOT IN (SELECT value FROM json_each(?))`, [...whereParams, JSON.stringify(pins)],
+        { ...filter, limit: room, offset: Math.max(0, offset - pins.length) })];
+}
+
 /** The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks). The nearby set and
  *  the search leave out these authors' listings; the route's search ETag describes this list. */
 export function authorsBlockedBy(db: Db, member: string): string[] {
@@ -1700,7 +1791,8 @@ export interface NearbySet {
     near: string[];
     /** The ids of S that are own(M) or ties(M), in the order of `ids`, each once: wherever they are, near or not. A phone
      *  keeps these past its cap, though it may hold no deal row for one (a restored phone; a deal older than the newest it
-     *  reads), so it never drops a listing the member is tied to (the review of #1778, finding 2). */
+     *  reads), so it never drops a listing the member is tied to (the review of #1778, finding 2). The live pins too: a
+     *  phone keeps the nearest of the rest, so a far pin held by no rule would drop and be fetched again every cycle. */
     tied: string[];
     /** Each row of S with its updated_at, each of its authors whose standing ever moved with their
      *  board_standing_changed_at (an author's holiday moves no listing row), and each of its authors as
@@ -1727,6 +1819,8 @@ export interface NearbySet {
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
+ * - pins: the live pins this reader may see, at most PINS_MAX, wherever they are (DESIGN-pinning-fable.md §2.10): a pin
+ *   reaches a member anywhere, and the set is all a phone holds. Nothing of the member's own place changes.
  * own and ties are kept to what a sync read gives this reader (getPosts with `sync`: the audience rules), so every id
  * of S is a row that a sync read kept to `ids` hands back, and nothing the reader may not read is named.
  */
@@ -1806,8 +1900,28 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     // host. The soonest NEARBY_SET_ONLINE_EVENTS open ones are in every member's set, under the listing's own rules for
     // this reader (open, not ended, the audience, hidden by reports out, an author on the board and not blocked), wherever
     // the member is. The author's half of the board rule is tested on the key, as rankNear's is.
+    // The live pins (DESIGN-pinning-fable.md §2.10), first of all: under the listing's own rules for this reader, as the
+    // online events below, and as few as a set has room for.
+    let pinned: typeof ranked = [];
+    const setMax = Math.max(0, Math.floor(q.max));
+    if (setMax > 0) {
+        const nowIso = new Date().toISOString();
+        const pickPins: RowsNear = (d, _near, listingWhere, listingParams) => {
+            const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
+                + (blocked.length > 0 ? NOT_BLOCKED_SQL : '');
+            pinned = prepared(d, `
+        SELECT p.id, p.updated_at, ${NAMED_AUTHOR_SQL} AS author_pubkey FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE ${PIN_LIVE_SQL}${where}${PIN_ORDER} LIMIT ?`)
+                .all(...pinLiveParams(nowIso), ...listingParams, ...(blocked.length > 0 ? [JSON.stringify(blocked)] : []), Math.min(PINS_MAX, setMax)) as typeof pinned;
+            return [];
+        };
+        if (livePinIds(db, nowIso).length > 0) getPostsRankedBy(db, { ...base, near: { lat: 0, lng: 0 } }, pickPins);
+    }
+    const pinnedIds = new Set(pinned.map(r => r.id));
+
     let online: typeof ranked = [];
-    const onlineMax = Math.min(NEARBY_SET_ONLINE_EVENTS, Math.max(0, Math.floor(q.max)));
+    const onlineMax = Math.min(NEARBY_SET_ONLINE_EVENTS, setMax - pinned.length);
     if (onlineMax > 0 && !q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
         const pickOnline: RowsNear = (d, _near, listingWhere, listingParams) => {
             const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
@@ -1825,8 +1939,9 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     // (apps/native/utils/posts-nearby.ts nearbyPrune), so a set past it would lose every online event on the phone. The
     // online events go in first, and the near list gives way to them from its far end.
     const onlineIds = new Set(online.map(r => r.id));
-    ranked = ranked.filter(r => !onlineIds.has(r.id)).slice(0, Math.max(0, Math.floor(q.max) - online.length));
-    ranked.push(...online);
+    online = online.filter(r => !pinnedIds.has(r.id));
+    ranked = ranked.filter(r => !onlineIds.has(r.id) && !pinnedIds.has(r.id)).slice(0, Math.max(0, setMax - online.length - pinned.length));
+    ranked.push(...online, ...pinned);
     const near = ranked.map(r => r.id);
 
     // own and ties, kept to a sync read's rules for this reader.
@@ -1844,7 +1959,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         getPostsRankedBy(db, { ...base, sync: true, ids: extra, near: { lat: 0, lng: 0 } }, keep);
     }
     const ids = [...near, ...kept.map(r => r.id)];
-    const ownOrTied = new Set([...own, ...tied]);
+    const ownOrTied = new Set([...own, ...tied, ...pinnedIds]);
     let stamp = [...ranked, ...kept].map(r => `${r.id}@${r.updated_at ?? ''}`).join(',');
     if (ids.length > 0) {
         // The authors of S whose standing ever moved (idx_members_standing_by_key, schema.sql). One whose never has adds
@@ -2149,9 +2264,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         where += ")";
     }
 
+    const pins = filter?.pinsFirst ? pinsOfRead(db, where, params) : [];
     let rows: any[];
     if (heal) {
         rows = postRowsForHeal(db, where, params, heal, filter);
+    } else if (pins.length > 0) {
+        rows = postRowsWithPins(pins, where, params, filter!, near
+            ? (w, p, f) => rowsNear(db, near, w, p, f)
+            : (w, p, f) => db.prepare(`${postRowSelect(f)}
+        WHERE 1=1${w}${recentOrder(f)}${f.limit ? ' LIMIT ? OFFSET ?' : ''}`).all(...p, ...(f.limit ? [f.limit, f.offset || 0] : [])) as any[]);
     } else if (near) {
         rows = rowsNear(db, near, where, params, filter!);
     } else {
@@ -2504,6 +2625,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // Which of a shop's Offers its keepers featured, and when: the shopfront's, a members' page (round 3 §5), so not a
     // visitor's. The listing itself stays.
     featuredAt: 'drop',
+    // A community's choice, shown to everyone who can see the post (DESIGN-pinning-fable.md §2.7): two times and no person.
+    pinnedUntil: 'keep', pinnedAt: 'keep',
     // What made it (an owner's assistant): the moderators' and the standby copy's, never a visitor's.
     createdVia: 'drop',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',

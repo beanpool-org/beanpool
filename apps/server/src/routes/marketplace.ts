@@ -45,6 +45,7 @@ import { CONVENOR_PAUSED_CODE, ENTERPRISE_CLOSED_CODE, LET_IN_ONLY_HOST, POST_PH
 import { routePhotosRefusal, photoRefusalText } from '../engine/avatar.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { respondShopRefusal } from './shop-refusal.js';
+import { PinRefusal, pinPost, unpinPost } from '../engine/pins.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
 import { nearbySetHash, nearbySetMemory } from '../engine/nearby-set-memory.js';
@@ -55,7 +56,7 @@ import { ownWithheldLine, withheldAttachmentFor } from '../engine/withheld-lines
 import { GROUP_THREAD_TYPE, groupChatRole, groupLineForReader } from '../engine/group-thread.js';
 import { fromEpochOf } from '../engine/group-keys.js';
 import { newListingCategory } from '../engine/shops.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, livePinIds, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 import { setReadCaching, PHOTO_EDGE_MAX_S } from '../guest-cache.js';
@@ -590,7 +591,14 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const keeperPart = asKeeper && reader && author !== reader && readsAsAuthor(db, reader, author) ? ':keeper' : '';
     // A member's copy draws its from-line from the directory (engine/event-copy.ts), and a row's change moves no listing.
     const directoryPart = switches.directoryMirror ? `:dir-${directoryStamp()}` : '';
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}`;
+    // The Market's own read leads with the live pins (DESIGN-pinning-fable.md §2.9, §2.10): not a search or a tag, one
+    // member's or one shop's listings, a radius, a group's or a person's, or a sync. Their tag holds them, so a pin that ends
+    // by the clock, which moves no row and no version, ends the 304 that would confirm it on top. With none, the tag is as it was.
+    const pinsFirst = !id && !ids && !sync && !updatedAfter && !q && !tags && !free && !author && !shopId && !lendableOnly && !targetGroupId
+        && !assignedTo && radiusKm === undefined && (audienceScope === undefined || audienceScope === 'public') && ctx.query.online === undefined;
+    const pinsNow = pinsFirst ? livePinIds(db) : [];
+    const pinsPart = pinsNow.length > 0 ? `:pins-${pinsNow.join(',')}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}${pinsPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -693,7 +701,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         posts = getPosts({
             ...listing, limit, offset, updatedAfter, sync, syncPage, localAuthorCardsChanged,
             near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
-            measureAtMost: point ? ONE_PASS_MAX_MEASURED : undefined,
+            measureAtMost: point ? ONE_PASS_MAX_MEASURED : undefined, pinsFirst: pinsFirst || undefined,
         });
     }
     // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or
@@ -1101,6 +1109,45 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, word('Failed to close poll')) };
+    }
+});
+
+// A pin (engine/pins.ts, DESIGN-pinning-fable.md §4): signed member routes, as /close is, so no automation token and no
+// assistant reaches them. Who it is is the signature's alone: the body says how long, and nothing else is read from it.
+function answerPinRefusal(ctx: { status: number; body: unknown }, e: unknown): boolean {
+    if (!(e instanceof PinRefusal)) return false;
+    ctx.status = e.status;
+    ctx.body = { error: e.message, code: e.code };
+    return true;
+}
+
+router.post('/api/marketplace/posts/:id/pin', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    try {
+        const { postId, pinnedUntil, pinnedAt } = pinPost(ctx.params.id, actor, (ctx as any).requestBody?.days);
+        ctx.body = { success: true, postId, pinnedUntil, pinnedAt };
+    } catch (e) {
+        if (!answerPinRefusal(ctx, e) && !respondProfileRefusal(ctx, e)) throw e;
+    }
+});
+
+router.post('/api/marketplace/posts/:id/unpin', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    try {
+        const { postId } = unpinPost(ctx.params.id, actor, canOperateTreasury);
+        ctx.body = { success: true, postId, pinnedUntil: null, pinnedAt: null };
+    } catch (e) {
+        if (!answerPinRefusal(ctx, e) && !respondProfileRefusal(ctx, e)) throw e;
     }
 });
 

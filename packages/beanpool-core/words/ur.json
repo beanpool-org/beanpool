@@ -891,6 +891,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "کوئی عدد اس وقت روکا جاتا ہے جب اس کے پیچھے {n} سے کم لوگ ہوں، یا دونوں کالموں میں {n} سے کم لوگوں کا فرق ہو۔",
   "First trades go up in steps of {n}, so the number never points at one person.": "پہلے تبادلے {n} کے گروپوں میں بڑھتے ہیں، تاکہ عدد کبھی کسی ایک شخص کی طرف اشارہ نہ کرے۔",
   "{n} at this spot": "اس جگہ پر {n}",
+  "Calendar": "کیلنڈر",
+  "Nothing on {date}": "{date} کو کچھ نہیں",
+  "Nothing on in {month}.": "{month} میں کچھ نہیں ہے۔",
+  "Next: {date} ›": "اگلا: {date} ›",
+  "No events coming up yet.": "ابھی کوئی آنے والی تقریب نہیں ہے۔",
+  "Start one ›": "ایک شروع کریں ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} تقریب",
+    "other": "{date}: {n} تقریبات"
+  },
   "Take questions about this on the global community": "عالمی کمیونٹی پر اس بارے میں سوال قبول کریں",
   "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "عالمی کمیونٹی کے اراکین وہاں آپ کا نام دیکھیں گے اور آپ کو ایک پیغام بھیج سکیں گے۔ جب تک آپ قبول نہ کریں یہ پیغام کی درخواستوں میں انتظار کرے گا۔",
   "{name} takes questions about this": "{name} اس بارے میں سوال قبول کرتے ہیں",

@@ -906,6 +906,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Eine Zahl wird zurückgehalten, wenn weniger als {n} Personen dahinterstehen oder sich die beiden Spalten um weniger als {n} Personen unterscheiden.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Erste Abschlüsse werden in Schritten von {n} gezählt, sodass die Zahl nie auf eine einzelne Person zeigt.",
   "{n} at this spot": "{n} an diesem Ort",
+  "Calendar": "Kalender",
+  "Nothing on {date}": "Nichts am {date}",
+  "Nothing on in {month}.": "Nichts los im {month}.",
+  "Next: {date} ›": "Nächster: {date} ›",
+  "No events coming up yet.": "Noch keine bevorstehenden Veranstaltungen.",
+  "Start one ›": "Eine erstellen ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} Veranstaltung",
+    "other": "{date}: {n} Veranstaltungen"
+  },
   "Take questions about this on the global community": "Fragen dazu in der globalen Community annehmen",
   "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "Mitglieder der globalen Community sehen dort deinen Namen und können dir eine Nachricht schicken. Sie wartet unter Nachrichtenanfragen, bis du sie annimmst.",
   "{name} takes questions about this": "{name} beantwortet Fragen dazu",

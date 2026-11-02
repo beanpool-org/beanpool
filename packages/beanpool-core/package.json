@@ -60,6 +60,11 @@
       "import": "./dist/words-check.js",
       "default": "./dist/words-check.js"
     },
+    "./calendar-month": {
+      "types": "./dist/calendar-month.d.ts",
+      "import": "./dist/calendar-month.js",
+      "default": "./dist/calendar-month.js"
+    },
     "./words-dates/*": {
       "types": "./dist/words-dates/*.d.ts",
       "import": "./dist/words-dates/*.js",

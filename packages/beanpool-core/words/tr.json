@@ -891,6 +891,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Bir sayının arkasında {n} kişiden az varsa ya da iki sütun arasındaki fark {n} kişiden azsa o sayı gizlenir.",
   "First trades go up in steps of {n}, so the number never points at one person.": "İlk takaslar {n}'lik adımlarla artar, böylece sayı hiçbir zaman tek bir kişiyi göstermez.",
   "{n} at this spot": "Bu noktada {n}",
+  "Calendar": "Takvim",
+  "Nothing on {date}": "{date} tarihinde etkinlik yok",
+  "Nothing on in {month}.": "{month} ayında etkinlik yok.",
+  "Next: {date} ›": "Sonraki: {date} ›",
+  "No events coming up yet.": "Henüz yaklaşan bir etkinlik yok.",
+  "Start one ›": "Bir tane başlat ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} etkinlik",
+    "other": "{date}: {n} etkinlik"
+  },
   "Take questions about this on the global community": "Küresel toplulukta bununla ilgili soruları kabul et",
   "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "Küresel topluluğun üyeleri orada adını görecek ve sana bir mesaj gönderebilecek. Mesaj, sen kabul edene kadar Mesaj isteklerinde bekler.",
   "{name} takes questions about this": "{name} bununla ilgili soruları kabul ediyor",

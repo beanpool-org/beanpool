@@ -969,6 +969,18 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Число скрывается, если за ним стоит меньше {n} человек или если две колонки различаются меньше чем на {n} человек.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Первые сделки растут шагами по {n}, поэтому число никогда не указывает на одного человека.",
   "{n} at this spot": "В этом месте: {n}",
+  "Calendar": "Календарь",
+  "Nothing on {date}": "Ничего нет на {date}",
+  "Nothing on in {month}.": "На {month} ничего нет.",
+  "Next: {date} ›": "Следующее: {date} ›",
+  "No events coming up yet.": "Предстоящих мероприятий пока нет.",
+  "Start one ›": "Создать ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} мероприятие",
+    "few": "{date}: {n} мероприятия",
+    "many": "{date}: {n} мероприятий",
+    "other": "{date}: {n} мероприятия"
+  },
   "Take questions about this on the global community": "Принимать вопросы об этом в глобальном сообществе",
   "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "Участники глобального сообщества увидят там ваше имя и смогут отправить вам одно сообщение. Оно подождёт в запросах на переписку, пока вы его не примете.",
   "{name} takes questions about this": "{name} отвечает на вопросы об этом",

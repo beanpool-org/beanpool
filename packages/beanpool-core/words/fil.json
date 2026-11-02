@@ -891,6 +891,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Hindi ipinapakita ang isang bilang kapag wala pang {n} tao ang nasa likod nito, o kapag wala pang {n} tao ang pagitan ng dalawang hanay.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Tumataas ang mga unang palitan nang tig-{n}, kaya hindi kailanman tumuturo ang bilang sa iisang tao.",
   "{n} at this spot": "{n} sa lugar na ito",
+  "Calendar": "Kalendaryo",
+  "Nothing on {date}": "Walang kaganapan sa {date}",
+  "Nothing on in {month}.": "Walang kaganapan sa {month}.",
+  "Next: {date} ›": "Susunod: {date} ›",
+  "No events coming up yet.": "Wala pang paparating na mga kaganapan.",
+  "Start one ›": "Magsimula ng isa ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: {n} kaganapan",
+    "other": "{date}: {n} kaganapan"
+  },
   "Take questions about this on the global community": "Tumanggap ng mga tanong tungkol dito sa pandaigdigang komunidad",
   "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "Makikita ng mga miyembro ng pandaigdigang komunidad ang pangalan mo roon, at maaari silang magpadala sa iyo ng isang mensahe. Maghihintay ito sa Mga kahilingan sa mensahe hanggang tanggapin mo.",
   "{name} takes questions about this": "Tumatanggap si {name} ng mga tanong tungkol dito",

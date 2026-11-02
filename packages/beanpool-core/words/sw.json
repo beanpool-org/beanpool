@@ -891,6 +891,16 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "Nambari huzuiwa ikiwa watu walio nyuma yake ni chini ya {n}, au ikiwa tofauti kati ya safu mbili ni chini ya watu {n}.",
   "First trades go up in steps of {n}, so the number never points at one person.": "Biashara za kwanza hupanda kwa hatua za {n}, ili nambari isimwonyeshe mtu mmoja kamwe.",
   "{n} at this spot": "{n} mahali hapa",
+  "Calendar": "Kalenda",
+  "Nothing on {date}": "Hakuna chochote tarehe {date}",
+  "Nothing on in {month}.": "Hakuna chochote mwezi wa {month}.",
+  "Next: {date} ›": "Inayofuata: {date} ›",
+  "No events coming up yet.": "Bado hakuna matukio yajayo.",
+  "Start one ›": "Anzisha moja ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "one": "{date}: tukio {n}",
+    "other": "{date}: matukio {n}"
+  },
   "Take questions about this on the global community": "Pokea maswali kuhusu hili kwenye jumuiya ya kimataifa",
   "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "Wanachama wa jumuiya ya kimataifa wataona jina lako huko, na wanaweza kukutumia ujumbe mmoja. Utasubiri kwenye Maombi ya ujumbe hadi utakapokubali.",
   "{name} takes questions about this": "{name} anapokea maswali kuhusu hili",

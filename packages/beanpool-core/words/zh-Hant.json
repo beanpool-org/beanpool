@@ -852,6 +852,15 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "當一個數字背後不足 {n} 人，或兩欄相差不足 {n} 人時，該數字不顯示。",
   "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 遞增，因此這個數字絕不會指向某一個人。",
   "{n} at this spot": "此處有 {n} 項",
+  "Calendar": "日曆",
+  "Nothing on {date}": "{date}無活動",
+  "Nothing on in {month}.": "{month}無活動。",
+  "Next: {date} ›": "下一個：{date} ›",
+  "No events coming up yet.": "尚無即將舉行的活動。",
+  "Start one ›": "發起一個 ›",
+  "{date}: {n} event|{date}: {n} events": {
+    "other": "{date}：{n} 場活動"
+  },
   "Take questions about this on the global community": "在全球社群接受有關此內容的提問",
   "Members of the global community will see your name there, and can send you one message. It waits under Message requests until you accept.": "全球社群的成員會在那裡看到你的名字，並可以傳一則訊息給你。在你接受之前，它會留在訊息請求中。",
   "{name} takes questions about this": "{name} 接受有關此內容的提問",

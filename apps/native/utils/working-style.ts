@@ -43,6 +43,7 @@ export async function adoptNewerRowIntoDevice(publicKey: string, rowArchetype: s
  * ask it again, so it waits as a carried result: judged against what the node holds, a tie sends nothing, a retake stands.
  */
 export async function carryRowToNode(publicKey: string, rowArchetype: string, community: string): Promise<void> {
+    if (await onGuestVisit(community)) return;
     const parsed = parseArchetype(rowArchetype);
     if (parsed) await keepCarriedArchetype(community, publicKey, publicArchetype(parsed));
 }

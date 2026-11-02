@@ -529,6 +529,15 @@ describe('nothing goes to a community the member isn\'t in', () => {
             expect(sentTo(B)).toEqual([]);
         });
 
+        it('a row the node holds older, on a guest visit: nothing waits there, so nothing is held to send after a join', async () => {
+            await guestWithARow();
+            await updateMemberProfile(ME, { callsign: 'Marty', bio: 'x', archetype: publicOf(quiz('2026-11-03', 'spark')) });
+            nodeAt(B).held.archetype = publicOf(quiz('2026-11-01', 'guardian'));
+            await performSync();
+            expect(await isGuestNode(B)).toBe(true);
+            expect(await waitingArchetype(B, ME)).toBeNull();
+        });
+
         it('no answer from the node leaves the mark too', async () => {
             await guestWithARow();
             nodeAt(B).member = 'silent';

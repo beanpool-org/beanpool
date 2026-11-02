@@ -850,6 +850,6 @@
   "Typical means the middle person: half were quicker, half slower.": "보통은 가운데 사람을 뜻해요. 절반은 더 빨랐고 절반은 더 느렸어요.",
   "The wait for a first trade counts only people who listed before they traded.": "첫 거래까지의 대기 시간은 거래 전에 게시물을 올린 사람만 세요.",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "해당 인원이 {n}명 미만이거나 두 열의 차이가 {n}명 미만이면 그 수치는 표시되지 않습니다.",
-  "First trades go up in steps of {n}, so the number never points at one person.": "첫 거래는 {n}건 단위로 늘어나서 숫자가 한 사람을 가리키지 않아요.",
+  "First trades go up in steps of {n}, so the number never points at one person.": "첫 거래는 {n}건 단위로 늘어나서 숫자가 한 사람을 가리키는 일은 없어요.",
   "{n} at this spot": "이 장소에 {n}개"
 }

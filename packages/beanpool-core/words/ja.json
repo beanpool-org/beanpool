@@ -838,8 +838,8 @@
   "Made a first listing": "初めて投稿した人",
   "Completed a first trade": "初めて取引を完了した人",
   "At least {n}": "{n} 人以上",
-  "Typical time from joining to a first listing": "参加から初めての投稿までの目安",
-  "Typical time from a first listing to a first trade": "初めての投稿から初めての取引までの目安",
+  "Typical time from joining to a first listing": "参加から初めての投稿までの典型的な時間",
+  "Typical time from a first listing to a first trade": "初めての投稿から初めての取引までの典型的な時間",
   "Held back": "非表示",
   "No trades yet": "取引はまだありません",
   "Under a day": "1日未満",
@@ -847,7 +847,7 @@
   "{n} day|{n} days": {
     "other": "{n}日"
   },
-  "Typical means the middle person: half were quicker, half slower.": "「目安」は真ん中の人の値で、半数はこれより早く、半数は遅い人です。",
+  "Typical means the middle person: half were quicker, half slower.": "「典型値」は真ん中の人の値で、半数はこれより早く、半数は遅い人です。",
   "The wait for a first trade counts only people who listed before they traded.": "初めての取引までの待ち時間は、取引より先に投稿した人だけを数えます。",
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "対象が{n}人未満のとき、または2つの列の差が{n}人未満のとき、その数値は表示されません。",
   "First trades go up in steps of {n}, so the number never points at one person.": "初めての取引は {n} 件単位で増えるため、数字が特定の人を指すことはありません。",

@@ -868,7 +868,7 @@
   "No public address currently assigned. An owner of this community can add one.": "अभी कोई सार्वजनिक पता निर्धारित नहीं है। इस समुदाय का कोई स्वामी एक पता जोड़ सकता है।",
   "{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.": "{address} अभी मुख्य पता नहीं है: पता सेवा कहती है {status}। यह सर्वर उस पर चला गया है और उसे माँगता रहता है, इसलिए नीचे का पैनल अब उसे दिखाता है। सदस्य अभी भी {current} पर इस समुदाय तक पहुँचते हैं।",
   "It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising {address}, and no name is given up. While its key holds {address}, members' apps that use it are still accepted. If the key doesn't hold it, they are refused after this.": "अब यह इस समुदाय का पता है। इसके बाद, नए सदस्यों को इसके किसी अन्य पते पर भेजा जाता है, यदि कोई हो। यह समुदाय {address} का प्रचार बंद करता है, और कोई नाम नहीं छोड़ा जाता। जब तक इसकी कुंजी के पास {address} है, इसका उपयोग करने वाले सदस्यों के ऐप स्वीकार किए जाते रहेंगे। यदि कुंजी के पास यह नहीं है, तो इसके बाद उन्हें अस्वीकार कर दिया जाएगा।",
-  "From joining to a first trade": "जुड़ने से पहले लेन-देन तक",
+  "From joining to a first trade": "जुड़ने से लेकर पहले लेन-देन तक",
   "How far new members get, for this community's owners and admins only. Whole-community numbers: no names, and nothing about one person.": "नए सदस्य कितना आगे बढ़ते हैं, सिर्फ़ इस समुदाय के मालिकों और एडमिन के लिए। पूरे समुदाय की संख्याएँ: कोई नाम नहीं, और किसी एक व्यक्ति के बारे में कुछ नहीं।",
   "Last 90 days": "पिछले 90 दिन",
   "All time": "अब तक",

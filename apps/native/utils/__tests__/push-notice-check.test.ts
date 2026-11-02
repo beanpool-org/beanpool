@@ -178,8 +178,8 @@ let byron: Community;
 let navigated: NoticeRoute[];
 const navigate = (route: NoticeRoute) => { navigated.push(route); };
 /** What a valid notice from another community the phone keeps was handed on with: the switch (push-notice-switch.ts). */
-let openedIn: Array<{ community: string; id: string; route: NoticeRoute }>;
-const openIn = async (community: string, id: string, route: () => Promise<NoticeRoute>) => { openedIn.push({ community, id, route: await route() }); };
+let openedIn: Array<{ community: string; id: string | null; route: NoticeRoute }>;
+const openIn = async (community: string, id: string | null, route: () => Promise<NoticeRoute>) => { openedIn.push({ community, id, route: await route() }); };
 const tap = (n: IncomingNotice) => followTap(n, { storage: AsyncStorage, account: kim, openIn }, navigate);
 const open = (n: IncomingNotice) => checkWhileOpen(n, { storage: AsyncStorage, recipient: kim.publicKey });
 

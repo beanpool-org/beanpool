@@ -27,8 +27,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, pushCommunityTag, pushNoticeBytes, pushNoticeWords, type PushNoticeKind } from '@beanpool/core';
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../push-notice-check';
 import {
-    clearActiveCount, countNotice, forgetNoticeCounts, noticeCountFor, NOTICE_COUNTS_STORE_KEY, onNoticeCounts, readNoticeCounts,
-    watchNoticeCounts,
+    clearActiveCount, countNotice, dropCounts, forgetNoticeCounts, noteServerUnread, noticeCountFor, noticeCountsSum, NOTICE_COUNTS_STORE_KEY,
+    onNoticeCounts, readNoticeCounts, watchNoticeCounts,
 } from '../notice-counts';
 import { communitySwitched } from '../community-switch';
 import { PUSH_PINS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -213,6 +213,130 @@ describe('a community\'s number goes back to nothing as it becomes the one in us
         // Back on Mullum, the notice still in the list counts no more.
         switchTo(MULLUM);
         await receive(push(data));
+        expect(await counts()).toEqual({});
+    });
+});
+
+describe('a community\'s own word beside the push tally: the `server` field and the max rule (design R6)', () => {
+    it('its answer is its number, kept in the tally\'s `server` field', async () => {
+        await noteServerUnread(storage, BYRON, 4);
+        expect(await counts()).toEqual({ [BYRON]: 4 });
+        expect(JSON.parse(mem.get(NOTICE_COUNTS_STORE_KEY)!)[BYRON].server).toBe(4);
+    });
+
+    it('between rounds the number is the larger of the two, never their sum: no double count', async () => {
+        await noteServerUnread(storage, BYRON, 3);
+        await receive(push(byron.notice(kim.publicKey)));
+        expect(await counts()).toEqual({ [BYRON]: 3 });
+        await noteServerUnread(storage, OLDTOWN, 0);
+        await receive(push(oldtown.notice(kim.publicKey)));
+        await receive(push(oldtown.notice(kim.publicKey)));
+        expect(await counts()).toEqual({ [BYRON]: 3, [OLDTOWN]: 2 });
+        expect(await noticeCountsSum(storage)).toBe(5);
+    });
+
+    it('when a round answers, the community\'s word stands, lower than the tally too, and pushes count afresh from there', async () => {
+        await receive(push(byron.notice(kim.publicKey)));
+        await receive(push(byron.notice(kim.publicKey)));
+        await receive(push(byron.notice(kim.publicKey)));
+        expect(await counts()).toEqual({ [BYRON]: 3 });
+        // Read on the web since.
+        await noteServerUnread(storage, BYRON, 1);
+        expect(await counts()).toEqual({ [BYRON]: 1 });
+        await noteServerUnread(storage, BYRON, 0);
+        expect(await counts()).toEqual({});
+        await receive(push(byron.notice(kim.publicKey)));
+        expect(await counts()).toEqual({ [BYRON]: 1 });
+    });
+
+    it('a notice counted before the answer doesn\'t count again after it', async () => {
+        const data = byron.notice(kim.publicKey);
+        await receive(push(data));
+        await noteServerUnread(storage, BYRON, 0);
+        await receive(push(data));
+        expect(await counts()).toEqual({});
+    });
+
+    it('says when it rose, once: not for the same again, not for a fall, and for a first word above none', async () => {
+        expect(await noteServerUnread(storage, BYRON, 2)).toBe(true);
+        expect(await noteServerUnread(storage, BYRON, 2)).toBe(false);
+        expect(await noteServerUnread(storage, BYRON, 1)).toBe(false);
+        expect(await noteServerUnread(storage, BYRON, 4)).toBe(true);
+        expect(await noteServerUnread(storage, OLDTOWN, 0)).toBe(false);
+    });
+
+    it('two answers at once: one rise, one teller', async () => {
+        const told = await Promise.all([noteServerUnread(storage, BYRON, 2), noteServerUnread(storage, BYRON, 2)]);
+        expect(told.filter(Boolean)).toHaveLength(1);
+    });
+
+    it('a rise that can\'t be written down is no rise: nobody tells what will be told again', async () => {
+        const failing = { ...storage, setItem: async () => { throw new Error('disk full'); } };
+        expect(await noteServerUnread(failing, BYRON, 2)).toBe(false);
+        expect(await noteServerUnread(storage, BYRON, 2)).toBe(true);
+    });
+
+    it('nothing for the community in use, one the phone doesn\'t keep, or when the list can\'t be read', async () => {
+        expect(await noteServerUnread(storage, MULLUM, 2)).toBe(false);
+        expect(await noteServerUnread(storage, 'https://stranger.example.com', 2)).toBe(false);
+        expect(await counts()).toEqual({});
+        mem.set(SAVED_NODES_STORE_KEY, '{not json');
+        expect(await noteServerUnread(storage, BYRON, 2)).toBe(false);
+    });
+
+    it('it clears at a switch: both numbers go, and what it said before is forgotten, so its next word is compared with none', async () => {
+        stopWatching = watchNoticeCounts(storage);
+        await noteServerUnread(storage, BYRON, 5);
+        await receive(push(byron.notice(kim.publicKey)));
+        switchTo(BYRON);
+        expect(await counts()).toEqual({});
+        expect(JSON.parse(mem.get(NOTICE_COUNTS_STORE_KEY)!)[BYRON]).not.toHaveProperty('server');
+        switchTo(MULLUM);
+        expect(await counts()).toEqual({});
+        expect(await noteServerUnread(storage, BYRON, 1)).toBe(true);
+    });
+
+    it('a community gone quiet for the rounds shows nothing, its notices still noted as seen', async () => {
+        const data = byron.notice(kim.publicKey);
+        await receive(push(data));
+        await noteServerUnread(storage, OLDTOWN, 3);
+        await dropCounts(storage, [BYRON, OLDTOWN]);
+        expect(await counts()).toEqual({});
+        await receive(push(data));
+        expect(await counts()).toEqual({});
+    });
+
+    it('a screen showing the numbers is told of a round\'s change, and only of a change', async () => {
+        await noteServerUnread(storage, BYRON, 2);
+        let told = 0;
+        const stop = onNoticeCounts(() => { told++; });
+        await noteServerUnread(storage, BYRON, 2);
+        await noteServerUnread(storage, BYRON, 3);
+        stop();
+        expect(told).toBe(1);
+    });
+
+    it('a `server` that can\'t be read is none; the sum of nothing is nothing', async () => {
+        mem.set(NOTICE_COUNTS_STORE_KEY, JSON.stringify({ [BYRON]: { n: 1, seen: {}, server: 'many' }, [OLDTOWN]: { n: 0, seen: {}, server: -3 } }));
+        expect(await counts()).toEqual({ [BYRON]: 1 });
+        mem.delete(NOTICE_COUNTS_STORE_KEY);
+        expect(await noticeCountsSum(storage)).toBe(0);
+    });
+
+    it('a forgotten community takes its word with it, out of the sum too', async () => {
+        await noteServerUnread(storage, BYRON, 2);
+        await noteServerUnread(storage, OLDTOWN, 3);
+        mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM }, { url: OLDTOWN }]));
+        expect(await noticeCountsSum(storage)).toBe(3);
+    });
+
+    it('a tap on the app\'s own notice counts nothing: it is no notice of that community\'s', async () => {
+        await noteServerUnread(storage, BYRON, 0);
+        const { openNoticeIn } = await import('../push-notice-switch');
+        await openNoticeIn(BYRON, null, async () => '/(tabs)/chats', {
+            storage, publicKey: kim.publicKey, joinUnderWay: async () => true, switchUnderWay: () => false,
+            switchTo: async () => {}, recheck: async () => 'member',
+        });
         expect(await counts()).toEqual({});
     });
 });

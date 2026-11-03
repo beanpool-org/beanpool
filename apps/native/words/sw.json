@@ -6217,5 +6217,7 @@
   "Event options": "Chaguo za tukio",
   "Poll options": "Chaguo za kura",
   "Failed to pin post": "Imeshindwa kubandika chapisho",
-  "Failed to unpin post": "Imeshindwa kuondoa ubandikaji"
+  "Failed to unpin post": "Imeshindwa kuondoa ubandikaji",
+  "Remove my working style": "Ondoa mtindo wangu wa kazi",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Hii inaondoa mtindo wako wa kazi kwenye kifaa hiki na kwenye kila jumuiya iliyomo. Ukifanya tena dodoso, unarudi."
 }

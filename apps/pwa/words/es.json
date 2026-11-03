@@ -3703,5 +3703,7 @@
   "Pinned by your community · until {date}": "Fijado por tu comunidad · hasta el {date}",
   "Take the pin off": "Quitar la fijación",
   "Three posts are pinned already. Take one off first.": "Ya hay tres publicaciones fijadas. Quita una primero.",
-  "📌 PINNED": "📌 FIJADO"
+  "📌 PINNED": "📌 FIJADO",
+  "Remove my working style": "Quitar mi estilo de trabajo",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Esto quita tu estilo de trabajo de este dispositivo y de todas las comunidades que hay en él. Repetir el cuestionario lo devuelve."
 }

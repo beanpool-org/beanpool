@@ -7183,5 +7183,7 @@
   "Event options": "خيارات الفعالية",
   "Poll options": "خيارات الاستطلاع",
   "Failed to pin post": "فشل تثبيت المنشور",
-  "Failed to unpin post": "فشل إزالة تثبيت المنشور"
+  "Failed to unpin post": "فشل إزالة تثبيت المنشور",
+  "Remove my working style": "إزالة أسلوب عملي",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "يُزيل هذا أسلوب عملك من هذا الجهاز ومن كل مجتمع عليه. إعادة الاختبار تعيده."
 }

@@ -6218,5 +6218,7 @@
   "Event options": "Etkinlik seçenekleri",
   "Poll options": "Anket seçenekleri",
   "Failed to pin post": "Gönderi sabitlenemedi",
-  "Failed to unpin post": "Sabitleme kaldırılamadı"
+  "Failed to unpin post": "Sabitleme kaldırılamadı",
+  "Remove my working style": "Çalışma tarzımı kaldır",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Bu, çalışma tarzınızı bu cihazdan ve cihazdaki her topluluktan kaldırır. Testi yeniden çözerseniz geri gelir."
 }

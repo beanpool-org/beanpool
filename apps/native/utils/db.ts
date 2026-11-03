@@ -28,13 +28,13 @@ import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from '
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
-import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
-import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, healGuestMark } from './working-style';
+import { clearPendingProfileChange, clearWaitingArchetype, clearWaitingRemoval, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype, waitingRemoval } from './pending-profile-sync';
+import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, finishRemoval, healGuestMark, removalToSend } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -4322,14 +4322,31 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
-            const arch = m.archetype || null;
+            let arch = m.archetype || null;
             let finalArch = arch;
+            // The node SAYING a member has no working style: the field is there, and null. A removal reaches other members'
+            // phones this way (the node bumps profile_updated_at, so the next delta names the member with null), and the
+            // COALESCE below would keep the cached result and go on typing them (Chemistry tips) while the web shows none.
+            // A delta that leaves the field out (an older node, a trimmed row) says nothing, and keeps it, as a partial
+            // list keeps an avatar. Not this member's own row: that has its own rule (a retake not yet sent stands, below).
+            const archetypeNullClears = m.archetype === null && pk !== selfPubkey;
             if (pk === selfPubkey) {
                 selfMemberFound = true;
                 const localRow = await txn.getFirstAsync<{ archetype?: string | null }>(
                     'SELECT archetype FROM members WHERE public_key = ?',
                     [pk]
                 );
+                // Remove my working style: while this community is still to be told, the result it holds, and any the phone's
+                // row still holds, are ones the member took off. Neither comes back through this sync (not into the row, the
+                // device copy, the other communities, nor the node). One taken after the removal is a retake: it stands.
+                const removal = anchorUrl ? await waitingRemoval(anchorUrl, pk) : null;
+                if (removal) {
+                    if (arch && !archetypeIsAfter(arch, removal.removedOn)) { arch = null; finalArch = null; }
+                    if (localRow?.archetype && !archetypeIsAfter(localRow.archetype, removal.removedOn)) {
+                        localRow.archetype = null;
+                        await txn.runAsync('UPDATE members SET archetype = NULL WHERE public_key = ?', [pk]);
+                    }
+                }
                 if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
                     finalArch = localRow.archetype;
                     // Null is a removal's to send (S3): only a row the node really holds older.
@@ -4346,16 +4363,17 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
+                   archetype = CASE WHEN ? THEN excluded.archetype
+                                    ELSE COALESCE(excluded.archetype, members.archetype) END,
                    avatar_url = CASE WHEN ? THEN excluded.avatar_url
                                      ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
-                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                   archetype = COALESCE(excluded.archetype, members.archetype)`,
-                // The CASE placeholder is the 9th `?` in the statement text, so it binds AFTER
-                // the eight VALUES parameters.
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, avatarNullClears ? 1 : 0]
+                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by)`,
+                // The CASE placeholders are the 9th (archetype) and 10th (avatar, last) `?` in the statement text, so
+                // they bind AFTER the eight VALUES parameters.
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, archetypeNullClears ? 1 : 0, avatarNullClears ? 1 : 0]
             );
         }
 
@@ -7679,9 +7697,27 @@ export async function pushWaitingArchetype(opts: { community: string }): Promise
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
     if (!anchorUrl || !identity || plainOriginOf(opts.community) !== plainOriginOf(anchorUrl)) return false;
-    if (!(await waitingArchetype(anchorUrl, identity.publicKey))) return false;
+    const removal = await waitingRemoval(anchorUrl, identity.publicKey);
+    if (!removal && !(await waitingArchetype(anchorUrl, identity.publicKey))) return false;
     const row = await getMemberProfile(identity.publicKey);
     if (!(await stillOnCommunity(anchorUrl))) return false;
+    if (removal) {
+        // Remove my working style: this community's turn to hear it, as a null, where it holds a result (working-style.ts).
+        if (!(await removalToSend(anchorUrl, identity)) || !(await stillOnCommunity(anchorUrl))) return false;
+        const removeBody = JSON.stringify({ publicKey: identity.publicKey, archetype: null });
+        const removeHeaders = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, removeBody, identity.privateKey, identity.publicKey);
+        try {
+            const res = await fetch(`${anchorUrl}/api/profile/update`, { method: 'POST', headers: removeHeaders, body: removeBody });
+            if (!res.ok) return false;
+        } catch {
+            return false;
+        }
+        // The null is in. The row here goes before the removal stops waiting: a row left holding the result, with no removal
+        // to judge it against, is what the next start adopts and carries to every other community. A copy that won't
+        // clear keeps the removal waiting (the next turn finds the node holding none and tries again).
+        await finishRemoval(anchorUrl, identity.publicKey, removal.removedOn);
+        return true;
+    }
     const archetype = await archetypeToSend(anchorUrl, identity, row?.archetype);
     if (!archetype) return false;
     const bodyString = JSON.stringify({ publicKey: identity.publicKey, archetype });

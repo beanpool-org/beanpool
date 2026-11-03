@@ -3701,5 +3701,7 @@
   "Pinned by your community · until {date}": "Naka-pin ng iyong komunidad · hanggang {date}",
   "Take the pin off": "Alisin ang pin",
   "Three posts are pinned already. Take one off first.": "May tatlong post nang naka-pin. Mag-alis muna ng isa.",
-  "📌 PINNED": "📌 NAKA-PIN"
+  "📌 PINNED": "📌 NAKA-PIN",
+  "Remove my working style": "Alisin ang aking estilo ng pagtatrabaho",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Aalisin nito ang iyong estilo ng pagtatrabaho sa device na ito at sa bawat komunidad dito. Babalik ito kapag inulit mo ang quiz."
 }

@@ -6219,5 +6219,7 @@
   "Event options": "Options de l'événement",
   "Poll options": "Options du sondage",
   "Failed to pin post": "Échec de l'épinglage de la publication",
-  "Failed to unpin post": "Échec du retrait de l'épingle"
+  "Failed to unpin post": "Échec du retrait de l'épingle",
+  "Remove my working style": "Retirer mon style de travail",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Cela retire votre style de travail de cet appareil et de chaque communauté qui s'y trouve. Refaire le quiz le rétablit."
 }

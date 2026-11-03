@@ -3959,5 +3959,7 @@
   "Pinned by your community · until {date}": "Закріплено вашою спільнотою · до {date}",
   "Take the pin off": "Зняти закріплення",
   "Three posts are pinned already. Take one off first.": "Вже закріплено три дописи. Спочатку зніміть один.",
-  "📌 PINNED": "📌 ЗАКРІПЛЕНО"
+  "📌 PINNED": "📌 ЗАКРІПЛЕНО",
+  "Remove my working style": "Видалити мій стиль роботи",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ваш стиль роботи буде видалено з цього пристрою та з усіх спільнот на ньому. Якщо пройти тест знову, він повернеться."
 }

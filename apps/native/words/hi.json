@@ -6219,5 +6219,7 @@
   "Event options": "इवेंट विकल्प",
   "Poll options": "पोल विकल्प",
   "Failed to pin post": "पोस्ट पिन करने में विफल",
-  "Failed to unpin post": "पिन हटाने में विफल"
+  "Failed to unpin post": "पिन हटाने में विफल",
+  "Remove my working style": "मेरी कार्यशैली हटाएं",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "इससे आपकी कार्यशैली इस डिवाइस से और इस पर मौजूद हर समुदाय से हट जाएगी। प्रश्नोत्तरी दोबारा लेने पर वह वापस आ जाएगी।"
 }

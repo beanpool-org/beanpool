@@ -3701,5 +3701,7 @@
   "Pinned by your community · until {date}": "Imebandikwa na jumuiya yako · hadi {date}",
   "Take the pin off": "Ondoa ubandikaji",
   "Three posts are pinned already. Take one off first.": "Machapisho matatu tayari yamebandikwa. Ondoa moja kwanza.",
-  "📌 PINNED": "📌 IMEBANDIKWA"
+  "📌 PINNED": "📌 IMEBANDIKWA",
+  "Remove my working style": "Ondoa mtindo wangu wa kazi",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Hii inaondoa mtindo wako wa kazi kwenye kifaa hiki na kwenye kila jumuiya iliyomo. Ukifanya tena dodoso, unarudi."
 }

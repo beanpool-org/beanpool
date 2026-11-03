@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { archetypeIsNewer } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from './storage-keys';
 
@@ -227,7 +227,45 @@ export async function keepWaitingArchetype(community: string | null | undefined,
 export async function keepCarriedArchetype(community: string | null | undefined, publicKey: string, archetype: string): Promise<void> {
     const waiting = await waitingArchetype(community, publicKey);
     if (waiting && !archetypeIsNewer(archetype, waiting)) return;
+    // A removal waiting there stands over a result from before it: only one taken after the removal takes its place.
+    const removal = await waitingRemoval(community, publicKey);
+    if (removal && !archetypeIsAfter(archetype, removal.removedOn)) return;
     await keepWaitingArchetype(community, publicKey, archetype, true);
+}
+
+/**
+ * The member took their working style off this device (working-style.ts removeWorkingStyle), and `community` is still to
+ * be told: the day it was removed, UTC. It waits in the same place as a result waiting there, so a retake (a result kept
+ * over it) replaces it and a removal made after a result waiting there replaces that: one slot, the later wins. It is
+ * read by waitingRemoval, never by waitingEntry, so no publish mistakes it for a result.
+ */
+export async function keepWaitingRemoval(community: string | null | undefined, publicKey: string, removedOn: string): Promise<void> {
+    const key = archetypeKeyOf(community);
+    if (!key || !publicKey) return;
+    await AsyncStorage.setItem(key, JSON.stringify({ publicKey, removedOn }));
+}
+
+/** The removal waiting to reach `community` for `publicKey`, or null: none, a result, or one of another account's. */
+export async function waitingRemoval(community: string | null | undefined, publicKey: string): Promise<{ removedOn: string } | null> {
+    const key = archetypeKeyOf(community);
+    if (!key || !publicKey) return null;
+    try {
+        const held: { publicKey?: unknown; removedOn?: unknown } | null = JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
+        return held?.publicKey === publicKey && typeof held.removedOn === 'string' ? { removedOn: held.removedOn } : null;
+    } catch {
+        return null;
+    }
+}
+
+/** The removal reached `community`, or it was overtaken or isn't needed there: it stops waiting, only while still that one. */
+export async function clearWaitingRemoval(community: string | null | undefined, removedOn: string): Promise<void> {
+    const key = archetypeKeyOf(community);
+    if (!key) return;
+    try {
+        const held: { removedOn?: unknown } | null = JSON.parse((await AsyncStorage.getItem(key)) ?? 'null');
+        if (held?.removedOn !== removedOn) return;
+    } catch { /* unreadable: it goes */ }
+    await AsyncStorage.removeItem(key);
 }
 
 /** What waits to reach `community` for `publicKey`, and whether it was carried (keepCarriedArchetype), or null. */

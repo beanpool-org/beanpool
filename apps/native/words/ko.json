@@ -5978,5 +5978,7 @@
   "Event options": "이벤트 옵션",
   "Poll options": "투표 옵션",
   "Failed to pin post": "게시물 고정 실패",
-  "Failed to unpin post": "고정 해제 실패"
+  "Failed to unpin post": "고정 해제 실패",
+  "Remove my working style": "내 일하는 방식 제거",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "이 기기와 이 기기에 있는 모든 커뮤니티에서 내 일하는 방식을 없앱니다. 퀴즈를 다시 풀면 돌아옵니다."
 }

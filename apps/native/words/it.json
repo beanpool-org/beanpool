@@ -6219,5 +6219,7 @@
   "Event options": "Opzioni dell'evento",
   "Poll options": "Opzioni del sondaggio",
   "Failed to pin post": "Impossibile fissare il post",
-  "Failed to unpin post": "Impossibile rimuovere la fissazione"
+  "Failed to unpin post": "Impossibile rimuovere la fissazione",
+  "Remove my working style": "Rimuovi il mio stile di lavoro",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Questo toglie il tuo stile di lavoro da questo dispositivo e da ogni comunità presente. Rifare il quiz lo riporta."
 }

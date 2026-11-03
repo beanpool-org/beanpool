@@ -9,9 +9,10 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, newestArchetype, ARCHETYPES, formatDate, formatNumber, listPhotoUrl, t, tn, word, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, listPhotoUrl, t, tn, word, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
-import { keepQuizResult, publishQuizResult, readWorkingStyle } from '../lib/working-style';
+import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
+import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
@@ -462,7 +463,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {/* ─── Collaboration Chemistry ─── */}
                 {(() => {
                     if (loading || !profile) return null;
-                    const viewerArchetype = parseArchetype(newestArchetype(viewerProfile?.archetype, readWorkingStyle(identity.publicKey)));
+                    const viewerArchetype = parseArchetype(shownWorkingStyle(identity.publicKey, viewerProfile?.archetype));
                     const targetArchetype = parseArchetype(profile?.archetype);
                     const synergy = (!isSelf && viewerArchetype && targetArchetype)
                         ? calculateSynergy(viewerArchetype.primary, targetArchetype.primary)
@@ -660,7 +661,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {/* Working style (self) */}
                 {isSelf && (() => {
                     if (loading || !profile) return null;
-                    const mine = parseArchetype(newestArchetype(profile?.archetype, readWorkingStyle(identity.publicKey)));
+                    const mine = parseArchetype(shownWorkingStyle(identity.publicKey, profile?.archetype));
                     const primary = mine ? ARCHETYPES[mine.primary] : null;
                     const secondary = mine ? ARCHETYPES[mine.secondary] : null;
 
@@ -730,6 +731,13 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         {t('🔄 Retake')}
                                     </button>
                                 </div>
+                                <RemoveWorkingStyleButton
+                                    publicKey={identity.publicKey}
+                                    onRemoved={() => {
+                                        setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                                        setProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                                    }}
+                                />
                             </div>
                         );
                     }

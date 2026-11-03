@@ -5978,5 +5978,7 @@
   "Event options": "活動選項",
   "Poll options": "投票選項",
   "Failed to pin post": "置頂貼文失敗",
-  "Failed to unpin post": "取消置頂失敗"
+  "Failed to unpin post": "取消置頂失敗",
+  "Remove my working style": "移除我的工作風格",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "這會把你的工作風格從此裝置及裝置上的每個社群中移除。重新測驗後即可恢復。"
 }

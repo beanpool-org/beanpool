@@ -4280,7 +4280,10 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 const removal = anchorUrl ? await waitingRemoval(anchorUrl, pk) : null;
                 if (removal) {
                     if (arch && !archetypeIsAfter(arch, removal.removedOn)) { arch = null; finalArch = null; }
-                    if (localRow?.archetype && !archetypeIsAfter(localRow.archetype, removal.removedOn)) localRow.archetype = null;
+                    if (localRow?.archetype && !archetypeIsAfter(localRow.archetype, removal.removedOn)) {
+                        localRow.archetype = null;
+                        await txn.runAsync('UPDATE members SET archetype = NULL WHERE public_key = ?', [pk]);
+                    }
                 }
                 if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
                     finalArch = localRow.archetype;

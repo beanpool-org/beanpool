@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import Module from 'node:module';
 import { dirname, resolve } from 'node:path';
@@ -94,10 +94,10 @@ import { closeDB, getDb, getMemberProfile, pushProfileToServer, pushWaitingArche
 import { addSavedNode, clearGuestNode, isGuestNode, markGuestNode, removeSavedNode } from '../nodes';
 import {
     carryPendingProfileChange, clearPendingProfileChange, clearWaitingArchetype, keepCarriedArchetype, keepPendingProfileChange, keepWaitingArchetype,
-    pendingProfileChange, waitingArchetype,
+    pendingProfileChange, waitingArchetype, waitingRemoval,
 } from '../pending-profile-sync';
 import { askBeforeSwitch } from '../reconnect';
-import { firstRunWorkingStyle, keepQuizResult } from '../working-style';
+import { firstRunWorkingStyle, keepQuizResult, removeWorkingStyle } from '../working-style';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from '../storage-keys';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
@@ -890,5 +890,258 @@ describe('what waits goes as an entry goes', () => {
         await clearPendingProfileChange(B, undefined, undefined, true);
         expect(await pendingProfileChange(B, ME)).toBeNull();
         expect(await waitingArchetype(B, ME)).toBe('x');
+    });
+});
+
+// ─── S3: Remove my working style, and Forget Community ───────────────────────────────────────────────────────────────────
+
+describe('Forget Community leaves the device copy and the node\'s row', () => {
+    it('the device copy stays, the community\'s own copy of what waits goes, and the node keeps its row', async () => {
+        await memberOfBoth();
+        await keepQuizResult(quiz('2026-11-03', 'spark'), ME, A);
+        nodeAt(B).held.archetype = publicOf(quiz('2026-10-01', 'guardian'));
+        expect(await waitingArchetype(B, ME)).toBe(publicOf(quiz('2026-11-03', 'spark')));
+
+        await removeSavedNode(B);
+
+        expect((await getCanonicalProfile())?.archetype).toBe(JSON.stringify(quiz('2026-11-03', 'spark')));
+        expect(await waitingArchetype(B, ME)).toBeNull();
+        // Nothing was sent to the community to take the row off: leaving a community says nothing about the working style.
+        expect(sentTo(B)).toEqual([]);
+        expect(nodeAt(B).held.archetype).toBe(publicOf(quiz('2026-10-01', 'guardian')));
+    });
+
+    it('a removal waiting for the community goes with it, and the other community still hears it', async () => {
+        await memberOfBoth();
+        await saveCanonicalProfile({ archetype: JSON.stringify(quiz('2026-11-01')) });
+        await removeWorkingStyle(ME);
+        expect(await waitingRemoval(B, ME)).not.toBeNull();
+        await removeSavedNode(B);
+        expect(await waitingRemoval(B, ME)).toBeNull();
+        expect(await waitingRemoval(A, ME)).not.toBeNull();
+    });
+});
+
+describe('Remove my working style', () => {
+    beforeEach(() => { vi.useFakeTimers({ now: new Date('2026-11-03T10:00:00Z'), toFake: ['Date'] }); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    const OLD = quiz('2026-11-01', 'guardian');
+    /** The member took the quiz in A on 1 Nov: every community holds it, on the node and in the phone's copy of the row. */
+    async function holdingOldResult() {
+        await memberOfBoth();
+        await saveCanonicalProfile({ archetype: JSON.stringify(OLD) });
+        for (const url of [A, B]) {
+            nodeAt(url).held.archetype = publicOf(OLD);
+            await openCommunity(url);
+            await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(OLD) });
+        }
+    }
+
+    it('takes the device copy and every community\'s row off the phone, and leaves a removal waiting for each, sending nothing yet', async () => {
+        await holdingOldResult();
+        await removeWorkingStyle(ME);
+
+        expect((await getCanonicalProfile())?.archetype).toBeNull();
+        for (const url of [A, B]) {
+            await openCommunity(url);
+            expect((await getMemberProfile(ME))?.archetype).toBeNull();
+            expect(await waitingRemoval(url, ME)).toEqual({ removedOn: '2026-11-03' });
+            expect(sentTo(url)).toEqual([]);
+        }
+    });
+
+    it('sends a null to every community on the phone, each at its own sync, and each stops waiting', async () => {
+        await holdingOldResult();
+        await removeWorkingStyle(ME);
+
+        await openCommunity(A);
+        expect((await performSync()).success).toBe(true);
+        expect(sentTo(A)).toEqual([{ publicKey: ME, archetype: null }]);
+        expect(nodeAt(A).held.archetype).toBeNull();
+        expect(await waitingRemoval(A, ME)).toBeNull();
+        // B has not had its turn: it waits.
+        expect(sentTo(B)).toEqual([]);
+        expect(await waitingRemoval(B, ME)).not.toBeNull();
+
+        await openCommunity(B);
+        await performSync();
+        expect(sentTo(B)).toEqual([{ publicKey: ME, archetype: null }]);
+        expect(nodeAt(B).held.archetype).toBeNull();
+        expect(await waitingRemoval(B, ME)).toBeNull();
+
+        // Neither sync brought the removed result back, and nothing is sent twice.
+        expect((await getCanonicalProfile())?.archetype).toBeNull();
+        await performSync();
+        expect(sentTo(B)).toHaveLength(1);
+        expect((await getMemberProfile(ME))?.archetype ?? null).toBeNull();
+    });
+
+    it('a null goes only where the node holds a result', async () => {
+        await holdingOldResult();
+        nodeAt(B).held.archetype = null;
+        await removeWorkingStyle(ME);
+        await openCommunity(B);
+        await pushWaitingArchetype({ community: B });
+        expect(sentTo(B)).toEqual([]);
+        expect(await waitingRemoval(B, ME)).toBeNull();
+    });
+
+    it('a guest visit gets nothing: no removal waits there and the community is not even asked', async () => {
+        await holdingOldResult();
+        await markGuestNode(B);
+        await removeWorkingStyle(ME);
+        expect(await waitingRemoval(B, ME)).toBeNull();
+        await openCommunity(B);
+        await pushWaitingArchetype({ community: B });
+        expect(sentTo(B)).toEqual([]);
+        expect(nodeAt(B).probes).toBe(0);
+    });
+
+    it('a community that says the key is no member gets nothing, and the removal stops waiting there', async () => {
+        await holdingOldResult();
+        nodeAt(B).member = 'no';
+        await removeWorkingStyle(ME);
+        await openCommunity(B);
+        await pushWaitingArchetype({ community: B });
+        expect(sentTo(B)).toEqual([]);
+        expect(await waitingRemoval(B, ME)).toBeNull();
+    });
+
+    it('a community that cannot be reached keeps the removal waiting, and gets it when it answers', async () => {
+        await holdingOldResult();
+        await removeWorkingStyle(ME);
+        await openCommunity(B);
+        nodeAt(B).mode = 'offline';
+        expect(await pushWaitingArchetype({ community: B })).toBe(false);
+        expect(await waitingRemoval(B, ME)).toEqual({ removedOn: '2026-11-03' });
+        nodeAt(B).mode = 'busy';
+        expect(await pushWaitingArchetype({ community: B })).toBe(false);
+        expect(await waitingRemoval(B, ME)).not.toBeNull();
+        nodeAt(B).mode = 'ok';
+        expect(await pushWaitingArchetype({ community: B })).toBe(true);
+        expect(nodeAt(B).held.archetype).toBeNull();
+        expect(await waitingRemoval(B, ME)).toBeNull();
+    });
+
+    it('a community that will not say who is a member keeps it waiting too', async () => {
+        await holdingOldResult();
+        await removeWorkingStyle(ME);
+        await openCommunity(B);
+        nodeAt(B).member = 'silent';
+        expect(await pushWaitingArchetype({ community: B })).toBe(false);
+        expect(sentTo(B)).toEqual([]);
+        expect(await waitingRemoval(B, ME)).not.toBeNull();
+    });
+
+    it('sends only from its own community: a cycle for B with the phone moved to A sends nothing', async () => {
+        await holdingOldResult();
+        await removeWorkingStyle(ME);
+        await openCommunity(A);
+        expect(await pushWaitingArchetype({ community: B })).toBe(false);
+        expect(sentTo(B)).toEqual([]);
+    });
+
+    describe('an old result does not come back', () => {
+        it('the community still to be told shows the result at its sync: not into the row, the device copy or the other community', async () => {
+            await holdingOldResult();
+            await removeWorkingStyle(ME);
+            // A cannot answer who is a member right now, so the removal waits, and its sync brings the old result in.
+            nodeAt(A).member = 'silent';
+            await openCommunity(A);
+            await performSync();
+
+            expect((await getCanonicalProfile())?.archetype).toBeNull();
+            expect((await getMemberProfile(ME))?.archetype ?? null).toBeNull();
+            expect(await waitingRemoval(A, ME)).not.toBeNull();
+            // B's waiting is still the removal: the old result was not carried to it.
+            expect(await waitingRemoval(B, ME)).not.toBeNull();
+            expect(await waitingArchetype(B, ME)).toBeNull();
+        });
+
+        it('a row the phone holds that the node holds older does not send the removed result back to the node', async () => {
+            await holdingOldResult();
+            await removeWorkingStyle(ME);
+            // The phone's row still held the result (a copy that could not be cleared), and the node holds an older one.
+            await openCommunity(A);
+            await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(OLD) });
+            nodeAt(A).held.archetype = publicOf(quiz('2026-10-01', 'sage'));
+            nodeAt(A).member = 'silent';
+            await performSync();
+            expect(await waitingArchetype(A, ME)).toBeNull();
+            expect(await waitingRemoval(A, ME)).not.toBeNull();
+            expect((await getMemberProfile(ME))?.archetype ?? null).toBeNull();
+            expect(sentTo(A)).toEqual([]);
+        });
+
+        it('another community\'s carried result from before the removal does not replace the removal waiting', async () => {
+            await holdingOldResult();
+            await removeWorkingStyle(ME);
+            await keepCarriedArchetype(B, ME, publicOf(OLD));
+            expect(await waitingRemoval(B, ME)).not.toBeNull();
+            expect(await waitingArchetype(B, ME)).toBeNull();
+        });
+
+        it('the first run does not take a result from a row of a community still to be told', async () => {
+            await holdingOldResult();
+            await removeWorkingStyle(ME);
+            await openCommunity(B);
+            await updateMemberProfile(ME, { callsign: 'Marty', archetype: publicOf(OLD) });
+            await firstRunWorkingStyle();
+            expect((await getCanonicalProfile())?.archetype).toBeNull();
+            expect(await waitingArchetype(A, ME)).toBeNull();
+        });
+    });
+
+    describe('the later of a result and a removal stands', () => {
+        it('a retake after the removal replaces it: the community hears the retake, not a null', async () => {
+            await holdingOldResult();
+            await removeWorkingStyle(ME);
+            const again = quiz('2026-11-03', 'spark');
+            await keepQuizResult(again, ME, A);
+            expect(await waitingRemoval(B, ME)).toBeNull();
+            expect(await waitingArchetype(B, ME)).toBe(publicOf(again));
+            await openCommunity(B);
+            await performSync();
+            expect(sentTo(B)).toEqual([{ publicKey: ME, archetype: publicOf(again) }]);
+            expect(nodeAt(B).held.archetype).toBe(publicOf(again));
+        });
+
+        it('a removal after a result waiting replaces that result: the community hears the null', async () => {
+            await holdingOldResult();
+            await keepQuizResult(quiz('2026-11-02', 'spark'), ME, A);
+            expect(await waitingArchetype(B, ME)).not.toBeNull();
+            await removeWorkingStyle(ME);
+            expect(await waitingArchetype(B, ME)).toBeNull();
+            await openCommunity(B);
+            await performSync();
+            expect(sentTo(B)).toEqual([{ publicKey: ME, archetype: null }]);
+        });
+
+        it('a result taken on another device after the removal stands: no null is sent, and the phone takes it', async () => {
+            await holdingOldResult();
+            await removeWorkingStyle(ME);
+            const later = quiz('2026-11-04', 'spark');
+            nodeAt(B).held.archetype = publicOf(later);
+            await openCommunity(B);
+            await performSync();
+            expect(sentTo(B)).toEqual([]);
+            expect(await waitingRemoval(B, ME)).toBeNull();
+            expect((await getCanonicalProfile())?.archetype).toBe(publicOf(later));
+            // and it is carried to A, over A's waiting removal.
+            expect(await waitingArchetype(A, ME)).toBe(publicOf(later));
+        });
+    });
+});
+
+describe('a date from a bad clock or a node does not stop a retake (archetype-s3)', () => {
+    it('a node holding a far-future day takes this phone\'s retake', async () => {
+        await memberOfBoth();
+        nodeAt(B).held.archetype = JSON.stringify({ primary: 'guardian', secondary: 'weaver', mode: 'quick', takenOn: '2099-01-01' });
+        const again = quiz(new Date().toISOString().slice(0, 10), 'spark');
+        await keepQuizResult(again, ME, A);
+        await openCommunity(B);
+        await performSync();
+        expect(sentTo(B)).toEqual([{ publicKey: ME, archetype: publicOf(again) }]);
     });
 });

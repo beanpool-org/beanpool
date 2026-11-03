@@ -111,7 +111,11 @@ import { GLOBAL_NODE_URL } from '../global-node-url';
 import { setLanguage } from '@beanpool/core';
 
 type Answer = { status: 'pending' } | { status: 'none' } | { status: 'approved'; invite: string } | 'offline';
-const scene = { answer: { status: 'pending' } as Answer, statusReads: 0, knocks: 0, sent: [] as Record<string, unknown>[], card: null as Record<string, unknown> | null };
+const scene = {
+    answer: { status: 'pending' } as Answer, statusReads: 0, knocks: 0, sent: [] as Record<string, unknown>[], card: null as Record<string, unknown> | null,
+    // The community's rule (GET /api/community/known-rule): null is an older node's 404.
+    rule: { known: false } as Record<string, unknown> | null,
+};
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CARD = { name: 'Riverside', host: 'riverside.example', members: null, area: null, joining: 'requests', askUrl: null, globalUrl: null };
@@ -142,10 +146,12 @@ beforeEach(() => {
     scene.knocks = 0;
     scene.sent = [];
     scene.card = null;
+    scene.rule = { known: false };
     setLanguage('en');
     globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
         const u = String(input);
         if (u === `${ORIGIN}/api/community/card`) return json(scene.card ?? CARD);
+        if (u === `${ORIGIN}/api/community/known-rule`) return scene.rule ? json(scene.rule) : json({ error: 'Not found' }, 404);
         if (u === `${ORIGIN}/api/join/knock/status`) {
             scene.statusReads++;
             if (scene.answer === 'offline') throw new TypeError('Network request failed');
@@ -423,5 +429,51 @@ describe('the card with no account on the phone', () => {
         expect(host.textContent).not.toContain('Explore BeanPool worldwide');
         expect(host.textContent).not.toContain('To ask, you need a BeanPool account first');
         expect(host.textContent).not.toContain('You join the global community first');
+    });
+});
+
+/**
+ * The rule on the card (Marty, board card balance-rule-other-doors, 3 Nov 2026: "Yes, show the sentence"): where the
+ * community confirms its members, the one sentence its join screen and rules page say, in its own numbers, read from the
+ * community itself. Nothing to tick or tap. Before this, the card said nothing of the rule: the "rule on" tests fail there.
+ */
+describe("the community's rule on its card", () => {
+    const RULE = { known: true, knownFloor: 100, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
+    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+
+    it("rule on: the join screen's sentence, in the community's numbers, and nothing to tick", async () => {
+        scene.rule = RULE;
+        await open();
+        expect(byTestId('community-card-rule')?.textContent).toBe(SENTENCE);
+        expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+        expect(host.textContent).not.toMatch(/\bI agree\b/i);
+    });
+
+    it('rule on, its own numbers: 30% and 21 days', async () => {
+        scene.rule = { ...RULE, debtLinePct: 30, quietDays: 21 };
+        await open();
+        expect(byTestId('community-card-rule')?.textContent).toBe("The admins can see a confirmed member's balance if they owe more than 30% of their credit line, or are in debit and haven't made a sale for 21 days. Each look is logged.");
+    });
+
+    it('rule on, for a phone with no account too: the card is the same door', async () => {
+        currentIdentity = null;
+        scene.rule = RULE;
+        await open();
+        expect(byTestId('community-card-rule')?.textContent).toBe(SENTENCE);
+    });
+
+    it('rule off: no sentence', async () => {
+        scene.rule = { known: false };
+        await open();
+        expect(byTestId('community-card')).not.toBeNull();
+        expect(byTestId('community-card-rule')).toBeNull();
+        expect(host.textContent).not.toContain("The admins can see");
+    });
+
+    it('an older node (404): no sentence', async () => {
+        scene.rule = null;
+        await open();
+        expect(byTestId('community-card')).not.toBeNull();
+        expect(byTestId('community-card-rule')).toBeNull();
     });
 });

@@ -12,6 +12,8 @@
  *   the per-member cap hold for every one.
  * - "May post for me" (agent/owner-posts.ts; design Q1): a tick on the make form, default off, kept on the token; only a
  *   ticked owner's assistant is offered the posting tools. The list shows it, and the posts each made today.
+ * - "May take down posts for me" (agent/owner-takedowns.ts): its own tick, default off, with the same fresh proof; the list shows it
+ *   and the posts each took down today. A token only: the consent page's tick is a later slice, so an OAuth grant has no such tools.
  * - "Owner and admin limit", first "Assistant posts a day" (`POST …/agent/posts-per-day`): how many posts one ticked
  *   assistant may make in a UTC day, and since 31 Oct owners' and admins' own content limits in the apps
  *   (engine/owner-admin-limit.ts), 1–1,000, 100 unless set (agent/limits.ts). An owner change with a fresh proof every time, as the gateway's settings
@@ -32,6 +34,7 @@ import {
     type AutomationTokenView,
 } from '../automation-tokens.js';
 import { grantIdsWithMadePosts, madePostsCount, removeAllMadeBy } from './owner-posts.js';
+import { takedownsTodayBy } from '../engine/agent-takedowns.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getMember } from '../state-engine.js';
 import { logger } from '../logger.js';
@@ -118,6 +121,8 @@ function oauthGrantView(g: OAuthGrantView, me: string | null, now = Date.now()) 
         lastUsedAt: g.lastUsedAt,
         callsToday: agentCallsToday(g.id, now),
         canPost: g.canPost === true,
+        canModerate: false,
+        takedownsToday: 0,
         postsToday: agentCreatesToday(g.id, now),
         madePosts: madePostsCount(g.id),
     };
@@ -140,6 +145,8 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
         lastUsedAt: t.lastUsedAt,
         callsToday: agentCallsToday(t.id, now),
         canPost: t.canPost === true,
+        canModerate: t.canModerate === true,
+        takedownsToday: takedownsTodayBy(t.id, now),
         postsToday: agentCreatesToday(t.id, now),
         /** Its live posts (created_via), which "Remove its posts" takes down. */
         madePosts: madePostsCount(t.id),
@@ -159,16 +166,17 @@ function previewGrant(ctx: any, grantId: unknown): AgentGrant | { error: string 
         if (o) {
             const r = nodeRoleOf(o.member);
             if (r !== 'owner' && r !== 'admin') return { error: 'Its member is no longer an owner or admin: it reads nothing now' };
-            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null, canPost: o.canPost === true };
+            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null, canPost: o.canPost === true, canModerate: false };
         }
         const t = visibleGrants(ctx).find((g) => g.id === grantId);
         if (!t) return { error: 'No such assistant' };
         const role = nodeRoleOf(t.createdBy);
         if (role !== 'owner' && role !== 'admin') return { error: 'Its member is no longer an owner or admin: it reads nothing now' };
-        return { id: t.id, name: t.name, member: t.createdBy, role, via: 'token', createdAt: t.createdAt, expiresAt: t.expiresAt, canPost: t.canPost === true };
+        return { id: t.id, name: t.name, member: t.createdBy, role, via: 'token', createdAt: t.createdAt, expiresAt: t.expiresAt, canPost: t.canPost === true, canModerate: t.canModerate === true };
     }
     return {
-        // An owner's own preview lists every tool their assistant can be given, the posting ones ticked (none is run here).
+        // An owner's own preview lists the tools their assistant can be given, the posting ones ticked (none is run here). Not the
+        // takedown tools: a preview shows what an assistant reads, and those read nothing.
         id: 'preview', name: 'Preview', member: actorOf(ctx) ?? 'owner:password', role: roleOf(ctx), via: 'token',
         createdAt: Date.now(), expiresAt: null, canPost: roleOf(ctx) === 'owner',
     };
@@ -267,6 +275,8 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         // (routes/automation-tokens.ts) and as the posts-a-day number does (below): a computer's key session is sent to the phone.
         // After the range checks: a code is spent when it is checked (#2002 NB1). An unticked token keeps the gate it had.
         const canPost = b.canPost === true && role === 'owner';
+        // "May take down posts for me": its own tick, and the same proof: a token that can hide members' posts is a bigger one to leak.
+        const canModerate = b.canModerate === true && role === 'owner';
         // The name too (MCP-OWNER-POSTS-W): a name left out or too long is refused before the proof, so it spends no code.
         const name = typeof b.name === 'string' ? b.name.trim() : '';
         if (!name || name.length > TOKEN_NAME_MAX) {
@@ -274,17 +284,17 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             ctx.body = { error: name ? `A token's name is at most ${TOKEN_NAME_MAX} characters` : 'Give the token a name, so you know later what uses it' };
             return;
         }
-        if (canPost && !(await requireFreshProof(ctx, b.code, 'connect an assistant that may post for you'))) return;
-        const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: now + days * DAY_MS, createdBy: me, canPost }, now);
+        if ((canPost || canModerate) && !(await requireFreshProof(ctx, b.code, canPost ? 'connect an assistant that may post for you' : 'connect an assistant that may take down posts for you'))) return;
+        const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: now + days * DAY_MS, createdBy: me, canPost, canModerate }, now);
         if (!res.ok) {
             ctx.status = 400;
             ctx.body = { error: res.error };
             return;
         }
-        logger.info('AUTH', 'AI assistant connected', { tokenId: res.record.id, role, by: me.slice(0, 16), expiresAt: res.record.expiresAt, canPost });
+        logger.info('AUTH', 'AI assistant connected', { tokenId: res.record.id, role, by: me.slice(0, 16), expiresAt: res.record.expiresAt, canPost, canModerate });
         noteSecurityEvent({
             key: 'sec.agent', actor: me, actorRole: role,
-            detail: agentConnectedWords(cleanMemberText(res.record.name, 60), role, role === 'owner', offersSuggestions(), role === 'owner' && canPost),
+            detail: agentConnectedWords(cleanMemberText(res.record.name, 60), role, role === 'owner', offersSuggestions(), role === 'owner' && canPost, canModerate),
         });
         ctx.status = 201;
         ctx.body = { token: res.token, grant: grantView(res.record, me) };

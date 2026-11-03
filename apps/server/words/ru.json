@@ -2,9 +2,9 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-11-02",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -22,6 +22,11 @@
   "That typed answer is not here": "Этого написанного ответа здесь нет",
   "This community has a new address": "У этого сообщества новый адрес",
   "This community is also at {address}. The old address keeps working.": "Это сообщество теперь доступно и по адресу {address}. Старый адрес продолжает работать.",
+  "🛡️ Your post was taken down": "🛡️ Ваше объявление снято",
+  "🛡️ Your posts were taken down": "🛡️ Ваши объявления сняты",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Модераторы сообщества сняли ваше объявление {title}. Причина: {reason}. Оно скрыто от всех остальных; если его не вернут в течение 7 дней, оно будет удалено.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Модераторы сообщества сняли ваше объявление. Причина: {reason}. Оно скрыто от всех остальных; если его не вернут в течение 7 дней, оно будет удалено.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Модераторы сообщества сняли ваши объявления ({n}). Причина: {reason}. Они скрыты от всех остальных; если их не вернут в течение 7 дней, они будут удалены.",
   "This poll already offers Other: leave it out of the answers": "В этом опросе уже есть «Другое»: уберите его из ответов",
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Чтобы выбрать «Другое», напишите свой ответ. Если писать негде, обновите приложение.",
   "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Вы уже ответили на этот опрос, и ничто не связывает ваш ответ с вами, поэтому его нельзя изменить.",

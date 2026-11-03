@@ -13,7 +13,9 @@
  * Slice S1: reads, and `take_backup` for owner grants. Slice S4: `suggest_action`, which changes nothing: it files a card the
  * member approves on their phone (agent/suggestions.ts). MCP-OWNER-POSTS: an owner's grant also posts Offers, Needs, events and
  * enterprise listings for them, photos required, 50 a day, and polls (agent/owner-posts.ts). Tags T4: every create and update_post takes
- * library tags and free tags, and tags_search finds the library's (agent/owner-reads.ts).
+ * library tags and free tags, and tags_search finds the library's (agent/owner-reads.ts). MCP-MODERATION S1: an owner's grant ticked
+ * "May take down posts for me" takes posts down directly (agent/owner-takedowns.ts): the one way an assistant changes moderation,
+ * and it moves no Bean. It still can't dismiss a report, put a post back, lift a mute, or remove or suspend a member.
  */
 import os from 'node:os';
 import { db } from '../db/db.js';
@@ -47,9 +49,10 @@ import {
 import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-posts.js';
 import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
+import { OWNER_TAKEDOWN_TOOLS, takedownsSummary } from './owner-takedowns.js';
 import { OWNER_SEED_TOOLS } from './owner-seeds.js';
 import {
-    fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
+    fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, suggestionAsks, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
 } from './suggestions.js';
 
@@ -66,6 +69,8 @@ export interface AgentGrant {
     expiresAt: number | null;
     /** "May post for me", ticked when it was connected (token form or consent page): only then are the posting tools listed. */
     canPost: boolean;
+    /** "May take down posts for me", ticked when it was connected: only then are the takedown tools listed. Left out, it may not. */
+    canModerate?: boolean;
 }
 
 export type ToolResult =
@@ -85,8 +90,10 @@ export interface AgentTool {
     ownerOnly?: boolean;
     /** Only a grant ticked "May post for me" has it (agent/owner-posts.ts): listed and callable. */
     posts?: boolean;
+    /** Only a grant ticked "May take down posts for me" (agent/owner-takedowns.ts): listed and callable. */
+    moderates?: boolean;
     write?: boolean;
-    /** Takes something down (remove_post, remove_all_i_made): the MCP annotation says so. */
+    /** Takes something down (remove_post, remove_all_i_made, take_down, take_down_many): the MCP annotation says so. */
     destructive?: boolean;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
@@ -243,6 +250,12 @@ export const AGENT_CANNOT = [
     'answer a join request or send an announcement',
     'reach another server',
 ];
+
+/** What this grant can't do: `connection_info`, said by what it was ticked for. */
+export function agentCannot(canModerate: boolean): string[] {
+    return !canModerate ? AGENT_CANNOT : AGENT_CANNOT.map((line) => (line === AGENT_CANNOT[3]
+        ? 'approve a suggestion, dismiss a report, put a post back or lift a mute (the admin does, on their phone or in Settings)' : line));
+}
 
 export const AGENT_TOOLS: AgentTool[] = [
     {
@@ -532,7 +545,8 @@ export const AGENT_TOOLS: AgentTool[] = [
         outputSchema: OBJ({
             name: STR, member: STR, role: STR, via: STR, createdAt: STR_OR_NULL, expiresAt: STR_OR_NULL,
             calls: OBJ({ today: NUM, perMinute: NUM, perDay: NUM }), backups: OBJ({ today: NUM, perDay: NUM }), tools: ARR, cannot: ARR,
-            posts: OBJ({ today: NUM, perDay: NUM, photoRoom: STR }), canPost: { type: 'boolean' },
+            posts: OBJ({ today: NUM, perDay: NUM, photoRoom: STR }), canPost: { type: 'boolean' }, canModerate: { type: 'boolean' },
+            takedowns: OBJ({ today: NUM, perDay: NUM }),
             photos: OBJ({ today: NUM, perDay: NUM, uploadPath: STR, ways: STR }),
         }, ['name', 'member', 'role', 'via', 'createdAt', 'expiresAt', 'calls', 'backups', 'tools', 'cannot', 'canPost']),
         run: (grant) => ({
@@ -553,8 +567,11 @@ export const AGENT_TOOLS: AgentTool[] = [
                 // Slice S4: the photos it has had fetched or uploaded today against the day's (limits.ts agentPhotosPerDay; agent/
                 // owner-photos.ts), where an upload goes (a path it joins to the address in its welcome), and the ways besides base64, in words.
                 ...(grantPosts(grant) ? { photos: { today: agentPhotosToday(grant.id), perDay: agentPhotosPerDay(), uploadPath: PHOTO_UPLOAD_PATH, ways: PHOTO_WAYS } } : {}),
+                // "May take down posts for me", and the posts it took down today against the same limit, on their own count.
+                canModerate: grantModerates(grant),
+                ...(grantModerates(grant) ? { takedowns: takedownsSummary(grant) } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
-                cannot: AGENT_CANNOT,
+                cannot: agentCannot(grantModerates(grant)),
             },
         }),
     },
@@ -647,7 +664,7 @@ AGENT_TOOLS.push({
         return {
             ok: true, rows: 1,
             result: {
-                id: filed.suggestion.id, kind, reportId: r.id, asks: SUGGESTION_WORDS[kind],
+                id: filed.suggestion.id, kind, reportId: r.id, asks: suggestionAsks(kind, r),
                 expiresAt: new Date(filed.suggestion.expiresAt).toISOString(),
                 waitingFor: `Waiting for ${callsign} to approve on their phone. Nothing has changed: say you suggested it, never that it is done.`,
                 changed: false,
@@ -658,17 +675,23 @@ AGENT_TOOLS.push({
 
 // An owner's assistant posts for them: Offers, Needs, events, enterprise listings and polls (agent/owner-posts.ts); slice S2, what it
 // reads for seeding, and its own undo: my_posts, update_post, remove_post, remove_all_i_made (agent/owner-reads.ts).
-// Slice S3: groups, a group's post and enterprises, content only (agent/owner-seeds.ts).
-AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS);
+// Slice S3: groups, a group's post and enterprises, content only (agent/owner-seeds.ts). MCP-MODERATION S1: its takedowns
+// (agent/owner-takedowns.ts).
+AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS, ...OWNER_TAKEDOWN_TOOLS);
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {
-    return AGENT_TOOLS.filter((t) => (!t.ownerOnly || grant.role === 'owner') && (!t.posts || grant.canPost));
+    return AGENT_TOOLS.filter((t) => (!t.ownerOnly || grant.role === 'owner') && (!t.posts || grant.canPost) && (!t.moderates || grant.canModerate));
 }
 
 /** Whether this grant posts: an owner's, ticked "May post for me" (agent/owner-posts.ts). */
 export function grantPosts(grant: AgentGrant): boolean {
     return grant.role === 'owner' && grant.canPost && AGENT_TOOLS.some((t) => t.posts);
+}
+
+/** Whether this grant takes posts down: an owner's, ticked "May take down posts for me" (agent/owner-takedowns.ts). */
+export function grantModerates(grant: AgentGrant): boolean {
+    return grant.role === 'owner' && grant.canModerate === true;
 }
 
 /** Whether the table offers suggestions (slice S4); the welcome and prompts say so only then. */

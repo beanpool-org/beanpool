@@ -24,6 +24,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { ChannelCategory, ChannelPlatform } from './creator-channels.js';
 import { scrubEndedEvents } from './posts.js';
+import { sweepTakedowns } from './agent-takedowns.js';
 import { avatarUrlOf } from '@beanpool/core';
 import { pulseHarvestAllowance } from './writer-bounds.js';
 
@@ -2141,6 +2142,15 @@ export async function runPulseSchedulerTick(): Promise<void> {
             }
         } catch (e) {
             console.warn('[Events] 30-day scrub did not run this tick:', e);
+        }
+
+        // An owner's assistant's takedowns, 7 days old and not put back, become final (engine/agent-takedowns.ts), caught for the
+        // same reason.
+        try {
+            const finalTakedowns = sweepTakedowns();
+            if (finalTakedowns > 0) console.log(`🛡️ [Takedowns] ${finalTakedowns} post(s) taken down by an assistant 7 days ago removed`);
+        } catch (e) {
+            console.warn('[Takedowns] The sweep did not run this tick:', e);
         }
 
         const channels = db.prepare(

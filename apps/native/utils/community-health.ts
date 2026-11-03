@@ -5,9 +5,11 @@
  * The screen also shows the community's totals and, as a list of its own, every look at trades and alerts (#1608), as
  * packages/beanpool-guide/content/settings/what-the-admins-can-see.md promises.
  */
+import type { WaitingLines } from '@beanpool/core';
 import type { OpenedEntry } from './names-list';
 
 export type HealthReason = 'past_debt_line' | 'quiet_in_debit';
+const REASONS: readonly string[] = ['past_debt_line', 'quiet_in_debit'] satisfies HealthReason[];
 
 export interface HealthException {
     memberPubkey: string;
@@ -28,8 +30,17 @@ export interface DepartedDebt {
     repaying: boolean;
 }
 
+/** When the rule starts here, and a tightened line's date while it waits. Absent from a node older than the rule. */
+export interface HealthRule {
+    from: string | null;
+    started: boolean;
+    debtLineFrom: string | null;
+    quietDaysFrom: string | null;
+}
+
 export interface HealthExceptionsBody {
     settings: { debtLinePct: number; quietDays: number };
+    rule?: HealthRule;
     exceptions: HealthException[];
     departed: DepartedDebt[];
 }
@@ -71,11 +82,31 @@ export function reasonText(r: HealthReason, settings: HealthExceptionsBody['sett
 }
 
 export function exceptionRows(body: HealthExceptionsBody, entries: Pick<OpenedEntry, 'id' | 'text'>[]): HealthRow[] {
-    return body.exceptions.map((e) => ({
-        key: e.memberPubkey,
-        name: nameFor(e.entryId, entries),
-        detail: `${beans(e.balance)} of a ${beans(e.floor)} floor · ${e.reasons.map((r) => reasonText(r, body.settings)).join(', and ')}`,
-    }));
+    return body.exceptions.map((e) => {
+        // A reason this phone has no words for gets the balance and the floor alone, never the wrong line: reasonText
+        // says "in debit with no sale" of anything else, and the node has a third (S1's step-back, which no app calls).
+        const crossed = e.reasons.filter((r) => REASONS.includes(r));
+        const base = `${beans(e.balance)} of a ${beans(e.floor)} floor`;
+        return {
+            key: e.memberPubkey,
+            name: nameFor(e.entryId, entries),
+            detail: crossed.length ? `${base} · ${crossed.map((r) => reasonText(r, body.settings)).join(', and ')}` : base,
+        };
+    });
+}
+
+/**
+ * What the node's summary says of a tightened line, for the dates the exceptions don't carry the owner's numbers for:
+ * `settings` there are the lines the list read. Null from a node older than the rule.
+ */
+export function readWaitingLines(v: unknown): WaitingLines | null {
+    const o = v as { settings?: { debtLinePct?: unknown; quietDays?: unknown }; rule?: { debtLineFrom?: unknown; quietDaysFrom?: unknown } } | null;
+    if (!o?.rule || !num(o.settings?.debtLinePct) || !num(o.settings?.quietDays)) return null;
+    return {
+        debtLinePct: o.settings.debtLinePct, quietDays: o.settings.quietDays,
+        debtLineFrom: typeof o.rule.debtLineFrom === 'string' ? o.rule.debtLineFrom : null,
+        quietDaysFrom: typeof o.rule.quietDaysFrom === 'string' ? o.rule.quietDaysFrom : null,
+    };
 }
 
 export function departedRows(body: HealthExceptionsBody, entries: Pick<OpenedEntry, 'id' | 'text'>[]): HealthRow[] {

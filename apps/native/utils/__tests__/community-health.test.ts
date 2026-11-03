@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    exceptionRows, departedRows, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, notOnThisNode, healthFailure, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody,
+    exceptionRows, departedRows, readWaitingLines, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, notOnThisNode, healthFailure, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody, type HealthReason,
 } from '../community-health';
 
 const entries = [
@@ -218,5 +218,31 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
 
     it('a look of a kind this phone doesn’t know yet still shows who and when', () => {
         expect(tradeLookText({ id: 'z', actor: 'k', actorCallsign: 'sam', action: 'something_new', at: '2026-10-04T01:00:00Z' })).toMatch(/^@sam looked at trades · /);
+    });
+});
+
+describe('a reason this phone has no words for (the node still has S1\'s step-back reason, which no app can cause)', () => {
+    const ROW = { memberPubkey: 'k', entryId: 'e1', balance: -800, floor: 200, reasons: ['stepped_back_owing'] as unknown as HealthReason[] };
+    const SETTINGS = { debtLinePct: 50, quietDays: 60 };
+
+    it('shows the balance and the floor alone, never "in debit with no sale", which would be untrue', () => {
+        const [row] = exceptionRows({ settings: SETTINGS, exceptions: [ROW], departed: [] }, entries);
+        expect(row.name).toBe('Ada Lovelace');
+        expect(row.detail).toBe('-800 Beans of a 200 Beans floor');
+    });
+
+    it('a line crossed keeps its reason, with or without the other', () => {
+        const row = (reasons: unknown[]) => exceptionRows({ settings: SETTINGS, exceptions: [{ ...ROW, reasons: reasons as HealthReason[] }], departed: [] }, entries)[0];
+        expect(row(['past_debt_line']).detail).toBe('-800 Beans of a 200 Beans floor · past 50% of their floor');
+        expect(row(['past_debt_line', 'stepped_back_owing']).detail).toBe('-800 Beans of a 200 Beans floor · past 50% of their floor');
+    });
+});
+
+describe('a tightened line on the summary', () => {
+    it('reads the owner\'s numbers with their dates; an older node has none', () => {
+        expect(readWaitingLines({ settings: { debtLinePct: 30, quietDays: 60 }, rule: { debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null } }))
+            .toEqual({ debtLinePct: 30, quietDays: 60, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
+        expect(readWaitingLines({ settings: { debtLinePct: 30, quietDays: 60 } })).toBeNull();
+        expect(readWaitingLines(null)).toBeNull();
     });
 });

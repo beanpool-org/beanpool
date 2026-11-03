@@ -110,3 +110,20 @@ export async function noAreaLineHere(publicKey: string | null | undefined): Prom
         return false;
     }
 }
+
+/**
+ * The member's own area on a community that syncs listings by area, as this phone holds it (the copy the node last
+ * confirmed, or this phone last sent), or null: no such community, no area, another key's copy, or not known. The Market
+ * orders the worldwide community by listed time within this circle (utils/market-global.ts nearbyCircle) and measures each
+ * card's distance from it. Never throws.
+ */
+export async function memberAreaHere(publicKey: string | null | undefined): Promise<NearbyArea | null> {
+    try {
+        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (!url || !publicKey) return null;
+        if (!(await getCachedNodeProfile(url))?.features.nearbyListings) return null;
+        return (await readNearbyAreaCopy(url, publicKey))?.area ?? null;
+    } catch {
+        return null;
+    }
+}

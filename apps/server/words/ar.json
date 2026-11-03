@@ -2,11 +2,17 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ أُزيل منشورك",
+  "🛡️ Your posts were taken down": "🛡️ أُزيلت منشوراتك",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "أزال مشرفو المجتمع منشورك {title}. السبب: {reason}. إنه مخفي عن الجميع؛ وإن لم يُعَد خلال 7 أيام فسيُحذف.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "أزال مشرفو المجتمع منشورك. السبب: {reason}. إنه مخفي عن الجميع؛ وإن لم يُعَد خلال 7 أيام فسيُحذف.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "أزال مشرفو المجتمع {n} من منشوراتك. السبب: {reason}. إنها مخفية عن الجميع؛ وإن لم تُعَد خلال 7 أيام فستُحذف.",
   "Only an owner or admin can pin a post.": "يمكن للمالك أو المشرف فقط تثبيت منشور.",
   "Only an owner, an admin or the post's author can take a pin off.": "يمكن للمالك أو المشرف أو كاتب المنشور فقط إزالة التثبيت.",
   "A pin lasts 1 day, 3 days or 1 week.": "يستمر التثبيت يومًا واحدًا أو 3 أيام أو أسبوعًا واحدًا.",

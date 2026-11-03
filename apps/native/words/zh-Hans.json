@@ -2,10 +2,10 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2, 2 Nov); claude-sonnet-5-5 (machine draft, market order S1: the Newest within line, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-11-04",
+    "updated": "2026-11-03",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "豆子",
@@ -27,10 +27,6 @@
   "💡 Tip: adding your suburb helps locals find you!": "💡 小提示:填上你所在的街区,附近的人更容易找到你!",
   "Use the name {name}": "使用名称 {name}",
   "What this community's admins can see": "本社区的管理员能看到什么",
-  "I agree": "我同意",
-  "✅ I agree": "✅ 我同意",
-  "⬜ I agree": "⬜ 我同意",
-  "Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.": "由你决定:同意与否,你都可以加入。如果不同意,管理员永远看不到你的余额。之后可以在“设置”中同意。",
   "🔑 Recover an existing account with seed phrase →": "🔑 用助记词恢复已有账户 →",
   "Joining network...": "正在加入网络…",
   "Next": "下一步",
@@ -1234,7 +1230,6 @@
   "Made up to show how it works: these are not real listings. They go once there are enough real ones.": "仅用于演示运作方式：这些并非真实的帖子。一旦有足够多的真实帖子，它们就会消失。",
   "Example, not a real listing. Offer: {title}. {description}": "示例（非真实帖子）。提供：{title}。{description}",
   "Example, not a real listing. Need: {title}. {description}": "示例（非真实帖子）。需求：{title}。{description}",
-  "Upcoming events": "即将到来的活动",
   "Yesterday": "昨天",
   "This Week": "本周",
   "Older Listings": "较早的帖子",
@@ -1256,7 +1251,6 @@
   "There are no Beans here. The description says what they would like in return, or that it is free. Message them to ask.": "这里不涉及豆子。说明中已注明想要什么回馈，或者属于免费赠送。发消息向他们询问吧。",
   "{noBeans} The description says what they would like in return, or that it is free. Message them to ask.": "{noBeans} 说明中已注明想要什么回馈，或者属于免费赠送。发消息向他们询问吧。",
   "No price here: say in the description what you would like in return, or that it is free.": "此处无需标价：在说明中说明你想要什么回馈，或者直接注明免费。",
-  "Nearest first": "距离最近优先",
   "You're seeing the newest listings worldwide.": "你正在浏览全球最新的帖子。",
   "Set your area to see what's near you.": "设置你的地区以查看身边的内容。",
   "An informal poll; it decides nothing": "非正式民意调查，不做任何正式决定",
@@ -2096,19 +2090,7 @@
   "{name} stays blocked and is no longer your friend. They can notice a removal.": "{name} 保持屏蔽状态且不再是你的好友。对方可能会察觉到被删除。",
   "Removing…": "正在删除…",
   "Also remove from friends": "同时从好友中删除",
-  "Your community changed what its admins can see": "你的社区更改了管理员可见的内容",
-  "Not saved: the community could not be reached.": "未保存：无法连接到社区。",
-  "Not saved. Try again later.": "未保存。请稍后重试。",
-  "Saved. You can take it back here at any time.": "已保存。你可以随时在此撤回。",
-  "Withdrawn. From now on the admins don't see your balance.": "已撤回。从现在起，管理员将无法查看你的余额。",
-  "You agreed on {date} to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.": "你于 {date} 同意了之前的条款。你可以随时撤回：自那时起管理员将无法查看你的余额。",
-  "You agreed on {date}. You can take it back at any time: from that moment the admins don't see your balance.": "你于 {date} 同意了。你可以随时撤回：自那时起管理员将无法查看你的余额。",
-  "You agreed to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.": "你同意了之前的条款。你可以随时撤回：自那时起管理员将无法查看你的余额。",
-  "You agreed. You can take it back at any time: from that moment the admins don't see your balance.": "你已同意。你可以随时撤回：自那时起管理员将无法查看你的余额。",
-  "What you agreed the admins can see": "你同意管理员可以查看的内容",
-  "Agreeing is up to you. If you don't, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.": "是否同意完全由你决定。如果不提供，其他任何功能都不会受到影响：管理员只是永远无法查看你的余额。你可以随时在设置中撤回此项。",
   "Saving…": "正在保存…",
-  "Withdraw": "撤回",
   "App Lock is on": "应用锁已开启",
   "your community": "你的社区",
   "No break-glass code": "无紧急备用代码",
@@ -4156,9 +4138,6 @@
   "No name: it is kept unsealed": "无姓名：保持未封装",
   "A note, with no name in it": "一条不含姓名的备注",
   "{label}: {value}": "{label}: {value}",
-  "Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.|Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.": {
-    "other": "仅包含同意管理员查看权限、超出其底线 {pct}% 或处于负债且 {n} 天无交易的成员。其交易绝不会被显示。"
-  },
   "PAST A LINE": "超出底线",
   "Nobody is past a line.": "没有人超出底线。",
   "LEFT WITH A DEBT": "离队欠款",
@@ -5948,6 +5927,9 @@
   "\"{title}\" stayed behind: {reason}": "\"{title}\" 留在了原处：{reason}",
   "{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.": "{name} 在你发布一个提供之后才接受需求。发布一个，我们会再次询问你。",
   "Poll": "投票",
+  "Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.|Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.": {
+    "other": "仅包含已确认成员：所欠超过其底线的 {pct}%，或处于负债且 {n} 天没有销售。其交易绝不会被显示。"
+  },
   "Stop taking questions": "停止接受提问",
   "on the global community": "在全球社区",
   "Open their requests there": "在那里打开他们的请求",
@@ -5980,5 +5962,6 @@
   "Scan a QR code": "扫描二维码",
   "Point the camera at the QR code on your invite.": "将相机对准你邀请上的二维码。",
   "Allow the camera for BeanPool in your phone settings, or paste your invite below.": "请在手机设置中允许 BeanPool 使用相机，或把邀请粘贴到下面。",
-  "Choose your community, then enter your callsign to restore your account with any linked sign-in.": "选择你的社区，然后输入你的呼号，用任一已关联的登录方式恢复账号。"
+  "Choose your community, then enter your callsign to restore your account with any linked sign-in.": "选择你的社区，然后输入你的呼号，用任一已关联的登录方式恢复账号。",
+  "Newest within {distance} of your area.": "你所在区域 {distance} 范围内的最新内容。"
 }

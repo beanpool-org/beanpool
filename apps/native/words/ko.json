@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2, 2 Nov); claude-sonnet-5-5 (machine draft, market order S1: the Newest within line, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-11-04",
+    "updated": "2026-11-03",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "콩",
@@ -27,10 +27,6 @@
   "💡 Tip: adding your suburb helps locals find you!": "💡 팁: 동네를 추가하면 이웃이 나를 더 쉽게 찾을 수 있어요!",
   "Use the name {name}": "{name} 이름 사용",
   "What this community's admins can see": "이 커뮤니티 관리자가 볼 수 있는 정보",
-  "I agree": "동의합니다",
-  "✅ I agree": "✅ 동의합니다",
-  "⬜ I agree": "⬜ 동의합니다",
-  "Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.": "선택 사항이에요. 동의하지 않아도 가입할 수 있어요. 동의하지 않으면 관리자는 내 잔액을 볼 수 없어요. 나중에 설정에서 동의할 수도 있어요.",
   "🔑 Recover an existing account with seed phrase →": "🔑 복구 문구로 기존 계정 복구하기 →",
   "Joining network...": "네트워크에 가입하는 중...",
   "Next": "다음",
@@ -1234,7 +1230,6 @@
   "Made up to show how it works: these are not real listings. They go once there are enough real ones.": "이해를 돕기 위한 예시이며 실제 게시물이 아니에요. 실제 글이 충분히 올라오면 사라져요.",
   "Example, not a real listing. Offer: {title}. {description}": "예시 게시물(실제 글 아님). 제공: {title}. {description}",
   "Example, not a real listing. Need: {title}. {description}": "예시 게시물(실제 글 아님). 요청: {title}. {description}",
-  "Upcoming events": "다가오는 행사",
   "Yesterday": "어제",
   "This Week": "이번 주",
   "Older Listings": "이전 게시물",
@@ -1256,7 +1251,6 @@
   "There are no Beans here. The description says what they would like in return, or that it is free. Message them to ask.": "여기에는 콩이 사용되지 않아요. 원하는 대가가 본문에 적혀 있거나 무료예요. 메시지로 문의해 보세요.",
   "{noBeans} The description says what they would like in return, or that it is free. Message them to ask.": "{noBeans} 원하는 대가가 본문에 적혀 있거나 무료예요. 메시지로 문의해 보세요.",
   "No price here: say in the description what you would like in return, or that it is free.": "가격이 없어요. 원하는 대가가 있다면 본문에 적어 주시거나, 무료라고 알려 주세요.",
-  "Nearest first": "가까운 순",
   "You're seeing the newest listings worldwide.": "전 세계의 최신 게시물을 보고 계세요.",
   "Set your area to see what's near you.": "가까운 게시물을 보려면 지역을 설정하세요.",
   "An informal poll; it decides nothing": "의견 수렴용 설문이며 아무것도 공식 결정하지 않아요",
@@ -2096,19 +2090,7 @@
   "{name} stays blocked and is no longer your friend. They can notice a removal.": "{name} 님은 계속 차단 상태로 유지되며 더 이상 친구가 아닙니다. 상대방이 친구 삭제를 알아챌 수 있습니다.",
   "Removing…": "삭제 중…",
   "Also remove from friends": "친구에서도 삭제",
-  "Your community changed what its admins can see": "커뮤니티 관리자가 볼 수 있는 정보가 변경되었습니다",
-  "Not saved: the community could not be reached.": "저장되지 않음: 커뮤니티에 연결할 수 없습니다.",
-  "Not saved. Try again later.": "저장되지 않았습니다. 나중에 다시 시도하세요.",
-  "Saved. You can take it back here at any time.": "저장되었습니다. 언제든 여기에서 철회할 수 있습니다.",
-  "Withdrawn. From now on the admins don't see your balance.": "철회되었습니다. 이제부터 관리자는 내 잔액을 볼 수 없습니다.",
-  "You agreed on {date} to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.": "{date}에 이전 내용에 동의하셨습니다. 언제든 철회할 수 있으며, 철회하는 순간부터 관리자는 내 잔액을 볼 수 없습니다.",
-  "You agreed on {date}. You can take it back at any time: from that moment the admins don't see your balance.": "{date}에 동의하셨습니다. 언제든 철회할 수 있으며, 철회하는 순간부터 관리자는 내 잔액을 볼 수 없습니다.",
-  "You agreed to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.": "이전 내용에 동의하셨습니다. 언제든 철회할 수 있으며, 철회하는 순간부터 관리자는 내 잔액을 볼 수 없습니다.",
-  "You agreed. You can take it back at any time: from that moment the admins don't see your balance.": "동의하셨습니다. 언제든 철회할 수 있으며, 철회하는 순간부터 관리자는 내 잔액을 볼 수 없습니다.",
-  "What you agreed the admins can see": "관리자가 볼 수 있도록 동의한 항목",
-  "Agreeing is up to you. If you don't, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.": "동의 여부는 자유입니다. 동의하지 않아도 다른 점은 없으며, 관리자가 잔액을 볼 수 없을 뿐입니다. 여기 설정에서 언제든 동의를 철회할 수 있습니다.",
   "Saving…": "저장 중…",
-  "Withdraw": "철회",
   "App Lock is on": "앱 잠금 켜짐",
   "your community": "내 커뮤니티",
   "No break-glass code": "비상 복구 코드 없음",
@@ -4156,9 +4138,6 @@
   "No name: it is kept unsealed": "이름 없음: 암호화되지 않은 상태로 보관됨",
   "A note, with no name in it": "이름이 포함되지 않은 메모",
   "{label}: {value}": "{label}: {value}",
-  "Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.|Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.": {
-    "other": "관리자 열람에 동의한 멤버 중 신용 한도의 {pct}%를 초과했거나 {n}일 동안 판매 없이 마이너스 잔액인 멤버만 표시됩니다. 거래 내역은 절대 공개되지 않습니다."
-  },
   "PAST A LINE": "한도 초과",
   "Nobody is past a line.": "한도를 초과한 멤버가 없습니다.",
   "LEFT WITH A DEBT": "부채를 남김",
@@ -5948,6 +5927,9 @@
   "\"{title}\" stayed behind: {reason}": "\"{title}\"을(를) 옮기지 못했습니다: {reason}",
   "{name} takes a Need once you have listed an Offer there. List one, and you will be asked again.": "{name}에서는 제공 글을 올린 뒤에야 요청 글을 받습니다. 하나 올리시면 다시 여쭤보겠습니다.",
   "Poll": "설문",
+  "Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.|Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.": {
+    "other": "확인된 멤버 중 신용 한도의 {pct}%를 초과했거나 {n}일 동안 판매 없이 마이너스 잔액인 멤버만 표시됩니다. 거래 내역은 절대 표시되지 않습니다."
+  },
   "Stop taking questions": "질문 받기 중단",
   "on the global community": "글로벌 커뮤니티에서",
   "Open their requests there": "거기서 요청 열기",
@@ -5980,5 +5962,6 @@
   "Scan a QR code": "QR 코드 스캔",
   "Point the camera at the QR code on your invite.": "초대장의 QR 코드를 카메라로 비추세요.",
   "Allow the camera for BeanPool in your phone settings, or paste your invite below.": "휴대폰 설정에서 BeanPool의 카메라 사용을 허용하거나, 아래에 초대를 붙여넣으세요.",
-  "Choose your community, then enter your callsign to restore your account with any linked sign-in.": "커뮤니티를 고른 다음 호출 부호(별명)를 입력해, 연결된 로그인으로 계정을 복원하세요."
+  "Choose your community, then enter your callsign to restore your account with any linked sign-in.": "커뮤니티를 고른 다음 호출 부호(별명)를 입력해, 연결된 로그인으로 계정을 복원하세요.",
+  "Newest within {distance} of your area.": "내 지역에서 {distance} 이내의 최신 글."
 }

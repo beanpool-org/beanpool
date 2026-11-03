@@ -98,6 +98,8 @@ export const OWNER_ALERT_WORDS = {
         one: `A member's account was moved to a new phone in the last day, ${how}.`,
         many: `{n} members' accounts were moved to a new phone in the last day, ${how}.`,
     }),
+    /** Posts an owner's AI assistant took down (engine/agent-takedowns.ts): a day's count, with no member and no assistant named. */
+    assistantTakedowns: { one: 'An AI assistant took down a post in the last day.', many: 'An AI assistant took down {n} posts in the last day.' },
     branchesPruned: { one: 'A branch of invites was pruned in the last day, by an owner.', many: '{n} branches of invites were pruned in the last day, by an owner.' },
     /** An owner paused a whole invite branch, which opened one vote on removing it (decisions-engine.ts pauseBranch; removal by vote S5). */
     branchesPaused: (how: string) => ({

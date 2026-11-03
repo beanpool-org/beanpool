@@ -38,7 +38,7 @@ import { logAddressTag } from '../log-address.js';
 import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
-import { grantPosts, offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
+import { grantModerates, grantPosts, offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
 import { AGENT_CREATE_BODY_MAX } from './owner-posts.js';
 import { dropEveryPhotoLink } from './owner-photos.js';
 import { PROMPTS, promptText, welcomeInstructions, type WelcomeFacts } from './welcome.js';
@@ -161,7 +161,7 @@ export function agentGrantFrom(ctx: any): GrantCheck {
         if (r !== 'owner' && r !== 'admin') return { ok: false, status: 401, error: 'Invalid, revoked or expired token', grantId: g.id };
         return {
             ok: true,
-            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null, canPost: g.canPost === true },
+            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null, canPost: g.canPost === true, canModerate: false },
         };
     }
     if (!m || !looksLikeAutomationToken(m[1])) return { ok: false, status: 401, error: UNAUTHORISED };
@@ -179,7 +179,7 @@ export function agentGrantFrom(ctx: any): GrantCheck {
         ok: true,
         grant: {
             id: record.id, name: record.name, member: record.createdBy, role, via: 'token',
-            createdAt: record.createdAt, expiresAt: record.expiresAt, canPost: record.canPost === true,
+            createdAt: record.createdAt, expiresAt: record.expiresAt, canPost: record.canPost === true, canModerate: record.canModerate === true,
         },
     };
 }
@@ -204,6 +204,7 @@ function welcomeFacts(ctx: any, grant: AgentGrant): WelcomeFacts {
         canBackup: grant.role === 'owner',
         canSuggest: offersSuggestions(),
         canPost: grantPosts(grant),
+        canModerate: grantModerates(grant),
     };
 }
 

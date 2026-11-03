@@ -2,10 +2,10 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-sonnet-5-5 (machine draft, invite-and-share 3 Nov); claude-sonnet-5-5 (machine draft, requests-r1-words 3 Nov); claude-sonnet-5-5 (machine draft, listing-promise-a3 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-sonnet-5-5 (machine draft, invite-and-share 3 Nov); claude-sonnet-5-5 (machine draft, requests-r1-words 3 Nov); claude-sonnet-5-5 (machine draft, listing-promise-a3 3 Nov); claude-opus-5-5 (machine draft, balance rule S2, 2 Nov); claude-opus-5-5 (machine draft, balance rule S2 fix round: the private tip and the rules page title, 3 Nov); claude-opus-5-5 (machine draft, balance rule S2 fix round 2: the rule sentence states what the server tests, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-11-04",
+    "updated": "2026-11-03",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "豆子",
@@ -226,7 +226,6 @@
   "Groups are for a street, a choir, a garden crew, a guild. Find them in Chat under Groups, or start one.": "群組適合一條街道、合唱團、園藝志工隊或興趣小組。在「聊天」的群組中尋找或自行建立。",
   "Commons is where your community decides things together. A Decision is a secret ballot, and when it passes it is carried out.": "公共板塊是社群共同決策的地方。決策採無記名投票，一旦通過就會執行。",
   "Polls ask what people think and change nothing by themselves. Find them in the Market under Polls.": "民意調查旨在了解大家的想法，其本身不會改變既定規則。在市集的投票專區中可以找到。",
-  "Only you can see your balance and your trades. Other members see your name, photo, level and reviews.": "只有你能查看自己的餘額和交易紀錄。其他成員只會看到你的姓名、相片、等級和評價。",
   "People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.": "未加入的人只能看到刊登了什麼與大致區域，絕不會看到你的姓名、面貌或精確位置。",
   "Tips · {position} of {total}": "提示 · 第 {position} 則（共 {total} 則）",
   "Done with tips. The card goes.": "已看完所有提示，卡片即將關閉。",
@@ -850,6 +849,17 @@
   "A figure is held back when fewer than {n} people are behind it, or fewer than {n} people separate the two columns.": "當一個數字背後不足 {n} 人，或兩欄相差不足 {n} 人時，該數字不顯示。",
   "First trades go up in steps of {n}, so the number never points at one person.": "首次交易按 {n} 遞增，因此這個數字絕不會指向某一個人。",
   "{n} at this spot": "此處有 {n} 項",
+  "Your balance and your trades are private. If your community has a rule on when the admins can see a balance, it's under How this community works.": "你的餘額和交易紀錄是私密的。如果你的社群有關於管理員何時能看到餘額的規定，可在「這個社群如何運作」中查看。",
+  "How this community works": "這個社群如何運作",
+  "**Confirmed members** can owe up to {amount} Beans (the known floor)": "**已確認成員**最多可欠 {amount} 顆豆子（已知下限）",
+  "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for {days}. Each look is logged.": "如果已確認成員所欠超過其信用額度的一半，或處於透支且連續 {days} 沒有銷售，管理員就能看到其餘額。每次查看都會被記錄。",
+  "The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or are in debit and haven't made a sale for {days}. Each look is logged.": "如果已確認成員所欠超過其信用額度的 {pct}%，或處於透支且連續 {days} 沒有銷售，管理員就能看到其餘額。每次查看都會被記錄。",
+  "The line of {pct}% applies from {date}.": "{pct}% 的界線自 {date} 起適用。",
+  "The line of {days} applies from {date}.": "{days} 的界線自 {date} 起適用。",
+  "The rule starts on {date}. Until then, only members confirmed since the notice began are listed.": "此規則於 {date} 開始。在此之前，只列出通知開始後確認的成員。",
+  "{n} days|{n} days": {
+    "other": "{n} 天"
+  },
   "Calendar": "日曆",
   "Nothing on {date}": "{date}無活動",
   "Nothing on in {month}.": "{month}無活動。",

@@ -16,6 +16,7 @@ import {
     type ListedReport,
     type ReportStatusFilter,
 } from '../../lib/node-client';
+import { POST_ON_HOLD_WORDS } from '../../lib/post-on-hold-words';
 
 /**
  * Settings for a moderator: Reports, and nothing else (Marty's decision, 2026-09-19: "real, narrow: reports and
@@ -261,10 +262,11 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
             ) : hasPost ? (
                 <div className="space-y-1">
                     <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
-                        Post{report.postAuthorCallsign ? ` by ${report.postAuthorCallsign}` : ''}{report.postMadeByAssistant ? ' · made by an assistant' : ''}{report.postRemoved ? ' · already down' : ''}
+                        Post{report.postAuthorCallsign ? ` by ${report.postAuthorCallsign}` : ''}{report.postMadeByAssistant ? ' · made by an assistant' : ''}{report.postRemoved ? ' · already down' : ''}{report.postOnHold ? ' · on hold' : ''}
                     </p>
                     <p className="text-base font-bold text-white m-0">{report.postTitle || 'Untitled post'}</p>
                     {report.postDescription && <p className="text-sm text-nature-200 m-0 whitespace-pre-line">{report.postDescription}</p>}
+                    {isOpen && report.postOnHold && <p className="text-sm font-semibold text-nature-100 m-0" data-testid="post-on-hold">{POST_ON_HOLD_WORDS}</p>}
                 </div>
             ) : pulse ? (
                 <div className="space-y-1">
@@ -328,7 +330,7 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                     <button type="button" disabled={!!busy}
                         onClick={() => void run('dismiss', () => dismissNodeReport(nodeUrl, report.id))}
                         className={`${btn} bg-nature-900 hover:bg-nature-800 border border-nature-700 text-nature-100`}>
-                        {busy === 'dismiss' ? 'Dismissing…' : hasPost && !report.postRemoved ? 'Dismiss (keep the post)' : 'Dismiss'}
+                        {busy === 'dismiss' ? 'Dismissing…' : hasPost && !report.postRemoved && !report.postOnHold ? 'Dismiss (keep the post)' : 'Dismiss'}
                     </button>
                 </div>
             )}

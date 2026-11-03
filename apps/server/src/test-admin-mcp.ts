@@ -316,8 +316,8 @@ async function main(): Promise<void> {
         // The posts an owner's assistant makes are their own suite's (test-mcp-owner-posts.ts): each needs photos and makes a post.
         // So are an edit and a removal of one it made (test-mcp-owner-undo.ts), and closing or reading a poll it made (test-mcp-owner-polls.ts):
         // this suite's assistant made none to name. So is the upload link (test-mcp-photo-link.ts): an address on this node is what it
-        // answers, the one answer with "http" in it.
-        const NEEDS_ITS_POST = ['update_post', 'remove_post', 'close_poll', 'poll_results'];
+        // answers, the one answer with "http" in it. A takedown needs a post to take, and a tick: test-mcp-takedown.ts.
+        const NEEDS_ITS_POST = ['update_post', 'remove_post', 'close_poll', 'poll_results', 'take_down', 'take_down_many'];
         for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_') && !NEEDS_ITS_POST.includes(x.name) && x.name !== 'photo_upload_link')) {
             // suggest_action (S4) files one card on r1: swept like every answer; it changes no report. remove_all_i_made (S2),
             // said out loud, answers that it removed nothing: this assistant made nothing.

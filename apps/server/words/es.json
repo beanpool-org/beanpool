@@ -2,9 +2,9 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-11-02",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -17,6 +17,11 @@
   "To go, ask to join {community}": "Para ir, pide unirte a {community}",
   "This event is run by another community, so you can't say you are going from here.": "Este evento lo organiza otra comunidad, así que no puedes decir desde aquí que vas a ir.",
   "This is shown from another community, so it can't be bought or taken here.": "Esto se muestra desde otra comunidad, así que aquí no se puede comprar ni tomar.",
+  "🛡️ Your post was taken down": "🛡️ Tu publicación fue retirada",
+  "🛡️ Your posts were taken down": "🛡️ Tus publicaciones fueron retiradas",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Los moderadores de la comunidad retiraron tu publicación {title}. Motivo: {reason}. Está oculta para los demás; si no se restablece en 7 días, se eliminará.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Los moderadores de la comunidad retiraron tu publicación. Motivo: {reason}. Está oculta para los demás; si no se restablece en 7 días, se eliminará.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Los moderadores de la comunidad retiraron {n} de tus publicaciones. Motivo: {reason}. Están ocultas para los demás; si no se restablecen en 7 días, se eliminarán.",
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Para responder Otro, escribe tu respuesta. Si no hay dónde escribir, actualiza la app.",
   "Only Other takes a typed answer": "Solo Otro admite una respuesta escrita",
   "A typed answer is at most {n} characters": "Una respuesta escrita tiene como máximo {n} caracteres",

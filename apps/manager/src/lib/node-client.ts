@@ -221,6 +221,8 @@ export interface NodeReport {
     /** The reported post's author's key, read by the node from the post (null when no post is reported). */
     postAuthorPubkey?: string | null;
     postRemoved?: boolean | null;
+    /** The reported post is an assistant's takedown on hold: dismissing the report doesn't keep it. */
+    postOnHold?: boolean | null;
     /** The reported post was made by an owner's AI assistant (the server's posts.created_via). */
     postMadeByAssistant?: boolean | null;
     targetPulseItemId?: string;
@@ -2692,7 +2694,7 @@ export interface AlertsStatus {
     recent?: Array<{ key: string; title: string; at: number; priority: number; detail: string; count?: number }>;
     acknowledge?: boolean;
     /** AI assistants today (admin MCP §8), counts only; absent on a server older than them. */
-    assistants?: { calls: number; connected: number };
+    assistants?: { calls: number; connected: number; takedowns?: number };
 }
 
 export function getAlertsStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AlertsStatus> {

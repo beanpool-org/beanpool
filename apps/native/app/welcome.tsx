@@ -19,7 +19,9 @@ import {
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
-import { bundledAvatarForPubkey, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink } from '@beanpool/core';
+import {
+    bundledAvatarForPubkey, joinRuleLines, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold, type KnownRule,
+} from '@beanpool/core';
 import {
     doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
 } from '../components/welcome/welcome-lines';
@@ -94,8 +96,8 @@ import { returnToApp } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
+import { fetchKnownRule } from '../utils/known-rule';
 import { holdPostAfterJoin } from '../utils/post-after-join';
-import { readConsentTerms, joinAsksConsent, type ConsentTerms } from '../utils/known-consent';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
@@ -107,7 +109,6 @@ import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, is
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
 import { communitySwitched } from '../utils/community-switch';
-import { ConsentText } from '../components/ConsentText';
 import { useWords } from '../components/LanguageProvider';
 import { LanguageSwitch } from '../components/LanguagePicker';
 import { CLAIM_NEW_SERVER_ROUTE, claimRouteFor } from '../utils/claim-link';
@@ -233,12 +234,8 @@ export default function WelcomeScreen() {
     /** The 12-words restore's address field, which "another address" hands the keyboard (components/RestoreCommunityChips.tsx). */
     const recoveryAddressRef = useRef<TextInput>(null);
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
-    // A known community's consent text, shown before joining (community modes slice 6), and the member's tick. Never
-    // required: unticked, the join goes on and the admins simply never see this member's balance.
-    const [joinTerms, setJoinTerms] = useState<ConsentTerms | null>(null);
-    // The version of the text the member ticked: a text that changes as they type the address is unticked again.
-    const [joinTickedVersion, setJoinTickedVersion] = useState<string | null>(null);
-    const joinConsentTicked = !!joinTerms && joinTickedVersion === joinTerms.version;
+    // A known community's rule, stated before joining in its own numbers. Nothing to tick, and no answer draws nothing.
+    const [joinRule, setJoinRule] = useState<KnownRule | null>(null);
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
     // A build without a key vault (utils/vault.ts `signInCopiesAt`) restores at the member's community, as before the
     // vault: a callsign and the community's address, looked up as they type.
@@ -1166,27 +1163,17 @@ export default function WelcomeScreen() {
         return () => { cancelled = true; };
     }, [mode, globalPhase, doorHeld]);
 
-    // The community's consent text, read (public, no key) from the node the invite or the typed address names, as the
-    // member fills the step in. An older node, a plain community or no answer: nothing is shown.
+    // The community's rule, read (public, no key) from the node the invite or the typed address names, as the member
+    // fills the step in. An older node, a plain community or no answer: nothing is shown.
     useEffect(() => {
         if (mode !== 'create') return;
         let origin: string | null;
         try { origin = extractNodeOrigin(inviteCode.trim()); } catch { origin = null; }
         const nodeUrl = normalizeNodeUrl(origin || createAnchorUrl.trim());
-        if (!nodeUrl || !looksLikeNodeAddress(nodeUrl) || shouldBlockCleartextNodeUrl(nodeUrl)) { setJoinTerms(null); return; }
+        if (!nodeUrl || !looksLikeNodeAddress(nodeUrl) || shouldBlockCleartextNodeUrl(nodeUrl)) { setJoinRule(null); return; }
         let cancelled = false;
         const timer = setTimeout(() => {
-            const ctl = new AbortController();
-            const stop = setTimeout(() => ctl.abort(), NEXT_REQUEST_TIMEOUT_MS);
-            fetch(`${nodeUrl}/api/community/consent-terms`, { signal: ctl.signal })
-                .then((r) => (r.ok ? r.json() : null))
-                .then((body) => {
-                    if (cancelled) return;
-                    const terms = readConsentTerms(body);
-                    setJoinTerms(joinAsksConsent(terms) ? terms : null);
-                })
-                .catch(() => { if (!cancelled) setJoinTerms(null); })
-                .finally(() => clearTimeout(stop));
+            void fetchKnownRule(nodeUrl, NEXT_REQUEST_TIMEOUT_MS).then((rule) => { if (!cancelled) setJoinRule(rule); });
         }, 600);
         return () => { cancelled = true; clearTimeout(timer); };
     }, [mode, inviteCode, createAnchorUrl]);
@@ -1351,13 +1338,6 @@ export default function WelcomeScreen() {
                 // and only for this invite; the pasted link itself may carry it too.
                 const sentFrom = postIdFromInviteLink(rawInvite) ?? (landingPost && landingPost.code === parsedCode ? landingPost.id : null);
                 if (sentFrom) await holdPostAfterJoin(nodeUrl, sentFrom);
-
-                // The consent the member ticked above, recorded now they are a member: signed with their key, on the anchor
-                // just set. Never in the way: a refusal (the lines changed meanwhile) or no answer leaves Settings to offer it.
-                if (joinTerms && joinConsentTicked) {
-                    const { signedRequestWithMethod } = await import('../utils/db');
-                    await signedRequestWithMethod('POST', '/api/names/consent', { version: joinTerms.version }).catch(() => null);
-                }
 
                 // Record wizard state so an interrupted setup (avatar/seed) resumes
                 await setPendingOnboarding({
@@ -2648,7 +2628,7 @@ export default function WelcomeScreen() {
                             // carry it, so the label is just the sentence.
                             accessibilityLabel={t("I've saved these words")}
                         >
-                            {/* Shrinks to the box and wraps, as the consent tickbox does: alone in a row, it ran past the box
+                            {/* Shrinks to the box and wraps: alone in a row, it ran past the box
                                 at 320 dp with 1.3x text, and longer languages more. */}
                             <Text style={[styles.checkboxText, { flexShrink: 1 }]}>
                                 {seedConfirmed ? '✅ ' : '⬜ '} <Text>{t("I've saved these words")}</Text>
@@ -3144,21 +3124,14 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        {joinTerms && (
-                            <View style={{ marginBottom: 12 }} testID="join-consent">
+                        {joinRule && (
+                            <View style={{ marginBottom: 12, gap: 6 }} testID="join-rule">
                                 <Text style={styles.checkboxText} accessibilityRole="header">{t("What this community's admins can see")}</Text>
-                                <ConsentText text={joinTerms.text} />
-                                <Pressable
-                                    style={[styles.checkbox, { marginVertical: 8, minHeight: 48 }, joinConsentTicked && styles.checkboxActive]}
-                                    onPress={() => setJoinTickedVersion(joinConsentTicked ? null : joinTerms.version)}
-                                    disabled={loading}
-                                    accessibilityRole="checkbox"
-                                    accessibilityState={{ checked: joinConsentTicked }}
-                                    accessibilityLabel={t('I agree')}
-                                >
-                                    <Text style={[styles.checkboxText, { flexShrink: 1 }]}>{joinConsentTicked ? t('✅ I agree') : t('⬜ I agree')}</Text>
-                                </Pressable>
-                                <Text style={{ color: colors.text.muted, fontSize: 13, lineHeight: 18 }}>{t("Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.")}</Text>
+                                {joinRuleLines(joinRule).map((line) => (
+                                    <Text key={line} style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
+                                        {splitBold(line).map((part) => <Text key={part.text} style={part.bold ? { fontWeight: '700' } : undefined}>{part.text}</Text>)}
+                                    </Text>
+                                ))}
                             </View>
                         )}
 

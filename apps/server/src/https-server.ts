@@ -110,6 +110,7 @@ import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
 import { createMcpRoutes, mcpBodyLimit, MCP_BODY_MAX } from './agent/mcp-route.js';
 import { createPhotoUploadRoutes } from './agent/photo-upload-route.js';
 import { createAgentGrantRoutes } from './agent/grants-route.js';
+import { createTakedownRoutes } from './agent/takedowns-route.js';
 import { createOAuthRoutes, oauthDoorOff } from './agent/oauth-route.js';
 import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
@@ -1979,6 +1980,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createMcpRoutes(deps),
         createPhotoUploadRoutes(),
         createAgentGrantRoutes(deps),
+        createTakedownRoutes(deps),
         createOAuthRoutes(deps),
         createAgentSuggestionRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),

@@ -493,7 +493,8 @@ describe('words in capitals, the language\'s way (never toUpperCase on a transla
     const catalog = (lang: string) => JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../words', `${lang}.json`), 'utf8')) as Record<string, string>;
 
     it('Turkish: a feed heading\'s "i" is a dotted capital "İ"', async () => {
-        const events = catalog('tr')['Upcoming events'];
+        // "Upcoming events" is no longer a heading (Market order); "Older Listings" has the same "i" in its Turkish.
+        const events = catalog('tr')['Older Listings'];
         expect(events).toMatch(/i/);
         await renderIn('tr');
         expect(host.textContent).toContain('Repair café');

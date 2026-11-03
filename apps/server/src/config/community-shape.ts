@@ -42,6 +42,8 @@
  *   - `auth_hatch_open`: ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false open what only members should read.
  *   - `open_membership`: members on demand stays on while the whole directory is closed (lockOnDemandToOpenMembership).
  *   - `standby`: a standby never publishes to the directory.
+ *   - `pool_too_small`: Who decides a removal can't be set to a jury while fewer than JURY_MIN_POOL members could serve on
+ *     one today (config/removal-decider.ts); a pause made then is decided by everyone whatever is set.
  * Nothing else is locked for being set by the server's kind alone: an operator's override changes those, and which of
  * them an owner may change is the write path's (config/community-shape-write.ts: what it takes, and which locks refuse).
  *
@@ -70,6 +72,9 @@ import {
 import { isPrivatePreview, PRIVATE_PREVIEW_ENV } from './private-preview.js';
 import { DOOR_KEY, doorFor, doorFromRow, isCommunityDoor, type CommunityDoor } from './door.js';
 import { RECOVERY_COPIES_KEY, isRecoveryCopies, recoveryCopiesFromRow, type RecoveryCopies } from './recovery-copies.js';
+import { REMOVAL_DECIDER_KEY, isRemovalDecider, removalDeciderFromRow, type RemovalDecider } from './removal-decider.js';
+import { JURY_MIN_POOL, jurySnapshotDate } from '@beanpool/core';
+import { removalJuryPool } from '../decisions-engine.js';
 import { keptCommunitySettings, parseCommunitySettings } from './community-settings.js';
 import {
     directoryHeldBack, directoryUnlistedByEnv, HELD_BACK_NAME_MESSAGE, HELD_BACK_PROBATION_MESSAGE, HELD_BACK_UNLISTED_MESSAGE,
@@ -84,7 +89,7 @@ export type ShapeSource = 'owner' | 'profile' | 'default' | 'server';
 
 export const SHAPE_LOCK_CODES = [
     'ledger_moved', 'private_preview', 'invites_off', 'beans_off', 'profile', 'server_env', 'held_back',
-    'auth_hatch_open', 'open_membership', 'standby',
+    'auth_hatch_open', 'open_membership', 'standby', 'pool_too_small',
 ] as const;
 export type ShapeLockCode = (typeof SHAPE_LOCK_CODES)[number];
 
@@ -146,6 +151,9 @@ export interface ShapeSettings {
     autoMute: ShapeSetting<boolean>;
     /** Where members' copies go (config/recovery-copies.ts, vault rethink VR2): the key vault, this server, or nowhere. */
     recoveryCopies: ShapeSetting<RecoveryCopies>;
+    /** Who decides a removal (config/removal-decider.ts, DESIGN-removal-jury-fable.md §6): a jury from 100, everyone, or a
+     *  jury. `lock` (pool_too_small) refuses a jury while the pool is under JURY_MIN_POOL; `poolSize` is today's pool. */
+    removalDecider: ShapeSetting<RemovalDecider> & { poolSize: number };
     connections: ShapeSetting<boolean>;
 }
 
@@ -223,6 +231,8 @@ const LOCK_WORDS = {
     previewDoor: "While the private preview is on, the open door takes nobody: only an owner's or admin's invite gets in.",
     previewVisitors: 'While the private preview is on, a visitor sees nothing but its message.',
     previewShareOutside: 'While the private preview is on, no post is shared outside: a visitor sees nothing but its message.',
+    poolTooSmall: (pool: number) => `A jury needs at least ${JURY_MIN_POOL} members who could serve on it (members for 30 days, not paused or closed), `
+        + `three juries' worth; ${pool} could today. Until then everyone decides a removal here.`,
     invitesOff: 'Off while no new members are taken: a request to join is answered with an invite, and this community makes none.',
     unlockInvites: 'Take new members again, with any member or only admins inviting, and requests to join follow their own setting.',
     beansOffFloor: 'This community has no Beans, so it has no known floor.',
@@ -289,6 +299,7 @@ interface CommunityRows {
     knownFloor: string | null;
     creditCap: string | null;
     recoveryCopies: string | null;
+    removalDecider: string | null;
     directory: Directory;
 }
 
@@ -310,6 +321,7 @@ function ownRows(): CommunityRows {
         knownFloor: row(KNOWN_FLOOR_KEY),
         creditCap: row(CREDIT_CAP_KEY),
         recoveryCopies: row(RECOVERY_COPIES_KEY),
+        removalDecider: row(REMOVAL_DECIDER_KEY),
         directory: Object.fromEntries(DIRECTORY_FIELDS.map((f) => [f, n[f]])) as Directory,
     };
 }
@@ -337,6 +349,7 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
             knownFloor: copied(KNOWN_FLOOR_KEY, own.knownFloor),
             creditCap: copied(CREDIT_CAP_KEY, own.creditCap),
             recoveryCopies: copied(RECOVERY_COPIES_KEY, own.recoveryCopies),
+            removalDecider: copied(REMOVAL_DECIDER_KEY, own.removalDecider),
             directory,
         },
         copiedAt: kept.copiedAt ?? null,
@@ -499,6 +512,7 @@ export function readShape(): Shape {
             source: isRecoveryCopies(rows.recoveryCopies) ? 'owner' : 'default',
             lock: null,
         },
+        removalDecider: removalDeciderShape(rows.removalDecider),
         connections: {
             value: ENABLE_PEER_CONNECTORS, configured: ENABLE_PEER_CONNECTORS, source: 'server',
             lock: lock('server_env', LOCK_WORDS.onTheServer('ENABLE_PEER_CONNECTORS')),
@@ -506,6 +520,23 @@ export function readShape(): Shape {
     };
     const version = (db.prepare('SELECT COALESCE(MAX(id), 0) AS v FROM community_settings_log').get() as { v: number }).v;
     return { kind, standby, ...(standby ? { copiedAt } : {}), version, settings, kindOnly, log: readLog() };
+}
+
+/**
+ * Who decides a removal (config/removal-decider.ts): as set, and as a pause made today would be decided. A jury chosen
+ * while fewer than JURY_MIN_POOL could serve today runs as everyone (decisions-engine.ts pauseMember), and the lock says so.
+ */
+function removalDeciderShape(stored: string | null): ShapeSetting<RemovalDecider> & { poolSize: number } {
+    const configured = removalDeciderFromRow(stored);
+    const poolSize = removalJuryPool(jurySnapshotDate(Date.now()), []).length;
+    const tooSmall = poolSize < JURY_MIN_POOL;
+    return {
+        value: configured === 'jury' && tooSmall ? 'everyone' : configured,
+        configured,
+        source: isRemovalDecider(stored) ? 'owner' : 'default',
+        lock: tooSmall ? lock('pool_too_small', LOCK_WORDS.poolTooSmall(poolSize)) : null,
+        poolSize,
+    };
 }
 
 /**

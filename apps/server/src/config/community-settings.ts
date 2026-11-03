@@ -64,7 +64,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
     'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
-    'directory_promise', 'recovery_copies', 'balance_rule_from',
+    'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -245,6 +245,8 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     recovery_copies: orNull(oneOf('server', 'none')),
     // When the rule on what the admins can see starts (config/balance-rule.ts): a take-over keeps the community's date.
     balance_rule_from: orNull((v) => readRuleInstant(v) === null ? BAD : v as string),
+    // Who decides a removal (config/removal-decider.ts): every rule an owner chose is stored, the default included.
+    removal_decider: orNull(oneOf('automatic', 'everyone', 'jury')),
 };
 
 /**

@@ -107,7 +107,8 @@ import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { memberShop, shopOf } from '../engine/shops.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
-import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor, titleForMembers, isBranchVote, removalSubjects } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, juryOf, openScopedDecisionsFor, titleForMembers, isBranchVote, removalSubjects } from '../decisions-engine.js';
+import { seatedJuror } from '../engine/removal-jury.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
@@ -642,8 +643,9 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     // formal Decisions only where they are on, never an emergency suspension made while they were off, and never a money
     // vote the member can't cast yet (no completed trade and no voice credits), which isn't asking anything of them, and never a
     // vote on removing the member themselves (the voter rule refuses them; the line would stay all week, #2430), a branch's
-    // included, nor a branch's vote to an app that doesn't draw it (lands=branch-vote; routes/commons.ts drawsBranchVotes).
-    // Only for a reader who reads as a member (`c.member`), and the line names the Decision.
+    // included, nor a branch's vote to an app that doesn't draw it (lands=branch-vote; routes/commons.ts drawsBranchVotes),
+    // and never a vote a jury decides where the member has no seat on it (castDecisionVote refuses them too; the push went to
+    // the jury only). Only for a reader who reads as a member (`c.member`), and the line names the Decision.
     if (c.member && decisionsOn()) {
         const mine = getOwnDecisionVotes(me);
         const blocked = !hasCompletedTrade(me) && getVoiceCredits(me) <= 0;
@@ -652,7 +654,8 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
                 && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
                 && !(d.franchise === 'quadratic_trade' && blocked)
                 && !(d.effect === 'remove_member' && removalSubjects(d).includes(me))
-                && (c.lands.has('branch-vote') || !isBranchVote(d)))
+                && (c.lands.has('branch-vote') || !isBranchVote(d))
+                && !(juryOf(d) && !seatedJuror(d.id, me)))
             .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt));
         if (votes.length) {
             const soonest = votes[0].closesAt;

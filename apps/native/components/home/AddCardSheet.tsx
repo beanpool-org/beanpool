@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t, word } from '@beanpool/core';
+import { homeCardHue, t, word } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import type { PickerGroup, PickerRow } from '../../utils/home-cards';
 import { HOME_TARGET_DP } from './HomeParts';
@@ -10,6 +10,10 @@ import { sheetStyles } from './sheet-parts';
 /** The picker's note, and the one it says when Home holds 24 cards (CARD-FRAME §1.2). */
 export const ADD_CARD_NOTE = word('Pick a card to put on Home. You can move or remove it any time.');
 export const ADD_CARD_FULL_NOTE = word('Home is full: remove a card to add one.');
+/** The hue dot before a row's name (S2): 10dp, with 8dp between it and the name. */
+export const ADD_CARD_DOT_DP = 10;
+export const ADD_CARD_DOT_GAP_DP = 8;
+
 /** Shown through t() in the member's language. */
 const NOTES = { open: ADD_CARD_NOTE, full: ADD_CARD_FULL_NOTE };
 
@@ -32,7 +36,17 @@ export function AddCardSheet({ visible, groups, full, colors, onAdd, onClose }: 
     const row = (r: PickerRow, last: boolean) => (
         <View key={r.type} style={[addCardStyles.row, !last && { borderBottomColor: colors.border.default, borderBottomWidth: StyleSheet.hairlineWidth }]} testID={`add-card-${r.type}`}>
             <View style={addCardStyles.rowText}>
-                <Text style={[addCardStyles.name, { color: colors.text.heading }]} numberOfLines={2}>{r.name}</Text>
+                <View style={addCardStyles.nameRow}>
+                    {/* The colour the card will have on Home, before it is there: decoration, so no label and hidden from a screen reader. */}
+                    <View
+                        style={[addCardStyles.dot, { backgroundColor: colors.card[homeCardHue({ type: r.type })].ink }]}
+                        accessible={false}
+                        importantForAccessibility="no-hide-descendants"
+                        accessibilityElementsHidden
+                        testID={`add-card-${r.type}-dot`}
+                    />
+                    <Text style={[addCardStyles.name, { color: colors.text.heading }]} numberOfLines={2}>{r.name}</Text>
+                </View>
                 <Text style={[addCardStyles.line, { color: colors.text.secondary }]} numberOfLines={2}>{r.line}</Text>
                 {!!r.count && <Text style={[addCardStyles.line, { color: colors.text.secondary }]} testID={`add-card-${r.type}-count`}>{r.count}</Text>}
                 {!!r.status && <Text style={[addCardStyles.line, { color: colors.text.secondary }]} testID={`add-card-${r.type}-status`}>{r.status}</Text>}
@@ -85,7 +99,9 @@ export const addCardStyles = StyleSheet.create({
     group: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 },
     row: { flexDirection: 'row', alignItems: 'center', minHeight: HOME_TARGET_DP + 8, gap: 8, paddingVertical: 6 },
     rowText: { flex: 1, minWidth: 0 },
-    name: { fontSize: 15, fontWeight: '700' },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: ADD_CARD_DOT_GAP_DP },
+    dot: { width: ADD_CARD_DOT_DP, height: ADD_CARD_DOT_DP, borderRadius: ADD_CARD_DOT_DP / 2, flexShrink: 0 },
+    name: { fontSize: 15, fontWeight: '700', flexShrink: 1, minWidth: 0 },
     line: { fontSize: 13, lineHeight: 18, marginTop: 1 },
     add: { minHeight: HOME_TARGET_DP, minWidth: HOME_TARGET_DP + 16, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
     addText: { fontSize: 14, fontWeight: '700' },

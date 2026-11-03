@@ -35,6 +35,28 @@ describe('AddCardDialog', () => {
         for (const b of within(dialog).getAllByRole('button')) expect(b.className).toContain('min-h-[44px]');
     });
 
+    it('each row has a 10px dot in its card\'s hue before the name: decoration, no label, hidden from a screen reader, never shrunk (S2)', () => {
+        const { groups, full } = pickerGroups(LOCAL, null, 'admin');
+        render(<AddCardDialog groups={groups} full={full} onAdd={vi.fn()} onClose={vi.fn()} />);
+        const dot = (type: string) => screen.getByTestId(`home-add-dot-${type}`);
+        expect(dot('events').style.backgroundColor).toBe('var(--bp-card-violet-ink)');
+        expect(dot('market').style.backgroundColor).toBe('var(--bp-card-orange-ink)');
+        expect(dot('groups').style.backgroundColor).toBe('var(--bp-card-rose-ink)');
+        expect(dot('search').style.backgroundColor).toBe('var(--bp-card-orange-ink)');
+        for (const row of screen.getAllByTestId(/^home-add-row-/)) {
+            const d = row.querySelector('[data-testid^="home-add-dot-"]') as HTMLElement;
+            expect(d, row.getAttribute('data-testid') ?? '').not.toBeNull();
+            expect(d).toHaveAttribute('aria-hidden', 'true');
+            expect(d).not.toHaveAttribute('aria-label');
+            expect(d.textContent).toBe('');
+            expect(d.style.width).toBe('10px');
+            expect(d.style.height).toBe('10px');
+            expect(d.className).toContain('shrink-0');
+            // The name beside it can shrink and wrap, so the dot costs the row's words only its own 10px and gap.
+            expect(d.nextElementSibling!.className).toContain('min-w-0');
+        }
+    });
+
     it('the worldwide community\'s picker has no Beans, deals, enterprise, Decide or Grow your community', () => {
         const { groups, full } = pickerGroups(GLOBAL, null, null);
         render(<AddCardDialog groups={groups} full={full} onAdd={vi.fn()} onClose={vi.fn()} />);

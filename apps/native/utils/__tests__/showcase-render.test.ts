@@ -197,12 +197,15 @@ describe('the marker in every palette', () => {
 
 for (const scheme of ['light', 'dark'] as const) {
     const colors: AppColors = scheme === 'dark' ? (darkColors as unknown as AppColors) : lightColors;
+    // The dashed edge: in light info.border. On the lifted dark card (#222822, home look S4) info.border is 2.92 and
+    // info.solid 2.91, under 3, so the tone's own blue words draw it.
+    const edge = scheme === 'dark' ? colors.feedback.info.fg : colors.feedback.info.border;
     describe(`the showcase in ${scheme} at 320 dp and 1.3× text`, () => {
         beforeEach(() => { theme.dark = scheme === 'dark'; });
 
         it('the marker reads in the info tone on its own background, and is never greyed, faded or locked', () => {
             const tone = markTone(colors);
-            expect(tone).toEqual({ fg: colors.feedback.info.fg, bg: colors.feedback.info.bg, border: colors.feedback.info.border });
+            expect(tone).toEqual({ fg: colors.feedback.info.fg, bg: colors.feedback.info.bg, border: edge });
             expect(contrast(tone.fg, tone.bg)).toBeGreaterThanOrEqual(4.5);
             expect(contrast(colors.text.body, tone.bg)).toBeGreaterThanOrEqual(4.5);
             expect(contrast(colors.surface.card, tone.fg)).toBeGreaterThanOrEqual(4.5);
@@ -213,7 +216,7 @@ for (const scheme of ['light', 'dark'] as const) {
             const strip = host.querySelector('[data-testid="local-community-strip"]')!;
             expect(text()).toContain(LOCAL_COMMUNITY_STRIP.lead.beans);
             expect(text()).toContain(LOCAL_COMMUNITY_STRIP.body.beans);
-            expect(styleOf(strip)).toMatchObject({ borderStyle: 'dashed', borderWidth: 1, backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border });
+            expect(styleOf(strip)).toMatchObject({ borderStyle: 'dashed', borderWidth: 1, backgroundColor: colors.feedback.info.bg, borderColor: edge });
             expect(styleOf(strip).opacity).toBeUndefined();
             const buttons = Array.from(strip.querySelectorAll('button')).filter(b => /Start a community|Communities near you/.test(b.textContent ?? ''));
             expect(buttons).toHaveLength(2);

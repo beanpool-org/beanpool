@@ -3561,5 +3561,16 @@
   "Move {card} earlier": "将{card}前移",
   "Move {card} later": "将{card}后移",
   "Messages in your other communities show on your phone, or when you open that community here.": "你在其他社区的消息会显示在手机上，或者在你在网页端打开该社区时显示。",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "来自你保存的每个社区的提醒都会发送到你的手机。你可以在 BeanPool 面板中关闭某个社区的提醒。"
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "来自你保存的每个社区的提醒都会发送到你的手机。你可以在 BeanPool 面板中关闭某个社区的提醒。",
+  "For 1 day": "1 天",
+  "For 1 week": "1 周",
+  "For 3 days": "3 天",
+  "Only an owner, an admin or the post's author can take a pin off.": "只有所有者、管理员或帖子作者可以取消置顶。",
+  "Options": "选项",
+  "Pin to the top…": "置顶帖子…",
+  "Pinned": "置顶",
+  "Pinned by your community · until {date}": "已被你的社区置顶 · 截止至 {date}",
+  "Take the pin off": "取消置顶",
+  "Three posts are pinned already. Take one off first.": "已有三个帖子置顶。请先取消一个。",
+  "📌 PINNED": "📌 置顶"
 }

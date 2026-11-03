@@ -3690,5 +3690,16 @@
   "Move {card} earlier": "Ilipat ang {card} nang mas maaga",
   "Move {card} later": "Ilipat ang {card} nang mas huli",
   "Messages in your other communities show on your phone, or when you open that community here.": "Lalabas ang mga mensahe sa iba mo pang komunidad sa iyong telepono, o kapag binuksan mo ang komunidad na iyon dito.",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Dumarating ang mga alerto sa iyong telepono mula sa bawat komunidad na iyong pinapanatili. Maaari mong i-off ang mga ito para sa isang komunidad sa BeanPool sheet."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Dumarating ang mga alerto sa iyong telepono mula sa bawat komunidad na iyong pinapanatili. Maaari mong i-off ang mga ito para sa isang komunidad sa BeanPool sheet.",
+  "For 1 day": "Para sa 1 araw",
+  "For 1 week": "Para sa 1 linggo",
+  "For 3 days": "Para sa 3 araw",
+  "Only an owner, an admin or the post's author can take a pin off.": "Ang may-ari, admin o sumulat ng post lang ang puwedeng mag-alis ng pin.",
+  "Options": "Mga Opsyon",
+  "Pin to the top…": "I-pin sa itaas…",
+  "Pinned": "Naka-pin",
+  "Pinned by your community · until {date}": "Naka-pin ng iyong komunidad · hanggang {date}",
+  "Take the pin off": "Alisin ang pin",
+  "Three posts are pinned already. Take one off first.": "May tatlong post nang naka-pin. Mag-alis muna ng isa.",
+  "📌 PINNED": "📌 NAKA-PIN"
 }

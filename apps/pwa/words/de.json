@@ -3690,5 +3690,16 @@
   "Move {card} earlier": "{card} nach vorne verschieben",
   "Move {card} later": "{card} nach hinten verschieben",
   "Messages in your other communities show on your phone, or when you open that community here.": "Nachrichten in deinen anderen Communities werden auf deinem Telefon angezeigt oder wenn du diese Community hier öffnest.",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Benachrichtigungen erreichen dein Telefon von jeder gespeicherten Community. Du kannst sie auf dem BeanPool-Blatt für eine Community ausschalten."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Benachrichtigungen erreichen dein Telefon von jeder gespeicherten Community. Du kannst sie auf dem BeanPool-Blatt für eine Community ausschalten.",
+  "For 1 day": "Für 1 Tag",
+  "For 1 week": "Für 1 Woche",
+  "For 3 days": "Für 3 Tage",
+  "Only an owner, an admin or the post's author can take a pin off.": "Nur Inhaber, Admins oder wer den Beitrag verfasst hat, können eine Anpinnung entfernen.",
+  "Options": "Optionen",
+  "Pin to the top…": "Oben anpinnen…",
+  "Pinned": "Angepinnt",
+  "Pinned by your community · until {date}": "Angepinnt von deiner Community · bis {date}",
+  "Take the pin off": "Anpinnung entfernen",
+  "Three posts are pinned already. Take one off first.": "Es sind schon drei Beiträge angepinnt. Entferne zuerst einen.",
+  "📌 PINNED": "📌 ANGEPINNT"
 }

@@ -3561,5 +3561,16 @@
   "Move {card} earlier": "{card} を前に移動",
   "Move {card} later": "{card} を後ろに移動",
   "Messages in your other communities show on your phone, or when you open that community here.": "他のコミュニティのメッセージはスマートフォンに表示されるか、ここでそのコミュニティを開いたときに表示されます。",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "保存しているすべてのコミュニティからの通知がスマートフォンに届きます。BeanPoolシートでコミュニティごとにオフにできます。"
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "保存しているすべてのコミュニティからの通知がスマートフォンに届きます。BeanPoolシートでコミュニティごとにオフにできます。",
+  "For 1 day": "1日間",
+  "For 1 week": "1週間",
+  "For 3 days": "3日間",
+  "Only an owner, an admin or the post's author can take a pin off.": "ピン留めを外せるのはオーナー、管理者、または投稿者のみです。",
+  "Options": "オプション",
+  "Pin to the top…": "先頭にピン留め…",
+  "Pinned": "ピン留め",
+  "Pinned by your community · until {date}": "コミュニティによるピン留め · {date}まで",
+  "Take the pin off": "ピン留めを解除",
+  "Three posts are pinned already. Take one off first.": "すでに3件の投稿がピン留めされています。先に1件外してください。",
+  "📌 PINNED": "📌 ピン留め"
 }

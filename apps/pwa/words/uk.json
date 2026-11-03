@@ -3948,5 +3948,16 @@
   "Move {card} earlier": "Перемістити {card} раніше",
   "Move {card} later": "Перемістити {card} пізніше",
   "Messages in your other communities show on your phone, or when you open that community here.": "Повідомлення в інших ваших спільнотах відображаються на вашому телефоні або коли ви відкриваєте цю спільноту тут.",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Сповіщення надходять на ваш телефон з кожної збереженої спільноти. Ви можете вимкнути їх для спільноти на панелі BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Сповіщення надходять на ваш телефон з кожної збереженої спільноти. Ви можете вимкнути їх для спільноти на панелі BeanPool.",
+  "For 1 day": "На 1 день",
+  "For 1 week": "На 1 тиждень",
+  "For 3 days": "На 3 дні",
+  "Only an owner, an admin or the post's author can take a pin off.": "Зняти закріплення можуть лише власник, адміністратор або автор допису.",
+  "Options": "Параметри",
+  "Pin to the top…": "Закріпити зверху…",
+  "Pinned": "Закріплено",
+  "Pinned by your community · until {date}": "Закріплено вашою спільнотою · до {date}",
+  "Take the pin off": "Зняти закріплення",
+  "Three posts are pinned already. Take one off first.": "Вже закріплено три дописи. Спочатку зніміть один.",
+  "📌 PINNED": "📌 ЗАКРІПЛЕНО"
 }

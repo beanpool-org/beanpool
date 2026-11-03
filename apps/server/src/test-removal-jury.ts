@@ -290,12 +290,19 @@ async function main() {
     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
                 VALUES (?, 'offer', 'food', 'Pears', '', 5, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
     deal.run(crypto.randomUUID(), theirPost, sam.pk, at(14).pk, 'requested', ago(DAY), null, ago(DAY));
-    // And Sam accepts at(17)'s free Offer in one step and confirms it as the buyer (acceptPost, completePostTransaction): a
-    // completed deal Sam made alone (review of #2793 round 2). It stands nobody aside.
+    // And Sam accepts at(17)'s free Offer in one step and confirms it as the buyer, through the real escrow code: a completed
+    // deal, and its trade chat, Sam made alone (reviews of #2793 rounds 2 and 3). It stands nobody aside. Sam may accept: the
+    // Plums are a listed Offer of Sam's.
     const freeOffer = crypto.randomUUID();
     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
                 VALUES (?, 'offer', 'food', 'Free lemons', '', 0, ?, 'active', 1, ?, ?, 'lemons')`).run(freeOffer, at(17).pk, ago(DAY), ago(DAY));
-    deal.run(crypto.randomUUID(), freeOffer, sam.pk, at(17).pk, 'completed', ago(DAY), ago(DAY), ago(DAY));
+    const lemons = se.acceptPost(freeOffer, sam.pk);
+    const lemonsDone = se.completePostTransaction(lemons.id, sam.pk);
+    const lemonsRow = db.prepare('SELECT buyer_pubkey, seller_pubkey, credits, status FROM marketplace_transactions WHERE id = ?')
+        .get(lemons.id) as { buyer_pubkey: string; seller_pubkey: string; credits: number; status: string } | undefined;
+    assert(lemonsDone?.status === 'completed' && lemonsRow?.status === 'completed' && lemonsRow.buyer_pubkey === sam.pk
+        && lemonsRow.seller_pubkey === at(17).pk && lemonsRow.credits === 0,
+        `Sam's one-step accept of at(17)'s free lemons is completed, Sam the buyer, 0 Beans (${JSON.stringify(lemonsRow)})`);
     // A chat a member opened with Sam while Sam blocks them is kept for them alone (engine/withheld-lines.ts); it stands them
     // aside as at(7)'s does, or who stood aside would say who Sam blocks. at(15)'s is still kept; at(16)'s became the real one
     // when Sam, the block lifted, opened a chat with them, under Sam's name: at(16)'s line kept from before is older than it.

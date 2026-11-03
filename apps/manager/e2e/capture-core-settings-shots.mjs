@@ -90,6 +90,26 @@ try {
 
         await shot(theme, '10-identity-being-found', { screen: { tab: 'appliance', sub: 'identity' } },
             (p) => p.waitForSelector('[data-testid="everyday-found"] [data-testid="shape-row-shareEmail"]'), (p) => p.getByTestId('everyday-found'));
+
+        // Round fix1: the person check on busy days is back under Being found (global kind only)...
+        await shot(theme, '11-identity-person-check-global', { screen: { tab: 'appliance', sub: 'identity' },
+            overrides: { '/api/local/admin/community-shape': (json) => ({ ...json, kind: 'global', settings: { ...json.settings, doorCheck: { value: true, configured: true, source: 'default', lock: null } } }) } },
+            (p) => p.waitForSelector('[data-testid="everyday-found"] [data-testid="shape-row-doorCheck"]'), (p) => p.getByTestId('shape-row-doorCheck'));
+
+        // ...and a community with Beans off who chooses On is offered the known floor, not told "Set by this server".
+        await shot(theme, '12-walk-floor-after-beans-on', { screen: { tab: 'shape' }, overrides: { '/api/local/admin/community-shape': (json) => {
+            const c = withCore({ locked: false })(json);
+            return { ...c, settings: { ...c.settings,
+                beans: { ...c.settings.beans, value: false, configured: false, lock: null },
+                knownFloor: { ...c.settings.knownFloor, value: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } } };
+        } } },
+            async (p) => {
+                await p.getByTestId('core-walk-start').click();
+                await p.getByTestId('walk-next').click();
+                await p.getByTestId('walk-next').click();
+                await p.getByRole('radio', { name: /^On/ }).first().click();
+                await p.getByTestId('walk-next').click();
+            }, (p) => p.getByTestId('core-walkthrough'));
     }
 } finally {
     await browser.close();

@@ -124,6 +124,12 @@ export function typedWordFor(setting: string, to: unknown): string | null {
 
 /** Whether an owner has confirmed and locked the core settings. A server from before them says nothing: not locked. */
 export const coreLocked = (shape: Shape | null | undefined): boolean => Boolean(shape?.core?.lock);
+/**
+ * What the menu's "!" on Core settings means: an OWNER, on the main server (not a standby), on a server that has the core
+ * block (not one from before it), whose core settings are not confirmed and locked yet. Admins never see it.
+ */
+export const coreAwaitsOwner = (shape: Shape | null | undefined, isOwner: boolean): boolean =>
+    isOwner && Boolean(shape) && !shape!.standby && Boolean(shape!.core) && !shape!.core!.lock;
 
 /** 40 Beans is an hour of work (PROTOCOL_CONSTANTS.REFERENCE_RATE). */
 export const BEANS_PER_HOUR = 40;

@@ -123,6 +123,26 @@ describe('EverydayRuleRows — the rules that moved to where they are used', () 
         expect(screen.queryByTestId('shape-expand-preview')?.tagName).toBe('DIV');
     });
 
+    it('Node Identity: the person check on busy days is a row where the global kind has it, and switches off alone', async () => {
+        const sent = mockApi(shapeOf({ doorCheck: on(true) }, { kind: 'global' }));
+        render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="found" title="Being found" />);
+        expect(await screen.findByTestId('shape-row-doorCheck')).toHaveTextContent('A person check on busy days');
+        expect(screen.getByTestId('shape-val-doorCheck')).toHaveTextContent('On');
+        fireEvent.click(screen.getByTestId('shape-expand-doorCheck'));
+        fireEvent.click(screen.getByRole('checkbox', { name: /Ask for a person check on busy days/i }));
+        expect(screen.getByTestId('shape-consequence')).toHaveTextContent('A 12-words join will never ask for a Cloudflare check.');
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].changes).toEqual({ doorCheck: false });
+    });
+
+    it('a shape with no doorCheck (a local community) draws no such row', async () => {
+        mockApi(shapeOf());
+        render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="found" title="Being found" />);
+        await screen.findByTestId('shape-row-listed');
+        expect(screen.queryByTestId('shape-row-doorCheck')).toBeNull();
+    });
+
     it('Listed opens under held_back, schedule_never and server_env (configured), so an owner can switch it off', async () => {
         for (const code of ['held_back', 'schedule_never', 'server_env'] as const) {
             const sent = mockApi(shapeOf({ listed: { value: false, configured: true, source: 'owner', lock: { code, why: `Locked by ${code}` } } }));

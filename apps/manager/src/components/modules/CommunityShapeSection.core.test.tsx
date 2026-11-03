@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // The place search is the shared Nominatim lookup; the tests answer it themselves.
@@ -324,6 +324,38 @@ describe('Core settings — the walkthrough', () => {
         expect(Object.keys(sent[0].body.changes).sort()).toEqual(['beans', 'join']);
     });
 
+    it('Beans off now, On chosen: the known floor is the owner\'s to choose, not held by today\'s beans_off lock', async () => {
+        const beansOff = shapeWith({ settings: {
+            beans: { value: false, configured: false, source: 'default', lock: null, includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true } } as any,
+            knownFloor: { value: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, configured: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, source: 'default', lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } as any,
+        } });
+        const { sent } = await walk(beansOff);
+        next(); next(); // intro → join → beans
+        expect(screen.getByTestId('core-walkthrough').getAttribute('data-step')).toBe('beans');
+        const on = screen.getAllByRole('radio').find((r) => r.closest('label')?.textContent?.startsWith('On'))!;
+        fireEvent.click(on);
+        next(); // the known floor step is there now
+        expect(screen.getByTestId('core-walkthrough').getAttribute('data-step')).toBe('knownFloor');
+        expect(screen.queryByTestId('walk-held-knownFloor')).toBeNull();
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.change(screen.getByLabelText(/Known floor \(Beans\)/), { target: { value: '500' } });
+        for (let i = 0; i < 5; i++) { if (screen.getByTestId('core-walkthrough').getAttribute('data-step') !== 'review') next(); }
+        expect(screen.getByTestId('walk-review-knownFloor')).not.toHaveTextContent('Set by this server');
+        fireEvent.click(screen.getByTestId('walk-confirm'));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].body.lock).toBe(true);
+        expect(sent[0].body.changes).toEqual({ beans: true, knownFloor: { on: true, floor: 500, cap: 2000 } });
+    });
+
+    it('Beans off and left off: no known floor step, and the review does not list one', async () => {
+        const beansOff = shapeWith({ settings: {
+            beans: { value: false, configured: false, source: 'default', lock: null, includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true } } as any,
+            knownFloor: { value: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, configured: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, source: 'default', lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } as any,
+        } });
+        await walk(beansOff, 'review');
+        expect(screen.queryByTestId('walk-review-knownFloor')).toBeNull();
+    });
+
     it('the known floor step checks its limits before Next', async () => {
         await walk();
         next(); next(); next(); // intro → join → beans → known floor
@@ -393,5 +425,53 @@ describe('Core settings — the walkthrough', () => {
         fireEvent.click(screen.getByTestId('walk-confirm'));
         expect(await screen.findByTestId('walk-error')).toHaveTextContent('already confirmed and locked');
         expect(screen.queryByRole('status')).toBeNull();
+    });
+});
+
+describe('Core settings — the menu\'s "!" is told only what it means', () => {
+    const calls = (shape: Shape, viewer: RolesViewer) => {
+        mockApi(shape);
+        const seen: boolean[] = [];
+        render(<CommunityShapeSection activeNode={NODE} viewer={viewer} onUnconfirmedChange={(u) => seen.push(u)} />);
+        return seen;
+    };
+
+    it('an owner whose core settings are not confirmed yet: true', async () => {
+        const seen = calls(shapeWith(), OWNER_KEY);
+        await screen.findByText('🧭');
+        expect(seen).toEqual([true]);
+    });
+
+    it('an owner whose core settings are locked: false', async () => {
+        const seen = calls(shapeWith({ core: { settings: [...CORE_SETTINGS], lock: LOCK, place: { needed: true, set: true } } }), OWNER_KEY);
+        await screen.findByText('🧭');
+        expect(seen).toEqual([false]);
+    });
+
+    it('an admin never has the badge, however unconfirmed', async () => {
+        const seen = calls(shapeWith(), ADMIN_KEY);
+        await screen.findByText('🧭');
+        expect(seen).toEqual([false]);
+    });
+
+    it('an owner on a standby, or on a server from before core settings, never has it', async () => {
+        const standby = calls({ ...shapeWith(), standby: true }, OWNER_KEY);
+        await screen.findByText('🧭');
+        expect(standby).toEqual([false]);
+        cleanup();
+        const old = calls(shapeWith({ core: null }), OWNER_KEY);
+        await screen.findByText('🧭');
+        expect(old).toEqual([false]);
+    });
+
+    it('locking in the walkthrough clears it', async () => {
+        const shape = shapeWith();
+        mockApi(shape, [{ ok: true, status: 200, body: { shape: { ...shape, core: { ...shape.core!, lock: LOCK } }, told: 'nobody' } }]);
+        const seen: boolean[] = [];
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} openWalkthrough="review" onUnconfirmedChange={(u) => seen.push(u)} />);
+        await screen.findByTestId('core-walkthrough');
+        fireEvent.click(screen.getByTestId('walk-confirm'));
+        await waitFor(() => expect(seen.at(-1)).toBe(false));
+        expect(seen[0]).toBe(true);
     });
 });

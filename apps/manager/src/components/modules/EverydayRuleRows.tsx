@@ -28,11 +28,11 @@ export type EverydayGroup = 'taking' | 'rules' | 'found' | 'connections';
 const GROUP_LOG: Record<EverydayGroup, string[]> = {
     taking: ['join', 'knocks'],
     rules: ['dmRequests', 'probation', 'autoHide', 'autoHideReports', 'autoMute'],
-    found: ['listed', 'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth'],
+    found: ['listed', 'doorCheck', 'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth'],
     connections: [],
 };
 
-type BoolKey = 'knocks' | 'dmRequests' | 'probation' | 'autoHide' | 'autoMute' | 'shareLocation' | 'shareMemberCount' | 'shareEmail' | 'sharePhone' | 'shareHealth';
+type BoolKey = 'knocks' | 'doorCheck' | 'dmRequests' | 'probation' | 'autoHide' | 'autoMute' | 'shareLocation' | 'shareMemberCount' | 'shareEmail' | 'sharePhone' | 'shareHealth';
 
 interface BoolRow { key: BoolKey; icon: string; name: string; summary: string; label: string; display?: (on: boolean) => string }
 
@@ -92,6 +92,7 @@ export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: Ev
                 { key: 'autoMute', icon: '🔇', name: t('Repeat offenders muted automatically'), summary: t('Three posts removed in 30 days stop a member posting and messaging until a moderator lifts it.'), label: t('Mute members after repeat removals'), display: onOff },
             ],
             found: [
+                { key: 'doorCheck', icon: '🛡️', name: t('A person check on busy days'), summary: t('When lots of people are joining, a 12-words join starts with a Cloudflare check. Needs the TURNSTILE keys on the server; without them it does nothing.'), label: t('Ask for a person check on busy days'), display: onOff },
                 { key: 'shareLocation', icon: '📍', name: t('Share location & radius'), summary: t('On: anyone sees roughly where you are (to about a kilometre). Off: only members do.'), label: t('Share location and radius in directory'), display: onOff },
                 { key: 'shareMemberCount', icon: '👥', name: t('Share member count'), summary: t('Shows the total number of users registered on your node in the directory.'), label: t('Share member count in directory'), display: onOff },
                 { key: 'shareEmail', icon: '📧', name: t('Share email'), summary: t('Puts the contact email in the public directory and on the map.'), label: t('Share email in directory'), display: onOff },

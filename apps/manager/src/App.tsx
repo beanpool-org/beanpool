@@ -85,7 +85,7 @@ import { SecondFactorPromptContext } from './components/common/FreshProofBox';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
 import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-client';
-import { fetchCommunityShape } from './lib/community-shape';
+import { fetchCommunityShape, coreAwaitsOwner } from './lib/community-shape';
 import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
 import { useInPageConfirm } from './components/common/InPageConfirm';
 
@@ -1293,7 +1293,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         if (coreProbe === 'other') return;
         let mounted = true;
         fetchCommunityShape(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
-            .then((s) => { if (mounted) setCoreUnconfirmed(!s.standby && Boolean(s.core) && !s.core?.lock); })
+            .then((s) => { if (mounted) setCoreUnconfirmed(coreAwaitsOwner(s, true)); })
             .catch(() => {});
         return () => { mounted = false; };
     }, [activeNode?.id, activeNode?.url, coreProbe, signedIn, viewerIsOwner, isFleetMode]);
@@ -1658,7 +1658,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                     <CommunityShapeSection
                                         activeNode={activeNode}
                                         openWalkthrough={navSubTab === 'walk' || navSubTab === 'review' ? navSubTab : null}
-                                        onLockedChange={(locked) => setCoreUnconfirmed(!locked)}
+                                        onUnconfirmedChange={setCoreUnconfirmed}
                                         viewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                         onNavigate={(tab, sub) => {
                                             setNavSubTab(sub);

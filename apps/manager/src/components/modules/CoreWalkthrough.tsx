@@ -57,6 +57,16 @@ export function draftFrom(shape: Shape): CoreDraft {
     };
 }
 
+/**
+ * The server's lock on the known floor as the DRAFT sees it. The `beans_off` lock describes Beans as they are now: a
+ * community whose Beans are off and who chooses On in the walkthrough is choosing the floor too (the server takes both
+ * in one lock request), so that lock does not hold the floor once the draft has Beans on.
+ */
+export function knownFloorLock(shape: Shape, d: CoreDraft) {
+    const lock = shape.settings.knownFloor.lock;
+    return lock && !(lock.code === 'beans_off' && d.beans) ? lock : null;
+}
+
 /** Only the settings the owner changed, and none a server lock holds (the global kind's door, a moved ledger...). */
 export function changesFrom(shape: Shape, d: CoreDraft): Record<string, unknown> {
     const s = shape.settings;
@@ -66,7 +76,7 @@ export function changesFrom(shape: Shape, d: CoreDraft): Record<string, unknown>
     if (s.wordsDoor && !s.wordsDoor.lock && d.wordsDoor !== now.wordsDoor) out.wordsDoor = d.wordsDoor;
     if (!s.beans.lock && d.beans !== now.beans) out.beans = d.beans;
     // The known floor is only a question while Beans are on.
-    if (d.beans && !s.knownFloor.lock && (d.knownFloor.on !== now.knownFloor.on || d.knownFloor.floor !== now.knownFloor.floor || d.knownFloor.cap !== now.knownFloor.cap)) {
+    if (d.beans && !knownFloorLock(shape, d) && (d.knownFloor.on !== now.knownFloor.on || d.knownFloor.floor !== now.knownFloor.floor || d.knownFloor.cap !== now.knownFloor.cap)) {
         out.knownFloor = d.knownFloor;
     }
     if (!s.decisions.lock && d.decisions !== now.decisions) out.decisions = d.decisions;
@@ -107,7 +117,7 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
         'join',
         ...(s.wordsDoor ? (['wordsDoor'] as const) : []),
         'beans',
-        ...(draft.beans && !s.knownFloor.lock ? (['knownFloor'] as const) : []),
+        ...(draft.beans && !knownFloorLock(shape, draft) ? (['knownFloor'] as const) : []),
         'decisions',
         ...(s.shareOutside ? (['shareOutside'] as const) : []),
         ...(s.recoveryCopies ? (['recoveryCopies'] as const) : []),
@@ -124,9 +134,9 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
     const stepBlocked =
         (step === 'place' && !place) ||
         (step === 'knownFloor' && kfProblem !== null);
-    const confirmBlocked = busy || (placeNeeded && !place) || (draft.beans && !s.knownFloor.lock && kfProblem !== null);
+    const confirmBlocked = busy || (placeNeeded && !place) || (draft.beans && !knownFloorLock(shape, draft) && kfProblem !== null);
 
-    const confirm = async () => {
+    const confirmAndLock = async () => {
         if (confirmBlocked) return;
         setBusy(true);
         setError(null);
@@ -143,7 +153,7 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
     };
 
     const serverHeld = (key: 'join' | 'wordsDoor' | 'beans' | 'decisions' | 'shareOutside' | 'recoveryCopies' | 'knownFloor') =>
-        (s[key] as { lock: { why: string } | null } | undefined)?.lock ?? null;
+        (key === 'knownFloor' ? knownFloorLock(shape, draft) : (s[key] as { lock: { why: string } | null } | undefined)?.lock) ?? null;
 
     const heldLine = (key: Parameters<typeof serverHeld>[0]) => {
         const lock = serverHeld(key);
@@ -372,7 +382,7 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
                         {t('Next')}
                     </button>
                 ) : (
-                    <button type="button" data-testid="walk-confirm" disabled={confirmBlocked} onClick={() => void confirm()}
+                    <button type="button" data-testid="walk-confirm" disabled={confirmBlocked} onClick={() => void confirmAndLock()}
                         className="py-2 px-4 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50 min-h-[44px]">
                         {busy ? t('Saving...') : t('Confirm and lock')}
                     </button>

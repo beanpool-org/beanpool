@@ -18,6 +18,7 @@ import {
     recoveryCopiesName,
     DOOR_PRESETS,
     coreLocked,
+    coreAwaitsOwner,
     isCoreSetting,
     typedWordFor,
 } from '../../lib/community-shape';
@@ -36,8 +37,8 @@ export interface CommunityShapeSectionProps {
     onNavigate?: (tab: string, subTab?: string) => void;
     /** The Home item opens the walkthrough: at its first step, or (a community with members) at the review. */
     openWalkthrough?: 'walk' | 'review' | null;
-    /** Told whenever the section learns whether the core settings are locked (the menu's badge follows it). */
-    onLockedChange?: (locked: boolean) => void;
+    /** Told whenever the section learns whether the menu's "!" applies: an owner's core settings not confirmed and locked yet. */
+    onUnconfirmedChange?: (unconfirmed: boolean) => void;
 }
 
 /** "3 Nov 2026": the lock line's date. */
@@ -57,7 +58,7 @@ export function CommunityShapeSection({
     viewer,
     onNavigate,
     openWalkthrough = null,
-    onLockedChange,
+    onUnconfirmedChange,
 }: CommunityShapeSectionProps) {
     const isOwner = viewer?.kind === 'password' || viewer?.role === 'owner';
 
@@ -87,7 +88,7 @@ export function CommunityShapeSection({
                 getTfaSessionToken(activeNode.id),
             );
             setShape(data);
-            onLockedChange?.(coreLocked(data));
+            onUnconfirmedChange?.(coreAwaitsOwner(data, isOwner));
         } catch (err: any) {
             setError(err.message || 'Failed to load core settings');
         } finally {
@@ -348,7 +349,7 @@ export function CommunityShapeSection({
             {/* Not confirmed yet: offered, never forced. The community runs on its choices meanwhile. */}
             {hasCore && !locked && !standby && !(walkStart && canEdit) && (
                 canEdit ? (
-                    <div data-testid="core-unconfirmed-banner" className="p-3.5 rounded-xl bg-bp-chip-warn-tint border border-amber-800/50 space-y-2">
+                    <div data-testid="core-unconfirmed-banner" className="p-3.5 rounded-xl bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-800/50 space-y-2">
                         <p className="text-xs font-bold text-bp-chip-warn-ink m-0">{t('Not confirmed yet.')}</p>
                         <button
                             type="button"
@@ -375,7 +376,7 @@ export function CommunityShapeSection({
                     onLocked={(next, told) => {
                         setShape(next);
                         setWalkStart(null);
-                        onLockedChange?.(true);
+                        onUnconfirmedChange?.(false);
                         setSaveSuccess(t('Locked. From now on each change asks you to unlock it first, and every owner is told. Admins can read these.'));
                         successTimer.schedule(() => setSaveSuccess(null), 8000);
                         void told;

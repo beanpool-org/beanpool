@@ -56,7 +56,7 @@ export function renderAndroidPage(apk: { version: string; versionCode: number; s
     const body = apk ? `<p>${e(w.t(W.fromHere))}</p>
 <p><strong>${e(w.t(W.sameApp))}</strong></p>
 <a class="door primary" data-apk="download" href="${e(`${ANDROID_PAGE}/${encodeURIComponent(apk.fileName)}`)}" download="${e(apk.fileName)}">${e(w.t(W.download, { version: apk.version }))}</a>
-<p data-apk="facts">${e(w.t(W.facts, { version: apk.version, code: String(apk.versionCode), mb: String(Math.round(apk.size / 1_000_000)) }))}</p>
+<p data-apk="facts">${e(w.t(W.facts, { version: apk.version, mb: String(Math.round(apk.size / 1_000_000)) }))}</p>
 <p class="digest" data-apk="sha256">${e(w.t(W.fileDigest, { sha256: apk.sha256 }))}</p>
 <h2>${e(w.t(W.installHeading))}</h2>
 <ol class="steps">

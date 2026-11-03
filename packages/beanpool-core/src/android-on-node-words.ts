@@ -13,7 +13,7 @@ export const ANDROID_ON_NODE_WORDS = {
     fromHere: word("This copy comes from this community's server, over this Wi-Fi. It needs no internet."),
     sameApp: word('This is the same app as on Google Play, signed by the same key.'),
     download: word('Download BeanPool {version} APK'),
-    facts: word('Version {version} ({code}), an APK file of {mb} MB.'),
+    facts: word('Version {version}, an APK file of {mb} MB.'),
     fileDigest: word("The file's SHA-256: {sha256}"),
     installHeading: word('Install it'),
     stepOpen: word("Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads."),

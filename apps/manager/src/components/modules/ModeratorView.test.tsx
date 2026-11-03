@@ -207,6 +207,38 @@ describe('ModeratorView report actions', () => {
         expect(posted('/reports/r-post/dismiss')).toHaveLength(1);
     });
 
+    it('says a post on hold is on its way out, and offers no "keep the post"', async () => {
+        const held = {
+            id: 'r-held', reason: 'Child safety: a false alarm', createdAt: '2026-11-02T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
+            postId: 'p-held', postTitle: 'On hold', postDescription: 'Taken down by an assistant', postAuthorCallsign: 'Oscar',
+            postRemoved: false, postOnHold: true, pulseItem: null,
+        };
+        const closed = { ...held, id: 'r-held-closed', outcome: 'dismissed' };
+        REPORTS.push(held as typeof REPORTS[number], closed as typeof REPORTS[number]);
+        try {
+            mockNode();
+            await act(async () => {
+                render(<ModeratorView nodeUrl="https://mullum.example" communityName="Mullum" onLogout={() => {}} />);
+            });
+            await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(5));
+            const cards = screen.getAllByTestId('moderator-report');
+            const [postCard, heldCard, closedCard] = [cards[0], cards[3], cards[4]];
+            expect(within(heldCard).getByText(/Post by Oscar · on hold/)).toBeInTheDocument();
+            expect(within(heldCard).getByTestId('post-on-hold').textContent).toMatch(/^On hold: .*Dismissing this report doesn't bring it back or stop its removal: only an owner or admin can put it back\.$/);
+            // A moderator can still act on what they read: removing it stays open to them.
+            expect(within(heldCard).getByRole('button', { name: 'Remove the post' })).toBeInTheDocument();
+            expect(within(heldCard).queryByRole('button', { name: /keep the post/ })).toBeNull();
+            await act(async () => { fireEvent.click(within(heldCard).getByRole('button', { name: 'Dismiss' })); });
+            expect(posted('/reports/r-held/dismiss')).toHaveLength(1);
+            // A report already closed offers nothing, so it needs no warning; a post that is up is as it was.
+            expect(within(closedCard).queryByTestId('post-on-hold')).toBeNull();
+            expect(within(postCard).queryByTestId('post-on-hold')).toBeNull();
+            expect(within(postCard).getByRole('button', { name: 'Dismiss (keep the post)' })).toBeInTheDocument();
+        } finally {
+            REPORTS.splice(-2, 2);
+        }
+    });
+
     it('opens a group chat message reported with its key, verified, and offers handled or dismiss only', async () => {
         const message = {
             id: 'r-message', reason: 'Offensive content', createdAt: '2026-10-25T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',

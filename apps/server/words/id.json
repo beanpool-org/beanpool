@@ -2,11 +2,17 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ Postingan Anda diturunkan",
+  "🛡️ Your posts were taken down": "🛡️ Postingan Anda diturunkan",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Moderator komunitas menurunkan postingan Anda {title}. Alasan: {reason}. Postingan ini disembunyikan dari orang lain; jika tidak dikembalikan dalam 7 hari, postingan ini dihapus.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Moderator komunitas menurunkan postingan Anda. Alasan: {reason}. Postingan ini disembunyikan dari orang lain; jika tidak dikembalikan dalam 7 hari, postingan ini dihapus.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Moderator komunitas menurunkan {n} postingan Anda. Alasan: {reason}. Postingan itu disembunyikan dari orang lain; jika tidak dikembalikan dalam 7 hari, postingan itu dihapus.",
   "Only an owner or admin can pin a post.": "Hanya pemilik atau admin yang dapat menyematkan postingan.",
   "Only an owner, an admin or the post's author can take a pin off.": "Hanya pemilik, admin, atau penulis postingan yang dapat melepas sematan.",
   "A pin lasts 1 day, 3 days or 1 week.": "Sematan berlaku 1 hari, 3 hari, atau 1 minggu.",

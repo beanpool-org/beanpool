@@ -135,7 +135,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                         ))}
                         {status.assistants && (status.assistants.connected > 0 || status.assistants.calls > 0) && (
                             <p className="text-xs text-nature-300 m-0 break-words" data-testid="alerts-assistants">
-                                AI assistants today: {status.assistants.calls} call{status.assistants.calls === 1 ? '' : 's'} · {status.assistants.connected} connected.
+                                AI assistants today: {status.assistants.calls} call{status.assistants.calls === 1 ? '' : 's'} · {status.assistants.connected} connected{(status.assistants.takedowns ?? 0) > 0 ? ` · ${status.assistants.takedowns} post${status.assistants.takedowns === 1 ? '' : 's'} taken down` : ''}.
                             </p>
                         )}
                         {status.acknowledge && (

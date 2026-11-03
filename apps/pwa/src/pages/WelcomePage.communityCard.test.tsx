@@ -20,7 +20,7 @@ const CARD = {
     joining: 'requests', askUrl: 'https://global.beanpool.org/?ask=castlemaine.beanpool.org', globalUrl: 'https://global.beanpool.org',
 };
 
-function stubNode(card: unknown) {
+function stubNode(card: unknown, rule: unknown = 404) {
     const asked: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
         const path = String(input);
@@ -28,6 +28,7 @@ function stubNode(card: unknown) {
         if (path === '/api/community/info') return json(200, LOCAL);
         if (path === '/api/community/card' && card instanceof Promise) return card;
         if (path === '/api/community/card') return card === 404 ? json(404, { error: 'Not Found' }) : json(200, card);
+        if (path === '/api/community/known-rule') return rule === 404 ? json(404, { error: 'Not found' }) : json(200, rule);
         return json(404, { error: 'Not Found' });
     }));
     return asked;
@@ -102,5 +103,35 @@ describe("a local community's card on its welcome page", () => {
         render(<WelcomePage onComplete={vi.fn()} />);
         expect(await screen.findByTestId('welcome-no-invite')).toBeTruthy();
         expect(screen.queryByTestId('community-card')).toBeNull();
+    });
+});
+
+/**
+ * The rule on the card's page (Marty, board card balance-rule-other-doors, 3 Nov 2026: "Yes, show the sentence"). On the
+ * web the card is drawn on the community's own join page, above the invite form, and that page already states the rule
+ * where the community confirms its members: the same sentence as the phone's card. Nothing to tick.
+ */
+describe("the community's rule on its card's page", () => {
+    const RULE = { known: true, knownFloor: 100, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
+    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+
+    it('rule on: the card, then the sentence on the same page, and nothing to tick', async () => {
+        stubNode(CARD, RULE);
+        render(<WelcomePage onComplete={vi.fn()} />);
+        const card = await screen.findByTestId('community-card');
+        const rule = await screen.findByTestId('join-rule');
+        expect(rule.textContent).toContain(SENTENCE);
+        expect(card.compareDocumentPosition(rule) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+    });
+
+    it('rule off: the card, and no sentence', async () => {
+        const asked = stubNode(CARD, { known: false });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByTestId('community-card');
+        await waitFor(() => expect(asked).toContain('/api/community/known-rule'));
+        await act(async () => {});
+        expect(screen.queryByTestId('join-rule')).toBeNull();
+        expect(document.body.textContent).not.toContain('The admins can see');
     });
 });

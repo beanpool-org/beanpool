@@ -52,6 +52,7 @@ describe('no window confirm() for a destructive action', () => {
             'App.tsx',
             'components/modules/AddressesPanel.tsx',
             'components/modules/ApplianceSection.tsx',
+            'components/modules/AssistantTakedownsPanel.tsx',
             'components/modules/AutomationTokensPanel.tsx',
             'components/modules/BulletinSection.tsx',
             'components/modules/ConnectedAssistantsPanel.tsx',

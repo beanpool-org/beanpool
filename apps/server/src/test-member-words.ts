@@ -560,7 +560,7 @@ const APP_MATCHES: { phrase: RegExp; where: string }[] = [
     { phrase: /already been used|already used|already a member|already been redeemed/i, where: 'apps/native/app/welcome.tsx, utils/invite-next.ts, apps/pwa WelcomePage.tsx (invites)' },
     { phrase: /set a profile photo/i, where: 'apps/native/utils/db.ts (the profile heal)' },
     { phrase: /relationship not found/i, where: 'apps/native/utils/db.ts' },
-    { phrase: /^Request failed/, where: 'apps/native/utils/known-consent.ts' },
+    { phrase: /^Request failed/, where: 'apps/native/utils/chat-line-words.ts' },
     { phrase: /NAT-4/, where: 'apps/native/utils/node-request-signing.ts' },
     { phrase: /nonce already used/i, where: 'apps/native/utils/rekey-redeem.ts, apps/pwa lib/web-rekey.ts' },
     { phrase: /owners are asked|owners can read|no owner|no recovery|not locked/i, where: 'apps/pwa lib/owner-words.ts, lib/takeover-unlock.ts' },

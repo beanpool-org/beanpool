@@ -30,7 +30,9 @@ import {
     shareOutsideOn,
     pollsInformal,
     INFORMAL_POLL_NOTE,
+    effectiveFeatures,
 } from '../node-profile';
+import { communityShapeLines } from '@beanpool/core';
 
 const GLOBAL_INFO = {
     memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0,
@@ -146,6 +148,46 @@ describe('readNodeProfile', () => {
     it('a copy read back from the phone keeps them', async () => {
         const p = readNodeProfile({ addresses: ['203.0.113.5', 'beans.example.org'], primaryAddress: 'beans.example.org' }, new Date('2026-10-18T00:00:00Z'))!;
         expect(readNodeProfile(JSON.parse(JSON.stringify(p)), new Date(p.checkedAt))).toEqual(p);
+    });
+});
+
+describe('the floor and the rule\'s two lines, from a member\'s read to "How this community works" (review of #2746)', () => {
+    // What GET /api/community/me says to a member of a known community (apps/server config/features-for.ts).
+    const WIRE = { beans: true, escrow: true, door: 'members', knownFloor: 1000, debtLinePct: 50, quietDays: 60 };
+    const RULE = /^The admins can see a confirmed member's balance/;
+
+    it('the reader\'s answer keeps the three numbers', () => {
+        expect(readNodeProfile({ features: WIRE })?.features).toMatchObject({ knownFloor: 1000, debtLinePct: 50, quietDays: 60 });
+    });
+
+    it('keeps only numbers, and says nothing of what a node left out', () => {
+        const features = readNodeProfile({ features: { ...WIRE, debtLinePct: '50', quietDays: null } })?.features;
+        expect(features).not.toHaveProperty('debtLinePct');
+        expect(features).not.toHaveProperty('quietDays');
+        expect(features?.knownFloor).toBe(1000);
+        expect(readNodeProfile({ features: { beans: true } })?.features).toEqual({ beans: true });
+    });
+
+    it('the reader\'s set carries them over the node\'s, which never has them', () => {
+        const reader = readNodeProfile({ features: WIRE })!.features;
+        const node = readNodeProfile({ features: { beans: true, escrow: true } })!.features;
+        expect(effectiveFeatures(node, reader)).toMatchObject({ knownFloor: 1000, debtLinePct: 50, quietDays: 60 });
+    });
+
+    it('through both, the page draws the floor and then the rule, the same lines as the node\'s own answer draws', () => {
+        const node = readNodeProfile({ features: { beans: true, escrow: true } })!.features;
+        const lines = communityShapeLines(effectiveFeatures(node, readNodeProfile({ features: WIRE })!.features));
+        const floor = lines.findIndex(l => l.includes('(the known floor)'));
+        expect(floor).toBeGreaterThanOrEqual(0);
+        expect(lines[floor + 1]).toMatch(RULE);
+        expect(lines).toEqual(communityShapeLines(WIRE as Parameters<typeof communityShapeLines>[0]));
+    });
+
+    it('a node older than the rule says the floor and no lines: the floor alone, as ever', () => {
+        const { debtLinePct: _p, quietDays: _q, ...older } = WIRE;
+        const lines = communityShapeLines(effectiveFeatures({ beans: true }, readNodeProfile({ features: older })!.features));
+        expect(lines.some(l => l.includes('(the known floor)'))).toBe(true);
+        expect(lines.filter(l => RULE.test(l))).toEqual([]);
     });
 });
 

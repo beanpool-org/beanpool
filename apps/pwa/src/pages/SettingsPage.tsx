@@ -53,7 +53,6 @@ import { keyLineWords } from '../components/key-lines';
 import { saidWords, type Said } from '../components/WebJoin';
 import type { LinkResult } from '../lib/link-signin';
 import { ModerationPauseCard } from '../components/ModerationPauseCard';
-import { KnownConsentCard } from '../components/KnownConsentCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { adoptWorkingStyle, keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
@@ -846,8 +845,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} keepsNoCopies={communityInfo?.recoveryCopies === 'none'} />
                         {/* A new account only, until the node says its limits are over (G11-e). */}
                         <NewAccountCard />
-                        {/* A known community only, until the member agrees to what its admins can see (slice 6); never blocks. */}
-                        <KnownConsentCard />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}

@@ -170,6 +170,8 @@ beforeEach(() => {
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: { beans: true }, checkedAt: new Date().toISOString() } }));
     me.identity = { publicKey: 'my-own-member-key', callsign: 'MyUser' };
     holds([]);
+    // The Market's fill reads the node; answer it here so no real request outlives the test (merge queue run 41642015479).
+    globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 
 afterEach(() => {

@@ -49,7 +49,7 @@ function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; mad
         }
         if (url.endsWith('/api/local/admin/agent/grants') && method === 'POST') {
             if (state.makeStatus && state.makeStatus !== 201) return new Response(JSON.stringify(state.makeBody ?? { error: 'bad' }), { status: state.makeStatus });
-            const g = grant({ name: body.name, canPost: body.canPost === true, postsToday: 0 });
+            const g = grant({ name: body.name, canPost: body.canPost === true, canModerate: body.canModerate === true, postsToday: 0 });
             state.grants = [...state.grants, g];
             return new Response(JSON.stringify({ token: NEW_TOKEN, grant: g }), { status: 201 });
         }
@@ -147,6 +147,21 @@ describe('ConnectedAssistantsPanel', () => {
         expect(countIn(container.innerHTML, 'c'.repeat(64))).toBe(0);
         // The list, reloaded, names it, never with a secret.
         expect(await screen.findByText('Claude on my laptop')).toBeInTheDocument();
+    });
+
+    it('"May take down posts for me" is its own tick, off until ticked, and a ticked row says so with its count (MCP-MODERATION S1)', async () => {
+        const calls = fakeNode({ grants: [grant({ id: 'aaaaaaaaaaaa', name: 'Sweeper', canPost: false, canModerate: true, takedownsToday: 4 })] });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        expect(await screen.findByTestId('agent-grant-moderates')).toHaveTextContent('May take down · 4 today');
+        fireEvent.change(screen.getByLabelText('Assistant’s name'), { target: { value: 'Reader' } });
+        const tick = screen.getByRole('checkbox', { name: /May take down posts for me/ });
+        expect(tick).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /May post for me/ })).not.toBeChecked();
+        fireEvent.click(tick);
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Reader', days: 30, canPost: false, canModerate: true }));
+        // What a leak of this token can do, said where the token is shown.
+        expect(await screen.findByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads, and can take posts down.');
     });
 
     it('"May post for me" is ticked or not at connect, each row says which, and an owner sets the posts a day (MCP-OWNER-POSTS)', async () => {

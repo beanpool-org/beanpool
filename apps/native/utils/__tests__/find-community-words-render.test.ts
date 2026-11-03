@@ -77,6 +77,8 @@ vi.mock('../community-directory', async () => {
         communityLabel: (c: { name: string }) => c.name, communityFacts: () => '',
         // As utils/community-directory.ts has it (tested there): core's rule, in the member's language.
         notAnsweringLine: (c: { lastSeenAt?: string | null }) => (core.notAnsweringLately(c.lastSeenAt) ? core.t(core.FIND_COMMUNITY_WORDS.notAnswering) : null),
+        // And the listing promise's lines (mothership A3), core's rule joined as the card joins them.
+        promiseLine: (c: object) => { const lines = core.communityPromiseLines(c); return lines.length ? lines.join(' · ') : null; },
     };
 });
 vi.mock('../knock', () => ({
@@ -175,5 +177,39 @@ describe('a community gone quiet says so under its name (front doors S13)', () =
         setLanguage('fr', [FR]);
         listing.communities = [{ ...lismore('a', 12), lastSeenAt: hoursAgo(40) }];
         expect(quiet(await render(), 'a')).toBe('Ne répond pas ces derniers temps');
+    });
+});
+
+describe('the listing promise under a community\'s name (mothership A3)', () => {
+    const promised = (host: HTMLElement, key: string) => line(host, `find-promise-${key}`);
+    const PROMISE = { v: 1, owners: 2, backups: true, reports: true, notice: true };
+    const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+
+    it('says "Keeps the listing promise", "Accepting members" and the closing day, as the directory gave them', async () => {
+        listing.communities = [{ ...lismore('a', 12), promise: PROMISE, acceptingKnocks: true, closingOn: inDays(20) }];
+        const text = promised(await render(), 'a');
+        expect(text).toContain('Keeps the listing promise');
+        expect(text).toContain('Accepting members');
+        expect(text).toContain('Closing on ');
+        expect(text).not.toContain('{date}');
+    });
+
+    it('"New listing" when the node says it has no promise; nothing at all from an older node', async () => {
+        listing.communities = [
+            { ...lismore('a', 12), promise: null, acceptingKnocks: false, closingOn: null },
+            lismore('b', 20),
+        ];
+        const host = await render();
+        expect(promised(host, 'a')).toBe('New listing');
+        expect(promised(host, 'b')).toBeNull();
+    });
+
+    it('in the member\'s language', async () => {
+        setLanguage('fr', [{
+            [FIND_COMMUNITY_WORDS.keepsPromise]: 'Tient sa promesse d’inscription',
+            [FIND_COMMUNITY_WORDS.acceptingMembers]: 'Accepte des membres',
+        }]);
+        listing.communities = [{ ...lismore('a', 12), promise: PROMISE, acceptingKnocks: true }];
+        expect(promised(await render(), 'a')).toBe('Tient sa promesse d’inscription · Accepte des membres');
     });
 });

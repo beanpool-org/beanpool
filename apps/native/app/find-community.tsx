@@ -11,7 +11,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts, notAnsweringLine,
+    fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts, notAnsweringLine, promiseLine,
     type DirectoryCommunity, type PlaceWatch, type Point,
 } from '../utils/community-directory';
 import {
@@ -746,6 +746,7 @@ export default function FindCommunityScreen() {
                             <Text style={styles.name} numberOfLines={2}>{communityLabel(c)}</Text>
                             {!!notAnsweringLine(c) && <Text style={[styles.facts, styles.quiet]} testID={`find-not-answering-${c.key}`}>{notAnsweringLine(c)}</Text>}
                             {!!communityFacts(c) && <Text style={styles.facts}>{communityFacts(c)}</Text>}
+                            {!!promiseLine(c) && <Text style={styles.facts} testID={`find-promise-${c.key}`}>{promiseLine(c)}</Text>}
                             {!!c.contactEmail && (
                                 <Text style={styles.contact} onPress={() => Linking.openURL(`mailto:${c.contactEmail}`).catch(() => {})} accessibilityRole="link">
                                     {c.contactEmail}

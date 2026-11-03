@@ -603,8 +603,9 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
                 target: { to: 'people' },
             });
         }
-        // A member asked an owner or admin to invite someone (engine/invite-asks.ts): theirs, on any door, a count and no
-        // name, for an app that answers them (lands=asks), in People → Invites.
+        // A member asked an owner or admin to invite someone (engine/invite-asks.ts): theirs on the admins door only (the
+        // count is 0 on any other door, or with invites off), a count and no name, for an app that answers them
+        // (lands=asks), in People → Invites.
         const asks = c.lands.has('asks') && (role === 'owner' || role === 'admin') ? inviteAskCount() : 0;
         if (asks > 0) {
             items.push({

@@ -2621,14 +2621,6 @@ BEGIN
     WHERE target_group_id = OLD.id;
 END;
 
--- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
--- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its
--- conversation_participants rows mirror the ACTIVE group_members (convenor, member, observer) and feed the Talk
--- list and unread counts; every read and post re-checks group_members, never the mirror.
-
--- Per-member, per-chat mute (decision 12): 8 hours, a week, or always (muted_until NULL). An @mention of the
--- member still notifies. Works for any conversation the member is in — DM, group, event, enterprise. Copied to a
--- standby verbatim (a plain table, engine/replication-manifest.ts), so a muted chat stays muted after a take-over.
 -- A member's ask that an admin invite someone (engine/invite-asks.ts): a first name and one line, read only by the community's
 -- owners and admins and the member who asked. Deleted with a tombstone when it is answered, taken back, or 30 days old.
 CREATE TABLE IF NOT EXISTS invite_asks (
@@ -2642,6 +2634,14 @@ CREATE TABLE IF NOT EXISTS invite_asks (
 );
 CREATE INDEX IF NOT EXISTS idx_invite_asks_asker ON invite_asks (asker_pubkey);
 
+-- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
+-- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its
+-- conversation_participants rows mirror the ACTIVE group_members (convenor, member, observer) and feed the Talk
+-- list and unread counts; every read and post re-checks group_members, never the mirror.
+
+-- Per-member, per-chat mute (decision 12): 8 hours, a week, or always (muted_until NULL). An @mention of the
+-- member still notifies. Works for any conversation the member is in — DM, group, event, enterprise. Copied to a
+-- standby verbatim (a plain table, engine/replication-manifest.ts), so a muted chat stays muted after a take-over.
 CREATE TABLE IF NOT EXISTS chat_mutes (
     conversation_id TEXT NOT NULL,
     member_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,

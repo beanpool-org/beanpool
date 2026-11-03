@@ -66,7 +66,7 @@ import { doorLinkFromSystemPath } from '../utils/open-door';
 import { isCommunityCardPath } from '../utils/community-card-link';
 import { isPeekPath } from '../utils/peek-link';
 import * as WebBrowser from 'expo-web-browser';
-import { postIdFromInviteLink, t } from '@beanpool/core';
+import { postIdFromInviteLink, requestsClearedNotice, t } from '@beanpool/core';
 import { settingsLineWords } from '../components/settings/settings-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { rekeyPromptWords } from '../components/shell-lines';
@@ -1118,8 +1118,10 @@ export default function RootLayout() {
         const wsSub = DeviceEventEmitter.addListener('ws_activity', (data) => {
             if (data?.type === 'system_announcement') {
                 // The node's own words, as it sent them (slice S4); the phone's stand-in title in the member's language.
-                const title = data.title || t('System Announcement');
-                const body = data.body || '';
+                // "Message requests cleared" is worded here in the member's language (core requests-cleared-words.ts).
+                const own = requestsClearedNotice(data);
+                const title = own?.title ?? (data.title || t('System Announcement'));
+                const body = own?.body ?? (data.body || '');
                 Alert.alert(title, body, [{ text: t('Acknowledge'), style: 'cancel' }]);
                 // A notice the node keeps names its id: shown now, so the background sync never posts it again
                 // (utils/sync-notices.ts).

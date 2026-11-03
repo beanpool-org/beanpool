@@ -6,6 +6,8 @@
  * member: which limit, when it lets up, why. The post form and the chat composer show it word for word, in place,
  * never a generic "failed" line; `request` puts the node's `code` and message on the error it throws.
  */
+import { requestsLimitedWords } from '@beanpool/core';
+
 export const PROBATION_LIMIT = 'probation_limit';
 export const MODERATION_MUTED = 'moderation_muted';
 export const PAUSED = 'paused';
@@ -21,6 +23,9 @@ export interface NodeRefusal {
 export function nodeRefusal(e: unknown): NodeRefusal | null {
     const err = e as { code?: unknown; message?: unknown } | null | undefined;
     if (!err || typeof err.message !== 'string' || !err.message.trim()) return null;
-    if (err.code === PROBATION_LIMIT || err.code === MODERATION_MUTED || err.code === PAUSED || err.code === DM_REQUESTS_LIMITED) return { code: err.code, message: err.message };
+    // The cleared limit's sentence is the app's own to word (core's requests-cleared-words.ts): the node's English is the
+    // fallback for any other wording of it.
+    if (err.code === DM_REQUESTS_LIMITED) return { code: err.code, message: requestsLimitedWords(err.message) };
+    if (err.code === PROBATION_LIMIT || err.code === MODERATION_MUTED || err.code === PAUSED) return { code: err.code, message: err.message };
     return null;
 }

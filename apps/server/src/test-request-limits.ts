@@ -37,7 +37,8 @@ import { consumeHandshakeToken, mintHandshakeToken } from './admin-key-auth.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, signDmLine } from '@beanpool/core';
+import { dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, signDmLine, requestsLimitedWords, requestsClearedNotice, requestsClearedTitle, REQUESTS_CLEARED_KIND, setLanguage } from '@beanpool/core';
+import { REQUESTS_CLEARED_TITLE, requestsClearedBody, notifyRequestsCleared } from './engine/moderation-notices.js';
 import { REQUEST_LIMIT, requestLimitOf, requestReportsReach, wordingOf } from './engine/request-limits.js';
 import { independentCircles } from './engine/auto-moderation.js';
 import { standbyRefuses } from './routes/standby-ledger-gate.js';
@@ -442,6 +443,27 @@ async function main(): Promise<void> {
         assert(!!marked, 'and so does a report\'s mark, with its wording\'s hash');
         assert(standbyRefuses(`/api/local/admin/members/${owner.pk}/request-limit/undo`, 'POST') && !standbyRefuses('/api/local/admin/members/request-limits', 'GET'),
             'a standby refuses the undo, as it writes no plain table, and still answers the list');
+    }
+
+    console.log('\n── 12. the apps word the sentence (core requests-cleared-words.ts) ──');
+    {
+        // The apps find the server's English by its pattern, and the notice by its kind and date: a reworded server sentence
+        // or a renamed kind must fail here, not quietly show English in every other language.
+        const until = '2026-11-08T09:00:00.000Z';
+        const english = requestsClearedBody(until);
+        setLanguage('fr', [{ [english.replace('2026-11-08', '{date}')]: 'FR {date}', '\u{1F6E1}\uFE0F Your message requests were cleared': 'FR titre' } as any]);
+        try {
+            assert(requestsLimitedWords(english) === 'FR 2026-11-08', `the app's pattern finds the server's refusal sentence (${requestsLimitedWords(english)})`);
+            const sent: any[] = [];
+            notifyRequestsCleared({ broadcast: (e: any) => { sent.push(e); }, dispatchPushNotification: () => {} } as any, owner.pk, until);
+            const kinds = sent.map((e) => ({ kind: e.kind, until: e.until }));
+            assert(kinds.length === 1 && kinds[0].kind === REQUESTS_CLEARED_KIND && kinds[0].until === until, `the live notice names its kind and date (${JSON.stringify(kinds)})`);
+            const own = requestsClearedNotice(sent[0]);
+            assert(own?.body === 'FR 2026-11-08' && own.title === 'FR titre', `and the app words it from those (${JSON.stringify(own)})`);
+        } finally {
+            setLanguage('en');
+        }
+        assert(requestsClearedTitle() === REQUESTS_CLEARED_TITLE, 'the English title is the server\'s own');
     }
 
     console.log(`\n${passed}/${run} passed`);

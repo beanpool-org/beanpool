@@ -14,6 +14,9 @@ import userEvent from '@testing-library/user-event';
 import { SystemAlerts, PRESS_GUARD_MS, type SystemAlertsProps } from './SystemAlerts';
 import * as api from '../lib/api';
 import type { KeptNotice } from '../lib/api';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { setLanguage } from '@beanpool/core';
 
 const Alerts = (props: SystemAlertsProps) => <SystemAlerts pressGuardMs={0} {...props} />;
 
@@ -172,6 +175,51 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 2' }));
         await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
         await waitFor(() => expect(markedIds()).toEqual([['p'], ['q', 'r']]));
+    });
+
+    describe('"message requests cleared" (core requests-cleared-words.ts)', () => {
+        const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+        const cleared: KeptNotice = { ...notice('c'), title: '🛡️ Your message requests were cleared', body: LIMITED, data: { kind: 'requests_cleared', until: '2026-11-08T09:00:00.000Z' } };
+        const es = () => JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+
+        it('English: the node\'s words, word for word', async () => {
+            vi.mocked(api.getUnseenNotices).mockResolvedValue([cleared]);
+            render(<Alerts memberPubkey="me" isGuest={false} />);
+            const dialog = await screen.findByRole('alertdialog');
+            expect(dialog).toHaveTextContent('🛡️ Your message requests were cleared');
+            expect(dialog).toHaveTextContent(LIMITED);
+        });
+
+        it('Spanish, kept or live: the title and the sentence in Spanish, dated, and not the node\'s English', async () => {
+            setLanguage('es', [es()]);
+            try {
+                vi.mocked(api.getUnseenNotices).mockResolvedValue([cleared]);
+                render(<Alerts memberPubkey="me" isGuest={false} />);
+                const dialog = await screen.findByRole('alertdialog');
+                expect(dialog).toHaveTextContent('🛡️ Se borraron tus solicitudes de mensaje');
+                expect(dialog).toHaveTextContent('no puedes enviar nuevas hasta el 2026-11-08');
+                expect(dialog).not.toHaveTextContent('People you wrote to');
+                await acknowledge();
+                await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+
+                announce({ type: 'system_announcement', title: cleared.title, body: LIMITED, severity: 'info', kind: 'requests_cleared', until: '2026-11-09T09:00:00.000Z' });
+                const live = await screen.findByRole('alertdialog');
+                expect(live).toHaveTextContent('no puedes enviar nuevas hasta el 2026-11-09');
+            } finally {
+                setLanguage('en');
+            }
+        });
+
+        it('another notice is shown as the node wrote it, even in Spanish', async () => {
+            setLanguage('es', [es()]);
+            try {
+                vi.mocked(api.getUnseenNotices).mockResolvedValue([notice('a', 'requests_back')]);
+                render(<Alerts memberPubkey="me" isGuest={false} />);
+                expect(await screen.findByRole('alertdialog')).toHaveTextContent('Body a');
+            } finally {
+                setLanguage('en');
+            }
+        });
     });
 
     it('tells the app what each alert was about as it is shown', async () => {

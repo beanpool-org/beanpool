@@ -9,6 +9,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import nodeCrypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 const mem = vi.hoisted(() => ({ async: new Map<string, string>() }));
@@ -29,7 +31,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { markNoticeShown, postNoticesFromSync, KNOCK_ROLE_RECHECK_MS, SYNC_NOTICE_MAX_AGE_MS, SYNC_NOTICES_TIMEOUT_MS, type LocalNotice } from '../sync-notices';
 import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY } from '../storage-keys';
-import { pushNoticeWords } from '@beanpool/core';
+import { pushNoticeWords, setLanguage } from '@beanpool/core';
 import { checkTap, checkWhileOpen, LOCAL_NOTICE_DATA } from '../push-notice-check';
 import { boundSignatureValid } from './server-signature-check';
 
@@ -44,7 +46,7 @@ function account(): Account {
     return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: seed.toString('hex') };
 }
 
-interface Row { id: string; recipient: string; title: string; body: string; createdAt: string; seenAt: string | null }
+interface Row { id: string; recipient: string; title: string; body: string; createdAt: string; seenAt: string | null; data?: Record<string, unknown> }
 
 let kim: Account;
 let rows: Row[];
@@ -85,7 +87,7 @@ beforeEach(() => {
         return new Response(JSON.stringify({
             notices: mine.map((r) => ({
                 id: r.id, title: r.title, body: r.body, createdAt: r.createdAt, seenAt: r.seenAt, severity: 'info',
-                data: { kind: 'post_hidden', screen: 'post', postId: 'x' },
+                data: r.data ?? { kind: 'post_hidden', screen: 'post', postId: 'x' },
             })),
         }), { status: 200 });
     }));
@@ -107,6 +109,27 @@ describe('local notices from the background sync', () => {
             { title: 'Report outcome', body: 'The post you reported was removed. Thank you.', data: { ...LOCAL_NOTICE_DATA } },
         ]);
         expect(requests).toEqual([{ url: `${MULLUM}/api/notices?unseen=1`, signedBy: true }]);
+    });
+
+    it("'message requests cleared' is posted in the member's language, from its kind and date", async () => {
+        const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+        const cleared = row('🛡️ Your message requests were cleared', LIMITED, 60_000);
+        cleared.data = { kind: 'requests_cleared', until: '2026-11-08T09:00:00.000Z' };
+        expect(await run()).toBe(1);
+        expect(posted[0]).toEqual({ title: '🛡️ Your message requests were cleared', body: LIMITED, data: { ...LOCAL_NOTICE_DATA } });
+
+        posted.length = 0;
+        const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+        setLanguage('es', [es]);
+        try {
+            const again = row('🛡️ Your message requests were cleared', LIMITED, 30_000);
+            again.data = { kind: 'requests_cleared', until: '2026-11-08T09:00:00.000Z' };
+            expect(await run()).toBe(1);
+            expect(posted[0].title).toBe('🛡️ Se borraron tus solicitudes de mensaje');
+            expect(posted[0].body).toBe('Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.');
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('each once: the next sync posts nothing again, and only a new one when it comes', async () => {

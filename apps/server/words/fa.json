@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "فقط پست عمومی را می‌توان سنجاق کرد.",
   "Only this community's own posts can be pinned.": "فقط پست‌های خود این جامعه را می‌توان سنجاق کرد.",
   "This post has ended, so it can't be pinned.": "این پست به پایان رسیده است، پس نمی‌توان آن را سنجاق کرد.",
-  "Three posts are pinned already. Take one off first.": "سه پست از قبل سنجاق شده‌اند. اول یکی را بردارید."
+  "Three posts are pinned already. Take one off first.": "سه پست از قبل سنجاق شده‌اند. اول یکی را بردارید.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "تأیید اعتبار در دعوت‌نامه 25، 50 یا 100 لوبیا است، یا هیچ‌کدام.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "فقط مالکان، مدیران و تأییدکنندگان منصوب می‌توانند در دعوت‌نامه اعتبار کسی را تأیید کنند."
 }

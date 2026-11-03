@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, GD: the door on a copy)",
+    "draftedBy": "null; claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -37,5 +37,7 @@
   "Only a public post can be pinned.": "Solo se puede fijar una publicación pública.",
   "Only this community's own posts can be pinned.": "Solo se pueden fijar las publicaciones de esta comunidad.",
   "This post has ended, so it can't be pinned.": "Esta publicación ha terminado, así que no se puede fijar.",
-  "Three posts are pinned already. Take one off first.": "Ya hay tres publicaciones fijadas. Quita una primero."
+  "Three posts are pinned already. Take one off first.": "Ya hay tres publicaciones fijadas. Quita una primero.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Un aval en una invitación es de 25, 50 o 100 frijoles, o ninguno.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Solo los dueños, los administradores y los avalistas designados pueden avalar a alguien en una invitación."
 }

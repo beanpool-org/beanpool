@@ -23,7 +23,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 const sha512 = (b: Uint8Array): Uint8Array => new Uint8Array(crypto.createHash('sha512').update(b).digest());
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState } from './state-engine.js';
+import { initStateEngine, exportSyncState, getBalance } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
@@ -282,6 +282,28 @@ async function main(): Promise<void> {
     const vee = newId('Vee');
     const byMelTicket = await redeemTicket(vee, melTicket);
     assert(byMelTicket.status === 200 && !liveConfirmation(vee.pk), `7a. a member's ticket bound to an entry: the joiner is a member, unconfirmed (the maker isn't an admin) (${show(byMelTicket)})`);
+
+    // ── 7b. A bound invite can carry a vouch: the two add up, as core creditAllowance adds them ──
+    const dial = async (on: boolean) => call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on } } }, PASSWORD());
+    require_((await dial(true)).status === 200, '7b. the community turns on the known floor');
+    const wes = await addEntry(owenP, { name: 'Wes by the weir', note: '' });
+    const invitesBeforeVouch = count('invite_codes');
+    const junkLevel = await call(owen, 'POST', `/api/names/entries/${wes.entryId}/invite`, { vouchLevel: 4 });
+    const melLevel = await call(mel, 'POST', `/api/names/entries/${wes.entryId}/invite`, { vouchLevel: 2 });
+    assert(junkLevel.status === 400 && junkLevel.body?.code === 'bad_vouch_level' && melLevel.status === 403 && count('invite_codes') === invitesBeforeVouch,
+        `7b. a bound invite takes a level on the same terms: refused, and no code (${show(junkLevel)} ${show(melLevel)})`);
+    const bothMade = await call(owen, 'POST', `/api/names/entries/${wes.entryId}/invite`, { vouchLevel: 2 });
+    require_(bothMade.status === 201, `7b. Owen makes a bound invite that vouches at 50 (${show(bothMade)})`);
+    const wesId = newId('Wes');
+    const wesJoins = await redeem(wesId, bothMade.body.invite.code);
+    const wesVouch = db.prepare('SELECT elder_vouched_by, vouch_credit FROM members WHERE public_key = ?').get(wesId.pk) as { elder_vouched_by: string | null; vouch_credit: number };
+    assert(wesJoins.status === 200 && liveConfirmation(wesId.pk)?.entry_id === wes.entryId && inviteRow(bothMade.body.invite.code)?.names_bind_outcome === 'confirmed',
+        `7b. the binding keeps working: Wes joins confirmed against the entry (${show(wesJoins)})`);
+    assert(wesVouch.elder_vouched_by === owen.pk && wesVouch.vouch_credit === 50, `7b. and vouched by Owen (${JSON.stringify(wesVouch)})`);
+    const wesBalance = getBalance(wesId.pk);
+    assert(wesBalance.knownGrant > 0 && wesBalance.floor === -(wesBalance.knownGrant + 50), `7b. his floor is the two added (known ${wesBalance.knownGrant} + vouch 50 = ${wesBalance.floor})`);
+    assert(getBalance(wesId.pk).usableFloor === 0, '7b. and with no live Offer none of it is usable');
+    require_((await dial(false)).status === 200, '7b. the dial goes back off');
 
     // ── 8. Answering a knock adds the entry and binds it in one step ─────────────────────────────
     const kim = newId('Kim');

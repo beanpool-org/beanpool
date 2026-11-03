@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "只有公開貼文可以置頂。",
   "Only this community's own posts can be pinned.": "只有本社群自己的貼文可以置頂。",
   "This post has ended, so it can't be pinned.": "此貼文已結束，無法置頂。",
-  "Three posts are pinned already. Take one off first.": "已有三則貼文置頂。請先取消一則。"
+  "Three posts are pinned already. Take one off first.": "已有三則貼文置頂。請先取消一則。",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "邀請中的擔保為 25、50 或 100 顆豆子，或者無。",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有擁有者、管理員和指定擔保人才能在邀請中為他人擔保。"
 }

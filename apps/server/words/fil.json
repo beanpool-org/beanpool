@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "Pampublikong post lang ang puwedeng i-pin.",
   "Only this community's own posts can be pinned.": "Mga post lang ng komunidad na ito ang puwedeng i-pin.",
   "This post has ended, so it can't be pinned.": "Tapos na ang post na ito, kaya hindi na ito mapi-pin.",
-  "Three posts are pinned already. Take one off first.": "May tatlong post nang naka-pin. Mag-alis muna ng isa."
+  "Three posts are pinned already. Take one off first.": "May tatlong post nang naka-pin. Mag-alis muna ng isa.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Ang patunay sa imbitasyon ay 25, 50 o 100 Munggo, o wala.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Ang mga may-ari, admin at itinalagang tagapagpatunay lang ang makakapagpatunay para sa isang tao sa imbitasyon."
 }

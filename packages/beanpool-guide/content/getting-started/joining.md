@@ -110,6 +110,13 @@ Any member can invite people, unless the community has chosen that only its admi
 
 A community's admins can turn invites off for the whole community.
 
+**Vouching on an invite.** If you can vouch for people (owners, admins and members the community has appointed to vouch), **Invites** also shows **Vouch for them**: **None**, **25**, **50** or **100**. It starts on **None** every time. Pick an amount and you vouch for that person the moment they join, so you don't have to look out for them under a name you may not recognise. It is the same as vouching from their profile: **Vouched by** shows you, and you can withdraw it the same way.
+
+- If you lose the right to vouch before they join, they still join, with no vouch.
+- The invite doesn't tell them beforehand. Once they have joined, the vouch shows as any vouch does.
+- A ticket made without a connection can't carry a vouch. To make one, choose **None**.
+- There is no vouch where a community has no Beans, so the global community doesn't show this.
+
 **Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. On the web app the **Tree** stays, and so do the codes you made earlier: they still work until they lapse. An owner or admin with no signal can still make a paper ticket, from the last role the community gave them. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
 
 - Invite codes you made before the community chose this still work until their 30 days are up.

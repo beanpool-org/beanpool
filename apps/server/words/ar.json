@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "يمكن تثبيت المنشورات العامة فقط.",
   "Only this community's own posts can be pinned.": "يمكن تثبيت منشورات هذا المجتمع فقط.",
   "This post has ended, so it can't be pinned.": "انتهى هذا المنشور، لذا لا يمكن تثبيته.",
-  "Three posts are pinned already. Take one off first.": "هناك ثلاثة منشورات مثبتة بالفعل. أزل واحدًا أولًا."
+  "Three posts are pinned already. Take one off first.": "هناك ثلاثة منشورات مثبتة بالفعل. أزل واحدًا أولًا.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "التزكية في الدعوة هي 25 أو 50 أو 100 فاصوليا، أو بلا تزكية.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "يمكن للمالكين والمشرفين والمزكّين المعيّنين فقط تزكية شخص في دعوة."
 }

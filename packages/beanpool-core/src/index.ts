@@ -107,6 +107,7 @@ export * from './pins.js';
 export * from './fresh-banner.js';
 export * from './map-stack.js';
 export * from './map-area-ring.js';
+export * from './map-type-filter.js';
 export * from './refresh-gate.js';
 export * from './dm-requests.js';
 export * from './messaging.js';

@@ -38,7 +38,7 @@ import {
     ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
     type CardHue,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
+    capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -2248,7 +2248,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         : undefined;
 
     function needsLine(item: NeedsItem, i: number) {
-        const words = item.kind === 'vote' && item.closesAt && item.count === 1
+        const words = item.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(item.count)) : item.kind === 'vote' && item.closesAt && item.count === 1
             ? item.label.replace(/closes (within the hour|in \d+ (hours?|days))/, closesWords(item.closesAt, now))
             : item.label;
         const go = () => {

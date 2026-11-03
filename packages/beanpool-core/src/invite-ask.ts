@@ -45,6 +45,7 @@ export const INVITE_ASK_WORDS = {
     noticeTitle: word('Your ask to invite someone'),
     noticeInvited: word('An admin made the invite. Open Invites to pass it on.'),
     noticeNo: word('An admin answered. Open Invites to read it.'),
+    unreachable: word("Couldn't reach your community. Check your connection and try again."),
 } as const;
 
 /**
@@ -88,6 +89,46 @@ export interface InviteAskAnswer {
 export interface InviteAskToAnswer extends InviteAskWaiting {
     askerCallsign: string;
     askerPubkey: string;
+}
+
+const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+
+function readWaiting(raw: unknown): InviteAskWaiting | null {
+    const r = raw as Partial<InviteAskWaiting> | null;
+    return r && text(r.id) && text(r.firstName) && text(r.howKnown) && text(r.askedAt)
+        ? { id: r.id, firstName: r.firstName, howKnown: r.howKnown, askedAt: r.askedAt } : null;
+}
+
+function readAnswer(raw: unknown): InviteAskAnswer | null {
+    const r = raw as Partial<InviteAskAnswer> | null;
+    if (!r || !text(r.id) || !text(r.askedAt) || (r.outcome !== 'invited' && r.outcome !== 'no')) return null;
+    return {
+        id: r.id, outcome: r.outcome, askedAt: r.askedAt, answeredAt: text(r.answeredAt) ? r.answeredAt : r.askedAt,
+        ...(text(r.code) ? { code: r.code } : {}),
+        ...(r.state === 'ready' || r.state === 'used' || r.state === 'lapsed' ? { state: r.state } : {}),
+        ...(text(r.reason) ? { reason: r.reason } : {}),
+    };
+}
+
+/** GET /api/invite/asks/mine as an app reads it, or null when it isn't that. */
+export function readInviteAsksMine(raw: unknown): { waiting: InviteAskWaiting[]; answers: InviteAskAnswer[] } | null {
+    const r = raw as { waiting?: unknown; answers?: unknown } | null;
+    if (!r || !Array.isArray(r.waiting) || !Array.isArray(r.answers)) return null;
+    return {
+        waiting: r.waiting.map(readWaiting).filter((a): a is InviteAskWaiting => a !== null),
+        answers: r.answers.map(readAnswer).filter((a): a is InviteAskAnswer => a !== null),
+    };
+}
+
+/** GET /api/invite/asks as an app reads it, or null when it isn't that. */
+export function readInviteAsksToAnswer(raw: unknown): InviteAskToAnswer[] | null {
+    const r = raw as { asks?: unknown } | null;
+    if (!r || !Array.isArray(r.asks)) return null;
+    return r.asks.flatMap((a): InviteAskToAnswer[] => {
+        const ask = readWaiting(a);
+        const who = a as Partial<InviteAskToAnswer>;
+        return ask && text(who.askerPubkey) ? [{ ...ask, askerPubkey: who.askerPubkey, askerCallsign: text(who.askerCallsign) ? who.askerCallsign : '' }] : [];
+    });
 }
 
 /** The Needs you line for an owner or admin, in their language. A count, never a name. */

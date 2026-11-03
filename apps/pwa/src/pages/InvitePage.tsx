@@ -19,7 +19,8 @@ import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
 import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { InviteVouchChoice } from '../components/InviteVouchChoice';
-import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, inviteVouchRefusalWords, offersInviteVouch, t, tn, type VouchLevel } from '@beanpool/core';
+import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
+import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, inviteVouchRefusalWords, offersInviteAsk, offersInviteVouch, t, tn, type VouchLevel } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -461,9 +462,11 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                 {adminsRefused !== null ? refusalWords(adminsRefused) : adminsOnlyText(takesKnocks(nodeInfo))}
                             </p>
                             {takesKnocks(nodeInfo) && linkActions()}
+                            {offersInviteAsk(nodeInfo?.features, !adminsOnly) && <AskAnAdmin onCopy={handleCopyProxy} onShare={handleShare} />}
                         </div>
                     ) : (
                         <>
+                    {!isPreview && nodeInfo?.features?.inviteAsks === true && <InviteAsksToAnswer offersVouch={offersVouch} />}
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
                         {t('🎟️ Invite Someone')}
                     </h2>

@@ -8,8 +8,8 @@
  * before this gate) and a 301 to https: never a page of the app, an API answer, a cookie or a live-updates socket in
  * cleartext. The redirect goes to the same host when it is one of this community's addresses, else to its main one.
  *
- * Which requests came through a tunnel is read from the socket, never from a header anyone can send (cf-connecting-ip was
- * only ever cosmetic):
+ * Which requests came through a tunnel is read from the socket first. A header counts only from a private-range source,
+ * never from a public one (cf-connecting-ip from anyone was only ever cosmetic):
  *   - loopback (127.0.0.0/8, ::1, ::ffff:127.x): cloudflared run by this server as its child, in the same container,
  *     dials LOOPBACK_ORIGIN (tunnel-connector.ts); so do the registrar's name watch and anything else inside the container.
  *     A connection from outside the container never has a loopback source: the container has its own network namespace.
@@ -32,7 +32,7 @@
 
 import type Koa from 'koa';
 import net from 'node:net';
-import { configuredAddresses, isBeanPoolName, isLocalNetworkHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
+import { configuredAddresses, isBeanPoolName, isLocalNetworkHost, isLoopbackHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
 import { holdsOwnCertificate, servedHosts, servesCaCertificateFor } from './services/tls.js';
 
 /** A socket's remote address as Node gives it, IPv4-mapped IPv6 unwrapped; '' for none. */
@@ -92,12 +92,12 @@ export function plainHttpAnswersAsBefore(req: PlainRequest): boolean {
 
 /**
  * Where the redirect goes: https://<the same host><path> when that host is one of this community's addresses (any but a
- * lost one), else its main address (primaryAddress), else an address it holds a valid certificate for. Null when it has
+ * lost one or a loopback name an operator listed for an SSH tunnel, which names whichever machine a visitor is on), else its main address (primaryAddress), else an address it holds a valid certificate for. Null when it has
  * none of those, which a server holding a certificate does not reach.
  */
 export function httpsRedirectTarget(host: string | undefined, url: string): string | null {
     const named = host ? normalizeAddress(host) : null;
-    const own = named && configuredAddresses().some((a) => a.address === named && !a.lost) ? named : null;
+    const own = named && !isLoopbackHost(named) && configuredAddresses().some((a) => a.address === named && !a.lost) ? named : null;
     const target = own ?? primaryAddress() ?? servedHosts().find((h) => servesCaCertificateFor(h)) ?? null;
     if (!target) return null;
     // Only the path and query of this request, after the host chosen here: `//elsewhere` stays a path on `target`. Anything

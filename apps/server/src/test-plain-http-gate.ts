@@ -36,7 +36,8 @@ import selfsigned from 'selfsigned';
 const dataDir = fs.mkdtempSync(path.join(process.env.BEANPOOL_DATA_DIR || process.env.TMPDIR || os.tmpdir(), 'plain-http-gate-'));
 process.env.BEANPOOL_DATA_DIR = dataDir;
 for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'PUBLIC_IP']) delete process.env[k];
-process.env.BEANPOOL_ADDRESSES = 'beans.example.org';
+// localhost too, as an operator lists it for an SSH tunnel: accepted, never an address to send anyone to.
+process.env.BEANPOOL_ADDRESSES = 'beans.example.org,localhost';
 process.env.ADMIN_PASSWORD ??= 'Plain-Http-Gate-Suite-Pw-4417!';
 
 let passed = 0, failed = 0;
@@ -142,6 +143,8 @@ for (const p of ['/api/version', '/api/community/info?x=1', '/settings', '/app/'
     check('a host that is not the community\'s goes to its main address', redirected(other, `https://${OWN}/api/version`), `${other.status} ${other.headers.location}`);
     const port = await get(PUBLIC, '/settings', `${OWN}:8080`);
     check('the Host header\'s port is dropped (https is 443)', redirected(port, `https://${OWN}/settings`), `${port.headers.location}`);
+    const loop = await get(PUBLIC, '/settings', 'localhost');
+    check('a listed loopback name is never kept: localhost goes to the main address', redirected(loop, `https://${OWN}/settings`), `${loop.headers.location}`);
     const slashes = await get(PUBLIC, '//elsewhere.example.net/x', OWN);
     check('`//elsewhere` stays a path on the community\'s host', redirected(slashes, `https://${OWN}//elsewhere.example.net/x`), `${slashes.headers.location}`);
     const cookie = await get(PUBLIC, '/api/version', OWN);

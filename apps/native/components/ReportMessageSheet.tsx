@@ -13,6 +13,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
+import { ScrollFieldContext } from './ScrollFieldContext';
 import { ReportReasonBox } from './ReportReasonBox';
 
 export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }: {
@@ -28,6 +30,7 @@ export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }:
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8, 0.92);
+    const fieldScroll = useScrollFieldIntoView();
     const styles = useStyles(({ colors }) => StyleSheet.create({
         backdrop: { flex: 1, backgroundColor: colors.overlay.scrim, justifyContent: 'flex-end' },
         sheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, flexShrink: 1 },
@@ -51,7 +54,7 @@ export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }:
                             <MaterialCommunityIcons name="close" size={24} color={colors.text.muted} />
                         </Pressable>
                     </View>
-                    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+                    <ScrollView {...fieldScroll.scrollProps} style={{ flexShrink: 1 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
                         <Text style={styles.shared}>
                             {blocks
                                 ? t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")
@@ -59,7 +62,9 @@ export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }:
                                     ? t("This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them.")
                                     : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
                         </Text>
-                        <ReportReasonBox onSubmit={onSubmit} onCancel={onClose} />
+                        <ScrollFieldContext.Provider value={fieldScroll}>
+                            <ReportReasonBox onSubmit={onSubmit} onCancel={onClose} />
+                        </ScrollFieldContext.Provider>
                     </ScrollView>
                 </View>
             </View>

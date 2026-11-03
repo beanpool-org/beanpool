@@ -84,6 +84,12 @@ async function throughTheServer(): Promise<void> {
     const unknown = await post('/api/pair/offer', { sessionId: 'ab'.repeat(16), phonePubHex: createPairInKey().publicKeyHex });
     assert(unknown.status === 410, 'an offer to no session: 410');
 
+    // No phone's account is ever taken into this session (the other direction's step), even while it waits for a phone.
+    const pushed = encryptPairingPayload(ACCOUNT, browser.publicKeyHex, browser.sessionId);
+    const transfer = await post('/api/pair/transfer', { sessionId: browser.sessionId, ...pushed, confirm: 'four-digits' });
+    assert(transfer.status === 400 && ((await transfer.json()) as any).confirmCode === undefined, "a phone's account sent into a waiting to-phone session: 400, no digits, nothing held");
+    assert(((await (await poll(browser.sessionId, cookie)).json()) as any).status === 'waiting', 'and the session still waits for its phone');
+
     // 3. The phone offers its key: four digits and a secret come back to it.
     const phone = createPairInKey();
     const offer = await post('/api/pair/offer', { sessionId: browser.sessionId, phonePubHex: phone.publicKeyHex });
@@ -96,11 +102,6 @@ async function throughTheServer(): Promise<void> {
     const thief = createPairInKey();
     const second = await post('/api/pair/offer', { sessionId: browser.sessionId, phonePubHex: thief.publicKeyHex });
     assert(second.status === 409 && ((await second.json()) as any).confirmCode === undefined, 'a second phone offering is refused (409), no digits');
-
-    // 5. No phone's account is ever taken into this session (the other direction's step).
-    const pushed = encryptPairingPayload(ACCOUNT, browser.publicKeyHex, browser.sessionId);
-    const transfer = await post('/api/pair/transfer', { sessionId: browser.sessionId, ...pushed, confirm: 'four-digits' });
-    assert(transfer.status === 400 && ((await transfer.json()) as any).confirmCode === undefined, "a phone's account sent into a to-phone session: 400, no digits, nothing held");
 
     // 6. Before the digits: the browser sees a phone scanned, not its key; it cannot send; the phone waits.
     const before = (await (await poll(browser.sessionId, cookie)).json()) as any;

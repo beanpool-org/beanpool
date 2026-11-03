@@ -8,10 +8,11 @@
  * Each hands the link to the phone's share sheet. A refusal says the node's own words, and nothing is shared: never a
  * false success.
  */
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Share, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Share, Alert, DeviceEventEmitter } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PEEK_WORDS as W, t } from '@beanpool/core';
+import { PEEK_WORDS as W, shareSays, t, type WordKey } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { shareOutsideOn } from '../utils/node-profile';
@@ -73,23 +74,64 @@ export function confirmShareOutside(
 }
 
 /** "Share outside the community", where the community allows it and the post may go: otherwise nothing at all. */
-export function ShareOutsideButton({ post }: { post: any }) {
+export function ShareOutsideButton({ post, outsideLine }: { post: any; outsideLine?: WordKey | null }) {
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
     const [busy, setBusy] = useState(false);
     const unsent = useRef<UnsentPeekLink | null>(null);
     if (!shareOutsideOn(profile?.features) || !shareableOutside(post)) return null;
+    const says = shareSays(profile?.features);
+    const line = outsideLine !== undefined ? outsideLine : says.outsideLine;
     return (
-        <Pressable onPress={() => confirmShareOutside({ id: post.id, title: post.title }, setBusy, unsent)} disabled={busy}
-            style={[styles.btn, busy && { opacity: 0.6 }]} accessibilityRole="button" testID="share-outside-button">
-            <Text style={styles.btnText}>{t(W.shareOutside)}</Text>
-        </Pressable>
+        <View style={styles.outsideBlock}>
+            <Pressable onPress={() => confirmShareOutside({ id: post.id, title: post.title }, setBusy, unsent)} disabled={busy}
+                style={[styles.btn, busy && { opacity: 0.6 }]} accessibilityRole="button" testID="share-outside-button">
+                <Text style={styles.btnText}>{t(W.shareOutside)}</Text>
+            </Pressable>
+            {line && (
+                <Text style={styles.note} testID="share-outside-note">
+                    {t(line)}
+                </Text>
+            )}
+        </View>
     );
 }
 
 /** A listing's two shares: the members' link, and outside where the community allows it. */
 export function SharePostButtons({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
+    const profile = useNodeProfile();
+    const [role, setRole] = useState<string | null | undefined>(undefined);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            let cancelled = false;
+            (async () => {
+                const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+                if (!anchor) {
+                    if (!cancelled) setRole(null);
+                    return;
+                }
+                try {
+                    const { loadIdentity } = await import('../utils/identity');
+                    const identity = await loadIdentity().catch(() => null);
+                    if (!identity) {
+                        if (!cancelled) setRole(null);
+                        return;
+                    }
+                    const { cachedNodeRole } = await import('../utils/node-admin');
+                    const res = await cachedNodeRole(anchor, identity);
+                    if (!cancelled) setRole(res.role);
+                } catch {
+                    if (!cancelled) setRole(null);
+                }
+            })();
+            return () => { cancelled = true; };
+        }, [])
+    );
+
+    const says = shareSays(profile?.features, role);
+
     const shareWithMembers = async () => {
         try {
             const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -100,18 +142,36 @@ export function SharePostButtons({ post }: { post: any }) {
             Alert.alert(t(W.notShared), e?.message || t('Please try again.'));
         }
     };
+
+    const onInviteSomeone = () => {
+        DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
+        router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
+    };
+
     return (
         <View style={styles.column} testID="share-post">
             <Pressable onPress={shareWithMembers} style={styles.btn} accessibilityRole="button" testID="share-members-button">
                 <Text style={styles.btnText}>{t(W.shareWithMembers)}</Text>
             </Pressable>
-            <ShareOutsideButton post={post} />
+            {says.membersLine && (
+                <Text style={styles.note} testID="share-members-note">
+                    {t(says.membersLine)}
+                </Text>
+            )}
+            {says.showInviteButton && (
+                <Pressable onPress={onInviteSomeone} style={styles.btn} accessibilityRole="button" testID="invite-someone-button">
+                    <Text style={styles.btnText}>{t('Invite someone')}</Text>
+                </Pressable>
+            )}
+            {says.showShareOutside && <ShareOutsideButton post={post} outsideLine={says.outsideLine} />}
         </View>
     );
 }
 
 const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     column: { gap: 10, marginTop: 12, marginBottom: 4 },
+    outsideBlock: { gap: 6 },
     btn: { minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
     btnText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center' },
+    note: { color: colors.text.secondary, fontSize: 13, lineHeight: 18 },
 });

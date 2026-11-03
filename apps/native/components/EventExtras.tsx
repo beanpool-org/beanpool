@@ -19,6 +19,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share, Alert, Linking, Platform, ActivityIndicator, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -40,7 +41,8 @@ import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
     googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets, type ShareableEvent,
 } from '../utils/event-extras';
-import { t, tn } from '@beanpool/core';
+import { shareSays, t, tn } from '@beanpool/core';
+import { useNodeProfile } from '../utils/use-node-profile';
 import { EVENT_ACCENT } from './EventCard';
 import { Sentence } from './Sentence';
 import { ShareOutsideButton } from './SharePost';
@@ -99,6 +101,37 @@ async function anchorOrThrow(): Promise<string> {
 export function EventShareAndCalendar({ post }: { post: any }) {
     const insets = useSafeAreaInsets();
     const styles = useStyles(makeStyles);
+    const profile = useNodeProfile();
+    const [role, setRole] = useState<string | null | undefined>(undefined);
+
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
+            (async () => {
+                const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+                if (!anchor) {
+                    if (!cancelled) setRole(null);
+                    return;
+                }
+                try {
+                    const { loadIdentity } = await import('../utils/identity');
+                    const identity = await loadIdentity().catch(() => null);
+                    if (!identity) {
+                        if (!cancelled) setRole(null);
+                        return;
+                    }
+                    const { cachedNodeRole } = await import('../utils/node-admin');
+                    const res = await cachedNodeRole(anchor, identity);
+                    if (!cancelled) setRole(res.role);
+                } catch {
+                    if (!cancelled) setRole(null);
+                }
+            })();
+            return () => { cancelled = true; };
+        }, [])
+    );
+
+    const says = shareSays(profile?.features, role);
     const event = shareableEvent(post);
     // Labelled with the place's zone ("Sat 17 Oct, 20:50 Lagos time"), so it is right wherever it is pasted (§4).
     const when = eventShareWhen(post);
@@ -168,6 +201,11 @@ export function EventShareAndCalendar({ post }: { post: any }) {
                     <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📅 Add to calendar')}</Text>
                 </Pressable>
             </View>
+            {says.membersLine && (
+                <Text style={styles.shareMembersNote} testID="event-share-members-note">
+                    {t(says.membersLine)}
+                </Text>
+            )}
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />
 
@@ -369,6 +407,7 @@ const makeStyles = ({ colors }: ThemeContextType) =>
             alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, backgroundColor: colors.surface.card,
         },
         btnText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
+        shareMembersNote: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: -6, marginBottom: 10 },
         reminderBox: {
             borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, backgroundColor: colors.surface.card,
             paddingHorizontal: 12, paddingVertical: 8, marginBottom: 14,

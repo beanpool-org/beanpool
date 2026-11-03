@@ -80,6 +80,7 @@ vi.mock('../node-admin', () => ({
 
 vi.mock('../identity', () => ({
     useIdentity: () => ({ publicKey: 'user-pk' }),
+    loadIdentity: async () => ({ publicKey: 'user-pk' }),
 }));
 
 vi.mock('../../app/ThemeContext', () => ({
@@ -231,6 +232,9 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
         expect(get('invite-someone-button')).toBeNull();
         expect(get('share-outside-button')).toBeNull();
+
+        act(() => { root.unmount(); });
+        root = createRoot(container);
 
         // Admin member
         mockState.role = 'owner';

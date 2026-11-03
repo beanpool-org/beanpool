@@ -7,7 +7,8 @@ related: event-chat, notifications, pin-locations, map-pins, polls
 
 ## Finding events
 
-- In the **Market**, tap **Events**. Choose **Today**, **This weekend** or **Next 7 days**.
+- In the **Market**, tap **Events**. The soonest comes first. Choose **Today**, **This weekend** or **Next 7 days**.
+- In the **Market**, under **All**, an event is listed again once, under **Today**, the day before it starts, and then sinks like any other post. A weekly event comes back once a week.
 - On the **Map**, events are purple pins. On the phone, tap **Events** to see only them. In the web app they are always there, and the date chips narrow them.
 
 ## Your events

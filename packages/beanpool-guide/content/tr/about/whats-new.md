@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Pazar tek bir sırada
+
+Telefonda güncel uygulamayla gelir; web tarayıcısında ise topluluğunuzun sunucusu güncellendiğinde.
+
+- **Önce en yeni, telefonda ve webde aynı.** Pazar, gönderileri en yeniden başlayarak, her birinin paylaşıldığı güne göre **Bugün**, **Dün**, **Bu Hafta** ve **Daha Eski İlanlar** altında listeler. **Yaklaşan etkinlikler**, **Anketler** ve **Önce en yakın** başlıkları artık yok.
+- **Bir etkinlik bir kez geri gelir.** Başlamasından bir gün önce bir etkinlik **Bugün** altında yeniden listelenir. Bir anket de kapanmasından bir gün önce aynısını yapar. Sonra diğer gönderiler gibi aşağı iner.
+- **Günde iki yer.** Bir kişinin o gün üçüncü gönderisi ve sonrakiler, o günün herkesin gönderilerinden sonra gelir.
+- **Bir gönderiyi düzenlemek onu yukarı taşımaz.** Tekrar görülmek için yeniden paylaşın.
+- **Küresel toplulukta** Pazar, bölgenizin 250 km yakınındaki en yenileri gösterir; her gönderi ne kadar uzakta olduğuyla birlikte gelir. Listenin üzerindeki bir satır bunu belirtir. Telefonun bunun için artık konumunuza ihtiyacı yok. Web uygulamasında seçtiğiniz **Mesafe** için de aynısı geçerlidir.
+- **Değişmeyenler:** bir sahibin sabitlediği gönderiler en üstte kalır, **Etkinlikler** yine en yakın tarihli olanı ilk sırada listeler ve bir arama sözcüklerinize en iyi uyanı bulur. Bkz. "Pazarda gezinme".
+
 ## Küresel topluluk, yakınınızda
 
 Bunları, küresel topluluğun sunucusu güncellendiğinde alırsınız. Telefonda güncel bir uygulama gerekir.
@@ -15,7 +26,7 @@ Bunları, küresel topluluğun sunucusu güncellendiğinde alırsınız. Telefon
 - **Bölgeniz.** Web uygulamasında küresel topluluğa katılmanın fotoğrafınızdan sonra bir adımı daha vardır: **Yaklaşık olarak neredesiniz?** Telefonda, zaten sahip olduğunuz bir hesapla katıldığınızda sorulur; yeni bir telefon hesabı bunu daha sonra Ayarlar'da **Bölgeniz** altından belirler. Bu adımda **Konumumu kullan**, **Bir kasaba veya semt yaz** veya **Şimdilik atla** seçeneğine dokunun. Yaklaşık 10 km'lik bir alan olarak tutulur, tam konumunuz asla tutulmaz. Ayarlar'da **Bölgeniz** altından değiştirin veya temizleyin. "Bölgeniz" bölümüne bakın.
 - **Bölge yoksa sorun yok.** Bir bölge olmadan her yerden en yeni ilanları görürsünüz ve Pazar'ın üzerindeki bir satır bunu belirtir. Telefonda bölgenizi belirlemek için bu satıra dokunun.
 - **Yakınınızdaki yeni ilanlar.** Paylaşıldıkça gelirler. Uzaktakiler artık telefonunuza ulaşmaz.
-- **Web uygulamasında** Pazar ve Harita bölgenizden veya **Mesafe** ile seçtiğiniz bir yerden başlar: en yakın olan ilk sırada, her ilanın ne kadar uzakta olduğu belirtilir. "Yakınınızdakileri bulma" bölümüne bakın.
+- **Web uygulamasında** Pazar ve Harita bölgenizden veya **Mesafe** ile seçtiğiniz bir yerden başlar: her ilanın ne kadar uzakta olduğu belirtilir. Harita en yakın olanı ilk sırada gösterir. Pazar en yenileri ilk sırada listeler; yukarıdaki "Pazar tek bir sırada" bölümü de böyle diyor. "Yakınınızdakileri bulma" bölümüne bakın.
 - **Anketlerin** kendilerine ait bir konumları yoktur, bu nedenle her anket onu oluşturan üyenin bölgesinde gösterilir.
 - **Kasabanızı yazın.** Küresel toplulukta Ana Sayfa'daki **Topluluğunu bul** artık konumunuza ihtiyaç duymaz: **veya kasabanı yaz** seçeneğine dokunup kasabanızı seçin. Yalnızca yaklaşık bir nokta tutulur. "Yakınınızda bir topluluk bulma" bölümüne bakın.
 - **Fiyatsız paylaşım.** Küresel toplulukta ilan formu fiyat sormaz; çünkü Fasulyeler yerel topluluklarda geçerlidir. Web uygulamasında **Teklif Paylaş** ve **İhtiyaç Paylaş** artık fiyatsız çalışır. Yerel bir topluluk hâlâ fiyat ister.

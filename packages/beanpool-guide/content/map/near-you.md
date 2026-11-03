@@ -27,8 +27,8 @@ The map has no distance filter of its own. Tap the target button on the left to 
 
 The global community has listings from everywhere, so the web app's **Market** and **Map** start from near you:
 
-- With a **Distance** chosen on the Market, both show the nearest listings within it, nearest first. The Map shows up to 200 pins.
-- Without one, they show the nearest listings within 250 km of your area: the rough place you give the community when you join, or later in **Settings**, under **Your area**. A line above the Market's list says **Nearest to your area first, within 250 km.** Tap **Show everywhere** for the newest from everywhere, and **Near your area** to come back.
+- With a **Distance** chosen on the Market, both show the listings within it. The Market lists them newest first, each with how far away it is, under a line that says **Newest within 5 km of the place you picked.** (with your distance). The Map shows the nearest, up to 200 pins.
+- Without one, they show the nearest listings within 250 km of your area: the rough place you give the community when you join, or later in **Settings**, under **Your area**. The Market lists them newest first, under a line that says **Newest within 250 km of your area.** The Map shows the nearest first. Tap **Show everywhere** for the newest from everywhere, and **Near your area** to come back.
 - With neither, you see the newest from everywhere, and **See what's near you** opens the distance picker. A line above the Market's list says which of these you are seeing. With a **Distance** it has no button: open **Distance** and tap **Reset**. You are then back near your area, or, with no area set, you see the newest from everywhere.
 - Each listing shows how far away it is, like **📍 12 km**. Your own listings are always on the Map, and on the Market near your area, wherever they are. With a **Distance**, the Market shows only what is within it, yours too.
 - While the list is near you, posts with no location are left out. A poll from someone who has not set their area is one of them. To see them, reset the **Distance** if you chose one, then tap **Show everywhere**.
@@ -39,7 +39,7 @@ The web app's search looks only through the listings on screen. **Show everywher
 
 ## On the global community, on the phone
 
-The phone keeps the listings nearest your area: up to 500, within 250 km. It also keeps your own listings, and any you have a deal, a chat or an answer on. The Market and the Map show what the phone keeps. With no area set, it keeps the newest listings instead, and a line above the Market says so. See "Your area".
+The phone keeps the listings nearest your area: up to 500, within 250 km. It also keeps your own listings, and any you have a deal, a chat or an answer on. The Market and the Map show what the phone keeps. The Market lists it newest first, each with how far away it is, under the same line, **Newest within 250 km of your area.** It does not need you to let the app use your location. With no area set, it keeps the newest listings instead, and a line above the Market says so. See "Your area".
 
 ## Events near you
 

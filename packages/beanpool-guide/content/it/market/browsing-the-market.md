@@ -9,13 +9,17 @@ source-hash: 24606918c00ac034
 
 ## La scheda Mercato
 
-Tocca **Mercato** nella riga delle schede. Vedi cosa offrono e cercano le persone nella tua comunità, dai post più recenti, raggruppati per giorno di pubblicazione.
+Tocca **Mercato** nella riga delle schede. Vedi cosa offrono e cercano le persone nella tua comunità, dai post più recenti, sotto **Oggi**, **Ieri**, **Questa settimana** e **Annunci precedenti**, in base al giorno in cui ciascuno è stato pubblicato. Il telefono e l'app web lo elencano allo stesso modo.
 
-Sul telefono, gli eventi vengono per primi. Se hai già consentito all'app l'uso della tua posizione, le visualizzazioni a elenco e compatta mostrano invece gli annunci a partire dai più vicini, sotto **Prima i più vicini**, con i sondaggi sotto **Sondaggi**. **Per Te** mantiene il proprio ordine. Trascina l'elenco verso il basso per aggiornarlo.
+- **Un evento torna una volta.** Il giorno prima che inizi, un evento viene elencato di nuovo sotto **Oggi**, tra i nuovi post di quel giorno, e poi scende come qualsiasi altro. Un evento settimanale torna una volta a settimana.
+- **Anche un sondaggio torna una volta**, il giorno prima che si chiuda.
+- **Nessuno occupa più di due posti al giorno.** Il terzo post di una persona in un giorno, e quelli successivi, vengono dopo quelli di tutti gli altri di quel giorno.
+- **Modificare un post non lo fa salire.** Neppure metterlo in pausa, né una risposta. Per essere visto di nuovo, pubblica di nuovo.
+- **Un post fissato da un proprietario** sta in cima, sotto **Fissato**, a prescindere da quanto sia vecchio.
 
-Nell'app web il Mercato si apre a schede. Nelle visualizzazioni a elenco e compatta, gli eventi si trovano sotto il giorno in cui sono stati pubblicati. In una comunità locale l'app web non mette prima i più vicini.
+Nelle visualizzazioni a elenco e compatta vedi i titoli dei giorni. La griglia mostra lo stesso ordine senza. Sul telefono il Mercato si apre come elenco; nell'app web, a schede. **Per Te** mantiene il proprio ordine. Sotto **Eventi** viene per primo il più vicino nel tempo, con **Oggi**, **Questo fine settimana** e **Prossimi 7 giorni**. Una ricerca mostra i post che corrispondono meglio alle tue parole. Sul telefono, trascina l'elenco verso il basso per aggiornarlo.
 
-Sulla comunità globale, l'app web mostra prima gli annunci vicino a te: i più vicini all'interno della tua **Distanza**, o entro 250 km dalla tua zona (la località approssimativa fornita alla comunità quando ti unisci, o in **Impostazioni**), ciascuno con l'indicazione della distanza. Una riga sopra l'elenco indica quale criterio è attivo. Vicino alla tua zona trovi **Mostra ovunque** per i più recenti da ogni luogo. Con una **Distanza**, apri **Distanza** e tocca **Reimposta** per tornare alla tua zona, poi tocca **Mostra ovunque**. Sul telefono, la comunità globale conserva gli annunci più vicini alla tua zona, e quelli sono ciò che il Mercato mostra. Vedi "Trovare cose vicino a te".
+Sulla comunità globale, il Mercato mostra i più recenti entro 250 km dalla tua zona (la località approssimativa fornita alla comunità quando ti unisci, o in **Impostazioni**), ciascun post con la distanza a cui si trova. Una riga sopra l'elenco lo indica: **Il più recente entro 250 km dalla tua zona.** È uguale sul telefono e nell'app web, e sul telefono non serve che tu consenta all'app di usare la tua posizione. Con una **Distanza**, entrambe le app mostrano i più recenti entro quella distanza. Nell'app web la riga dice allora **Il più recente entro 5 km dal luogo che hai scelto.** e ogni post mostra a che distanza si trova. Nell'app web, vicino alla tua zona la riga ha **Mostra ovunque** per i più recenti da ogni luogo. Con una **Distanza**, apri **Distanza** e tocca **Reimposta** per tornare alla tua zona, poi tocca **Mostra ovunque**. Vedi "Trovare cose vicino a te".
 
 Sulla comunità globale, quando ci sono solo pochi annunci, il Mercato mostra anche alcune schede contrassegnate come **Esempio**. Sono fittizie, create per mostrare cosa pubblicano le persone, e non possono essere aperte né ricevere risposte. Scompaiono quando ci sono abbastanza annunci reali.
 

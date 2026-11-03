@@ -34,7 +34,7 @@ Puoi avere un solo sondaggio aperto alla volta, e una comunità può averne 5 ap
 
 ## Trovare i sondaggi e rispondere
 
-I sondaggi si trovano nel Mercato. Tocca **Sondaggi** nella riga in alto per vedere solo i sondaggi.
+I sondaggi si trovano nel Mercato. Tocca **Sondaggi** nella riga in alto per vedere solo i sondaggi. Un sondaggio viene elencato di nuovo una volta, sotto **Oggi**, il giorno prima che si chiuda.
 
 - Tocca una risposta per sceglierla. Toccane un'altra per cambiare idea, fino alla chiusura del sondaggio.
 - La scheda mostra quanti hanno scelto ciascuna risposta.

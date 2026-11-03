@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Eneo lako ni nini
 
-Kwenye jumuiya ya kimataifa, eneo lako ni takriban pale ulipo: takriban kilomita 10 kuzunguka mji au eneo, kamwe si mahali pako kamili. Jumuiya ya kimataifa hulitumia kukuonyesha kile kinachotolewa karibu nawe: matangazo 500 ya karibu zaidi ndani ya kilomita 250 kutoka hapo. Tazama "Zaidi ya jumuiya moja".
+Kwenye jumuiya ya kimataifa, eneo lako ni takriban pale ulipo: takriban kilomita 10 kuzunguka mji au eneo, kamwe si mahali pako kamili. Jumuiya ya kimataifa hulitumia kukuonyesha kile kinachotolewa karibu nawe: matangazo 500 ya karibu zaidi ndani ya kilomita 250 kutoka hapo. Soko kisha huyaorodhesha mapya zaidi kwanza, kila moja likiwa na umbali wake. Tazama "Zaidi ya jumuiya moja".
 
 Unalitoa unapojiunga, kwenye **Uko takriban wapi?**, ambalo unaweza kuliruka kwa **Ruka kwa sasa**. Unaweza kulibadilisha au kulifuta wakati wowote. Ni la akaunti yako katika jumuiya ya kimataifa, kwa hivyo simu yako na programu ya wavuti hutumia lilelile.
 

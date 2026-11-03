@@ -34,7 +34,7 @@ Du kannst jeweils eine Umfrage gleichzeitig offen haben, und eine Community kann
 
 ## Umfragen finden und beantworten
 
-Umfragen befinden sich im Markt. Tippe in der oberen Zeile auf **Umfragen**, um nur Umfragen anzuzeigen.
+Umfragen befinden sich im Markt. Tippe in der oberen Zeile auf **Umfragen**, um nur Umfragen anzuzeigen. Eine Umfrage wird am Tag vor ihrem Ende noch einmal unter **Heute** aufgeführt.
 
 - Tippe auf eine Antwort, um sie auszuwählen. Tippe auf eine andere, um deine Meinung zu ändern, bis die Umfrage schließt.
 - Die Karte zeigt, wie viele jede Antwort gewählt haben.

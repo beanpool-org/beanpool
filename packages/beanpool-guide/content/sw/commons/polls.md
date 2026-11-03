@@ -34,7 +34,7 @@ Unaweza kuwa na kura moja ya maoni iliyo wazi kwa wakati mmoja, na jumuiya inawe
 
 ## Kupata na kujibu kura za maoni
 
-Kura za maoni ziko Sokoni. Gusa **Kura za maoni** katika safu ya juu ili kuona kura za maoni pekee.
+Kura za maoni ziko Sokoni. Gusa **Kura za maoni** katika safu ya juu ili kuona kura za maoni pekee. Kura ya maoni huorodheshwa tena mara moja, chini ya **Leo**, siku moja kabla ya kufungwa.
 
 - Gusa jibu ili kulichagua. Gusa lingine ili kubadili nia yako, hadi kura ya maoni ifungwe.
 - Kadi huonyesha ni watu wangapi waliochagua kila jibu.

@@ -549,7 +549,7 @@ describe('the Market in English', () => {
         expect(Array.from(screen.getByTestId('feed-type-filter').querySelectorAll('button')).map(b => b.textContent))
             .toEqual(['All', '★ For You', '🟢 Offers', '🟠 Needs', 'Events', '🗳️ Polls']);
         expect(screen.getByText('🔥').parentElement!.textContent).toContain('1 fresh listing posted today!');
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest to your area first, within 250 km.');
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Newest within 250 km of your area.');
         // The date chips are lib/events.ts EVENT_WINDOWS' words, shown here through t().
         fireEvent.click(screen.getByRole('button', { name: 'Events' }));
         expect(Array.from(screen.getByTestId('feed-event-window-chips').querySelectorAll('button')).map(b => b.textContent))

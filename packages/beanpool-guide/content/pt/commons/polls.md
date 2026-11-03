@@ -34,7 +34,7 @@ Você pode ter uma enquete aberta por vez, e uma comunidade pode ter até 5 aber
 
 ## Encontrar e responder enquetes
 
-As enquetes ficam no Mercado. Toque em **Enquetes** na linha superior para ver apenas enquetes.
+As enquetes ficam no Mercado. Toque em **Enquetes** na linha superior para ver apenas enquetes. Uma enquete é listada de novo uma vez, em **Hoje**, no dia anterior ao encerramento.
 
 - Toque em uma resposta para escolhê-la. Toque em outra para mudar de ideia, até que a enquete seja encerrada.
 - O cartão mostra quantas pessoas escolheram cada resposta.

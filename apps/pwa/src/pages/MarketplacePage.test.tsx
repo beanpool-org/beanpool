@@ -611,15 +611,15 @@ describe('MarketplacePage: a listing pushed over the live feed', () => {
     });
 
     it('a listing pushed while the page was still loading survives the load', async () => {
-        // The feed read and the viewer's-own read are both held until the push has landed.
+        // The feed read, the viewer's-own read and the events read beside the feed (market order S2) are held until the push has landed.
         const pending: Array<(v: any) => void> = [];
         vi.mocked(api.getMarketplacePosts).mockImplementation(() => new Promise(r => { pending.push(r); }));
         render(<MarketplacePage identity={identity} />);
-        await waitFor(() => expect(pending.length).toBe(2));
+        await waitFor(() => expect(pending.length).toBe(3));
 
         // The list was read before this listing existed.
         await push({ type: 'new_post', post: pushed() });
-        await act(async () => { pending[0](posts); pending[1]([]); });
+        await act(async () => { pending[0](posts); pending[1]([]); pending[2]([]); });
 
         expect(await screen.findByText('Bicycle Repair')).toBeTruthy();
         expect(await screen.findByText('Spare lemons')).toBeTruthy();

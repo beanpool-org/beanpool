@@ -35,7 +35,7 @@ You can have one poll open at a time, and a community can have 5 open at once. Y
 
 ## Finding and answering polls
 
-Polls are in the Market. Tap **Polls** in the top row to see only polls.
+Polls are in the Market. Tap **Polls** in the top row to see only polls. A poll is listed again once, under **Today**, the day before it closes.
 
 - Tap an answer to choose it. Tap another to change your mind, until the poll closes.
 - The card shows how many chose each answer.

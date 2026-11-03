@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Khu vực của bạn là gì
 
-Trên cộng đồng toàn cầu, khu vực của bạn là vị trí ước chừng nơi bạn đang ở: khoảng 10 km xung quanh một thị trấn hoặc một địa điểm, không bao giờ là vị trí chính xác của bạn. Cộng đồng toàn cầu sử dụng thông tin này để hiển thị cho bạn những gì đang được cung cấp ở gần bạn: 500 tin đăng gần nhất trong phạm vi 250 km xung quanh khu vực đó. Xem "Nhiều hơn một cộng đồng".
+Trên cộng đồng toàn cầu, khu vực của bạn là vị trí ước chừng nơi bạn đang ở: khoảng 10 km xung quanh một thị trấn hoặc một địa điểm, không bao giờ là vị trí chính xác của bạn. Cộng đồng toàn cầu sử dụng thông tin này để hiển thị cho bạn những gì đang được cung cấp ở gần bạn: 500 tin đăng gần nhất trong phạm vi 250 km xung quanh khu vực đó. Sau đó Chợ liệt kê chúng mới nhất trước, mỗi tin kèm khoảng cách bao xa. Xem "Nhiều hơn một cộng đồng".
 
 Bạn cung cấp thông tin này khi tham gia, tại mục **Bạn đang ở khoảng đâu?**, bạn có thể bỏ qua bước này bằng **Để sau**. Bạn có thể thay đổi hoặc xóa thông tin này bất cứ lúc nào. Nó thuộc về tài khoản của bạn trong cộng đồng toàn cầu, vì vậy điện thoại của bạn và ứng dụng web đều dùng chung một khu vực.
 

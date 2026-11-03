@@ -3,6 +3,8 @@
  * (and "Moderate <community>" to moderators).
  *
  *   GET /api/node-admin/me     — the SIGNED-IN member's own node role (owner | admin | moderator | null). Nobody else's.
+ *                                For an owner or admin, also whether the core settings are confirmed and locked
+ *                                (`coreSettings`, config/core-settings.ts): nobody else's business.
  *   GET /api/node-admin/queue  — for an owner/admin: counts of pending admin work, each with its /settings section;
  *                                for a moderator: the reports waiting, and nothing else.
  *
@@ -20,6 +22,7 @@ import Router from '@koa/router';
 import { getMember, isVisitorKey, nodeRoleOf } from '../state-engine.js';
 import { getAdminQueue } from '../engine/admin-queue.js';
 import { getLocalConfig } from '../config/local-config.js';
+import { readCoreLock } from '../config/community-shape.js';
 import { issueBreakGlassCode } from '../admin-key-auth.js';
 import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR } from '../engine/member-signature.js';
 import { NOT_A_MEMBER_CODE } from '../engine/members.js';
@@ -53,9 +56,13 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
         const actor = signedMember(ctx);
         if (!actor) return;
         const config = getLocalConfig();
+        const role = nodeRoleOf(actor) ?? null;
+        // The phone's Core settings row (DESIGN-core-settings-fable.md §8.4): an owner's or admin's only.
+        const core = role === 'owner' || role === 'admin' ? readCoreLock() : null;
         ctx.body = {
-            role: nodeRoleOf(actor) ?? null,
+            role,
             communityName: config.communityName || config.callsign || null,
+            ...(core ? { coreSettings: core.locked && core.at ? { locked: true, at: core.at } : { locked: core.locked } } : {}),
         };
     });
 

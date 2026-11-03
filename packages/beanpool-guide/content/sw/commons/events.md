@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Kupata matukio
 
-- Katika **Soko**, gusa **Matukio**. Chagua **Leo**, **Wikendi hii** au **Siku 7 zijazo**.
+- Katika **Soko**, gusa **Matukio**. Lile la karibu zaidi kwa wakati hutangulia. Chagua **Leo**, **Wikendi hii** au **Siku 7 zijazo**.
+- Katika **Soko**, chini ya **Yote**, tukio huorodheshwa tena mara moja, chini ya **Leo**, siku moja kabla ya kuanza, kisha huzama kama chapisho lingine lolote. Tukio la kila wiki hurudi mara moja kwa wiki.
 - Kwenye **Ramani**, matukio ni pini za rangi ya zambarau. Kwenye simu, gusa **Matukio** ili kuona yenyewe tu. Kwenye programu ya wavuti yapo hapo kila wakati, na vichujio vya tarehe huyapunguza.
 
 ## Matukio yako

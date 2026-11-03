@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Ce qu'est votre zone
 
-Sur la communauté globale, votre zone correspond approximativement à votre situation géographique : environ 10 km autour d'une ville ou d'un point, jamais votre adresse exacte. La communauté globale l'utilise pour vous présenter les offres à proximité : les 500 annonces les plus proches dans un rayon de 250 km. Voir « Plus d'une communauté ».
+Sur la communauté globale, votre zone correspond approximativement à votre situation géographique : environ 10 km autour d'une ville ou d'un point, jamais votre adresse exacte. La communauté globale l'utilise pour vous présenter les offres à proximité : les 500 annonces les plus proches dans un rayon de 250 km. Le Marché les liste ensuite des plus récentes aux plus anciennes, chacune avec son éloignement. Voir « Plus d'une communauté ».
 
 Vous la renseignez lors de votre inscription, à l'étape **Où êtes-vous à peu près ?**, que vous pouvez passer avec **Ignorer pour l'instant**. Vous pouvez la modifier ou l'effacer à tout moment. Elle est rattachée à votre compte dans la communauté globale, votre téléphone et l'application web utilisent donc la même.
 

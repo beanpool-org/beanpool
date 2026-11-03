@@ -16,9 +16,9 @@ Ini adalah batasan untuk komunitas global. Suatu komunitas lokal berjalan di ser
 
 ## Batasannya
 
-- **Iklan diarsipkan 90 hari setelah terakhir kali diubah.** Iklan tersebut dihapus dari Pasar dan Peta, dan foto-fotonya dihapus. Mengeditnya, menjedanya, atau menayangkannya kembali semuanya dihitung sebagai perubahan: membukanya dengan **Edit Post** dan mengetuk **Simpan** akan menyimpannya selama 90 hari ke depan. Ketika salah satu iklanmu diarsipkan, kamu akan mendapatkan pemberitahuan bersama peringatan **Aktivitas Pasar**. Kamu dapat mempostingnya kembali kapan saja.
+- **Iklan diarsipkan 90 hari setelah terakhir kali diubah.** Iklan tersebut dihapus dari Pasar dan Peta, dan foto-fotonya dihapus. Mengeditnya, menjedanya, atau menayangkannya kembali semuanya dihitung sebagai perubahan: membukanya dengan **Edit Post** dan mengetuk **Simpan** akan menyimpannya selama 90 hari ke depan. Semua ini tidak menaikkannya di Pasar, yang menampilkan postingan dari yang terbaru. Ketika salah satu iklanmu diarsipkan, kamu akan mendapatkan pemberitahuan bersama peringatan **Aktivitas Pasar**. Kamu dapat mempostingnya kembali kapan saja.
 - **Hingga 5 foto per iklan.**
-- **Ponselmu menyimpan 500 iklan terdekat**, dalam radius 250 km dari wilayahmu. Ponsel juga menyimpan iklan milikmu sendiri, dan iklan apa pun yang memiliki kesepakatan atau percakapan denganmu. Pencarian Pasar tetap menemukan iklan dari mana saja. Lihat "Wilayahmu".
+- **Ponselmu menyimpan 500 iklan terdekat**, dalam radius 250 km dari wilayahmu. Ponsel juga menyimpan iklan milikmu sendiri, dan iklan apa pun yang memiliki kesepakatan atau percakapan denganmu. Pasar menampilkan yang berjarak dalam 250 km dari wilayahmu mulai dari yang terbaru, dan setiap kartu menyebutkan seberapa jauh jaraknya. Pencarian Pasar tetap menemukan iklan dari mana saja. Lihat "Wilayahmu".
 - **Kamu dapat memantau hingga 3 tempat** dengan **Beri tahu saya jika ada yang dimulai di sini**. Untuk memantau tempat lain, berhentilah memantau salah satunya. Lihat "Finding a community near you".
 
 Akun baru juga memiliki beberapa batasan harian untuk hari-hari pertamanya. Lihat "Reporting a problem".

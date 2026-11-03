@@ -9,13 +9,17 @@ source-hash: 24606918c00ac034
 
 ## Pazar sekmesi
 
-Sekme satırında **Pazar** seçeneğine dokunun. Topluluğunuzdaki insanların ne teklif ettiğini ve ne aradığını, en yeniden başlayarak ve paylaşıldıkları güne göre gruplanmış olarak görürsünüz.
+Sekme satırında **Pazar** seçeneğine dokunun. Topluluğunuzdaki insanların ne teklif ettiğini ve ne aradığını, en yeniden başlayarak, her birinin paylaşıldığı güne göre **Bugün**, **Dün**, **Bu Hafta** ve **Daha Eski İlanlar** altında görürsünüz. Telefon ve web uygulaması onu aynı şekilde listeler.
 
-Telefonda etkinlikler ilk sırada gelir. Uygulamanın konumunuzu kullanmasına zaten izin verdiyseniz liste ve kompakt görünümler bunun yerine **Önce en yakın** altında en yakın ilanları ve **Anketler** altında anketleri gösterir. **Sana Özel** kendi sırasını korur. Listeyi yenilemek için aşağı çekin.
+- **Bir etkinlik bir kez geri gelir.** Başlamasından bir gün önce bir etkinlik, o günün yeni gönderilerinin arasında **Bugün** altında yeniden listelenir, sonra diğerleri gibi aşağı iner. Haftalık bir etkinlik haftada bir geri gelir.
+- **Bir anket de bir kez geri gelir**, kapanmasından bir gün önce.
+- **Hiç kimse günde iki yerden fazlasını almaz.** Bir kişinin o gün üçüncü gönderisi ve sonrakiler, o günün herkesin gönderilerinden sonra gelir.
+- **Bir gönderiyi düzenlemek onu yukarı taşımaz.** Duraklatmak da, ona gelen bir yanıt da taşımaz. Tekrar görülmek için yeniden paylaşın.
+- **Bir sahibin sabitlediği gönderi**, yaşı ne olursa olsun, **Sabitlendi** altında en üstte durur.
 
-Web uygulamasında Pazar kartlar halinde açılır. Liste ve kompakt görünümlerde etkinlikler paylaşıldıkları günün altında yer alır. Yerel bir toplulukta web uygulaması en yakın olanları ilk sıraya koymaz.
+Liste ve kompakt görünümlerde gün başlıklarını görürsünüz. Izgara aynı sırayı bunlar olmadan gösterir. Telefonda Pazar liste olarak açılır; web uygulamasında kartlar halinde açılır. **Sana Özel** kendi sırasını korur. **Etkinlikler** altında en yakın tarihli olan ilk sırada gelir; **Bugün**, **Bu hafta sonu** ve **Gelecek 7 gün** ile. Bir arama, sözcüklerinize en iyi uyan gönderileri gösterir. Telefonda listeyi yenilemek için aşağı çekin.
 
-Küresel toplulukta web uygulaması önce yakınınızdaki ilanları gösterir: her biri ne kadar uzakta olduğu bilgisiyle birlikte **Mesafe**'niz içindeki veya bölgenizin (katılırken topluluğa verdiğiniz yaklaşık konum veya **Ayarlar**'daki) 250 km yakınındaki en yakın ilanlar. Listenin üzerindeki bir satır hangisi olduğunu belirtir. Bölgenizin yakınındayken her yerden en yenileri görmek için **Her yeri göster** seçeneği bulunur. Bir **Mesafe** seçiliyken bölgenize geri dönmek için **Mesafe**'yi açıp **Sıfırla**'ya dokunun, ardından **Her yeri göster** seçeneğine dokunun. Telefonda küresel topluluk bölgenize en yakın ilanları tutar, bu nedenle Pazar bunları gösterir. "Yakınınızdakileri bulma" bölümüne bakın.
+Küresel toplulukta Pazar, bölgenizin (katılırken topluluğa verdiğiniz yaklaşık konum veya **Ayarlar**'daki) 250 km yakınındaki en yenileri gösterir; her gönderi ne kadar uzakta olduğuyla birlikte gelir. Listenin üzerindeki bir satır bunu belirtir: **Bölgenin 250 km çevresindeki en yeniler.** Telefonda ve web uygulamasında aynıdır; telefonda uygulamanın konumunuzu kullanmasına izin vermeniz gerekmez. Bir **Mesafe** seçtiğinizde iki uygulama da onun içindeki en yenileri gösterir. Web uygulamasında satır o zaman **Seçtiğin yerin 5 km çevresindeki en yeniler.** der ve her gönderi ne kadar uzakta olduğunu da gösterir. Web uygulamasında, bölgenizin yakınındayken satırda her yerden en yenileri görmek için **Her yeri göster** seçeneği bulunur. Bir **Mesafe** seçiliyken bölgenize geri dönmek için **Mesafe**'yi açıp **Sıfırla**'ya dokunun, ardından **Her yeri göster** seçeneğine dokunun. Yakınınızda sekizden az olduğunda, başka yerlerden en yeniler **Başka yerlerden en yeniler** altında, telefonda ve web uygulamasında altta gelir. Bir **Mesafe** seçtiğinizde, bir arama yazdığınızda veya **Etkinlikler**'e baktığınızda gelmezler. "Yakınınızdakileri bulma" bölümüne bakın.
 
 Küresel toplulukta yalnızca birkaç ilan varken Pazar ayrıca **Örnek** olarak işaretlenmiş birkaç kart gösterir. İnsanların neler paylaştığını göstermek için kurgulanmışlardır; açılamaz veya yanıtlanamazlar. Yeterince gerçek ilan olduğunda kaybolurlar.
 

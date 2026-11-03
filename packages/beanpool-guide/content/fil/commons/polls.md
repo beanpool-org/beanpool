@@ -34,7 +34,7 @@ Maaari kang magkaroon ng isang bukas na botohan sa bawat pagkakataon, at ang isa
 
 ## Paghahanap at pagsagot sa mga botohan
 
-Nasa Merkado ang mga botohan. I-tap ang **Mga Poll** sa itaas na hanay upang makita lamang ang mga botohan.
+Nasa Merkado ang mga botohan. I-tap ang **Mga Poll** sa itaas na hanay upang makita lamang ang mga botohan. Inililista muli nang isang beses ang isang botohan, sa ilalim ng **Ngayong araw**, sa araw bago ito magsara.
 
 - I-tap ang isang sagot upang piliin ito. I-tap ang isa pa upang magbago ang iyong isip, hanggang sa magsara ang botohan.
 - Ipinapakita ng card kung ilan ang pumili sa bawat sagot.

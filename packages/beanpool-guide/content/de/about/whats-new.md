@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Der Markt in einer Reihenfolge
+
+Auf dem Telefon bekommst du das mit einer aktuellen App; im Webbrowser, sobald der Server deiner Gemeinschaft aktualisiert ist.
+
+- **Neueste zuerst, auf dem Telefon und im Web gleich.** Der Markt listet Beiträge mit den neuesten zuerst, unter **Heute**, **Gestern**, **Diese Woche** und **Ältere Angebote**, nach dem Tag, an dem sie veröffentlicht wurden. Die Überschriften **Kommende Veranstaltungen**, **Umfragen** und **Nächste zuerst** gibt es nicht mehr.
+- **Eine Veranstaltung kommt einmal wieder.** Am Tag vor ihrem Beginn wird eine Veranstaltung noch einmal unter **Heute** aufgeführt. Eine Umfrage macht das am Tag vor ihrem Ende genauso. Danach sinken sie wie jeder andere Beitrag.
+- **Zwei Plätze am Tag.** Der dritte Beitrag einer Person an einem Tag und alle weiteren kommen nach allen anderen Beiträgen dieses Tages.
+- **Einen Beitrag zu bearbeiten schiebt ihn nicht nach oben.** Um wieder gesehen zu werden, veröffentliche ihn erneut.
+- **In der globalen Community** zeigt der Markt die neuesten im Umkreis von 250 km um deine Gegend, jeden Beitrag mit seiner Entfernung. Eine Zeile über der Liste sagt es dir. Das Telefon braucht dafür deinen Standort nicht mehr. In der Web-App gilt das Gleiche für eine **Entfernung**, die du wählst.
+- **Nicht geändert:** Beiträge, die ein Owner angepinnt hat, bleiben oben, **Veranstaltungen** listet weiterhin die zeitnächsten zuerst, und eine Suche findet, was am besten zu deinen Wörtern passt. Siehe „Im Markt stöbern“.
+
 ## Die globale Community in deiner Nähe
 
 Du erhältst diese Funktionen, sobald der Server der globalen Community aktualisiert wurde. Auf dem Telefon erfordern sie eine aktuelle Version der App.
@@ -15,7 +26,7 @@ Du erhältst diese Funktionen, sobald der Server der globalen Community aktualis
 - **Deine Gegend.** In der Web-App gibt es beim Beitritt zur globalen Community nach deinem Foto einen weiteren Schritt: **Ungefähr wo bist du?** Auf dem Telefon wird dies abgefragt, wenn du mit einem bestehenden Konto beitrittst; ein neues Konto auf dem Telefon richtet dies später in den Einstellungen unter **Deine Gegend** ein. Tippe in diesem Schritt auf **Meinen Standort verwenden**, **Ort oder Stadtteil eingeben** oder **Vorerst überspringen**. Sie wird nur auf etwa 10 km genau gespeichert, nie dein genauer Standort. Du kannst sie in den Einstellungen unter **Deine Gegend** ändern oder löschen. Siehe „Deine Gegend“.
 - **Keine Gegend festgelegt – kein Problem.** Ohne Angabe siehst du die neuesten Einträge von überall, worauf ein Hinweis über dem Markt hinweist. Tippe auf dem Telefon darauf, um deine Gegend festzulegen.
 - **Neue Angebote in deiner Nähe.** Sie treffen ein, sobald sie veröffentlicht werden. Weit entfernte Einträge erreichen dein Telefon nicht mehr.
-- **In der Web-App** starten Markt und Karte von deiner Gegend aus oder von einem Ort, den du unter **Entfernung** wählst: Nächstgelegene zuerst, jedes Angebot mit Entfernungsangabe. Siehe „Dinge in der Nähe finden“.
+- **In der Web-App** starten Markt und Karte von deiner Gegend aus oder von einem Ort, den du unter **Entfernung** wählst: jedes Angebot mit Entfernungsangabe. Die Karte zeigt die nächsten zuerst. Der Markt listet die neuesten zuerst, wie „Der Markt in einer Reihenfolge“ oben sagt. Siehe „Dinge in der Nähe finden“.
 - **Umfragen** haben keinen eigenen Ort, daher wird jede Umfrage in der Gegend des Mitglieds angezeigt, das sie erstellt hat.
 - **Ort eingeben.** In der globalen Community benötigt **Finde deine Community** auf der Startseite deinen Standort nicht mehr: Tippe auf **oder Ort eingeben** und wähle deinen Ort. Es wird nur ein ungefährer Punkt gespeichert. Siehe „Community in der Nähe finden“.
 - **Ohne Preis veröffentlichen.** In der globalen Community fragt das Beitragsformular nach keinem Preis, da Bohnen in lokalen Gemeinschaften zu Hause sind. In der Web-App funktionieren **Angebot veröffentlichen** und **Gesuch veröffentlichen** nun ohne Preisangabe. Eine lokale Gemeinschaft fragt weiterhin nach einem Preis.

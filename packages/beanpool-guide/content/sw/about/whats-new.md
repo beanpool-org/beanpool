@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Soko kwa mpangilio mmoja
+
+Kwenye simu unapata hili ukiwa na programu iliyosasishwa; kwenye kivinjari cha wavuti, seva ya jumuiya yako inaposasishwa.
+
+- **Mpya zaidi kwanza, sawa kwenye simu na wavuti.** Soko huorodhesha machapisho mpya zaidi kwanza chini ya **Leo**, **Jana**, **Wiki Hii** na **Matangazo ya Zamani**, kulingana na siku kila moja lilipoorodheshwa. Vichwa **Matukio yajayo**, **Kura za maoni** na **Ya karibu kwanza** havipo tena.
+- **Tukio hurudi mara moja.** Siku moja kabla ya kuanza, tukio huorodheshwa tena chini ya **Leo**. Kura ya maoni hufanya vivyo hivyo siku moja kabla ya kufungwa. Kisha huzama kama chapisho lingine lolote.
+- **Nafasi mbili kwa siku.** Chapisho la tatu la mtu katika siku moja, na yoyote baada yake, huja baada ya machapisho ya wengine wote ya siku hiyo.
+- **Kuhariri chapisho hakulipandishi juu.** Ili lionekane tena, chapisha tena.
+- **Kwenye jumuiya ya kimataifa**, Soko huonyesha machapisho mapya zaidi ndani ya km 250 kutoka eneo lako, kila chapisho likiwa na umbali wake. Mstari ulio juu ya orodha husema hivyo. Simu haihitaji tena eneo lako kwa hili. Kwenye programu ya wavuti, hilo hilo hutumika kwa **Umbali** unaochagua.
+- **Visivyobadilika:** machapisho aliyoyabandika mmiliki hubaki juu, **Matukio** bado huorodhesha ya karibu zaidi kwa wakati kwanza, na utafutaji hupata kinacholingana vyema na maneno yako. Tazama "Kuvinjari sokoni".
+
 ## Jumuiya ya kimataifa, karibu nawe
 
 Unapata mambo haya seva ya jumuiya ya kimataifa inaposasishwa. Kwenye simu yanahitaji programu iliyosasishwa.
@@ -15,7 +26,7 @@ Unapata mambo haya seva ya jumuiya ya kimataifa inaposasishwa. Kwenye simu yanah
 - **Eneo lako.** Kwenye programu ya wavuti, kujiunga na jumuiya ya kimataifa kuna hatua moja zaidi baada ya picha yako: **Uko takriban wapi?** Kwenye simu huulizwa unapojiunga kwa akaunti uliyo nayo tayari; akaunti mpya ya simu huliweka baadaye kwenye Mipangilio, chini ya **Eneo lako**. Katika hatua hiyo, gusa **Tumia mahali nilipo**, **Andika mji au mtaa**, au **Ruka kwa sasa**. Huhifadhiwa hadi takriban km 10, si mahali ulipo hasa. Libadilishe au lifute kwenye Mipangilio, chini ya **Eneo lako**. Tazama "Eneo lako".
 - **Huna eneo, hakuna shida.** Bila eneo unaona matangazo mapya zaidi kutoka kila mahali, na mstari ulio juu ya Soko unasema hivyo. Kwenye simu, uguse ili kuweka eneo lako.
 - **Matangazo mapya karibu nawe.** Huingia yanapochapishwa. Yale ya mbali hayafiki tena kwenye simu yako.
-- **Kwenye programu ya wavuti**, Soko na Ramani huanzia kwenye eneo lako, au mahali unapochagua kwa **Umbali**: yaliyo karibu kwanza, kila tangazo likionyesha umbali wake. Tazama "Kupata vitu vilivyo karibu".
+- **Kwenye programu ya wavuti**, Soko na Ramani huanzia kwenye eneo lako, au mahali unapochagua kwa **Umbali**: kila tangazo likionyesha umbali wake. Ramani huonyesha yaliyo karibu zaidi kwanza. Soko huorodhesha mapya zaidi kwanza, kama "Soko kwa mpangilio mmoja", hapo juu, inavyosema. Tazama "Kupata vitu vilivyo karibu".
 - **Kura za maoni** hazina mahali pake maalum, kwa hivyo kila moja huonyeshwa kwenye eneo la mwanachama aliyeiunda.
 - **Andika mji wako.** Kwenye jumuiya ya kimataifa, **Pata jumuiya yako** kwenye Nyumbani haihitaji tena eneo lako: gusa **au andika mji wako** na uchague mji wako. Nukta ya makadirio tu ndiyo inayowekwa. Tazama "Kupata jumuiya iliyo karibu nawe".
 - **Kuchapisha bila bei.** Kwenye jumuiya ya kimataifa fomu ya chapisho haiombi bei, kwa sababu Maharagwe huishi katika jumuiya za eneo. Kwenye programu ya wavuti, **Weka Ofa** na **Weka Uhitaji** sasa hufanya kazi bila bei. Jumuiya ya eneo bado huomba bei.

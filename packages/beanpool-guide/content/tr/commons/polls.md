@@ -34,7 +34,7 @@ Bir seferde açık bir anketiniz olabilir ve bir topluluğun aynı anda 5 açık
 
 ## Anketleri bulma ve yanıtlama
 
-Anketler Pazar'dadır. Yalnızca anketleri görmek için üst satırdaki **Anketler**'e dokunun.
+Anketler Pazar'dadır. Yalnızca anketleri görmek için üst satırdaki **Anketler**'e dokunun. Bir anket, kapanmasından bir gün önce **Bugün** altında bir kez yeniden listelenir.
 
 - Seçmek için bir yanıta dokunun. Anket kapanana kadar fikrinizi değiştirmek için başka bir yanıta dokunun.
 - Kart, her yanıtı kaç kişinin seçtiğini gösterir.

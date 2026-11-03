@@ -103,6 +103,9 @@ const LOCAL = { ...GLOBAL, profile: 'local', features: { openJoin: false, guestL
 // The posts as the global node sends them to a guest (G9a guestPost): the person neutralised, the place at the centre
 // of its 0.1° cell, no typed event place and no poll voters.
 const NOW = new Date().toISOString();
+// The Market lists the newest first and breaks a tie by id (core market-order, market order S2), so the four posts are created one
+// minute apart, in the order the lobby's tests read them (offer, need, event, poll); one shared time would put the poll first.
+const MINUTES_AGO = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 const IN_TWO_DAYS = new Date(Date.now() + 2 * 86_400_000).toISOString();
 const IN_TWO_DAYS_LATER = new Date(Date.now() + 2 * 86_400_000 + 7_200_000).toISOString();
 const person = { authorPublicKey: 'hidden', authorCallsign: '', authorAvatarUrl: null, authorEnergyCycled: 0, authorFoundingNeeded: false };
@@ -114,16 +117,17 @@ const OFFER = {
 };
 const NEED = {
     ...OFFER, id: 'p-need', type: 'need', category: 'tools', title: 'Borrow a ladder', description: 'Two days next week.', photos: [],
-    lat: -28.65, lng: 153.55,
+    lat: -28.65, lng: 153.55, createdAt: MINUTES_AGO(1), updatedAt: MINUTES_AGO(1),
 };
 const EVENT = {
     ...OFFER, id: 'p-event', type: 'event', category: 'events', title: 'Seed swap in the park', description: 'Bring seeds.', photos: [],
     eventStartAt: IN_TWO_DAYS, eventEndAt: IN_TWO_DAYS_LATER, eventState: 'scheduled', goingCount: 4, interestedCount: 2,
+    createdAt: MINUTES_AGO(2), updatedAt: MINUTES_AGO(2),
 };
 const POLL = {
     ...OFFER, id: 'p-poll', type: 'poll', category: 'general', title: 'Market on Sundays?', description: '', photos: [], lat: undefined, lng: undefined,
     pollOptions: [{ id: 'o1', text: 'Yes', votes: 3, percentage: 75 }, { id: 'o2', text: 'No', votes: 1, percentage: 25 }],
-    totalVotes: 4, pollClosesAt: IN_TWO_DAYS,
+    totalVotes: 4, pollClosesAt: IN_TWO_DAYS, createdAt: MINUTES_AGO(3), updatedAt: MINUTES_AGO(3),
 };
 const GUEST_POSTS = [OFFER, NEED, EVENT, POLL];
 

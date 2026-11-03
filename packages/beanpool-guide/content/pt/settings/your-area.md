@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## O que é sua área
 
-Na comunidade global, sua área é aproximadamente onde você está: cerca de 10 km ao redor de uma cidade ou local, nunca seu ponto exato. A comunidade global a utiliza para mostrar o que está sendo oferecido perto de você: os 500 anúncios mais próximos dentro de um raio de 250 km. Veja "Mais de uma comunidade".
+Na comunidade global, sua área é aproximadamente onde você está: cerca de 10 km ao redor de uma cidade ou local, nunca seu ponto exato. A comunidade global a utiliza para mostrar o que está sendo oferecido perto de você: os 500 anúncios mais próximos dentro de um raio de 250 km. O Mercado os lista, então, dos mais recentes para os mais antigos, cada um com a que distância está. Veja "Mais de uma comunidade".
 
 Você a define quando entra na comunidade, em **Mais ou menos onde você está?**, etapa que você pode pular com **Pular por enquanto**. Você pode alterá-la ou limpá-la a qualquer momento. Ela pertence à sua conta na comunidade global, portanto seu celular e o app web usam a mesma referência.
 

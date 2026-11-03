@@ -82,6 +82,9 @@ import {
 } from '../services/directory-publisher.js';
 import { ENABLE_PEER_CONNECTORS } from '../connector-manager.js';
 import { adminActorName, COMMUNITY_ADMIN } from '../engine/admin-actor-name.js';
+import {
+    CORE_SETTINGS, CORE_SETTINGS_LOCK_KEY, coreLockFromRow, placeNeededFor, placeIsSet, type CoreSettingName,
+} from './core-settings.js';
 
 // ── The shape ──────────────────────────────────────────────────────────────────────────────
 
@@ -122,7 +125,9 @@ export type VisitorsView = 'nothing' | 'listings' | 'open';
 export interface KnownFloorShape { on: boolean; floor: number; cap: number; capMax: number }
 
 export interface ShapeSettings {
-    join: ShapeSetting<JoinState>;
+    /** `door`: the door the community's row stores (or the default), paused or not: what un-pausing goes back to, and
+     *  what a Core change of who can join is measured against (config/core-settings.ts isCoreChange). */
+    join: ShapeSetting<JoinState> & { door: CommunityDoor };
     openDoor: ShapeSetting<boolean>;
     /** The 12-words door beside the sign-in one: only where the open door is set on (it means nothing elsewhere). */
     wordsDoor?: ShapeSetting<boolean>;
@@ -176,6 +181,18 @@ export interface ShapeLogLine {
     note: string | null;
 }
 
+/**
+ * Core settings (config/core-settings.ts; DESIGN-core-settings-fable.md §8.2): which settings are Core, and whether an
+ * owner has confirmed and locked them. `lock.by` is the key behind the session or `owner:password`, `byCallsign` that
+ * key's callsign (null for the password, or a key with none); `at` and `by` are null for a row that doesn't read as a
+ * lock, which locks all the same. `place`: whether this kind of server confirms only with its place set, and whether it is.
+ */
+export interface CoreShape {
+    settings: readonly CoreSettingName[];
+    lock: { at: string | null; by: string | null; byCallsign: string | null } | null;
+    place: { needed: boolean; set: boolean };
+}
+
 export interface Shape {
     kind: NodeProfile;
     standby: boolean;
@@ -184,6 +201,7 @@ export interface Shape {
     /** The newest community_settings_log id (0 with none): what changed since a page last read it. */
     version: number;
     settings: ShapeSettings;
+    core: CoreShape;
     kindOnly: KindOnlySetting[];
     /** The newest LOG_LINES changes, newest first. */
     log: ShapeLogLine[];
@@ -300,6 +318,7 @@ interface CommunityRows {
     creditCap: string | null;
     recoveryCopies: string | null;
     removalDecider: string | null;
+    coreLock: string | null;
     directory: Directory;
 }
 
@@ -322,6 +341,7 @@ function ownRows(): CommunityRows {
         creditCap: row(CREDIT_CAP_KEY),
         recoveryCopies: row(RECOVERY_COPIES_KEY),
         removalDecider: row(REMOVAL_DECIDER_KEY),
+        coreLock: row(CORE_SETTINGS_LOCK_KEY),
         directory: Object.fromEntries(DIRECTORY_FIELDS.map((f) => [f, n[f]])) as Directory,
     };
 }
@@ -350,6 +370,7 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
             creditCap: copied(CREDIT_CAP_KEY, own.creditCap),
             recoveryCopies: copied(RECOVERY_COPIES_KEY, own.recoveryCopies),
             removalDecider: copied(REMOVAL_DECIDER_KEY, own.removalDecider),
+            coreLock: copied(CORE_SETTINGS_LOCK_KEY, own.coreLock),
             directory,
         },
         copiedAt: kept.copiedAt ?? null,
@@ -409,7 +430,7 @@ export function readShape(): Shape {
     // Who can join: the door the gates use (doorFor reads the row only when the setting decides), and invites.
     const door = doorFor(() => doorFromRow(rows.door));
     const configuredJoin = configuredJoinOf(cfg, () => doorFromRow(rows.door));
-    const join: ShapeSetting<JoinState> = {
+    const join: ShapeSettings['join'] = {
         value: door === 'open' ? 'open' : !s.invites ? 'paused' : door,
         configured: configuredJoin,
         source: configuredJoin === 'open' ? (sourceOf('openJoin') === 'owner' || sourceOf('invites') === 'owner' ? 'owner' : 'profile')
@@ -419,6 +440,7 @@ export function readShape(): Shape {
             : door === 'open' ? lock('profile', LOCK_WORDS.openByKind(kind, features.wordsDoor, sourceOf('openJoin') === 'owner' || sourceOf('invites') === 'owner'))
             : configuredJoin === 'open' && !s.openJoin ? lock('ledger_moved', LOCK_WORDS.doorStaysShut(history ?? 'a trade, a balance or a pledge'))
             : null,
+        door: doorFromRow(rows.door),
     };
 
     // The open door, which a preview and a moved ledger keep shut, and the 12-words door beside it.
@@ -519,7 +541,26 @@ export function readShape(): Shape {
         },
     };
     const version = (db.prepare('SELECT COALESCE(MAX(id), 0) AS v FROM community_settings_log').get() as { v: number }).v;
-    return { kind, standby, ...(standby ? { copiedAt } : {}), version, settings, kindOnly, log: readLog() };
+    return { kind, standby, ...(standby ? { copiedAt } : {}), version, settings, core: coreShape(kind, rows.coreLock), kindOnly, log: readLog() };
+}
+
+function coreShape(kind: NodeProfile, stored: string | null): CoreShape {
+    const l = coreLockFromRow(stored);
+    return {
+        settings: CORE_SETTINGS,
+        lock: l ? { at: l.at, by: l.by, byCallsign: l.by ? callsignOf(l.by) : null } : null,
+        place: { needed: placeNeededFor(kind), set: placeIsSet() },
+    };
+}
+
+/**
+ * Whether the core settings are confirmed and locked, and since when, as the shape reads it (a standby: its copy of the
+ * main server's row): a lighter read than readShape for the phone's GET /api/node-admin/me (routes/node-admin.ts).
+ */
+export function readCoreLock(): { locked: boolean; at: string | null } {
+    const stored = getNodeRole() === 'backup' ? standbyRows().rows.coreLock : row(CORE_SETTINGS_LOCK_KEY);
+    const l = coreLockFromRow(stored);
+    return { locked: l !== null, at: l?.at ?? null };
 }
 
 /**

@@ -3,7 +3,7 @@ slug: near-you
 title: Trouver près de chez vous
 summary: Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Dans l'onglet Marché
@@ -28,8 +28,8 @@ La carte ne dispose pas de son propre filtre de distance. Touchez le bouton de l
 
 La communauté globale rassemble des annonces du monde entier, de sorte que le **Marché** et la **Carte** de l'application web s'ouvrent en partant de ce qui est près de chez vous :
 
-- Avec une **Distance** définie sur le Marché, les deux affichent les annonces les plus proches dans ce rayon, les plus proches d'abord. La Carte affiche jusqu'à 200 repères.
-- Sans distance définie, ils affichent les annonces les plus proches à moins de 250 km de votre zone : le lieu approximatif que vous renseignez lors de votre inscription, ou plus tard dans les **Paramètres**, sous **Votre zone**. Une ligne au-dessus de la liste du Marché indique **Les plus proches de votre zone en premier, dans un rayon de 250 km.** Touchez **Afficher partout** pour voir les plus récentes de partout, et **Près de chez vous** pour revenir.
+- Avec une **Distance** définie sur le Marché, les deux affichent les annonces dans ce rayon. Le Marché les liste des plus récentes aux plus anciennes, chacune avec son éloignement, sous une ligne qui indique **Le plus récent dans un rayon de 5 km autour du lieu choisi.** (avec votre distance). La Carte affiche les plus proches, jusqu'à 200 repères.
+- Sans distance définie, ils affichent les annonces les plus proches à moins de 250 km de votre zone : le lieu approximatif que vous renseignez lors de votre inscription, ou plus tard dans les **Paramètres**, sous **Votre zone**. Le Marché les liste des plus récentes aux plus anciennes, sous une ligne qui indique **Le plus récent dans un rayon de 250 km autour de votre zone.** La Carte affiche les plus proches d'abord. Touchez **Afficher partout** pour voir les plus récentes de partout, et **Près de chez vous** pour revenir.
 - Si vous n'avez défini ni l'une ni l'autre, vous voyez les plus récentes de partout, et **Voir ce qui est près de chez vous** ouvre le sélecteur de distance. Une ligne au-dessus de la liste du Marché précise ce que vous consultez actuellement. Avec une **Distance**, elle ne comporte aucun bouton : ouvrez **Distance** et touchez **Réinitialiser**. Vous revenez alors près de votre zone, ou, si aucune zone n'est définie, vous voyez les annonces les plus récentes de partout.
 - Chaque annonce indique son éloignement, comme **📍 12 km**. Vos propres annonces figurent toujours sur la Carte, et sur le Marché près de votre zone, où qu'elles se situent. Avec une **Distance**, le Marché ne montre que ce qui se trouve dans ce rayon, vos annonces y comprises.
 - Tant que la liste est centrée près de chez vous, les publications sans localisation sont exclues. Un sondage émanant de quelqu'un qui n'a pas défini sa zone en fait partie. Pour les voir, réinitialisez la **Distance** si vous en aviez choisi une, puis touchez **Afficher partout**.
@@ -40,7 +40,7 @@ La recherche de l'application web ne porte que sur les annonces présentes à l'
 
 ## Sur la communauté globale, sur le téléphone
 
-Le téléphone conserve les annonces les plus proches de votre zone : jusqu'à 500, dans un rayon de 250 km. Il conserve également vos propres annonces ainsi que celles pour lesquelles vous avez un accord, une discussion ou une réponse. Le Marché et la Carte affichent ce que le téléphone conserve. Si aucune zone n'est définie, il conserve les annonces les plus récentes à la place, et une ligne au-dessus du Marché l'indique. Voir « Votre zone ».
+Le téléphone conserve les annonces les plus proches de votre zone : jusqu'à 500, dans un rayon de 250 km. Il conserve également vos propres annonces ainsi que celles pour lesquelles vous avez un accord, une discussion ou une réponse. Le Marché et la Carte affichent ce que le téléphone conserve. Le Marché le liste des plus récentes aux plus anciennes, chacune avec son éloignement, sous la même ligne, **Le plus récent dans un rayon de 250 km autour de votre zone.** Il n'a pas besoin que vous autorisiez l'application à utiliser votre position. Si aucune zone n'est définie, il conserve les annonces les plus récentes à la place, et une ligne au-dessus du Marché l'indique. Voir « Votre zone ».
 
 ## Événements près de chez vous
 

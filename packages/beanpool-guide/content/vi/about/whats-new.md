@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Chợ theo một thứ tự
+
+Trên điện thoại, bạn có điều này khi dùng ứng dụng đã cập nhật; trên trình duyệt web, khi máy chủ cộng đồng của bạn được cập nhật.
+
+- **Mới nhất trước, giống nhau trên điện thoại và web.** Chợ liệt kê các bài đăng mới nhất trước, dưới **Hôm nay**, **Hôm qua**, **Tuần này** và **Các bài đăng cũ hơn**, theo ngày mỗi bài được đăng. Các tiêu đề **Sự kiện sắp tới**, **Thăm dò** và **Gần nhất trước** không còn nữa.
+- **Một sự kiện quay lại một lần.** Vào ngày trước khi bắt đầu, sự kiện được liệt kê lại dưới **Hôm nay**. Một cuộc thăm dò cũng vậy vào ngày trước khi kết thúc. Sau đó chúng chìm xuống như mọi bài đăng khác.
+- **Hai chỗ mỗi ngày.** Bài đăng thứ ba của một người trong ngày, và các bài sau đó, xếp sau bài của tất cả những người khác trong ngày đó.
+- **Chỉnh sửa một bài đăng không đẩy nó lên.** Muốn được thấy lại, hãy đăng lại.
+- **Trên cộng đồng toàn cầu**, Chợ hiển thị những bài mới nhất trong vòng 250 km quanh khu vực của bạn, mỗi bài kèm khoảng cách bao xa. Một dòng phía trên danh sách cho biết điều đó. Điện thoại không còn cần vị trí của bạn cho việc này. Trong ứng dụng web, điều tương tự áp dụng cho **Khoảng cách** bạn chọn.
+- **Không thay đổi:** các bài đăng mà chủ sở hữu đã ghim vẫn ở trên cùng, **Sự kiện** vẫn liệt kê sự kiện sớm nhất trước, và tìm kiếm tìm ra những gì khớp nhất với từ của bạn. Xem "Xem qua chợ".
+
 ## Cộng đồng toàn cầu, ở gần bạn
 
 Bạn nhận được những điều này khi máy chủ của cộng đồng toàn cầu được cập nhật. Trên điện thoại, bạn cần có ứng dụng được cập nhật.
@@ -15,7 +26,7 @@ Bạn nhận được những điều này khi máy chủ của cộng đồng t
 - **Khu vực của bạn.** Trong ứng dụng web, việc tham gia cộng đồng toàn cầu có thêm một bước sau bước ảnh của bạn: **Bạn đang ở khoảng đâu?** Trên điện thoại, câu hỏi này được đưa ra khi bạn tham gia bằng tài khoản bạn đã có; tài khoản mới trên điện thoại sẽ thiết lập mục này sau trong Cài đặt, dưới mục **Khu vực của bạn**. Trong bước đó, hãy nhấn **Dùng vị trí của tôi**, **Nhập tên thị trấn hoặc khu phố**, hoặc **Bỏ qua lúc này**. Khu vực chỉ được lưu ở mức khoảng 10 km, không bao giờ là vị trí chính xác của bạn. Hãy thay đổi hoặc xóa mục này trong Cài đặt, dưới mục **Khu vực của bạn**. Xem "Khu vực bạn".
 - **Không có khu vực, không sao cả.** Nếu không có, bạn sẽ thấy các tin đăng mới nhất từ khắp mọi nơi, và một dòng phía trên Chợ sẽ thông báo điều đó. Trên điện thoại, hãy nhấn vào đó để đặt khu vực của bạn.
 - **Tin đăng mới gần bạn.** Các tin xuất hiện ngay khi được đăng. Những tin ở xa sẽ không còn gửi đến điện thoại của bạn nữa.
-- **Trong ứng dụng web**, Chợ và Bản đồ bắt đầu từ khu vực của bạn, hoặc từ một địa điểm bạn chọn bằng **Khoảng cách**: tin gần nhất hiển thị trước, mỗi tin kèm khoảng cách bao xa. Xem "Tìm kiếm thứ ở gần bạn".
+- **Trong ứng dụng web**, Chợ và Bản đồ bắt đầu từ khu vực của bạn, hoặc từ một địa điểm bạn chọn bằng **Khoảng cách**: mỗi tin kèm khoảng cách bao xa. Bản đồ hiển thị tin gần nhất trước. Chợ liệt kê tin mới nhất trước, như "Chợ theo một thứ tự" ở trên đã nói. Xem "Tìm kiếm thứ ở gần bạn".
 - **Các cuộc thăm dò** không có địa điểm riêng, vì vậy mỗi cuộc thăm dò được hiển thị tại khu vực của thành viên đã tạo ra nó.
 - **Nhập thị trấn của bạn.** Trên cộng đồng toàn cầu, **Tìm cộng đồng của bạn** trên Trang chủ không còn cần vị trí của bạn nữa: hãy nhấn **hoặc nhập tên thị trấn của bạn** và chọn thị trấn của bạn. Chỉ một điểm ước chừng được lưu giữ. Xem "Tìm một cộng đồng gần bạn".
 - **Đăng bài không cần giá.** Trên cộng đồng toàn cầu, biểu mẫu đăng bài không hỏi giá, vì đậu chỉ tồn tại trong các cộng đồng địa phương. Trong ứng dụng web, **Đăng lời đề nghị** và **Đăng nhu cầu** giờ đây hoạt động mà không cần giá. Một cộng đồng địa phương vẫn yêu cầu giá.

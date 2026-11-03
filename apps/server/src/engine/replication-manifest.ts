@@ -769,6 +769,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     directory_promise: { kind: 'community-settings', reason: "the listing promise's two ticked lines and the closing day (engine/directory-promise.ts)" },
     recovery_copies: { kind: 'community-settings', reason: "where members' copies go: BeanPool's key vault, this server, or nowhere (config/recovery-copies.ts)" },
     removal_decider: { kind: 'community-settings', reason: 'who decides a removal: a jury from 100 members, everyone, or a jury (config/removal-decider.ts)' },
+    core_settings_lock: { kind: 'community-settings', reason: "the core settings confirmed and locked by an owner, when and by whom (config/core-settings.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

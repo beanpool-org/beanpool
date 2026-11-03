@@ -247,7 +247,7 @@ async function main(): Promise<void> {
         assert(byAdmin.status === 403, `an admin's session cannot make one (${show(byAdmin)})`);
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent');
-        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs, events and polls as that owner, and suggest actions it cannot take\./.test(e.detail)),
+        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs, events and polls and start groups and enterprises as that owner, and suggest actions it cannot take\./.test(e.detail)),
             `owners are told an assistant connected, in the server's words (${told.map(e => e.detail).join(' | ')})`);
 
         const client = await connect(AGENT);
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
         const s4Welcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true });
         assert(instructions === postsWelcome && instructions.includes('acting for Olive, who is an owner there'),
             `initialize returns the welcome, made for this grant (${instructions.slice(0, 120)}…)`);
-        assert(/; take a backup; post Offers, Needs and events as Olive \(or as an enterprise they keep\) and polls as Olive, live at once with no approval; and SUGGEST/.test(instructions)
+        assert(/; take a backup; post Offers, Needs and events as Olive \(or as an enterprise they keep\) and polls as Olive, and start groups and enterprises for Olive and post to their groups, live at once with no approval; and SUGGEST/.test(instructions)
             && /A post is made at once, public to members: post only what Olive asked for, and after each say that you posted it, with its link\./.test(instructions)
             && !/post Offers|A post is made/.test(s4Welcome),
             'a grant ticked "May post for me" is told it posts at once and must say so; one not ticked is told nothing of posts');

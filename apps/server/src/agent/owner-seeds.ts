@@ -22,9 +22,10 @@
  *   `beans`, the listing's price the group form asks where Beans are on, as create_offer's; no tool moves a Bean.
  * - An enterprise is kept by the owner (its lead keeper), never by the node: my_enterprises then lists it, and the post tools
  *   take it as as_enterprise.
- * - Each is recorded as this grant's (schema.sql agent_made, `assistant:<grant id>`), so remove_all_i_made and the owner's
- *   "Remove its posts" in Settings name the groups and enterprises it made: no route deletes a group, and an enterprise winds
- *   up through its keepers with its objection window, so they are listed back to wind up in the app, never removed here.
+ * - Each is recorded as this grant's (schema.sql agent_made, `assistant:<grant id>`), so remove_all_i_made names the groups
+ *   and enterprises it made (Settings' "Remove its posts" takes posts only and does not list them yet): no route deletes a
+ *   group, and an enterprise winds up through its keepers with its objection window, so they are listed back to wind up in
+ *   the app, never removed here.
  * - Member-written text read back (a group's name) is fenced, as every read's.
  */
 import { approximateLocation, GROUP_CATEGORIES, GROUP_CATEGORY_LABELS, JOIN_POLICIES, replaceLoneSurrogates } from '@beanpool/core';
@@ -302,7 +303,11 @@ const ONE_PICTURE = (what: string, required: boolean) => Object.fromEntries(Obje
     description: `${required ? `${what}'s one photo, required` : `${what}'s picture, at most one; left out, its category's emblem`}: ${v.description.replace(/ 1 to \d+ photos are required[^.]*\./, '')}`,
 }]));
 
-const SEEDED_WORDS = `${OWNERS_POST_WORDS.replace('the post is', 'it is')}; it counts as one of the day's posts (connection_info's posts.perDay)`;
+const DAY_COUNT_WORDS = "it counts as one of the day's posts (connection_info's posts.perDay)";
+/** A group post's: it is a post, so the post words hold. */
+const SEEDED_WORDS = `${OWNERS_POST_WORDS.replace('the post is', 'it is')}; ${DAY_COUNT_WORDS}`;
+/** A group's or an enterprise's: neither is deleted as a post is, and nothing shows a moderator that an assistant made it. */
+const STARTED_WORDS = (owner: string) => `It is the owner's (${owner}), and ${DAY_COUNT_WORDS}`;
 
 /** Slice S3's rows: owner-only, ticked "May post for me", as every create. */
 export const OWNER_SEED_TOOLS: AgentTool[] = [
@@ -329,7 +334,7 @@ export const OWNER_SEED_TOOLS: AgentTool[] = [
         title: 'Start a group',
         reads: `nothing: it starts a group (a guild, a working group, a social circle) as the member this assistant acts for, its first convenor, live at once and `
             + 'listed to every member unless it is invite_only; its chat is the members\' own, and this assistant never reads or writes it. '
-            + `No assistant removes a group: its convenors close it in the app. ${SEEDED_WORDS}, and the member's own groups a day hold too`,
+            + `No assistant removes a group: its convenors close it in the app. ${STARTED_WORDS('its first convenor')}; the member's own groups a day hold too`,
         never: "anything but the new group's id, or another member's data",
         ownerOnly: true,
         posts: true,
@@ -399,7 +404,7 @@ export const OWNER_SEED_TOOLS: AgentTool[] = [
             + 'its name, its purpose, one photo and, if given, its place: content only. It has no goal, deadline, ceiling or pledges and is never a project, its credit '
             + 'line is 0 as every member-made one\'s is, and it holds no Beans until members trade with it; a person sets anything more in the app. my_enterprises then '
             + 'lists it, so create_enterprise_listing and create_event post as it. No assistant winds one up: its keepers do, in the app. '
-            + `${SEEDED_WORDS}, and the member's own enterprises a day hold too`,
+            + `${STARTED_WORDS('its lead keeper')}; the member's own enterprises a day hold too`,
         never: "an enterprise's key, a balance, or another member's data; it never moves Beans",
         ownerOnly: true,
         posts: true,

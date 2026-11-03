@@ -49,6 +49,8 @@ Anyone who taps that link opens the event — in the app if they have it, in the
 
 Where your community allows it, the event also has **Share outside the community**: a link that shows someone who isn't a member this one event for 7 days, without anyone's name or face, and without the place you typed or the private note: only roughly where it is and when. See "Browsing the Market" for what it shows and how to stop it.
 
+Where you can invite people, the event also has **Invite and share**: one invite for one person, which brings a friend into the community and, once they have joined, to this event. See "Browsing the Market" for how it works.
+
 ## Putting it in your calendar
 
 Open the event and tap **Add to calendar**.

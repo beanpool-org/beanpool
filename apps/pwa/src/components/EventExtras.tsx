@@ -22,6 +22,7 @@ import {
 import { eventShareWhen } from '../lib/events';
 import { Sentence } from './Sentence';
 import { ShareOutsideButton } from './SharePost';
+import { InviteAndShareButton } from './InviteAndShare';
 
 /** The community's own address: the node the web app is talking to, or wherever it is being served from. */
 export function nodeOrigin(): string {
@@ -209,6 +210,8 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
             {note && <p role="status" data-testid="event-share-note" className="m-0 text-xs text-nature-600 dark:text-nature-400">{note}</p>}
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />
+            {/* One invite for a friend, who lands on this event once they have joined (invite-and-share). */}
+            <InviteAndShareButton post={post} />
         </div>
     );
 }

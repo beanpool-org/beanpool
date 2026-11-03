@@ -17,6 +17,7 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { shareOutsideOn } from '../utils/node-profile';
 import { eventLink } from '../utils/event-extras';
 import { makePeekLink, peekStopsHere } from '../utils/peek';
+import { InviteAndShareButton } from './InviteAndShare';
 
 /**
  * Whether a post may be offered for sharing outside: one everyone here sees, on the board, and not an event that has
@@ -106,6 +107,8 @@ export function SharePostButtons({ post }: { post: any }) {
                 <Text style={styles.btnText}>{t(W.shareWithMembers)}</Text>
             </Pressable>
             <ShareOutsideButton post={post} />
+            {/* One invite for a friend, who lands here once they have joined (invite-and-share): only where this member may invite. */}
+            <InviteAndShareButton post={post} />
         </View>
     );
 }

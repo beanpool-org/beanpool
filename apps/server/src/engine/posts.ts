@@ -2506,7 +2506,9 @@ type ArchiveRow = CancelledPostRow & { status: string | null };
  * - One already off (done, or taken down) that still holds photos loses them, and is stamped so a phone reads it again
  *   without them.
  *
- * Changed means its row was: an edit (saving it unchanged counts), a pause, being put back up. A message about it doesn't.
+ * Changed means its row was: an edit (saving it unchanged counts), a pause, being put back up; or a member traded on it,
+ * a deal on it asked for, accepted, declined or done inside the window (its marketplace_transactions row moved), which
+ * leaves the listing's own row as it was. A message about it doesn't.
  *
  * The photos go as a listing's photos always go: each row DELETEd with its `post_photos` tombstone, so a standby deletes
  * its copy too, and a pricing guide picture taken from one forgotten. Their objects are then orphans, which the image
@@ -2543,11 +2545,12 @@ export function archiveStaleListings(broadcast: BroadcastFn, push?: PushFn, nowM
            AND COALESCE(p.updated_at, p.created_at) < ?
            AND (COALESCE(p.status, 'active') IN ('active', 'paused')
                 OR (p.status IN ('completed', 'cancelled') AND EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id)))
-           AND NOT EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id AND t.status IN ('requested', 'pending'))
+           AND NOT EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id
+                            AND (t.status IN ('requested', 'pending') OR COALESCE(t.updated_at, t.completed_at, t.created_at) >= ?))
            AND NOT EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = p.id AND r.status = 'pending')
            AND NOT EXISTS (SELECT 1 FROM deferred_wage_claims w WHERE w.post_id = p.id AND w.status = 'pending')
          ORDER BY COALESCE(p.updated_at, p.created_at), p.id
-         LIMIT ?`).all(cutoff, batch + 1) as ArchiveRow[];
+         LIMIT ?`).all(cutoff, cutoff, batch + 1) as ArchiveRow[];
     run.more = due.length > batch;
 
     const photosOf = db.prepare('SELECT order_num FROM post_photos WHERE post_id = ?');
@@ -2610,4 +2613,117 @@ function tellArchivedAuthors(push: PushFn, archived: ArchiveRow[], days: number)
             console.warn('[Retention] archive notice not sent:', e);
         }
     }
+}
+
+// ===================== EVENTS A WEEK AFTER, POLLS AT CLOSE =====================
+
+/** At most this many events and this many polls a run; the rest wait for the next minute's run. */
+export const ENDED_POST_ARCHIVE_BATCH = 200;
+
+export interface EndedPostArchiveRun {
+    /** Ended events whose photos went. */
+    events: number;
+    /** Closed polls taken off the board. */
+    polls: number;
+    /** The events' photo rows deleted. */
+    photosDropped: number;
+    /** More were due than one run takes. */
+    more: boolean;
+}
+
+/**
+ * The rest of retention (config/node-profile.ts `retention`, on for the global node; DESIGN-global-mothership-fable §4.2:
+ * "events a week after they end, polls when they close"), beside the listings' archive (archiveStaleListings).
+ *
+ * - An event that ended `profileLimits().eventArchiveDays` (7) ago loses its photos. Nothing else of it changes here: every
+ *   list, the map, Home and search already leave an event out from the moment it ends (getPosts), so its photos are what
+ *   is left to archive. Its host and the people who went still open it by id, its chat is kept, and the 30-day scrub
+ *   (scrubEndedEvents) takes its RSVPs and chat on every node as before: retention never cuts a chat short. Left alone:
+ *   a repeating event whose series goes on (its next date rolls in), one changed inside the week (a host adding photos
+ *   after the day, an RSVP), one a report waits on or hidden for the moderators, and another community's copy.
+ * - A poll that has closed (by its author, or at its closing time: closeExpiredPolls, the line before this one in the
+ *   minute's tick) is taken off the board (`active = 0`, its status stays `completed`) and its audience told `post_removed`.
+ *   A poll carries no photos (createPost strips them). Its votes and answers stay in their tables; nothing reads them once
+ *   it is off. Left alone as an event is: a report waiting, hidden for the moderators, another community's copy.
+ *
+ * An event's photos go as archiveStaleListings sends a listing's: each row DELETEd with its `post_photos` tombstone, so a standby deletes
+ * its copy too, the objects left to the image store's orphan sweep, brought forward. The post row is stamped, so a phone's
+ * delta and a standby's next copy carry the change; nothing in it shrinks.
+ *
+ * Safe on every tick: each post is its own transaction, and its end state (an event with no photo, a poll off the board)
+ * is what keeps the next run from finding it. Main server only. A no-op where `retention` is off.
+ */
+export function archiveEndedPosts(broadcast: BroadcastFn, nowMs = Date.now(), batch = ENDED_POST_ARCHIVE_BATCH): EndedPostArchiveRun {
+    const run: EndedPostArchiveRun = { events: 0, polls: 0, photosDropped: 0, more: false };
+    if (getNodeRole() !== 'primary') return run;
+    const limits = profileLimits();
+    if (limits.eventArchiveDays === null && !limits.pollArchiveAtClose) return run;
+
+    // What leaves every archive alone: a moderator's case, and another community's copy.
+    const notHeld = `p.origin_node IS NULL AND p.hidden_by_reports_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = p.id AND r.status = 'pending')`;
+    let events: CancelledPostRow[] = [];
+    if (limits.eventArchiveDays !== null) {
+        const cutoff = new Date(nowMs - limits.eventArchiveDays * DAY_MS).toISOString();
+        events = db.prepare(`
+            SELECT p.id, p.type, p.title, p.author_pubkey, p.target_group_id, p.audience_scope, p.target_pubkey, p.assigned_to
+              FROM posts p
+             WHERE p.type = 'event'
+               AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?
+               AND COALESCE(p.updated_at, p.created_at) < ?
+               AND NOT (p.event_repeat IS NOT NULL AND (p.event_repeat_until IS NULL OR p.event_start_local IS NULL
+                        OR p.event_repeat_until > substr(p.event_start_local, 1, 10)))
+               AND ${notHeld}
+               AND EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id)
+             ORDER BY p.event_end_at, p.id
+             LIMIT ?`).all(cutoff, cutoff, batch + 1) as CancelledPostRow[];
+        if (events.length > batch) { run.more = true; events = events.slice(0, batch); }
+    }
+    let polls: CancelledPostRow[] = [];
+    if (limits.pollArchiveAtClose) {
+        polls = db.prepare(`
+            SELECT p.id, p.type, p.title, p.author_pubkey, p.target_group_id, p.audience_scope, p.target_pubkey, p.assigned_to
+              FROM posts p
+             WHERE p.type = 'poll' AND p.status = 'completed' AND p.active = 1
+               AND ${notHeld}
+             ORDER BY COALESCE(p.updated_at, p.created_at), p.id
+             LIMIT ?`).all(batch + 1) as CancelledPostRow[];
+        if (polls.length > batch) { run.more = true; polls = polls.slice(0, batch); }
+    }
+    if (events.length === 0 && polls.length === 0) return run;
+
+    const photosOf = db.prepare('SELECT order_num FROM post_photos WHERE post_id = ?');
+    const dropPhotos = db.prepare('DELETE FROM post_photos WHERE post_id = ?');
+    const stamp = db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?');
+    const takeOff = db.prepare('UPDATE posts SET active = 0, updated_at = ? WHERE id = ? AND active = 1');
+
+    for (const row of events) {
+        try {
+            const dropped = db.transaction(() => {
+                stamp.run(new Date().toISOString(), row.id);
+                const slots = photosOf.all(row.id) as { order_num: number }[];
+                dropPhotos.run(row.id);
+                for (const s of slots) writeTombstone('post_photos', `${row.id}|${s.order_num}`);
+                return slots.length;
+            })();
+            run.photosDropped += dropped;
+            run.events++;
+        } catch (e) {
+            // One bad row must not stop the rest, nor the tick that runs this.
+            console.warn(`[Retention] could not archive event ${row.id.slice(0, 8)}:`, e);
+        }
+    }
+    const takenOff: CancelledPostRow[] = [];
+    for (const row of polls) {
+        try {
+            if (takeOff.run(new Date().toISOString(), row.id).changes > 0) { run.polls++; takenOff.push(row); }
+        } catch (e) {
+            console.warn(`[Retention] could not archive poll ${row.id.slice(0, 8)}:`, e);
+        }
+    }
+    if (run.events === 0 && takenOff.length === 0) return run;
+    bumpPostsVersion();
+    if (run.photosDropped > 0) nudgeOrphanSweep();
+    for (const row of takenOff) announcePostCancelled(broadcast, row, [], undefined, 'SYSTEM');
+    return run;
 }

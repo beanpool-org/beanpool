@@ -516,6 +516,10 @@ export function nearbyListingsLimits(): { radiusKm: number; max: number } {
 
 /** A listing is archived this many days after it last changed, where `retention` is on (Marty, 2026-10-18). */
 export const LISTING_ARCHIVE_DAYS_DEFAULT = 90;
+/** An event's photos are deleted this many days after it ended, where `retention` is on (design §4.2: "events a week
+ *  after they end"). Not an env: the 30-day scrub takes the rest of an ended event on every node, so a longer number
+ *  would mean nothing and a shorter one would take photos the people who went still look at. */
+export const EVENT_ARCHIVE_DAYS = 7;
 /** LISTING_ARCHIVE_DAYS's range: under a month would take listings their authors still mean; ten years is "keep them". */
 const LISTING_ARCHIVE_DAYS_MIN = 30;
 const LISTING_ARCHIVE_DAYS_MAX = 3_650;
@@ -532,6 +536,11 @@ export interface ProfileLimits {
     /** Days after it last changed (an edit, a pause, being put back up) a listing is archived: LISTING_ARCHIVE_DAYS, 90.
      *  Null where `retention` is off: a listing stays until its author takes it down. */
     listingArchiveDays: number | null;
+    /** Days after it ended an event loses its photos: EVENT_ARCHIVE_DAYS, 7. Null where `retention` is off. */
+    eventArchiveDays: number | null;
+    /** A poll is taken off the board when it closes, and its photos deleted. False where `retention` is off: a closed
+     *  poll stays on the board with its result, as before. */
+    pollArchiveAtClose: boolean;
     /** Photos a listing or an event may carry: 5 on every node, as the apps' five photo slots are (@beanpool/engine
      *  MAX_POST_PHOTOS). Not an env: a lower number would meet five slots in the apps. */
     photosPerListing: number;
@@ -561,6 +570,8 @@ export function profileLimits(): ProfileLimits {
     const s = getProfileSwitches();
     return {
         listingArchiveDays: s.retention ? archiveDaysSetting() : null,
+        eventArchiveDays: s.retention ? EVENT_ARCHIVE_DAYS : null,
+        pollArchiveAtClose: s.retention,
         photosPerListing: MAX_POST_PHOTOS,
         nearbyListingsMax: s.nearbyListings ? nearbyListingsLimits().max : null,
         placeWatches: envLimit('PLACE_WATCHES_MAX', PLACE_WATCHES_DEFAULT, 1, PLACE_WATCHES_CEILING),
@@ -953,7 +964,8 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     }
     if (configured.retention) {
         console.log(`🗄️  Retention is on: a listing is archived ${archiveDaysSetting()} days after it last changed, and its photos are `
-            + 'deleted (LISTING_ARCHIVE_DAYS).');
+            + `deleted (LISTING_ARCHIVE_DAYS); an event loses its photos ${EVENT_ARCHIVE_DAYS} days after it ends; a poll leaves the `
+            + 'board when it closes.');
     }
     return { profile, previous };
 }

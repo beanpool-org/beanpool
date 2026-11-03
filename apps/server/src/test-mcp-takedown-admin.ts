@@ -302,7 +302,7 @@ async function main(): Promise<void> {
         const fenced = structured(await ad.callTool({ name: 'take_down', arguments: { post_id: chosen, reason: 'spam', why: WHY } }));
         const keptId = fenced?.kept?.[0]?.postId;
         assert(keptId?.untrusted === true && /<<<MEMBER-TEXT/.test(keptId?.text ?? '') && /<<<END/.test(keptId?.text ?? '') && typeof fenced?._notice === 'string',
-            `an id the assistant was handed comes back as member text, between the markers (${JSON.stringify(keptId).slice(0, 120)})`);
+            `an id the assistant was handed comes back as member text, between the markers (${String(JSON.stringify(keptId)).slice(0, 120)})`);
 
         // ── 5. An admin's grant can't bulk ───────────────────────────────────────────────────────────
         console.log("── 5. An admin's grant can't bulk ──");

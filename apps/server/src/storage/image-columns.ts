@@ -301,10 +301,21 @@ export function inlinePhotoColumns(photoData: string): PhotoColumns {
     return { photo_data: photoData, storage_key: null, sha256: null, bytes: null, mime: null };
 }
 
-/** What an attachment writer puts in the row. `nonce` and `mime` are the caller's and never move. */
+/**
+ * What an attachment writer puts in the row. `nonce` and `mime` are the caller's and never move. `sha256` and `bytes` are
+ * the stored object's (null while the row holds `data`): a standby fetches the object by them (gap G4,
+ * engine/replication-manifest.ts message_attachments).
+ */
 export interface AttachmentColumns {
     data: string | null;
     storage_key: string | null;
+    sha256: string | null;
+    bytes: number | null;
+}
+
+/** An attachment kept in its row: no object, so nothing a standby fetches. */
+export function inlineAttachmentColumns(data: string): AttachmentColumns {
+    return { data, storage_key: null, sha256: null, bytes: null };
 }
 
 /**
@@ -316,13 +327,13 @@ export interface AttachmentColumns {
  */
 export function storeAttachmentColumns(store: ImageStore, key: string, data: string): AttachmentColumns {
     const storable = prepareStorableCiphertext(data);
-    if (!storable) return { data, storage_key: null };
+    if (!storable) return inlineAttachmentColumns(data);
     try {
         const put = store.put(key, storable.bytes, { mime: storable.mime, sha256: storable.sha256 });
-        return { data: null, storage_key: put.key };
+        return { data: null, storage_key: put.key, sha256: put.sha256, bytes: put.bytes };
     } catch (e) {
         console.warn('[ImageStore] Could not store an attachment; keeping it in the row for now:', e);
-        return { data, storage_key: null };
+        return inlineAttachmentColumns(data);
     }
 }
 

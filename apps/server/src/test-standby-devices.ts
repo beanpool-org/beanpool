@@ -1153,9 +1153,10 @@ async function main(): Promise<void> {
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];
-        assert(!missing.some((line) => /notifications on|muted chats|activity list|pricing guide/.test(line)) && missing.some((line) => /photos sent in chats/.test(line))
+        assert(!missing.some((line) => /notifications on|muted chats|activity list|pricing guide|photos sent in chats/.test(line))
+            && missing.some((line) => /Commons project proposals/.test(line))
             && missing.some((line) => /price reports sent without signing in, or by someone who hadn't joined/.test(line)),
-            `the preview no longer says phones or members' conveniences will be missing, and still names chat photos, and the price reports that stay on M (${JSON.stringify(missing).slice(0, 260)})`);
+            `the preview no longer says phones, members' conveniences or chat photos (copied since G4's chat photos) will be missing, and still names the Commons proposals and the price reports that stay on M (${JSON.stringify(missing).slice(0, 260)})`);
         // The manager's own copies of the list (its fallback, and the fixture its phone-width run answers with) say the
         // same, line for line (review 4128175968): each is the array literal after `<name> … = [` in its file.
         const listIn = (file: string, name: string): string[] => {

@@ -37,6 +37,7 @@
  */
 
 import { db } from '../db/db.js';
+import { getNodeRole } from '../config/node-role.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
 import { closeWashSnapshotHandle } from '@beanpool/engine';
 import {
@@ -74,12 +75,16 @@ export interface EvacuationCounts {
     attachmentsMoved: number;
     attachmentBytesMoved: number;
     attachmentsSkipped: number;
+    /** Chat photos already in the store whose row now names their object's sha256 and size (hashAttachmentBatch). */
+    attachmentsHashed: number;
+    /** Of those, ones whose object could not be read to hash it: left as they are (hashAttachmentBatch). */
+    attachmentHashesSkipped: number;
 }
 
 function emptyCounts(): EvacuationCounts {
     return {
         photosMoved: 0, photoBytesMoved: 0, photosSkipped: 0,
-        attachmentsMoved: 0, attachmentBytesMoved: 0, attachmentsSkipped: 0,
+        attachmentsMoved: 0, attachmentBytesMoved: 0, attachmentsSkipped: 0, attachmentsHashed: 0, attachmentHashesSkipped: 0,
     };
 }
 
@@ -91,6 +96,8 @@ function addCounts(a: EvacuationCounts, b: EvacuationCounts): EvacuationCounts {
         attachmentsMoved: a.attachmentsMoved + b.attachmentsMoved,
         attachmentBytesMoved: a.attachmentBytesMoved + b.attachmentBytesMoved,
         attachmentsSkipped: a.attachmentsSkipped + b.attachmentsSkipped,
+        attachmentsHashed: a.attachmentsHashed + b.attachmentsHashed,
+        attachmentHashesSkipped: a.attachmentHashesSkipped + b.attachmentHashesSkipped,
     };
 }
 
@@ -108,11 +115,14 @@ function addCounts(a: EvacuationCounts, b: EvacuationCounts): EvacuationCounts {
  */
 const skippedPhotos = new Set<string>();
 const skippedAttachments = new Set<string>();
+/** Chat photos whose object could not be read to hash it (hashAttachmentBatch): not tried again by this process. */
+const skippedAttachmentHashes = new Set<string>();
 
 /** Test seam: forget which rows were skipped, so a suite can re-run a pass over the same fixture. */
 export function resetEvacuationSkipsForTests(): void {
     skippedPhotos.clear();
     skippedAttachments.clear();
+    skippedAttachmentHashes.clear();
 }
 
 /**
@@ -213,9 +223,14 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
     return counts;
 }
 
-/** One pass over at most {@link EVACUATION_BATCH} message attachments. */
+/**
+ * One pass over at most {@link EVACUATION_BATCH} message attachments. On a main server only: a standby's rows are its main
+ * server's, verbatim (a plain table, gap G4: engine/replication-manifest.ts message_attachments), and its import alone writes
+ * them. A row that holds its ciphertext there is moved by the main server's own pass, and that write is copied.
+ */
 function evacuateAttachmentBatch(store: ImageStore, limit: number): EvacuationCounts {
     const counts = emptyCounts();
+    if (getNodeRole() === 'backup') return counts;
     let rows: any[];
     try {
         rows = db.prepare(`
@@ -230,9 +245,10 @@ function evacuateAttachmentBatch(store: ImageStore, limit: number): EvacuationCo
         return counts;
     }
 
+    // With the object's sha256 and size, by which a standby fetches it (gap G4).
     const update = db.prepare(`
         UPDATE message_attachments
-           SET data = NULL, storage_key = ?
+           SET data = NULL, storage_key = ?, sha256 = ?, bytes = ?
          WHERE message_id = ? AND storage_key IS NULL
     `);
 
@@ -251,7 +267,7 @@ function evacuateAttachmentBatch(store: ImageStore, limit: number): EvacuationCo
             const key = attachmentKey(row.message_id);
             const bytes = putAndVerify(store, key, storable.bytes, storable.mime, storable.sha256);
             if (bytes === null) { skippedAttachments.add(row.message_id); counts.attachmentsSkipped++; continue; }
-            const res = update.run(key, row.message_id);
+            const res = update.run(key, storable.sha256, bytes, row.message_id);
             if (res.changes > 0) {
                 counts.attachmentsMoved++;
                 counts.attachmentBytesMoved += row.data.length;
@@ -266,14 +282,66 @@ function evacuateAttachmentBatch(store: ImageStore, limit: number): EvacuationCo
     return counts;
 }
 
-/** How many rows still hold bytes the store could take. */
-export function pendingEvacuationCount(): { photos: number; attachments: number } {
+/**
+ * Chat photos already in the store whose row doesn't yet name the object's sha256 and size: every one stored before a standby
+ * copied them (gap G4). Read back, hashed, and the two written, at most {@link EVACUATION_BATCH} a pass; the write moves the
+ * row's watermark, so the next copy carries it, by reference, and the standby fetches its object. On a main server only, as
+ * evacuateAttachmentBatch. An object that can't be read is left so (attachmentHashesSkipped; not tried again by this process):
+ * the row stays one a standby copies with no object, as it does today.
+ */
+function hashAttachmentBatch(store: ImageStore, limit: number): EvacuationCounts {
+    const counts = emptyCounts();
+    if (getNodeRole() === 'backup') return counts;
+    let rows: { message_id: string; storage_key: string }[];
+    try {
+        rows = db.prepare(`
+            SELECT message_id, storage_key
+              FROM message_attachments
+             WHERE storage_key IS NOT NULL AND sha256 IS NULL AND (data IS NULL OR data = '')
+             ORDER BY message_id
+             LIMIT ?
+        `).all(limit + skippedAttachmentHashes.size) as { message_id: string; storage_key: string }[];
+    } catch (e) {
+        console.warn('[ImageEvacuation] Could not read message_attachments:', e);
+        return counts;
+    }
+    const update = db.prepare(`
+        UPDATE message_attachments
+           SET sha256 = ?, bytes = ?
+         WHERE message_id = ? AND storage_key = ? AND sha256 IS NULL
+    `);
+    let done = 0;
+    for (const row of rows) {
+        if (done >= limit) break;
+        if (skippedAttachmentHashes.has(row.message_id)) continue;
+        done++;
+        let bytes: Buffer | null;
+        try {
+            bytes = store.get(row.storage_key);
+        } catch (e) {
+            if (e instanceof ImageStoreUnavailableError) throw e;
+            bytes = null;
+        }
+        if (!bytes || bytes.length === 0) {
+            skippedAttachmentHashes.add(row.message_id);
+            counts.attachmentHashesSkipped++;
+            continue;
+        }
+        if (update.run(sha256Hex(bytes), bytes.length, row.message_id, row.storage_key).changes > 0) counts.attachmentsHashed++;
+    }
+    return counts;
+}
+
+/** How many rows still hold bytes the store could take, and (a main server's) chat photos whose object isn't hashed yet. */
+export function pendingEvacuationCount(): { photos: number; attachments: number; attachmentsToHash: number } {
     const count = (sql: string): number => {
         try { return ((db.prepare(sql).get() as any)?.c as number) || 0; } catch { return 0; }
     };
     return {
         photos: count(`SELECT COUNT(*) AS c FROM post_photos WHERE storage_key IS NULL AND photo_data IS NOT NULL AND photo_data != ''`),
         attachments: count(`SELECT COUNT(*) AS c FROM message_attachments WHERE storage_key IS NULL AND data IS NOT NULL AND data != ''`),
+        attachmentsToHash: getNodeRole() === 'backup' ? 0
+            : count(`SELECT COUNT(*) AS c FROM message_attachments WHERE storage_key IS NOT NULL AND sha256 IS NULL AND (data IS NULL OR data = '')`),
     };
 }
 
@@ -293,12 +361,15 @@ export function evacuateImagesOnce(limit = EVACUATION_BATCH): EvacuationCounts {
     // attachment on a node with one such photo stuck behind it, permanently.
     const photoWorkLeft = photos.photosMoved + photos.photosSkipped > 0;
     const attachments = photoWorkLeft ? emptyCounts() : evacuateAttachmentBatch(store, limit);
-    return addCounts(photos, attachments);
+    // Then the chat photos stored before their rows named the object (gap G4), on the same rule.
+    const attachmentWorkLeft = photoWorkLeft || attachments.attachmentsMoved + attachments.attachmentsSkipped > 0;
+    const hashed = attachmentWorkLeft ? emptyCounts() : hashAttachmentBatch(store, limit);
+    return addCounts(addCounts(photos, attachments), hashed);
 }
 
 /** Did a pass do anything at all? False means there is nothing left this process can move. */
 export function evacuationPassDidWork(counts: EvacuationCounts): boolean {
-    return counts.photosMoved + counts.photosSkipped + counts.attachmentsMoved + counts.attachmentsSkipped > 0;
+    return counts.photosMoved + counts.photosSkipped + counts.attachmentsMoved + counts.attachmentsSkipped + counts.attachmentsHashed + counts.attachmentHashesSkipped > 0;
 }
 
 /**
@@ -367,11 +438,12 @@ let total = emptyCounts();
 export function startImageEvacuation(): void {
     if (timer) return;
     const pending = pendingEvacuationCount();
-    if (pending.photos === 0 && pending.attachments === 0) {
+    if (pending.photos === 0 && pending.attachments === 0 && pending.attachmentsToHash === 0) {
         reclaimSpaceOnce();
         return;
     }
-    console.log(`🖼️  [ImageEvacuation] Moving ${pending.photos} photo(s) and ${pending.attachments} attachment(s) out of the database...`);
+    console.log(`🖼️  [ImageEvacuation] Moving ${pending.photos} photo(s) and ${pending.attachments} attachment(s) out of the database`
+        + (pending.attachmentsToHash > 0 ? `, and naming ${pending.attachmentsToHash} chat photo(s)' objects for a standby` : '') + '...');
     total = emptyCounts();
 
     // Each pass schedules the next only once it has finished, so a slow disk can never pile passes up.

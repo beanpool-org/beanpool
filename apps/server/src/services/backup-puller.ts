@@ -57,7 +57,7 @@ import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engin
 import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
 import {
     REPLICA_FORMAT, replicaFormatOfCopy, noteLedgerMismatch, valueLeftOutName, OversizedCopyError, deleteSyncCursor, mergeCopyPages, isCopyPage,
-    namesPhotoObject, photoReferenceOf, type CopyPage, type PhotoReference, type ValueLeftOut,
+    namesPhotoObject, photoReferenceOf, attachmentReferenceOf, referenceLabel, type CopyPage, type PhotoReference, type ValueLeftOut,
 } from '../engine/sync.js';
 import { getImageStore, headObject, readObject, writeObject, MAX_OBJECT_BYTES } from '../storage/image-store.js';
 import {
@@ -510,9 +510,19 @@ async function readUpTo(res: Response, max: number): Promise<Buffer> {
  * The listing photos a copy's page names by reference (engine/sync.ts photoRowsByReference), each checked: a page that names
  * an object by anything but an address a store keeps (photoReferenceOf) came, and is refused. A photo with its bytes inline
  * is none of these: the import stores it as it always did.
+ *
+ * And its chat photos' objects (gap G4): each `message_attachments` row of the page (a plain table, its main server's rows
+ * verbatim) that names its object (engine/sync.ts attachmentReferenceOf). One that names none, or names it any other way,
+ * is written as it is, its photo unavailable here as long as no copy names its object: never a refused copy, which no later
+ * copy of the same row would mend.
  */
 function photoReferencesOf(page: CopyPage): PhotoReference[] {
     const out: PhotoReference[] = [];
+    const chat = (page.plainTables as Record<string, unknown> | undefined)?.message_attachments;
+    for (const row of Array.isArray(chat) ? chat : []) {
+        const ref = attachmentReferenceOf(row);
+        if (ref) out.push(ref);
+    }
     for (const row of Array.isArray(page.photos) ? page.photos : []) {
         if (!namesPhotoObject(row)) continue;
         const ref = photoReferenceOf(row);
@@ -572,6 +582,17 @@ class PhotoObjectNotItsPhoto extends Error {
     }
 }
 
+/**
+ * A chat photo's object the main server didn't send (404: no row there names it now, or its store lacks it; 410: its bytes
+ * there are not the ones its row names). Never a failed pull (fetchPhotoObjects): the row lands as the main server holds it.
+ */
+class ChatPhotoUnavailable extends Error {
+    constructor() {
+        super('a chat photo\'s object the main server did not send');
+        this.name = 'ChatPhotoUnavailable';
+    }
+}
+
 /** What fetching a copy's listing photos found (fetchPhotoObjects). */
 interface PhotoObjectsFetched {
     /** Photos by reference the copy named. */
@@ -585,6 +606,12 @@ interface PhotoObjectsFetched {
     stored?: number;
     /** The listing photo (`post_id|order_num`) whose object's fetch failed the pull, if one did. */
     failedOn?: string;
+    /**
+     * Chat photos (gap G4) whose object the main server didn't send (404 or 410): no failed pull, their rows land without it,
+     * as the main server holds them (it lost the object, or the photo went since the copy's snapshot, and its tombstone
+     * follows); a whole copy asks for them again.
+     */
+    chatUnavailable?: number;
 }
 
 /**
@@ -625,6 +652,7 @@ async function fetchPhotoObjects(
         for (let attempt = 1; ; attempt++) {
             stopIfStopped(stop);
             const bytes = await requests.object(ref.sha256, stop);
+            if (ref.message_id !== undefined && (bytes === 'not-its-photo' || bytes === null)) throw new ChatPhotoUnavailable();
             if (bytes === 'not-its-photo') {
                 throw new PhotoObjectNotItsPhoto(`listing photo ${ref.post_id}|${ref.order_num}'s object (sha256 ${ref.sha256.slice(0, 12)}…) is not that photo on the `
                     + 'main server, which answered 410: this copy is not taken, and the next leaves that photo out (this standby keeps its own copy of it)');
@@ -637,10 +665,11 @@ async function fetchPhotoObjects(
             out.fetchedBytes += bytes.length;
             const got = sha(bytes);
             if (bytes.length === ref.bytes && got === ref.sha256) return bytes;
-            logger.warn('P2P', `[Backup] Listing photo ${ref.post_id}|${ref.order_num}'s object came as ${bytes.length} bytes with sha256 ${got.slice(0, 12)}…, `
+            const label = referenceLabel(ref);
+            logger.warn('P2P', `[Backup] ${label[0].toUpperCase()}${label.slice(1)}'s object came as ${bytes.length} bytes with sha256 ${got.slice(0, 12)}…, `
                 + `not the ${ref.bytes} bytes and ${ref.sha256.slice(0, 12)}… its row names: not written${attempt < OBJECT_TRIES ? ', asked for again' : ''}.`);
             if (attempt >= OBJECT_TRIES) {
-                throw new PhotoObjectRefused(`listing photo ${ref.post_id}|${ref.order_num}'s object came ${OBJECT_TRIES} times as bytes its row doesn't name `
+                throw new PhotoObjectRefused(`${label}'s object came ${OBJECT_TRIES} times as bytes its row doesn't name `
                     + `(sha256 ${ref.sha256.slice(0, 12)}…, ${ref.bytes} bytes): refused, and nothing of it written`);
             }
         }
@@ -674,7 +703,14 @@ async function fetchPhotoObjects(
                 pending = fetchChecked(ref);
                 fetching.set(ref.sha256, pending);
             }
-            bytes = await pending;
+            try {
+                bytes = await pending;
+            } catch (e) {
+                if (!(e instanceof ChatPhotoUnavailable)) throw e;
+                fetching.delete(ref.sha256);
+                out.chatUnavailable = (out.chatUnavailable ?? 0) + 1;
+                return;
+            }
         }
         const put = bytes;
         await inOwnStore(`write ${ref.key}`, () => writeObject(store, ref.key, put, { mime: ref.mime, sha256: ref.sha256 }));
@@ -693,7 +729,7 @@ async function fetchPhotoObjects(
             const r = await it.next();
             if (r.done) return;
             try { await one(r.value); } catch (e) {
-                if (failure === null) out.failedOn = `${r.value.post_id}|${r.value.order_num}`;
+                if (failure === null) out.failedOn = r.value.message_id !== undefined ? `chat:${r.value.message_id}` : `${r.value.post_id}|${r.value.order_num}`;
                 failure ??= e;
             }
         }
@@ -706,8 +742,9 @@ async function fetchPhotoObjects(
     }
     if (failure !== null) throw failure;
     if (out.named > 0) {
-        logger.info('P2P', `[Backup] Listing photos by reference: ${out.named} named, ${out.held} already held here, ${out.fetched} object(s) fetched `
-            + `(${(out.fetchedBytes / 1048576).toFixed(1)} MB).`);
+        logger.info('P2P', `[Backup] Listing and chat photos by reference: ${out.named} named, ${out.held} already held here, ${out.fetched} object(s) fetched `
+            + `(${(out.fetchedBytes / 1048576).toFixed(1)} MB)`
+            + (out.chatUnavailable ? `; ${out.chatUnavailable} chat photo(s) the main server did not send, kept without their object as it holds them.` : '.'));
     }
     return out;
 }
@@ -1155,7 +1192,8 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             lastCopyWait = {
                 kind: !hadCursor ? 'first' : why === 'retention' ? 'retention' : fresh ? 'resync' : 'whole',
                 cause: photosFailed ? 'photos' : came ? 'refused' : 'never-came',
-                reason: photosFailed && photos.failedOn ? `listing photo ${photos.failedOn}: ${msg}` : msg,
+                reason: photosFailed && photos.failedOn
+                    ? `${photos.failedOn.startsWith('chat:') ? `chat photo ${photos.failedOn.slice(5)}` : `listing photo ${photos.failedOn}`}: ${msg}` : msg,
                 tries: photosFailed ? photoFailuresInRow : null,
             };
         }

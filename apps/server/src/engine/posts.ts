@@ -2452,6 +2452,12 @@ export function scrubEndedEvents(nowMs = Date.now()): number {
                 // shell of a chat nobody can open any more, and deleting it would cascade nothing useful
                 // while giving a replica a row key it has no tombstone handler for.
                 const msgs = db.prepare('SELECT id FROM messages WHERE conversation_id = ?').all(id) as any[];
+                // An event chat takes no photos (they are for locked chats), but a photo row hung off one of its lines
+                // goes with it, with its tombstone (a standby copies them, gap G4), and its object once this commits.
+                const photoKeys = (db.prepare('SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id = ?)')
+                    .all(id) as { storage_key: string }[]).map((r) => r.storage_key);
+                deletePlainRows('message_attachments', 'message_id IN (SELECT id FROM messages WHERE conversation_id = ?)', id);
+                if (photoKeys.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, photoKeys));
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
                 for (const m of msgs) writeTombstone('messages', m.id);
 

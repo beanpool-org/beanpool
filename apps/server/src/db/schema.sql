@@ -532,15 +532,23 @@ CREATE INDEX IF NOT EXISTS idx_post_photos_storage_key ON post_photos(storage_ke
 -- `data` is the ciphertext until the image store has it, then `storage_key` names the object and `data` is
 -- null. `nonce` and `mime` never leave the row: the recipient needs both to decrypt, they are a few dozen
 -- bytes, and the node has never held the key that would let it read either the object or the row.
+-- A standby copies the rows verbatim (a plain table, engine/replication-manifest.ts, gap G4) and fetches each object by
+-- `sha256` and `bytes` (the stored ciphertext's), as listing photos go by reference (routes/backup.ts sync-object). Both
+-- are NULL while the row holds `data`, and on a row from before them until the evacuation job fills them in.
 CREATE TABLE IF NOT EXISTS message_attachments (
     message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
     data TEXT,
     nonce TEXT NOT NULL,
     mime TEXT,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    storage_key TEXT
+    storage_key TEXT,
+    sha256 TEXT,
+    bytes INTEGER,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_message_attachments_storage_key ON message_attachments(storage_key COLLATE NOCASE) WHERE storage_key IS NOT NULL;
+-- A chat photo's object by its content address, as a standby asks for one (routes/backup.ts sync-object).
+CREATE INDEX IF NOT EXISTS idx_message_attachments_sha256 ON message_attachments(sha256) WHERE sha256 IS NOT NULL;
 
 -- 5. Marketplace Transactions
 CREATE TABLE IF NOT EXISTS marketplace_transactions (

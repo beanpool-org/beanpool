@@ -165,11 +165,10 @@ function writeAtomic(file: string, data: string | Buffer, mode: number): void {
  * (design G2); so are Decisions and their votes, keepers' wages owed, keeper and succession votes, invites, re-key codes,
  * recovery releases and links with other communities (G3); and the phones members get notifications on, muted chats,
  * enterprise thread read marks, event reminders already sent, the activity list and the pricing guide with its members'
- * reports (G4). A price report without a member's key stays on the main server (engine/replication-manifest.ts
+ * reports, and the photos sent in chats, DM and group alike (G4). A price report without a member's key stays on the main server (engine/replication-manifest.ts
  * MEMBERS_REPORTS, #1295 review 4126894855). The last line is the one thing a fresher copy changes.
  */
 export const WHAT_WILL_BE_MISSING: readonly string[] = [
-    'photos sent in chats',
     'Commons project proposals still waiting for a decision',
     "price reports sent without signing in, or by someone who hadn't joined",
     "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",

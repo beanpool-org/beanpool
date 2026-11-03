@@ -97,7 +97,11 @@ export interface TableHashes {
  * before its main server hashes one more table. REPLICA_FORMAT stays: what an older importer drops is an ask still waiting,
  * which its member can see is unanswered and ask again.
  */
-export const TABLE_HASHES_VERSION = 17;
+/**
+ * 18: message_attachments becomes a copied table (chat photos, gap G4: REPLICA_FORMAT 14), with three new columns (sha256,
+ * bytes, updated_at). Raised for the same reason as 8: a standby updated before its main server hashes one more table.
+ */
+export const TABLE_HASHES_VERSION = 18;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

@@ -537,8 +537,8 @@ export function postGroupThreadMessage(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(msgId, groupId, authorPubkey, ciphertext, nonce, type, metadata, timestamp);
         if (photo && cols) {
-            db.prepare('INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)')
-                .run(msgId, cols.data, photo.nonce, photo.mime, cols.storage_key);
+            db.prepare('INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key, sha256, bytes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                .run(msgId, cols.data, photo.nonce, photo.mime, cols.storage_key, cols.sha256, cols.bytes);
         }
     })();
     if (photoBytes > 0) recordStoredPhotoBytes(authorPubkey, photoBytes);

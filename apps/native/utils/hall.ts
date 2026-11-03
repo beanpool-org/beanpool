@@ -14,8 +14,9 @@
  *   2. The phone remembers the hall (utils/hall-state.ts: the number, the community's NAME it signs for, the address it
  *      came from), then moves to the number with its copy carried (utils/reconnect.ts switchPhoneTo with `carryFrom`:
  *      the community's file, its DM pins and group-chat keys and sync cursors, whole or not at all). The name signed for
- *      is the host of the phone's own address before the move: never the `for` the poster or the laptop names, which
- *      only has to agree with it.
+ *      is the host of the phone's own address before the move: never the `for` the poster or the laptop names. That
+ *      name may be the community's other one (Byron: the poster says byron.beanpool.org, phones saved under
+ *      mullum.beanpool.org stay there), so it never stops the check: step 1 decides.
  *   3. While there, the node's health (`lightsOut`, H1) drives one banner (components/HallBanner.tsx): the record's age.
  *   4. Home again: the node's health says `lightsOut.on: false` and the phone checks its own address the same way
  *      (statement, same key, no fewer take-overs than it kept before the hall) and carries the copy back. If the laptop

@@ -12,8 +12,8 @@
  * Then (doors-s9-fix1) the phone tells the relay, with its own secret, whether it SAVED the account: 'saved' once
  * restoreFromWords has finished, else 'not saved' (the seal didn't read, the save failed, or the member left). Only
  * 'saved' lets the browser offer to remove the account there. Leaving while the save runs sends nothing then: the
- * save's own end sends the real word (doors-s9-fix2), and one tap on Bring starts one save. One offer per scan (two taps on Continue send one), and
- * the four digits go when the session ends by the relay's clock, network or not.
+ * save's own end sends the real word (doors-s9-fix2), and one tap on Bring starts one save. One offer per scan (two
+ * taps on Continue send one), and the four digits go when the session ends by the relay's clock, network or not.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, ScrollView } from 'react-native';

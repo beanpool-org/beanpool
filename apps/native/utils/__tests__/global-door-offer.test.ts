@@ -295,7 +295,7 @@ describe('the welcome screen', () => {
         const h = home();
         // Explore looks first on a phone with no account (slice S12, welcome's exploreWorldwide), which opens the door itself
         // wherever looking can't happen; `exploring` is the line under it while it asks.
-        const doors = h.match(/^( *)(.*)<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{\(\) => setMode\('create'\)\} openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\} exploring=\{exploring\} styles=\{styles\} \/>$/m);
+        const doors = h.match(/^( *)(.*)<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{\(\) => setMode\('create'\)\} openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\} restore=\{\(\) => setMode\('member'\)\} exploring=\{exploring\} styles=\{styles\} \/>$/m);
         expect(doors).not.toBeNull();
         // On a line of its own: no `{x && (`, no ternary, in front of it.
         expect(doors![2]).toBe('');
@@ -306,9 +306,12 @@ describe('the welcome screen', () => {
         expect(title).toBeGreaterThan(-1);
         expect(at).toBeGreaterThan(title);
         expect(h.slice(title, at)).not.toMatch(/<Text|<Pressable|<View/);
-        for (const after of ["{t('Trade skills, goods and favours", "Clipboard.isPasteButtonAvailable", "onPress={() => setMode('member')}"]) {
+        for (const after of ["{t('Trade skills, goods and favours", "Clipboard.isPasteButtonAvailable", "styles.claimServerLink"]) {
             expect(h.indexOf(after), after).toBeGreaterThan(at);
         }
+        // Already a member? Restore is the doors' third button now (front doors S10): the component's, handed the tap (the regex
+        // above), not a link drawn under the fold.
+        expect(h).not.toContain('styles.restoreSecondaryBtn');
         // The buttons themselves are the component's alone.
         expect(h).not.toMatch(/Explore BeanPool worldwide|Join with an invite/);
         expect(src().match(/openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\}/g)).toHaveLength(1);

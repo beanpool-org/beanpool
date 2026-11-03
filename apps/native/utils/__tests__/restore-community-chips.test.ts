@@ -275,6 +275,8 @@ describe("a restored copy's list of communities (vault rethink VR5)", () => {
     it("the sign-in restore offers them, and starts Which community? at the copy's first (app/welcome.tsx)", () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
         expect(src).toContain('nodes={withCopyCommunities(savedNodes, ssoReleased.communities)}');
-        expect(src).toMatch(/const first = result\.restored\.communities\?\.\[0\];\s*if \(first\) setSsoCommunity\(fieldTextFor\(first\.url\)\);/);
+        // Starts at the copy's first community, unless the member already tapped one before signing in (front doors S10:
+        // Which community? is asked first, and a tap is the member's word over the copy's list).
+        expect(src).toMatch(/const first = result\.restored\.communities\?\.\[0\];\s*if \(first && !ssoCommunityPicked\.current\) setSsoCommunity\(fieldTextFor\(first\.url\)\);/);
     });
 });

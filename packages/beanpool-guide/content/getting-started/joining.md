@@ -32,7 +32,7 @@ An invite is a link, a QR code or a code. A code looks like **INV-** followed by
 To join:
 
 - Install BeanPool and open it. If you tap an invite link first, the app picks up the invite by itself, even straight after installing it from Google Play.
-- On the first screen, tap **Join with an invite**. If the invite is on your clipboard, you can tap **Paste** instead. On Android the button says **Been sent an invite? Tap to check your clipboard**. In the web app, the button says **I'm New Here**.
+- On the first screen, tap **Join with an invite**. If the invite is on your clipboard, you can tap **Paste** instead. If someone shows you the invite's QR code, tap **Scan a QR code** and point the camera at it: the phone asks to use the camera only then. On Android the button says **Been sent an invite? Tap to check your clipboard**. In the web app, the button says **I'm New Here**.
 - Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.
 - Choose the name people will see. It needs at least 2 characters. Keep it short: when you join, names longer than 20 characters are cut short.
 - Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others. Until it has finished, **← Back to Home** and **Restore Existing Identity** don't work.

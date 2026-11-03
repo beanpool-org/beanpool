@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { inviteFromScan } from '../utils/invite-scan';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity, StoredKeyUnreadableError, readStoredIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
@@ -99,7 +101,7 @@ import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
 import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
-import { fieldTextFor, releaseFieldHints, withCopyCommunities } from '../utils/restore-community-choices';
+import { chosenRestoreChoice, fieldTextFor, releaseFieldHints, restoreCommunityChoices, withCopyCommunities } from '../utils/restore-community-choices';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -221,6 +223,9 @@ export default function WelcomeScreen() {
     // Communities this device has joined before. They survive an identity wipe on purpose, so
     // a member recovering on the same phone can tap theirs rather than retype its address.
     const [savedNodes, setSavedNodes] = useState<SavedNode[]>([]);
+    // Join with an invite > Scan a QR code (front doors S10): the claim's camera screen (components/ScanCodeModal.tsx), loaded
+    // and asked for only at the tap (memory: permissions only when asked).
+    const [Scanner, setScanner] = useState<null | typeof import('../components/ScanCodeModal').default>(null);
     useEffect(() => {
         if (mode !== 'ssoRecover' && mode !== 'recover') return;
         getSavedNodes().then(setSavedNodes).catch(() => {});
@@ -295,6 +300,8 @@ export default function WelcomeScreen() {
      * bare host (normalizeNodeUrl adds the https://): with the scheme, a 320 dp field showed only "://global.beanpool.org".
      */
     const [ssoCommunity, setSsoCommunity] = useState(GLOBAL_NODE_URL.replace(/^https:\/\//, ''));
+    /** The member tapped a community before signing in (front doors S10): the copy's own first community must not overwrite it. */
+    const ssoCommunityPicked = useRef(false);
     const [ssoChecking, setSsoChecking] = useState(false);
     /** Stops a sign-in restore whose sign-in has finished and not yet been sent, when this screen goes away. */
     const recoveryAbortRef = useRef<AbortController | null>(null);
@@ -331,7 +338,7 @@ export default function WelcomeScreen() {
                 // The copy listed the member's communities (vault rethink VR5): the first is the one the phone was on when
                 // the sign-in was linked, so "Which community?" starts there. Global otherwise, as before.
                 const first = result.restored.communities?.[0];
-                if (first) setSsoCommunity(fieldTextFor(first.url));
+                if (first && !ssoCommunityPicked.current) setSsoCommunity(fieldTextFor(first.url));
                 setError(null);
             }
         } catch (e) {
@@ -852,6 +859,19 @@ export default function WelcomeScreen() {
         }
         setMode('create');
     }, [t]);
+
+    const openInviteScanner = async () => {
+        const m = await import('../components/ScanCodeModal');
+        setScanner(() => m.default);
+    };
+    /** An invite's QR fills the invite step as a pasted one does; any other QR keeps the camera reading. */
+    const onInviteScanned = (data: string): boolean => {
+        const raw = inviteFromScan(data);
+        if (!raw) return false;
+        setScanner(null);
+        void applyInviteContent(raw, 'join');
+        return true;
+    };
 
     const handlePasteInvite = async () => {
         try {
@@ -3052,6 +3072,12 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
+                        {/* Scan a QR code, beside Paste (front doors S10): many old Androids have no shortcut to the phone's own camera app. */}
+                        <Pressable style={styles.scanInviteBtn} onPress={() => { void openInviteScanner(); }} accessibilityRole="button" testID="join-scan-invite">
+                            <MaterialCommunityIcons name="qrcode-scan" size={20} color={dark ? palette.blue400 : palette.blue600} />
+                            <Text style={styles.scanInviteBtnText}>{t('Scan a QR code')}</Text>
+                        </Pressable>
+
                         <TextInput
                             style={styles.input}
                             placeholder={t('Paste your invite link or code')}
@@ -3205,6 +3231,14 @@ export default function WelcomeScreen() {
                         </Text>
                     </View>
                 </KeyboardAwareScrollView>
+                {Scanner && (
+                    <Scanner
+                        hint={t('Point the camera at the QR code on your invite.')}
+                        deniedText={t('Allow the camera for BeanPool in your phone settings, or paste your invite below.')}
+                        onRead={onInviteScanned}
+                        onClose={() => setScanner(null)}
+                    />
+                )}
             </SafeAreaView>
         );
     }
@@ -3671,6 +3705,9 @@ export default function WelcomeScreen() {
     if (mode === 'ssoRecover' && (!hasVault() || ssoAtCommunity)) {
         /** The providers this screen offers: every one without a vault; with one, only the provider the vault has no copy for. */
         const offeredHere = (p: SsoProvider) => !hasVault() || ssoAtCommunity === p;
+        const chosenCommunity = chosenRestoreChoice(recoveryAnchorUrl, restoreCommunityChoices(savedNodes));
+        /** Typed only for "another address", or before a chip is chosen: a chip already carries its address. */
+        const anotherAddress = chosenCommunity === null || chosenCommunity === 'another';
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -3690,9 +3727,19 @@ export default function WelcomeScreen() {
                                 </>
                             ) : (
                                 <Text style={styles.subtitle}>
-                                    {t('Enter your callsign and node address to restore your account with any linked sign-in.')}
+                                    {t('Choose your community, then enter your callsign to restore your account with any linked sign-in.')}
                                 </Text>
                             )}
+
+                            {/* Which community? first, as taps (front doors S10; "another address" draws the field, so the keyboard comes a moment later, DESIGN-entry-points-fable.md §3.5 item 2): the global
+                                community, this phone's own, or another address. The name below is then all that is left to type. */}
+                            <RestoreCommunityChips
+                                saved={savedNodes}
+                                value={recoveryAnchorUrl}
+                                onChoose={(text) => { setRecoveryAnchorUrl(text); setError(null); }}
+                                onAnother={(text) => { setRecoveryAnchorUrl(text); setError(null); setTimeout(() => recoveryAddressRef.current?.focus(), 50); }}
+                                disabled={loading}
+                            />
 
                             <TextInput
                                 accessibilityLabel={t('Callsign')}
@@ -3756,32 +3803,26 @@ export default function WelcomeScreen() {
                                 </Text>
                             )}
 
-                            <SavedNodePicker
-                                nodes={savedNodes}
-                                onPick={(url) => { setRecoveryAnchorUrl(url); setError(null); }}
-                                disabled={loading}
-                                selectedUrl={normalizeNodeUrl(recoveryAnchorUrl.trim())}
-                                label={t('Your communities on this phone')}
-                                actionLabel={t('Recover on')}
-                                hint={t("Or type your community's name or address below.")}
-                            />
-
-                            <TextInput
-                                accessibilityLabel={t('Community name or node address')}
-                                accessibilityHint={t('Enter your community name, like mullum, or its full address')}
-                                style={styles.input}
-                                placeholder={t('Community name or address (e.g. mullum)')}
-                                placeholderTextColor={colors.text.muted}
-                                value={recoveryAnchorUrl}
-                                onChangeText={setRecoveryAnchorUrl}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                keyboardType="url"
-                                editable={!loading}
-                            />
+                            {/* The address is typed only for "another address" (or before anything is chosen): a chip already is one. */}
+                            {anotherAddress && (
+                                <TextInput
+                                    ref={recoveryAddressRef}
+                                    accessibilityLabel={t('Community name or node address')}
+                                    accessibilityHint={t('Enter your community name, like mullum, or its full address')}
+                                    style={styles.input}
+                                    placeholder={t('Community name or address (e.g. mullum)')}
+                                    placeholderTextColor={colors.text.muted}
+                                    value={recoveryAnchorUrl}
+                                    onChangeText={setRecoveryAnchorUrl}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="url"
+                                    editable={!loading}
+                                />
+                            )}
                             {/* Shown, not assumed — see isBareCommunityName. A community on its
                                 own domain has a name that expands to the wrong address. */}
-                            {isBareCommunityName(recoveryAnchorUrl) && (
+                            {anotherAddress && isBareCommunityName(recoveryAnchorUrl) && (
                                 <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
                                     {t('Will connect to {address} — if your community is hosted elsewhere, enter its full address instead.', { address: normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '') })}
                                 </Text>
@@ -3935,6 +3976,31 @@ export default function WelcomeScreen() {
                                     <Text style={styles.subtitle}>
                                         {t("Sign in with the account you linked to BeanPool. The sign-in finds your account: there's no name or address to type.")}
                                     </Text>
+                                    {/* Which community? first, as taps (front doors S10, DESIGN-entry-points-fable.md §3.5 item 2), the same chips
+                                        as the 12 words'. What is chosen here is where the account opens once the vault lets it go (the next
+                                        step still shows it, and a copy's own list is offered there). */}
+                                    <RestoreCommunityChips
+                                        saved={savedNodes}
+                                        value={ssoCommunity}
+                                        onChoose={(text) => { ssoCommunityPicked.current = true; setSsoCommunity(text); setError(null); }}
+                                        onAnother={(text) => { ssoCommunityPicked.current = true; setSsoCommunity(text); setError(null); }}
+                                        disabled={loading}
+                                    />
+                                    {[null, 'another'].includes(chosenRestoreChoice(ssoCommunity, restoreCommunityChoices(savedNodes)) as string | null) && (
+                                        <TextInput
+                                            accessibilityLabel={t('Community name or node address')}
+                                            accessibilityHint={t('Enter your community name, like mullum, or its full address')}
+                                            style={styles.input}
+                                            placeholder={t('Community name or address (e.g. mullum)')}
+                                            placeholderTextColor={colors.text.muted}
+                                            value={ssoCommunity}
+                                            onChangeText={(text) => { ssoCommunityPicked.current = true; setSsoCommunity(text); }}
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                            keyboardType="url"
+                                            editable={!loading}
+                                        />
+                                    )}
                                     <Text style={styles.fieldHint}>
                                         {t("For your safety it takes a day, or less if another phone of yours says it's you.")}
                                     </Text>
@@ -3970,6 +4036,12 @@ export default function WelcomeScreen() {
                                                 style={{ marginBottom: 10, width: '100%' }}
                                             />
                                         </>
+                                    )}
+                                    {/* The day's wait is said above; the 12 words are the fast path beside it, as on the waiting screen. */}
+                                    {!loading && (
+                                        <Pressable style={[styles.recoverBtn, { marginTop: 2 }]} onPress={() => handleSsoStartAgain('recover')} accessibilityRole="button">
+                                            <Text style={styles.recoverBtnText}>{t('🔑 Use my 12 words instead')}</Text>
+                                        </Pressable>
                                     )}
                                 </>
                             )}
@@ -4030,7 +4102,7 @@ export default function WelcomeScreen() {
     // the two doors come right under the title (components/WelcomeDoors.tsx, DESIGN-global-entry §B.3): Join with an
     // invite first and primary, Explore BeanPool worldwide under it, always drawn, so at 320 dp with text at 1.3× both
     // are above the fold (the long sentence about BeanPool comes after them: above them it pushed Explore under the fold).
-    // Restoring an account on a new phone is the rare case and lives as a quiet link below.
+    // Restoring an account on a new phone is a full-width quiet third button under the two doors, above the hint (front doors S10).
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style={dark ? 'light' : 'dark'} />
@@ -4041,7 +4113,7 @@ export default function WelcomeScreen() {
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
 
-                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={() => { void exploreWorldwide(); }} exploring={exploring} styles={styles} />
+                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
 
                     <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
@@ -4065,15 +4137,6 @@ export default function WelcomeScreen() {
                             <Text style={styles.clipboardHintText}>{t('📋 Been sent an invite? Tap to check your clipboard')}</Text>
                         </Pressable>
                     ))}
-
-                    <Pressable
-                        style={styles.restoreSecondaryBtn}
-                        onPress={() => setMode('member')}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Already a Member? Restore Account')}
-                    >
-                        <Text style={styles.restoreSecondaryBtnText}>{t('🔑 Already a Member? Restore Account →')}</Text>
-                    </Pressable>
 
                     {/* Whoever installed a community server claims it here, and the claim makes their account: no invite,
                         and nothing of ours (app/claim-community.tsx). Quiet, under the fold: the doors and their hint stay
@@ -4129,6 +4192,10 @@ const styles = StyleSheet.create({
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
     tosLink: { color: dark ? palette.blue400 : palette.blue600, textDecorationLine: 'underline' },
     inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
+    // Already a member? Restore, the third button under the two doors (front doors S10): full width, quiet (an outline, no fill),
+    // a 48dp target; its label shrinks to two lines like the doors', so it stays above the fold at 320dp and 1.3x text.
+    restoreBtn: { width: '100%', minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    restoreBtnText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 15, fontWeight: '700', textAlign: 'center' },
     restoreSecondaryBtn: {
         marginTop: 20,
         paddingVertical: 14,
@@ -4198,6 +4265,8 @@ const styles = StyleSheet.create({
     pasteCard: { backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', borderRadius: 12, padding: 14, marginBottom: 16, alignItems: 'center' },
     pasteCardText: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 12 },
     pasteCardSystemBtn: { width: 170, height: 44 },
+    scanInviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent' },
+    scanInviteBtnText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
     pasteCardBtn: { backgroundColor: palette.blue600, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999, alignItems: 'center' },
     pasteCardBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700' },
 

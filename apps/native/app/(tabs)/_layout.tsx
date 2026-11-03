@@ -24,6 +24,7 @@ import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
 import { keepCommunityIdentity } from '../../utils/address-follow';
+import { HallBanner } from '../../components/HallBanner';
 
 /** Each tour step's tab as a route, written out so every link into the app is checked (deep-links-resolve.test.ts). */
 const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' | '/(tabs)/chats' | '/(tabs)/projects' | '/(tabs)/ledger'> = {
@@ -381,6 +382,8 @@ export default function TabLayout() {
             <View style={isMapScreen ? { height: measuredHeaderHeight } : undefined}>
                 <GlobalHeader onMeasure={onHeaderMeasure} />
             </View>
+            {/* Lights-out H2: on the hall laptop, the record's age (components/HallBanner.tsx). Nothing otherwise. */}
+            <HallBanner />
             <View style={{ flex: 1, marginBottom: tourSceneInset(tourRunning, tourBarHeight) }} testID="tab-scenes">
             <Tabs backBehavior="none" screenOptions={{
                 tabBarPosition: 'top',

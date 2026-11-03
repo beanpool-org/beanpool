@@ -31,9 +31,13 @@ import { audienceOf, ed25519KeyOfPeerId, formatDate, t } from '@beanpool/core';
 import {
     fetchIdentityStatement, keptCommunityIdentity, sameCommunity, type CommunityIdentity,
 } from './address-follow';
-import { clearHall, hallOriginOf, readHall, writeHall, type HallRecord } from './hall-state';
-import { isPlainNodeAddress, normalizeNodeUrl, plainOriginOf } from './node-url';
+import { clearHall, readHall, writeHall, type HallRecord } from './hall-state';
+import type { HallLink } from './hall-link';
+import { isPlainNodeAddress, plainOriginOf } from './node-url';
 import type { CopyCarry } from './community-copy-carry';
+
+// The poster's link and the typed number (kept light for app/+native-intent.ts).
+export { hallAddressOf, hallRouteFor, hallRouteFromSystemPath, parseHallLink, type HallLink } from './hall-link';
 
 /** Where a node signs a nonce with its node key (apps/server routes/public-address.ts). */
 export const ATTEST_PATH = '/api/attest';
@@ -42,77 +46,6 @@ const ATTEST_TAGS: Record<string, string> = { v1: 'beanpool-node-attest/v1', v2:
 const CHECK_TIMEOUT_MS = 8_000;
 /** The laptop is gone: the phone asks its own address by itself at most this often (design §2.5, as the follow card). */
 export const HOME_TRY_MS = 60 * 60 * 1000;
-
-// ─── The door ───────────────────────────────────────────────────────────────────────────────
-
-/** What a hall link or a typed number names. `for` and `id` are only ever compared or shown, never signed for. */
-export interface HallLink {
-    /** The laptop's address as an origin (utils/hall-state.ts hallOriginOf: a private address only). */
-    at: string;
-    /** The community's name the poster says, when it says one: must equal the phone's own, or nothing moves. */
-    for: string | null;
-    /** The node key's short form the poster prints, for a careful person to compare. Shown, never trusted. */
-    id: string | null;
-}
-
-/** A typed or scanned laptop address (`192.168.8.1:8080`, `http://192.168.8.1`), as the hall origin, or null. */
-export function hallAddressOf(raw: unknown): string | null {
-    if (typeof raw !== 'string') return null;
-    const s = raw.trim();
-    if (!s || /\s/.test(s)) return null;
-    if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(s) && !/^https?:\/\//i.test(s)) return null;
-    // A number with no scheme is plain http (node-url.ts normalizeNodeUrl gives a private IPv4 address http by itself).
-    const withPort = /^\d{1,3}(?:\.\d{1,3}){3}:\d{1,5}(?:\/.*)?$/.test(s) ? `http://${s}` : s;
-    return hallOriginOf(normalizeNodeUrl(withPort));
-}
-
-/** A bare host as audienceOf writes it, or null. */
-function bareHost(raw: unknown): string | null {
-    if (typeof raw !== 'string' || !raw || /[/:@?#\\\s]/.test(raw)) return null;
-    const host = audienceOf(raw);
-    return host === raw ? host : null;
-}
-
-/** `beanpool://hall?at=…&for=…&id=…` (the poster's QR), read strictly, or null when it isn't one. */
-export function parseHallLink(raw: unknown): HallLink | null {
-    if (typeof raw !== 'string') return null;
-    const m = /^(?:beanpool:\/\/\/?|\/)?hall\/?(\?[^#]*)?(?:#.*)?$/i.exec(raw.trim());
-    if (!m) return null;
-    let q: URLSearchParams;
-    try {
-        q = new URLSearchParams((m[1] ?? '').slice(1));
-    } catch {
-        return null;
-    }
-    const at = hallAddressOf(q.get('at'));
-    if (!at) return null;
-    const forRaw = q.get('for');
-    const forHost = forRaw === null ? null : bareHost(forRaw.toLowerCase());
-    if (forRaw !== null && !forHost) return null;
-    const idRaw = q.get('id');
-    const id = idRaw && /^[1-9A-HJ-NP-Za-km-z.…-]{4,64}$/.test(idRaw) ? idRaw : null;
-    return { at, for: forHost, id };
-}
-
-/** The route a hall link opens (app/hall.tsx), with only the fields that passed their checks. */
-export function hallRouteFor(link: HallLink): `/hall?${string}` {
-    const q = [`at=${encodeURIComponent(link.at)}`];
-    if (link.for) q.push(`for=${encodeURIComponent(link.for)}`);
-    if (link.id) q.push(`id=${encodeURIComponent(link.id)}`);
-    return `/hall?${q.join('&')}`;
-}
-
-/**
- * The route for a system path (app/+native-intent.ts): a whole hall link opens the hall screen with it; a bare
- * `beanpool://hall` opens the screen to type the number. Null for anything else.
- */
-export function hallRouteFromSystemPath(path: unknown): string | null {
-    if (typeof path !== 'string') return null;
-    const s = path.trim();
-    if (!/^(?:beanpool:\/\/\/?|\/)?hall\/?(?:[?#].*)?$/i.test(s)) return null;
-    const link = parseHallLink(s);
-    return link ? hallRouteFor(link) : '/hall';
-}
 
 // ─── The check: this laptop is my community ─────────────────────────────────────────────────
 

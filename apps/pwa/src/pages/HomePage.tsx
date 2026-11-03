@@ -38,7 +38,7 @@ import {
     ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
     type CardHue,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, knockStillAnswerable, t, tn, word,
+    capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -2822,8 +2822,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const n = c.notices!;
                 return (
                     <HomeCard key={id} {...common}>
-                        <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{n.first.title}</p>
-                        {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{n.first.line}</p>}
+                        <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{inviteAskNoticeHere(n.first.title)}</p>
+                        {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{inviteAskNoticeHere(n.first.line)}</p>}
                         {n.unseen > 1 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{tn(n.unseen - 1, 'and {n} more', 'and {n} more')}</p>}
                         <HomeMore onClick={() => {
                             // Never a notice of a Home this page no longer holds (another community's, in a tab that missed the news).

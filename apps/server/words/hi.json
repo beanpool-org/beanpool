@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "यह पोस्ट समाप्त हो चुकी है, इसलिए इसे पिन नहीं किया जा सकता।",
   "Three posts are pinned already. Take one off first.": "तीन पोस्ट पहले से पिन हैं। पहले एक हटाएँ।",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "निमंत्रण पर समर्थन 25, 50 या 100 फलियों का होता है, या कोई नहीं।",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "केवल मालिक, एडमिन और नियुक्त समर्थक ही निमंत्रण पर किसी का समर्थन कर सकते हैं।"
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "केवल मालिक, एडमिन और नियुक्त समर्थक ही निमंत्रण पर किसी का समर्थन कर सकते हैं।",
+  "Only a member of this community can ask an admin to invite someone.": "केवल इस समुदाय का सदस्य किसी व्यवस्थापक से किसी को आमंत्रित करने को कह सकता है।",
+  "Your account here is paused for now, so you can’t ask for an invite.": "आपका खाता यहाँ अभी रोका गया है, इसलिए आप आमंत्रण नहीं माँग सकते।",
+  "Only this community’s owners and admins read and answer these.": "ये अनुरोध केवल इस समुदाय के मालिक और व्यवस्थापक पढ़ते और उत्तर देते हैं।",
+  "This ask is no longer waiting. It may have been answered or taken back.": "यह अनुरोध अब प्रतीक्षा में नहीं है। शायद इसका उत्तर दिया गया या इसे वापस ले लिया गया।",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "यह सर्वर समुदाय की बैकअप प्रति है, इसलिए यह इसे नहीं ले सकता। कृपया समुदाय के अपने पते पर फिर से कोशिश करें।",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "यहाँ पूछने को कुछ नहीं: यह समुदाय आमंत्रण केवल व्यवस्थापकों तक सीमित नहीं रखता।",
+  "You’re an owner or admin here, so you can make the invite yourself.": "आप यहाँ मालिक या व्यवस्थापक हैं, इसलिए आमंत्रण स्वयं बना सकते हैं।",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "आपके {n} अनुरोध प्रतीक्षा में हैं। एक वापस लें या उत्तर की प्रतीक्षा करें।",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "आप आज {n} बार पूछ चुके हैं। कल फिर पूछ सकते हैं।",
+  "Please keep this to {n} characters.": "कृपया इसे {n} अक्षरों तक रखें।",
+  "Please fill in their first name and how you know them.": "कृपया उनका पहला नाम और आप उन्हें कैसे जानते हैं, लिखें।",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "कृपया फ़ोन नंबर और ईमेल पते न लिखें। व्यवस्थापक के लिए पहला नाम और आप उन्हें कैसे जानते हैं, इतना काफ़ी है।"
 }

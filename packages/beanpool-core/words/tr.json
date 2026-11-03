@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct core); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct core); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -938,5 +938,33 @@
   "None": "Hiçbiri",
   "{amount} Beans": "{amount} Fasulye",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Davetteki kefalet 25, 50 veya 100 Fasulye’dir ya da hiç yoktur.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Davette birine yalnızca sahipler, yöneticiler ve atanmış kefiller kefil olabilir."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Davette birine yalnızca sahipler, yöneticiler ve atanmış kefiller kefil olabilir.",
+  "Ask an admin to invite someone": "Bir yöneticiden birini davet etmesini iste",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "Bir yönetici bunu okur ve karar verir. Yalnızca bir ad ve kişiyi nereden tanıdığınız: telefon veya e-posta yok.",
+  "Their first name": "Adı",
+  "How you know them": "Onu nereden tanıyorsunuz",
+  "Send to the admins": "Yöneticilere gönder",
+  "What you’ve asked": "Sizin istekleriniz",
+  "Waiting for an admin": "Bir yönetici bekleniyor",
+  "Take it back": "Geri al",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "Bir yönetici, iletmeniz için bir davet oluşturdu. Bir kez, 30 gün boyunca çalışır.",
+  "Someone has joined with this invite.": "Biri bu davetle katıldı.",
+  "This invite lapsed before anyone used it.": "Bu davetin süresi, kimse kullanmadan doldu.",
+  "An admin said no.": "Bir yönetici hayır dedi.",
+  "Asked {date}": "{date} tarihinde istendi",
+  "Members asking you to invite someone": "Üyeler birini davet etmenizi istiyor",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "Davet gönder sıradan bir davet oluşturur ve kod, iletmesi için isteyen üyeye gider.",
+  "Asked by {name}": "İsteyen: {name}",
+  "Send invite": "Davet gönder",
+  "No\u0004button: refuse a request": "Hayır",
+  "A short reason (you can leave this out)": "Kısa bir neden (boş bırakılabilir)",
+  "Sent. The code is with the member now.": "Gönderildi. Kod artık üyede.",
+  "Done. The member has been told.": "Tamam. Üyeye bildirildi.",
+  "Your ask to invite someone": "Birini davet etme isteğiniz",
+  "An admin answered. Open Invites to read it.": "Bir yönetici yanıtladı. Okumak için Davetler'i açın.",
+  "An admin answered your ask to invite someone.": "Bir yönetici, birini davet etme isteğinizi yanıtladı.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "one": "{n} üye birini davet etmenizi istedi",
+    "other": "{n} üye birini davet etmenizi istedi"
+  }
 }

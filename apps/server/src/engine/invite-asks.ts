@@ -26,8 +26,8 @@
  * What tells the member how it ended is a kept notice (engine/kept-notices.ts), not the request: fixed words, and in its
  * data the outcome, the time they asked, and the code or the admin's reason. No name and no line of the request, and no
  * admin's name: the moderation notices' own rule. A notice goes with a member's account, moves with a re-key and leaves a
- * standby by tombstone like any other, and is gone after 60 days. Neither the push nor the socket event carries anything
- * but the fixed words.
+ * standby by tombstone like any other, and is gone after 60 days. The push carries the fixed words only, and no socket
+ * event carries anything about an ask.
  *
  * ## Limits
  *
@@ -183,7 +183,7 @@ export function answerWithInvite(id: string, admin: string, vouchLevel: VouchLev
         const invite = generateInvite(admin, undefined, () => assertMayMakeInvite(admin), undefined, vouchLevel);
         if (!invite) throw new Error('an ask could not be answered: the invite was not made');
         deletePlainRows('invite_asks', 'id = ?', id);
-        const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeInvited,
+        const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeBody,
             { kind: NOTICE_KIND, outcome: 'invited', code: invite.code, askedAt: row.asked_at }, now);
         if (!kept) throw new Error('an ask could not be answered: the answer was not kept');
         return { ok: true, asker: row.asker_pubkey };
@@ -196,7 +196,7 @@ export function answerNo(id: string, reason: string, now = Date.now()): AskAnswe
         const row = liveAsk(id, now);
         if (!row) return { ok: false, reason: 'not_found' };
         deletePlainRows('invite_asks', 'id = ?', id);
-        const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeNo,
+        const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeBody,
             { kind: NOTICE_KIND, outcome: 'no', askedAt: row.asked_at, ...(reason ? { reason } : {}) }, now);
         if (!kept) throw new Error('an ask could not be answered: the answer was not kept');
         return { ok: true, asker: row.asker_pubkey };

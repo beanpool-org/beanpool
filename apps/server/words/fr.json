@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -36,5 +36,17 @@
   "This post has ended, so it can't be pinned.": "Cette publication est terminée, elle ne peut donc pas être épinglée.",
   "Three posts are pinned already. Take one off first.": "Trois publications sont déjà épinglées. Retirez-en une d'abord.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Une garantie sur une invitation est de 25, 50 ou 100 haricots, ou aucune.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Seuls les propriétaires, les admins et les garants désignés peuvent se porter garants de quelqu’un sur une invitation."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Seuls les propriétaires, les admins et les garants désignés peuvent se porter garants de quelqu’un sur une invitation.",
+  "Only a member of this community can ask an admin to invite someone.": "Seul un membre de cette communauté peut demander à un administrateur d’inviter quelqu’un.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "Votre compte est en pause pour l’instant, vous ne pouvez donc pas demander d’invitation.",
+  "Only this community’s owners and admins read and answer these.": "Seuls les propriétaires et administrateurs de cette communauté lisent ces demandes et y répondent.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "Cette demande n’est plus en attente. Elle a peut-être reçu une réponse ou été retirée.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "Ce serveur est une copie de secours de la communauté, il ne peut donc pas accepter ceci. Réessayez à l’adresse de la communauté.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "Rien à demander ici : dans cette communauté, les invitations ne sont pas réservées aux administrateurs.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "Vous êtes propriétaire ou administrateur ici : vous pouvez créer l’invitation vous-même.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "Vous avez {n} demandes en attente. Retirez-en une ou attendez une réponse.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "Vous avez demandé {n} fois aujourd’hui. Vous pourrez redemander demain.",
+  "Please keep this to {n} characters.": "Limitez ce texte à {n} caractères.",
+  "Please fill in their first name and how you know them.": "Indiquez son prénom et comment vous la connaissez.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Ne mettez ni numéro de téléphone ni adresse e-mail. Un prénom et la façon dont vous connaissez cette personne suffisent à un administrateur."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -938,5 +938,33 @@
   "None": "ഒന്നുമില്ല",
   "{amount} Beans": "{amount} പയർ",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "ക്ഷണത്തിലെ സാക്ഷ്യപ്പെടുത്തൽ 25, 50 അല്ലെങ്കിൽ 100 പയർ ആണ്, അല്ലെങ്കിൽ ഒന്നുമില്ല.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "ഉടമകൾക്കും അഡ്മിൻമാർക്കും നിയമിത സാക്ഷ്യപ്പെടുത്തുന്നവർക്കും മാത്രമേ ക്ഷണത്തിൽ ഒരാളെ സാക്ഷ്യപ്പെടുത്താനാകൂ."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "ഉടമകൾക്കും അഡ്മിൻമാർക്കും നിയമിത സാക്ഷ്യപ്പെടുത്തുന്നവർക്കും മാത്രമേ ക്ഷണത്തിൽ ഒരാളെ സാക്ഷ്യപ്പെടുത്താനാകൂ.",
+  "Ask an admin to invite someone": "ആരെയെങ്കിലും ക്ഷണിക്കാൻ ഒരു അഡ്മിനോട് ആവശ്യപ്പെടുക",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "ഒരു അഡ്മിൻ ഇത് വായിച്ച് തീരുമാനിക്കും. പേരിന്റെ ആദ്യഭാഗവും അവരെ എങ്ങനെ അറിയാം എന്നതും മാത്രം: ഫോൺ നമ്പറോ ഇമെയിലോ വേണ്ട.",
+  "Their first name": "അവരുടെ പേര്",
+  "How you know them": "അവരെ എങ്ങനെ അറിയാം",
+  "Send to the admins": "അഡ്മിൻമാർക്ക് അയയ്ക്കുക",
+  "What you’ve asked": "നിങ്ങൾ ആവശ്യപ്പെട്ടത്",
+  "Waiting for an admin": "അഡ്മിനെ കാത്തിരിക്കുന്നു",
+  "Take it back": "പിൻവലിക്കുക",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "നിങ്ങൾക്ക് കൈമാറാൻ ഒരു അഡ്മിൻ ക്ഷണം ഉണ്ടാക്കി. ഇത് ഒരിക്കൽ, 30 ദിവസത്തേക്ക് പ്രവർത്തിക്കും.",
+  "Someone has joined with this invite.": "ഈ ക്ഷണം ഉപയോഗിച്ച് ഒരാൾ ചേർന്നു.",
+  "This invite lapsed before anyone used it.": "ആരും ഉപയോഗിക്കും മുൻപ് ഈ ക്ഷണത്തിന്റെ കാലാവധി കഴിഞ്ഞു.",
+  "An admin said no.": "ഒരു അഡ്മിൻ ഇല്ല എന്ന് പറഞ്ഞു.",
+  "Asked {date}": "{date}-ന് ആവശ്യപ്പെട്ടു",
+  "Members asking you to invite someone": "ആരെയെങ്കിലും ക്ഷണിക്കാൻ അംഗങ്ങൾ ആവശ്യപ്പെടുന്നു",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "ക്ഷണം അയയ്ക്കുക ഒരു സാധാരണ ക്ഷണം ഉണ്ടാക്കും, കോഡ് ആവശ്യപ്പെട്ട അംഗത്തിന് കൈമാറാനായി ലഭിക്കും.",
+  "Asked by {name}": "{name} ആവശ്യപ്പെട്ടു",
+  "Send invite": "ക്ഷണം അയയ്ക്കുക",
+  "No\u0004button: refuse a request": "ഇല്ല",
+  "A short reason (you can leave this out)": "ചെറിയ കാരണം (ഒഴിവാക്കാം)",
+  "Sent. The code is with the member now.": "അയച്ചു. കോഡ് ഇപ്പോൾ അംഗത്തിന്റെ കൈവശമാണ്.",
+  "Done. The member has been told.": "കഴിഞ്ഞു. അംഗത്തെ അറിയിച്ചു.",
+  "Your ask to invite someone": "ആരെയെങ്കിലും ക്ഷണിക്കാനുള്ള നിങ്ങളുടെ അഭ്യർത്ഥന",
+  "An admin answered. Open Invites to read it.": "ഒരു അഡ്മിൻ മറുപടി നൽകി. വായിക്കാൻ ക്ഷണങ്ങൾ തുറക്കുക.",
+  "An admin answered your ask to invite someone.": "ആരെയെങ്കിലും ക്ഷണിക്കാനുള്ള നിങ്ങളുടെ അഭ്യർത്ഥനയ്ക്ക് ഒരു അഡ്മിൻ മറുപടി നൽകി.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "one": "ആരെയെങ്കിലും ക്ഷണിക്കാൻ {n} അംഗം ആവശ്യപ്പെട്ടു",
+    "other": "ആരെയെങ്കിലും ക്ഷണിക്കാൻ {n} അംഗങ്ങൾ ആവശ്യപ്പെട്ടു"
+  }
 }

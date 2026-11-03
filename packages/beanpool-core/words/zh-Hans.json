@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -898,5 +898,32 @@
   "None": "无",
   "{amount} Beans": "{amount} 颗豆子",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "邀请中的担保为 25、50 或 100 颗豆子，或者无。",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有所有者、管理员和指定担保人才能在邀请中为他人担保。"
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有所有者、管理员和指定担保人才能在邀请中为他人担保。",
+  "Ask an admin to invite someone": "请管理员邀请某人",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "管理员会阅读并决定。只需名字和你们如何认识：不要填电话或邮箱。",
+  "Their first name": "对方的名字",
+  "How you know them": "你们如何认识",
+  "Send to the admins": "发送给管理员",
+  "What you’ve asked": "你的请求",
+  "Waiting for an admin": "等待管理员",
+  "Take it back": "撤回",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "管理员已创建邀请，请你转交。可使用一次，有效期 30 天。",
+  "Someone has joined with this invite.": "已有人通过此邀请加入。",
+  "This invite lapsed before anyone used it.": "此邀请在无人使用前已过期。",
+  "An admin said no.": "管理员拒绝了。",
+  "Asked {date}": "请求于 {date}",
+  "Members asking you to invite someone": "成员请你邀请某人",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "“发送邀请”会创建一份普通邀请，邀请码交给提出请求的成员，由其转交。",
+  "Asked by {name}": "{name} 的请求",
+  "Send invite": "发送邀请",
+  "No\u0004button: refuse a request": "不",
+  "A short reason (you can leave this out)": "简短理由（可不填）",
+  "Sent. The code is with the member now.": "已发送。邀请码已交给该成员。",
+  "Done. The member has been told.": "已完成。已告知该成员。",
+  "Your ask to invite someone": "你请管理员邀请某人的请求",
+  "An admin answered. Open Invites to read it.": "管理员已回复。打开“邀请”查看。",
+  "An admin answered your ask to invite someone.": "管理员已回复你邀请某人的请求。",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "other": "{n} 位成员请你邀请某人"
+  }
 }

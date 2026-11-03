@@ -109,13 +109,12 @@ function wholeQuery(raw: unknown, fallback: number, max: number): number | null 
 
 export function createInviteAskRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { rateLimit, broadcast } = deps;
+    const { rateLimit } = deps;
 
-    /** Tells the member an ask of theirs was answered: fixed words only, to their own phones and sockets. */
+    /** Tells the member an ask of theirs was answered: fixed words only, to their own phones. Their kept notice does the rest. */
     const tellAsker = (asker: string): void => {
         const { title, body } = pushNoticeWords('community.invite-ask');
         try { dispatchPushNotification([asker], 'SYSTEM', title, body, { screen: 'people' }, 'marketplace', 'community.invite-ask'); } catch { /* it is kept */ }
-        broadcast?.({ type: 'system_announcement', title, message: body, severity: 'info' }, [asker]);
     };
 
     router.post('/api/invite/asks', async (ctx) => {

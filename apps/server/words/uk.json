@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "Цей допис завершено, тому його не можна закріпити.",
   "Three posts are pinned already. Take one off first.": "Вже закріплено три дописи. Спочатку зніміть один.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Порука в запрошенні — це 25, 50 або 100 бобів чи жодної.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Поручитися за когось у запрошенні можуть лише власники, адміністратори та призначені поручителі."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Поручитися за когось у запрошенні можуть лише власники, адміністратори та призначені поручителі.",
+  "Only a member of this community can ask an admin to invite someone.": "Лише учасник цієї спільноти може попросити адміністратора запросити людину.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "Ваш обліковий запис тут зараз призупинено, тож ви не можете просити про запрошення.",
+  "Only this community’s owners and admins read and answer these.": "Ці прохання читають і на них відповідають лише власники та адміністратори спільноти.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "Це прохання вже не чекає. Можливо, на нього відповіли або його відкликали.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "Цей сервер — резервна копія спільноти, тож він не може цього прийняти. Спробуйте ще раз за адресою самої спільноти.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "Тут нема про що просити: у цій спільноті запрошувати можуть не лише адміністратори.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "Ви тут власник або адміністратор, тож можете створити запрошення самі.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "У вас {n} прохання чекають. Відкличте одне або дочекайтеся відповіді.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "Сьогодні ви вже просили {n} рази. Знову попросити можна завтра.",
+  "Please keep this to {n} characters.": "Скоротіть це до {n} символів.",
+  "Please fill in their first name and how you know them.": "Вкажіть ім’я людини та звідки ви її знаєте.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Не вказуйте номери телефонів та адреси пошти. Адміністратору достатньо імені й того, звідки ви знаєте цю людину."
 }

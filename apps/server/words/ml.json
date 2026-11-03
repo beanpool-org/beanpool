@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "ഈ പോസ്റ്റ് അവസാനിച്ചു, അതിനാൽ പിൻ ചെയ്യാനാകില്ല.",
   "Three posts are pinned already. Take one off first.": "മൂന്ന് പോസ്റ്റുകൾ ഇതിനകം പിൻ ചെയ്തിട്ടുണ്ട്. ആദ്യം ഒന്ന് നീക്കുക.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "ക്ഷണത്തിലെ സാക്ഷ്യപ്പെടുത്തൽ 25, 50 അല്ലെങ്കിൽ 100 പയർ ആണ്, അല്ലെങ്കിൽ ഒന്നുമില്ല.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "ഉടമകൾക്കും അഡ്മിൻമാർക്കും നിയമിത സാക്ഷ്യപ്പെടുത്തുന്നവർക്കും മാത്രമേ ക്ഷണത്തിൽ ഒരാളെ സാക്ഷ്യപ്പെടുത്താനാകൂ."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "ഉടമകൾക്കും അഡ്മിൻമാർക്കും നിയമിത സാക്ഷ്യപ്പെടുത്തുന്നവർക്കും മാത്രമേ ക്ഷണത്തിൽ ഒരാളെ സാക്ഷ്യപ്പെടുത്താനാകൂ.",
+  "Only a member of this community can ask an admin to invite someone.": "ഈ കമ്മ്യൂണിറ്റിയിലെ അംഗത്തിന് മാത്രമേ ആരെയെങ്കിലും ക്ഷണിക്കാൻ അഡ്മിനോട് ആവശ്യപ്പെടാനാകൂ.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "നിങ്ങളുടെ അക്കൗണ്ട് ഇവിടെ ഇപ്പോൾ താൽക്കാലികമായി നിർത്തിയിരിക്കുന്നു, അതിനാൽ ക്ഷണം ആവശ്യപ്പെടാനാകില്ല.",
+  "Only this community’s owners and admins read and answer these.": "ഈ കമ്മ്യൂണിറ്റിയുടെ ഉടമകളും അഡ്മിൻമാരും മാത്രമേ ഇവ വായിക്കുകയും മറുപടി നൽകുകയും ചെയ്യൂ.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "ഈ അഭ്യർത്ഥന ഇനി കാത്തിരിക്കുന്നില്ല. മറുപടി നൽകിയിരിക്കാം അല്ലെങ്കിൽ പിൻവലിച്ചിരിക്കാം.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "ഈ സെർവർ കമ്മ്യൂണിറ്റിയുടെ സ്റ്റാൻഡ്ബൈ പകർപ്പാണ്, അതിനാൽ ഇത് സ്വീകരിക്കാനാകില്ല. കമ്മ്യൂണിറ്റിയുടെ സ്വന്തം വിലാസത്തിൽ വീണ്ടും ശ്രമിക്കുക.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "ഇവിടെ ആവശ്യപ്പെടാൻ ഒന്നുമില്ല: ഈ കമ്മ്യൂണിറ്റി ക്ഷണങ്ങൾ അഡ്മിൻമാർക്ക് മാത്രമായി വെച്ചിട്ടില്ല.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "നിങ്ങൾ ഇവിടെ ഉടമയോ അഡ്മിനോ ആണ്, അതിനാൽ ക്ഷണം സ്വയം ഉണ്ടാക്കാം.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "നിങ്ങളുടെ {n} അഭ്യർത്ഥനകൾ കാത്തിരിക്കുന്നു. ഒന്ന് പിൻവലിക്കുക അല്ലെങ്കിൽ മറുപടിക്കായി കാത്തിരിക്കുക.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "ഇന്ന് നിങ്ങൾ {n} തവണ ആവശ്യപ്പെട്ടു. നാളെ വീണ്ടും ആവശ്യപ്പെടാം.",
+  "Please keep this to {n} characters.": "ഇത് {n} അക്ഷരങ്ങളിൽ ഒതുക്കുക.",
+  "Please fill in their first name and how you know them.": "അവരുടെ പേരും അവരെ എങ്ങനെ അറിയാം എന്നതും പൂരിപ്പിക്കുക.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "ഫോൺ നമ്പറുകളും ഇമെയിൽ വിലാസങ്ങളും ഒഴിവാക്കുക. ഒരു അഡ്മിന് പേരും അവരെ എങ്ങനെ അറിയാം എന്നതും മതി."
 }

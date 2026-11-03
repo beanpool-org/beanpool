@@ -158,7 +158,7 @@ function AskCard({ ask, offersVouch, busy, onSend, onNo }: {
                         <input className={FIELD} value={reason} onChange={e => setReason(e.target.value)} maxLength={INVITE_ASK_LIMITS.reason} autoComplete="off" autoFocus data-testid={`invite-ask-reason-${ask.id}`} />
                     </label>
                     <div className="flex flex-wrap gap-2">
-                        <button type="submit" className={STRONG} disabled={busy} data-testid={`invite-ask-send-no-${ask.id}`}>{t(INVITE_ASK_WORDS.sendNo)}</button>
+                        <button type="submit" className={STRONG} disabled={busy} data-testid={`invite-ask-send-no-${ask.id}`}>{t(INVITE_ASK_WORDS.say)}</button>
                         <button type="button" className={QUIET} onClick={() => setSaying(false)} disabled={busy}>{t('Cancel')}</button>
                     </div>
                 </form>

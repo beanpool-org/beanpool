@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "Αυτή η ανάρτηση έχει λήξει, οπότε δεν μπορεί να καρφιτσωθεί.",
   "Three posts are pinned already. Take one off first.": "Τρεις αναρτήσεις είναι ήδη καρφιτσωμένες. Βγάλτε πρώτα μία.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Η εγγύηση σε μια πρόσκληση είναι 25, 50 ή 100 φασόλια ή καμία.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Μόνο οι ιδιοκτήτες, οι διαχειριστές και οι διορισμένοι εγγυητές μπορούν να εγγυηθούν για κάποιον σε μια πρόσκληση."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Μόνο οι ιδιοκτήτες, οι διαχειριστές και οι διορισμένοι εγγυητές μπορούν να εγγυηθούν για κάποιον σε μια πρόσκληση.",
+  "Only a member of this community can ask an admin to invite someone.": "Μόνο ένα μέλος αυτής της κοινότητας μπορεί να ζητήσει από διαχειριστή να προσκαλέσει κάποιον.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "Ο λογαριασμός σας εδώ είναι σε παύση προς το παρόν, οπότε δεν μπορείτε να ζητήσετε πρόσκληση.",
+  "Only this community’s owners and admins read and answer these.": "Μόνο οι ιδιοκτήτες και οι διαχειριστές αυτής της κοινότητας διαβάζουν και απαντούν σε αυτά.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "Αυτό το αίτημα δεν περιμένει πια. Ίσως απαντήθηκε ή αποσύρθηκε.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "Αυτός ο διακομιστής είναι εφεδρικό αντίγραφο της κοινότητας, οπότε δεν μπορεί να το δεχτεί. Δοκιμάστε ξανά στη διεύθυνση της κοινότητας.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "Δεν υπάρχει κάτι να ζητήσετε εδώ: αυτή η κοινότητα δεν κρατά τις προσκλήσεις μόνο για τους διαχειριστές της.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "Είστε ιδιοκτήτης ή διαχειριστής εδώ, οπότε μπορείτε να φτιάξετε μόνοι σας την πρόσκληση.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "Έχετε {n} αιτήματα σε αναμονή. Αποσύρετε ένα ή περιμένετε απάντηση.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "Ζητήσατε {n} φορές σήμερα. Μπορείτε να ζητήσετε ξανά αύριο.",
+  "Please keep this to {n} characters.": "Κρατήστε το έως {n} χαρακτήρες.",
+  "Please fill in their first name and how you know them.": "Συμπληρώστε το μικρό του όνομα και πώς το γνωρίζετε.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Αφήστε έξω τηλέφωνα και διευθύνσεις email. Ένα μικρό όνομα και το πώς γνωρίζετε το άτομο αρκούν σε έναν διαχειριστή."
 }

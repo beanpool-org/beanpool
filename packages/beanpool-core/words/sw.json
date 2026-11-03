@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -938,5 +938,33 @@
   "None": "Hakuna",
   "{amount} Beans": "Maharagwe {amount}",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Udhamini kwenye mwaliko ni Maharagwe 25, 50 au 100, au hakuna.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Wamiliki, wasimamizi na wadhamini walioteuliwa pekee ndio wanaweza kumdhamini mtu kwenye mwaliko."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Wamiliki, wasimamizi na wadhamini walioteuliwa pekee ndio wanaweza kumdhamini mtu kwenye mwaliko.",
+  "Ask an admin to invite someone": "Mwombe msimamizi amwalike mtu",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "Msimamizi anasoma hili na kuamua. Jina la kwanza tu na jinsi unavyomjua: bila nambari ya simu au barua pepe.",
+  "Their first name": "Jina lake la kwanza",
+  "How you know them": "Jinsi unavyomjua",
+  "Send to the admins": "Tuma kwa wasimamizi",
+  "What you’ve asked": "Ulichoomba",
+  "Waiting for an admin": "Inasubiri msimamizi",
+  "Take it back": "Ondoa ombi",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "Msimamizi ametengeneza mwaliko wa wewe kupitisha. Unafanya kazi mara moja, kwa siku 30.",
+  "Someone has joined with this invite.": "Mtu amejiunga kwa mwaliko huu.",
+  "This invite lapsed before anyone used it.": "Mwaliko huu uliisha kabla ya mtu kuutumia.",
+  "An admin said no.": "Msimamizi alisema hapana.",
+  "Asked {date}": "Iliombwa {date}",
+  "Members asking you to invite someone": "Wanachama wanakuomba umwalike mtu",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "Tuma mwaliko hutengeneza mwaliko wa kawaida, na msimbo huenda kwa mwanachama aliyeomba, ili aupitishe.",
+  "Asked by {name}": "Imeombwa na {name}",
+  "Send invite": "Tuma mwaliko",
+  "No\u0004button: refuse a request": "Hapana",
+  "A short reason (you can leave this out)": "Sababu fupi (unaweza kuiacha)",
+  "Sent. The code is with the member now.": "Imetumwa. Msimbo sasa uko kwa mwanachama.",
+  "Done. The member has been told.": "Tayari. Mwanachama ameambiwa.",
+  "Your ask to invite someone": "Ombi lako la kumwalika mtu",
+  "An admin answered. Open Invites to read it.": "Msimamizi amejibu. Fungua Mialiko ili kusoma.",
+  "An admin answered your ask to invite someone.": "Msimamizi amejibu ombi lako la kumwalika mtu.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "one": "Mwanachama {n} amekuomba umwalike mtu",
+    "other": "Wanachama {n} wamekuomba umwalike mtu"
+  }
 }

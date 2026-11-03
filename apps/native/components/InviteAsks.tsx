@@ -227,7 +227,7 @@ function AskCard({ ask, offersVouch, busy, onSend, onNo }: {
                         testID={`invite-ask-reason-${ask.id}`}
                     />
                     <View style={[styles.actions, { marginTop: 0 }]}>
-                        <Button label={t(INVITE_ASK_WORDS.sendNo)} strong onPress={() => onNo(reason)} disabled={busy} testID={`invite-ask-send-no-${ask.id}`} />
+                        <Button label={t(INVITE_ASK_WORDS.say)} strong onPress={() => onNo(reason)} disabled={busy} testID={`invite-ask-send-no-${ask.id}`} />
                         <Button label={t('Cancel')} onPress={() => setSaying(false)} disabled={busy} />
                     </View>
                 </>

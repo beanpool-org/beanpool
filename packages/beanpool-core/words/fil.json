@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -938,5 +938,33 @@
   "None": "Wala",
   "{amount} Beans": "{amount} Munggo",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Ang patunay sa imbitasyon ay 25, 50 o 100 Munggo, o wala.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Ang mga may-ari, admin at itinalagang tagapagpatunay lang ang makakapagpatunay para sa isang tao sa imbitasyon."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Ang mga may-ari, admin at itinalagang tagapagpatunay lang ang makakapagpatunay para sa isang tao sa imbitasyon.",
+  "Ask an admin to invite someone": "Hilingin sa isang admin na mag-imbita ng isang tao",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "Babasahin ito ng admin at magpapasya. Unang pangalan lang at kung paano mo siya kilala: walang numero ng telepono o email.",
+  "Their first name": "Unang pangalan niya",
+  "How you know them": "Paano mo siya kilala",
+  "Send to the admins": "Ipadala sa mga admin",
+  "What you’ve asked": "Mga hiniling mo",
+  "Waiting for an admin": "Naghihintay ng admin",
+  "Take it back": "Bawiin",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "Gumawa ang admin ng imbitasyon na ipapasa mo. Gumagana ito nang isang beses, sa loob ng 30 araw.",
+  "Someone has joined with this invite.": "May sumali gamit ang imbitasyong ito.",
+  "This invite lapsed before anyone used it.": "Nag-expire ang imbitasyong ito bago may gumamit.",
+  "An admin said no.": "Humindi ang admin.",
+  "Asked {date}": "Hiniling noong {date}",
+  "Members asking you to invite someone": "Mga miyembrong humihiling na mag-imbita ka ng isang tao",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "Gumagawa ang Ipadala ang imbitasyon ng karaniwang imbitasyon, at mapupunta ang code sa miyembrong humiling, para ipasa niya.",
+  "Asked by {name}": "Hiniling ni {name}",
+  "Send invite": "Ipadala ang imbitasyon",
+  "No\u0004button: refuse a request": "Hindi",
+  "A short reason (you can leave this out)": "Maikling dahilan (puwedeng iwanang blangko)",
+  "Sent. The code is with the member now.": "Naipadala. Nasa miyembro na ang code.",
+  "Done. The member has been told.": "Tapos na. Nasabihan na ang miyembro.",
+  "Your ask to invite someone": "Ang hiling mong mag-imbita ng isang tao",
+  "An admin answered. Open Invites to read it.": "Sumagot ang admin. Buksan ang Mga Imbitasyon para mabasa.",
+  "An admin answered your ask to invite someone.": "Sumagot ang admin sa hiling mong mag-imbita ng isang tao.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "one": "{n} miyembro ang humiling na mag-imbita ka ng isang tao",
+    "other": "{n} miyembro ang humiling na mag-imbita ka ng isang tao"
+  }
 }

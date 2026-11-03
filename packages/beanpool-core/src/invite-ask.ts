@@ -38,13 +38,11 @@ export const INVITE_ASK_WORDS = {
     sendInvite: word('Send invite'),
     say: word('No', 'button: refuse a request'),
     reason: word('A short reason (you can leave this out)'),
-    sendNo: word('Send'),
     sent: word('Sent. The code is with the member now.'),
     told: word('Done. The member has been told.'),
     // A kept notice (apps/server engine/invite-asks.ts): never the code, the reason or a name.
     noticeTitle: word('Your ask to invite someone'),
-    noticeInvited: word('An admin made the invite. Open Invites to pass it on.'),
-    noticeNo: word('An admin answered. Open Invites to read it.'),
+    noticeBody: word('An admin answered. Open Invites to read it.'),
     unreachable: word("Couldn't reach your community. Check your connection and try again."),
 } as const;
 
@@ -129,6 +127,13 @@ export function readInviteAsksToAnswer(raw: unknown): InviteAskToAnswer[] | null
         const who = a as Partial<InviteAskToAnswer>;
         return ask && text(who.askerPubkey) ? [{ ...ask, askerPubkey: who.askerPubkey, askerCallsign: text(who.askerCallsign) ? who.askerCallsign : '' }] : [];
     });
+}
+
+/** A kept notice's fixed words in the member's language: the node keeps them in English. Any other notice's as they came. */
+export function inviteAskNoticeHere(said: string): string {
+    if (said === INVITE_ASK_WORDS.noticeTitle) return t(INVITE_ASK_WORDS.noticeTitle);
+    if (said === INVITE_ASK_WORDS.noticeBody) return t(INVITE_ASK_WORDS.noticeBody);
+    return said;
 }
 
 /** The Needs you line for an owner or admin, in their language. A count, never a name. */

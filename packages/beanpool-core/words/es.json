@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, front doors S15: the community card); gemini-3.8-flash-high (machine draft, front doors S15 words: look around global first); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, front doors S15: the community card); gemini-3.8-flash-high (machine draft, front doors S15 words: look around global first); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G2 event copy: the door); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -981,5 +981,33 @@
   "None": "Ninguno",
   "{amount} Beans": "{amount} frijoles",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Un aval en una invitación es de 25, 50 o 100 frijoles, o ninguno.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Solo los dueños, los administradores y los avalistas designados pueden avalar a alguien en una invitación."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Solo los dueños, los administradores y los avalistas designados pueden avalar a alguien en una invitación.",
+  "Ask an admin to invite someone": "Pedir a un administrador que invite a alguien",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "Un administrador lo lee y decide. Solo un nombre de pila y cómo conoces a esa persona: ni teléfono ni correo.",
+  "Their first name": "Su nombre de pila",
+  "How you know them": "Cómo la conoces",
+  "Send to the admins": "Enviar a los administradores",
+  "What you’ve asked": "Lo que has pedido",
+  "Waiting for an admin": "Esperando a un administrador",
+  "Take it back": "Retirar",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "Un administrador creó una invitación para que la pases. Funciona una vez, durante 30 días.",
+  "Someone has joined with this invite.": "Alguien se ha unido con esta invitación.",
+  "This invite lapsed before anyone used it.": "Esta invitación caducó antes de que alguien la usara.",
+  "An admin said no.": "Un administrador dijo que no.",
+  "Asked {date}": "Pedido el {date}",
+  "Members asking you to invite someone": "Miembros que te piden invitar a alguien",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "Enviar invitación crea una invitación normal, y el código va al miembro que la pidió, para que la pase.",
+  "Asked by {name}": "Pedido por {name}",
+  "Send invite": "Enviar invitación",
+  "No\u0004button: refuse a request": "No",
+  "A short reason (you can leave this out)": "Un motivo breve (puedes omitirlo)",
+  "Sent. The code is with the member now.": "Enviado. El miembro ya tiene el código.",
+  "Done. The member has been told.": "Hecho. Se lo hemos dicho al miembro.",
+  "Your ask to invite someone": "Tu petición de invitar a alguien",
+  "An admin answered. Open Invites to read it.": "Un administrador respondió. Abre Invitaciones para leerlo.",
+  "An admin answered your ask to invite someone.": "Un administrador respondió a tu petición de invitar a alguien.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "one": "{n} miembro te pidió invitar a alguien",
+    "other": "{n} miembros te pidieron invitar a alguien"
+  }
 }

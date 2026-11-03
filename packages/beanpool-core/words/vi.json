@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -898,5 +898,32 @@
   "None": "Không có",
   "{amount} Beans": "{amount} đậu",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Bảo lãnh trên lời mời là 25, 50 hoặc 100 đậu, hoặc không có.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Chỉ chủ sở hữu, quản trị viên và người bảo lãnh được chỉ định mới có thể bảo lãnh cho ai đó trên lời mời."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Chỉ chủ sở hữu, quản trị viên và người bảo lãnh được chỉ định mới có thể bảo lãnh cho ai đó trên lời mời.",
+  "Ask an admin to invite someone": "Nhờ quản trị viên mời ai đó",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "Quản trị viên sẽ đọc và quyết định. Chỉ cần tên và cách bạn quen người đó: không số điện thoại, không email.",
+  "Their first name": "Tên của họ",
+  "How you know them": "Bạn quen họ thế nào",
+  "Send to the admins": "Gửi cho quản trị viên",
+  "What you’ve asked": "Những gì bạn đã nhờ",
+  "Waiting for an admin": "Đang chờ quản trị viên",
+  "Take it back": "Rút lại",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "Quản trị viên đã tạo lời mời để bạn chuyển đi. Dùng được một lần, trong 30 ngày.",
+  "Someone has joined with this invite.": "Có người đã tham gia bằng lời mời này.",
+  "This invite lapsed before anyone used it.": "Lời mời này đã hết hạn trước khi có người dùng.",
+  "An admin said no.": "Quản trị viên đã từ chối.",
+  "Asked {date}": "Đã nhờ ngày {date}",
+  "Members asking you to invite someone": "Thành viên nhờ bạn mời ai đó",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "Gửi lời mời tạo một lời mời bình thường, và mã được gửi cho thành viên đã nhờ để chuyển đi.",
+  "Asked by {name}": "{name} đã nhờ",
+  "Send invite": "Gửi lời mời",
+  "No\u0004button: refuse a request": "Không",
+  "A short reason (you can leave this out)": "Lý do ngắn (có thể bỏ trống)",
+  "Sent. The code is with the member now.": "Đã gửi. Mã đã ở chỗ thành viên.",
+  "Done. The member has been told.": "Xong. Thành viên đã được báo.",
+  "Your ask to invite someone": "Lời nhờ mời ai đó của bạn",
+  "An admin answered. Open Invites to read it.": "Quản trị viên đã trả lời. Mở Lời mời để đọc.",
+  "An admin answered your ask to invite someone.": "Quản trị viên đã trả lời lời nhờ mời ai đó của bạn.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "other": "{n} thành viên đã nhờ bạn mời ai đó"
+  }
 }

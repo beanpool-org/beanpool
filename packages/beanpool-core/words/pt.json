@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert); claude-opus-5-5 (machine draft, G1′ fix round: a Need's line on a copy); antigravity (machine draft, dns-s2-addresses 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2 Nov); claude-opus-5-5 (machine draft, dns-s2 fix round 2, 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade 2 Nov); claude-opus-5-5 (machine draft, time-to-first-trade director fix 3 Nov); claude-opus-5-5 (machine draft, GD: the listing hint true with the door on or off, 3 Nov); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-03",
@@ -938,5 +938,33 @@
   "None": "Nenhum",
   "{amount} Beans": "{amount} feijões",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Um apoio em um convite é de 25, 50 ou 100 feijões, ou nenhum.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Só donos, administradores e apoiadores nomeados podem apoiar alguém em um convite."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Só donos, administradores e apoiadores nomeados podem apoiar alguém em um convite.",
+  "Ask an admin to invite someone": "Pedir a um administrador que convide alguém",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "Um administrador lê isto e decide. Apenas um primeiro nome e como conhece a pessoa: sem telefone nem e-mail.",
+  "Their first name": "O primeiro nome",
+  "How you know them": "Como conhece a pessoa",
+  "Send to the admins": "Enviar aos administradores",
+  "What you’ve asked": "O que pediu",
+  "Waiting for an admin": "À espera de um administrador",
+  "Take it back": "Retirar",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "Um administrador criou um convite para passar adiante. Funciona uma vez, durante 30 dias.",
+  "Someone has joined with this invite.": "Alguém entrou com este convite.",
+  "This invite lapsed before anyone used it.": "Este convite expirou antes de alguém o usar.",
+  "An admin said no.": "Um administrador disse não.",
+  "Asked {date}": "Pedido em {date}",
+  "Members asking you to invite someone": "Membros a pedir que convide alguém",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "Enviar convite cria um convite normal, e o código vai para o membro que pediu, para o passar adiante.",
+  "Asked by {name}": "Pedido por {name}",
+  "Send invite": "Enviar convite",
+  "No\u0004button: refuse a request": "Não",
+  "A short reason (you can leave this out)": "Um motivo curto (pode deixar em branco)",
+  "Sent. The code is with the member now.": "Enviado. O membro já tem o código.",
+  "Done. The member has been told.": "Feito. O membro foi avisado.",
+  "Your ask to invite someone": "O seu pedido para convidar alguém",
+  "An admin answered. Open Invites to read it.": "Um administrador respondeu. Abra Convites para ler.",
+  "An admin answered your ask to invite someone.": "Um administrador respondeu ao seu pedido para convidar alguém.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "one": "{n} membro pediu que convidasse alguém",
+    "other": "{n} membros pediram que convidasse alguém"
+  }
 }

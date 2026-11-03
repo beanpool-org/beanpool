@@ -320,6 +320,7 @@ export interface CommunityInfo {
      * (absent when off).
      */
     features?: {
+        door?: string | null; invites?: boolean | null;
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
         onlineEvents?: boolean;

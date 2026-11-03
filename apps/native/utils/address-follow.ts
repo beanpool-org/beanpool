@@ -252,6 +252,18 @@ function readKeptIdentity(v: unknown): CommunityIdentity | null {
         ? { peerId: k.peerId, communityId: k.communityId, epoch: k.epoch as number } : null;
 }
 
+/**
+ * What the phone first verified its community to be at `origin` (an origin, as kept), or null when nothing is kept there.
+ * The hall door (utils/hall.ts) checks the hall laptop against it. Never throws.
+ */
+export async function keptCommunityIdentity(origin: string): Promise<CommunityIdentity | null> {
+    try {
+        return readKeptIdentity((await readMap<CommunityIdentity>(COMMUNITY_IDENTITY_KEY))[origin]);
+    } catch {
+        return null;
+    }
+}
+
 export type FollowCheck = 'same' | 'not-same' | 'unreachable';
 
 /**

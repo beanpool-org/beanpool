@@ -31,8 +31,6 @@ export type RemovalDecider = 'automatic' | 'everyone' | 'jury';
 export const REMOVAL_DECIDER_KEY = 'removal_decider';
 /** Until slice J3 (see the header): `everyone`, so nothing changes for a community that never chose. */
 export const DEFAULT_REMOVAL_DECIDER: RemovalDecider = 'everyone';
-/** Every rule. */
-export const REMOVAL_DECIDERS: readonly RemovalDecider[] = ['automatic', 'everyone', 'jury'];
 
 export function isRemovalDecider(v: unknown): v is RemovalDecider {
     return v === 'automatic' || v === 'everyone' || v === 'jury';

@@ -463,6 +463,7 @@
  "test-removal-chain": 10.4,
  "test-removal-doors": 10.1,
  "test-removal-fairness": 15.5,
+ "test-removal-jury": 3.7,
  "test-removal-small": 5.5,
  "test-removed-connector-listings": 6.3,
  "test-removed-member-delete": 6.6,

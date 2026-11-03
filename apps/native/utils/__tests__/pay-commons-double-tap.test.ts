@@ -6,7 +6,8 @@
  * button behind it still takes taps (keyboardShouldPersistTaps="handled"; `busy` is set only once a dialog's Pay is
  * tapped). Each dialog's Pay mints a fresh payment id (confirmCommonsPayment), so two dialogs meant two payments: the member
  * pays in the first, sees the same dialog still there, and pays again. The helper now drops an identical Alert while one is
- * waiting.
+ * waiting, and (round 3, iPhone, where a tap fires as the finger lifts and Alerts stack) until the open dialog is answered
+ * or a short hold after it opened ends.
  *
  * The screen (app/pay-commons.tsx) is drawn for real and its own Pay handler runs; so does the helper's logic
  * (makeKeyboardAlert). Only keyboard-controller is stood in for, at the helper's seam (its native side doesn't load in
@@ -49,6 +50,8 @@ vi.mock('../keyboard-alert', async (importOriginal) => {
             blurNow: () => {},
             // Long enough that only the reported hide opens the Alert here, however slow the machine.
             timeoutMs: 10_000,
+            // Likewise: only an answer to the dialog ends the hold after it opens (round 3), never the machine's pace.
+            holdMs: 10_000,
         }),
     };
 });
@@ -156,6 +159,24 @@ describe('Pay the Commons: a double tap on Pay with the keyboard up', () => {
         expect(alerts.opened.map((d) => d.title)).toEqual([REPAYMENT_LINES.payTitle]);
         expect(alerts.opened[0].message).toContain('5');
         expect(kb.hides).toBe(1); // the second tap did not start a wait of its own
+        expect(host.textContent).toContain('Paid');
+    });
+
+    it('a second tap that lifts just after the hide, with the dialog already up, opens no second dialog: one payment', async () => {
+        await draw();
+        await typeAmount('5');
+        await tap(payButton());
+        kb.finish();
+        kb.visible = false; // keyboardDidHide: the controller now reads the keyboard closed
+        await settle();
+        expect(alerts.opened).toHaveLength(1);
+        // On iPhone the second press went down while the keyboard was closing; it lifts now, under the open dialog.
+        await tap(payButton());
+        await settle();
+        expect(alerts.opened).toHaveLength(1);
+        await payInEveryDialog();
+        expect(node.payments.map((p) => p.body.amount)).toEqual([5]);
+        expect(kb.hides).toBe(1);
         expect(host.textContent).toContain('Paid');
     });
 

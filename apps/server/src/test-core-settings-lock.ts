@@ -244,7 +244,7 @@ async function main(): Promise<void> {
     assert(lines.length === 2 && lines[0].setting === 'decisions' && lines[0].new_value === 'off' && lines[1].setting === 'core.lock'
         && lines[1].new_value === 'locked' && lines[1].old_value === null && lines.every((l) => l.at === row.at && l.actor_pubkey === owen.pk),
         `a line for the change, then core.lock, stamped as the row (${JSON.stringify(lines.map((l) => [l.setting, l.old_value, l.new_value, l.at === row?.at]))})`);
-    let told = noticesSince(nMark);
+    const told = noticesSince(nMark);
     assert(r.body?.told === 'members' && told.length > 0 && told.every((n) => /community votes are off/.test(n.body) && !/lock/i.test(n.body)),
         `members are told of the change, and nothing of the lock (${told.length} notices: ${told[0]?.body})`);
     let newAlerts = alerts.slice(aMark);

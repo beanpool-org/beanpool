@@ -413,7 +413,7 @@ async function directoryRegistry(): Promise<{ url: string; bodies: any[]; close:
 type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kept: any; directory: any };
 
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
-const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider'] as const;
+const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock'] as const;
 const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours', 'areaName'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);
@@ -483,6 +483,8 @@ async function main(): Promise<void> {
         built('its snapshot schedule: one every 6 hours', await api(m, 'POST', '/api/local/admin/snapshots/config', { admin: await main.send('owner-phone-session'), body: { enabled: true, intervalHours: 6, keep: 3 } }));
         built('only its admins invite (the owner, under How this community works)', await A('/api/local/admin/community-shape', { changes: { join: 'admins' } }));
         built("its owner switches the known floor's confirmations off", await A('/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }));
+        // Core settings (config/core-settings.ts, slice C1): confirmed and locked, which its place, set above, allows.
+        built('its owner confirms and locks the core settings', await A('/api/local/admin/community-shape', { lock: true }));
         // The listing promise's two ticks and a closing day (mothership A2, engine/directory-promise.ts): the community's word.
         built('its owners make the listing promise and say when it closes', await A('/api/local/admin/directory/promise', {
             reports: true, notice: true, closingOn: new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10) }));
@@ -492,6 +494,8 @@ async function main(): Promise<void> {
         let mSettings: Settings = await main.send('settings');
         require_(mSettings.rows.door === 'admins', `M: only its admins invite (door ${j(mSettings.rows.door)})`);
         require_(mSettings.rows.confirmation === 'off', `M: the dial is switched off, an 'off' row (${j(mSettings.rows.confirmation)})`);
+        require_(typeof mSettings.rows.core_settings_lock === 'string' && JSON.parse(mSettings.rows.core_settings_lock).at,
+            `M: its core settings are confirmed and locked (${j(mSettings.rows.core_settings_lock)})`);
         require_(mSettings.rows.ledger_audit_baseline && Math.abs(Number(mSettings.rows.ledger_audit_baseline) - 0.1) < 1e-9,
             `M: its accepted baseline is 0.1 (${mSettings.rows.ledger_audit_baseline})`);
 
@@ -619,6 +623,8 @@ async function main(): Promise<void> {
         const s2Door = await standby2.send('door-now', { pubkey: ann.pk });
         assert(s2.rows.door === 'admins' && s2Door.door === 'admins' && s2Door.may === false,
             `promoted by hand, S2 keeps the community's door: only admins invite, so Ann, a member, may not (${j({ row: s2.rows.door, now: s2Door })})`);
+        assert(s2.rows.core_settings_lock === mSettings.rows.core_settings_lock,
+            `promoted by hand, S2 is locked as M was: its core settings ask an owner's proof from its first boot (${j(s2.rows.core_settings_lock)})`);
         assert(j(s2.localConfig.gateway?.adminIpAllowlist) === j(['192.0.2.44']) && s2.kept?.installedAt,
             `S2 keeps its own admin IP allowlist, and the record says when it was installed (${j({ allowlist: s2.localConfig.gateway?.adminIpAllowlist, installedAt: s2.kept?.installedAt })})`);
         const s2Audit = await standby2.send('ledger-audit');

@@ -860,7 +860,7 @@ async function main() {
     const calVote = pauseOf(cal);
     await settle(500);
     const calJury = seatedOf(calVote);
-    const notOnCal = byKey.get(juryOrder(de.removalJuryPool(today, [cal.pk]), cal.pk, today).order.slice(60).find(k => memberStatus(k) === 'active')!)!;
+    const notOnCal = byKey.get(juryOrder(de.removalJuryPool(today, [cal.pk]), cal.pk, today).order.slice(60).find(k => byKey.has(k) && memberStatus(k) === 'active')!)!;
     assert(calJury.length === 12 && sameSet(sentTo('decision.jury', mark), phonesOf(calJury)) && sameSet(sentTo('account.removal-vote', mark), phonesOf([cal.pk])),
         `"a vote opened" to the jury is the jury's own push, to the 12 seated and nobody else, and the member is told as before (${sentTo('decision.jury', mark).size} phones)`);
     assert(sentTo('decision.removal', mark).size === 0, 'and nobody else in the community is pushed: the card has no vote button for them');

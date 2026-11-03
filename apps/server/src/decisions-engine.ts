@@ -3820,12 +3820,15 @@ export function noticeRemovalVoteOpened(decision: Decision, push: RemovalVotePus
     if (!subjects.length) return;
     const actor = typeof decision.params?.pausedBy === 'string' ? decision.params.pausedBy : SYSTEM_AUTHOR;
     // A vote a jury decides: its jurors are told they were drawn, and asked to answer (slice J2b, pushJurySeated).
-    if (juryOf(decision)) pushJurySeated(decision, removalVoters(decision), push, parseDbTime(decision.opensAt));
-    else try {
-        push(removalVoters(decision), actor, 'A vote on removing a member opened', 'Open Commons, then Decide, to read the case and vote.',
-            { screen: 'decide' }, 'chat', 'decision.removal');
-    } catch (err) {
-        console.warn('[Decisions] the removal vote push to its voters failed:', err);
+    if (juryOf(decision)) {
+        pushJurySeated(decision, removalVoters(decision), push, parseDbTime(decision.opensAt));
+    } else {
+        try {
+            push(removalVoters(decision), actor, 'A vote on removing a member opened', 'Open Commons, then Decide, to read the case and vote.',
+                { screen: 'decide' }, 'chat', 'decision.removal');
+        } catch (err) {
+            console.warn('[Decisions] the removal vote push to its voters failed:', err);
+        }
     }
     const body = removalVoteNoticeBody(decision.closesAt);
     // Each account it names is told, a branch's every one (removalSubjects).

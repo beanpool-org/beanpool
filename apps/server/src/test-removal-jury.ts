@@ -826,13 +826,16 @@ async function main() {
     /**
      * A case whose first 30 of the draw are active members seeded here, with phones this suite knows (none re-keyed since,
      * none paused: `age` moves one case's times and not the rest of the world's, so a pause made a minute ago would read as
-     * made after a seat it moved two days back). `paused` alone may be one paused, and must then be among the first 10.
+     * made after a seat it moved two days back).
      */
-    const plainCase = (paused?: Id) => subjectWhere(c => {
+    const plainCase = () => subjectWhere(c => {
         if (memberStatus(c.pk) !== 'active') return false;
         const o = juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order;
-        return o.slice(0, 30).every(k => byKey.has(k) && (memberStatus(k) === 'active' || k === paused?.pk)) && (!paused || o.slice(0, 10).includes(paused.pk));
+        return o.slice(0, 30).every(k => byKey.has(k) && memberStatus(k) === 'active');
     });
+    /** A case `who` is among the first 10 of the draw of, so they are seated (nothing links them to its member). Not aged. */
+    const caseSeating = (who: Id) => subjectWhere(c => memberStatus(c.pk) === 'active'
+        && juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order.slice(0, 10).includes(who.pk));
     /** Time travel: the whole case, its seats with it, as if it had all happened `ms` earlier. */
     const rollColumns = new Set((db.prepare("SELECT name FROM pragma_table_info('decision_electors')").all() as Array<{ name: string }>).map(c => c.name));
     const back = (iso: string | null, ms: number) => (iso ? new Date(Date.parse(iso) - ms).toISOString() : iso);
@@ -1042,7 +1045,7 @@ async function main() {
     assert(sentTo('decision.jury-last-day', mark).size === 0, 'and once');
 
     // ── Fay's case: one paused before they were seated keeps the seat (the pool keeps paused members), and votes ──
-    const fay = plainCase(paused);
+    const fay = caseSeating(paused);
     const fayVote = pauseOf(fay);
     const pausedSeated = seatedOf(fayVote).includes(paused.pk);
     de.tickDecisions();
@@ -1050,6 +1053,25 @@ async function main() {
     assert(memberStatus(paused.pk) === 'disabled' && row(pausedOwn).status === 'open' && pausedSeated && seatedOf(fayVote).includes(paused.pk)
         && fayCast.success && de.tallyDecision(fayVote).turnout?.voted === 1,
         `a member paused before the draw seated them keeps the seat across the tick, and their vote counts (${pausedSeated}, ${fayCast.error ?? 'voted'})`);
+
+    // ── Gus's case: a member of the draw who moved to a new phone since is seated under the key they sign with ──
+    const gus = plainCase();
+    const gusVote = pauseOf(gus);
+    const gusOrder = juryOrder((poolRowOf(gusVote) ?? '').split('\n'), gus.pk, today).order;
+    const onGus = new Set(rollOf(gusVote).map(r => r.k));
+    const nextUp = byKey.get(gusOrder.find(k => !onGus.has(k) && k !== gen.pk && k !== ada.pk)!)!;
+    const nextUpMoved = rekey(nextUp);
+    const gusStep = await answerAs(gusVote, byKey.get(seatedOf(gusVote)[0])!, 'step_aside');
+    const gusRoll = rollOf(gusVote);
+    assert(gusStep.status === 200 && gusRoll.some(r => r.k === nextUpMoved.pk && r.status === 'on') && !gusRoll.some(r => r.k === nextUp.pk),
+        `a member of the draw re-keyed since the draw is seated in the seat that came free, under their new key (${gusStep.status})`);
+    closeNow(gusVote);
+    const gusClosed = (await juryRead(gusVote, notOnCal)).body?.jury ?? {};
+    const gusEntries: any[] = [...(gusClosed.voted ?? []), ...(gusClosed.didNotServe ?? [])];
+    assert(gusEntries.find(x => x.publicKey === nextUpMoved.pk)?.drawnAs === nextUp.pk
+        && checkJuryDraw({ pool: (gusClosed.pool ?? []).map((p: any) => p.publicKey), subject: gusClosed.subject, snapshotDate: gusClosed.snapshotDate,
+            rosterHash: gusClosed.rosterHash, roll: gusEntries.map(x => x.drawnAs) }).ok,
+        'closed, they are listed as drawn under their old key, and the draw checks out');
 
     assert(offMachine.length === 0, `nothing left this machine (${offMachine.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} passed`);

@@ -184,6 +184,7 @@ vi.mock('../push-notice-switch', async (importOriginal) => {
         ...orig,
         openNoticeIn: vi.fn(async (url: string, id: string | null, route: unknown) => {
             openNoticeCalls.calls.push({ url, id, route });
+            return 'switched';
         }),
     };
 });
@@ -921,5 +922,40 @@ describe('Cross-community unread notices at top of Chat (design R6)', () => {
         });
         await settle();
         expect(row.disabled).toBe(false);
+    });
+
+    // PR #2772 review, finding 6: a tap that moved nothing says so, and one that moved something says nothing.
+    for (const result of ['held', 'failed'] as const) {
+        it(`a tap that came back ${result} says so under the rows, in words`, async () => {
+            store.map.set('beanpool_notice_counts', JSON.stringify({ 'https://castlemaine.example': { n: 1, seen: {} } }));
+            store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: 'https://castlemaine.example', name: 'Castlemaine' }]));
+            const { openNoticeIn } = await import('../push-notice-switch');
+            vi.mocked(openNoticeIn).mockImplementationOnce(async () => result);
+            await renderIn('en');
+            expect(host.querySelector('[data-testid="other-community-note"]')).toBeNull();
+            await click(buttonWithText('1 new message in Castlemaine · Switch'), 'Castlemaine notice row');
+            await settle();
+            expect(host.querySelector('[data-testid="other-community-note"]')?.textContent).toBe('Something went wrong. Try again in a moment.');
+            // And the row is there to press again.
+            expect((buttonWithText('1 new message in Castlemaine · Switch') as HTMLButtonElement).disabled).toBe(false);
+        });
+    }
+
+    it('a tap that switched says nothing', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({ 'https://castlemaine.example': { n: 1, seen: {} } }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: 'https://castlemaine.example', name: 'Castlemaine' }]));
+        await renderIn('en');
+        await click(buttonWithText('1 new message in Castlemaine · Switch'), 'Castlemaine notice row');
+        await settle();
+        expect(host.querySelector('[data-testid="other-community-note"]')).toBeNull();
+    });
+
+    it('a community with alerts off has no row, even with a number still written for it', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({ 'https://castlemaine.example': { n: 4, seen: {} } }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: 'https://castlemaine.example', name: 'Castlemaine' }]));
+        store.map.set('beanpool_push_alerts_off', JSON.stringify(['https://castlemaine.example']));
+        await renderIn('en');
+        expect(buttonWithText('4 new messages in Castlemaine · Switch')).toBeNull();
+        store.map.delete('beanpool_push_alerts_off');
     });
 });

@@ -63,7 +63,7 @@
   "Your account there was closed.": "وہاں آپ کا اکاؤنٹ بند کر دیا گیا۔",
   "Your own community isn't affected.": "آپ کی اپنی کمیونٹی اس سے متاثر نہیں ہوتی۔",
   "Global community, {state}": "عالمی کمیونٹی، {state}",
-  "Switches to this community. Long press to remove it.": "اس کمیونٹی پر لے جاتا ہے۔ ہٹانے کے لیے دیر تک دبائیں۔",
+  "Switches to this community. Long press for its options.": "اس کمیونٹی پر لے جاتا ہے۔ اس کے اختیارات کے لیے دیر تک دبائیں۔",
   "Guest": "مہمان",
   "Explore BeanPool worldwide": "پوری دنیا میں BeanPool دیکھیں",
   "🌍 Explore BeanPool worldwide": "🌍 پوری دنیا میں BeanPool دیکھیں",
@@ -6202,5 +6202,6 @@
     "one": "{community} میں {n} نیا پیغام · تبدیل کریں",
     "other": "{community} میں {n} نئے پیغامات · تبدیل کریں"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "الرٹس آپ کے فون پر ہر اس کمیونٹی سے پہنچتے ہیں جسے آپ رکھتے ہیں۔ آپ BeanPool شیٹ پر کسی کمیونٹی کے لیے انہیں بند کر سکتے ہیں۔"
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "الرٹس آپ کے فون پر ہر اس کمیونٹی سے پہنچتے ہیں جسے آپ رکھتے ہیں۔ آپ BeanPool شیٹ پر کسی کمیونٹی کے لیے انہیں بند کر سکتے ہیں۔",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "اس فون پر الرٹس بند ہیں۔ انہیں وہاں روکنے کے لیے یہ فون ابھی اس کمیونٹی تک نہیں پہنچ سکا، اور دوبارہ کوشش کرے گا۔"
 }

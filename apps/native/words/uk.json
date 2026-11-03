@@ -63,7 +63,7 @@
   "Your account there was closed.": "Ваш обліковий запис там закрито.",
   "Your own community isn't affected.": "Це не впливає на вашу власну спільноту.",
   "Global community, {state}": "Глобальна спільнота, {state}",
-  "Switches to this community. Long press to remove it.": "Перемикає на цю спільноту. Натисніть і утримуйте, щоб прибрати її.",
+  "Switches to this community. Long press for its options.": "Перемикає на цю спільноту. Натисніть і утримуйте, щоб відкрити її параметри.",
   "Guest": "Гість",
   "Explore BeanPool worldwide": "Дослідити BeanPool у світі",
   "🌍 Explore BeanPool worldwide": "🌍 Дослідити BeanPool у світі",
@@ -6683,5 +6683,6 @@
     "many": "{n} нових повідомлень в {community} · Перейти",
     "other": "{n} нового повідомлення в {community} · Перейти"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Сповіщення надходять на ваш телефон з кожної збереженої спільноти. Ви можете вимкнути їх для спільноти на панелі BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Сповіщення надходять на ваш телефон з кожної збереженої спільноти. Ви можете вимкнути їх для спільноти на панелі BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Сповіщення на цьому телефоні вимкнено. Телефон поки не зміг зв'язатися з цією спільнотою, щоб зупинити їх там, і спробує знову."
 }

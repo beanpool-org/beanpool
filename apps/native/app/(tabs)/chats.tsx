@@ -32,6 +32,7 @@ import { openNoticeIn } from '../../utils/push-notice-switch';
 import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-communities';
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
+import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
 import { listPhotoUrl, t, tn, word, type WordKey } from '@beanpool/core';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
@@ -98,12 +99,15 @@ export default function ChatsScreen() {
     const otherNotices = useOtherCommunitiesNotices();
     const requestsHere = requests ?? (onGlobal > 0 ? { count: 0, conversations: [] } : null);
     const [switchingCommunity, setSwitchingCommunity] = useState(false);
+    // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
+    const [switchNote, setSwitchNote] = useState<string | null>(null);
 
     const openOtherCommunity = async (url: string) => {
-        if (!identity?.publicKey || switchingCommunity || communitySwitchUnderWay()) return;
+        if (!identity?.publicKey || switchingCommunity) return;
+        setSwitchNote(null);
         setSwitchingCommunity(true);
         try {
-            await openNoticeIn(url, null, async () => '/(tabs)/chats', {
+            const result = await openNoticeIn(url, null, async () => '/(tabs)/chats', {
                 storage: AsyncStorage,
                 publicKey: identity.publicKey,
                 joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
@@ -111,6 +115,7 @@ export default function ChatsScreen() {
                 switchTo: switchCommunity,
                 recheck,
             });
+            if (result !== 'switched') setSwitchNote(t("Something went wrong. Try again in a moment."));
         } finally {
             setSwitchingCommunity(false);
         }
@@ -911,23 +916,9 @@ export default function ChatsScreen() {
                 </Pressable>
             </View>
             {/* One row per other community where messages wait (design R6): lands in that community's Talk. */}
-            {otherNotices.length > 0 && messagesFilter !== 'requests' && otherNotices.map((item) => {
-                const label = tn(item.count, '{n} new message in {community} · Switch', '{n} new messages in {community} · Switch', { community: item.name });
-                return (
-                    <Pressable
-                        key={item.url}
-                        accessibilityRole="button"
-                        accessibilityLabel={label}
-                        testID={`other-community-notice-${item.url}`}
-                        style={styles.requestsRow}
-                        disabled={switchingCommunity || communitySwitchUnderWay()}
-                        onPress={() => void openOtherCommunity(item.url)}
-                    >
-                        <Text style={styles.requestsRowText} numberOfLines={2}>{label}</Text>
-                        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
-                    </Pressable>
-                );
-            })}
+            {messagesFilter !== 'requests' && (
+                <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
+            )}
             {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
             {requestsHere && requestsHere.count + onGlobal > 0 && messagesFilter !== 'requests' && (
                 <Pressable

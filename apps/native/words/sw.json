@@ -63,7 +63,7 @@
   "Your account there was closed.": "Akaunti yako huko ilifungwa.",
   "Your own community isn't affected.": "Jumuiya yako mwenyewe haiathiriwi.",
   "Global community, {state}": "Jumuiya ya kimataifa, {state}",
-  "Switches to this community. Long press to remove it.": "Inahamia jumuiya hii. Bonyeza kwa muda mrefu ili kuiondoa.",
+  "Switches to this community. Long press for its options.": "Inahamia jumuiya hii. Bonyeza kwa muda mrefu kuona chaguo zake.",
   "Guest": "Mgeni",
   "Explore BeanPool worldwide": "Gundua BeanPool duniani kote",
   "🌍 Explore BeanPool worldwide": "🌍 Gundua BeanPool duniani kote",
@@ -6201,5 +6201,6 @@
     "one": "Ujumbe mpya {n} katika {community} · Badilisha",
     "other": "Ujumbe mpya {n} katika {community} · Badilisha"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Arifa hufika kwenye simu yako kutoka kwa kila jumuiya unayoweka. Unaweza kuzizima kwa ajili ya jumuiya kwenye ukurasa wa BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Arifa hufika kwenye simu yako kutoka kwa kila jumuiya unayoweka. Unaweza kuzizima kwa ajili ya jumuiya kwenye ukurasa wa BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Arifa zimezimwa kwenye simu hii. Haijaweza kufikia jumuiya hii bado ili kuzisimamisha huko, na itajaribu tena."
 }

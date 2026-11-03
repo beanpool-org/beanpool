@@ -63,7 +63,7 @@
   "Your account there was closed.": "Tu cuenta allí se cerró.",
   "Your own community isn't affected.": "Tu propia comunidad no se ve afectada.",
   "Global community, {state}": "Comunidad global, {state}",
-  "Switches to this community. Long press to remove it.": "Cambia a esta comunidad. Mantén pulsado para quitarla.",
+  "Switches to this community. Long press for its options.": "Cambia a esta comunidad. Mantén pulsado para ver sus opciones.",
   "Guest": "Invitado",
   "Explore BeanPool worldwide": "Explorar BeanPool en todo el mundo",
   "🌍 Explore BeanPool worldwide": "🌍 Explorar BeanPool en todo el mundo",
@@ -6207,5 +6207,6 @@
     "one": "{n} mensaje nuevo en {community} · Cambiar",
     "other": "{n} mensajes nuevos en {community} · Cambiar"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Las alertas llegan a tu teléfono desde cada comunidad que conservas. Puedes desactivarlas para una comunidad en la hoja de BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Las alertas llegan a tu teléfono desde cada comunidad que conservas. Puedes desactivarlas para una comunidad en la hoja de BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Las alertas están desactivadas en este teléfono. Aún no pudo conectar con esta comunidad para detenerlas allí, y volverá a intentarlo."
 }

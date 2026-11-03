@@ -24,8 +24,26 @@ const shared = vi.hoisted(() => ({ messages: [] as string[] }));
 // use-global-guest-visit reads useNodeStatus().recheck (only during a visit, which these screens never start); the real
 // context pulls expo-crypto in at import.
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'unknown' }) }));
-vi.mock('../account-leaves-phone', () => ({ turnAlertsOffAt: vi.fn(async () => {}) }));
-vi.mock('../../services/push-notifications', () => ({ turnAlertsOnAt: vi.fn(async () => {}) }));
+// The switch's OFF path is the real one (utils/account-leaves-phone.ts `turnAlertsOff`): its DELETE goes to a fake community
+// (fake-communities.ts) through the real signing. Only the layers under it that need a device are stood in for.
+const turnOn = vi.hoisted(() => ({ fail: false }));
+vi.mock('../../services/push-notifications', () => ({
+    turnAlertsOnAt: vi.fn(async () => { if (turnOn.fail) throw new Error('disk full'); }),
+}));
+const secure = vi.hoisted(() => ({ map: new Map<string, string>() }));
+vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: vi.fn(async (key: string) => secure.map.get(key) ?? null),
+    setItemAsync: vi.fn(async (key: string, value: string) => { secure.map.set(key, value); }),
+    deleteItemAsync: vi.fn(async (key: string) => { secure.map.delete(key); }),
+}));
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
+});
+vi.mock('../db', () => ({ clearDB: vi.fn(async () => {}), closeDB: vi.fn(async () => {}) }));
+vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
+vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', switch: 'switch' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -38,6 +56,8 @@ vi.mock('react-native', () => {
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (onValueChange) { attrs.type = 'checkbox'; attrs.onChange = (e: any) => onValueChange(e?.target?.checked ?? !value); attrs.checked = !!value; }
         if (disabled) attrs.disabled = true;
+        if (props.trackColor) { attrs['data-track-off'] = String(props.trackColor.false); attrs['data-track-on'] = String(props.trackColor.true); }
+        if (props.thumbColor) attrs['data-thumb'] = String(props.thumbColor);
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -78,11 +98,13 @@ vi.mock('expo-router', async () => {
 });
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
+const look = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors } = await import('../../constants/colors');
+    const { lightColors, darkColors } = await import('../../constants/colors');
+    const now = () => ({ theme: look.dark ? 'dark' : 'light', colors: look.dark ? darkColors : lightColors });
     return {
-        useTheme: () => ({ theme: 'light', colors: lightColors }),
-        useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }),
+        useTheme: () => now(),
+        useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make(now()),
     };
 });
 vi.mock('../use-guide', async () => {
@@ -103,8 +125,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         removeItem: vi.fn(async (k: string) => { store.map.delete(k); }),
     },
 }));
+const who = vi.hoisted(() => ({ identity: { publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(64), callsign: 'Damo' } as { publicKey: string; privateKey: string; callsign: string } | null }));
 vi.mock('../../app/IdentityContext', () => ({
-    useIdentity: () => ({ identity: { publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(64), callsign: 'Damo' }, setIdentity() {} }),
+    useIdentity: () => ({ identity: who.identity, setIdentity() {} }),
 }));
 vi.mock('../global-join-existing', () => ({
     isGlobalCommunity: (url: string | null | undefined) => !!url && url.trim().replace(/\/+$/, '').toLowerCase() === 'https://global.beanpool.org',
@@ -132,7 +155,18 @@ import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { getBundledGuide, searchGuide } from '../guide';
 import BeanPoolSheet from '../../app/beanpool';
-import { NOTICE_COUNTS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import {
+    NOTICE_COUNTS_STORE_KEY, PUSH_ALERTS_OFF_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY,
+} from '../storage-keys';
+import { contrastRatio } from '@beanpool/core';
+import { darkColors, lightColors } from '../../constants/colors';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { draftIdentity, importIdentity, type BeanPoolIdentity } from '../identity';
+import { registerPushTokenWithCommunity } from '../push-registrations';
+import { pendingLeaveStatements, presentLeaveStatements } from '../push-leave';
+import { retryLeavesOwed } from '../account-leaves-phone';
+import { readNoticeCounts } from '../notice-counts';
+import { Communities, PHONE_TOKEN } from './fake-communities';
 
 const RIVERSIDE = 'https://riverside.example';
 const HILLS = 'https://hills.example';
@@ -165,6 +199,9 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     store.map.clear();
+    secure.map.clear();
+    look.dark = false;
+    turnOn.fail = false;
     shared.messages.length = 0;
     list.rows = [{ url: RIVERSIDE, name: 'Riverside', status: 'online' }, { url: HILLS, name: 'Hills', status: 'offline' }];
     list.active = RIVERSIDE;
@@ -447,3 +484,163 @@ describe('the BeanPool sheet at 320 dp with 1.3× text, in the pseudo-locale', (
     });
 });
 
+
+// ── The alerts switch never says more than is so (PR #2772 review, findings 1, 2, 3, 5, 7) ───────────────────────────────
+describe('the alerts switch on the options sheet: a real sign-in, a fake community, the real DELETE', () => {
+    let kim: BeanPoolIdentity;
+    let nodes: Communities;
+    const deletes = () => nodes.sent.filter((x) => x.method === 'DELETE' && x.path === '/api/push-tokens');
+    const offList = () => JSON.parse(store.map.get(PUSH_ALERTS_OFF_STORE_KEY) ?? '[]') as string[];
+
+    beforeEach(async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        const quietError = console.error;
+        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+            if (typeof args[0] === 'string' && args[0].startsWith('Failed to migrate legacy identity')) return;
+            quietError(...args);
+        });
+        kim = await draftIdentity('Kim');
+        nodes = new Communities();
+        nodes.join(kim.publicKey, HILLS, RIVERSIDE);
+        await importIdentity(kim);
+        who.identity = { publicKey: kim.publicKey, privateKey: kim.privateKey, callsign: 'Kim' };
+        secure.map.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        // The token went to Hills (the app opened while the phone was set to it), and the phone is set to Riverside now.
+        store.map.set('beanpool_anchor_url', HILLS);
+        expect(await registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android')).toBe(true);
+        expect(nodes.has(HILLS, kim.publicKey)).toBe(true);
+        store.map.set('beanpool_anchor_url', RIVERSIDE);
+        store.map.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: RIVERSIDE }, { url: HILLS }]));
+    });
+    afterEach(() => {
+        who.identity = { publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(64), callsign: 'Damo' };
+        vi.restoreAllMocks();
+    });
+
+    const longPressHills = async (lang: UiLang = 'en') => {
+        await renderIn(lang);
+        const row = host.querySelector('[aria-label*="Hills"]');
+        expect(row).not.toBeNull();
+        await act(async () => { (row as any).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); });
+        await settle();
+        return host.querySelector('input[role="switch"]') as HTMLInputElement;
+    };
+    const press = async (el: HTMLElement) => { await act(async () => { el.click(); }); await settle(40); };
+    const note = () => host.querySelector('[data-testid="alerts-switch-note"]')?.textContent ?? null;
+
+    it('off reaches the community by the DELETE, and the switch moves once it has answered', async () => {
+        const sw = await longPressHills();
+        expect(sw.checked).toBe(true);
+        await press(sw);
+        expect(deletes().map((d) => d.community)).toEqual([HILLS]);
+        expect(nodes.has(HILLS, kim.publicKey)).toBe(false);
+        expect(sw.checked).toBe(false);
+        expect(offList()).toEqual([HILLS]);
+        expect(note()).toBeNull();
+        expect(await pendingLeaveStatements()).toEqual([]);
+    });
+
+    it('a community that can\'t be reached: the switch moves, says so in plain words, and the DELETE is owed and tried again', async () => {
+        nodes.answer = (x) => (x.method === 'DELETE' ? 'down' : 'up');
+        const sw = await longPressHills();
+        await press(sw);
+        // The phone has stopped asking and registering there; the token is still at the community.
+        expect(sw.checked).toBe(false);
+        expect(offList()).toEqual([HILLS]);
+        expect(nodes.has(HILLS, kim.publicKey)).toBe(true);
+        expect(note()).toBe("Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.");
+        // The leave is written down, signed, and waits to be presented again (utils/push-leave.ts).
+        expect((await pendingLeaveStatements()).map((st) => st.community)).toEqual([HILLS]);
+        // Back online, the next try takes it off.
+        nodes.answer = () => 'up';
+        await presentLeaveStatements();
+        await retryLeavesOwed(kim);
+        expect(nodes.has(HILLS, kim.publicKey)).toBe(false);
+        expect(await pendingLeaveStatements()).toEqual([]);
+    });
+
+    it('a change that can\'t be written leaves the switch where it was, says so, and tells nobody', async () => {
+        const sw = await longPressHills();
+        vi.mocked(AsyncStorage.setItem).mockImplementationOnce(async () => { throw new Error('disk full'); });
+        await press(sw);
+        expect(sw.checked).toBe(true);
+        expect(note()).toBe('Something went wrong. Try again in a moment.');
+        expect(deletes()).toEqual([]);
+        expect(offList()).toEqual([]);
+        expect(nodes.has(HILLS, kim.publicKey)).toBe(true);
+        // Off for real, then on again that can't be written: it stays off, and says so.
+        await press(sw);
+        expect(sw.checked).toBe(false);
+        turnOn.fail = true;
+        await press(sw);
+        expect(sw.checked).toBe(false);
+        expect(note()).toBe('Something went wrong. Try again in a moment.');
+    });
+
+    it('a phone with no account on it: the list is written, nothing is sent, and there is nothing to say', async () => {
+        who.identity = null;
+        const sw = await longPressHills();
+        await press(sw);
+        expect(sw.checked).toBe(false);
+        expect(offList()).toEqual([HILLS]);
+        expect(deletes()).toEqual([]);
+        expect(note()).toBeNull();
+    });
+
+    it('off clears the community\'s number at once, before the community has answered, and Remove waits for the switch', async () => {
+        store.map.set(NOTICE_COUNTS_STORE_KEY, JSON.stringify({ [HILLS]: { n: 3, seen: {} } }));
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({ [HILLS]: 3 });
+        nodes.answer = (x) => (x.method === 'DELETE' ? 'hold' : 'up');
+        const sw = await longPressHills();
+        await act(async () => { sw.click(); });
+        await settle(40);
+        // The DELETE is still out: the number is gone already, the switch has not moved, and it can't be pressed again.
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({});
+        // Cleared in the store, not only hidden: turned on again later, the old number does not come back.
+        expect(JSON.parse(store.map.get(NOTICE_COUNTS_STORE_KEY) ?? '{}')[HILLS]?.n ?? 0).toBe(0);
+        expect(sw.checked).toBe(true);
+        expect(sw.disabled).toBe(true);
+        const remove = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Remove from your saved list') as HTMLButtonElement;
+        expect(remove.disabled).toBe(true);
+        nodes.releaseHeld();
+        await settle(40);
+        expect(sw.checked).toBe(false);
+        expect(sw.disabled).toBe(false);
+        expect(remove.disabled).toBe(false);
+    });
+
+    it('the row\'s spoken hint says what a long press does now, and the old sentence is gone', async () => {
+        await renderIn('en');
+        const hills = host.querySelector('[aria-label*="Hills"]')!;
+        expect(hills.getAttribute('data-hint')).toBe('Switches to this community. Long press for its options.');
+        expect(host.innerHTML).not.toContain('Long press to remove it');
+    });
+
+    for (const [name, tree, dark] of [['light', lightColors, false], ['dark', darkColors, true]] as const) {
+        it(`the off state reads in ${name}: the border colour as the track, a thumb that stands off the card by 3:1`, async () => {
+            look.dark = dark;
+            const sw = await longPressHills();
+            await press(sw);
+            expect(sw.checked).toBe(false);
+            expect(sw.getAttribute('data-track-off')).toBe(tree.border.default);
+            expect(sw.getAttribute('data-thumb')).toBe(tree.text.muted);
+            expect(contrastRatio(sw.getAttribute('data-thumb')!, tree.surface.card)).toBeGreaterThanOrEqual(3);
+            expect(contrastRatio(sw.getAttribute('data-thumb')!, tree.border.default)).toBeGreaterThanOrEqual(3);
+            // On: the brand track under the card-coloured thumb, as before.
+            await press(sw);
+            expect(sw.checked).toBe(true);
+            expect(sw.getAttribute('data-track-on')).toBe(tree.brand.primary);
+            expect(contrastRatio(sw.getAttribute('data-thumb')!, tree.brand.primary)).toBeGreaterThanOrEqual(3);
+        });
+    }
+
+    it('at 320 dp with 1.3× text in the pseudo-locale, the new note and the sheet\'s words all came through t()', async () => {
+        nodes.answer = (x) => (x.method === 'DELETE' ? 'down' : 'up');
+        const sw = await longPressHills('xx');
+        await press(sw);
+        expect(host.textContent).toContain(pseudoLocalise("Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again."));
+        expect(bypassing()).toEqual([]);
+        expect(widthOf(widestWord(note() ?? ''), 13 * SCALE)).toBeLessThanOrEqual(288 - 32);
+    });
+});

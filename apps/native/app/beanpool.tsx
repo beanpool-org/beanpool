@@ -14,9 +14,9 @@ import {
 import { openBeanPoolWebsite } from '../utils/beanpool-links';
 import { useCommunities, type CommunityRow, type CommunityStatus } from '../utils/use-communities';
 import { useNoticeCounts } from '../utils/use-notice-counts';
-import { dropCounts, noticeCountFor } from '../utils/notice-counts';
+import { noticeCountFor } from '../utils/notice-counts';
 import { readAlertsOff } from '../utils/push-alerts-off';
-import { communityAddress, sameCommunity } from '../utils/push-pins';
+import { sameCommunity } from '../utils/push-pins';
 import { useGlobalEntry } from '../utils/use-global-entry';
 import { useGlobalDoor } from '../utils/use-global-door-open';
 import { isGlobalCommunity } from '../utils/global-join-existing';
@@ -138,6 +138,7 @@ export default function BeanPoolSheet() {
         switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, minHeight: 48, gap: 12 },
         switchTextWrap: { flex: 1, minWidth: 0 },
         switchLabel: { fontSize: 15, fontWeight: '600', color: colors.text.body },
+        switchNote: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, paddingBottom: 8 },
         switchSub: { fontSize: 13, color: colors.text.secondary, marginTop: 2, lineHeight: 18 },
         optionsDivider: { borderTopWidth: 1, borderTopColor: colors.border.default, marginVertical: 8 },
         removeBtn: { minHeight: 48, justifyContent: 'center' },
@@ -181,28 +182,37 @@ export default function BeanPoolSheet() {
         return () => { alive = false; };
     }, []);
 
+    // What the switch has to say beyond its position: it could not be changed, or the community could not be asked to stop
+    // yet. Cleared as the sheet opens or closes and as the switch is touched again.
+    const [alertsNote, setAlertsNote] = useState<string | null>(null);
+
+    // A switch never says more than is so (Marty: never a false success): it moves once the change is written on this phone
+    // and, going off, once the community has answered. Off with the community out of reach moves it too (the phone stops
+    // asking and registering there at once, and the DELETE is owed and tried again: utils/account-leaves-phone.ts
+    // `retryLeavesOwed`) and says so in plain words. A change that can't be written leaves it where it was, and says that.
+    React.useEffect(() => { setAlertsNote(null); }, [optionsCommunity?.url]);
+    const alertsOn = !!optionsCommunity && !alertsOff.some((c) => sameCommunity(c, optionsCommunity.url));
+
     const toggleAlerts = async () => {
         if (!optionsCommunity || togglingAlerts) return;
         setTogglingAlerts(true);
+        setAlertsNote(null);
         const target = optionsCommunity.url;
         const isOff = alertsOff.some((c) => sameCommunity(c, target));
         try {
             if (isOff) {
-                setAlertsOff((prev) => prev.filter((c) => !sameCommunity(c, target)));
                 const { turnAlertsOnAt } = await import('../services/push-notifications');
-                await turnAlertsOnAt(target).catch((e) => console.warn('[Push] Turn alerts on failed', e));
+                await turnAlertsOnAt(target);
+                setAlertsOff((prev) => prev.filter((c) => !sameCommunity(c, target)));
             } else {
+                const { turnAlertsOff } = await import('../utils/account-leaves-phone');
+                const reached = await turnAlertsOff(identity, target);
                 setAlertsOff((prev) => [...prev, target]);
-                if (identity) {
-                    const { turnAlertsOffAt } = await import('../utils/account-leaves-phone');
-                    await turnAlertsOffAt(identity, target).catch((e) => console.warn('[Push] Turn alerts off failed', e));
-                } else {
-                    const { markAlertsOff } = await import('../utils/push-alerts-off');
-                    const base = communityAddress(target);
-                    if (base) await markAlertsOff(base).catch(() => {});
-                }
-                await dropCounts(AsyncStorage, [target]).catch(() => {});
+                if (!reached) setAlertsNote(t("Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again."));
             }
+        } catch (e) {
+            console.warn('[Push] Could not change the alerts switch', e);
+            setAlertsNote(t("Something went wrong. Try again in a moment."));
         } finally {
             setTogglingAlerts(false);
         }
@@ -235,7 +245,7 @@ export default function BeanPoolSheet() {
         : globalEntry === 'unreachable' ? globalDoor.retry
         : globalEntry === 'closed' || globalEntry === 'preview' ? openDoor
         : undefined;
-    const globalHint = globalSaved && globalTap === switchToGlobal ? t('Switches to this community. Long press to remove it.') : undefined;
+    const globalHint = globalSaved && globalTap === switchToGlobal ? t('Switches to this community. Long press for its options.') : undefined;
     // The global community can't be reached, and the community in use is another one this account is a member of and that
     // answers (online; a guest's isn't "your own"): say so under the line
     // (DESIGN-global-mothership-fable.md §2.5, pick 1: one community among many, which yours never needs). Not while the
@@ -401,7 +411,7 @@ export default function BeanPoolSheet() {
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isCurrent }}
                                 accessibilityLabel={savedRowLabel(r.name, t(STATUS_TEXT[r.status]), isCurrent, notices)}
-                                accessibilityHint={isCurrent ? undefined : t('Switches to this community. Long press to remove it.')}
+                                accessibilityHint={isCurrent ? undefined : t('Switches to this community. Long press for its options.')}
                             >
                                 <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />
                                 <View style={styles.rowText}>
@@ -563,20 +573,27 @@ export default function BeanPoolSheet() {
                                     <Text style={styles.switchSub}>{t('Stops notifications and unread message checks from this community')}</Text>
                                 </View>
                                 <Switch
-                                    value={!alertsOff.some((c) => sameCommunity(c, optionsCommunity.url))}
+                                    value={alertsOn}
                                     onValueChange={() => void toggleAlerts()}
                                     disabled={togglingAlerts}
-                                    trackColor={{ false: colors.surface.subtle, true: colors.brand.primary }}
-                                    thumbColor={colors.surface.card}
+                                    // Off: the border colour as the track (as Pulse's switch), and a thumb that stands off the card
+                                    // (text.muted, over 5:1 on it in both themes; the subtle fill and the card itself were about 1.1:1).
+                                    trackColor={{ false: colors.border.default, true: colors.brand.primary }}
+                                    thumbColor={alertsOn ? colors.surface.card : colors.text.muted}
                                     accessibilityRole="switch"
                                     accessibilityLabel={t('Alerts from this community')}
                                 />
                             </View>
+                            {alertsNote && (
+                                <Text style={styles.switchNote} accessibilityRole="alert" testID="alerts-switch-note">{alertsNote}</Text>
+                            )}
                             {communities.active && !sameCommunity(optionsCommunity.url, communities.active) && (
                                 <>
                                     <View style={styles.optionsDivider} />
                                     <Pressable
-                                        style={styles.removeBtn}
+                                        style={[styles.removeBtn, togglingAlerts && { opacity: 0.5 }]}
+                                        // Not while the switch is changing: a Remove then could leave an alerts-off entry behind.
+                                        disabled={togglingAlerts}
                                         onPress={() => {
                                             const target = optionsCommunity;
                                             setOptionsCommunity(null);

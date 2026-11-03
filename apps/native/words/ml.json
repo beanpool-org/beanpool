@@ -63,7 +63,7 @@
   "Your account there was closed.": "അവിടെയുള്ള നിങ്ങളുടെ അക്കൗണ്ട് അടച്ചു.",
   "Your own community isn't affected.": "നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റിയെ ഇത് ബാധിക്കുന്നില്ല.",
   "Global community, {state}": "ആഗോള കമ്മ്യൂണിറ്റി, {state}",
-  "Switches to this community. Long press to remove it.": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് മാറുന്നു. നീക്കം ചെയ്യാൻ ദീർഘനേരം അമർത്തൂ.",
+  "Switches to this community. Long press for its options.": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് മാറുന്നു. ഓപ്ഷനുകൾക്കായി ദീർഘനേരം അമർത്തൂ.",
   "Guest": "അതിഥി",
   "Explore BeanPool worldwide": "ലോകമെമ്പാടുമുള്ള BeanPool കാണൂ",
   "🌍 Explore BeanPool worldwide": "🌍 ലോകമെമ്പാടുമുള്ള BeanPool കാണൂ",
@@ -6202,5 +6202,6 @@
     "one": "{community}-ൽ {n} പുതിയ സന്ദേശം · മാറുക",
     "other": "{community}-ൽ {n} പുതിയ സന്ദേശങ്ങൾ · മാറുക"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "നിങ്ങൾ സൂക്ഷിക്കുന്ന ഓരോ കമ്മ്യൂണിറ്റിയിൽ നിന്നും നിങ്ങളുടെ ഫോണിൽ അറിയിപ്പുകൾ എത്തും. BeanPool ഷീറ്റിൽ ഒരു കമ്മ്യൂണിറ്റിക്കായി നിങ്ങൾക്ക് അവ ഓഫാക്കാം."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "നിങ്ങൾ സൂക്ഷിക്കുന്ന ഓരോ കമ്മ്യൂണിറ്റിയിൽ നിന്നും നിങ്ങളുടെ ഫോണിൽ അറിയിപ്പുകൾ എത്തും. BeanPool ഷീറ്റിൽ ഒരു കമ്മ്യൂണിറ്റിക്കായി നിങ്ങൾക്ക് അവ ഓഫാക്കാം.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "ഈ ഫോണിൽ അറിയിപ്പുകൾ ഓഫാണ്. അവിടെ അവ നിർത്താൻ ഈ കമ്മ്യൂണിറ്റിയെ ഇതുവരെ ബന്ധപ്പെടാനായില്ല; ഫോൺ വീണ്ടും ശ്രമിക്കും."
 }

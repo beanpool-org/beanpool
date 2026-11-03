@@ -38,7 +38,8 @@ vi.mock('expo-crypto', async () => {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { clearActiveCount, countNotice, noticeCountsSum, readNoticeCounts } from '../notice-counts';
+import { clearActiveCount, countNotice, dropCounts, noticeCountsSum, readNoticeCounts } from '../notice-counts';
+import { markAlertsOff } from '../push-alerts-off';
 import {
     askOtherCommunities, keepsOtherCommunities, noticesAfterSync, NOT_THEIRS_WAIT_MS, roundWhileOpen, showUnreadSum, UNREAD_ROUND_GAP_MS, UNREAD_ROUND_SIZE,
     type PhoneNotices, type RoundDeps,
@@ -1202,5 +1203,62 @@ describe('wired in where the design says', () => {
         expect(task).toContain('await postNoticesAfterSync()');
         const service = fs.readFileSync(path.resolve(__dirname, '../../services/push-notifications.ts'), 'utf8');
         expect(service).toContain('return await noticesAfterSync({');
+    });
+});
+
+describe('alerts turned off while a round is out (PR #2772 review, finding 2)', () => {
+    /** The next answer from `community` waits until `release()`: the member's switch lands first. */
+    function holdAnswers(community: string) {
+        const real = fetch as unknown as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        let entered = 0;
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (new URL(String(input)).origin === community) { entered += 1; await gate; }
+            return real(input, init);
+        }));
+        return { release, entered: () => entered };
+    }
+
+    it('the answer that comes after the switch went off is not counted, not told, and the number stays cleared', async () => {
+        keep(HOME, [CASTLEMAINE, 'Castlemaine']);
+        answers.set(CASTLEMAINE, { unread: 5 });
+        const held = holdAnswers(CASTLEMAINE);
+        const running = round();
+        await vi.waitFor(() => expect(held.entered()).toBe(1));
+        // The sheet's switch: the list first, then the number goes.
+        await markAlertsOff(CASTLEMAINE);
+        await dropCounts(AsyncStorage, [CASTLEMAINE]);
+        held.release();
+        expect(await running).toBe(0);
+        expect(posted).toEqual([]);
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({});
+        expect(badges).toEqual([0]);
+    });
+
+    it('the same round with the switch still on counts and tells, so the check above could fail', async () => {
+        keep(HOME, [CASTLEMAINE, 'Castlemaine']);
+        answers.set(CASTLEMAINE, { unread: 5 });
+        const held = holdAnswers(CASTLEMAINE);
+        const running = round();
+        await vi.waitFor(() => expect(held.entered()).toBe(1));
+        held.release();
+        expect(await running).toBe(1);
+        expect(posted).toHaveLength(1);
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({ [CASTLEMAINE]: 5 });
+    });
+
+    it('the community in use, answering after its alerts went off, adds nothing to the badge', async () => {
+        keep(HOME, [CASTLEMAINE, 'Castlemaine']);
+        answers.set(HOME, { unread: 4 });
+        answers.set(CASTLEMAINE, { unread: 0 });
+        const held = holdAnswers(HOME);
+        const running = closedRound();
+        await vi.waitFor(() => expect(held.entered()).toBe(1));
+        await markAlertsOff(HOME);
+        held.release();
+        await running;
+        expect(posted).toEqual([]);
+        expect(badges[badges.length - 1]).toBe(0);
     });
 });

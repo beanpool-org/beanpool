@@ -42,8 +42,9 @@ import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
 import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfirmed, type NamesPinStore } from './names-list';
-import { confirmLeave, leaveStatementsSettled, leaveWrittenDown, recordLeave } from './push-leave';
+import { confirmLeave, leaveStatementsSettled, leaveWrittenDown, pendingLeaveStatements, recordLeave } from './push-leave';
 import { markAlertsOff, markAlertsOn } from './push-alerts-off';
+import { dropCounts } from './notice-counts';
 import { sameCommunity } from './push-pins';
 import {
     communitiesForAlerts, communityAddress, dropFromRecord, forgetPushRegistrations, leaveNoLongerOwed, leavesOwed, oweLeave,
@@ -304,11 +305,33 @@ export async function forgetCommunityPush(
  * (services/push-notifications.ts `turnAlertsOnAt`).
  */
 export async function turnAlertsOffAt(account: LeavingAccount, community: string): Promise<void> {
+    await turnAlertsOff(account, community);
+}
+
+/**
+ * {@link turnAlertsOffAt} for the sheet's switch, which must not say more than is so: `community` goes on the alerts-off
+ * list (throws, changing nothing, when that can't be written), its number goes at once (the member sees it clear before
+ * the node is asked), and then the node is told to drop this phone's token. True when that is dealt with: the node
+ * answered, or never held the token, or the phone has no account (so no token went anywhere). False when the node could not
+ * be reached: the leave is then owed ({@link retryLeavesOwed}) or kept as a statement that is presented again when the app
+ * comes back, and the sheet says so. Never throws once the list is written.
+ */
+export async function turnAlertsOff(account: LeavingAccount | null | undefined, community: string): Promise<boolean> {
     const base = communityAddress(community);
-    if (!base) return;
+    if (!base) return true;
     await markAlertsOff(base);
+    await dropCounts(AsyncStorage, [base]);
+    if (!account) return true;
     try {
-        await unregisterPushTokenAt(account, base);
+        if (!await unregisterPushTokenAt(account, base)) return false;
+        // A leave that was only written down (the community didn't answer) is still waiting for it: presented again when the
+        // app comes back, until the community confirms. Not "dealt with" for the sheet's switch.
+        return !(await pendingLeaveStatements()).some((st) => sameCommunity(st.community, base));
+    } catch (e) {
+        // Not expected (it never throws), but the list is written: the phone owes the community the leave and says so.
+        console.warn(`[Push] Could not tell ${base} to drop this phone's token`, e);
+        await oweLeave(base).catch(() => {});
+        return false;
     } finally {
         resumeRegisteringAt(account.publicKey, base);
     }

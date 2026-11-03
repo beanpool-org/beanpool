@@ -63,7 +63,7 @@
   "Your account there was closed.": "그곳의 계정이 닫혔어요.",
   "Your own community isn't affected.": "내 커뮤니티에는 영향이 없어요.",
   "Global community, {state}": "글로벌 커뮤니티, {state}",
-  "Switches to this community. Long press to remove it.": "이 커뮤니티로 전환해요. 길게 눌러 삭제하세요.",
+  "Switches to this community. Long press for its options.": "이 커뮤니티로 전환해요. 길게 눌러 옵션을 확인하세요.",
   "Guest": "게스트",
   "Explore BeanPool worldwide": "전 세계 BeanPool 둘러보기",
   "🌍 Explore BeanPool worldwide": "🌍 전 세계 BeanPool 둘러보기",
@@ -5962,5 +5962,6 @@
   "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
     "other": "{community}에 새 메시지 {n}개 · 전환"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "저장된 모든 커뮤니티의 알림이 휴대전화로 전송됩니다. BeanPool 시트에서 커뮤니티별로 알림을 끌 수 있습니다."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "저장된 모든 커뮤니티의 알림이 휴대전화로 전송됩니다. BeanPool 시트에서 커뮤니티별로 알림을 끌 수 있습니다.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "이 휴대폰에서는 알림이 꺼져 있어요. 그 커뮤니티에서 알림을 멈추도록 아직 연결하지 못했고, 휴대폰이 다시 시도해요."
 }

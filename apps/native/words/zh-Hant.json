@@ -63,7 +63,7 @@
   "Your account there was closed.": "你在那裡的帳號已被關閉。",
   "Your own community isn't affected.": "你自己的社群不受影響。",
   "Global community, {state}": "全球社群，{state}",
-  "Switches to this community. Long press to remove it.": "切換到這個社群。長按可移除。",
+  "Switches to this community. Long press for its options.": "切換到這個社群。長按可查看它的選項。",
   "Guest": "訪客",
   "Explore BeanPool worldwide": "探索全球 BeanPool",
   "🌍 Explore BeanPool worldwide": "🌍 探索全球 BeanPool",
@@ -5962,5 +5962,6 @@
   "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
     "other": "{community} 中有 {n} 則新訊息 · 切換"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "來自你保留的每個社群的通知都會傳送到你的手機。你可以在 BeanPool 頁面上關閉特定社群的通知。"
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "來自你保留的每個社群的通知都會傳送到你的手機。你可以在 BeanPool 頁面上關閉特定社群的通知。",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "這支手機上的通知已關閉。手機暫時還沒能聯絡上這個社群來停止那邊的通知，會再試一次。"
 }

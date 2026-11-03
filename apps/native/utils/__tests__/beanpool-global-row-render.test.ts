@@ -507,7 +507,7 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(title()).toBe('BeanPool Global');
         expect(line()).toBe('global.beanpool.org');
         expect(row().querySelector('i[data-icon="earth"]')).toBeNull();
-        expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press to remove it.');
+        expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press for its options.');
         await tap();
         expect(list.switched).toEqual([GLOBAL]);
         expect(communityRows()).toHaveLength(3);
@@ -583,7 +583,7 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
         scene.standing = 'member';
         await open();
-        expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press to remove it.');
+        expect(row().getAttribute('data-hint')).toBe('Switches to this community. Long press for its options.');
         expect(row().getAttribute('aria-label')).toBe('BeanPool Global, Connected. You are a member here.');
     });
 

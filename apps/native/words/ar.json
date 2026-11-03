@@ -63,7 +63,7 @@
   "Your account there was closed.": "أُغلق حسابك هناك.",
   "Your own community isn't affected.": "مجتمعك الخاص لم يتأثر.",
   "Global community, {state}": "المجتمع العالمي، {state}",
-  "Switches to this community. Long press to remove it.": "ينقلك إلى هذا المجتمع. اضغط مطولًا لإزالته.",
+  "Switches to this community. Long press for its options.": "ينقلك إلى هذا المجتمع. اضغط مطولًا لعرض خياراته.",
   "Guest": "ضيف",
   "Explore BeanPool worldwide": "استكشف BeanPool حول العالم",
   "🌍 Explore BeanPool worldwide": "🌍 استكشف BeanPool حول العالم",
@@ -7167,5 +7167,6 @@
     "many": "{n} رسالة جديدة في {community} · تبديل",
     "other": "{n} رسالة جديدة في {community} · تبديل"
   },
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "تصل التنبيهات إلى هاتفك من كل مجتمع تحتفظ به. يمكنك إيقاف تشغيلها لمجتمع ما في ورقة BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "تصل التنبيهات إلى هاتفك من كل مجتمع تحتفظ به. يمكنك إيقاف تشغيلها لمجتمع ما في ورقة BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "التنبيهات متوقفة على هذا الهاتف. لم يتمكن من الوصول إلى هذا المجتمع لإيقافها هناك بعد، وسيحاول مرة أخرى."
 }

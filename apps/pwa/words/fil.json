@@ -2040,7 +2040,6 @@
   "Show QR code": "Ipakita ang QR code",
   "Show Voters ({n}) ▼": "Ipakita ang mga Botante ({n}) ▼",
   "Show all categories": "Ipakita ang lahat ng kategorya",
-  "Show events": "Ipakita ang mga event",
   "Show everywhere": "Ipakita kahit saan",
   "Show its 12 words": "Ipakita ang 12 salita nito",
   "Show me as a connection in common": "Ipakita ako bilang karaniwang koneksyon",
@@ -3703,5 +3702,15 @@
   "Three posts are pinned already. Take one off first.": "May tatlong post nang naka-pin. Mag-alis muna ng isa.",
   "📌 PINNED": "📌 NAKA-PIN",
   "Remove my working style": "Alisin ang aking estilo ng pagtatrabaho",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Aalisin nito ang iyong estilo ng pagtatrabaho sa device na ito at sa bawat komunidad dito. Babalik ito kapag inulit mo ang quiz."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Aalisin nito ang iyong estilo ng pagtatrabaho sa device na ito at sa bawat komunidad dito. Babalik ito kapag inulit mo ang quiz.",
+  "All Categories": "Lahat ng Kategorya",
+  "Food": "Pagkain",
+  "Health": "Kalusugan",
+  "Care": "Pangangalaga",
+  "Tech": "Teknolohiya",
+  "Mindset": "Kaisipan",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "I-clear ang mga filter",
+  "Filter by category": "I-filter ayon sa kategorya"
 }

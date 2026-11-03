@@ -2040,7 +2040,6 @@
   "Show QR code": "QR कोड दिखाएं",
   "Show Voters ({n}) ▼": "मतदाता दिखाएं ({n}) ▼",
   "Show all categories": "सभी श्रेणियाँ दिखाएँ",
-  "Show events": "कार्यक्रम दिखाएँ",
   "Show everywhere": "हर जगह दिखाएं",
   "Show its 12 words": "इसके 12 शब्द दिखाएँ",
   "Show me as a connection in common": "मुझे एक सामान्य कनेक्शन के रूप में दिखाएं",
@@ -3703,5 +3702,15 @@
   "Three posts are pinned already. Take one off first.": "तीन पोस्ट पहले से पिन हैं। पहले एक हटाएँ।",
   "📌 PINNED": "📌 पिन किया गया",
   "Remove my working style": "मेरी कार्यशैली हटाएं",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "इससे आपकी कार्यशैली इस डिवाइस से और इस पर मौजूद हर समुदाय से हट जाएगी। प्रश्नोत्तरी दोबारा लेने पर वह वापस आ जाएगी।"
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "इससे आपकी कार्यशैली इस डिवाइस से और इस पर मौजूद हर समुदाय से हट जाएगी। प्रश्नोत्तरी दोबारा लेने पर वह वापस आ जाएगी।",
+  "All Categories": "सभी श्रेणियां",
+  "Food": "भोजन",
+  "Health": "स्वास्थ्य",
+  "Care": "देखभाल",
+  "Tech": "तकनीक",
+  "Mindset": "मानसिकता",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "फ़िल्टर हटाएं",
+  "Filter by category": "श्रेणी के अनुसार फ़िल्टर करें"
 }

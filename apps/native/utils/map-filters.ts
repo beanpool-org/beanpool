@@ -15,12 +15,16 @@
  * pins — that is the rule that makes the remembering safe. "All Categories" clears the category.
  */
 
-import { t } from '@beanpool/core';
-import { CATEGORY_META, normalizeCategory } from '../constants/categories';
+import {
+    t, visibleMarketPins as coreVisibleMarketPins, visibleEventPins as coreVisibleEventPins, mapFiltersActive as coreMapFiltersActive,
+    type MapTypeFilter, type MapFilterState as CoreMapFilterState,
+} from '@beanpool/core';
+import { CATEGORY_META } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
 
-export type MapTypeFilter = 'all' | 'offers' | 'needs' | 'events';
+// The rule for which pins survive the filters lives in @beanpool/core (map-type-filter.ts), read by the web map too.
+export type { MapTypeFilter };
 
 export type MapSecondRow =
     | { kind: 'categories'; chips: FilterChip[] }
@@ -38,39 +42,11 @@ export function mapSecondRow(type: MapTypeFilter): MapSecondRow {
         : { kind: 'categories', chips: CATEGORY_FILTER_CHIPS };
 }
 
-export interface MapFilterState {
-    type: MapTypeFilter;
-    /** 'all' or a category id from CATEGORY_META. */
-    category: string;
-    eventWindow: EventWindow;
-}
-
-function hasCoords(p: any): boolean {
-    if (p.lat == null || p.lng == null) return false;
-    return !isNaN(Number(p.lat)) && !isNaN(Number(p.lng));
-}
-
-/**
- * Compared normalised, so a post filed under a legacy alias sits under the chip whose emoji its pin wears
- * (the pin resolves its emoji through the same normaliser).
- */
-function inCategory(p: any, state: MapFilterState): boolean {
-    if (state.type === 'events' || state.category === 'all') return true;
-    return normalizeCategory(p.category) === state.category;
-}
+export type MapFilterState = CoreMapFilterState<EventWindow>;
 
 /** Offer and Need pins. Events come from visibleEventPins; both draw through UnifiedMapPin and cluster together. */
 export function visibleMarketPins<T = any>(posts: T[], state: MapFilterState): T[] {
-    return posts.filter((p: any) => {
-        if (p.status && p.status !== 'active') return false;
-        if (!hasCoords(p)) return false;
-        const pt = (p.type || '').toLowerCase();
-        if (pt === 'event') return false;
-        if (state.type === 'events') return false;
-        if (state.type === 'offers' && pt !== 'offer') return false;
-        if (state.type === 'needs' && pt !== 'need') return false;
-        return inCategory(p, state);
-    });
+    return coreVisibleMarketPins(posts, state);
 }
 
 /**
@@ -79,13 +55,7 @@ export function visibleMarketPins<T = any>(posts: T[], state: MapFilterState): T
  * and cancelled events either way.
  */
 export function visibleEventPins<T = any>(posts: T[], state: MapFilterState, nowMs: number = Date.now()): T[] {
-    if (state.type !== 'all' && state.type !== 'events') return [];
-    return posts.filter((p: any) => {
-        if ((p.type || '').toLowerCase() !== 'event') return false;
-        if (!hasCoords(p)) return false;
-        if (!inCategory(p, state)) return false;
-        return eventInWindow(p, state.type === 'events' ? state.eventWindow : 'all', nowMs);
-    });
+    return coreVisibleEventPins(posts, state, (p, w) => eventInWindow(p, w, nowMs));
 }
 
 /** The collapsed chip's text: the current category, and whether tapping it opens or closes the panel. */
@@ -117,11 +87,11 @@ export function categoryPanelReducer(s: CategoryPanelState, a: CategoryPanelActi
 }
 
 /**
- * Whether the ✕ in the top row has anything to clear. A date window only filters under Events, which is
- * already type !== 'all', so it needs no clause of its own.
+ * Whether the ✕ in the top row has anything to clear. A date window only filters under Events, which is already
+ * type !== 'all', so it needs no clause of its own.
  */
 export function mapFiltersActive(state: MapFilterState): boolean {
-    return state.type !== 'all' || state.category !== 'all';
+    return coreMapFiltersActive(state);
 }
 
 // ===================== BRINGING EVENTS INTO VIEW (events round 2, B2) =====================

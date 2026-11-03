@@ -2002,7 +2002,6 @@
   "Show QR code": "Tampilkan kode QR",
   "Show Voters ({n}) ▼": "Tampilkan Pemilih ({n}) ▼",
   "Show all categories": "Tampilkan semua kategori",
-  "Show events": "Tampilkan acara",
   "Show everywhere": "Tampilkan di mana saja",
   "Show its 12 words": "Tampilkan 12 katanya",
   "Show me as a connection in common": "Tampilkan saya sebagai koneksi bersama",
@@ -3574,5 +3573,15 @@
   "Three posts are pinned already. Take one off first.": "Sudah ada tiga postingan yang disematkan. Lepaskan satu dulu.",
   "📌 PINNED": "📌 DISEMATKAN",
   "Remove my working style": "Hapus gaya kerjaku",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ini menghapus gaya kerjamu dari perangkat ini dan dari setiap komunitas di dalamnya. Mengulang kuis akan mengembalikannya."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ini menghapus gaya kerjamu dari perangkat ini dan dari setiap komunitas di dalamnya. Mengulang kuis akan mengembalikannya.",
+  "All Categories": "Semua Kategori",
+  "Food": "Makanan",
+  "Health": "Kesehatan",
+  "Care": "Perawatan & Asuhan",
+  "Tech": "Teknologi",
+  "Mindset": "Wawasan & Diskusi",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "Hapus filter",
+  "Filter by category": "Filter berdasarkan kategori"
 }

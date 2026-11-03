@@ -2002,7 +2002,6 @@
   "Show QR code": "显示二维码",
   "Show Voters ({n}) ▼": "显示投票人 ({n}) ▼",
   "Show all categories": "显示所有分类",
-  "Show events": "显示活动",
   "Show everywhere": "显示所有地区",
   "Show its 12 words": "显示它的 12 个词",
   "Show me as a connection in common": "将我显示为共同好友",
@@ -3574,5 +3573,15 @@
   "Three posts are pinned already. Take one off first.": "已有三个帖子置顶。请先取消一个。",
   "📌 PINNED": "📌 置顶",
   "Remove my working style": "移除我的工作风格",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "这会把你的工作风格从此设备及设备上的每个社区中移除。重新测试后会恢复。"
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "这会把你的工作风格从此设备及设备上的每个社区中移除。重新测试后会恢复。",
+  "All Categories": "全部分类",
+  "Food": "食品",
+  "Health": "健康医疗",
+  "Care": "关爱照料",
+  "Tech": "数码科技",
+  "Mindset": "心理成长",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "清除筛选",
+  "Filter by category": "按类别筛选"
 }

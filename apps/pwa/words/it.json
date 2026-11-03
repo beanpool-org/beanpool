@@ -2040,7 +2040,6 @@
   "Show QR code": "Mostra codice QR",
   "Show Voters ({n}) ▼": "Mostra votanti ({n}) ▼",
   "Show all categories": "Mostra tutte le categorie",
-  "Show events": "Mostra eventi",
   "Show everywhere": "Mostra ovunque",
   "Show its 12 words": "Mostra le sue 12 parole",
   "Show me as a connection in common": "Mostrami come collegamento in comune",
@@ -3704,5 +3703,15 @@
   "Three posts are pinned already. Take one off first.": "Ci sono già tre post fissati. Togline prima uno.",
   "📌 PINNED": "📌 FISSATO",
   "Remove my working style": "Rimuovi il mio stile di lavoro",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Questo toglie il tuo stile di lavoro da questo dispositivo e da ogni comunità presente. Rifare il quiz lo riporta."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Questo toglie il tuo stile di lavoro da questo dispositivo e da ogni comunità presente. Rifare il quiz lo riporta.",
+  "All Categories": "Tutte le categorie",
+  "Food": "Cibo",
+  "Health": "Salute",
+  "Care": "Cura e assistenza",
+  "Tech": "Tecnologia",
+  "Mindset": "Crescita e confronto",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "Cancella filtri",
+  "Filter by category": "Filtra per categoria"
 }

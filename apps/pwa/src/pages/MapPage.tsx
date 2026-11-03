@@ -13,7 +13,7 @@ import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines } from '@beanpool/core';
 import { copyPriceLine, eventCopyOf } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -69,11 +69,13 @@ import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
+import { marketPinMatchesFilter, visibleEventPins as filterEventPins, mapFiltersActive, type MapTypeFilter, type MapFilterState } from '@beanpool/core';
+import { MAP_CATEGORY_CHIPS, MAP_EVENT_WINDOWS, MAP_TYPE_PILLS, mapCategoryChipLabel } from '../lib/map-filters';
 import { MAP_TAP_CAP_ZOOM, STACK_LIST_CLOSED, areaRingLeafletStyle, settleMapStop, stackDropped, stackHeading, stackLift, stackRestWatch, stackShut, stackTapped, type MapFrame, type StackListState } from '@beanpool/core';
 import {
-    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
+    CLIENT_POST_TYPES, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventRepeatCreate, parseCopyEventContext, withMovedFromLine,
-    eventInWindow, formatEventWhen, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
+    eventInWindow, formatEventWhen, isEventHostView, type EventEditForm, type EventWindow,
     hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
 
@@ -257,7 +259,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
      * layer of its own).
      */
     const markersRef = useRef<L.LayerGroup | null>(null);
-    const eventChipsRef = useRef<HTMLDivElement | null>(null);
     const userMarkerRef = useRef<L.Marker | null>(null);
     const radiusCircleRef = useRef<L.Circle | null>(null);
 
@@ -300,6 +301,48 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [keeperOf, setKeeperOf] = useState<string[]>([]);
     const [keeperNames, setKeeperNames] = useState<Record<string, string>>({});
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
+    // The phone's filter (apps/native map.tsx): the type pills, a category under Offers / Needs / All, the date chips under Events.
+    // The category and the date window are remembered across type switches and each only filters while its row shows
+    // (@beanpool/core map-type-filter.ts).
+    const [mapType, setMapType] = useState<MapTypeFilter>('all');
+    const [mapCategory, setMapCategory] = useState('all');
+    const [categoryOpen, setCategoryOpen] = useState(false);
+    const mapFilterState: MapFilterState<EventWindow> = { type: mapType, category: mapCategory, eventWindow };
+    // The filter bar's height, measured, so the notes about where the pins were read from sit under it (two rows, and more at large text).
+    const filterBarRef = useRef<HTMLDivElement | null>(null);
+    const [filterH, setFilterH] = useState(0);
+    // Offers and All fill with the brand green, Needs with the action orange: the phone's pill colours, from the central tokens.
+    const categoryFill = mapType === 'needs' ? 'bg-bp-action-fill text-bp-action-on' : 'bg-bp-commit-fill text-bp-commit-on';
+    function selectMapType(type: MapTypeFilter) {
+        setMapType(type);
+        setCategoryOpen(false);
+        setPreviewPost(null);
+        // Events brings its pins into view below the rows, as a date chip does (events round 2, B2).
+        if (type === 'events') fitEventPins(eventWindow);
+    }
+    function clearMapFilters() {
+        setMapType('all');
+        setMapCategory('all');
+        setEventWindow('all');
+        setCategoryOpen(false);
+    }
+    useLayoutEffect(() => {
+        const el = filterBarRef.current;
+        if (!el) { setFilterH(0); return; }
+        const measure = () => setFilterH(Math.round(el.getBoundingClientRect().height));
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const watch = new ResizeObserver(measure);
+        watch.observe(el);
+        return () => watch.disconnect();
+    }, [showNewPost]);
+    // Escape folds the category panel away.
+    useEffect(() => {
+        if (!categoryOpen) return;
+        const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setCategoryOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [categoryOpen]);
     /** True while the event form holds a copy of an existing event, so the form can say what did not come with it. */
     const [eventIsCopy, setEventIsCopy] = useState(false);
     /** Non-null while the event form is editing an existing event: its id and the form as it was opened. */
@@ -409,6 +452,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const pinKeysRef = useRef(new Map<L.Layer, string>());
     const stack = useMemo(() => (stackKeys ? stackPins(stackKeys, pinsOnMap) : []), [stackKeys, pinsOnMap]);
     const stackOpen = stack.length > 0;
+    // The category panel folds away on anything that takes the map's attention, as the phone's does (its 'dismiss'): a pin's
+    // card, a bubble's list, the composer.
+    useEffect(() => {
+        if (previewPost || stackOpen || showNewPost) setCategoryOpen(false);
+    }, [previewPost, stackOpen, showNewPost]);
     const stackListRef = useRef(stackList);
     stackListRef.current = stackList;
     const [calendarOpen, setCalendarOpen] = useState(false);
@@ -675,6 +723,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         map.on('click', () => {
             setPreviewPost(null);
             setStackList(stackShut);
+            setCategoryOpen(false);
         });
 
         // Markers layer
@@ -1589,11 +1638,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         return () => { map.off('click', onMapClick); };
     }, [pinDropMode]);
 
-    const visibleEventPins = useMemo(() => posts.filter(post => post.type === 'event' && post.lat != null && post.lng != null
-        && eventInWindow(post, eventWindow)
-        && !(post as any)._remoteNode
-        && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey)),
-    [posts, eventWindow, blockedSet, inactiveEnterpriseKeys]);
+    // Events pin under All and Events only; under Events the date chips narrow them (@beanpool/core map-type-filter.ts).
+    const visibleEventPins = useMemo(() => filterEventPins(
+        posts.filter(post => !(post as any)._remoteNode && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey)),
+        { type: mapType, category: mapCategory, eventWindow },
+        (post, window) => eventInWindow(post, window),
+    ),
+    [posts, mapType, mapCategory, eventWindow, blockedSet, inactiveEnterpriseKeys]);
 
     /**
      * A tap on a date chip brings that chip's events into view BELOW the chip row, so a member who asks for
@@ -1609,7 +1660,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             .map(post => [post.lat!, post.lng!] as [number, number]);
         if (points.length === 0) return;
         const container = map.getContainer().getBoundingClientRect();
-        const chips = eventChipsRef.current?.getBoundingClientRect();
+        const chips = filterBarRef.current?.getBoundingClientRect();
         // The pin is drawn 48px tall above its point, so clear the chips by that much and a margin.
         const top = Math.max(110, (chips ? chips.bottom - container.top : 120) + 48 + 16);
         map.fitBounds(points, { paddingTopLeft: [40, top], paddingBottomRight: [40, 140], maxZoom: FIT_MAX_ZOOM });
@@ -1634,7 +1685,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         };
 
         posts
-            .filter(post => post.type !== 'poll' && post.type !== 'event' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
+            // Offers and Needs under the type filter and its category (@beanpool/core map-type-filter.ts). A listing with no
+            // coordinates still pins near the community's centre below, so the place is not asked here.
+            .filter(post => post.type !== 'poll' && marketPinMatchesFilter(post, mapFilterState) && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
             .forEach((post) => {
             const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
             const emoji = cat?.emoji || '📌';
@@ -1776,8 +1829,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 "'": '&#39;',
             }[m] || m));
 
+        // The phone's map has no enterprise pins, so the filter has no rule for them: a business is neither an Offer, a Need
+        // nor an Event and has no category, so they show only while nothing is filtered ("Offers shows offers only").
         enterprises
-            .filter(ent => ent.lat != null && ent.lng != null && ent.status !== 'completed')
+            .filter(ent => !mapFiltersActive(mapFilterState) && ent.lat != null && ent.lng != null && ent.status !== 'completed')
             .forEach(ent => {
                 const isPaused = ent.paused || ent.status === 'paused';
                 const borderColor = isPaused ? '#f59e0b' : '#e06d53';
@@ -1859,7 +1914,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         pinKeysRef.current = pinKeys;
         setPinsOnMap(pinRows);
         setPinsFromPosts(pinsLoaded);
-    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius, visitor, pinsLoaded]);
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, mapType, mapCategory, nodeRadius, visitor, pinsLoaded]);
 
     // No location from the node: centre once on this community's own pins, which are its real centre. Posts from
     // partner communities are left out — they are somewhere else. Nothing to centre on leaves the neutral view and
@@ -2031,6 +2086,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             centredRef.current = true;
             mapRef.current.setView([target.lat, target.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 16));
         }
+        // Every filter off, not just the date window: the pins follow the filter, and a card with no pin under it reads as lost.
+        setMapType('all');
+        setMapCategory('all');
+        setCategoryOpen(false);
         setEventWindow('all');
         setPreviewPost(target);
         onFocusPostHandled?.();
@@ -2046,11 +2105,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         onOpenCalendarHandled?.();
     }, [openCalendar, onOpenCalendarHandled]);
 
-    // Only an event the map can pin: an online one has no place, so the chips would filter nothing (review of #1952, finding 8).
-    const hasOpenEvents = posts.some(p => p.type === 'event' && p.lat != null && p.lng != null && isEventOpen(p) && !(p as any)._remoteNode);
-    // The notes about where the pins were read from take the event chips' spot, so while the chips show they sit under
-    // them (#1770): the chips' row is its 48px buttons with 0.25rem above and below, then a 0.25rem gap.
-    const nearNoteTop = hasOpenEvents ? 'top-[calc(5rem+48px)] md:top-[calc(1.5rem+48px)]' : 'top-[4.25rem] md:top-3';
+    // The notes about where the pins were read from take the filter bar's spot, so they sit under it, whatever its height (two
+    // rows, and more at large text): the bar's measured height, then a 0.25rem gap. The bar is at 4.25rem, under the header.
+    const noteTop = 'top-[calc(4.25rem+var(--map-filter-h,0px)+0.25rem)]';
+    const noteStyle = { '--map-filter-h': `${filterH}px` } as CSSProperties;
 
     // Shared by the offer/need and event forms.
     function renderLocationPicker() {
@@ -2192,7 +2250,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-location-hint"
-                    className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 pointer-events-none"
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 pointer-events-none`}
                 >
                     {t("This community hasn't set its location yet")}
                 </p>
@@ -2202,7 +2261,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-near-empty"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>
                         {near.from === 'area'
@@ -2217,7 +2277,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-area-failed"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>{areaStanding}</span>
                 </p>
@@ -2227,7 +2288,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-area-failed"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>{t("Couldn't check your area just now, so this is the newest from everywhere.")}</span>
                     <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">{t('Try again')}</button>
@@ -2237,7 +2299,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             {nearAgain && !showLocationHint && !showNewPost && (
                 <p
                     data-testid="map-near-again"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>{t('Newest from everywhere.')}</span>
                     <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">
@@ -2246,31 +2309,105 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 </p>
             )}
 
-            {/* Event chips (docs/events-on-the-map.md §3) and Calendar button (DESIGN-map-calendar-fable.md §2, §6).
-                One row that scrolls sideways rather than wraps, so it holds at 320px with large text.
-                The calendar button is always shown; chips alone are gated by hasOpenEvents. */}
+            {/* The map's filter (the phone's, apps/native map.tsx; the rule is @beanpool/core map-type-filter.ts) and the Calendar
+                button (DESIGN-map-calendar-fable.md §2, §6). Row one: the type pills (All · Offers · Needs · Events) with a ✕ while
+                a filter is on, then the calendar button. Row two, always under it: one chip naming the category (it opens every
+                category as tiles) for All / Offers / Needs, or the date chips under Events. Each row scrolls sideways rather than
+                wraps, so it holds at 320px with large text. It sits under the header at every width: the header draws on the
+                map at md and up too (see AppHeader), so at md:top-3 the bar stood on the header's sync chip. */}
             {/* Hidden while composing: at 320px the New Post panel leaves only a strip of map to drop a pin in. */}
             {!showNewPost && (
                 <div
-                    className="absolute top-[4.25rem] md:top-3 left-0 z-[100] w-fit max-w-full px-3 py-1 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain"
-                    style={{ scrollbarWidth: 'none' }}
+                    ref={filterBarRef}
+                    data-testid="map-filter-bar"
+                    // Over the locate pill and the + button while the panel is open: the phone hides them then, and the tiles under them are taps.
+                    className={`absolute top-[4.25rem] left-0 ${categoryOpen ? 'z-[120]' : 'z-[100]'} w-fit max-w-full px-3 py-1 flex flex-col items-start gap-1.5 pointer-events-none`}
                 >
-                    {hasOpenEvents && (
+                    <div
+                        data-testid="map-filter-row"
+                        className="pointer-events-auto max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
+                        style={{ scrollbarWidth: 'none' }}
+                    >
                         <div
-                            ref={eventChipsRef}
+                            data-testid="map-type-pills"
+                            role="group"
+                            className="flex-shrink-0 flex flex-nowrap items-center p-0.5 rounded-full border border-nature-200 dark:border-nature-700 bg-white/95 dark:bg-nature-900/95 shadow-md"
+                        >
+                            {MAP_TYPE_PILLS.map(pill => {
+                                const on = mapType === pill.id;
+                                const filled = pill.id === 'offers' ? 'bg-bp-commit-fill text-bp-commit-on'
+                                    : pill.id === 'needs' ? 'bg-bp-action-fill text-bp-action-on'
+                                    : pill.id === 'events' ? 'bg-violet-700 text-white'
+                                    : 'bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white';
+                                return (
+                                    <button
+                                        key={pill.id}
+                                        type="button"
+                                        data-testid={`map-type-${pill.id}`}
+                                        aria-pressed={on}
+                                        onClick={() => selectMapType(pill.id)}
+                                        className={`flex-shrink-0 whitespace-nowrap min-h-[44px] px-3.5 rounded-full text-sm cursor-pointer transition-colors ${
+                                            on ? `${filled} font-extrabold` : 'text-nature-700 dark:text-oat-100 font-semibold'
+                                        }`}
+                                    >
+                                        {t(pill.label)}
+                                    </button>
+                                );
+                            })}
+                            {mapFiltersActive(mapFilterState) && (
+                                <button
+                                    type="button"
+                                    data-testid="map-filter-clear"
+                                    aria-label={t('Clear filters')}
+                                    onClick={clearMapFilters}
+                                    className="flex-shrink-0 min-h-[44px] min-w-[44px] px-2 rounded-full text-sm font-extrabold text-nature-600 dark:text-nature-300 cursor-pointer"
+                                >
+                                    <span aria-hidden="true">✕</span>
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            data-testid="map-calendar-button"
+                            aria-label={t('Calendar')}
+                            aria-pressed={calendarOpen}
+                            onClick={() => {
+                                calendarFromDoor.current = false;
+                                setCalendarOpen(open => !open);
+                                setPreviewPost(null);
+                                setStackList(stackShut);
+                            }}
+                            className={`flex-shrink-0 min-h-[48px] min-w-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors flex items-center justify-center cursor-pointer ${
+                                calendarOpen
+                                    ? 'bg-violet-700 border-violet-700 text-white'
+                                    : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                            }`}
+                        >
+                            <svg data-calendar-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                                <path d="M3.5 10h17M8 3v4M16 3v4" />
+                                <circle cx="8.5" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="12" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="15.5" cy="14.5" r="0.6" fill="currentColor" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {mapType === 'events' ? (
+                        <div
                             data-testid="event-window-chips"
                             role="group"
-                            aria-label={t('Show events')}
-                            className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain"
+                            aria-label={t('Filter events by date')}
+                            className="pointer-events-auto max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
                             style={{ scrollbarWidth: 'none' }}
                         >
-                            {EVENT_WINDOWS.map(w => (
+                            {MAP_EVENT_WINDOWS.map(w => (
                                 <button
                                     key={w.id}
                                     type="button"
                                     aria-pressed={eventWindow === w.id}
                                     onClick={() => { setEventWindow(w.id); setPreviewPost(null); fitEventPins(w.id); }}
-                                    className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors ${
+                                    className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors cursor-pointer ${
                                         eventWindow === w.id
                                             ? 'bg-violet-700 border-violet-700 text-white'
                                             : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
@@ -2280,32 +2417,47 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 </button>
                             ))}
                         </div>
+                    ) : (
+                        <div className="relative pointer-events-auto max-w-full">
+                            <button
+                                type="button"
+                                data-testid="map-category-chip"
+                                aria-expanded={categoryOpen}
+                                onClick={() => setCategoryOpen(open => !open)}
+                                className={`whitespace-nowrap min-h-[44px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors cursor-pointer ${
+                                    mapCategory !== 'all'
+                                        ? `${categoryFill} border-transparent`
+                                        : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                                }`}
+                            >
+                                {mapCategoryChipLabel(mapCategory, categoryOpen)}
+                            </button>
+                            {categoryOpen && (
+                                <div
+                                    data-testid="map-category-panel"
+                                    role="group"
+                                    aria-label={t('Filter by category')}
+                                    className="absolute left-0 top-full mt-1.5 w-[min(24rem,calc(100vw-1.5rem))] max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain grid gap-1 p-1 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 shadow-xl"
+                                    style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(4.5rem, 1fr))' }}
+                                >
+                                    {MAP_CATEGORY_CHIPS.map(c => (
+                                        <button
+                                            key={c.id}
+                                            type="button"
+                                            aria-pressed={mapCategory === c.id}
+                                            onClick={() => { setMapCategory(c.id); setCategoryOpen(false); setPreviewPost(null); }}
+                                            className={`min-h-[48px] px-0.5 py-1 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer ${
+                                                mapCategory === c.id ? `${categoryFill} font-extrabold` : 'bg-black/5 dark:bg-white/10 text-nature-800 dark:text-oat-50 font-semibold'
+                                            }`}
+                                        >
+                                            <span className="text-lg leading-snug" aria-hidden="true">{c.emoji}</span>
+                                            <span className="text-[0.7rem] leading-tight">{t(c.label)}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     )}
-                    <button
-                        type="button"
-                        data-testid="map-calendar-button"
-                        aria-label={t('Calendar')}
-                        aria-pressed={calendarOpen}
-                        onClick={() => {
-                            calendarFromDoor.current = false;
-                            setCalendarOpen(open => !open);
-                            setPreviewPost(null);
-                            setStackList(stackShut);
-                        }}
-                        className={`flex-shrink-0 min-h-[48px] min-w-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors flex items-center justify-center cursor-pointer ${
-                            calendarOpen
-                                ? 'bg-violet-700 border-violet-700 text-white'
-                                : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
-                        }`}
-                    >
-                        <svg data-calendar-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
-                            <path d="M3.5 10h17M8 3v4M16 3v4" />
-                            <circle cx="8.5" cy="14.5" r="0.6" fill="currentColor" />
-                            <circle cx="12" cy="14.5" r="0.6" fill="currentColor" />
-                            <circle cx="15.5" cy="14.5" r="0.6" fill="currentColor" />
-                        </svg>
-                    </button>
                 </div>
             )}
 

@@ -2192,7 +2192,6 @@
   "Show QR code": "إظهار رمز QR",
   "Show Voters ({n}) ▼": "عرض المصوتين ({n}) ▼",
   "Show all categories": "عرض كل الفئات",
-  "Show events": "إظهار الفعاليات",
   "Show everywhere": "عرض في كل مكان",
   "Show its 12 words": "إظهار كلماته الـ12",
   "Show me as a connection in common": "إظهاري كجهة اتصال مشتركة",
@@ -4219,5 +4218,15 @@
   "Three posts are pinned already. Take one off first.": "هناك ثلاثة منشورات مثبتة بالفعل. أزل واحدًا أولًا.",
   "📌 PINNED": "📌 مثبت",
   "Remove my working style": "إزالة أسلوب عملي",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "يُزيل هذا أسلوب عملك من هذا الجهاز ومن كل مجتمع عليه. إعادة الاختبار تعيده."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "يُزيل هذا أسلوب عملك من هذا الجهاز ومن كل مجتمع عليه. إعادة الاختبار تعيده.",
+  "All Categories": "كل الفئات",
+  "Food": "طعام",
+  "Health": "صحة",
+  "Care": "رعاية",
+  "Tech": "تقنية",
+  "Mindset": "تطوير الذات",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "مسح عوامل التصفية",
+  "Filter by category": "تصفية حسب الفئة"
 }

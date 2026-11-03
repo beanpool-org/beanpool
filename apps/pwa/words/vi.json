@@ -2002,7 +2002,6 @@
   "Show QR code": "Hiện mã QR",
   "Show Voters ({n}) ▼": "Hiện người bỏ phiếu ({n}) ▼",
   "Show all categories": "Hiển thị tất cả danh mục",
-  "Show events": "Hiện sự kiện",
   "Show everywhere": "Hiện tất cả mọi nơi",
   "Show its 12 words": "Hiện 12 từ của nó",
   "Show me as a connection in common": "Hiển thị tôi là kết nối chung",
@@ -3574,5 +3573,15 @@
   "Three posts are pinned already. Take one off first.": "Đã có ba bài đăng được ghim. Hãy bỏ ghim một bài trước.",
   "📌 PINNED": "📌 ĐÃ GHIM",
   "Remove my working style": "Xóa phong cách làm việc của tôi",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Thao tác này xóa phong cách làm việc của bạn khỏi thiết bị này và khỏi mọi cộng đồng trên đó. Làm lại bài trắc nghiệm sẽ đưa nó trở lại."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Thao tác này xóa phong cách làm việc của bạn khỏi thiết bị này và khỏi mọi cộng đồng trên đó. Làm lại bài trắc nghiệm sẽ đưa nó trở lại.",
+  "All Categories": "Tất cả danh mục",
+  "Food": "Ẩm thực",
+  "Health": "Sức khỏe",
+  "Care": "Chăm sóc",
+  "Tech": "Công nghệ",
+  "Mindset": "Tâm lý",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "Xóa bộ lọc",
+  "Filter by category": "Lọc theo danh mục"
 }

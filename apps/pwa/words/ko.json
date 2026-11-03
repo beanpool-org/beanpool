@@ -2002,7 +2002,6 @@
   "Show QR code": "QR 코드 보기",
   "Show Voters ({n}) ▼": "투표자 보기 ({n}) ▼",
   "Show all categories": "모든 카테고리 보기",
-  "Show events": "행사 보기",
   "Show everywhere": "모든 지역 표시",
   "Show its 12 words": "12개 단어 보기",
   "Show me as a connection in common": "나를 함께 아는 사람으로 표시",
@@ -3574,5 +3573,15 @@
   "Three posts are pinned already. Take one off first.": "이미 세 개의 게시물이 고정되어 있어요. 먼저 하나를 해제하세요.",
   "📌 PINNED": "📌 고정됨",
   "Remove my working style": "내 일하는 방식 제거",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "이 기기와 이 기기에 있는 모든 커뮤니티에서 내 일하는 방식을 없앱니다. 퀴즈를 다시 풀면 돌아옵니다."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "이 기기와 이 기기에 있는 모든 커뮤니티에서 내 일하는 방식을 없앱니다. 퀴즈를 다시 풀면 돌아옵니다.",
+  "All Categories": "모든 카테고리",
+  "Food": "식품",
+  "Health": "건강",
+  "Care": "돌봄",
+  "Tech": "기술/IT",
+  "Mindset": "마음/상담",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "필터 초기화",
+  "Filter by category": "카테고리별 필터"
 }

@@ -2039,7 +2039,6 @@
   "Show QR code": "Εμφάνιση κωδικού QR",
   "Show Voters ({n}) ▼": "Εμφάνιση ψηφοφόρων ({n}) ▼",
   "Show all categories": "Εμφάνιση όλων των κατηγοριών",
-  "Show events": "Εμφάνιση εκδηλώσεων",
   "Show everywhere": "Εμφάνιση παντού",
   "Show its 12 words": "Εμφάνιση των 12 λέξεών του",
   "Show me as a connection in common": "Εμφάνισέ με ως κοινή σύνδεση",
@@ -3702,5 +3701,15 @@
   "Three posts are pinned already. Take one off first.": "Τρεις αναρτήσεις είναι ήδη καρφιτσωμένες. Βγάλτε πρώτα μία.",
   "📌 PINNED": "📌 ΚΑΡΦΙΤΣΩΜΕΝΟ",
   "Remove my working style": "Αφαίρεση του στυλ εργασίας μου",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Αυτό αφαιρεί το στυλ εργασίας σου από αυτή τη συσκευή και από κάθε κοινότητα που έχει. Αν ξανακάνεις το κουίζ, επιστρέφει."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Αυτό αφαιρεί το στυλ εργασίας σου από αυτή τη συσκευή και από κάθε κοινότητα που έχει. Αν ξανακάνεις το κουίζ, επιστρέφει.",
+  "All Categories": "Όλες οι κατηγορίες",
+  "Food": "Τρόφιμα",
+  "Health": "Υγεία",
+  "Care": "Φροντίδα",
+  "Tech": "Τεχνολογία",
+  "Mindset": "Προσωπική ανάπτυξη",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "Εκκαθάριση φίλτρων",
+  "Filter by category": "Φιλτράρισμα ανά κατηγορία"
 }

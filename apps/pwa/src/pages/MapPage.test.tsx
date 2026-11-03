@@ -593,6 +593,12 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             await act(async () => { on('moveend')(); await new Promise((r) => setTimeout(r, STACK_REST_MS + 30)); });
         };
         const listOpen = () => screen.queryByTestId('map-stack-list');
+        /** The Events pill: the date chips appear, and only event pins stay (the old markers are dropped, so a tap finds the new ones). */
+        const showEvents = async () => {
+            mockCreatedMarkers.length = 0;
+            await act(async () => { fireEvent.click(screen.getByTestId('map-type-events')); });
+            await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
+        };
 
         it('takes the tap from the library: no zoom of its own, no spiral', async () => {
             await drawMap();
@@ -694,6 +700,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
 
         it('drops a row the date chips hid', async () => {
             await drawMap();
+            await showEvents();
             await tap(bubble([pinOf('Repair café'), pinOf('Spring working bee')], 20));
             expect(rowTitles(screen.getByTestId('map-stack-list'))).toEqual(['Repair café', 'Spring working bee']);
             fireEvent.click(within(screen.getByTestId('event-window-chips')).getByRole('button', { name: 'Next 7 days' }));
@@ -704,6 +711,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         it('closes when the chips hide every row, and does not come back with them', async () => {
             vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([offer, soon, later, ev('ev-later2', 'Harvest supper', 24 * 21)] as any);
             await drawMap();
+            await showEvents();
             await waitFor(() => expect(pinOf('Harvest supper')).toBeTruthy());
             await tap(bubble([pinOf('Spring working bee'), pinOf('Harvest supper')], 20));
             const chips = () => within(screen.getByTestId('event-window-chips'));
@@ -948,32 +956,39 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
     it('a date chip fits the map to its events, below the chip row (B2)', async () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await act(async () => { fireEvent.click(await view!.findByTestId('map-type-events')); });
         await waitFor(() => expect(view!.getByTestId('event-window-chips')).toBeTruthy());
         const map = (L as any).map.mock.results[0].value;
         map.fitBounds.mockClear();
         await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'All events' })); });
         expect(map.fitBounds).toHaveBeenCalledTimes(1);
         const [points, opts] = map.fitBounds.mock.calls[0];
-        expect(points.length).toBe(eventPins().length);
+        expect(points.length).toBe(new Set(eventPins().map(m => m.opts.title)).size);
         // The chips' own bottom edge plus the 48px pin and a margin: the pin's head never sits under them.
         expect(opts.paddingTopLeft[1]).toBeGreaterThanOrEqual(48 + 16);
     });
 
-    it('filters event pins with Today / This weekend / Next 7 days / All, in one row', async () => {
+    it('Events keeps the date chips: All events / Today / This weekend / Next 7 days, in one row, and the calendar button', async () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        // Under All there is no date row (the phone's rule): the category chip stands in its place.
+        await view!.findByTestId('map-category-chip');
+        expect(view!.queryByTestId('event-window-chips')).toBeNull();
+        await act(async () => { fireEvent.click(view!.getByTestId('map-type-events')); });
         const chips = await view!.findByTestId('event-window-chips');
+        expect(view!.queryByTestId('map-category-chip')).toBeNull();
         expect(chips.className).toContain('flex-nowrap');
         expect(chips.className).toContain('overflow-x-auto');
         const buttons = Array.from(chips.querySelectorAll('button'));
-        expect(buttons.map(b => b.textContent)).toEqual(['Today', 'This weekend', 'Next 7 days', 'All events']);
+        expect(buttons.map(b => b.textContent)).toEqual(['All events', 'Today', 'This weekend', 'Next 7 days']);
         for (const b of buttons) expect(b.className).toContain('whitespace-nowrap');
+        expect(view!.getByTestId('map-calendar-button')).toBeTruthy();
 
         mockCreatedMarkers.length = 0;
         await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'Next 7 days' })); });
         expect(eventPins().map(m => m.opts.title)).toEqual(['Event: Repair café']);
-        // The chips never touch offers.
-        expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true);
+        // Under Events the date chips are the only filter: no offer pin is drawn.
+        expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(false);
 
         mockCreatedMarkers.length = 0;
         await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'All events' })); });
@@ -1214,6 +1229,209 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
             expect(within(panel).getByText(/Location set/)).toBeInTheDocument();
         });
+    });
+});
+
+describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (web-map-type-filter)", () => {
+    const HOUR = 60 * 60 * 1000;
+    const at = (n: number) => ({ lat: -28.5 - n / 100, lng: 153.5 + n / 100 });
+    const listing = (id: string, type: 'offer' | 'need', category: string, n: number) => ({
+        id, type, category, title: id, description: '', credits: 5, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true, ...at(n),
+    });
+    const eggs = listing('eggs', 'offer', 'food', 1);
+    const ladder = listing('ladder', 'offer', 'tools', 2);
+    const lift = listing('lift', 'need', 'food', 3);
+    const supper = {
+        id: 'supper', type: 'event', category: 'community', title: 'Supper', description: '', credits: 0, priceType: 'fixed',
+        authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: false,
+        eventStartAt: new Date(Date.now() + 2 * HOUR).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null, ...at(4),
+    };
+    /** What is drawn now, by kind, as the position each marker was made at (n of `at`). */
+    const drawn = () => {
+        const kind = (cls: string) => mockCreatedMarkers.filter(m => m.opts?.className?.includes(cls)).map(m => Math.round((-28.5 - m.coords[0]) * 100)).sort();
+        return { offers: kind('custom-map-pin'), events: kind('custom-event-pin'), enterprises: kind('custom-enterprise-pin') };
+    };
+    /** Pins as they stand after the next click: the markers of the redraw only. */
+    const click = async (testId: string) => {
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(screen.getByTestId(testId)); });
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([eggs, ladder, lift, supper] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({
+            enterprises: [{ publicKey: 'ent-pk', name: 'Tool Shed', callsign: 'Shed', avatar: '🔧', ...at(5), paused: false, status: 'active' }],
+        } as any);
+    });
+
+    const draw = async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(drawn().events.length).toBeGreaterThan(0));
+        await waitFor(() => expect(drawn().enterprises.length).toBeGreaterThan(0));
+    };
+
+    it("has the phone's first row, All · Offers · Needs · Events, with the category chip under it", async () => {
+        await draw();
+        const pills = screen.getByTestId('map-type-pills');
+        expect(within(pills).getAllByRole('button').map(b => b.textContent)).toEqual(['All', 'Offers', 'Needs', 'Events']);
+        expect(screen.getByTestId('map-type-all').getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🏷️ All Categories ▾');
+        expect(screen.queryByTestId('map-filter-clear')).toBeNull();
+        expect(screen.getByTestId('map-calendar-button')).toBeTruthy();
+        // All draws every kind of pin.
+        expect(drawn()).toEqual({ offers: [1, 2, 3], events: [4], enterprises: [5] });
+    });
+
+    it('Offers shows offers only: no need, no event, no enterprise', async () => {
+        await draw();
+        await click('map-type-offers');
+        expect(drawn()).toEqual({ offers: [1, 2], events: [], enterprises: [] });
+        expect(screen.getByTestId('map-type-offers').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('Needs shows needs only', async () => {
+        await draw();
+        await click('map-type-needs');
+        expect(drawn()).toEqual({ offers: [3], events: [], enterprises: [] });
+    });
+
+    it('Show on map with a filter on turns every filter off, so the listing has its pin under its card', async () => {
+        let view!: ReturnType<typeof render>;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(drawn().events.length).toBeGreaterThan(0));
+        await click('map-type-offers');
+        expect(drawn().offers).toEqual([1, 2]);
+        mockCreatedMarkers.length = 0;
+        // The need 'lift' is not drawn under Offers; Show on map opens it.
+        await act(async () => { view.rerender(<MapPage identity={mockIdentity} focusPostId="lift" onFocusPostHandled={() => {}} />); });
+        await waitFor(() => expect(screen.getByTestId('map-type-all').getAttribute('aria-pressed')).toBe('true'));
+        await waitFor(() => expect(drawn().offers).toContain(3));
+    });
+
+    it('Events shows event pins only, with the date chips and the calendar button', async () => {
+        await draw();
+        await click('map-type-events');
+        expect(drawn()).toEqual({ offers: [], events: [4], enterprises: [] });
+        expect(screen.getByTestId('event-window-chips')).toBeTruthy();
+        expect(screen.queryByTestId('map-category-chip')).toBeNull();
+        expect(screen.getByTestId('map-calendar-button')).toBeTruthy();
+    });
+
+    it('a category under Offers narrows the offers, and the chip names it', async () => {
+        await draw();
+        await click('map-type-offers');
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        const panel = screen.getByTestId('map-category-panel');
+        // Every category as a tile, the phone's names: All Categories, then the 17.
+        expect(within(panel).getAllByRole('button')).toHaveLength(18);
+        expect(within(panel).getByRole('button', { name: /Food/ })).toBeTruthy();
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Tools/ })); });
+        expect(drawn()).toEqual({ offers: [2], events: [], enterprises: [] });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🛠️ Tools ▾');
+        // Under Needs the same category is a different set: the one need is food, so none is tools.
+        await click('map-type-needs');
+        expect(drawn().offers).toEqual([]);
+    });
+
+    it('a category under All also hides the events and enterprise pins, which have none (an event is filed "community")', async () => {
+        await draw();
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(within(screen.getByTestId('map-category-panel')).getByRole('button', { name: /Food/ })); });
+        expect(drawn()).toEqual({ offers: [1, 3], events: [], enterprises: [] });
+    });
+
+    it('the category is remembered across Events (which ignores it) and applies again on the way back', async () => {
+        await draw();
+        await click('map-type-offers');
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        await act(async () => { fireEvent.click(within(screen.getByTestId('map-category-panel')).getByRole('button', { name: /Tools/ })); });
+        await click('map-type-events');
+        expect(drawn().events).toEqual([4]);
+        await click('map-type-offers');
+        expect(drawn().offers).toEqual([2]);
+    });
+
+    it('the category panel folds away on Escape, on the chip again, and on a tap of the map', async () => {
+        await draw();
+        const chip = () => screen.getByTestId('map-category-chip');
+        await act(async () => { fireEvent.click(chip()); });
+        expect(chip().textContent).toBe('🏷️ All Categories ▴');
+        expect(chip().getAttribute('aria-expanded')).toBe('true');
+        await act(async () => { fireEvent.keyDown(window, { key: 'Escape' }); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        await act(async () => { fireEvent.click(chip()); });
+        await act(async () => { fireEvent.click(chip()); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        await act(async () => { fireEvent.click(chip()); });
+        const map = (L as any).map.mock.results[0].value;
+        const onMapClick = map.on.mock.calls.find((c: any[]) => c[0] === 'click')![1];
+        await act(async () => { onMapClick(); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        // Folding it away changed no filter.
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🏷️ All Categories ▾');
+    });
+
+    it("the category panel folds away when a pin's card opens, as the phone's does", async () => {
+        await draw();
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        expect(screen.getByTestId('map-category-panel')).toBeTruthy();
+        const pin = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        await act(async () => { pin.listeners.click(); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+    });
+
+    it('Clear filters (the ✕) returns to All, the first category and the first date chip, and goes away', async () => {
+        await draw();
+        await click('map-type-offers');
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        await act(async () => { fireEvent.click(within(screen.getByTestId('map-category-panel')).getByRole('button', { name: /Tools/ })); });
+        expect(screen.getByTestId('map-filter-clear').getAttribute('aria-label')).toBe('Clear filters');
+        await click('map-type-events');
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Today' })); });
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(screen.getByTestId('map-filter-clear')); });
+        expect(screen.queryByTestId('map-filter-clear')).toBeNull();
+        expect(screen.getByTestId('map-type-all').getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🏷️ All Categories ▾');
+        expect(drawn()).toEqual({ offers: [1, 2, 3], events: [4], enterprises: [5] });
+        // And the date window is back to All events, not still on Today.
+        await click('map-type-events');
+        expect(screen.getByRole('button', { name: 'All events' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('the bar sits under the header at every width, so it never stands on the sync chip the header draws at md and up', async () => {
+        await draw();
+        const bar = screen.getByTestId('map-filter-bar');
+        expect(bar.className).toContain('top-[4.25rem]');
+        expect(bar.className).not.toMatch(/md:top-/);
+        // And its rows scroll sideways rather than wrap, so 320 px at 130% text keeps every chip whole.
+        expect(screen.getByTestId('map-filter-row').className).toContain('flex-nowrap');
+        expect(screen.getByTestId('map-filter-row').className).toContain('overflow-x-auto');
+    });
+
+    it('the pills use the central colour roles: offers the commit green, needs the action orange, events violet', async () => {
+        await draw();
+        await click('map-type-offers');
+        expect(screen.getByTestId('map-type-offers').className).toContain('bg-bp-commit-fill');
+        await click('map-type-needs');
+        expect(screen.getByTestId('map-type-needs').className).toContain('bg-bp-action-fill');
+        await click('map-type-events');
+        expect(screen.getByTestId('map-type-events').className).toContain('bg-violet-700');
     });
 });
 
@@ -2044,8 +2262,10 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         await waitFor(() => expect(ownReads().length).toBe(1));
         expect(await view!.findByTestId('map-near-empty')).toHaveTextContent('Nothing within 250 km of your area yet.');
-        // The chips filter pins; with no event to pin there are none to show (review of #1952, finding 8).
+        // Under All there is no date row; under Events it shows (the phone's rule) with no event to pin (review of #1952, finding 8).
         expect(view!.queryByTestId('event-window-chips')).toBeNull();
+        fireEvent.click(view!.getByTestId('map-type-events'));
+        expect(await view!.findByTestId('event-window-chips')).toBeTruthy();
         expect(mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-event-pin'))).toEqual([]);
         expect(onlineReads()).toEqual([]);
     });
@@ -2066,7 +2286,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
         expect(mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-event-pin'))).toEqual([]);
     });
 
-    it('after Show everywhere with an upcoming event loaded, the note sits under the event chips', async () => {
+    it('after Show everywhere, the note sits under the filter bar, at every width', async () => {
         const event = {
             ...post, id: 'ev-seed', type: 'event', category: 'community', title: 'Seed swap', credits: 0, repeatable: false,
             eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
@@ -2075,13 +2295,15 @@ describe('MapPage: where the pins are read from (S5)', () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         const note = await view!.findByTestId('map-near-empty');
-        expect(note.className).toContain('top-[4.25rem]');
+        // Under the filter bar, which sits under the header at every width: its measured height, then a gap (jsdom measures none).
+        expect(note.className).toContain('top-[calc(4.25rem+var(--map-filter-h,0px)+0.25rem)]');
+        expect(note.className).not.toContain('md:top-3');
+        expect(note.style.getPropertyValue('--map-filter-h')).toBe('0px');
         fireEvent.click(within(note).getByRole('button', { name: 'Show everywhere' }));
-        await view!.findByTestId('event-window-chips');
+        await view!.findByTestId('map-filter-bar');
         const back = await view!.findByTestId('map-near-again');
-        expect(back.className).toContain('top-[calc(5rem+48px)]');
-        expect(back.className).toContain('md:top-[calc(1.5rem+48px)]');
-        expect(back.className).not.toContain('top-[4.25rem]');
+        expect(back.className).toContain('top-[calc(4.25rem+var(--map-filter-h,0px)+0.25rem)]');
+        expect(back.className).not.toContain('md:top-');
     });
 
     it('a failed read of the member\'s area says so on the Map, with Try again, as the Market does', async () => {

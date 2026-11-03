@@ -56,8 +56,9 @@ import { ModerationPauseCard } from '../components/ModerationPauseCard';
 import { KnownConsentCard } from '../components/KnownConsentCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
-import { adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle } from '../lib/working-style';
-import { parseArchetype, newestArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
+import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
+import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
 import { BoldWords } from '../components/BoldWords';
 import { Sentence } from '../components/Sentence';
@@ -859,7 +860,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 {t('COMMUNITY WORKING STYLE')}
                             </div>
                             {(() => {
-                                const parsed = parseArchetype(newestArchetype(profile?.archetype, readWorkingStyle(identity.publicKey)));
+                                const parsed = parseArchetype(shownWorkingStyle(identity.publicKey, profile?.archetype));
                                 const primary = parsed ? ARCHETYPES[parsed.primary] : null;
                                 const secondary = parsed ? ARCHETYPES[parsed.secondary] : null;
 
@@ -935,6 +936,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     {t('🔄 Retake')}
                                                 </button>
                                             </div>
+                                            <RemoveWorkingStyleButton publicKey={identity.publicKey} onRemoved={() => setProfile(prev => (prev ? { ...prev, archetype: null } : prev))} />
                                         </div>
                                     );
                                 }

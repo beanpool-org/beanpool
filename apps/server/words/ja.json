@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "この投稿は終了しているため、ピン留めできません。",
   "Three posts are pinned already. Take one off first.": "すでに3件の投稿がピン留めされています。先に1件外してください。",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "招待に付ける推薦（保証）は25、50、100豆、またはなしです。",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "招待で推薦（保証）できるのは、オーナー、管理者、任命された推薦人だけです。"
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "招待で推薦（保証）できるのは、オーナー、管理者、任命された推薦人だけです。",
+  "Only a member of this community can ask an admin to invite someone.": "管理者に招待を頼めるのは、このコミュニティのメンバーだけです。",
+  "Your account here is paused for now, so you can’t ask for an invite.": "ここでのアカウントは現在一時停止中のため、招待を依頼できません。",
+  "Only this community’s owners and admins read and answer these.": "これらを読んで回答できるのは、このコミュニティのオーナーと管理者だけです。",
+  "This ask is no longer waiting. It may have been answered or taken back.": "この依頼はもう回答待ちではありません。回答済みか、取り下げられた可能性があります。",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "このサーバーはコミュニティのスタンバイコピーのため、受け付けられません。コミュニティ本来のアドレスで再度お試しください。",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "ここでは依頼する必要はありません。このコミュニティでは招待は管理者に限られていません。",
+  "You’re an owner or admin here, so you can make the invite yourself.": "あなたはここのオーナーまたは管理者なので、自分で招待を作れます。",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "回答待ちの依頼が{n}件あります。1件取り下げるか、回答をお待ちください。",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "今日はすでに{n}回依頼しました。明日また依頼できます。",
+  "Please keep this to {n} characters.": "{n}文字以内にしてください。",
+  "Please fill in their first name and how you know them.": "その人の下の名前と知り合った経緯を入力してください。",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "電話番号やメールアドレスは書かないでください。管理者に必要なのは下の名前と知り合った経緯だけです。"
 }

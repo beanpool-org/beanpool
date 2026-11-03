@@ -65,7 +65,7 @@ import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
 import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
 import { composeTargetFor } from '../../utils/compose-options';
-import { toolHomeCardType, readToolsSettings } from '@beanpool/core';
+import { inviteAskNoticeHere, toolHomeCardType, readToolsSettings } from '@beanpool/core';
 import { toolOfHomeCard } from '../../tools/index';
 import { ToolHomeBody } from '../../tools/frame';
 import { YourToolsBody } from '../../components/home/YourToolsBody';
@@ -899,7 +899,7 @@ export default function HomeScreen() {
             const found = list?.find(n => n.id === noticeId);
             if (found) { title = found.title; body = found.body; }
         } catch { /* the card's own words */ }
-        Alert.alert(title, body);
+        Alert.alert(inviteAskNoticeHere(title), inviteAskNoticeHere(body));
         try { await signedPost(url, '/api/notices/seen', { ids: [noticeId] }, id); } catch { /* seen next time */ }
         void refreshRef.current('again');
     }, [url]);

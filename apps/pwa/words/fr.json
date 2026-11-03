@@ -3702,5 +3702,7 @@
   "Pinned by your community · until {date}": "Épinglé par votre communauté · jusqu'au {date}",
   "Take the pin off": "Retirer l'épingle",
   "Three posts are pinned already. Take one off first.": "Trois publications sont déjà épinglées. Retirez-en une d'abord.",
-  "📌 PINNED": "📌 ÉPINGLÉ"
+  "📌 PINNED": "📌 ÉPINGLÉ",
+  "Remove my working style": "Retirer mon style de travail",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Cela retire votre style de travail de cet appareil et de chaque communauté qui s'y trouve. Refaire le quiz le rétablit."
 }

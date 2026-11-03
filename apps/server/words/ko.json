@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "이 게시물은 끝나서 고정할 수 없어요.",
   "Three posts are pinned already. Take one off first.": "이미 세 개의 게시물이 고정되어 있어요. 먼저 하나를 해제하세요.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "초대에 담는 보증은 25, 50, 100 콩이거나 없음이에요.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "소유자, 관리자, 지정된 보증인만 초대로 누군가를 보증할 수 있어요."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "소유자, 관리자, 지정된 보증인만 초대로 누군가를 보증할 수 있어요.",
+  "Only a member of this community can ask an admin to invite someone.": "이 커뮤니티의 멤버만 관리자에게 초대를 부탁할 수 있어요.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "이곳의 계정이 지금 일시 중지되어 초대를 부탁할 수 없어요.",
+  "Only this community’s owners and admins read and answer these.": "이 커뮤니티의 소유자와 관리자만 이 내용을 읽고 답할 수 있어요.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "이 부탁은 더 이상 대기 중이 아니에요. 답변을 받았거나 취소됐을 수 있어요.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "이 서버는 커뮤니티의 대기 사본이라 받을 수 없어요. 커뮤니티 주소에서 다시 시도해 주세요.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "여기서는 부탁할 필요가 없어요. 이 커뮤니티는 초대를 관리자에게만 맡기지 않아요.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "이곳의 소유자나 관리자이므로 직접 초대를 만들 수 있어요.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "대기 중인 부탁이 {n}개 있어요. 하나를 취소하거나 답변을 기다려 주세요.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "오늘 {n}번 부탁했어요. 내일 다시 부탁할 수 있어요.",
+  "Please keep this to {n} characters.": "{n}자 이내로 적어 주세요.",
+  "Please fill in their first name and how you know them.": "그분의 이름과 어떻게 아는 사이인지 적어 주세요.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "전화번호와 이메일 주소는 빼 주세요. 관리자에게는 이름과 어떻게 아는 사이인지만 있으면 돼요."
 }

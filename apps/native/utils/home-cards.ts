@@ -27,7 +27,7 @@ import {
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
-    knockStillAnswerable,
+    knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
     copyFromLine, eventCopyOf, type ShownFromLine,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
@@ -132,6 +132,8 @@ export interface HomeMarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean | null; shownFrom?: ShownFromLine | null; shownPrice?: string | null;
+    /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
+    pinned?: boolean | null;
 }
 export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
@@ -141,6 +143,8 @@ export interface HomeEventItem {
     repeat?: RepeatPattern | null; repeatUntil?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from stands for its place. */
     shownCopy?: boolean | null; shownFrom?: ShownFromLine | null;
+    /** A live pin (HomeMarketItem.pinned): the event leads Coming up, whatever its date. */
+    pinned?: boolean | null;
 }
 export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt?: string | null }
 
@@ -152,7 +156,7 @@ export interface HomeEnterpriseLine { amount: number; at: string; kind: 'member'
 
 export interface HomeDecideItem { id: string; title: string; closesAt: string; voted: boolean }
 
-export interface HomeDecidePoll { id: string; title: string; closesAt: string }
+export interface HomeDecidePoll { id: string; title: string; closesAt: string; pinned?: boolean | null }
 
 export interface HomeGroupLastLine { who: string | null; at: string; text: string; locked?: { ciphertext: string; nonce: string; metadata: string | null } }
 
@@ -941,11 +945,22 @@ export function firstSteps(
  * starred categories first, each part keeping that order (interests reorder, never filter). Elsewhere what's new, starred
  * first, as H2 drew it. The node orders it so too, but the phone's stars can be newer than its answer.
  */
-export function marketInOrder<T extends { category: string; distanceKm?: number | null }>(
+export function marketInOrder<T extends { category: string; distanceKm?: number | null; pinned?: boolean | null }>(
     items: readonly T[], interests: readonly string[], profile: string, normalise: (c: string) => string = c => c,
 ): T[] {
     const near = profile === 'global' ? nearestFirst(items) : [...items];
-    return starredFirst(near, i => i.category, interests, normalise);
+    const ordered = starredFirst(near, i => i.category, interests, normalise);
+    // A live pin leads whatever the stars and the distance say (the node put it first; the phone's reordering keeps it there).
+    return [...ordered.filter(i => i.pinned), ...ordered.filter(i => !i.pinned)];
+}
+
+/** The 📌 a pinned Home row draws before its title (DESIGN-pinning-fable.md §2.2): nothing on any other row. */
+export function pinMark(row: { pinned?: boolean | null }): string {
+    return row.pinned ? '📌 ' : '';
+}
+/** A pinned Home row's text with its 📌 before it (see pinMark). */
+export function withPin(text: string, row: { pinned?: boolean | null }): string {
+    return `${pinMark(row)}${text}`;
 }
 
 function nearestFirst<T extends { distanceKm?: number | null }>(items: readonly T[]): T[] {
@@ -1054,7 +1069,7 @@ export function mergeNeeds(
     // A vote lands on Commons → Decide: never on a node without it (the node sends none there; this keeps it so).
     const lands = (i: HomeNeedsItem) => i.target.to !== 'decide' || !features || decideOnNode(features);
     const fromNode = (node ?? []).filter(i => !phoneHas(i.kind) && lands(i))
-        .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: voteLabelHere(i, now), target: i.target }));
+        .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: i.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(i.count)) : voteLabelHere(i, now), target: i.target }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.
         const named = e.kind === 'deal' ? (node ?? []).find(i => i.kind === 'deal' && sameDeal(i.target, e.target)) : undefined;
@@ -1258,7 +1273,7 @@ export function eventLine(e: HomeEventItem): string {
     const place = e.online ? t('Online') : copy ? (copy.from ? copyFromLine(copy.from) : null) : e.place;
     // A repeating event's rule rides after its next date: "Fri 16 Oct · ↻ Every Friday · Working bee, The hall".
     const repeats = repeatCaption(e.repeat ?? null, e.repeatUntil ?? null);
-    return `${eventHomeWhen(e)}${repeats ? ` · ↻ ${repeats}` : ''} · ${e.title}${place ? `, ${place}` : ''}`;
+    return `${eventHomeWhen(e)}${repeats ? ` · ↻ ${repeats}` : ''} · ${pinMark(e)}${e.title}${place ? `, ${place}` : ''}`;
 }
 
 /** An event's answer, beside it on Home; and as the screen reader says it. Shown through t(). */

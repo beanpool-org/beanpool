@@ -3701,5 +3701,7 @@
   "Pinned by your community · until {date}": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റി പിൻ ചെയ്തത് · {date} വരെ",
   "Take the pin off": "പിൻ നീക്കുക",
   "Three posts are pinned already. Take one off first.": "മൂന്ന് പോസ്റ്റുകൾ ഇതിനകം പിൻ ചെയ്തിട്ടുണ്ട്. ആദ്യം ഒന്ന് നീക്കുക.",
-  "📌 PINNED": "📌 പിൻ ചെയ്തവ"
+  "📌 PINNED": "📌 പിൻ ചെയ്തവ",
+  "Remove my working style": "എന്റെ പ്രവർത്തന ശൈലി നീക്കം ചെയ്യുക",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "ഇത് നിങ്ങളുടെ പ്രവർത്തന ശൈലി ഈ ഉപകരണത്തിൽ നിന്നും അതിലുള്ള എല്ലാ കമ്മ്യൂണിറ്റികളിൽ നിന്നും നീക്കം ചെയ്യും. ക്വിസ് വീണ്ടും ചെയ്താൽ അത് തിരികെ വരും."
 }

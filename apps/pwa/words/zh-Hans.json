@@ -3572,5 +3572,7 @@
   "Pinned by your community · until {date}": "已被你的社区置顶 · 截止至 {date}",
   "Take the pin off": "取消置顶",
   "Three posts are pinned already. Take one off first.": "已有三个帖子置顶。请先取消一个。",
-  "📌 PINNED": "📌 置顶"
+  "📌 PINNED": "📌 置顶",
+  "Remove my working style": "移除我的工作风格",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "这会把你的工作风格从此设备及设备上的每个社区中移除。重新测试后会恢复。"
 }

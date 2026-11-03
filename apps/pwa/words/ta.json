@@ -3700,5 +3700,7 @@
   "Pinned by your community · until {date}": "உங்கள் சமூகத்தால் பொருத்தப்பட்டது · {date} வரை",
   "Take the pin off": "பொருத்தலை நீக்கு",
   "Three posts are pinned already. Take one off first.": "மூன்று இடுகைகள் ஏற்கெனவே பொருத்தப்பட்டுள்ளன. முதலில் ஒன்றை நீக்குங்கள்.",
-  "📌 PINNED": "📌 பொருத்தப்பட்டது"
+  "📌 PINNED": "📌 பொருத்தப்பட்டது",
+  "Remove my working style": "என் வேலை பாணியை அகற்று",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "இது உங்கள் வேலை பாணியை இந்தச் சாதனத்திலிருந்தும் அதிலுள்ள ஒவ்வொரு சமூகத்திலிருந்தும் அகற்றும். வினாடிவினாவை மீண்டும் எடுத்தால் அது திரும்ப வரும்."
 }

@@ -6217,5 +6217,7 @@
   "Event options": "Veranstaltungsoptionen",
   "Poll options": "Umfrageoptionen",
   "Failed to pin post": "Beitrag konnte nicht angepinnt werden",
-  "Failed to unpin post": "Anpinnung konnte nicht entfernt werden"
+  "Failed to unpin post": "Anpinnung konnte nicht entfernt werden",
+  "Remove my working style": "Meinen Arbeitsstil entfernen",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Das nimmt deinen Arbeitsstil von diesem Gerät und aus jeder Community darauf. Ein erneutes Quiz bringt ihn zurück."
 }

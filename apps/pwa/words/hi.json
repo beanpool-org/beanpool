@@ -3701,5 +3701,7 @@
   "Pinned by your community · until {date}": "आपके समुदाय द्वारा पिन किया गया · {date} तक",
   "Take the pin off": "पिन हटाएँ",
   "Three posts are pinned already. Take one off first.": "तीन पोस्ट पहले से पिन हैं। पहले एक हटाएँ।",
-  "📌 PINNED": "📌 पिन किया गया"
+  "📌 PINNED": "📌 पिन किया गया",
+  "Remove my working style": "मेरी कार्यशैली हटाएं",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "इससे आपकी कार्यशैली इस डिवाइस से और इस पर मौजूद हर समुदाय से हट जाएगी। प्रश्नोत्तरी दोबारा लेने पर वह वापस आ जाएगी।"
 }

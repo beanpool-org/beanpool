@@ -1105,6 +1105,19 @@ describe('the global node\'s Home (H4)', () => {
         expect(marketInOrder(items, [], 'local').map(i => i.id)).toEqual(['far', 'none', 'near', 'mid', 'mid2']);
         expect(marketInOrder(items, ['food'], 'local').map(i => i.id)).toEqual(starredFirst(items, i => i.category, ['food']).map(i => i.id));
     });
+
+    it('a live pin leads whatever the distance and the stars say (Home slice 4); the rest keep their order', () => {
+        const items = [
+            { id: 'near', category: 'tools', distanceKm: 0.4 },
+            { id: 'mid', category: 'food', distanceKm: 5 },
+            { id: 'far-pin', category: 'goods', distanceKm: 900, pinned: true },
+            { id: 'pin-2', category: 'arts', distanceKm: null, pinned: true },
+        ];
+        expect(marketInOrder(items, ['food'], 'global').map(i => i.id)).toEqual(['far-pin', 'pin-2', 'mid', 'near']);
+        expect(marketInOrder(items, ['food'], 'local').map(i => i.id)).toEqual(['far-pin', 'pin-2', 'mid', 'near']);
+        // Nothing pinned: the order is exactly what it was.
+        expect(marketInOrder(items.map(({ pinned: _p, ...i }) => i), ['food'], 'local').map(i => i.id)).toEqual(['mid', 'near', 'far-pin', 'pin-2']);
+    });
 });
 
 describe('the phone\'s own marked save, read back (review of #1701 confirmation, finding 2; review of #1715, finding 1; the web app\'s home-layout.test.ts)', () => {

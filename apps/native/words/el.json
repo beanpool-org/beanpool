@@ -6218,5 +6218,7 @@
   "Event options": "Επιλογές εκδήλωσης",
   "Poll options": "Επιλογές δημοσκόπησης",
   "Failed to pin post": "Αποτυχία καρφιτσώματος ανάρτησης",
-  "Failed to unpin post": "Αποτυχία αφαίρεσης καρφιτσώματος"
+  "Failed to unpin post": "Αποτυχία αφαίρεσης καρφιτσώματος",
+  "Remove my working style": "Αφαίρεση του στυλ εργασίας μου",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Αυτό αφαιρεί το στυλ εργασίας σου από αυτή τη συσκευή και από κάθε κοινότητα που έχει. Αν ξανακάνεις το κουίζ, επιστρέφει."
 }

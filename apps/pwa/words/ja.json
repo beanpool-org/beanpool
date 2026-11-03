@@ -3572,5 +3572,7 @@
   "Pinned by your community · until {date}": "コミュニティによるピン留め · {date}まで",
   "Take the pin off": "ピン留めを解除",
   "Three posts are pinned already. Take one off first.": "すでに3件の投稿がピン留めされています。先に1件外してください。",
-  "📌 PINNED": "📌 ピン留め"
+  "📌 PINNED": "📌 ピン留め",
+  "Remove my working style": "自分のワークスタイルを削除",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "この端末と、端末内のすべてのコミュニティからあなたのワークスタイルを削除します。診断をやり直すと元に戻ります。"
 }

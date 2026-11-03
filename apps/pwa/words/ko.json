@@ -3572,5 +3572,7 @@
   "Pinned by your community · until {date}": "커뮤니티에서 고정함 · {date}까지",
   "Take the pin off": "고정 해제",
   "Three posts are pinned already. Take one off first.": "이미 세 개의 게시물이 고정되어 있어요. 먼저 하나를 해제하세요.",
-  "📌 PINNED": "📌 고정됨"
+  "📌 PINNED": "📌 고정됨",
+  "Remove my working style": "내 일하는 방식 제거",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "이 기기와 이 기기에 있는 모든 커뮤니티에서 내 일하는 방식을 없앱니다. 퀴즈를 다시 풀면 돌아옵니다."
 }

@@ -4217,5 +4217,7 @@
   "Pinned by your community · until {date}": "مثبت بواسطة مجتمعك · حتى {date}",
   "Take the pin off": "إزالة التثبيت",
   "Three posts are pinned already. Take one off first.": "هناك ثلاثة منشورات مثبتة بالفعل. أزل واحدًا أولًا.",
-  "📌 PINNED": "📌 مثبت"
+  "📌 PINNED": "📌 مثبت",
+  "Remove my working style": "إزالة أسلوب عملي",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "يُزيل هذا أسلوب عملك من هذا الجهاز ومن كل مجتمع عليه. إعادة الاختبار تعيده."
 }

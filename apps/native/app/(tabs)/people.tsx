@@ -25,7 +25,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteVouchRefusalWords, offersInviteVouch, t, tn, word, type VouchLevel, type WordKey } from '@beanpool/core';
+import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteVouchRefusalWords, offersInviteAsk, offersInviteVouch, t, tn, word, type VouchLevel, type WordKey } from '@beanpool/core';
 import { InviteVouchChoice } from '../../components/InviteVouchChoice';
 import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
@@ -41,6 +41,7 @@ import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } fr
 import { joinedNudgeWords } from '../../utils/joined-nudge-words';
 import { copiesAtFor } from '../../utils/copies-rule';
 import { WantsToJoin } from '../../components/WantsToJoin';
+import { AskAnAdmin, InviteAsksToAnswer } from '../../components/InviteAsks';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
 import { lookUpMembers, lookUpSpentKind, nearPath, searchPath } from '../../utils/members-lookup';
@@ -1222,6 +1223,9 @@ export default function PeopleScreen() {
                             {identity && anchorUrl && takesKnocks && (
                                 <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} />
                             )}
+                            {identity && anchorUrl && nodeProfile?.features.inviteAsks === true && doorAdminsOnly && mayInvite && (
+                                <InviteAsksToAnswer anchorUrl={anchorUrl} identity={identity} offersVouch={offersVouch} />
+                            )}
                             {identity && isGlobalNode && <MyJoinRequests identity={identity} />}
 
                             {!makesInvites ? (
@@ -1256,6 +1260,9 @@ export default function PeopleScreen() {
                                         >
                                             <Text style={styles.btnGenerateText}>{t('📤 Share the link')}</Text>
                                         </Pressable>
+                                    )}
+                                    {identity && anchorUrl && offersInviteAsk(nodeProfile?.features, mayInvite) && (
+                                        <AskAnAdmin anchorUrl={anchorUrl} identity={identity} onShare={shareInvite} />
                                     )}
                                 </>
                             ) : null}

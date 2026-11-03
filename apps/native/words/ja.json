@@ -5978,5 +5978,7 @@
   "Event options": "イベントのオプション",
   "Poll options": "アンケートのオプション",
   "Failed to pin post": "投稿のピン留めに失敗しました",
-  "Failed to unpin post": "ピン留めの解除に失敗しました"
+  "Failed to unpin post": "ピン留めの解除に失敗しました",
+  "Remove my working style": "自分のワークスタイルを削除",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "この端末と、端末内のすべてのコミュニティからあなたのワークスタイルを削除します。診断をやり直すと元に戻ります。"
 }

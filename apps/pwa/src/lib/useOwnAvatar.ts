@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getMemberProfile } from './api';
 import { resolveAvatarUrl } from './avatar';
 import { PROFILE_SAVED_EVENT } from './profile-saved';
-import { adoptWorkingStyle } from './working-style';
+import { adoptWorkingStyle, deliverRemoval } from './working-style';
 
 /**
  * The member's own picture, for the sidebar's profile button: read from the node (this app keeps no copy of it, as
@@ -24,6 +24,8 @@ export function useOwnAvatar(publicKey: string | null): string | null {
                 const profile = await getMemberProfile(publicKey, publicKey);
                 if (live && n === asked) {
                     setAvatar(resolveAvatarUrl(profile?.avatar));
+                    // A removal still waiting to reach this community goes now that its row is read (lib/working-style.ts).
+                    void deliverRemoval(publicKey, profile?.archetype ?? null);
                     if (profile?.archetype) adoptWorkingStyle(publicKey, profile.archetype);
                 }
             } catch { /* offline, or no profile yet: what is shown stays */ }

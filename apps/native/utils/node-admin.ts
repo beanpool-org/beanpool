@@ -137,7 +137,8 @@ export function forgetNodeRole(nodeUrl: string, publicKey: string): void {
 /** Pending admin work on this node (for the header badge). Null when unavailable or not an admin. */
 export async function fetchAdminQueue(nodeUrl: string, identity: BeanPoolIdentity): Promise<{ total: number; items: AdminQueueItem[] } | null> {
     try {
-        const url = `${base(nodeUrl)}/api/node-admin/queue`;
+        // `asks=1`: this app answers a member's ask that an admin invite someone (apps/server engine/admin-queue.ts).
+        const url = `${base(nodeUrl)}/api/node-admin/queue?asks=1`;
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });

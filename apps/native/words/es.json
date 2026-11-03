@@ -6223,5 +6223,7 @@
   "Event options": "Opciones del evento",
   "Poll options": "Opciones de la encuesta",
   "Failed to pin post": "No se pudo fijar la publicación",
-  "Failed to unpin post": "No se pudo quitar la fijación de la publicación"
+  "Failed to unpin post": "No se pudo quitar la fijación de la publicación",
+  "Remove my working style": "Quitar mi estilo de trabajo",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Esto quita tu estilo de trabajo de este dispositivo y de todas las comunidades que hay en él. Repetir el cuestionario lo devuelve."
 }

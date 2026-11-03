@@ -6217,5 +6217,7 @@
   "Event options": "நிகழ்வு விருப்பங்கள்",
   "Poll options": "வாக்கெடுப்பு விருப்பங்கள்",
   "Failed to pin post": "இடுகையைப் பொருத்துவதில் தோல்வி",
-  "Failed to unpin post": "பொருத்தலை நீக்குவதில் தோல்வி"
+  "Failed to unpin post": "பொருத்தலை நீக்குவதில் தோல்வி",
+  "Remove my working style": "என் வேலை பாணியை அகற்று",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "இது உங்கள் வேலை பாணியை இந்தச் சாதனத்திலிருந்தும் அதிலுள்ள ஒவ்வொரு சமூகத்திலிருந்தும் அகற்றும். வினாடிவினாவை மீண்டும் எடுத்தால் அது திரும்ப வரும்."
 }

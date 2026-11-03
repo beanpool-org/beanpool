@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { archetypeIsNewer, archetypeToCarry, newestArchetype, parseArchetype, publicArchetype, scoreQuiz } from '../archetypes.js';
+import { archetypeIsAfter, archetypeIsNewer, archetypeToCarry, newestArchetype, parseArchetype, publicArchetype, scoreQuiz } from '../archetypes.js';
 
 // One working style across a member's communities (scratch/fable-design/DESIGN-archetype-across-fable.md, slice S1). What
 // a community is sent says less than it did: a day, never a millisecond that matches across communities.
@@ -113,5 +113,33 @@ describe('what a Save or a catch-up carries', () => {
     it('never an older copy, never on a tie: the row stands', () => {
         expect(archetypeToCarry(result('2026-11-01'), result('2026-11-02'))).toBeNull();
         expect(archetypeToCarry(result('2026-11-02', 'spark'), result('2026-11-02'))).toBeNull();
+    });
+});
+
+describe('a date from a bad clock or a node (archetype-s3)', () => {
+    it('a day past tomorrow reads as no day, so it never beats a later retake', () => {
+        vi.useFakeTimers({ now: new Date('2026-11-03T12:00:00Z') });
+        expect(parseArchetype(result('2099-01-01'))?.takenOn).toBeUndefined();
+        expect(parseArchetype(stamped('2099-01-01T00:00:00.000Z'))?.takenOn).toBeUndefined();
+        // A retake today goes over the far-future row, and the far-future one is no newer than a dated retake.
+        expect(archetypeIsNewer(result('2026-11-03', 'spark'), result('2099-01-01'))).toBe(true);
+        expect(archetypeIsNewer(result('2099-01-01'), result('2026-11-03', 'spark'))).toBe(false);
+        expect(JSON.parse(publicArchetype(parseArchetype(result('2099-01-01'))!))).not.toHaveProperty('takenOn');
+    });
+
+    it('tomorrow is still a day (a clock a day ahead is no fault), the day after is not', () => {
+        vi.useFakeTimers({ now: new Date('2026-11-03T12:00:00Z') });
+        expect(parseArchetype(result('2026-11-04'))?.takenOn).toBe('2026-11-04');
+        expect(parseArchetype(result('2026-11-05'))?.takenOn).toBeUndefined();
+    });
+});
+
+describe('after a removal', () => {
+    it('a result is after a removal only when it was taken on a later day', () => {
+        expect(archetypeIsAfter(result('2026-11-04'), '2026-11-03')).toBe(true);
+        expect(archetypeIsAfter(result('2026-11-03'), '2026-11-03')).toBe(false);
+        expect(archetypeIsAfter(result('2026-10-01'), '2026-11-03')).toBe(false);
+        expect(archetypeIsAfter(result(null), '2026-11-03')).toBe(false);
+        expect(archetypeIsAfter(null, '2026-11-03')).toBe(false);
     });
 });

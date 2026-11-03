@@ -9,6 +9,8 @@
  * (__fixtures__/fake-cloudflared.mjs): no suite ever starts the real binary, and nothing here reaches Docker, Cloudflare's
  * edge or the live registrar.
  *
+ *  0. The fake prints every line a test says to it, in order, whatever the pace of its reader (a late line was once lost, and a
+ *     test waiting on it ran out its time: CI #2769).
  *  1. No publicAddress → no child. 8. A leftover data/tunnel-token (the fleet token deploy.sh wrote) is deleted at boot and
  *     never run. And the warning when Docker's socket is still mounted.
  *  9. The binary missing → state `missing`, one log line, no crash loop.
@@ -44,6 +46,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import Koa from 'koa';
 import { initStateEngine, getNodeConfig, updateNodeConfig } from './state-engine.js';
@@ -60,7 +63,7 @@ import { noteTurnedAway } from './config/turned-away-names.js';
 import { registrarNames } from './engine/registrar-names.js';
 import { writeAddressRequestFile } from './address-request.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
-import { useFakeCloudflared, type FakeTunnel } from './tunnel-test-fake.js';
+import { useFakeCloudflared, saidFile, FAKE_CLOUDFLARED, type FakeTunnel } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
 
 const DATA = process.env.BEANPOOL_DATA_DIR;
@@ -256,6 +259,30 @@ async function main(): Promise<void> {
     let settingsGet: ((p: string) => Promise<{ status: number; body: any }>) | null = null;
 
     try {
+        await section('0. the fake prints every line said to it, none lost, in order (CI #2769: a line said once never came)', async () => {
+            // A fake of its own, looking every 1 ms, with 3,000 lines said one at a time, as fast as they can be written: a line
+            // appended to the file the fake takes by renaming was lost when the fake took the file between its creation and its write.
+            const dir = path.join(DATA!, 'fake-says');
+            fs.rmSync(dir, { recursive: true, force: true });
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, 'say-poll-ms'), '1');
+            const child = spawn(process.execPath, [FAKE_CLOUDFLARED, dir, '--metrics', '127.0.0.1:0'], { env: { TUNNEL_TOKEN: 'eyJ.token-says', PATH: process.env.PATH }, stdio: ['ignore', 'ignore', 'pipe'] });
+            const got: string[] = [];
+            let buf = '';
+            child.stderr!.on('data', (d) => { buf += d; const parts = buf.split('\n'); buf = parts.pop()!; got.push(...parts.filter(Boolean)); });
+            try {
+                assert(await until(() => fs.existsSync(path.join(dir, 'runs.jsonl')), 15_000), 'the fake is up');
+                for (let i = 0; i < 3_000; i++) saidFile(dir, i % 2 ? 'eyJ_token-says' : null, [`line ${i}`]);
+                saidFile(dir, 'eyJ_token-other', ['for another name']);
+                const all = await until(() => got.length >= 3_000, 20_000);
+                await sleep(100);
+                assert(all && got.length === 3_000, `all 3,000 lines came (${got.length})`);
+                assert(got.every((l, i) => l === `line ${i}`), 'in the order they were said, and none for another name');
+            } finally {
+                child.kill('SIGTERM');
+            }
+        });
+
         await section('1, 8. at boot: no address, no child; a leftover token file is deleted and never run', async () => {
             const leftover = path.join(DATA!, 'tunnel-token');
             fs.writeFileSync(leftover, 'FLEET-TOKEN-deploy-sh-should-never-run');
@@ -323,12 +350,14 @@ async function main(): Promise<void> {
             assert(!tunnelLogs().some((l) => l.message.includes(T1)) && rows.some((l) => l.message.includes('[tunnel token]')), 'the token is never logged');
             // A failed request's address, which may be a photo link's (agent/owner-photos.ts): a secret in its path.
             fake.say({ level: 'error', message: 'Request failed', error: 'Get "https://node.example/mcp/photos/u/LINK-SECRET-88": EOF' });
-            await until(() => tunnelLogs().some((l) => l.message.includes('Request failed')), 3_000);
-            await sleep(150);
+            // The line has been read when the log has it and the status Settings shows has taken its error (one step in the connector).
+            await until(() => tunnelLogs().some((l) => l.message.includes('Request failed')) && (getTunnelStatus().reason ?? '').includes('/mcp/photos/u/…'), 3_000);
             assert(!tunnelLogs().some((l) => l.message.includes('LINK-SECRET-88')) && !(getTunnelStatus().reason ?? '').includes('LINK-SECRET-88')
                 && tunnelLogs().some((l) => l.message.includes('/mcp/photos/u/…')), `a photo link's secret is in no line, nor in the status Settings shows (${getTunnelStatus().reason})`);
             fake.say('Provided Tunnel token is not valid.');
-            await sleep(150);
+            // Wait for this line to be read (the status still shows the request's error until it is), not for a time: a loaded
+            // runner reads it late (CI #2771: the status still read the request's error 150 ms later).
+            await until(() => getTunnelStatus().reason === 'Provided Tunnel token is not valid.', 3_000);
             const st = getTunnelStatus();
             assert(st.state === 'retrying' && st.reason === 'Provided Tunnel token is not valid.', `not connected yet, and why: the error, not the pointer to help after it (${st.state}: ${st.reason})`);
             assert(tunnelLogs().some((l) => l.level === 'ERROR' && l.message === '[Tunnel] Provided Tunnel token is not valid.')

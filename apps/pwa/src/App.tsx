@@ -66,7 +66,7 @@ import { ModerationPauseCard } from './components/ModerationPauseCard';
 import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
-import { takePostParam } from './lib/event-extras';
+import { linkedPostAtLoad } from './lib/invite-and-share';
 import { forgetKeptPeek, keepPeek, peekAtLoad, takePeekParam } from './lib/peek';
 import { YourShopPage } from './pages/YourShopPage';
 import { ShopDetailPage } from './pages/ShopDetailPage';
@@ -560,7 +560,7 @@ export function App() {
         if (peekParam) keepPeek(peekParam);
         else if (window.location.search) forgetKeptPeek();
         takePeekParam();
-        setLinkedPost(takePostParam());
+        setLinkedPost(linkedPostAtLoad());
     }, []); // once, at load: what the address carried then
     useEffect(() => { if (identity) forgetKeptPeek(); }, [identity]);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);

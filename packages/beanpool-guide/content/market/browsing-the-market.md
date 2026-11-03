@@ -94,3 +94,14 @@ Where your community allows it, you can also tap **Share outside the community**
 - A post only your group or one person can see can't be shared outside.
 
 Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off.
+
+## Inviting a friend to a post
+
+Where you can invite people to your community, a post also has **Invite and share**. It is for a friend who isn't in BeanPool yet and who you'd like to see this very post once they are in.
+
+- Tap it and you see a line saying what it makes: one invite, for one person. An invite works once. If you can vouch for people, **Vouch for them** is there too, on **None** until you choose.
+- Tap **Make the invite and share**. Your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. The invite is also listed under **Invites** like any other.
+- Your friend joins as anyone does with an invite, in the app or in the browser, and when they have joined they land on that post. Before that they see only what an invite shows: the link doesn't let them look at the post.
+- If they can't see that post, because it was taken down or only a group can see it, they land on Home as any new member does. Nothing says why, and nothing is wrong.
+- It needs a connection. A ticket made without one can't take anyone to a post, so you're told so and no invite is made.
+- Where only your community's admins invite, owners and admins see the button and other members don't.

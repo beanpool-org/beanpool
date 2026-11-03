@@ -71,10 +71,15 @@ const SAID = /^say\.(?:([A-Za-z0-9_-]+)\.)?(\d{14}-\d{6})\.jsonl$/;
 setInterval(() => {
     try { process.kill(parent, 0); } catch { process.exit(0); }
     let said = [];
+    // Only files said before this look began. A listing taken while files are renamed in may miss one renamed during it and
+    // still return a later one (Linux readdir; CI #2774: 3,000 lines came, out of order). A suite says one file at a time and
+    // stamps each before renaming it, so everything said after a missed one carries a stamp from this look or later: it waits
+    // for the next look with the one that was missed, and the order holds.
+    const lookBegan = Date.now();
     try {
         said = fs.readdirSync(dir)
             .map((f) => ({ f, m: SAID.exec(f) }))
-            .filter((x) => x.m && (x.m[1] === undefined || x.m[1] === id))
+            .filter((x) => x.m && (x.m[1] === undefined || x.m[1] === id) && Number(x.m[2].slice(0, 14)) < lookBegan)
             .sort((a, b) => (a.m[2] < b.m[2] ? -1 : a.m[2] > b.m[2] ? 1 : 0));
     } catch { return; }
     for (const { f } of said) {

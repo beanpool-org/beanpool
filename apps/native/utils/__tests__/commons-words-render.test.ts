@@ -18,6 +18,7 @@
  * marker (its stand-in draws the label an action hands it, and the header's words).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../../components/useKeepCaretVisible', () => ({ useKeepCaretVisible: () => ({ scrollRef: { current: null }, scrollProps: {} }) })); // the real one needs the keyboard library's native side
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

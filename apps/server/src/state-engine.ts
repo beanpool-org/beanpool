@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, isVouchLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
@@ -12,7 +12,7 @@ import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing, 
 import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
-    getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
+    getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS,
     profileLimits, BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
@@ -2139,7 +2139,7 @@ export { generateInvite, adminGenerateInvite };
 
 /** `joinerSigned`: the request carries a fresh signature by `publicKey` itself, the only way a visitor's row joins. */
 export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
-    return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned);
+    return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned, vouchOnJoin);
 }
 
 export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
@@ -5617,6 +5617,13 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
  * (a re-vouch can raise or lower the level).
  */
 export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
+    writeVouch(voucherPubkey, targetPubkey, level);
+    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
+    return { ok: true };
+}
+
+/** A vouch's checks and its row: vouchMember's, and an invite's at the redeem, which announces it once that has committed. */
+function writeVouch(voucherPubkey: string, targetPubkey: string, level: VouchLevel): void {
     if (voucherPubkey === targetPubkey) throw new Error(word('You cannot vouch for yourself'));
     // A visitor's row is no voucher, as a key with no row is none (getActingMember).
     if (!getActingMember(voucherPubkey)) throw new Error(word('Voucher not found'));
@@ -5635,8 +5642,33 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     // profile_updated_at moved (engine getMemberDirectoryRows). Without it the vouch reached phones at their hourly full read.
     db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ?, profile_updated_at = ? WHERE public_key = ?`)
         .run(voucherPubkey, vouchCredit, new Date().toISOString(), targetPubkey);
-    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
-    return { ok: true };
+}
+
+/**
+ * The vouch an invite carries, at its redeem (engine/invites.ts), inside the redeem's transaction. It is a hand vouch by
+ * the invite's maker in every way but the moment: the same checks and the same row, so "Vouched by" shows and it can be
+ * withdrawn the same way. The right is asked again here: a maker who has lost it vouches for nobody, and the person
+ * still joins, because a vouch never stops a join. So whatever refuses is caught, and nothing rolls back. A maker who is
+ * paused or has left never gets here: their invite admits nobody, with a vouch or without (redeemInvite's canInvite).
+ */
+function vouchOnJoin(voucherPubkey: string, joinerPubkey: string, level: VouchLevel): boolean {
+    if (!getProfileSwitches().beans) return false;
+    try {
+        writeVouch(voucherPubkey, joinerPubkey, level);
+        return true;
+    } catch (e) {
+        console.warn(`🤝 An invite's vouch was not applied: ${(e as Error)?.message}`);
+        return false;
+    }
+}
+
+/** What a level asked for on a new invite comes to: the level (none: undefined), or the refusal. No code is made on one. */
+export function readInviteVouch(inviterPubkey: string, raw: unknown): { level?: VouchLevel; refusal?: { status: number; error: string; code: string } } {
+    if (raw === undefined || raw === null) return {};
+    if (!isVouchLevel(raw)) return { refusal: { status: 400, error: word('A vouch on an invite is 25, 50 or 100 Beans, or none.'), code: 'bad_vouch_level' } };
+    if (!getProfileSwitches().beans) return { refusal: { status: 403, error: BEANS_OFF_MESSAGE, code: PROFILE_NO_BEANS } };
+    if (!canVouch(inviterPubkey)) return { refusal: { status: 403, error: word('Only owners, admins and appointed vouchers can vouch for someone on an invite.'), code: 'not_a_voucher' } };
+    return { level: raw };
 }
 
 /**

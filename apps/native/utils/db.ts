@@ -1820,6 +1820,17 @@ export async function getBalance(pubkey: string) {
     };
 }
 
+/**
+ * Whether the node says this member can vouch now (the invite screen's control, people.tsx). getBalance answers from this
+ * phone's copy and refreshes it behind that answer, so on its own it would show someone appointed since the last read
+ * nothing, and someone stood down a choice the node then refuses. With no answer from the node the copy stands: that screen
+ * offers no vouch offline, and the node decides again when the invite is made.
+ */
+export async function askCanVouch(pubkey: string): Promise<boolean> {
+    await refreshBalanceFromServer(pubkey);
+    return (await getBalance(pubkey)).canVouch;
+}
+
 export async function getTransactions(pubkey: string) {
     const database = await getDb();
     

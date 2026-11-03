@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "공개 게시물만 고정할 수 있어요.",
   "Only this community's own posts can be pinned.": "이 커뮤니티의 게시물만 고정할 수 있어요.",
   "This post has ended, so it can't be pinned.": "이 게시물은 끝나서 고정할 수 없어요.",
-  "Three posts are pinned already. Take one off first.": "이미 세 개의 게시물이 고정되어 있어요. 먼저 하나를 해제하세요."
+  "Three posts are pinned already. Take one off first.": "이미 세 개의 게시물이 고정되어 있어요. 먼저 하나를 해제하세요.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "초대에 담는 보증은 25, 50, 100 콩이거나 없음이에요.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "소유자, 관리자, 지정된 보증인만 초대로 누군가를 보증할 수 있어요."
 }

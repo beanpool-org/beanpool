@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "பொது இடுகையை மட்டுமே பொருத்த முடியும்.",
   "Only this community's own posts can be pinned.": "இந்தச் சமூகத்தின் சொந்த இடுகைகளை மட்டுமே பொருத்த முடியும்.",
   "This post has ended, so it can't be pinned.": "இந்த இடுகை முடிந்துவிட்டது, எனவே இதைப் பொருத்த முடியாது.",
-  "Three posts are pinned already. Take one off first.": "மூன்று இடுகைகள் ஏற்கெனவே பொருத்தப்பட்டுள்ளன. முதலில் ஒன்றை நீக்குங்கள்."
+  "Three posts are pinned already. Take one off first.": "மூன்று இடுகைகள் ஏற்கெனவே பொருத்தப்பட்டுள்ளன. முதலில் ஒன்றை நீக்குங்கள்.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "அழைப்பில் சான்றளிப்பு 25, 50 அல்லது 100 பயறுகள், அல்லது எதுவுமில்லை.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "உரிமையாளர்கள், நிர்வாகிகள், நியமிக்கப்பட்ட சான்றளிப்பவர்கள் மட்டுமே அழைப்பில் ஒருவருக்குச் சான்றளிக்க முடியும்."
 }

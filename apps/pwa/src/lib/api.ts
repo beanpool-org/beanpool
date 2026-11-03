@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
-import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
+import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig, type VouchLevel } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -323,6 +323,7 @@ export interface CommunityInfo {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
         onlineEvents?: boolean;
+        inviteVouch?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
         /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
@@ -537,8 +538,8 @@ export interface InviteCode {
     intendedFor?: string;
 }
 
-export async function generateInvite(publicKey: string, intendedFor?: string): Promise<{ success: boolean; invite: InviteCode }> {
-    return request('POST', '/api/invite/generate', { publicKey, intendedFor });
+export async function generateInvite(publicKey: string, intendedFor?: string, vouchLevel?: VouchLevel): Promise<{ success: boolean; invite: InviteCode }> {
+    return request('POST', '/api/invite/generate', { publicKey, intendedFor, vouchLevel });
 }
 
 export interface InviteCheck { valid: boolean; reason?: string; inviterCallsign?: string | null; communityName?: string | null }

@@ -7,13 +7,16 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const nav = vi.hoisted(() => ({ params: { view: 'community' } as Record<string, string>, pushed: [] as unknown[] }));
-vi.mock('expo-router', () => ({
-    router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.pushed.push(to), navigate: () => {}, back: () => {}, canGoBack: () => true },
-    useLocalSearchParams: () => nav.params,
-    useFocusEffect: (cb: () => void | (() => void)) => { cb(); },
-    useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
-    ErrorBoundary: () => null,
-}));
+vi.mock('expo-router', async () => {
+    const { useEffect } = await import('react');
+    return {
+        router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.pushed.push(to), navigate: () => {}, back: () => {}, canGoBack: () => true },
+        useLocalSearchParams: () => nav.params,
+        useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
+        useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
+        ErrorBoundary: () => null,
+    };
+});
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
 vi.mock('react-native', async () => (await import('./profile-events-words-harness')).nativeMock(alerts));

@@ -86,6 +86,8 @@ export interface NodeFeatures {
      * alone (the #1946 review, finding 1, measured).
      */
     onlineEvents?: boolean;
+    /** An invite can carry a vouch here (core offersInviteVouch). */
+    inviteVouch?: boolean;
     /**
      * Anyone can join in a minute (the global node; DESIGN-global-member-privacy-fable.md §1): a new event's "Only people I
      * let in" starts ticked, and the form says who reads the note. A node that doesn't say is a local community.
@@ -115,7 +117,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'pollOther',
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'dmRequests', 'shareOutside',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteVouch', 'openMembership', 'dmRequests', 'shareOutside',
 ];
 
 export interface NodeProfile {

@@ -3,6 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventDetail } from './EventCard';
 import { YourEvents } from './YourEvents';
 import * as api from '../lib/api';
+import * as features from '../lib/features';
+
+vi.mock('../lib/features', async () => {
+    const actual = await vi.importActual('../lib/features');
+    return {
+        ...actual,
+        useCommunityInfo: vi.fn(),
+    };
+});
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -45,6 +54,7 @@ function notFound(): Error {
 }
 
 beforeEach(() => {
+    vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members' } } as any);
     vi.mocked(api.getMyEvents).mockReset().mockResolvedValue([]);
     vi.mocked(api.setEventReminder).mockReset().mockResolvedValue({ success: true } as any);
     vi.mocked(api.getNotificationPreferences).mockReset().mockResolvedValue({} as any);
@@ -347,5 +357,12 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         expect(screen.queryByTestId('event-add-google-calendar')).toBeNull();
         expect(document.activeElement).toBe(trigger);
         open.mockRestore();
+    });
+
+    it('the Share row on an event gets the share-says line', () => {
+        render(<EventDetail post={event} identity={identity} />);
+        const note = screen.getByTestId('event-share-members-note');
+        expect(note).toBeInTheDocument();
+        expect(note).toHaveTextContent('This link opens for members only.');
     });
 });

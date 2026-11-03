@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SharePostButtons } from './SharePost';
 import type { MarketplacePost } from '../lib/api';
@@ -49,7 +49,9 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 
-        render(<SharePostButtons post={samplePost} />);
+        await act(async () => {
+            render(<SharePostButtons post={samplePost} />);
+        });
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-outside-button')).toBeInTheDocument();
@@ -66,7 +68,9 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 
         const onNavigate = vi.fn();
-        render(<SharePostButtons post={samplePost} onNavigate={onNavigate} />);
+        await act(async () => {
+            render(<SharePostButtons post={samplePost} onNavigate={onNavigate} />);
+        });
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
@@ -86,7 +90,9 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 
-        render(<SharePostButtons post={samplePost} />);
+        await act(async () => {
+            render(<SharePostButtons post={samplePost} />);
+        });
 
         await waitFor(() => {
             expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only, and only admins invite here.');
@@ -103,7 +109,9 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue('admin');
 
-        render(<SharePostButtons post={samplePost} />);
+        await act(async () => {
+            render(<SharePostButtons post={samplePost} />);
+        });
 
         await waitFor(() => {
             expect(screen.getByTestId('invite-someone-button')).toBeInTheDocument();
@@ -120,7 +128,9 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 
-        render(<SharePostButtons post={samplePost} />);
+        await act(async () => {
+            render(<SharePostButtons post={samplePost} />);
+        });
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
@@ -136,7 +146,11 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 
-        const { unmount } = render(<SharePostButtons post={samplePost} />);
+        let unmountFn: () => void = () => {};
+        await act(async () => {
+            const { unmount } = render(<SharePostButtons post={samplePost} />);
+            unmountFn = unmount;
+        });
 
         await waitFor(() => {
             expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only, and only admins invite here.');
@@ -144,11 +158,13 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
         expect(screen.queryByTestId('share-outside-button')).toBeNull();
 
-        unmount();
+        unmountFn();
 
         // Admin member
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue('owner');
-        render(<SharePostButtons post={samplePost} />);
+        await act(async () => {
+            render(<SharePostButtons post={samplePost} />);
+        });
 
         await waitFor(() => {
             expect(screen.getByTestId('invite-someone-button')).toBeInTheDocument();
@@ -160,7 +176,9 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue(null);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 
-        render(<SharePostButtons post={samplePost} />);
+        await act(async () => {
+            render(<SharePostButtons post={samplePost} />);
+        });
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
@@ -168,3 +186,4 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
     });
 });
+

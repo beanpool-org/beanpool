@@ -9,10 +9,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { t } from '@beanpool/core';
+import { shareSays, t } from '@beanpool/core';
 import {
-    getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, setEventReminder, type MarketplacePost,
+    getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, myNodeRoleOnce, setEventReminder, type MarketplacePost,
 } from '../lib/api';
+import { useCommunityInfo } from '../lib/features';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
@@ -57,6 +58,14 @@ const BUTTON =
  * phone app shares. Google Calendar opens Google's template URL in a new tab.
  */
 export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
+    const info = useCommunityInfo();
+    const [role, setRole] = useState<string | null | undefined>(undefined);
+    useEffect(() => {
+        let cancelled = false;
+        void myNodeRoleOnce().then(r => { if (!cancelled) setRole(r ?? null); });
+        return () => { cancelled = true; };
+    }, []);
+    const says = shareSays(info?.features, role);
     const [note, setNote] = useState<string | null>(null);
     const [calendarMenuOpen, setCalendarMenuOpen] = useState(false);
     const calendarMenuRef = useRef<HTMLDivElement | null>(null);
@@ -176,6 +185,11 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                     </button>
                 </div>
             </div>
+            {says.membersLine && (
+                <p data-testid="event-share-members-note" className="m-0 text-xs text-text-secondary break-words">
+                    {t(says.membersLine)}
+                </p>
+            )}
             {/* In the page's flow, not floating: the event's card is overflow-hidden and would cut a floating menu off. */}
                 {calendarMenuOpen && (
                     <div

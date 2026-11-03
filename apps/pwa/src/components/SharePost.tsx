@@ -8,9 +8,9 @@
  * Each hands the link to the browser's own share sheet where there is one, and copies it where there is not, and says
  * which. A refusal says the node's own words, and nothing is copied: never a false success.
  */
-import { useState } from 'react';
-import { PEEK_WORDS as W, t } from '@beanpool/core';
-import type { MarketplacePost } from '../lib/api';
+import { useEffect, useState } from 'react';
+import { PEEK_WORDS as W, shareSays, t, type WordKey } from '@beanpool/core';
+import { myNodeRoleOnce, type MarketplacePost } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
 import { eventLink } from '../lib/event-extras';
 import { makePeekLink } from '../lib/peek';
@@ -69,7 +69,7 @@ async function handOver(title: string, link: string): Promise<'shared' | 'copied
  * again (or the button again) hands the same link over inside that tap, with no wait before it; no second link is made.
  * A share sheet the member closed leaves one too: it is kept the same way, unshown, for the next tap.
  */
-export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
+export function ShareOutsideButton({ post, outsideLine }: { post: MarketplacePost; outsideLine?: WordKey | null }) {
     const info = useCommunityInfo();
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
@@ -79,6 +79,8 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
     if (info?.features?.shareOutside !== true || !shareableOutside(post)) return null;
     const keptLink = kept?.postId === post.id ? kept.link : null;
     const shownLink = kept?.postId === post.id && kept.failed ? kept.link : null;
+    const says = shareSays(info?.features);
+    const line = outsideLine !== undefined ? outsideLine : says.outsideLine;
 
     const handOverNow = async (link: string) => {
         const how = await handOver(post.title, link);
@@ -114,9 +116,9 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
             <button type="button" data-testid="share-outside-button" onClick={share} disabled={busy} className={BUTTON}>
                 {t(W.shareOutside)}
             </button>
-            <p className="m-0 text-xs text-text-primary break-words">{t(W.shareOutsideNote)}</p>
+            {line && <p data-testid="share-outside-note" className="m-0 text-xs text-text-secondary break-words">{t(line)}</p>}
             {note && (
-                <p role="status" data-testid="share-outside-note" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
+                <p role="status" data-testid="share-outside-status" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
                     {note.text}
                 </p>
             )}
@@ -135,7 +137,15 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
 }
 
 /** A listing's two shares: the members' link, and outside where the community allows it. */
-export function SharePostButtons({ post }: { post: MarketplacePost }) {
+export function SharePostButtons({ post, onNavigate }: { post: MarketplacePost; onNavigate?: (tab: string) => void }) {
+    const info = useCommunityInfo();
+    const [role, setRole] = useState<string | null | undefined>(undefined);
+    useEffect(() => {
+        let cancelled = false;
+        void myNodeRoleOnce().then(r => { if (!cancelled) setRole(r ?? null); });
+        return () => { cancelled = true; };
+    }, []);
+    const says = shareSays(info?.features, role);
     const [note, setNote] = useState<string | null>(null);
     const shareWithMembers = async () => {
         const how = await handOver(post.title, eventLink(nodeOrigin(), post.id));
@@ -146,8 +156,23 @@ export function SharePostButtons({ post }: { post: MarketplacePost }) {
             <button type="button" data-testid="share-members-button" onClick={shareWithMembers} className={BUTTON}>
                 {t(W.shareWithMembers)}
             </button>
+            {says.membersLine && (
+                <p data-testid="share-members-note" className="m-0 text-xs text-text-secondary break-words">
+                    {t(says.membersLine)}
+                </p>
+            )}
             {note && <p role="status" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{note}</p>}
-            <ShareOutsideButton post={post} />
+            {says.showInviteButton && (
+                <button
+                    type="button"
+                    data-testid="invite-someone-button"
+                    onClick={() => onNavigate?.('people-invites')}
+                    className={BUTTON}
+                >
+                    {t('Invite someone')}
+                </button>
+            )}
+            {says.showShareOutside && <ShareOutsideButton post={post} outsideLine={says.outsideLine} />}
         </div>
     );
 }

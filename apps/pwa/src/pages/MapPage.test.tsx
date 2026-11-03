@@ -1870,6 +1870,68 @@ describe('MapPage: a listing pushed over the live feed', () => {
 });
 
 /*
+ * Marty, 3 Nov: "some of the offers are green - some yellow?" The yellow was the Elder glow swapping the whole ring to gold,
+ * so an Elder's offer and need looked alike. He chose "Type colour + gold halo": the ring stays the type colour and the
+ * phone's gold halo sits outside it (lib/map-pin-style.ts). (Kept ahead of the describes that vi.restoreAllMocks(): after
+ * those the leaflet mock draws no pins.)
+ */
+describe("an Elder's pin keeps its type colour (web-map-pins)", () => {
+    const base = {
+        category: 'food', description: '', credits: 0, priceType: 'fixed', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
+        updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', repeatable: false,
+        lat: -28.5495, lng: 153.5005,
+    };
+    const elderOffer = { ...base, id: 'elder-offer', type: 'offer', title: 'Elder eggs', authorPublicKey: 'elder-pk', authorEnergyCycled: 5000 };
+    const elderNeed = { ...base, id: 'elder-need', type: 'need', title: 'Elder ladder', authorPublicKey: 'elder-pk', authorEnergyCycled: 5000 };
+    const newOffer = { ...base, id: 'new-offer', type: 'offer', title: 'New eggs', authorPublicKey: 'new-pk', authorEnergyCycled: 10 };
+    const offerPins = () => mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([elderOffer, elderNeed, newOffer] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it("an Elder's offer is green and an Elder's need terracotta, each with the gold halo outside; a newer member has none", async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(offerPins()).toHaveLength(3));
+        const htmls = offerPins().map(m => m.opts.html as string);
+        const ringOf = (html: string) => /border: 2\.5px solid (#[0-9a-f]{6})/i.exec(html)![1];
+        const haloed = htmls.filter(h => h.includes('data-elder-halo'));
+        expect(haloed).toHaveLength(2);
+        expect(haloed.map(ringOf).sort()).toEqual(['#10b981', '#d97757']);
+        for (const h of htmls) {
+            // The ring is never gold: gold is only the halo's own border.
+            expect(ringOf(h)).not.toBe('#fbbf24');
+            expect(h).not.toContain('box-shadow: 0 0 6px rgba(251,191,36');
+        }
+        const plain = htmls.filter(h => !h.includes('data-elder-halo'));
+        expect(plain).toHaveLength(1);
+        expect(plain[0]).not.toContain('#fbbf24');
+    });
+
+    it("the bubble is the phone's: blue, sized by the pins inside, and its icon box is centred on the point", async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect((L as any).markerClusterGroup).toHaveBeenCalled());
+        const opts = (L as any).markerClusterGroup.mock.calls[0][0];
+        const icon = opts.iconCreateFunction({ getChildCount: () => 12 });
+        expect(icon.className).toBe('custom-cluster-icon');
+        expect(icon.html).toContain('#2563eb');
+        expect(icon.html).toContain('>12<');
+        expect(icon.iconSize).toEqual([60, 60]);
+        expect(icon.iconAnchor).toEqual([30, 30]);
+        expect(opts.iconCreateFunction({ getChildCount: () => 120 }).html).toContain('>99+<');
+    });
+});
+
+/*
  * G9b (design G9a §7): on a node that shows visitors its listings (the global one), a member's composer says, under
  * the photos, who else will see them; and a visitor to the lobby, with no key, gets the map with nothing to post and
  * a pin card of the listing alone.

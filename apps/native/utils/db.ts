@@ -2099,8 +2099,15 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
             // sets one), and every null that reaches here today comes from a caller rebuilding
             // the row with `?? null` — which is how the quiz path wiped it. Refusing to destroy
             // the device's only portable copy is the safer reading of an ambiguous null.
+            const portablePhoto = isPortableAvatarValue(data.avatar_url);
+            // Where it was set, only to name that community when the photo is offered on joining another (Profile S3).
+            let photoSetIn: string | undefined;
+            if (portablePhoto) {
+                try { photoSetIn = (await AsyncStorage.getItem('beanpool_anchor_url')) ?? undefined; } catch { /* a name for the offer, never needed */ }
+            }
             await saveCanonicalProfile({
-                avatar: isPortableAvatarValue(data.avatar_url) ? data.avatar_url : undefined,
+                avatar: portablePhoto ? data.avatar_url : undefined,
+                avatarFrom: photoSetIn,
                 bio: data.bio,
                 contactValue: data.contact_value,
                 contactVisibility: data.contact_visibility,

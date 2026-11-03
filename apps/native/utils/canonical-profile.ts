@@ -22,6 +22,8 @@ const KEY = CANONICAL_PROFILE_STORE_KEY;
 
 export interface CanonicalProfile {
     avatar?: string | null;
+    /** The community (its address) the photo was last set in: only to name it when the photo is offered on joining another. */
+    avatarFrom?: string | null;
     bio?: string;
     contactValue?: string | null;
     contactVisibility?: string;
@@ -42,6 +44,16 @@ export async function getCanonicalAvatar(): Promise<string | null> {
     return p?.avatar || null;
 }
 
+/**
+ * "The picture I used last", and the community it was set in. Profile S3: the one thing this store is for. It is
+ * OFFERED, as a tickbox that starts off, when the member joins a community that holds no photo for them
+ * (utils/last-photo-offer.ts); no screen draws it and no publish sends it unasked.
+ */
+export async function getLastPhoto(): Promise<{ avatar: string; from: string | null } | null> {
+    const p = await getCanonicalProfile();
+    return p?.avatar ? { avatar: p.avatar, from: p.avatarFrom ?? null } : null;
+}
+
 // Merge-save: only the keys explicitly provided are overwritten, so a bio-only
 // edit never wipes the stored avatar (and vice-versa). Pass `avatar: null` only
 // to deliberately clear it.
@@ -50,6 +62,7 @@ export async function saveCanonicalProfile(partial: CanonicalProfile): Promise<v
         const existing = (await getCanonicalProfile()) || {};
         const merged: CanonicalProfile = { ...existing };
         if (partial.avatar !== undefined) merged.avatar = partial.avatar;
+        if (partial.avatarFrom !== undefined) merged.avatarFrom = partial.avatarFrom;
         if (partial.bio !== undefined) merged.bio = partial.bio;
         if (partial.contactValue !== undefined) merged.contactValue = partial.contactValue;
         if (partial.contactVisibility !== undefined) merged.contactVisibility = partial.contactVisibility;

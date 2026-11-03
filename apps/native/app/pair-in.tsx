@@ -11,7 +11,8 @@
  *
  * Then (doors-s9-fix1) the phone tells the relay, with its own secret, whether it SAVED the account: 'saved' once
  * restoreFromWords has finished, else 'not saved' (the seal didn't read, the save failed, or the member left). Only
- * 'saved' lets the browser offer to remove the account there. One offer per scan (two taps on Continue send one), and
+ * 'saved' lets the browser offer to remove the account there. Leaving while the save runs sends nothing then: the
+ * save's own end sends the real word (doors-s9-fix2), and one tap on Bring starts one save. One offer per scan (two taps on Continue send one), and
  * the four digits go when the session ends by the relay's clock, network or not.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -66,6 +67,8 @@ export default function PairInScreen() {
     const offering = useRef(false);
     /** Collected: the browser waits to hear, once, whether this phone saved the account. */
     const toTell = useRef<{ qr: PairInQr; secret: string } | null>(null);
+    /** restoreFromWords is running: only its end knows whether the account was saved, so it alone tells the browser. */
+    const restoring = useRef(false);
 
     const tellBrowser = useCallback((saved: boolean) => {
         const r = toTell.current;
@@ -74,8 +77,9 @@ export default function PairInScreen() {
     }, []);
 
     const cancelRelay = useCallback(() => {
-        // Leaving after the collect, before a save: nothing was saved here, and the browser keeps the account.
-        tellBrowser(false);
+        // Leaving after the collect, before a save: nothing was saved here, and the browser keeps the account. Leaving
+        // while the save runs (Android back, an iOS swipe) says nothing: bring() tells the browser the outcome when it ends.
+        if (!restoring.current) tellBrowser(false);
         const s = session.current;
         session.current = null;
         phoneKey.current = null;
@@ -170,6 +174,9 @@ export default function PairInScreen() {
     }, [waitingFor]);
 
     const bring = useCallback(async (qr: PairInQr, account: PairInAccount) => {
+        // One save at a time: a second tap before the screen redraws starts nothing.
+        if (restoring.current) return;
+        restoring.current = true;
         setStep({ kind: 'restoring' });
         session.current = null;
         try {
@@ -179,11 +186,13 @@ export default function PairInScreen() {
             const restored = await restoreFromWords(account.words, qr.nodeUrl, {
                 nameOnNode: (publicKey, privateKey) => fetchNodeCallsign(qr.nodeUrl, publicKey, privateKey),
             });
+            restoring.current = false;
             // Saved: only now may the browser offer to remove the account there.
             tellBrowser(true);
             setIdentity(restored);
             router.replace('/');
         } catch (err) {
+            restoring.current = false;
             tellBrowser(false);
             if (!alive.current) return;
             setStep({ kind: 'refused', text: err instanceof RestoreStopped ? t(PAIR_IN_WORDS.hasAccount) : t(PAIR_IN_WORDS.badAccount) });

@@ -9,7 +9,9 @@
  *    seal doesn't read, the save fails, or the member cancels at the confirm; before the collect it says nothing;
  *  - two taps on Continue before the screen redraws send one offer;
  *  - the four digits go when the session ends by the relay's clock (the offer's endsInMs), even when the network has
- *    dropped and no answer comes.
+ *    dropped and no answer comes;
+ *  - (doors-s9-fix2, the Opus review of 44aec445) going back while the save runs sends nothing then, and the save's
+ *    end sends the real word, once; two taps on Bring start one save.
  * The account's words and key are real (core and utils/crypto); restoreFromWords is stubbed: restore-account tests run it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -195,6 +197,46 @@ describe('Scan from a browser: what the phone tells the relay', () => {
         expect(of('/api/pair/saved')[0].body.saved).toBe(false);
         expect(text()).toContain(PAIR_IN_WORDS.badAccount);
         expect(restore.fn).not.toHaveBeenCalled();
+    });
+
+    // doors-s9-fix2 (the Opus review of 44aec445): going back mid-save used to send 'not saved', and then the save ended.
+    it("going back while the save runs says nothing then; when the save ends, 'saved'", async () => {
+        await toConfirm();
+        let finish: (v: unknown) => void = () => {};
+        restore.fn.mockImplementation(() => new Promise((r) => { finish = r; }));
+        await act(async () => { button('Bring it to this phone')!.click(); });
+        // Android back or an iOS swipe: the screen closes while restoreFromWords runs.
+        await act(async () => { root.unmount(); root = createRoot(host); });
+        expect(of('/api/pair/saved')).toHaveLength(0);
+        await act(async () => { finish({ publicKey: 'x', privateKey: 'y', callsign: 'Ana' }); });
+        await until(() => of('/api/pair/saved').length === 1);
+        await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+        expect(of('/api/pair/saved')).toHaveLength(1);
+        expect(of('/api/pair/saved')[0].body).toEqual({ sessionId: browser.sessionId, phoneSecret: SECRET, saved: true });
+    });
+
+    it("going back while the save runs, and the save fails: one 'not saved', at its end", async () => {
+        await toConfirm();
+        let fail: (e: Error) => void = () => {};
+        restore.fn.mockImplementation(() => new Promise((_r, reject) => { fail = reject; }));
+        await act(async () => { button('Bring it to this phone')!.click(); });
+        await act(async () => { root.unmount(); root = createRoot(host); });
+        expect(of('/api/pair/saved')).toHaveLength(0);
+        await act(async () => { fail(new Error('disk full')); });
+        await until(() => of('/api/pair/saved').length === 1);
+        await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+        expect(of('/api/pair/saved')).toHaveLength(1);
+        expect(of('/api/pair/saved')[0].body.saved).toBe(false);
+    });
+
+    it('two taps on Bring before the screen redraws start one save', async () => {
+        await toConfirm();
+        restore.fn.mockResolvedValue({ publicKey: 'x', privateKey: 'y', callsign: 'Ana' });
+        const go = button('Bring it to this phone')!;
+        await act(async () => { go.click(); go.click(); });
+        await until(() => of('/api/pair/saved').length === 1);
+        expect(restore.fn).toHaveBeenCalledTimes(1);
+        expect(of('/api/pair/saved')[0].body.saved).toBe(true);
     });
 
     it("Cancel at the confirm: 'not saved', then the session is cancelled", async () => {

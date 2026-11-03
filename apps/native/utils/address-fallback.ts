@@ -57,7 +57,11 @@ export const ASK_EVERY_MS = 60 * 1000;
 export const ANSWERED_FOR_MS = 5 * 60 * 1000;
 /** A failed try more than this long after the last one starts a new run. */
 export const TRIES_GAP_MS = 60 * 60 * 1000;
-/** At most this many other addresses are asked in one round, in the community's own order. */
+/**
+ * Only the first this many other addresses not snoozed, in the community's own order, are ever asked: the rest only once
+ * one of those is snoozed. A community publishes a handful; this caps a 32-address list's cost on a phone that can't
+ * reach its own.
+ */
 const MAX_ASKED = 6;
 /** How long another address's check is reused (an hour; five minutes when it gave no answer), as the follow card's. */
 const VERDICT_TTL_MS = 60 * 60 * 1000;

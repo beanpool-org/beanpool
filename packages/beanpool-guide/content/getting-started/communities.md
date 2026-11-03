@@ -99,9 +99,9 @@ A community can move to a new address: for example, from its server's number (su
 
 ## When your community's address stops answering
 
-Some communities answer at more than one address: two names, or a name and their own domain. If the address your phone uses stops answering for about five minutes, and another address the community gave answers as the same community, Home shows a card: **byron.beanpool.org isn't answering. Your community also answers at mullum.beanpool.org. Use that for now?** It shows only after your phone has checked with the community's server that the other address is the same community.
+Some communities answer at more than one address: two beanpool.org names, or a beanpool.org name and their own domain. If the address your phone uses stops answering for about five minutes, and another address the community gave answers as the same community, Home shows a card: **byron.beanpool.org isn't answering. Your community also answers at mullum.beanpool.org. Use that for now?** It shows only after your phone has checked with the community's server that the other address is the same community.
 
-- Tap **Use that address for now**. Your phone moves there with what it keeps for that community, your messages included, and opens the community again, as when you switch. Once the main address answers again, the card in the section above offers the way back.
+- Tap **Use that address for now**. Your phone moves there with what it keeps for that community, your messages included, and opens the community again, as when you switch. Once the community's main address answers again, the card in the section above offers the way back to it.
 - Tap **Not now**, and the card waits a day before it offers that address again. Your phone never moves by itself.
 - The card only offers an address the community gave itself. It never offers a server's number, an address without https, or the worldwide community.
 - The web app can't do this, because a browser's sign-in belongs to one address. Open the other address in your browser and sign in there: restore your account, or link your browser from your phone.

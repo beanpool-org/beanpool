@@ -419,6 +419,17 @@ describe('"Not now": 24 hours, per pair of addresses', () => {
         expect((await failForFiveMinutes(w))[5]).toEqual({ from: THIRD, to: MULLUM, fromHost: 'beans.example.net', host: 'mullum.example.org' });
     });
 
+    it('only the first six other addresses not snoozed are asked: a seventh only once one of those is snoozed', async () => {
+        const hosts = Array.from({ length: 7 }, (_, i) => `n${i + 1}.example.org`);
+        const seventh = `https://${hosts[6]}`;
+        const w = world({ prof: profile({ addresses: ['byron.example.org', ...hosts] }), answers: { [seventh]: statement(node, COMMUNITY) } });
+        expect((await failForFiveMinutes(w))[5]).toBeNull();
+        expect(w.state.asked).not.toContain(seventh);
+        await snoozeAddressFallback({ ...OFFER, to: `https://${hosts[0]}`, host: hosts[0] }, w.deps);
+        w.state.now += MIN;
+        expect(await addressFallbackOffer(w.deps)).toEqual({ ...OFFER, to: seventh, host: hosts[6] });
+    });
+
     it('with every pair snoozed, the phone\'s address is not even asked', async () => {
         const w = world();
         await snoozeAddressFallback(OFFER, w.deps);

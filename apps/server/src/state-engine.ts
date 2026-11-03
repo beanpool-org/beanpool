@@ -8987,6 +8987,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         dropPlaceWatches(publicKey);
         // What they wrote when they asked to join (G6) goes with them; the record of the knock stays.
         scrubKnocksOf(publicKey);
+        // Their asks that an admin invite someone go whole, with a tombstone each (engine/invite-asks.ts).
+        deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);
         // The moderation notices kept for them, and their pushes' details: nobody can read them now (engine/kept-notices.ts,
         // engine/push-notices.ts).
         dropKeptNoticesOf(publicKey);
@@ -9184,6 +9186,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
+        deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);
         dropKeptNoticesOf(publicKey);
         dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).

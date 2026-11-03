@@ -38,7 +38,7 @@ import {
     ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
     type CardHue,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
+    capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -2248,7 +2248,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         : undefined;
 
     function needsLine(item: NeedsItem, i: number) {
-        const words = item.kind === 'vote' && item.closesAt && item.count === 1
+        const words = item.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(item.count)) : item.kind === 'vote' && item.closesAt && item.count === 1
             ? item.label.replace(/closes (within the hour|in \d+ (hours?|days))/, closesWords(item.closesAt, now))
             : item.label;
         const go = () => {
@@ -2825,8 +2825,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const n = c.notices!;
                 return (
                     <HomeCard key={id} {...common}>
-                        <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{n.first.title}</p>
-                        {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{n.first.line}</p>}
+                        <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{inviteAskNoticeHere(n.first.title)}</p>
+                        {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{inviteAskNoticeHere(n.first.line)}</p>}
                         {n.unseen > 1 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{tn(n.unseen - 1, 'and {n} more', 'and {n} more')}</p>}
                         <HomeMore onClick={() => {
                             // Never a notice of a Home this page no longer holds (another community's, in a tab that missed the news).

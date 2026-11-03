@@ -27,7 +27,7 @@ import {
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
-    knockStillAnswerable,
+    knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
     copyFromLine, eventCopyOf, type ShownFromLine,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
@@ -1069,7 +1069,7 @@ export function mergeNeeds(
     // A vote lands on Commons → Decide: never on a node without it (the node sends none there; this keeps it so).
     const lands = (i: HomeNeedsItem) => i.target.to !== 'decide' || !features || decideOnNode(features);
     const fromNode = (node ?? []).filter(i => !phoneHas(i.kind) && lands(i))
-        .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: voteLabelHere(i, now), target: i.target }));
+        .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: i.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(i.count)) : voteLabelHere(i, now), target: i.target }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.
         const named = e.kind === 'deal' ? (node ?? []).find(i => i.kind === 'deal' && sameDeal(i.target, e.target)) : undefined;

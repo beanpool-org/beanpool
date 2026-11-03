@@ -76,7 +76,7 @@ export type NeedsTarget =
     | { to: 'shop'; id: string }
     | { to: 'shop-mine' };
 /** `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites lists them (S2). */
-export interface NeedsItem { kind: 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
+export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**
  * A version-1 layout, as the web app before the card frame kept it (on the account and in this browser): read only

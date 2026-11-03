@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "Tapos na ang post na ito, kaya hindi na ito mapi-pin.",
   "Three posts are pinned already. Take one off first.": "May tatlong post nang naka-pin. Mag-alis muna ng isa.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Ang patunay sa imbitasyon ay 25, 50 o 100 Munggo, o wala.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Ang mga may-ari, admin at itinalagang tagapagpatunay lang ang makakapagpatunay para sa isang tao sa imbitasyon."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Ang mga may-ari, admin at itinalagang tagapagpatunay lang ang makakapagpatunay para sa isang tao sa imbitasyon.",
+  "Only a member of this community can ask an admin to invite someone.": "Miyembro lang ng komunidad na ito ang puwedeng humiling sa admin na mag-imbita ng isang tao.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "Naka-pause ang account mo rito sa ngayon, kaya hindi ka makakahiling ng imbitasyon.",
+  "Only this community’s owners and admins read and answer these.": "Mga may-ari at admin lang ng komunidad na ito ang nagbabasa at sumasagot dito.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "Hindi na naghihintay ang hiling na ito. Baka nasagot na o nabawi na.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "Standby na kopya ng komunidad ang server na ito, kaya hindi nito matatanggap ito. Subukan muli sa sariling address ng komunidad.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "Walang dapat hilingin dito: hindi inilalaan ng komunidad na ito ang mga imbitasyon sa mga admin nito.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "May-ari o admin ka rito, kaya puwede kang gumawa mismo ng imbitasyon.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "May {n} hiling kang naghihintay. Bawiin ang isa, o maghintay ng sagot.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "{n} beses ka nang humiling ngayon. Puwede kang humiling ulit bukas.",
+  "Please keep this to {n} characters.": "Panatilihin ito sa {n} character.",
+  "Please fill in their first name and how you know them.": "Pakilagay ang unang pangalan niya at kung paano mo siya kilala.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Huwag ilagay ang mga numero ng telepono at email address. Unang pangalan at kung paano mo siya kilala lang ang kailangan ng admin."
 }

@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -642,9 +642,10 @@ export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans
 
 export function NoticesBody({ card, colors, onOpen }: { card: NonNullable<HomeCards['notices']>; colors: AppColors; onOpen: (id: string) => void }) {
     const more = card.unseen - 1;
-    const values = { title: sentence(card.first.title), line: sentence(card.first.line) };
+    const [title, line] = [inviteAskNoticeHere(card.first.title), inviteAskNoticeHere(card.first.line)];
+    const values = { title: sentence(title), line: sentence(line) };
     return (
-        <HomeRow colors={colors} text={card.first.title} sub={more > 0 ? tn(more, '{line} · {n} more', '{line} · {n} more', { line: card.first.line }) : card.first.line} strong
+        <HomeRow colors={colors} text={title} sub={more > 0 ? tn(more, '{line} · {n} more', '{line} · {n} more', { line }) : line} strong
             a11y={more > 0 ? tn(more, '{title} {line} {n} more unread. Opens it.', '{title} {line} {n} more unread. Opens it.', values) : t('{title} {line} Opens it.', values)}
             onPress={() => onOpen(card.first.id)} testID="home-notice-line" />
     );

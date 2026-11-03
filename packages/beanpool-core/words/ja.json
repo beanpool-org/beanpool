@@ -904,5 +904,32 @@
   "The person you send it to joins with this invite and lands on this listing.": "送った相手はこの招待で参加し、この投稿が開きます。",
   "Make the invite and share": "招待を作って共有",
   "An invite from here needs a connection, because an offline ticket can’t take someone to this listing. Try again when you’re connected.": "ここからの招待には接続が必要です。オフラインチケットでは、この投稿に案内できないためです。接続してからもう一度お試しください。",
-  "The invite was not made.": "招待を作れませんでした。"
+  "The invite was not made.": "招待を作れませんでした。",
+  "Ask an admin to invite someone": "管理者に招待を頼む",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "管理者が読んで判断します。名前(下の名前)と知り合った経緯だけ:電話番号やメールは書かないでください。",
+  "Their first name": "その人の下の名前",
+  "How you know them": "知り合った経緯",
+  "Send to the admins": "管理者に送る",
+  "What you’ve asked": "あなたの依頼",
+  "Waiting for an admin": "管理者の回答待ち",
+  "Take it back": "取り下げる",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "管理者が、あなたから渡すための招待を作りました。1回限り、30日間使えます。",
+  "Someone has joined with this invite.": "この招待で誰かが参加しました。",
+  "This invite lapsed before anyone used it.": "この招待は使われないまま期限切れになりました。",
+  "An admin said no.": "管理者が断りました。",
+  "Asked {date}": "{date}に依頼",
+  "Members asking you to invite someone": "メンバーからの招待の依頼",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "「招待を送る」は通常の招待を作り、コードは依頼したメンバーに届いて、その人から渡されます。",
+  "Asked by {name}": "{name}さんの依頼",
+  "Send invite": "招待を送る",
+  "No\u0004button: refuse a request": "いいえ",
+  "A short reason (you can leave this out)": "短い理由(空欄でも可)",
+  "Sent. The code is with the member now.": "送りました。コードはメンバーに届いています。",
+  "Done. The member has been told.": "完了しました。メンバーに伝えました。",
+  "Your ask to invite someone": "あなたの招待の依頼",
+  "An admin answered. Open Invites to read it.": "管理者が回答しました。「招待」を開いて確認してください。",
+  "An admin answered your ask to invite someone.": "管理者があなたの招待の依頼に回答しました。",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "other": "{n}人のメンバーが招待を依頼しています"
+  }
 }

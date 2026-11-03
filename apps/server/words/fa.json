@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "این پست به پایان رسیده است، پس نمی‌توان آن را سنجاق کرد.",
   "Three posts are pinned already. Take one off first.": "سه پست از قبل سنجاق شده‌اند. اول یکی را بردارید.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "تأیید اعتبار در دعوت‌نامه 25، 50 یا 100 لوبیا است، یا هیچ‌کدام.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "فقط مالکان، مدیران و تأییدکنندگان منصوب می‌توانند در دعوت‌نامه اعتبار کسی را تأیید کنند."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "فقط مالکان، مدیران و تأییدکنندگان منصوب می‌توانند در دعوت‌نامه اعتبار کسی را تأیید کنند.",
+  "Only a member of this community can ask an admin to invite someone.": "فقط عضو این جامعه می‌تواند از یک مدیر بخواهد کسی را دعوت کند.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "حساب شما در اینجا فعلاً متوقف است، پس نمی‌توانید دعوت درخواست کنید.",
+  "Only this community’s owners and admins read and answer these.": "فقط مالکان و مدیران این جامعه این درخواست‌ها را می‌خوانند و پاسخ می‌دهند.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "این درخواست دیگر در انتظار نیست. شاید پاسخ داده یا پس گرفته شده باشد.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "این سرور نسخهٔ پشتیبان جامعه است و نمی‌تواند این را بپذیرد. لطفاً در نشانی خود جامعه دوباره تلاش کنید.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "اینجا چیزی برای درخواست نیست: این جامعه دعوت را به مدیرانش محدود نکرده است.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "شما اینجا مالک یا مدیر هستید و می‌توانید خودتان دعوت را بسازید.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "{n} درخواست در انتظار دارید. یکی را پس بگیرید یا منتظر پاسخ بمانید.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "امروز {n} بار درخواست داده‌اید. فردا می‌توانید دوباره درخواست کنید.",
+  "Please keep this to {n} characters.": "لطفاً این را به {n} نویسه محدود کنید.",
+  "Please fill in their first name and how you know them.": "لطفاً نام کوچک او و اینکه او را چطور می‌شناسید بنویسید.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "لطفاً شماره تلفن و نشانی ایمیل ننویسید. برای مدیر، نام کوچک و اینکه او را چطور می‌شناسید کافی است."
 }

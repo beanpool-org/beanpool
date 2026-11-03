@@ -904,5 +904,32 @@
   "The person you send it to joins with this invite and lands on this listing.": "받는 사람은 이 초대로 가입하고 이 게시글로 바로 들어와요.",
   "Make the invite and share": "초대 만들고 공유",
   "An invite from here needs a connection, because an offline ticket can’t take someone to this listing. Try again when you’re connected.": "여기서 초대하려면 연결이 필요해요. 오프라인 티켓으로는 이 게시글로 안내할 수 없어요. 연결되면 다시 시도해 주세요.",
-  "The invite was not made.": "초대를 만들지 못했어요."
+  "The invite was not made.": "초대를 만들지 못했어요.",
+  "Ask an admin to invite someone": "관리자에게 초대를 부탁하기",
+  "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "관리자가 읽고 결정해요. 이름과 어떻게 아는 사이인지만 적어 주세요. 전화번호나 이메일은 안 돼요.",
+  "Their first name": "그분의 이름",
+  "How you know them": "어떻게 아는 사이인가요",
+  "Send to the admins": "관리자에게 보내기",
+  "What you’ve asked": "내가 부탁한 내용",
+  "Waiting for an admin": "관리자 답변 대기 중",
+  "Take it back": "취소하기",
+  "An admin made an invite for you to pass on. It works once, for 30 days.": "관리자가 전달할 초대를 만들었어요. 한 번, 30일 동안 쓸 수 있어요.",
+  "Someone has joined with this invite.": "누군가 이 초대로 가입했어요.",
+  "This invite lapsed before anyone used it.": "이 초대는 아무도 쓰지 않은 채 만료됐어요.",
+  "An admin said no.": "관리자가 거절했어요.",
+  "Asked {date}": "{date}에 부탁함",
+  "Members asking you to invite someone": "멤버들의 초대 부탁",
+  "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "초대 보내기는 일반 초대를 만들고, 코드는 부탁한 멤버에게 가서 그 멤버가 전달해요.",
+  "Asked by {name}": "{name} 님의 부탁",
+  "Send invite": "초대 보내기",
+  "No\u0004button: refuse a request": "아니요",
+  "A short reason (you can leave this out)": "짧은 이유 (비워 둬도 돼요)",
+  "Sent. The code is with the member now.": "보냈어요. 이제 코드는 멤버에게 있어요.",
+  "Done. The member has been told.": "완료했어요. 멤버에게 알렸어요.",
+  "Your ask to invite someone": "내 초대 부탁",
+  "An admin answered. Open Invites to read it.": "관리자가 답했어요. 초대를 열어 확인하세요.",
+  "An admin answered your ask to invite someone.": "관리자가 내 초대 부탁에 답했어요.",
+  "{n} member asked you to invite someone|{n} members asked you to invite someone": {
+    "other": "멤버 {n}명이 초대를 부탁했어요"
+  }
 }

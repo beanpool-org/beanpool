@@ -2621,6 +2621,19 @@ BEGIN
     WHERE target_group_id = OLD.id;
 END;
 
+-- A member's ask that an admin invite someone (engine/invite-asks.ts): a first name and one line, read only by the community's
+-- owners and admins and the member who asked. Deleted with a tombstone when it is answered, taken back, or 30 days old.
+CREATE TABLE IF NOT EXISTS invite_asks (
+    id           TEXT PRIMARY KEY,
+    asker_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    first_name   TEXT NOT NULL CHECK (length(first_name) BETWEEN 1 AND 30),
+    how_known    TEXT NOT NULL CHECK (length(how_known) BETWEEN 1 AND 140),
+    asked_at     DATETIME NOT NULL,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at   DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_invite_asks_asker ON invite_asks (asker_pubkey);
+
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
 -- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its
 -- conversation_participants rows mirror the ACTIVE group_members (convenor, member, observer) and feed the Talk

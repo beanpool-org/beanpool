@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "Bu gönderi sona erdi, bu yüzden sabitlenemez.",
   "Three posts are pinned already. Take one off first.": "Üç gönderi zaten sabitlenmiş. Önce birini kaldır.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Davetteki kefalet 25, 50 veya 100 Fasulye’dir ya da hiç yoktur.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Davette birine yalnızca sahipler, yöneticiler ve atanmış kefiller kefil olabilir."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Davette birine yalnızca sahipler, yöneticiler ve atanmış kefiller kefil olabilir.",
+  "Only a member of this community can ask an admin to invite someone.": "Bir yöneticiden birini davet etmesini yalnızca bu topluluğun üyesi isteyebilir.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "Buradaki hesabınız şimdilik duraklatıldı, bu yüzden davet isteyemezsiniz.",
+  "Only this community’s owners and admins read and answer these.": "Bu istekleri yalnızca bu topluluğun sahipleri ve yöneticileri okur ve yanıtlar.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "Bu istek artık beklemiyor. Yanıtlanmış veya geri alınmış olabilir.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "Bu sunucu topluluğun yedek kopyası olduğu için bunu kabul edemez. Lütfen topluluğun kendi adresinden yeniden deneyin.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "Burada istenecek bir şey yok: bu toplulukta davetler yöneticilere ayrılmış değil.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "Burada sahip veya yöneticisiniz, daveti kendiniz oluşturabilirsiniz.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "Bekleyen {n} isteğiniz var. Birini geri alın veya yanıt bekleyin.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "Bugün {n} kez istediniz. Yarın yeniden isteyebilirsiniz.",
+  "Please keep this to {n} characters.": "Lütfen bunu {n} karakterle sınırlayın.",
+  "Please fill in their first name and how you know them.": "Lütfen adını ve onu nereden tanıdığınızı yazın.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Lütfen telefon numarası ve e-posta adresi yazmayın. Bir yöneticiye bir ad ve kişiyi nereden tanıdığınız yeter."
 }

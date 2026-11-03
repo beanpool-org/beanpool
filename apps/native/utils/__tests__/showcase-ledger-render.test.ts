@@ -293,7 +293,8 @@ for (const scheme of ['light', 'dark'] as const) {
                 const marks = Array.from(host.querySelectorAll('[data-testid="local-community-strip"], [data-testid="local-community-action"]'));
                 expect(marks.length).toBeGreaterThan(0);
                 for (const m of marks) {
-                    expect(styleOf(m)).toMatchObject({ borderStyle: 'dashed', borderWidth: 1, borderColor: colors.feedback.info.border });
+                    // The dashed edge: info.border in light; on the lifted dark card (#222822, home look S4) the tone's own blue words.
+                    expect(styleOf(m)).toMatchObject({ borderStyle: 'dashed', borderWidth: 1, borderColor: scheme === 'dark' ? colors.feedback.info.fg : colors.feedback.info.border });
                     expect(styleOf(m).opacity).toBeUndefined();
                     // Its pill names the one marker, in the info tone of this scheme.
                     const pill = Array.from(m.querySelectorAll('span')).find(s => s.textContent === `${LOCAL_COMMUNITY_EMOJI} ${LOCAL_COMMUNITY_MARK}`)!;

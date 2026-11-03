@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { t, word } from '@beanpool/core';
 import { getListedCommunityByHost } from '../lib/api';
-import { communityFacts, type HomeCommunity } from '../lib/home-cards';
+import { communityFacts, promiseLine, type HomeCommunity } from '../lib/home-cards';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { AskToJoin } from './AskToJoin';
 
@@ -43,11 +43,13 @@ export function AskedCommunity({ host, identity, asked, onAsked, onClose }: {
     const listed = row !== 'loading' && row !== null ? row : null;
     const name = listed?.name ?? host;
     const facts = listed ? communityFacts(listed) : '';
+    const promised = listed ? promiseLine(listed) : null;
     return (
         // The ✕'s room is kept beside the name and facts only, so Ask to join's form below has the box's whole width.
         <div ref={at} data-testid="home-find-asked" className="relative mb-2 rounded-xl border-2 border-bp-ink-info p-3">
             <p dir="auto" className="m-0 pr-10 text-base font-bold break-words text-text-primary">{name}</p>
             {facts && <p className="m-0 pr-10 text-sm break-words text-text-primary">{facts}</p>}
+            {promised && <p dir="auto" className="m-0 pr-10 text-sm break-words text-text-primary" data-testid="home-find-asked-promise">{promised}</p>}
             {row !== 'loading' && !listed && (
                 <p role="status" className="m-0 mt-1 pr-10 text-sm break-words text-text-primary">{t(ASKED_COMMUNITY_WORDS.notListed, { name })}</p>
             )}

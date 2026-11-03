@@ -30,7 +30,9 @@ export function markTone(colors: AppColors) {
         .filter(behind => /^#[0-9a-f]{6}$/i.test(behind))
         .every(behind => contrastRatio(fg, behind) >= 4.5);
     const info = reads(own.fg, own.bg) ? own : lightColors.feedback.info;
-    const border = contrastRatio(info.border, colors.surface.card) >= 3 ? info.border : info.solid;
+    // The dashed edge needs 3:1 on the card. On the phone's lifted dark card (#222822) the border and the solid are both
+    // under it (2.92, 2.91); the tone's own blue words then draw the edge (5.92).
+    const border = [info.border, info.solid].find(c => contrastRatio(c, colors.surface.card) >= 3) ?? info.fg;
     return { fg: info.fg, bg: info.bg, border };
 }
 

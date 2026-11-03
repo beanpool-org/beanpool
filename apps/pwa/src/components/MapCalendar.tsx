@@ -25,6 +25,20 @@ export interface MapCalendarProps {
     onStartEvent?: () => void;
 }
 
+/**
+ * The panel's width from md up is a third of the map, never under 320 px nor over 480 px (the panel's classes below). The
+ * pin cards and the filter bar stop short of it with the same rule as a clamp (the two class names here), and
+ * `calendarPanelWidth` is it as a number, for the code that asks whether a card fits beside the panel; MapCalendar.test.tsx
+ * pins that the three agree. Tailwind reads class names as whole literals, so they are spelled out.
+ */
+export const CARD_STOPS_AT_CALENDAR_CLASS = 'md:right-[clamp(320px,33.3333%,480px)]';
+/** The filter bar's width cap while the panel is open (from md up the panel lies over the map's right side): its rows scroll, with the › hint, rather than run under it. */
+export const CHIPS_STOP_AT_CALENDAR_CLASS = 'md:max-w-[calc(100%-clamp(320px,33.3333%,480px))]';
+export function calendarPanelWidth(mapWidth: number, wide: boolean): number {
+    if (!wide) return mapWidth; // below md the panel covers the whole map
+    return Math.max(320, Math.min(mapWidth / 3, 480));
+}
+
 /** Convert a calendar occurrence to a StackPin row for MapStackList. */
 function occurrenceToStackPin(
     occ: CalendarOccurrence<CalendarEventPost>,

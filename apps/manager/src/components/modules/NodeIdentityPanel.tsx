@@ -814,7 +814,7 @@ export function NodeIdentityPanel({
                     <div>
                         <h4 className="text-sm font-bold text-white m-0">Community Contacts</h4>
                         <p className="text-xs text-nature-400 mt-0.5 m-0">
-                            {t('The email and phone stay private unless you turn each on under How this community works; then anyone can read it.')}
+                            {t('The email and phone stay private unless you turn each on under Being found, further down this page; then anyone can read it.')}
                         </p>
                         {contacts === 'failed' && (
                             <p id="contacts-not-loaded" role="status" className="text-[11px] text-amber-300 mt-1 m-0 leading-normal">

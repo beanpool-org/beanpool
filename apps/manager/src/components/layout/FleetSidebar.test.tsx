@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { FleetSidebar, NodeHealthStatus, AlertCounts, TabId } from './FleetSidebar';
+import { FleetSidebar, NodeHealthStatus, AlertCounts, TabId, singleNodeNavItems } from './FleetSidebar';
 import type { NodeProfile } from '../../lib/profiles';
 
 describe('FleetSidebar Component', () => {
@@ -186,6 +186,25 @@ describe('FleetSidebar Component', () => {
             expect(screen.getByText('Sovereign Node')).toBeInTheDocument();
             expect(screen.queryByText(/v\d+\.\d+\.\d+/)).not.toBeInTheDocument();
             expect(screen.queryByText(/1\.4\.2/)).not.toBeInTheDocument();
+        });
+    });
+
+    describe('Core settings in the single-node menu', () => {
+        it('is last, named Core settings, and keeps the id every saved tab and help page keys on', () => {
+            const last = singleNodeNavItems[singleNodeNavItems.length - 1];
+            expect(last).toMatchObject({ id: 'shape', label: 'Core settings' });
+            expect(singleNodeNavItems.map((i) => i.id)).toEqual(['home', 'people', 'economy', 'bulletin', 'appliance', 'shape']);
+            expect(singleNodeNavItems.some((i) => i.label === 'How it works')).toBe(false);
+        });
+
+        it('shows a "!" badge on it only when told one', () => {
+            const props = { ...defaultProps, isFleetMode: false, activeTab: 'home' as TabId };
+            const { unmount } = render(<FleetSidebar {...props} />);
+            expect(screen.queryByTestId('nav-badge-shape')).toBeNull();
+            unmount();
+            render(<FleetSidebar {...props} badges={{ shape: '!' }} />);
+            expect(screen.getByTestId('nav-badge-shape')).toHaveTextContent('!');
+            expect(screen.queryByTestId('nav-badge-people')).toBeNull();
         });
     });
 });

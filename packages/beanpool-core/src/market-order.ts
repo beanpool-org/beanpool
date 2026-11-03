@@ -10,9 +10,11 @@
  * had theirs. Their third and later go to the end of that day, in their order. A copy of someone else's post on the
  * worldwide community, and any post with no author on the row, share one hidden author and are exempt.
  *
- * Pure, with no imports: the phone's SQLite rows (`created_at`, `event_start_at`) and the web's (`createdAt`, `eventStartAt`)
+ * Pure, with one import (the words layer's key helper): the phone's SQLite rows (`created_at`, `event_start_at`) and the web's (`createdAt`, `eventStartAt`)
  * give the same order.
  */
+
+import { word } from './words.js';
 
 /** An event or a poll is listed again this long before its moment. */
 export const RELIST_BEFORE_MS = 24 * 60 * 60 * 1000;
@@ -142,4 +144,41 @@ export function daySections<T extends Row>(ordered: readonly T[], now: number): 
         buckets[days <= 0 ? 0 : days === 1 ? 1 : days < 7 ? 2 : 3].push(p);
     }
     return HEADINGS.map((h, n) => ({ ...h, posts: buckets[n] })).filter(s => s.posts.length > 0);
+}
+
+/**
+ * "New since you last looked" (DESIGN-market-order-fable.md §2.9, slice 4). One stamp per device, kept beside the fresh banner's
+ * dismissal: the newest `listedAt` on screen when the Market was last left. No per-post state, no node, no account.
+ * Both apps store it under this key (AsyncStorage on the phone, localStorage on the web).
+ */
+export const MARKET_SEEN_KEY = 'bp_market_seen_listed';
+
+/** The line's words, in the section header's style on both apps; each shows it through t(). */
+export const NEW_SINCE_LINE = word('New since you last looked');
+
+/** The newest `listedAt` among `posts`, or null for none: what to store when the Market is left. */
+export function newestListed(posts: readonly Row[], now: number): number | null {
+    let newest: number | null = null;
+    for (const p of posts) {
+        const at = listedAt(p, now);
+        if (newest === null || at > newest) newest = at;
+    }
+    return newest;
+}
+
+/** A stored stamp read back: a positive whole number of milliseconds, as a number or a digit string; anything else is none. */
+export function parseSeenListed(stored: unknown): number | null {
+    const n = typeof stored === 'number' ? stored : typeof stored === 'string' && /^\d+$/.test(stored.trim()) ? Number(stored.trim()) : NaN;
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+/**
+ * Where the line goes in `ordered` (the Market's order, as drawn): the index of the first post listed at or before `stamp`, so the
+ * line sits above it. -1 for no line: no stamp (the first visit), nothing newer (that index would be 0), or nothing at or before
+ * the stamp. The caller shows none under a search or a filter.
+ */
+export function newSinceIndex(ordered: readonly Row[], stamp: number | null, now: number): number {
+    if (stamp === null) return -1;
+    const i = ordered.findIndex(p => listedAt(p, now) <= stamp);
+    return i > 0 ? i : -1;
 }

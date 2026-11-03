@@ -14,6 +14,7 @@ Tap **Market** in the row of tabs. You see what people in your community are off
 - **A poll comes back once too**, the day before it closes.
 - **Nobody takes more than two places a day.** A person's third post of a day, and any after it, come after everyone else's from that day.
 - **Editing a post does not move it up.** Nor does pausing it, or an answer to it. To be seen again, post again.
+- **A line shows where you stopped.** **New since you last looked** sits above the first post that was already listed when you last left the Market on this phone or in this browser; it is not there the first time, when nothing is newer, or while you search or filter, and the phone's grid does not draw it.
 - **A post an owner has pinned** sits at the very top, under **Pinned**, whatever its age.
 
 In the list and compact views you see the day headings. The grid shows the same order without them. On the phone the Market opens as a list; in the web app it opens as cards. **For You** keeps its own order. Under **Events** the soonest comes first, with **Today**, **This weekend** and **Next 7 days**. A search shows the posts that best match your words. Pull the list down on the phone to refresh it.

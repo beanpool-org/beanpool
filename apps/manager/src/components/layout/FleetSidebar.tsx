@@ -27,11 +27,12 @@ export type NodeHealthStatus = 'online' | 'warning' | 'critical' | 'alert' | 'of
 /** The single-node Settings sections, in menu order. lib/manual.test.ts reads the ids from this list. */
 export const singleNodeNavItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
     { id: 'home', label: 'Home', icon: '⚡' },
-    { id: 'shape', label: 'How it works', icon: '🧭' },
     { id: 'people', label: 'People & Safety', icon: '👥' },
     { id: 'economy', label: 'Shared Projects & Economy', icon: '🏛️' },
     { id: 'bulletin', label: 'Bulletin & News', icon: '📢' },
     { id: 'appliance', label: 'Appliance & Data', icon: '⚙️' },
+    // Last: set once, when the community starts (was "How it works", second). Same id: saved tabs and the manual key on it.
+    { id: 'shape', label: 'Core settings', icon: '🧭' },
 ];
 
 export interface AlertCounts {
@@ -51,6 +52,8 @@ interface FleetSidebarProps {
     onSelectTab: (tab: TabId) => void;
     nodeHealthMap?: Record<string, NodeHealthStatus>;
     tabAlertCounts?: Partial<Record<TabId, AlertCounts>>;
+    /** A badge on a menu item (Core settings: "!" while an owner has not confirmed and locked them). */
+    badges?: Partial<Record<TabId, string>>;
     isFleetMode?: boolean;
     communityName?: string;
     version?: string | null;
@@ -87,6 +90,7 @@ export function FleetSidebar({
     onSelectTab,
     nodeHealthMap = {},
     tabAlertCounts = {},
+    badges = {},
     isFleetMode = IS_FLEET_MODE,
     communityName,
     version,
@@ -176,9 +180,12 @@ export function FleetSidebar({
                             <span>{counts.warning}</span>
                         </span>
                     )}
-                    {item.badge && !hasCounts && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
-                            {item.badge}
+                    {(item.badge ?? badges[item.id]) && !hasCounts && (
+                        <span
+                            data-testid={`nav-badge-${item.id}`}
+                            className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30"
+                        >
+                            {item.badge ?? badges[item.id]}
                         </span>
                     )}
                     {accordion && (

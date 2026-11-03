@@ -176,6 +176,8 @@ vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ busy:
 const node = vi.hoisted(() => ({
     sessions: [] as Array<{ collectionId: string; startedAt: string }>,
     role: null as null | 'owner' | 'admin' | 'moderator',
+    /** What the node says of the core settings to an owner or admin (GET /api/node-admin/me `coreSettings`); undefined: it says nothing. */
+    core: undefined as undefined | { locked: boolean; at?: string },
     /** Whether `GET /api/node-admin/me` answered at all (false: offline, a timeout, a 5xx). */
     heard: true,
     /** While set, the node's role answer waits for it: the screen between asking and being told. */
@@ -225,7 +227,7 @@ vi.mock('../node-admin', () => {
     // As the real pair: askNodeRole is null when the node gave no answer, and fetchMyNodeRole makes that "no role".
     const askNodeRole = async () => {
         if (node.hold) await node.hold;
-        return node.heard ? { role: node.role, communityName: 'Mullum Commons' } : null;
+        return node.heard ? { role: node.role, communityName: 'Mullum Commons', ...(node.core ? { coreSettings: node.core } : {}) } : null;
     };
     return {
         askNodeRole,
@@ -325,6 +327,7 @@ beforeEach(() => {
     who.identity = { publicKey: KEY, privateKey: 'me-priv', callsign: 'Ana', mnemonic: WORDS };
     node.sessions = [];
     node.role = null;
+    node.core = undefined;
     node.heard = true;
     node.hold = null;
     node.ownerChecked = null;
@@ -723,6 +726,82 @@ describe('Settings → COMMUNITY: "How this community works" for a member, and i
         await renderIn('en');
         expect(communitySection()).toBe(1);
         expect(shapeRows()).toBe(1);
+    });
+});
+
+describe('Settings → Community admin: an owner\'s and admin\'s row is "Core settings", a moderator\'s and a member\'s stays "How this community works" (core settings C3)', () => {
+    const rowText = () => host.querySelector('[data-testid="settings-how-this-community-works"]')?.textContent ?? '';
+    const LIST = 'Who can join, Beans, votes, sharing outside, where copies go';
+
+    it.each(['owner', 'admin'] as const)('%s, locked: the row says Core settings and when', async (role) => {
+        node.role = role;
+        node.core = { locked: true, at: '2026-11-03T10:00:00.000Z' };
+        await renderIn('en');
+        expect(rowText()).toBe(`🧭Core settings${LIST} · Locked since 3 Nov›`);
+        expect(host.textContent).not.toContain('How this community works');
+    });
+
+    it('an owner, not confirmed yet: says so', async () => {
+        node.role = 'owner';
+        node.core = { locked: false };
+        await renderIn('en');
+        expect(rowText()).toContain(`${LIST} · Not confirmed yet`);
+    });
+
+    it('an owner of a node that says nothing of the lock: the list alone, never "Not confirmed yet"', async () => {
+        node.role = 'owner';
+        await renderIn('en');
+        expect(rowText()).toContain('Core settings');
+        expect(rowText()).toContain(LIST);
+        expect(rowText()).not.toContain('Not confirmed');
+        expect(rowText()).not.toContain('Locked');
+    });
+
+    it('a moderator keeps the members\' row and its words', async () => {
+        node.role = 'moderator';
+        node.core = { locked: true, at: '2026-11-03T10:00:00.000Z' };
+        await renderIn('en');
+        expect(rowText()).toContain('How this community works');
+        expect(rowText()).not.toContain('Core settings');
+        expect(rowText()).not.toContain('Locked');
+    });
+
+    it('a member keeps the members\' row and its words', async () => {
+        await renderIn('en');
+        expect(rowText()).toContain('How this community works');
+        expect(rowText()).not.toContain('Core settings');
+    });
+
+    it('in the pseudo-language the row\'s words are translated whole, date and all', async () => {
+        node.role = 'owner';
+        node.core = { locked: true, at: '2026-11-03T10:00:00.000Z' };
+        await renderIn('xx');
+        expect(rowText()).toContain(pseudoLocalise('Core settings'));
+        expect(rowText()).not.toContain('Who can join');
+    });
+
+    it('an owner\'s sheet: the members\' title, the lock line naming the core settings, the facts, the way to change them', async () => {
+        node.role = 'owner';
+        node.core = { locked: true, at: '2026-11-03T10:00:00.000Z' };
+        node.me = { beans: true, escrow: true, door: 'members' };
+        await renderIn('en');
+        await click(host.querySelector('[data-testid="settings-how-this-community-works"]'), 'the row');
+        const sheet = host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
+        // Only the row is "Core settings": the sheet also lists everyday settings, so its lock line names what it covers (review of #2809).
+        expect(sheet).toContain('🧭 How this community works');
+        expect(sheet).toContain('🔒 Core settings (who can join, Beans, votes, sharing outside, where copies go) locked since 3 Nov.');
+        expect(sheet).toContain('Beans: on');
+        expect(sheet).toContain('Change them on a computer, or press Manage: Settings opens there.');
+    });
+
+    it('a member\'s sheet has no lock line and no footer', async () => {
+        node.me = { beans: true, escrow: true, door: 'members' };
+        await renderIn('en');
+        await click(host.querySelector('[data-testid="settings-how-this-community-works"]'), 'the row');
+        const sheet = host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
+        expect(sheet).toContain('How this community works');
+        expect(sheet).not.toContain('Core settings');
+        expect(sheet).not.toContain('Change them on a computer');
     });
 });
 

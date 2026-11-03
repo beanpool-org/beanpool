@@ -34,6 +34,7 @@ vi.mock('react-native', () => {
         Alert: { alert: vi.fn() },
         Linking: { openURL: vi.fn() },
         DeviceEventEmitter: { addListener: () => ({ remove() {} }), emit: vi.fn() },
+        AppState: { addEventListener: () => ({ remove() {} }) },
     };
 });
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardStickyView: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));

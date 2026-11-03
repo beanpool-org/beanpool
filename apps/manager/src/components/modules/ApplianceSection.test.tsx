@@ -1,6 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// The everyday rules card reads the community's shape on mount (its own tests: EverydayRuleRows.test.tsx); this file counts other calls.
+vi.mock('./EverydayRuleRows', () => ({ EverydayRuleRows: () => null }));
 import { ApplianceSection } from './ApplianceSection';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, GatewayConfig } from '../../lib/node-client';

@@ -108,6 +108,27 @@ describe('role gating — owners and admins see Manage, moderators see Moderate'
         expect((calls[0].init?.headers as any)['X-Signature']).toBe('sig:GET:https://mullum.beanpool.org/api/node-admin/me');
     });
 
+    it('core settings (C3): an owner or admin is told whether they are locked, and when; nothing else is read', async () => {
+        const reply = (role: string, coreSettings: unknown) => mockFetch({ '/api/node-admin/me': { status: 200, body: { role, communityName: 'Mullum', coreSettings } } });
+        reply('owner', { locked: true, at: '2026-11-03T10:00:00.000Z' });
+        expect(await fetchMyNodeRole(NODE, identity)).toEqual({ role: 'owner', communityName: 'Mullum', coreSettings: { locked: true, at: '2026-11-03T10:00:00.000Z' } });
+        reply('admin', { locked: false });
+        expect(await fetchMyNodeRole(NODE, identity)).toEqual({ role: 'admin', communityName: 'Mullum', coreSettings: { locked: false } });
+        // Locked with no readable date: locked, no date. A date on an unlocked answer is dropped.
+        reply('owner', { locked: true, at: 'yesterday' });
+        expect((await fetchMyNodeRole(NODE, identity)).coreSettings).toEqual({ locked: true });
+        reply('owner', { locked: false, at: '2026-11-03T10:00:00.000Z' });
+        expect((await fetchMyNodeRole(NODE, identity)).coreSettings).toEqual({ locked: false });
+        // Not the shape the node sends: not told, never read as "not confirmed".
+        for (const bad of [undefined, null, 'locked', { locked: 'yes' }, {}, []]) {
+            reply('owner', bad);
+            expect((await fetchMyNodeRole(NODE, identity)).coreSettings, JSON.stringify(bad)).toBeUndefined();
+        }
+        // A moderator's phone does not read it even if a node sent it.
+        reply('moderator', { locked: true, at: '2026-11-03T10:00:00.000Z' });
+        expect(await fetchMyNodeRole(NODE, identity)).toEqual({ role: 'moderator', communityName: 'Mullum' });
+    });
+
     it('a plain member or an unknown role gets no button', async () => {
         for (const role of [null, 'member', 'superuser']) {
             mockFetch({ '/api/node-admin/me': { status: 200, body: { role } } });

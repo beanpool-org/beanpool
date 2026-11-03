@@ -4,7 +4,7 @@ title: Kuvinjari sokoni
 summary: Pata Ofa na Mahitaji kwa utafutaji, vichujio na umbali.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Ofa na Mahitaji kutoka kwa watu walio karibu. Tafuta, chagua kategoria au umbali, au gusa WEKA TANGAZO kuweka lako.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## Kichupo cha Soko
@@ -15,6 +15,7 @@ Gusa **Soko** katika safu mlalo ya vichupo. Unaona kile ambacho watu katika jumu
 - **Kura ya maoni nayo hurudi mara moja**, siku moja kabla ya kufungwa.
 - **Hakuna anayechukua nafasi zaidi ya mbili kwa siku.** Chapisho la tatu la mtu katika siku moja, na yoyote baada yake, huja baada ya machapisho ya wengine wote ya siku hiyo.
 - **Kuhariri chapisho hakulipandishi juu.** Wala kulisitisha, wala jibu kwake. Ili lionekane tena, chapisha tena.
+- **Mstari unaonyesha ulipoachia.** **Mapya tangu ulipotazama mara ya mwisho** huwekwa juu ya chapisho la kwanza lililokuwa tayari kwenye orodha ulipotoka Sokoni mara ya mwisho kwenye simu hii au kivinjari hiki; haupo mara ya kwanza, wakati hakuna kipya zaidi, wala unapotafuta au kuchuja, na gridi ya simu haiuchori.
 - **Chapisho alilolibandika mmiliki** hukaa juu kabisa, chini ya **Imebandikwa**, bila kujali umri wake.
 
 Katika mionekano ya orodha na ya kubana unaona vichwa vya siku. Gridi huonyesha mpangilio ule ule bila vichwa hivyo. Kwenye simu Soko hufunguka kama orodha; kwenye programu ya wavuti hufunguka kama kadi. **Kwako** huweka mpangilio wake yenyewe. Chini ya **Matukio** lile la karibu zaidi kwa wakati hutangulia, pamoja na **Leo**, **Wikendi hii** na **Siku 7 zijazo**. Utafutaji huonyesha machapisho yanayolingana vyema na maneno yako. Kwenye simu, vuta orodha chini ili kuiburudisha.

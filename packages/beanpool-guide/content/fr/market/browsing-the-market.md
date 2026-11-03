@@ -4,7 +4,7 @@ title: Explorer le Marché
 summary: Trouver des Offres et Demandes grâce à la recherche, aux filtres et à la distance.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Offres et Demandes des personnes près de chez vous. Cherchez, filtrez par catégorie ou distance, ou touchez + PUBLIER pour créer la vôtre.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## L'onglet Marché
@@ -15,6 +15,7 @@ Touchez **Marché** dans la barre des onglets. Vous voyez ce que les membres de 
 - **Un sondage revient une fois aussi**, la veille de sa clôture.
 - **Personne ne prend plus de deux places par jour.** La troisième publication d'une personne dans une journée, et toutes les suivantes, passent après celles de tous les autres ce jour-là.
 - **Modifier une publication ne la fait pas remonter.** La suspendre non plus, ni une réponse. Pour être vu de nouveau, publiez de nouveau.
+- **Une ligne montre où vous vous êtes arrêté.** **Nouveau depuis votre dernière visite** se place au-dessus de la première publication déjà listée lors de votre dernière sortie du Marché sur ce téléphone ou dans ce navigateur ; elle n'apparaît pas la première fois, quand rien n'est plus récent, ni pendant une recherche ou un filtre, et la grille du téléphone ne l'affiche pas.
 - **Une publication épinglée par un propriétaire** reste tout en haut, sous **Épinglé**, quel que soit son âge.
 
 Dans les vues en liste et compacte, vous voyez les titres des jours. La grille montre le même ordre sans eux. Sur le téléphone, le Marché s'ouvre en liste ; dans l'application web, sous forme de cartes. L'onglet **Pour vous** conserve son propre ordre. Sous **Événements**, le plus proche dans le temps vient en premier, avec **Aujourd'hui**, **Ce week-end** et **7 prochains jours**. Une recherche montre les publications qui correspondent le mieux à vos mots. Sur le téléphone, tirez la liste vers le bas pour l'actualiser.

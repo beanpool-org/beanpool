@@ -99,7 +99,7 @@ describe('GatewayModule component', () => {
         });
     });
 
-    it('offers no switch for invites, messaging, the Market or federation (How this community works S3)', () => {
+    it('offers no switch for invites, messaging, the Market or federation (Core settings S3)', () => {
         render(
             <GatewayModule
                 gateway={mockGatewayConfig}
@@ -114,7 +114,7 @@ describe('GatewayModule component', () => {
             expect(screen.queryByLabelText(gone)).toBeNull();
         }
         expect(screen.queryByText('Subsystem Feature Toggles')).toBeNull();
-        expect(screen.getByText(/Who can join is set under How this community works/)).toBeInTheDocument();
+        expect(screen.getByText(/Who can join is set under Core settings/)).toBeInTheDocument();
     });
 
     it('displays rate limit disabled alert and enables rate limiting on quick fix click', () => {

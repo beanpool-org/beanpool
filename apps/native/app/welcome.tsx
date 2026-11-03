@@ -29,6 +29,7 @@ import {
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
+import { coreSettingsNextWords } from '../components/settings/settings-lines';
 import { RestoreMenu } from '../components/welcome/RestoreMenu';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
@@ -2985,6 +2986,7 @@ export default function WelcomeScreen() {
                         <Text style={styles.title} testID="owner-card-title">{claimedName ? t('You own {name}', { name: claimedName }) : t('You own this community')}</Text>
                         <Text style={styles.ownerAddress} selectable>{createAnchorUrl}</Text>
                         <Text style={styles.subtitle}>{t("This phone's screen lock is how you manage it; keep it on. Add a second owner soon.")}</Text>
+                        <Text style={styles.subtitle} testID="owner-card-core-settings-next">{coreSettingsNextWords()}</Text>
                         {nudge ? <Text style={styles.subtitle} testID="owner-card-number-nudge">{numberNudge(nudge)}</Text> : null}
                         <Pressable
                             style={styles.secondaryBtn}

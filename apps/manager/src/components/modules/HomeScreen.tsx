@@ -8,6 +8,7 @@ import { WebVisitsCard } from './WebVisitsCard';
 import { AppVersionsCard } from './AppVersionsCard';
 import { type NodeProfile, nodeCredential } from '../../lib/profiles';
 import { type Shape, fetchCommunityShape } from '../../lib/community-shape';
+import type { RolesViewer } from './NodeRolesPanel';
 
 /** The Alerts card (AlertsPanel, under Backups & Restore): where each of the server's alerts is listed and marked seen. */
 export const SERVER_ALERTS_ANCHOR = 'server-alerts';
@@ -41,8 +42,10 @@ interface HomeScreenProps {
     onForgetStandby?: (id: string) => Promise<void>;
     /** The node this Home is for: its web app visits card reads it. Without one the card is not shown. */
     activeNode?: NodeProfile;
-    /** How this community works shape settings (optional, will fetch from activeNode if omitted). */
+    /** Core settings: the community's shape (optional, will fetch from activeNode if omitted). */
     shape?: Shape | null;
+    /** Who is looking: an owner is offered the core settings walkthrough, an admin is told the owners haven't confirmed. */
+    viewer?: RolesViewer;
 }
 
 export function HomeScreen({
@@ -67,6 +70,7 @@ export function HomeScreen({
     onForgetStandby,
     activeNode,
     shape,
+    viewer,
 }: HomeScreenProps) {
     const [shutdownDismissed, setShutdownDismissed] = useState(false);
     const [communityShape, setCommunityShape] = useState<Shape | null>(shape ?? null);
@@ -92,7 +96,7 @@ export function HomeScreen({
     const shapeCardText = useMemo(() => {
         // An answer without the four settings (a node on an older build, an error body) draws no line: Home must still render.
         const s = communityShape?.settings;
-        if (!s?.join || !s.beans || !s.decisions || !s.knocks) return null;
+        if (!s?.join || !s.beans || !s.decisions) return null;
         const joinText =
             s.join.value === 'members'
                 ? 'any member invites'
@@ -103,8 +107,15 @@ export function HomeScreen({
                 : 'open door';
         const beansText = s.beans.value ? 'Beans on' : 'Beans off';
         const votesText = s.decisions.value ? 'votes on' : 'votes off';
-        const knocksText = s.knocks.value ? 'requests to join on' : 'requests to join off';
-        return `🧭 How this community works · ${joinText} · ${beansText} · ${votesText} · ${knocksText} · Change ›`;
+        const core = communityShape?.core;
+        const lockText = !core
+            ? null
+            : core.lock
+                ? (core.lock.at && !Number.isNaN(new Date(core.lock.at).getTime())
+                    ? `locked ${new Date(core.lock.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                    : 'locked')
+                : 'not confirmed yet';
+        return `🧭 Core settings · ${joinText} · ${beansText} · ${votesText}${lockText ? ` · ${lockText}` : ''} ›`;
     }, [communityShape]);
 
     useEffect(() => {
@@ -224,6 +235,24 @@ export function HomeScreen({
             text: `${knockCount === 1 ? '1 person' : `${knockCount} people`} asked to join: answer them in the BeanPool app, under People → Invites`,
             tab: 'people',
             sub: 'invites',
+        });
+    }
+
+    // Core settings nobody has confirmed (Core settings design §3): offered to owners, never forced; it ends when the lock row exists.
+    const isOwnerViewer = viewer?.kind === 'password' || viewer?.role === 'owner';
+    const coreUnconfirmed = Boolean(communityShape && !communityShape.standby && communityShape.core && !communityShape.core.lock);
+    const coreOwnerItem = coreUnconfirmed && isOwnerViewer;
+    const coreAdminLine = coreUnconfirmed && !isOwnerViewer && viewer?.role === 'admin';
+    if (coreOwnerItem) {
+        const joined = membersCount !== null && membersCount > 1 ? membersCount : 0;
+        actionItems.push({
+            key: 'core-settings',
+            icon: '🧭',
+            text: joined > 0
+                ? `${joined} members joined under core settings nobody confirmed yet · confirm and lock them ›`
+                : 'Core settings not confirmed yet · six settings, about five minutes ›',
+            tab: 'shape',
+            sub: joined > 0 ? 'review' : 'walk',
         });
     }
 
@@ -496,11 +525,16 @@ export function HomeScreen({
                     // The words the phone's "Needs you" said, so the owner who tapped it sees what it meant.
                     <p className="text-xs font-semibold text-nature-200 m-0">This server has alerts: {serverAlerts!.count}</p>
                 )}
-                {actionItems.length === 0 && unchecked.length === 0 && (
+                {actionItems.length === 0 && unchecked.length === 0 && !coreAdminLine && (
                     <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-4 py-3 rounded-xl">
                         <span>🟢</span>
                         <span>All clear — node is running cleanly with no pending actions.</span>
                     </div>
+                )}
+                {coreAdminLine && (
+                    <p data-testid="home-core-admin-line" className="text-xs text-nature-300 m-0 p-3 rounded-xl bg-nature-950 border border-nature-800">
+                        🧭 The owners haven&apos;t confirmed the core settings yet. You can read them.
+                    </p>
                 )}
                 {actionItems.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -534,7 +568,7 @@ export function HomeScreen({
                 )}
             </div>
 
-            {/* How this community works card */}
+            {/* Core settings card */}
             {shapeCardText && (
                 <button
                     type="button"

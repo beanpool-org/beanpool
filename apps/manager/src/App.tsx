@@ -85,6 +85,7 @@ import { SecondFactorPromptContext } from './components/common/FreshProofBox';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
 import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-client';
+import { fetchCommunityShape, coreAwaitsOwner } from './lib/community-shape';
 import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
 import { useInPageConfirm } from './components/common/InPageConfirm';
 
@@ -1282,6 +1283,22 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         logs: { critical: logErrorsCount, warning: logWarningsCount },
     };
 
+    // Core settings an owner has not confirmed and locked yet: a "!" on the menu item (Core settings design §3). Owners only;
+    // re-read when Home or Core settings is shown, so it clears once they lock.
+    const [coreUnconfirmed, setCoreUnconfirmed] = useState(false);
+    const viewerIsOwner = !isFleetMode && (keySession ? keySession.role === 'owner' : passwordSession);
+    const coreProbe = activeTab === 'home' || activeTab === 'shape' ? activeTab : 'other';
+    useEffect(() => {
+        if (isFleetMode || !activeNode || !signedIn || !viewerIsOwner) { setCoreUnconfirmed(false); return; }
+        if (coreProbe === 'other') return;
+        let mounted = true;
+        fetchCommunityShape(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
+            .then((s) => { if (mounted) setCoreUnconfirmed(coreAwaitsOwner(s, true)); })
+            .catch(() => {});
+        return () => { mounted = false; };
+    }, [activeNode?.id, activeNode?.url, coreProbe, signedIn, viewerIsOwner, isFleetMode]);
+    const navBadges: Partial<Record<TabId, string>> = coreUnconfirmed ? { shape: '!' } : {};
+
     // Phone layout (single-node, below lg): the section menu is a sheet, and screens are history entries so Back works.
     const [menuOpen, setMenuOpen] = useState(false);
     const currentSubTab = navSubTab ?? defaultSubTab(activeTab);
@@ -1430,6 +1447,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 }}
                 nodeHealthMap={nodeHealthMap}
                 tabAlertCounts={tabAlertCounts}
+                badges={navBadges}
                 isFleetMode={isFleetMode}
                 communityName={effectiveCommunityName}
                 version={diag?.version}
@@ -1466,6 +1484,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         onBeforeManual={leaveMenuForManual}
                         nodeHealthMap={nodeHealthMap}
                         tabAlertCounts={tabAlertCounts}
+                        badges={navBadges}
                         isFleetMode={false}
                         communityName={effectiveCommunityName}
                         onLogout={handleLogout}
@@ -1587,6 +1606,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                     <SectionErrorBoundary sectionName="Home" resetKey={activeNode?.id}>
                                         <HomeScreen
                                             activeNode={activeNode}
+                                            viewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                             communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
                                             publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
                                             version={diag?.version}
@@ -1634,9 +1654,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                             })()}
 
                             {activeTab === 'shape' && activeNode && (
-                                <SectionErrorBoundary sectionName="How this community works" resetKey={activeNode.id}>
+                                <SectionErrorBoundary sectionName="Core settings" resetKey={activeNode.id}>
                                     <CommunityShapeSection
                                         activeNode={activeNode}
+                                        openWalkthrough={navSubTab === 'walk' || navSubTab === 'review' ? navSubTab : null}
+                                        onUnconfirmedChange={setCoreUnconfirmed}
                                         viewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                         onNavigate={(tab, sub) => {
                                             setNavSubTab(sub);

@@ -58,6 +58,7 @@ vi.mock('react-native', () => {
         Alert: { alert() {} },
         Linking: { openURL: async () => {} },
         DeviceEventEmitter: { addListener: listener, emit() {} },
+        AppState: { addEventListener: () => ({ remove() {} }) },
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),

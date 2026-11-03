@@ -4,7 +4,7 @@ title: Pazarda gezinme
 summary: Arama, filtreler ve mesafe ile Teklifleri ve İhtiyaçları bulun.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Yakınınızdaki kişilerden Teklifler ve İhtiyaçlar. Arayın, filtreleyin veya kendinizinkini eklemek için + İLAN EKLE'ye dokunun.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## Pazar sekmesi
@@ -15,6 +15,7 @@ Sekme satırında **Pazar** seçeneğine dokunun. Topluluğunuzdaki insanların 
 - **Bir anket de bir kez geri gelir**, kapanmasından bir gün önce.
 - **Hiç kimse günde iki yerden fazlasını almaz.** Bir kişinin o gün üçüncü gönderisi ve sonrakiler, o günün herkesin gönderilerinden sonra gelir.
 - **Bir gönderiyi düzenlemek onu yukarı taşımaz.** Duraklatmak da, ona gelen bir yanıt da taşımaz. Tekrar görülmek için yeniden paylaşın.
+- **Bir satır nerede kaldığınızı gösterir.** **Son baktığınızdan beri yeni**, bu telefonda ya da bu tarayıcıda Pazar'dan en son ayrıldığınızda zaten listelenmiş olan ilk gönderinin üstünde durur; ilk seferde, daha yeni bir şey olmadığında ya da arama veya filtre kullanırken görünmez, telefondaki ızgara da onu çizmez.
 - **Bir sahibin sabitlediği gönderi**, yaşı ne olursa olsun, **Sabitlendi** altında en üstte durur.
 
 Liste ve kompakt görünümlerde gün başlıklarını görürsünüz. Izgara aynı sırayı bunlar olmadan gösterir. Telefonda Pazar liste olarak açılır; web uygulamasında kartlar halinde açılır. **Sana Özel** kendi sırasını korur. **Etkinlikler** altında en yakın tarihli olan ilk sırada gelir; **Bugün**, **Bu hafta sonu** ve **Gelecek 7 gün** ile. Bir arama, sözcüklerinize en iyi uyan gönderileri gösterir. Telefonda listeyi yenilemek için aşağı çekin.

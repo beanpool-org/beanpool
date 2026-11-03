@@ -146,6 +146,52 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         expect(routes.pushed).toEqual([{ pathname: '/guide/[slug]', params: { slug: 'how-your-community-works' } }]);
     });
 
+    describe('for an owner or admin: the members\' sheet with a lock line and a footer (core settings C3)', () => {
+        const sheetText = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
+        const FOOTER = 'Change them on a computer, or press Manage: Settings opens there.';
+
+        const CORE = 'Core settings (who can join, Beans, votes, sharing outside, where copies go)';
+
+        it.each([[false], [true]])('locked: the members\' title, the lock line naming the core settings with its date, the same facts, the footer last (dark: %s)', async (dark) => {
+            theme.dark = dark;
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: true, at: '2026-11-03T10:00:00.000Z' } } }));
+            // The sheet lists everyday settings too, so it is not itself called "Core settings"; only the lock line is, and it says what it covers.
+            expect(host.querySelector('[data-testid="community-shape-sheet"] [role="heading"]')?.textContent).toBe('🧭 How this community works');
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe(`🔒 ${CORE} locked since 3 Nov. An owner unlocks one to change it, and every owner is told.`);
+            expect(sheetText()).toContain('any member can invite someone');
+            expect(sheetText()).toContain('Beans: on');
+            expect(sheetText()).toContain('Read more in the guide');
+            expect(host.querySelector('[data-testid="community-shape-footer"]')?.textContent).toBe(FOOTER);
+            // The footer is the sheet's last line, after the guide button.
+            expect(sheetText().endsWith(FOOTER)).toBe(true);
+        });
+
+        it('not confirmed yet: says so', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: false } } }));
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe(`${CORE} are not confirmed yet. An owner confirms and locks them in Settings.`);
+        });
+
+        it('locked with no date: the same line, naming the core settings, without a date', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: true } } }));
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe(`🔒 ${CORE} locked. An owner unlocks one to change it, and every owner is told.`);
+        });
+
+        it('the node said nothing of the lock: no lock line, but still the footer', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: null } }));
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')).toBeNull();
+            expect(sheetText()).toContain('🧭 How this community works');
+            expect(sheetText()).toContain(FOOTER);
+        });
+
+        it('a member\'s sheet is as it was: its name, no lock line, no footer', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn() }));
+            expect(sheetText()).toContain('How this community works');
+            expect(sheetText()).not.toContain('Core settings');
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')).toBeNull();
+            expect(host.querySelector('[data-testid="community-shape-footer"]')).toBeNull();
+        });
+    });
+
     it('renders in dark theme cleanly without error', async () => {
         theme.dark = true;
         const onClose = vi.fn();

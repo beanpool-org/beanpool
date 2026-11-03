@@ -11,15 +11,18 @@
  *     behind the setting until the apps can show a jury, slice J3).
  *  2. Who decides a removal: an owner sets Automatic; A jury is locked (pool_too_small) while fewer than 36 could serve.
  *  3. The draw on 150 members: the pool is exactly the members of 30 days (never the subject, the admin pausing them, a
- *     newcomer or a frozen account); its hash, the jury's size and rule on the vote; every member with a conflict at the
- *     head of the draw stood aside (a reporter, the inviter, an invitee, a block either way, a deal completed in 90 days,
- *     an open deal, a conversation), one whose trade is older than 90 days seated; the roll is the head of the draw, and
- *     it checks out with core's checkJuryDraw.
+ *     newcomer or a frozen account); its hash, the jury's size and rule on the vote; every member with a conflict Sam
+ *     can't make alone, at the head of the draw, stood aside (a reporter, the inviter, an invitee, one who blocked Sam, a
+ *     deal completed in 90 days, an open deal they opened, a chat they opened, kept for them alone because Sam blocks them
+ *     or not), one whose trade is older than 90 days seated; what Sam does alone stands nobody aside (Marty, 3 Nov: five
+ *     Sam blocked, a chat and a deal request Sam sent that nobody answered); the roll is the head of the draw, and it
+ *     checks out with core's checkJuryDraw.
  *  4. Only the jury votes: a member not drawn and one passed over are refused; a juror votes; a vote row written for anyone
  *     off the roll is not counted. While open members read the turnout, never the split; the push goes to the jury and the
  *     member, nobody else.
  *  5. GET /api/commons/decisions/:id/jury through the middleware: a member reads the pool and the facts and can recompute
- *     the draw; a juror reads their own seat; nobody else is named while open; a non-member and an unsigned caller are
+ *     the draw; a juror reads their own seat; nobody else is named while open; a member Sam blocked reads exactly what a
+ *     juror with no link to Sam reads, and one passed over reads no reason; a non-member and an unsigned caller are
  *     refused; a vote no jury decides is a 404.
  *  6. The tally over the roll (§5): 6 Yes to 3 No removes (the grace window opens), 5 to 4 doesn't and the pause lifts,
  *     8 votes is too few and the pause lifts. Closed, the jury, who stood aside and who voted are named, never which way,
@@ -260,16 +263,44 @@ async function main() {
         .run(crypto.randomUUID(), at(0).pk, gen.pk, post, ago(DAY));
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(at(1).pk, sam.pk);
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(sam.pk, at(2).pk);
-    db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)').run(sam.pk, at(3).pk);
-    db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)').run(at(4).pk, sam.pk);
+    const block = db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)');
+    block.run(at(4).pk, sam.pk);
     const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, updated_at)
                              VALUES (?, ?, ?, ?, 5, ?, ?, ?, ?)`);
     deal.run(crypto.randomUUID(), post, at(5).pk, sam.pk, 'completed', ago(20 * DAY), ago(20 * DAY), ago(20 * DAY));
+    // at(6) asked for Sam's plums: an open deal they opened.
     deal.run(crypto.randomUUID(), post, at(6).pk, sam.pk, 'pending', ago(DAY), null, ago(DAY));
     deal.run(crypto.randomUUID(), post, at(9).pk, sam.pk, 'completed', ago(120 * DAY), ago(120 * DAY), ago(120 * DAY));
-    const conv = crypto.randomUUID();
-    db.prepare("INSERT INTO conversations (id, type, created_by) VALUES (?, 'dm', ?)").run(conv, at(7).pk);
-    db.prepare('INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?), (?, ?)').run(conv, at(7).pk, conv, sam.pk);
+    const dm = (opener: Id, other: Id, createdAt = ago(DAY)) => {
+        const id = crypto.randomUUID();
+        db.prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, 'dm', ?, ?)").run(id, opener.pk, createdAt);
+        db.prepare('INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?), (?, ?)').run(id, opener.pk, id, other.pk);
+        return id;
+    };
+    dm(at(7), sam);
+    // What Sam can do alone, to steer the draw (review of #2793, Marty's answer of 3 Nov): Sam blocks five of the members
+    // the draw would seat first; opens a chat with at(13), who never answers; and asks for a deal on at(14)'s listing,
+    // which nobody answers. None of it stands anyone aside.
+    const samBlocks = [3, 8, 10, 11, 12].map(at);
+    for (const b of samBlocks) block.run(sam.pk, b.pk);
+    const unanswered = dm(sam, at(13));
+    db.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp) VALUES (?, ?, ?, 'c', 'n', ?)")
+        .run(crypto.randomUUID(), unanswered, sam.pk, ago(DAY));
+    const theirPost = crypto.randomUUID();
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+                VALUES (?, 'offer', 'food', 'Pears', '', 5, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
+    deal.run(crypto.randomUUID(), theirPost, sam.pk, at(14).pk, 'requested', ago(DAY), null, ago(DAY));
+    // A chat a member opened with Sam while Sam blocks them is kept for them alone (engine/withheld-lines.ts); it stands them
+    // aside as at(7)'s does, or who stood aside would say who Sam blocks. at(15)'s is still kept; at(16)'s became the real one
+    // when Sam, the block lifted, opened a chat with them, under Sam's name: at(16)'s line kept from before is older than it.
+    block.run(sam.pk, at(15).pk);
+    db.prepare('INSERT INTO withheld_conversations (id, owner_pubkey, other_pubkey, created_at) VALUES (?, ?, ?, ?)')
+        .run(crypto.randomUUID(), at(15).pk, sam.pk, ago(2 * DAY));
+    const promoted = dm(sam, at(16), ago(DAY));
+    db.prepare("INSERT INTO withheld_lines (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp) VALUES (?, ?, ?, 'c', 'n', ?)")
+        .run(crypto.randomUUID(), promoted, at(16).pk, ago(3 * DAY));
+    const asideAt = [0, 1, 2, 4, 5, 6, 7, 15, 16];
+    const seatedAt = [3, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20];
     pushes.length = 0;
     const samVote = pauseOf(sam);
     const params = paramsOf(samVote);
@@ -284,9 +315,16 @@ async function main() {
     const roll = rollOf(samVote);
     const aside = roll.filter(r => r.status === 'stood_aside').map(r => r.k);
     const seated = roll.filter(r => r.status === 'on').map(r => r.k);
-    assert(JSON.stringify([...aside].sort()) === JSON.stringify(order.slice(0, 8).sort()),
-        `the reporter, the inviter, an invitee, both blocks, the 90-day partner, the open deal and the conversation stood aside: 8 (${aside.length})`);
-    assert(JSON.stringify([...seated].sort()) === JSON.stringify(order.slice(8, 20).sort()) && seated.includes(at(9).pk),
+    const keysAt = (is: number[]) => is.map(i => order[i]).sort();
+    assert(JSON.stringify([...aside].sort()) === JSON.stringify(keysAt(asideAt)),
+        `the reporter, the inviter, an invitee, the one who blocked Sam, the 90-day partner, the deal and the chats they opened stood aside: 9 (${aside.length})`);
+    assert(samBlocks.every(b => seated.includes(b.pk)),
+        `Sam blocked five of the first the draw would seat, and the draw seats all five anyway (${samBlocks.filter(b => seated.includes(b.pk)).length} of 5)`);
+    assert(seated.includes(at(13).pk) && seated.includes(at(14).pk),
+        'a chat Sam opened that nobody answered, and a deal Sam asked for that nobody answered, stand nobody aside');
+    assert(aside.includes(at(7).pk) && aside.includes(at(15).pk) && aside.includes(at(16).pk),
+        'a chat the member opened with Sam stands them aside, kept for them alone because Sam blocks them or not');
+    assert(JSON.stringify([...seated].sort()) === JSON.stringify(keysAt(seatedAt)) && seated.includes(at(9).pk),
         `the next 12 of the draw are seated, the one whose deal is 120 days old among them (${seated.length})`);
     assert(roll.every(r => r.role === 'juror'), 'every row of the roll is a juror\'s');
     assert(checkJuryDraw({ pool: stored, subject: sam.pk, snapshotDate: today, rosterHash: params.jury.rosterHash, roll: roll.map(r => r.k) }).ok,
@@ -356,8 +394,22 @@ async function main() {
     fresh();
     const mine = await signed('GET', `/api/commons/decisions/${samVote}/jury`, jurors[2]);
     fresh();
-    const mineAside = await signed('GET', `/api/commons/decisions/${samVote}/jury`, at(3));
+    const mineAside = await signed('GET', `/api/commons/decisions/${samVote}/jury`, at(4));
     assert(mine.body?.jury?.you === 'on' && mineAside.body?.jury?.you === 'stood_aside', `a juror reads their own seat; one passed over reads that (${mine.body?.jury?.you}, ${mineAside.body?.jury?.you})`);
+    // Nothing a member reads says Sam blocked them (Marty, 3 Nov: no reason shown may reveal a block). A member Sam blocked
+    // reads, byte for byte, what a juror with no link to Sam reads; one passed over is told no reason, only where they stand,
+    // and is refused a vote in the words a member not drawn is.
+    fresh();
+    const blockedBySam = await signed('GET', `/api/commons/decisions/${samVote}/jury`, at(3));
+    fresh();
+    const noLink = await signed('GET', `/api/commons/decisions/${samVote}/jury`, at(17));
+    assert(blockedBySam.status === 200 && blockedBySam.text === noLink.text && blockedBySam.body?.jury?.you === 'on',
+        `a member Sam blocked reads exactly what a juror with no link to Sam reads (${blockedBySam.body?.jury?.you})`);
+    const juryKeys = (b: any) => Object.keys(b?.jury ?? {}).sort().join(',');
+    const refusedBlocker = de.castDecisionVote(samVote, at(4).pk, true);
+    assert(juryKeys(mineAside.body) === juryKeys(open.body) && !/block|reason|why/i.test(mineAside.text)
+        && refusedBlocker.error === de.JURY_ONLY_VOTE_ERROR && !/block/i.test(String(refusedBlocker.error)),
+        `one passed over reads no reason, and is refused as a member not drawn is (${juryKeys(mineAside.body)}; ${refusedBlocker.error})`);
     fresh();
     const stranger = await signed('GET', `/api/commons/decisions/${samVote}/jury`, keypair('Stranger'));
     fresh();
@@ -380,6 +432,9 @@ async function main() {
         && names(closed.body?.jury?.voted).length === 9 && names(closed.body?.jury?.didNotVote).length === 3,
         'closed: the jury, who stood aside, the 9 who voted and the 3 who did not are named');
     assert(!closed.text.includes('"support"') && !JSON.stringify(closed.body?.jury?.voted).includes('true'), 'never which way anyone voted');
+    assert((closed.body?.jury?.stoodAside ?? []).every((x: any) => Object.keys(x).sort().join(',') === 'callsign,publicKey')
+        && !/block|reason|why/i.test(closed.text) && !samBlocks.some(b => names(closed.body?.jury?.stoodAside).includes(b.pk)),
+        'who stood aside is named with no reason, and none of the five Sam blocked is among them');
     const closedRoll = [...names(closed.body?.jury?.jury), ...names(closed.body?.jury?.stoodAside)];
     assert(checkJuryDraw({ pool: (closed.body?.jury?.pool ?? []).map((p: any) => p.publicKey), subject: sam.pk, snapshotDate: today, rosterHash: params.jury.rosterHash, roll: closedRoll }).ok,
         'and what was served checks out: the roll is the head of the draw');

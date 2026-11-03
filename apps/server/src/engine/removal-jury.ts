@@ -19,10 +19,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const JURY_CONFLICT_DAYS = 90;
 
 /**
- * Who stands aside from judging `subject`, from data only this node holds (§4): who reported them or something they
- * posted in the last 90 days; who invited them and whom they invited; a block either way; a deal completed with them in
- * the last 90 days, or one still open; a direct conversation with them. None of it is ever said: a member passed over
- * for any of these is listed after close exactly as one who stepped aside themselves.
+ * Who stands aside from judging `subject`, from data only this node holds: only a conflict the subject cannot make alone
+ * (Marty, 3 Nov 2026, "Only conflicts they can't fake", narrowing §4 of the design). The draw's order is public, so
+ * anything the subject could do by themselves would let them pass over whoever they expect to say Yes and pick their jury.
+ *
+ *  - the member reported them, or something they posted, in the last 90 days;
+ *  - the member blocked them;
+ *  - the member invited them, or was invited by them;
+ *  - a deal between the two was completed in the last 90 days, whoever opened it;
+ *  - a deal still open that the member opened: one on a listing of the subject's (the side that isn't a deal's listing's
+ *    author is the side that asked for it: engine/escrow.ts);
+ *  - a direct conversation the member opened with them.
+ *
+ * Never the subject's own acts: their blocks, or a message or deal request they sent. A block the subject made shows
+ * nowhere here either (engine/member-blocks.ts: nothing a blocked member can read changes): a conversation the member
+ * opened counts the same whether it became a real one or was kept for them alone because the subject blocks them
+ * (engine/withheld-lines.ts withheld_conversations; and one of those the subject later opened too, which became the real
+ * one under the subject's name: the member's kept lines are older than it). None of it is ever said: a member passed over
+ * for any of these is listed after close exactly as one who stepped aside themselves, with no reason, and while the vote
+ * is open is refused in the words a member not drawn is.
  */
 export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set<string> {
     const since = new Date(atMs - JURY_CONFLICT_DAYS * DAY_MS).toISOString();
@@ -32,16 +47,23 @@ export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set
            AND (target_pubkey = @s OR target_post_id IN (SELECT id FROM posts WHERE author_pubkey = @s))
         UNION SELECT invited_by FROM members WHERE public_key = @s AND invited_by IS NOT NULL
         UNION SELECT public_key FROM members WHERE invited_by = @s
-        UNION SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = @s
         UNION SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = @s
         UNION SELECT CASE WHEN buyer_pubkey = @s THEN seller_pubkey ELSE buyer_pubkey END FROM marketplace_transactions
-         WHERE (buyer_pubkey = @s OR seller_pubkey = @s)
-           AND (status IN ('requested', 'pending', 'disputed')
-                OR (status = 'completed' AND julianday(COALESCE(completed_at, updated_at, created_at)) >= julianday(@since)))
-        UNION SELECT other.public_key FROM conversation_participants mine
-          JOIN conversations c ON c.id = mine.conversation_id AND c.type = 'dm'
-          JOIN conversation_participants other ON other.conversation_id = mine.conversation_id AND other.public_key != mine.public_key
-         WHERE mine.public_key = @s
+         WHERE (buyer_pubkey = @s OR seller_pubkey = @s) AND status = 'completed'
+           AND julianday(COALESCE(completed_at, updated_at, created_at)) >= julianday(@since)
+        UNION SELECT CASE WHEN t.buyer_pubkey = @s THEN t.seller_pubkey ELSE t.buyer_pubkey END FROM marketplace_transactions t
+          JOIN posts p ON p.id = t.post_id AND p.author_pubkey = @s
+         WHERE (t.buyer_pubkey = @s OR t.seller_pubkey = @s) AND t.status IN ('requested', 'pending', 'disputed')
+        UNION SELECT c.created_by FROM conversations c
+          JOIN conversation_participants them ON them.conversation_id = c.id AND them.public_key = @s
+          JOIN conversation_participants opener ON opener.conversation_id = c.id AND opener.public_key = c.created_by
+         WHERE c.type = 'dm'
+        UNION SELECT owner_pubkey FROM withheld_conversations WHERE other_pubkey = @s
+        UNION SELECT w.author_pubkey FROM withheld_lines w
+          JOIN conversations c ON c.id = w.conversation_id AND c.type = 'dm'
+          JOIN conversation_participants them ON them.conversation_id = c.id AND them.public_key = @s
+          JOIN conversation_participants opener ON opener.conversation_id = c.id AND opener.public_key = w.author_pubkey
+         WHERE julianday(w.timestamp) < julianday(c.created_at)
     `).all({ s: subject, since }) as Array<{ k: string | null }>;
     const out = new Set<string>();
     for (const r of rows) if (r.k && r.k !== subject) out.add(r.k);

@@ -27,6 +27,7 @@ import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding
 import { forgetKnockKey } from '../utils/knock-key';
 import { inviteLinkToWelcome } from '../utils/waiting-to-join';
 import { listenForScannedInvites } from '../utils/scanned-invite';
+import { postRoute, takePostAfterJoin } from '../utils/post-after-join';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
@@ -65,7 +66,7 @@ import { doorLinkFromSystemPath } from '../utils/open-door';
 import { isCommunityCardPath } from '../utils/community-card-link';
 import { isPeekPath } from '../utils/peek-link';
 import * as WebBrowser from 'expo-web-browser';
-import { t } from '@beanpool/core';
+import { postIdFromInviteLink, t } from '@beanpool/core';
 import { settingsLineWords } from '../components/settings/settings-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { rekeyPromptWords } from '../components/shell-lines';
@@ -404,6 +405,15 @@ function RootLayoutNav() {
             return;
         }
         const parsedCode = normaliseInviteCode(inviteToken);
+        // The listing an invite-and-share link was sent from (core postIdFromInviteLink: an id, and only beside an invite), opened
+        // once the friend has joined. Nothing about it is read, shown or asked before then.
+        const linkPostId = postIdFromInviteLink(currentUrl);
+        // Joined here with this tap: Home first, then the listing over it, as a shared listing opens. A post this member can't see
+        // opens nothing (app/post/[id].tsx), with no error.
+        const openLinkedPost = () => {
+            const route = postRoute(linkPostId);
+            if (route && isComponentMounted.current) router.push(route as any);
+        };
 
         // Parse node origin / server address from deep link. An address that isn't plain host[:port] (a login, a
         // backslash: utils/node-url.ts) is refused outright: on iOS it reaches another host than it names, and every
@@ -439,6 +449,7 @@ function RootLayoutNav() {
                 router.setParams({
                     invite: parsedCode,
                     server: extractedNodeOrigin || undefined,
+                    post: linkPostId || undefined,
                     t: Date.now().toString()
                 });
             } else {
@@ -447,6 +458,7 @@ function RootLayoutNav() {
                     params: {
                         invite: parsedCode,
                         server: extractedNodeOrigin || undefined,
+                        post: linkPostId || undefined,
                         t: Date.now().toString()
                     }
                 });
@@ -537,6 +549,7 @@ function RootLayoutNav() {
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
                                             await recheck();
                                             router.replace('/(tabs)');
+                                            openLinkedPost();
                                         })
                                         .catch(err => {
                                             const errStr = err?.message || String(err);
@@ -598,7 +611,7 @@ function RootLayoutNav() {
                                                                 const { removeSavedNode } = await import('../utils/nodes');
                                                                 await removeSavedNode(targetOrigin);
                                                             });
-                                                            router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
+                                                            router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin, post: linkPostId || undefined } });
                                                         } catch (err: any) {
                                                             Alert.alert(t('Wipe Failed'), err.message);
                                                         }
@@ -623,6 +636,7 @@ function RootLayoutNav() {
                                                 requestSync().catch(console.error);
                                                 await recheck();
                                                 router.replace('/(tabs)');
+                                                openLinkedPost();
                                             })
                                             .catch(err => {
                                                 const errStr = err?.message || String(err);
@@ -857,6 +871,10 @@ function RootLayoutNav() {
         if (landing) router.replace(landing);
         const notice = landing === DEFAULT_MEMBER_LANDING ? takeOpenAfterLanding(identity.publicKey, nodeUrl) : null;
         if (notice) router.push(notice);
+        // Or the listing an invite-and-share link was sent from, held since the join (utils/post-after-join.ts), once.
+        else if (landing === DEFAULT_MEMBER_LANDING) {
+            void takePostAfterJoin(nodeUrl).then((route) => { if (route && isComponentMounted.current) router.push(route as any); });
+        }
     }, [identity, isLoading, segments, recognition, pendingOnboarding, noCommunity]);
 
     // When the phone allows notifications (e.g. Android <= 12, or a restored account on a device where permission was

@@ -115,6 +115,22 @@ export function selfSignedHosts(now = clock()): Array<{ host: string; expired: b
     return out;
 }
 
+/**
+ * Whether this server has a certificate of its own, for the plain listener's line (plain-http-gate.ts, design D9): it
+ * serves a valid CA certificate for one of its addresses, or one of its certified addresses had one that expired before it
+ * was renewed (selfSignedHosts `expired`), so a lapse never reopens port 80 to the app in cleartext. On disk only
+ * (data/tls/acme/<identifier>/state.json), read at most once every 10 seconds; false on a node that never had one.
+ */
+export function holdsOwnCertificate(now = clock()): boolean {
+    for (const s of served.values()) if (s.notAfter > now) return true;
+    if (heldMemo && now >= heldMemo.at && now - heldMemo.at < HELD_MEMO_MS) return heldMemo.held;
+    const held = selfSignedHosts(now).some((h) => h.expired);
+    heldMemo = { at: now, held };
+    return held;
+}
+const HELD_MEMO_MS = 10_000;
+let heldMemo: { at: number; held: boolean } | null = null;
+
 /** Whether any identifier is left with the self-signed pair (selfSignedHosts): tls.fallback, and the AI assistants' health read. */
 export function tlsFellBackToSelfSigned(now = clock()): boolean {
     return selfSignedHosts(now).length > 0;

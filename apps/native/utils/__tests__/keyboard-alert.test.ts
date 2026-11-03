@@ -8,6 +8,8 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { makeKeyboardAlert } from '../keyboard-alert';
+
 const calls: string[] = [];
 
 vi.mock('react-native', () => ({
@@ -28,6 +30,101 @@ describe('Alert from utils/keyboard-alert', () => {
         Alert.alert('Title', 'Body', buttons);
         expect(calls).toEqual(['dismiss', 'alert:Title']);
         expect(rn.Alert.alert).toHaveBeenLastCalledWith('Title', 'Body', buttons);
+    });
+
+    it('with no keyboard-controller to load (node), opens at once, as before', async () => {
+        const { Alert } = await import('../keyboard-alert');
+        Alert.alert('Plain');
+        expect(calls).toEqual(['dismiss', 'alert:Plain']);
+    });
+});
+
+// The 4 Nov Opus review of #2804: Keyboard.dismiss() and an Alert in the same tick open the Alert over a keyboard that is
+// still closing (phantom padding). With a keyboard up, the Alert waits for the hide; with none, it opens at once.
+describe('makeKeyboardAlert: order of the hide and the Alert', () => {
+    const make = (opts: { visible: boolean; dismiss?: () => unknown; timeoutMs?: number; keyboard?: () => any }) => {
+        const log: string[] = [];
+        const kb = { isVisible: () => opts.visible, dismiss: opts.dismiss ?? (() => { log.push('hide-start'); return Promise.resolve(); }) };
+        const alert = makeKeyboardAlert({
+            openAlert: (...a: any[]) => { log.push(`alert:${String(a[0])}`); },
+            keyboard: opts.keyboard ?? (() => kb),
+            blurNow: () => { log.push('blur'); },
+            timeoutMs: opts.timeoutMs,
+        });
+        return { log, alert };
+    };
+
+    it('keyboard up: the Alert opens only AFTER the awaited hide, with the same arguments', async () => {
+        let finishHide!: () => void;
+        const hide = new Promise<void>((r) => { finishHide = r; });
+        const log: string[] = [];
+        const alert = makeKeyboardAlert({
+            openAlert: (...a: any[]) => { log.push(`alert:${a.join('|')}`); },
+            keyboard: () => ({ isVisible: () => true, dismiss: () => { log.push('hide-start'); return hide; } }),
+            blurNow: () => { log.push('blur'); },
+        });
+        const ret = alert.alert('T', 'B');
+        expect(ret).toBeUndefined(); // synchronous-looking: nobody awaits it
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(log).toEqual(['hide-start']); // hide not reported yet: no Alert over the closing keyboard
+        finishHide();
+        await vi.waitFor(() => expect(log).toEqual(['hide-start', 'alert:T|B']));
+        expect(log).not.toContain('blur');
+    });
+
+    it('no keyboard up: opens at once, in the same tick, with no wait', () => {
+        const { log, alert } = make({ visible: false });
+        alert.alert('Now');
+        expect(log).toEqual(['blur', 'alert:Now']);
+    });
+
+    it('no keyboard-controller at all: opens at once', () => {
+        const { log, alert } = make({ visible: true, keyboard: () => null });
+        alert.alert('Now');
+        expect(log).toEqual(['blur', 'alert:Now']);
+    });
+
+    it('keyboard-controller throwing when asked: the Alert still goes ahead at once', () => {
+        const { log, alert } = make({ visible: true, keyboard: () => { throw new Error('native side missing'); } });
+        alert.alert('Now');
+        expect(log).toEqual(['blur', 'alert:Now']);
+    });
+
+    it('bounded: a hide that never reports does not hold the Alert back', async () => {
+        vi.useFakeTimers();
+        try {
+            const { log, alert } = make({ visible: true, dismiss: () => new Promise(() => {}), timeoutMs: 400 });
+            alert.alert('Stuck');
+            await vi.advanceTimersByTimeAsync(399);
+            expect(log).toEqual([]);
+            await vi.advanceTimersByTimeAsync(2);
+            expect(log).toEqual(['alert:Stuck']);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a dismiss that throws does not stop the Alert', async () => {
+        const { log, alert } = make({ visible: true, dismiss: () => { throw new Error('boom'); } });
+        alert.alert('Still');
+        await vi.waitFor(() => expect(log).toEqual(['alert:Still']));
+    });
+});
+
+describe('App Lock cover: NativeAlert.alert is looked up when the Alert opens', () => {
+    it('an Alert.alert replaced after import (installLockCovers) is the one that runs', async () => {
+        const { Alert } = await import('../keyboard-alert');
+        const rn = await import('react-native');
+        const original = rn.Alert.alert;
+        const cover = vi.fn();
+        (rn.Alert as any).alert = cover;
+        try {
+            Alert.alert('Covered');
+            expect(cover).toHaveBeenCalledWith('Covered');
+        } finally {
+            (rn.Alert as any).alert = original;
+        }
     });
 });
 

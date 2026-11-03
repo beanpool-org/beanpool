@@ -535,7 +535,7 @@ async function main(): Promise<void> {
         assert(sent12.every(m => m.kind === 'event.reminder' && pushIsGeneric(m.sent)),
             'every lock screen is still only its kind\'s fixed words, with no event name');
         const marked = (db.prepare('SELECT COUNT(*) AS n FROM event_reminders_sent WHERE post_id = ?').get(fiesta.id) as { n: number }).n;
-        assert(sentMarks(fiesta.id).join() === '1440' && marked === 5,
+        assert(sentMarks(fiesta.id).every(offset => offset === 1440) && marked === 5,
             '...and each member\'s moment is marked once, however many languages the batch split into');
 
         // Members in the same language are one call (the title, body and payload are identical); `en` and no language are one.

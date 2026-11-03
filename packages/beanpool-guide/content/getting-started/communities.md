@@ -97,6 +97,15 @@ A community can move to a new address: for example, from its server's number (su
 - If the old address stopped answering before your phone heard of the new one, nothing can tell your phone where the community went. Ask its owners for the new address, then tap the bean, then **Add a community**, and type it there.
 - In the web app, at an address the community still answers to, a quiet line at the top tells you where its main address is now: **This community's main address is now ‹address›. This address keeps working.** You can open it there, or link your browser from your phone.
 
+## When your community's address stops answering
+
+Some communities answer at more than one address: two names, or a name and their own domain. If the address your phone uses stops answering for about five minutes, and another address the community gave answers as the same community, Home shows a card: **byron.beanpool.org isn't answering. Your community also answers at mullum.beanpool.org. Use that for now?** It shows only after your phone has checked with the community's server that the other address is the same community.
+
+- Tap **Use that address for now**. Your phone moves there with what it keeps for that community, your messages included, and opens the community again, as when you switch. Once the main address answers again, the card in the section above offers the way back.
+- Tap **Not now**, and the card waits a day before it offers that address again. Your phone never moves by itself.
+- The card only offers an address the community gave itself. It never offers a server's number, an address without https, or the worldwide community.
+- The web app can't do this, because a browser's sign-in belongs to one address. Open the other address in your browser and sign in there: restore your account, or link your browser from your phone.
+
 ## Forgetting a community on this phone
 
 - In **Saved communities**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.

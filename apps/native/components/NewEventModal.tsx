@@ -22,9 +22,19 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    View, Text, StyleSheet, Modal, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Platform,
-    Linking, Keyboard,
+    View,
+    Text,
+    StyleSheet,
+    Modal,
+    TextInput,
+    Pressable,
+    ScrollView,
+    ActivityIndicator,
+    Platform,
+    Linking,
+    Keyboard,
 } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from './useKeepCaretVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

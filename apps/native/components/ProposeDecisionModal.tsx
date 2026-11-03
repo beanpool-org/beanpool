@@ -7,9 +7,9 @@ import {
     TextInput,
     Pressable,
     ScrollView,
-    Alert,
     ActivityIndicator,
 } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { useScrollFieldIntoView } from './useScrollFieldIntoView';

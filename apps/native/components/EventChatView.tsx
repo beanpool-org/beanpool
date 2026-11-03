@@ -19,7 +19,8 @@
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator, Linking } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

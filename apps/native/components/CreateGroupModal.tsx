@@ -7,9 +7,9 @@ import {
     TextInput,
     Pressable,
     ScrollView,
-    Alert,
     ActivityIndicator,
 } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 // No nested KeyboardProvider inside this <Modal>: on the emulator it left the root provider suspended after the
 // sheet closed, so the chat composer stayed under the keyboard. The sheet fits the Modal's measured height
 // (useModalKeyboardLift): lifted by the keyboard's height.

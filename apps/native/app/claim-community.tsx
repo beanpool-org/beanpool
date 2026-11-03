@@ -17,7 +17,8 @@
  * truncated: it is the one thing a phishing server cannot make look right.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Modal, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Modal, BackHandler } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';

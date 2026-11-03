@@ -20,10 +20,10 @@ import {
     TextInput,
     Pressable,
     ScrollView,
-    Alert,
     ActivityIndicator,
     Platform,
 } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Veranstaltungen finden
 
-- Tippe im **Markt** auf **Veranstaltungen**. Wähle **Heute**, **Dieses Wochenende** oder **Nächste 7 Tage**.
+- Tippe im **Markt** auf **Veranstaltungen**. Die zeitnächste steht zuerst. Wähle **Heute**, **Dieses Wochenende** oder **Nächste 7 Tage**.
+- Im **Markt** wird eine Veranstaltung unter **Alle** noch einmal unter **Heute** aufgeführt, am Tag vor ihrem Beginn, und sinkt dann wie jeder andere Beitrag. Eine wöchentliche Veranstaltung kommt einmal pro Woche wieder.
 - Auf der **Karte** sind Veranstaltungen lila Stecknadeln. Tippe auf dem Smartphone auf **Veranstaltungen**, um nur diese zu sehen. In der Web-App werden sie immer angezeigt, und die Datums-Filter grenzen sie ein.
 
 ## Deine Veranstaltungen

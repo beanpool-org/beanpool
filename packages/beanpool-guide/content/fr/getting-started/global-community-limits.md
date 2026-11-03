@@ -16,9 +16,9 @@ Ce sont les limites de la communauté globale. Une communauté locale tourne sur
 
 ## Les limites
 
-- **Une annonce est archivée 90 jours après sa dernière modification.** Elle quitte le Marché et la Carte, et ses photos sont supprimées. La modifier, la suspendre ou la republier comptent comme une modification : l'ouvrir avec **Modifier l'annonce** et toucher **Enregistrer** la préserve pour 90 jours supplémentaires. Quand l'une des vôtres est archivée, vous recevez une notification avec vos alertes d'**Activité du marché**. Vous pouvez la republier à tout moment.
+- **Une annonce est archivée 90 jours après sa dernière modification.** Elle quitte le Marché et la Carte, et ses photos sont supprimées. La modifier, la suspendre ou la republier comptent comme une modification : l'ouvrir avec **Modifier l'annonce** et toucher **Enregistrer** la préserve pour 90 jours supplémentaires. Rien de tout cela ne la fait remonter sur le Marché, qui liste les publications des plus récentes aux plus anciennes. Quand l'une des vôtres est archivée, vous recevez une notification avec vos alertes d'**Activité du marché**. Vous pouvez la republier à tout moment.
 - **Jusqu'à 5 photos par annonce.**
-- **Votre téléphone conserve les 500 annonces les plus proches**, à moins de 250 km de votre zone. Il conserve également les vôtres, ainsi que toute annonce pour laquelle vous avez un accord ou une conversation. La recherche du Marché continue de trouver des annonces de partout. Voir « Votre zone ».
+- **Votre téléphone conserve les 500 annonces les plus proches**, à moins de 250 km de votre zone. Il conserve également les vôtres, ainsi que toute annonce pour laquelle vous avez un accord ou une conversation. Le Marché liste d'abord les plus récentes celles qui sont à moins de 250 km de votre zone, chaque carte indiquant son éloignement. La recherche du Marché continue de trouver des annonces de partout. Voir « Votre zone ».
 - **Vous pouvez surveiller jusqu'à 3 lieux** avec **Me prévenir quand une communauté naît ici**. Pour en surveiller un autre, arrêtez d'en surveiller un. Voir « Trouver une communauté proche ».
 
 Un nouveau compte est également soumis à quelques limites quotidiennes pendant ses premiers jours. Voir « Signaler un problème ».

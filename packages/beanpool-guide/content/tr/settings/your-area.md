@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Bölgenizin ne olduğu
 
-Küresel toplulukta bölgeniz yaklaşık olarak bulunduğunuz yerdir: bir kasaba veya bir noktanın çevresinde yaklaşık 10 km, asla tam konumunuz değildir. Küresel topluluk, yakınınızda nelerin sunulduğunu size göstermek için bunu kullanır: 250 km mesafedeki en yakın 500 ilan. Bkz. "Birden fazla topluluk".
+Küresel toplulukta bölgeniz yaklaşık olarak bulunduğunuz yerdir: bir kasaba veya bir noktanın çevresinde yaklaşık 10 km, asla tam konumunuz değildir. Küresel topluluk, yakınınızda nelerin sunulduğunu size göstermek için bunu kullanır: 250 km mesafedeki en yakın 500 ilan. Pazar bunları sonra en yeniden başlayarak, her biri ne kadar uzakta olduğuyla birlikte listeler. Bkz. "Birden fazla topluluk".
 
 Bunu katıldığınızda **Yaklaşık olarak neredesin?** ekranında verirsiniz; burayı **Şimdilik atla** ile geçebilirsiniz. İstediğiniz zaman değiştirebilir veya temizleyebilirsiniz. Küresel topluluktaki hesabınıza aittir, bu nedenle telefonunuz ve web uygulaması aynısını kullanır.
 

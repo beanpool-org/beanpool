@@ -3,7 +3,7 @@ slug: near-you
 title: Yakınınızdakileri bulma
 summary: Yalnızca size veya seçtiğiniz herhangi bir yere belirli bir mesafedeki ilanları gösterin.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Pazar sekmesinde
@@ -28,8 +28,8 @@ Haritanın kendine ait bir mesafe filtresi yoktur. Nerede olduğunuzu görmek i�
 
 Küresel toplulukta her yerden ilanlar bulunur, bu nedenle web uygulamasının **Pazar** ve **Harita** sekmeleri yakınınızdan başlar:
 
-- Pazar'da bir **Mesafe** seçildiğinde her ikisi de bunun içindeki en yakın ilanları, en yakın olanlar ilk sırada olacak şekilde gösterir. Harita 200'e kadar iğne gösterir.
-- Bir mesafe seçilmediğinde, bölgenizin 250 km yakınındaki en yakın ilanları gösterirler: katıldığınızda topluluğa verdiğiniz yaklaşık yer veya daha sonra **Ayarlar** altında **Bölgeniz** bölümünde belirlediğiniz yer. Pazar listesinin üzerindeki bir satır **Önce bölgenize en yakın olanlar, 250 km içinde.** der. Her yerden en yeniler için **Her yeri göster** seçeneğine ve geri dönmek için **Bölgenizin yakınında** seçeneğine dokunun.
+- Pazar'da bir **Mesafe** seçildiğinde her ikisi de bunun içindeki ilanları gösterir. Pazar bunları en yeniden başlayarak, her biri ne kadar uzakta olduğuyla birlikte, **Seçtiğin yerin 5 km çevresindeki en yeniler.** diyen bir satırın altında listeler (kendi mesafenizle). Harita en yakın olanları, 200'e kadar iğne gösterir.
+- Bir mesafe seçilmediğinde, bölgenizin 250 km yakınındaki en yakın ilanları gösterirler: katıldığınızda topluluğa verdiğiniz yaklaşık yer veya daha sonra **Ayarlar** altında **Bölgeniz** bölümünde belirlediğiniz yer. Pazar bunları en yeniden başlayarak, **Bölgenin 250 km çevresindeki en yeniler.** diyen bir satırın altında listeler. Harita en yakın olanı ilk sırada gösterir. Her yerden en yeniler için **Her yeri göster** seçeneğine ve geri dönmek için **Bölgenizin yakınında** seçeneğine dokunun.
 - İkisi de yoksa her yerden en yenileri görürsünüz ve **Yakınınızda neler olduğunu görün** mesafe seçiciyi açar. Pazar listesinin üzerindeki bir satır bunlardan hangisini gördüğünüzü belirtir. Bir **Mesafe** seçiliyken düğmesi yoktur: **Mesafe**'yi açın ve **Sıfırla**'ya dokunun. Ardından tekrar bölgenizin yakınına dönersiniz veya belirlenmiş bir bölge yoksa her yerden en yenileri görürsünüz.
 - Her ilan **📍 12 km** gibi ne kadar uzakta olduğunu gösterir. Kendi ilanlarınız nerede olurlarsa olsunlar her zaman Harita'da ve bölgenizin yakınındaki Pazar'da yer alır. Bir **Mesafe** belirlendiğinde Pazar yalnızca bunun içindekileri gösterir, sizinkiler de dahil.
 - Liste yakınınızdayken konumu olmayan gönderiler dışarıda bırakılır. Bölgesini belirlememiş birinden gelen bir anket bunlardan biridir. Onları görmek için belirlediyseniz **Mesafe**'yi sıfırlayın, ardından **Her yeri göster** seçeneğine dokunun.
@@ -40,7 +40,7 @@ Web uygulamasının araması yalnızca ekrandaki ilanlar arasında arama yapar. 
 
 ## Küresel toplulukta, telefonda
 
-Telefon bölgenize en yakın ilanları tutar: 250 km içinde 500'e kadar. Ayrıca kendi ilanlarınızı ve üzerinde bir anlaşmanız, sohbetiniz veya yanıtınız olan ilanları tutar. Pazar ve Harita telefonun tuttuklarını gösterir. Bölge belirlenmemişse bunun yerine en yeni ilanları tutar ve Pazar'ın üzerindeki bir satır bunu belirtir. "Bölgeniz" bölümüne bakın.
+Telefon bölgenize en yakın ilanları tutar: 250 km içinde 500'e kadar. Ayrıca kendi ilanlarınızı ve üzerinde bir anlaşmanız, sohbetiniz veya yanıtınız olan ilanları tutar. Pazar ve Harita telefonun tuttuklarını gösterir. Pazar bunları en yeniden başlayarak, her biri ne kadar uzakta olduğuyla birlikte, aynı satırın, **Bölgenin 250 km çevresindeki en yeniler.** altında listeler. Bunun için uygulamanın konumunuzu kullanmasına izin vermeniz gerekmez. Bölge belirlenmemişse bunun yerine en yeni ilanları tutar ve Pazar'ın üzerindeki bir satır bunu belirtir. "Bölgeniz" bölümüne bakın.
 
 ## Yakınınızdaki etkinlikler
 

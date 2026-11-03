@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## El Mercado en un solo orden
+
+En el teléfono lo obtienes con una app actualizada; en un navegador web, cuando se actualiza el servidor de tu comunidad.
+
+- **Lo más reciente primero, igual en el teléfono y en la web.** El Mercado lista las publicaciones de la más reciente a la más antigua, bajo **Hoy**, **Ayer**, **Esta semana** y **Publicaciones anteriores**, según el día en que se publicó cada una. Los títulos **Próximos eventos**, **Encuestas** y **Los más cercanos primero** ya no están.
+- **Un evento vuelve una vez.** El día antes de que empiece, un evento se lista de nuevo bajo **Hoy**. Una encuesta hace lo mismo el día antes de que cierre. Después bajan como cualquier otra publicación.
+- **Dos lugares al día.** La tercera publicación de una persona en un día, y las que siguen, van después de las de todos los demás de ese día.
+- **Editar una publicación no la sube.** Para que la vean de nuevo, publica de nuevo.
+- **En la comunidad global**, el Mercado muestra lo más reciente dentro de 250 km de tu zona, o dentro de tu **Distancia**, cada publicación con la distancia a la que está. Una línea arriba de la lista lo indica. El teléfono ya no necesita tu ubicación para esto.
+- **Sin cambios:** las publicaciones que un propietario fijó siguen arriba, **Eventos** sigue listando primero el más próximo en el tiempo, y una búsqueda encuentra lo que mejor coincide con tus palabras. Consulta "Explorar el Mercado".
+
 ## La comunidad global, cerca de ti
 
 Obtienes estas mejoras cuando se actualiza el servidor de la comunidad global. En el teléfono se necesita una versión actualizada de la aplicación.
@@ -15,7 +26,7 @@ Obtienes estas mejoras cuando se actualiza el servidor de la comunidad global. E
 - **Tu zona.** En la aplicación web, unirte a la comunidad global tiene un paso adicional después de tu foto: **¿Más o menos dónde estás?** En el teléfono se pregunta cuando te unes con una cuenta que ya tienes; una cuenta nueva en el teléfono la configura más tarde en Ajustes, en **Tu zona**. En ese paso, toca **Usar mi ubicación**, **Escribe una localidad o barrio** u **Omitir por ahora**. Se guarda con un margen de unos 10 km, nunca tu punto exacto. Cámbiala o bórrala en Ajustes, en **Tu zona**. Consulta "Tu zona".
 - **Sin zona, no hay problema.** Si no tienes una, ves las publicaciones más recientes de todas partes, y una línea sobre el Mercado te lo indica. En el teléfono, tócala para configurar tu zona.
 - **Nuevas publicaciones cerca de ti.** Llegan a medida que se publican. Las que están lejos ya no llegan a tu teléfono.
-- **En la aplicación web**, el Mercado y el Mapa comienzan desde tu zona, o desde un lugar que elijas con **Distancia**: las más cercanas primero, indicando la distancia a cada publicación. Consulta "Encontrar cosas cerca de ti".
+- **En la aplicación web**, el Mercado y el Mapa comienzan desde tu zona, o desde un lugar que elijas con **Distancia**: indicando la distancia a cada publicación. El Mapa muestra las más cercanas primero. El Mercado lista lo más reciente primero, como dice "El Mercado en un solo orden", arriba. Consulta "Encontrar cosas cerca de ti".
 - **Las encuestas** no tienen un lugar propio, por lo que cada una se muestra en la zona del miembro que la creó.
 - **Escribe tu localidad.** En la comunidad global, **Encuentra tu comunidad** en Inicio ya no necesita tu ubicación: toca **o escribe tu localidad** y elige tu localidad. Solo se guarda una ubicación aproximada. Consulta "Buscar una comunidad cerca".
 - **Publicar sin precio.** En la comunidad global el formulario de publicación no pide precio, porque los frijoles existen en las comunidades locales. En la aplicación web, **Publicar Oferta** y **Publicar Necesidad** ahora funcionan sin precio. Una comunidad local todavía pide un precio.

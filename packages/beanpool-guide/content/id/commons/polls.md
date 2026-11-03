@@ -34,7 +34,7 @@ Kamu dapat memiliki satu jajak pendapat yang terbuka pada satu waktu, dan suatu 
 
 ## Menemukan dan menjawab jajak pendapat
 
-Jajak pendapat ada di Pasar. Ketuk **Jajak Pendapat** di baris atas untuk hanya melihat jajak pendapat.
+Jajak pendapat ada di Pasar. Ketuk **Jajak Pendapat** di baris atas untuk hanya melihat jajak pendapat. Jajak pendapat ditampilkan lagi sekali, di bawah **Hari ini**, sehari sebelum ditutup.
 
 - Ketuk jawaban untuk memilihnya. Ketuk jawaban lain untuk mengubah pilihanmu, hingga jajak pendapat ditutup.
 - Kartu menampilkan berapa banyak orang yang memilih setiap jawaban.

@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Il Mercato in un solo ordine
+
+Sul telefono lo ottieni con un'app aggiornata; in un browser web, quando il server della tua comunità viene aggiornato.
+
+- **I più recenti per primi, uguale sul telefono e sul web.** Il Mercato elenca i post dai più recenti, sotto **Oggi**, **Ieri**, **Questa settimana** e **Annunci precedenti**, in base al giorno in cui ciascuno è stato pubblicato. I titoli **Prossimi eventi**, **Sondaggi** e **Prima i più vicini** non ci sono più.
+- **Un evento torna una volta.** Il giorno prima che inizi, un evento viene elencato di nuovo sotto **Oggi**. Un sondaggio fa lo stesso il giorno prima che si chiuda. Poi scendono come qualsiasi altro post.
+- **Due posti al giorno.** Il terzo post di una persona in un giorno, e quelli successivi, vengono dopo quelli di tutti gli altri di quel giorno.
+- **Modificare un post non lo fa salire.** Per essere visto di nuovo, pubblica di nuovo.
+- **Nella comunità globale**, il Mercato mostra i più recenti entro 250 km dalla tua zona, oppure entro la tua **Distanza**, ciascun post con la distanza a cui si trova. Una riga sopra l'elenco lo indica. Il telefono non ha più bisogno della tua posizione per questo.
+- **Non cambia:** i post fissati da un proprietario restano in cima, **Eventi** elenca ancora per primo il più vicino nel tempo, e una ricerca trova ciò che corrisponde meglio alle tue parole. Vedi "Esplorare il mercato".
+
 ## La comunità globale, vicino a te
 
 Riceverai queste novità quando il server della comunità globale verrà aggiornato. Sul telefono richiedono un'app aggiornata.
@@ -15,7 +26,7 @@ Riceverai queste novità quando il server della comunità globale verrà aggiorn
 - **La tua zona.** Nell'app web, l'adesione alla comunità globale prevede un passaggio in più dopo la foto: **Più o meno dove sei?** Sul telefono viene chiesto quando accedi con un account che possiedi già; un nuovo account su telefono la imposta in un secondo momento nelle Impostazioni, sotto **La tua zona**. In quel passaggio, tocca **Usa la mia posizione**, **Scrivi una città o un quartiere** oppure **Salta per ora**. La posizione viene limitata a circa 10 km, mai al tuo punto esatto. Puoi modificarla o cancellarla nelle Impostazioni, sotto **La tua zona**. Vedi "La tua zona".
 - **Nessuna zona impostata? Nessun problema.** Senza una zona vedrai gli annunci più recenti da ogni luogo, e una riga sopra il Mercato lo ricorderà. Sul telefono, toccala per impostare la tua zona.
 - **Nuovi annunci vicino a te.** Compaiono non appena vengono pubblicati. Quelli lontani non raggiungono più il tuo telefono.
-- **Nell'app web**, il Mercato e la Mappa partono dalla tua zona, oppure da un luogo scelto con **Distanza**: i più vicini per primi, con la distanza indicata su ciascun annuncio. Vedi "Trovare cose vicino a te".
+- **Nell'app web**, il Mercato e la Mappa partono dalla tua zona, oppure da un luogo scelto con **Distanza**: con la distanza indicata su ciascun annuncio. La Mappa mostra i più vicini per primi. Il Mercato elenca i più recenti per primi, come dice "Il Mercato in un solo ordine", qui sopra. Vedi "Trovare cose vicino a te".
 - **I sondaggi** non hanno un luogo specifico, quindi ognuno viene mostrato nella zona del membro che lo ha creato.
 - **Scrivi la tua città.** Nella comunità globale, **Trova la tua comunità** nella Home non richiede più la tua posizione: tocca **o inserisci il tuo comune** e seleziona la tua città. Viene salvato solo un punto approssimativo. Vedi "Trovare una comunità vicina".
 - **Pubblicare senza prezzo.** Nella comunità globale il modulo per pubblicare non chiede un prezzo, perché i fagioli appartengono alle comunità locali. Nell'app web, **Pubblica Offerta** e **Pubblica Richiesta** funzionano ora senza indicare un prezzo. Una comunità locale richiede comunque un prezzo.

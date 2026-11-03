@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Encontrar eventos
 
-- No **Mercado**, toque em **Eventos**. Escolha **Hoje**, **Este fim de semana** ou **Próximos 7 dias**.
+- No **Mercado**, toque em **Eventos**. O que acontece antes vem primeiro. Escolha **Hoje**, **Este fim de semana** ou **Próximos 7 dias**.
+- No **Mercado**, em **Tudo**, um evento é listado de novo uma vez, em **Hoje**, no dia anterior ao início, e depois desce como qualquer outra publicação. Um evento semanal volta uma vez por semana.
 - No **Mapa**, os eventos são marcadores roxos. No celular, toque em **Eventos** para ver apenas eles. No aplicativo web eles estão sempre presentes, e os seletores de data os refinam.
 
 ## Seus eventos

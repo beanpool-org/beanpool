@@ -3,7 +3,7 @@ slug: near-you
 title: Encontrar coisas por perto
 summary: Mostrar apenas anúncios a uma certa distância de você ou de qualquer lugar que escolher.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Na aba Mercado
@@ -28,8 +28,8 @@ O mapa não tem um filtro de distância próprio. Toque no botão da mira à esq
 
 A comunidade global reúne anúncios de todos os lugares, por isso o **Mercado** e o **Mapa** do aplicativo web iniciam mostrando o que está perto de você:
 
-- Com uma **Distância** selecionada no Mercado, ambos mostram os anúncios mais próximos dentro desse raio, do mais próximo ao mais distante. O Mapa exibe até 200 marcadores.
-- Sem selecionar uma distância, mostram os anúncios mais próximos em um raio de 250 km da sua região: a localização aproximada informada à comunidade quando você entra, ou posteriormente em **Configurações**, sob **Sua região**. Uma linha acima da lista do Mercado informa: **Mais próximos da sua área primeiro, dentro de 250 km.** Toque em **Mostrar de qualquer lugar** para ver os mais recentes de todos os lugares, e em **Perto da sua área** para retornar.
+- Com uma **Distância** selecionada no Mercado, ambos mostram os anúncios dentro desse raio. O Mercado os lista dos mais recentes para os mais antigos, cada um com a que distância está, sob uma linha que diz **Mais recentes em até 5 km do lugar que você escolheu.** (com a sua distância). O Mapa mostra os mais próximos, até 200 marcadores.
+- Sem selecionar uma distância, mostram os anúncios mais próximos em um raio de 250 km da sua região: a localização aproximada informada à comunidade quando você entra, ou posteriormente em **Configurações**, sob **Sua região**. O Mercado os lista dos mais recentes para os mais antigos, sob uma linha que diz **Mais recentes em até 250 km da sua área.** O Mapa mostra os mais próximos primeiro. Toque em **Mostrar de qualquer lugar** para ver os mais recentes de todos os lugares, e em **Perto da sua área** para retornar.
 - Sem nenhum dos dois definidos, você vê os mais recentes de qualquer lugar, e **Veja o que está perto de você** abre o seletor de distância. Uma linha acima da lista do Mercado informa qual visualização está ativa. Ao usar uma **Distância**, a linha não possui botão: abra **Distância** e toque em **Redefinir**. Você voltará a ver o que está perto da sua região ou, se nenhuma região estiver configurada, os mais recentes de qualquer lugar.
 - Cada anúncio indica a que distância se encontra, como **📍 12 km**. Seus próprios anúncios estão sempre no Mapa e no Mercado perto da sua região, onde quer que estejam. Com uma **Distância** definida, o Mercado mostra apenas o que estiver dentro dela, incluindo os seus.
 - Enquanto a lista estiver configurada para perto de você, publicações sem localização são omitidas. Uma enquete de alguém que não definiu sua região é uma delas. Para vê-las, redefina a **Distância** se tiver escolhido uma, e toque em **Mostrar de qualquer lugar**.
@@ -40,7 +40,7 @@ A busca do aplicativo web pesquisa apenas entre os anúncios exibidos na tela. *
 
 ## Na comunidade global, no celular
 
-O celular mantém os anúncios mais próximos da sua região: até 500, em um raio de 250 km. Ele também guarda seus próprios anúncios e qualquer um com o qual você tenha uma negociação, uma conversa ou uma resposta. O Mercado e o Mapa mostram o que o celular armazena. Sem nenhuma região configurada, ele armazena os anúncios mais recentes, e uma linha acima do Mercado avisa sobre isso. Consulte "Sua região".
+O celular mantém os anúncios mais próximos da sua região: até 500, em um raio de 250 km. Ele também guarda seus próprios anúncios e qualquer um com o qual você tenha uma negociação, uma conversa ou uma resposta. O Mercado e o Mapa mostram o que o celular armazena. O Mercado os lista dos mais recentes para os mais antigos, cada um com a que distância está, sob a mesma linha, **Mais recentes em até 250 km da sua área.** Ele não precisa que você permita ao aplicativo usar sua localização. Sem nenhuma região configurada, ele armazena os anúncios mais recentes, e uma linha acima do Mercado avisa sobre isso. Consulte "Sua região".
 
 ## Eventos perto de você
 

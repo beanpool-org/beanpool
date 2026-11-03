@@ -16,9 +16,9 @@ Hii ndiyo mipaka ya jumuiya ya kimataifa. Jumuiya ya eneo hujiendesha kwenye sev
 
 ## Mipaka
 
-- **Tangazo huwekwa kwenye kumbukumbu za zamani siku 90 baada ya kubadilishwa mara ya mwisho.** Huondolewa kwenye Soko na Ramani, na picha zake hufutwa. Kulihariri, kulisitisha au kulirudisha mtandaoni yote huhesabiwa kama mabadiliko: kulifungua kwa **Edit Post** na kugusa **Hifadhi** huliweka kwa siku nyingine 90. Moja ya matangazo yako linapowekwa kwenye kumbukumbu, unapata arifa pamoja na arifa zako za **Shughuli za Soko**. Unaweza kulichapisha tena wakati wowote.
+- **Tangazo huwekwa kwenye kumbukumbu za zamani siku 90 baada ya kubadilishwa mara ya mwisho.** Huondolewa kwenye Soko na Ramani, na picha zake hufutwa. Kulihariri, kulisitisha au kulirudisha mtandaoni yote huhesabiwa kama mabadiliko: kulifungua kwa **Edit Post** na kugusa **Hifadhi** huliweka kwa siku nyingine 90. Hakuna kati ya haya linalolipandisha juu kwenye Soko, ambalo huorodhesha machapisho mapya zaidi kwanza. Moja ya matangazo yako linapowekwa kwenye kumbukumbu, unapata arifa pamoja na arifa zako za **Shughuli za Soko**. Unaweza kulichapisha tena wakati wowote.
 - **Hadi picha 5 kwa kila tangazo.**
-- **Simu yako huweka matangazo 500 yaliyo karibu zaidi**, ndani ya km 250 ya eneo lako. Huweka pia matangazo yako mwenyewe, na yoyote uliyo na makubaliano au mazungumzo kuyahusu. Utafutaji wa Soko bado hupata matangazo kutoka kila mahali. Tazama "Eneo lako".
+- **Simu yako huweka matangazo 500 yaliyo karibu zaidi**, ndani ya km 250 ya eneo lako. Huweka pia matangazo yako mwenyewe, na yoyote uliyo na makubaliano au mazungumzo kuyahusu. Soko huorodhesha yale yaliyo ndani ya km 250 ya eneo lako mapya zaidi kwanza, kila kadi ikisema ilipo umbali gani. Utafutaji wa Soko bado hupata matangazo kutoka kila mahali. Tazama "Eneo lako".
 - **Unaweza kufuatilia hadi maeneo 3** kwa **Niambie pindi moja inapoanza hapa**. Ili kufuatilia lingine, acha kufuatilia mojawapo. Tazama "Kupata jumuiya iliyo karibu nawe".
 
 Akaunti mpya pia ina mipaka michache ya kila siku kwa siku zake za kwanza. Tazama "Kuripoti tatizo".

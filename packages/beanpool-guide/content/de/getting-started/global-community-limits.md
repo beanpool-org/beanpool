@@ -16,9 +16,9 @@ Dies sind die Limits der globalen Community. Eine lokale Community läuft auf ih
 
 ## Die Limits
 
-- **Ein Eintrag wird 90 Tage nach seiner letzten Änderung archiviert.** Er wird aus dem Markt und von der Karte entfernt und seine Fotos werden gelöscht. Bearbeiten, Pausieren oder Wiedereinstellen zählen alle als Änderung: Ihn über **Beitrag bearbeiten** zu öffnen und auf **Speichern** zu tippen, bewahrt ihn für weitere 90 Tage. Wenn einer deiner Einträge archiviert wird, erhältst du eine Benachrichtigung mit deinen Hinweisen zu **Marktplatz-Aktivität**. Du kannst ihn jederzeit erneut veröffentlichen.
+- **Ein Eintrag wird 90 Tage nach seiner letzten Änderung archiviert.** Er wird aus dem Markt und von der Karte entfernt und seine Fotos werden gelöscht. Bearbeiten, Pausieren oder Wiedereinstellen zählen alle als Änderung: Ihn über **Beitrag bearbeiten** zu öffnen und auf **Speichern** zu tippen, bewahrt ihn für weitere 90 Tage. Nichts davon schiebt ihn im Markt nach oben, der Beiträge mit den neuesten zuerst listet. Wenn einer deiner Einträge archiviert wird, erhältst du eine Benachrichtigung mit deinen Hinweisen zu **Marktplatz-Aktivität**. Du kannst ihn jederzeit erneut veröffentlichen.
 - **Bis zu 5 Fotos pro Eintrag.**
-- **Dein Telefon speichert die nächsten 500 Einträge**, im Umkreis von 250 km deines Gebiets. Es behält auch deine eigenen sowie alle, bei denen du einen Deal oder eine Unterhaltung hast. Die Suche des Markts findet weiterhin Einträge von überall her. Siehe „Dein Gebiet“.
+- **Dein Telefon speichert die nächsten 500 Einträge**, im Umkreis von 250 km deines Gebiets. Es behält auch deine eigenen sowie alle, bei denen du einen Deal oder eine Unterhaltung hast. Der Markt listet die im Umkreis von 250 km um dein Gebiet mit den neuesten zuerst, jede Karte mit ihrer Entfernung. Die Suche des Markts findet weiterhin Einträge von überall her. Siehe „Dein Gebiet“.
 - **Du kannst bis zu 3 Orte beobachten** mit **Benachrichtigen, wenn hier eine startet**. Um einen weiteren zu beobachten, beende die Beobachtung eines bestehenden. Siehe „Community in der Nähe finden“.
 
 Ein neues Konto hat für seine ersten Tage außerdem einige tägliche Limits. Siehe „Ein Problem melden“.

@@ -16,9 +16,9 @@ Estes são os limites da comunidade global. Uma comunidade local roda em servido
 
 ## Os limites
 
-- **Um anúncio é arquivado 90 dias após sua última alteração.** Ele sai do Mercado e do Mapa, e suas fotos são excluídas. Editar o anúncio, pausá-lo ou colocá-lo de volta contam como uma alteração: abri-lo com **Editar anúncio** e tocar em **Salvar** o mantém por mais 90 dias. Quando um dos seus anúncios for arquivado, você receberá uma notificação com os seus alertas de **Atividade no mercado**. Você pode publicá-lo novamente a qualquer momento.
+- **Um anúncio é arquivado 90 dias após sua última alteração.** Ele sai do Mercado e do Mapa, e suas fotos são excluídas. Editar o anúncio, pausá-lo ou colocá-lo de volta contam como uma alteração: abri-lo com **Editar anúncio** e tocar em **Salvar** o mantém por mais 90 dias. Nada disso o faz subir no Mercado, que lista as publicações das mais recentes para as mais antigas. Quando um dos seus anúncios for arquivado, você receberá uma notificação com os seus alertas de **Atividade no mercado**. Você pode publicá-lo novamente a qualquer momento.
 - **Até 5 fotos por anúncio.**
-- **Seu celular mantém os 500 anúncios mais próximos**, em um raio de 250 km da sua região. Ele também guarda os seus próprios anúncios e qualquer um no qual você tenha um acordo ou conversa em andamento. A busca do Mercado continua encontrando anúncios de todos os lugares. Consulte "Sua área".
+- **Seu celular mantém os 500 anúncios mais próximos**, em um raio de 250 km da sua região. Ele também guarda os seus próprios anúncios e qualquer um no qual você tenha um acordo ou conversa em andamento. O Mercado lista os que estão a até 250 km da sua região, dos mais recentes para os mais antigos, e cada cartão diz a que distância está. A busca do Mercado continua encontrando anúncios de todos os lugares. Consulte "Sua área".
 - **Você pode acompanhar até 3 locais** com **Avise-me quando uma começar aqui**. Para acompanhar outro, pare de acompanhar um dos anteriores. Consulte "Encontrar uma comunidade próxima".
 
 Uma conta nova também tem alguns limites diários durante seus primeiros dias. Consulte "Denunciar um problema".

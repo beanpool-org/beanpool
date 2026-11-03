@@ -16,9 +16,9 @@ Questi sono i limiti della comunità globale. Una comunità locale opera sul pro
 
 ## I limiti
 
-- **Un annuncio viene archiviato 90 giorni dopo la sua ultima modifica.** Viene rimosso dal Mercato e dalla Mappa, e le relative foto vengono eliminate. Modificarlo, metterlo in pausa o ripubblicarlo contano tutti come una modifica: aprirlo con **Modifica annuncio** e toccare **Salva** lo mantiene attivo per altri 90 giorni. Quando uno dei tuoi annunci viene archiviato, ricevi una notifica insieme ai tuoi avvisi di **Attività del marketplace**. Puoi pubblicarlo di nuovo in qualsiasi momento.
+- **Un annuncio viene archiviato 90 giorni dopo la sua ultima modifica.** Viene rimosso dal Mercato e dalla Mappa, e le relative foto vengono eliminate. Modificarlo, metterlo in pausa o ripubblicarlo contano tutti come una modifica: aprirlo con **Modifica annuncio** e toccare **Salva** lo mantiene attivo per altri 90 giorni. Niente di tutto questo lo fa salire nel Mercato, che elenca i post dai più recenti. Quando uno dei tuoi annunci viene archiviato, ricevi una notifica insieme ai tuoi avvisi di **Attività del marketplace**. Puoi pubblicarlo di nuovo in qualsiasi momento.
 - **Fino a 5 foto per annuncio.**
-- **Il tuo telefono conserva i 500 annunci più vicini**, entro 250 km dalla tua zona. Conserva anche i tuoi annunci e qualsiasi annuncio per cui hai un accordo o una conversazione. La ricerca del Mercato trova comunque annunci da ogni parte del mondo. Vedi "La tua zona".
+- **Il tuo telefono conserva i 500 annunci più vicini**, entro 250 km dalla tua zona. Conserva anche i tuoi annunci e qualsiasi annuncio per cui hai un accordo o una conversazione. Il Mercato elenca per primi i più recenti tra quelli entro 250 km dalla tua zona, e ogni scheda indica a che distanza si trova. La ricerca del Mercato trova comunque annunci da ogni parte del mondo. Vedi "La tua zona".
 - **Puoi seguire fino a 3 luoghi** con **Avvisami quando ne nasce una qui**. Per seguirne un altro, smetti di seguirne uno. Vedi "Trovare una comunità vicina".
 
 Un nuovo account ha anche alcuni limiti giornalieri per i suoi primi giorni. Vedi "Segnalare un problema".

@@ -34,7 +34,7 @@ Bạn có thể mở một cuộc thăm dò tại một thời điểm, và mộ
 
 ## Tìm kiếm và trả lời thăm dò
 
-Các cuộc thăm dò nằm trong Chợ. Nhấn **Thăm dò** ở hàng trên cùng để chỉ xem các cuộc thăm dò.
+Các cuộc thăm dò nằm trong Chợ. Nhấn **Thăm dò** ở hàng trên cùng để chỉ xem các cuộc thăm dò. Một cuộc thăm dò được liệt kê lại một lần, dưới **Hôm nay**, vào ngày trước khi kết thúc.
 
 - Nhấn vào một câu trả lời để chọn. Nhấn vào câu trả lời khác để thay đổi ý định, cho đến khi cuộc thăm dò kết thúc.
 - Thẻ sẽ hiển thị số người đã chọn mỗi câu trả lời.

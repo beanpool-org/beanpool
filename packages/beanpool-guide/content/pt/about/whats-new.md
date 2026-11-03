@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## O Mercado em uma só ordem
+
+No telefone você recebe isso com um app atualizado; no navegador web, quando o servidor da sua comunidade é atualizado.
+
+- **Os mais recentes primeiro, igual no celular e na web.** O Mercado lista as publicações das mais recentes para as mais antigas, sob **Hoje**, **Ontem**, **Esta semana** e **Anúncios anteriores**, pelo dia em que cada uma foi publicada. Os títulos **Próximos eventos**, **Enquetes** e **Mais próximos primeiro** deixaram de existir.
+- **Um evento volta uma vez.** No dia anterior ao início, o evento é listado de novo em **Hoje**. Uma enquete faz o mesmo no dia anterior ao encerramento. Depois, eles descem como qualquer outra publicação.
+- **Dois lugares por dia.** A terceira publicação de uma pessoa no dia, e as seguintes, vêm depois das publicações de todas as outras pessoas naquele dia.
+- **Editar uma publicação não a faz subir.** Para ser vista de novo, publique de novo.
+- **Na comunidade global**, o Mercado mostra os mais recentes em até 250 km da sua região, ou dentro da sua **Distância**, cada publicação com a que distância está. Uma linha acima da lista informa isso. O celular não precisa mais da sua localização para isso.
+- **Não mudou:** as publicações que um proprietário fixou continuam no topo, **Eventos** ainda lista primeiro os que acontecem antes, e uma busca encontra o que melhor corresponde às suas palavras. Consulte "Explorar o Mercado".
+
 ## A comunidade global, perto de você
 
 Você recebe estas novidades quando o servidor da comunidade global é atualizado. No celular, elas exigem um aplicativo atualizado.
@@ -15,7 +26,7 @@ Você recebe estas novidades quando o servidor da comunidade global é atualizad
 - **Sua região.** No aplicativo web, entrar na comunidade global tem mais uma etapa após a sua foto: **Mais ou menos onde você está?** No celular, isso é perguntado quando você entra com uma conta que já possui; uma nova conta no celular define isso mais tarde em Configurações, em **Sua região**. Nessa etapa, toque em **Usar minha localização**, **Digite uma cidade ou bairro** ou **Pular por enquanto**. A localização é mantida com uma precisão de cerca de 10 km, nunca o ponto exato. Altere ou limpe isso em Configurações, em **Sua região**. Consulte "Sua região".
 - **Sem região, sem problema.** Sem ela, você vê os anúncios mais recentes de todos os lugares, e uma linha acima do Mercado avisa isso. No celular, toque nela para definir sua região.
 - **Novos anúncios perto de você.** Eles chegam assim que são publicados. Os distantes não chegam mais ao seu celular.
-- **No aplicativo web**, o Mercado e o Mapa começam a partir da sua região ou de um local que você escolher com **Distância**: os mais próximos primeiro, cada anúncio indicando a que distância está. Consulte "Encontrar coisas por perto".
+- **No aplicativo web**, o Mercado e o Mapa começam a partir da sua região ou de um local que você escolher com **Distância**: cada anúncio indicando a que distância está. O Mapa mostra os mais próximos primeiro. O Mercado lista os mais recentes primeiro, como diz "O Mercado em uma só ordem", acima. Consulte "Encontrar coisas por perto".
 - **Enquetes** não têm um local próprio, então cada uma é exibida na região do membro que a criou.
 - **Digite sua cidade.** Na comunidade global, **Encontre sua comunidade** no Início não precisa mais da sua localização: toque em **ou digite sua cidade** e escolha sua cidade. Apenas um ponto aproximado é guardado. Consulte "Achar uma comunidade próxima".
 - **Publicar sem preço.** Na comunidade global, o formulário de publicação não pede preço, porque os feijões vivem em comunidades locais. No aplicativo web, **Publicar Oferta** e **Publicar Pedido** agora funcionam sem preço. Uma comunidade local ainda pede um preço.

@@ -7,7 +7,7 @@ related: home, the-bean, how-it-works, rules, faq, communities
 
 ## The Market in one order
 
-On the phone you get this with an up-to-date app; in a web browser, at once.
+On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated.
 
 - **Newest first, the same on the phone and the web.** The Market lists posts newest first under **Today**, **Yesterday**, **This Week** and **Older Listings**, by the day each was listed. The headings **Upcoming events**, **Polls** and **Nearest first** are gone.
 - **An event comes back once.** The day before it starts, an event is listed again under **Today**. A poll does the same the day before it closes. Then they sink like any other post.

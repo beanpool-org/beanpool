@@ -3,7 +3,7 @@ slug: near-you
 title: Encontrar cosas cerca de ti
 summary: Ver solo publicaciones dentro de cierta distancia de ti o de cualquier lugar que elijas.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## En la pestaña Mercado
@@ -28,8 +28,8 @@ El mapa no tiene un filtro de distancia propio. Toca el botón de la diana a la 
 
 La comunidad global tiene publicaciones de todas partes, por lo que el **Mercado** y el **Mapa** de la app web comienzan desde cerca de ti:
 
-- Con una **Distancia** elegida en el Mercado, ambos muestran las publicaciones más cercanas dentro de ella, las más cercanas primero. El Mapa muestra hasta 200 pines.
-- Sin ella, muestran las publicaciones más cercanas dentro de 250 km de tu zona: el lugar aproximado que das a la comunidad cuando te unes, o más tarde en **Ajustes**, bajo **Tu zona**. Una línea arriba de la lista del Mercado dice **Los más cercanos a tu zona primero, dentro de 250 km.** Toca **Mostrar de todas partes** para ver lo más reciente de todas partes, y **Cerca de tu zona** para regresar.
+- Con una **Distancia** elegida en el Mercado, ambos muestran las publicaciones dentro de ella. El Mercado las lista de la más reciente a la más antigua, cada una con la distancia a la que está, bajo una línea que dice **Lo más reciente a menos de 5 km del lugar que elegiste.** (con tu distancia). El Mapa muestra las más cercanas, hasta 200 pines.
+- Sin ella, muestran las publicaciones más cercanas dentro de 250 km de tu zona: el lugar aproximado que das a la comunidad cuando te unes, o más tarde en **Ajustes**, bajo **Tu zona**. El Mercado las lista de la más reciente a la más antigua, bajo una línea que dice **Lo más reciente a menos de 250 km de tu zona.** El Mapa muestra primero las más cercanas. Toca **Mostrar de todas partes** para ver lo más reciente de todas partes, y **Cerca de tu zona** para regresar.
 - Sin ninguna de las dos, ves lo más reciente de todas partes, y **Mira lo que hay cerca de ti** abre el selector de distancia. Una línea arriba de la lista del Mercado indica cuál de estas opciones estás viendo. Con una **Distancia** no tiene botón: abre **Distancia** y toca **Restablecer**. Volverás entonces a cerca de tu zona o, si no has definido una zona, verás lo más reciente de todas partes.
 - Cada publicación muestra a qué distancia se encuentra, como **📍 12 km**. Tus propias publicaciones siempre están en el Mapa, y en el Mercado cerca de tu zona, dondequiera que estén. Con una **Distancia**, el Mercado muestra solo lo que está dentro de ella, incluidas las tuyas.
 - Mientras la lista esté cerca de ti, las publicaciones sin ubicación se excluyen. Una encuesta de alguien que no ha definido su zona es una de ellas. Para verlas, restablece la **Distancia** si elegiste una, luego toca **Mostrar de todas partes**.
@@ -40,7 +40,7 @@ La búsqueda de la app web busca únicamente entre las publicaciones en pantalla
 
 ## En la comunidad global, en el teléfono
 
-El teléfono conserva las publicaciones más cercanas a tu zona: hasta 500, dentro de 250 km. También conserva tus propias publicaciones y cualquiera en la que tengas un trato, un chat o una respuesta. El Mercado y el Mapa muestran lo que el teléfono conserva. Sin una zona definida, conserva las publicaciones más recientes en su lugar, y una línea arriba del Mercado lo indica. Consulta "Tu zona".
+El teléfono conserva las publicaciones más cercanas a tu zona: hasta 500, dentro de 250 km. También conserva tus propias publicaciones y cualquiera en la que tengas un trato, un chat o una respuesta. El Mercado y el Mapa muestran lo que el teléfono conserva. El Mercado lo lista de lo más reciente a lo más antiguo, cada una con la distancia a la que está, bajo la misma línea, **Lo más reciente a menos de 250 km de tu zona.** No necesita que permitas que la app use tu ubicación. Sin una zona definida, conserva las publicaciones más recientes en su lugar, y una línea arriba del Mercado lo indica. Consulta "Tu zona".
 
 ## Eventos cerca de ti
 

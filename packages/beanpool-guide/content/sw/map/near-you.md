@@ -3,7 +3,7 @@ slug: near-you
 title: Kupata vitu vilivyo karibu
 summary: Onyesha tu matangazo yaliyo ndani ya umbali kutoka kwako, au kutoka mahali popote unapochagua.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Kwenye kichupo cha Soko
@@ -28,8 +28,8 @@ Ramani haina kichujio chake cha umbali. Gusa kitufe cha shabaha kilicho upande w
 
 Jumuiya ya kimataifa ina orodha kutoka kila mahali, kwa hivyo **Soko** na **Ramani** za programu ya wavuti huanzia karibu nawe:
 
-- Ukiwa na **Umbali** uliochaguliwa kwenye Soko, zote huonyesha orodha zilizo karibu zaidi ndani yake, zilizo karibu zaidi kwanza. Ramani huonyesha hadi pini 200.
-- Bila umbali huo, huonyesha orodha zilizo karibu zaidi ndani ya kilomita 250 kutoka eneo lako: mahali pa makadirio unayoipa jumuiya unapojiunga, au baadaye katika **Mipangilio**, chini ya **Eneo lako**. Mstari ulio juu ya orodha ya Soko husema **Karibu zaidi na eneo lako kwanza, ndani ya km 250.** Gusa **Onyesha kila mahali** kwa mpya zaidi kutoka kila mahali, na **Karibu na eneo lako** ili kurudi.
+- Ukiwa na **Umbali** uliochaguliwa kwenye Soko, zote huonyesha orodha zilizo ndani yake. Soko huziorodhesha mpya zaidi kwanza, kila moja ikiwa na umbali wake, chini ya mstari unaosema **Mpya zaidi ndani ya km 5 kutoka mahali ulipochagua.** (pamoja na umbali wako). Ramani huonyesha zilizo karibu zaidi, hadi pini 200.
+- Bila umbali huo, huonyesha orodha zilizo karibu zaidi ndani ya kilomita 250 kutoka eneo lako: mahali pa makadirio unayoipa jumuiya unapojiunga, au baadaye katika **Mipangilio**, chini ya **Eneo lako**. Soko huziorodhesha mpya zaidi kwanza, chini ya mstari unaosema **Mpya zaidi ndani ya km 250 kutoka eneo lako.** Ramani huonyesha zilizo karibu zaidi kwanza. Gusa **Onyesha kila mahali** kwa mpya zaidi kutoka kila mahali, na **Karibu na eneo lako** ili kurudi.
 - Bila vyote viwili, unaona mpya zaidi kutoka kila mahali, na **Ona kilicho karibu nawe** hufungua kiteuzi cha umbali. Mstari ulio juu ya orodha ya Soko husema kipi kati ya hivi unachokiona. Ukiwa na **Umbali** hauna kitufe: fungua **Umbali** na uguse **Weka upya**. Kisha unarudi karibu na eneo lako, au, bila eneo lililowekwa, unaona mpya zaidi kutoka kila mahali.
 - Kila orodha huonyesha iko umbali gani, kama vile **📍 12 km**. Orodha zako mwenyewe zipo kwenye Ramani kila wakati, na kwenye Soko karibu na eneo lako, popote zilipo. Ukiwa na **Umbali**, Soko huonyesha tu kile kilicho ndani yake, zako zikiwemo.
 - Wakati orodha inapokuwa karibu nawe, machapisho yasiyo na eneo huachwa nje. Kura ya maoni kutoka kwa mtu ambaye hajaweka eneo lake ni mojawapo. Ili kuyaona, weka upya **Umbali** ikiwa ulichagua moja, kisha uguse **Onyesha kila mahali**.
@@ -40,7 +40,7 @@ Utafutaji wa programu ya wavuti huangalia tu kupitia orodha zilizo kwenye skrini
 
 ## Kwenye jumuiya ya kimataifa, kwenye simu
 
-Simu huweka orodha zilizo karibu zaidi na eneo lako: hadi 500, ndani ya kilomita 250. Huweka pia orodha zako mwenyewe, na yoyote uliyo na makubaliano, gumzo au jibu kwayo. Soko na Ramani huonyesha kile ambacho simu inaweka. Bila eneo lililowekwa, huweka orodha mpya zaidi badala yake, na mstari ulio juu ya Soko unasema hivyo. Tazama "Eneo lako".
+Simu huweka orodha zilizo karibu zaidi na eneo lako: hadi 500, ndani ya kilomita 250. Huweka pia orodha zako mwenyewe, na yoyote uliyo na makubaliano, gumzo au jibu kwayo. Soko na Ramani huonyesha kile ambacho simu inaweka. Soko huziorodhesha mpya zaidi kwanza, kila moja ikiwa na umbali wake, chini ya mstari ule ule, **Mpya zaidi ndani ya km 250 kutoka eneo lako.** Haihitaji uiruhusu programu kutumia eneo lako. Bila eneo lililowekwa, huweka orodha mpya zaidi badala yake, na mstari ulio juu ya Soko unasema hivyo. Tazama "Eneo lako".
 
 ## Matukio yaliyo karibu nawe
 

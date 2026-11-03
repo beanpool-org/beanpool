@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Ang Merkado sa iisang pagkakasunod-sunod
+
+Sa telepono, makukuha mo ito gamit ang updated na app; sa web browser, kapag na-update na ang server ng iyong komunidad.
+
+- **Pinakabago muna, pareho sa telepono at sa web.** Inililista ng Merkado ang mga post na pinakabago muna sa ilalim ng **Ngayong araw**, **Kahapon**, **Ngayong Linggo** at **Mga Mas Lumang Listahan**, ayon sa araw na inilista ang bawat isa. Wala na ang mga heading na **Mga paparating na event**, **Mga Poll** at **Pinakamalapit muna**.
+- **Isang beses bumabalik ang event.** Sa araw bago ito magsimula, inililista muli ang event sa ilalim ng **Ngayong araw**. Ganoon din ang botohan sa araw bago ito magsara. Pagkatapos, lumulubog sila gaya ng ibang post.
+- **Dalawang puwesto sa isang araw.** Ang ikatlong post ng isang tao sa isang araw, at ang mga kasunod nito, ay nasa likod ng mga post ng lahat ng iba pa sa araw na iyon.
+- **Hindi iniaakyat ng pag-edit ang isang post.** Para makitang muli, mag-post muli.
+- **Sa pandaigdigang komunidad**, ipinapakita ng Merkado ang pinakabago sa loob ng 250 km ng iyong lugar, o sa loob ng iyong **Distansya**, bawat post ay may layo nito. Sinasabi ito ng isang linya sa itaas ng listahan. Hindi na kailangan ng telepono ang iyong lokasyon para dito.
+- **Hindi nagbago:** nananatili sa itaas ang mga post na ipinin ng may-ari, inililista pa rin ng **Mga Event** ang pinakamaaga muna, at ang paghahanap ay nakakahanap ng pinakaangkop sa iyong mga salita. Tingnan ang "Pag-browse sa merkado".
+
 ## Ang pandaigdigang komunidad, malapit sa iyo
 
 Makukuha mo ang mga ito kapag na-update ang server ng pandaigdigang komunidad. Sa telepono, kailangan ng mga ito ng updated na app.
@@ -15,7 +26,7 @@ Makukuha mo ang mga ito kapag na-update ang server ng pandaigdigang komunidad. S
 - **Iyong lugar.** Sa web app, ang pagsali sa pandaigdigang komunidad ay may isa pang hakbang pagkatapos ng iyong larawan: **Saan ka humigit-kumulang?** Sa telepono, itinatanong ito kapag sumali ka gamit ang account na mayroon ka na; itinatakda ito ng bagong account sa telepono mamaya sa Mga Setting, sa ilalim ng **Iyong lugar**. Sa hakbang na iyon, i-tap ang **Gamitin ang location ko**, **Mag-type ng bayan o lugar**, o **Laktawan muna**. Itinatago ito sa humigit-kumulang 10 km, hindi kailanman ang eksaktong lokasyon mo. Baguhin o i-clear ito sa Mga Setting, sa ilalim ng **Iyong lugar**. Tingnan ang "Iyong lugar".
 - **Walang lugar, walang problema.** Kung wala nito, makikita mo ang mga pinakabagong listing mula sa kahit saan, at sinasabi ito ng isang linya sa itaas ng Merkado. Sa telepono, i-tap ito upang itakda ang iyong lugar.
 - **Mga bagong listing malapit sa iyo.** Dumarating ang mga ito kapag nai-post na. Ang mga malalayo ay hindi na nakakarating sa iyong telepono.
-- **Sa web app**, nagsisimula ang Merkado at ang Mapa mula sa iyong lugar, o mula sa lugar na pipiliin mo gamit ang **Distansya**: pinakamalapit muna, bawat listing ay may layo nito. Tingnan ang "Paghahanap ng bagay sa malapit".
+- **Sa web app**, nagsisimula ang Merkado at ang Mapa mula sa iyong lugar, o mula sa lugar na pipiliin mo gamit ang **Distansya**: bawat listing ay may layo nito. Ipinapakita ng Mapa ang pinakamalapit muna. Inililista ng Merkado ang pinakabago muna, gaya ng sinasabi ng "Ang Merkado sa iisang pagkakasunod-sunod", sa itaas. Tingnan ang "Paghahanap ng bagay sa malapit".
 - **Walang sariling lugar ang mga poll**, kaya ipinapakita ang bawat isa sa lugar ng miyembro na gumawa nito.
 - **I-type ang iyong bayan.** Sa pandaigdigang komunidad, ang **Hanapin ang iyong komunidad** sa Home ay hindi na nangangailangan ng iyong lokasyon: i-tap ang **o i-type ang iyong bayan** at piliin ang iyong bayan. Isang tinatayang lokasyon lang ang itinatago. Tingnan ang "Paghahanap ng kalapit na komunidad".
 - **Pag-post nang walang presyo.** Sa pandaigdigang komunidad, hindi humihingi ng presyo ang form ng pag-post, dahil ang mga munggo ay nasa mga lokal na komunidad. Sa web app, gumagana na ngayon ang **Mag-post ng Alok** at **Mag-post ng Kahilingan** nang wala nito. Humihingi pa rin ng presyo ang lokal na komunidad.

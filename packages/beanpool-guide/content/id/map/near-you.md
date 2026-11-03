@@ -3,7 +3,7 @@ slug: near-you
 title: Menemukan hal di dekatmu
 summary: Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Pada tab Pasar
@@ -28,8 +28,8 @@ Peta tidak memiliki filter jarak tersendiri. Ketuk tombol target di sebelah kiri
 
 Komunitas global memiliki iklan dari mana saja, sehingga **Pasar** dan **Peta** pada web app dimulai dari lokasi di dekatmu:
 
-- Dengan **Jarak** yang dipilih di Pasar, keduanya menampilkan iklan terdekat di dalamnya, diurutkan dari yang terdekat. Peta menampilkan hingga 200 pin.
-- Tanpa filter jarak, keduanya menampilkan iklan terdekat dalam radius 250 km dari wilayahmu: perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau nanti di **Pengaturan**, di bawah **Wilayahmu**. Baris di atas daftar Pasar bertuliskan **Terdekat dari area Anda terlebih dahulu, dalam 250 km.** Ketuk **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja, dan **Dekat area Anda** untuk kembali.
+- Dengan **Jarak** yang dipilih di Pasar, keduanya menampilkan iklan di dalamnya. Pasar menampilkannya dari yang terbaru, masing-masing dengan seberapa jauh jaraknya, di bawah baris yang bertuliskan **Terbaru dalam jarak 5 km dari tempat yang kamu pilih.** (dengan jarakmu). Peta menampilkan yang terdekat, hingga 200 pin.
+- Tanpa filter jarak, keduanya menampilkan iklan terdekat dalam radius 250 km dari wilayahmu: perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau nanti di **Pengaturan**, di bawah **Wilayahmu**. Pasar menampilkannya dari yang terbaru, di bawah baris yang bertuliskan **Terbaru dalam jarak 250 km dari wilayahmu.** Peta menampilkan yang terdekat dulu. Ketuk **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja, dan **Dekat area Anda** untuk kembali.
 - Tanpa keduanya, kamu melihat yang terbaru dari mana saja, dan **Lihat apa yang ada di dekat Anda** membuka pemilih jarak. Baris di atas daftar Pasar memberi tahu pilihan mana yang sedang kamu lihat. Jika menggunakan **Jarak**, baris ini tidak memiliki tombol: buka **Jarak** dan ketuk **Atur ulang**. Kamu kemudian kembali ke dekat wilayahmu, atau, jika belum mengatur wilayah, kamu melihat yang terbaru dari mana saja.
 - Setiap iklan menunjukkan seberapa jauh jaraknya, seperti **📍 12 km**. Iklanmu sendiri selalu ada di Peta, dan di Pasar dekat wilayahmu, di mana pun lokasinya. Dengan filter **Jarak**, Pasar hanya menampilkan apa yang berada di dalamnya, termasuk milikmu.
 - Saat daftar berada di dekatmu, postingan tanpa lokasi tidak disertakan. Jajak pendapat dari seseorang yang belum mengatur wilayahnya adalah salah satunya. Untuk melihatnya, atur ulang **Jarak** jika kamu memilihnya, lalu ketuk **Tampilkan di mana saja**.
@@ -40,7 +40,7 @@ Pencarian web app hanya mencari melalui iklan yang ada di layar. **Tampilkan di 
 
 ## Di komunitas global, di ponsel
 
-Ponsel menyimpan iklan yang paling dekat dengan wilayahmu: hingga 500, dalam jarak 250 km. Ponsel juga menyimpan iklan milikmu sendiri, dan setiap iklan yang kamu miliki kesepakatan, obrolan, atau jawaban di dalamnya. Pasar dan Peta menampilkan apa yang disimpan ponsel. Tanpa mengatur wilayah, ponsel menyimpan iklan terbaru sebagai gantinya, dan baris di atas Pasar memberi tahu demikian. Lihat "Wilayahmu".
+Ponsel menyimpan iklan yang paling dekat dengan wilayahmu: hingga 500, dalam jarak 250 km. Ponsel juga menyimpan iklan milikmu sendiri, dan setiap iklan yang kamu miliki kesepakatan, obrolan, atau jawaban di dalamnya. Pasar dan Peta menampilkan apa yang disimpan ponsel. Pasar menampilkannya dari yang terbaru, masing-masing dengan seberapa jauh jaraknya, di bawah baris yang sama, **Terbaru dalam jarak 250 km dari wilayahmu.** Ini tidak memerlukan kamu mengizinkan aplikasi menggunakan lokasimu. Tanpa mengatur wilayah, ponsel menyimpan iklan terbaru sebagai gantinya, dan baris di atas Pasar memberi tahu demikian. Lihat "Wilayahmu".
 
 ## Acara di dekatmu
 

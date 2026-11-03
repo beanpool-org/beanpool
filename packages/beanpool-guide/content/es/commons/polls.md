@@ -34,7 +34,7 @@ Puedes tener una encuesta abierta a la vez, y una comunidad puede tener 5 abiert
 
 ## Encontrar y responder encuestas
 
-Las encuestas están en el Mercado. Toca **Encuestas** en la fila superior para ver solo encuestas.
+Las encuestas están en el Mercado. Toca **Encuestas** en la fila superior para ver solo encuestas. Una encuesta se lista de nuevo una vez, bajo **Hoy**, el día antes de que cierre.
 
 - Toca una respuesta para elegirla. Toca otra para cambiar de opinión, hasta que la encuesta se cierre.
 - La tarjeta muestra cuántos eligieron cada respuesta.

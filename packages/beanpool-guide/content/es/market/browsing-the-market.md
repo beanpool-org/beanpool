@@ -9,13 +9,17 @@ source-hash: 24606918c00ac034
 
 ## La pestaña Mercado
 
-Toca **Mercado** en la fila de pestañas. Ves lo que las personas de tu comunidad están ofreciendo y buscando, lo más reciente primero, agrupado por el día en que se publicó.
+Toca **Mercado** en la fila de pestañas. Ves lo que las personas de tu comunidad están ofreciendo y buscando, lo más reciente primero, bajo **Hoy**, **Ayer**, **Esta semana** y **Publicaciones anteriores**, según el día en que se publicó cada una. El teléfono y la app web lo listan igual.
 
-En el teléfono, los eventos van primero. Si ya has permitido que la app use tu ubicación, las vistas de lista y compacta muestran las publicaciones más cercanas primero, bajo **Los más cercanos primero**, con las encuestas bajo **Encuestas**. **Para ti** conserva su propio orden. Desliza la lista hacia abajo para actualizarla.
+- **Un evento vuelve una vez.** El día antes de que empiece, un evento se lista de nuevo bajo **Hoy**, entre las publicaciones nuevas de ese día, y después baja como cualquier otro. Un evento semanal vuelve una vez por semana.
+- **Una encuesta también vuelve una vez**, el día antes de que cierre.
+- **Nadie ocupa más de dos lugares al día.** La tercera publicación de una persona en un día, y las que siguen, van después de las de todos los demás de ese día.
+- **Editar una publicación no la sube.** Tampoco pausarla, ni una respuesta. Para que la vean de nuevo, publica de nuevo.
+- **Una publicación que un propietario fijó** se queda muy arriba, bajo **Fijado**, sin importar su antigüedad.
 
-En la app web, el Mercado se abre en forma de tarjetas. En las vistas de lista y compacta, los eventos se sitúan bajo el día en que se publicaron. En una comunidad local, la app web no coloca los más cercanos primero.
+En las vistas de lista y compacta ves los títulos de los días. La cuadrícula muestra el mismo orden sin ellos. En el teléfono el Mercado se abre como lista; en la app web, en forma de tarjetas. **Para ti** conserva su propio orden. Bajo **Eventos** va primero el más próximo en el tiempo, con **Hoy**, **Este fin de semana** y **Próximos 7 días**. Una búsqueda muestra las publicaciones que mejor coinciden con tus palabras. En el teléfono, desliza la lista hacia abajo para actualizarla.
 
-En la comunidad global, la app web muestra primero las publicaciones cerca de ti: las más cercanas dentro de tu **Distancia**, o dentro de 250 km de tu zona (el lugar aproximado que das a la comunidad cuando te unes, o en **Ajustes**), cada una con la distancia a la que está. Una línea arriba de la lista indica cuál. Cerca de tu zona tiene **Mostrar de todas partes** para ver lo más reciente de todas partes. Con una **Distancia**, abre **Distancia** y toca **Restablecer** para regresar a tu zona, luego toca **Mostrar de todas partes**. En el teléfono, la comunidad global conserva las publicaciones más cercanas a tu zona, por lo que esas son las que muestra el Mercado. Consulta "Encontrar cosas cerca de ti".
+En la comunidad global, el Mercado muestra lo más reciente dentro de 250 km de tu zona (el lugar aproximado que das a la comunidad cuando te unes, o en **Ajustes**), o dentro de la **Distancia** que elijas, cada publicación con la distancia a la que está. Una línea arriba de la lista indica cuál: **Lo más reciente a menos de 250 km de tu zona.** o, con una **Distancia**, **Lo más reciente a menos de 5 km del lugar que elegiste.** Es igual en el teléfono y en la app web, y en el teléfono no necesita que permitas que la app use tu ubicación. En la app web, cerca de tu zona la línea tiene **Mostrar de todas partes** para ver lo más reciente de todas partes. Con una **Distancia**, abre **Distancia** y toca **Restablecer** para regresar a tu zona, luego toca **Mostrar de todas partes**. Consulta "Encontrar cosas cerca de ti".
 
 En la comunidad global, mientras haya pocas publicaciones, el Mercado también muestra algunas tarjetas marcadas como **Ejemplo**. Son ficticias, para mostrar qué publica la gente, y no se pueden abrir ni responder. Desaparecen una vez que haya suficientes publicaciones reales.
 

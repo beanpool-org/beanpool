@@ -3,7 +3,7 @@ slug: near-you
 title: Tìm kiếm thứ ở gần bạn
 summary: Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Trên tab Chợ
@@ -28,8 +28,8 @@ Bản đồ không có bộ lọc khoảng cách riêng. Hãy nhấn vào nút h
 
 Cộng đồng toàn cầu có các tin đăng từ khắp mọi nơi, vì vậy các tab **Chợ** và **Bản đồ** của ứng dụng web sẽ bắt đầu bằng những bài đăng ở gần bạn:
 
-- Khi đã chọn một **Khoảng cách** trên Chợ, cả hai màn hình sẽ hiển thị các tin đăng gần nhất trong phạm vi đó, gần nhất xếp trước. Bản đồ hiển thị tối đa 200 ghim.
-- Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Một dòng chữ phía trên danh sách của Chợ ghi **Gần khu vực của bạn nhất trước, trong phạm vi 250 km.** Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.
+- Khi đã chọn một **Khoảng cách** trên Chợ, cả hai màn hình sẽ hiển thị các tin đăng trong phạm vi đó. Chợ liệt kê chúng mới nhất trước, mỗi tin kèm khoảng cách bao xa, dưới một dòng ghi **Mới nhất trong vòng 5 km quanh nơi bạn đã chọn.** (kèm khoảng cách của bạn). Bản đồ hiển thị những tin gần nhất, tối đa 200 ghim.
+- Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Chợ liệt kê chúng mới nhất trước, dưới một dòng ghi **Mới nhất trong vòng 250 km quanh khu vực của bạn.** Bản đồ hiển thị tin gần nhất trước. Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.
 - Khi không có thiết lập nào ở trên, bạn sẽ thấy những bài đăng mới nhất từ mọi nơi, và mục **Xem những gì gần bạn** sẽ mở bộ chọn khoảng cách. Một dòng phía trên danh sách của Chợ cho biết bạn đang xem theo chế độ nào. Khi đã chọn **Khoảng cách**, dòng này không có nút: hãy mở **Khoảng cách** và nhấn **Đặt lại**. Khi đó bạn sẽ quay lại chế độ gần khu vực của bạn, hoặc nếu chưa thiết lập khu vực, bạn sẽ thấy bài đăng mới nhất từ mọi nơi.
 - Mỗi tin đăng hiển thị khoảng cách xa bao nhiêu, chẳng hạn như **📍 12 km**. Các tin đăng của chính bạn luôn luôn xuất hiện trên Bản đồ, và trên Chợ ở chế độ gần khu vực của bạn, dù chúng ở bất cứ đâu. Khi đã chọn **Khoảng cách**, Chợ chỉ hiển thị những tin nằm trong khoảng cách đó, bao gồm cả tin của bạn.
 - Trong khi danh sách đang hiển thị các mục ở gần bạn, các bài đăng không có vị trí sẽ bị bỏ qua. Một cuộc thăm dò từ người chưa thiết lập khu vực của họ là một trong số đó. Để xem chúng, hãy đặt lại **Khoảng cách** nếu bạn đã chọn, sau đó nhấn **Hiện tất cả mọi nơi**.
@@ -40,7 +40,7 @@ Tính năng tìm kiếm của ứng dụng web chỉ tìm qua các tin đăng đ
 
 ## Trên cộng đồng toàn cầu, trên điện thoại
 
-Điện thoại lưu các tin đăng ở gần khu vực của bạn nhất: tối đa 500 tin, trong phạm vi 250 km. Điện thoại cũng lưu các tin đăng của chính bạn, cùng bất kỳ tin nào bạn có giao dịch, cuộc trò chuyện hoặc câu trả lời. Tab Chợ và Bản đồ hiển thị những gì điện thoại lưu giữ. Nếu không thiết lập khu vực, điện thoại sẽ lưu các tin đăng mới nhất thay thế, và một dòng phía trên Chợ sẽ thông báo điều đó. Xem "Khu vực bạn".
+Điện thoại lưu các tin đăng ở gần khu vực của bạn nhất: tối đa 500 tin, trong phạm vi 250 km. Điện thoại cũng lưu các tin đăng của chính bạn, cùng bất kỳ tin nào bạn có giao dịch, cuộc trò chuyện hoặc câu trả lời. Tab Chợ và Bản đồ hiển thị những gì điện thoại lưu giữ. Chợ liệt kê chúng mới nhất trước, mỗi tin kèm khoảng cách bao xa, dưới cùng một dòng, **Mới nhất trong vòng 250 km quanh khu vực của bạn.** Việc này không cần bạn cho phép ứng dụng sử dụng vị trí của bạn. Nếu không thiết lập khu vực, điện thoại sẽ lưu các tin đăng mới nhất thay thế, và một dòng phía trên Chợ sẽ thông báo điều đó. Xem "Khu vực bạn".
 
 ## Sự kiện ở gần bạn
 

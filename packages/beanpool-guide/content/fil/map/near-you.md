@@ -3,7 +3,7 @@ slug: near-you
 title: Paghahanap ng bagay sa malapit
 summary: Ipakita lamang ang mga post sa loob ng partikular na distansya mula sa iyo, o sa anumang lugar na piliin mo.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Sa tab ng Merkado
@@ -28,8 +28,8 @@ Ang mapa ay walang sariling filter ng distansya. I-tap ang target button sa kali
 
 Ang pandaigdigang komunidad ay may mga listing mula sa lahat ng dako, kaya ang **Merkado** at **Mapa** ng web app ay nagsisimula mula malapit sa iyo:
 
-- Kapag may napiling **Distansya** sa Merkado, parehong ipinapakita ang pinakamalapit na mga listing sa loob nito, pinakamalapit muna. Nagpapakita ang Mapa ng hanggang 200 pin.
-- Kung wala nito, ipinapakita ng mga ito ang pinakamalapit na mga listing sa loob ng 250 km mula sa iyong lugar: ang tinatayang lugar na ibinigay mo sa komunidad noong sumali ka, o mamaya sa **Mga Setting**, sa ilalim ng **Iyong lugar**. Sinasabi ng isang linya sa itaas ng listahan ng Merkado ang **Pinakamalapit muna sa iyong lugar, sa loob ng 250 km.** I-tap ang **Ipakita kahit saan** para sa pinakabago mula sa lahat ng dako, at **Malapit sa iyong lugar** upang bumalik.
+- Kapag may napiling **Distansya** sa Merkado, parehong ipinapakita ang mga listing sa loob nito. Inililista ng Merkado ang mga ito na pinakabago muna, bawat isa ay may layo nito, sa ilalim ng isang linyang nagsasabing **Pinakabago sa loob ng 5 km mula sa lugar na pinili mo.** (kasama ang iyong distansya). Ipinapakita ng Mapa ang pinakamalapit, hanggang 200 pin.
+- Kung wala nito, ipinapakita ng mga ito ang pinakamalapit na mga listing sa loob ng 250 km mula sa iyong lugar: ang tinatayang lugar na ibinigay mo sa komunidad noong sumali ka, o mamaya sa **Mga Setting**, sa ilalim ng **Iyong lugar**. Inililista ng Merkado ang mga ito na pinakabago muna, sa ilalim ng isang linyang nagsasabing **Pinakabago sa loob ng 250 km mula sa iyong lugar.** Ipinapakita ng Mapa ang pinakamalapit muna. I-tap ang **Ipakita kahit saan** para sa pinakabago mula sa lahat ng dako, at **Malapit sa iyong lugar** upang bumalik.
 - Kung wala ang alinman, makikita mo ang pinakabago mula sa lahat ng dako, at binubuksan ng **Tingnan ang malapit sa iyo** ang tagapili ng distansya. Sinasabi ng isang linya sa itaas ng listahan ng Merkado kung alin sa mga ito ang iyong nakikita. Kapag may **Distansya** wala itong button: buksan ang **Distansya** at i-tap ang **I-reset**. Babalik ka pagkatapos sa malapit sa iyong lugar, o, kapag walang nakatakdang lugar, makikita mo ang pinakabago mula sa lahat ng dako.
 - Ipinapakita ng bawat listing kung gaano ito kalayo, tulad ng **📍 12 km**. Ang sarili mong mga listing ay palaging nasa Mapa, at nasa Merkado malapit sa iyong lugar, saanman naroon ang mga ito. Kapag may **Distansya**, ipinapakita lamang ng Merkado ang nasa loob nito, maging ang sa iyo.
 - Habang ang listahan ay malapit sa iyo, ang mga post na walang lokasyon ay iniiwan. Ang isang botohan mula sa isang taong hindi pa nagtatakda ng kanilang lugar ay isa sa mga ito. Upang makita ang mga ito, i-reset ang **Distansya** kung pumili ka ng isa, pagkatapos ay i-tap ang **Ipakita kahit saan**.
@@ -40,7 +40,7 @@ Tinitingnan lamang ng paghahanap sa web app ang mga listing sa screen. Ipinapaki
 
 ## Sa pandaigdigang komunidad, sa telepono
 
-Itinatago ng telepono ang mga listing na pinakamalapit sa iyong lugar: hanggang 500, sa loob ng 250 km. Itinatago rin nito ang sarili mong mga listing, at alinman na mayroon kang deal, chat o sagot. Ipinapakita ng Merkado at ng Mapa kung ano ang itinatago ng telepono. Kapag walang nakatakdang lugar, itinatago nito ang mga pinakabagong listing sa halip, at sinasabi ito ng isang linya sa itaas ng Merkado. Tingnan ang "Iyong lugar".
+Itinatago ng telepono ang mga listing na pinakamalapit sa iyong lugar: hanggang 500, sa loob ng 250 km. Itinatago rin nito ang sarili mong mga listing, at alinman na mayroon kang deal, chat o sagot. Ipinapakita ng Merkado at ng Mapa kung ano ang itinatago ng telepono. Inililista ng Merkado ang mga ito na pinakabago muna, bawat isa ay may layo nito, sa ilalim ng parehong linya, **Pinakabago sa loob ng 250 km mula sa iyong lugar.** Hindi nito kailangang payagan mo ang app na gamitin ang iyong lokasyon. Kapag walang nakatakdang lugar, itinatago nito ang mga pinakabagong listing sa halip, at sinasabi ito ng isang linya sa itaas ng Merkado. Tingnan ang "Iyong lugar".
 
 ## Mga event na malapit sa iyo
 

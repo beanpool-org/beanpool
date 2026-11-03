@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Cos'è la tua zona
 
-Nella comunità globale, la tua zona indica approssimativamente dove ti trovi: circa 10 km attorno a un comune o a un punto, mai la tua posizione esatta. La comunità globale la usa per mostrarti cosa viene offerto vicino a te: i 500 annunci più vicini entro 250 km da essa. Vedi "Più di una comunità".
+Nella comunità globale, la tua zona indica approssimativamente dove ti trovi: circa 10 km attorno a un comune o a un punto, mai la tua posizione esatta. La comunità globale la usa per mostrarti cosa viene offerto vicino a te: i 500 annunci più vicini entro 250 km da essa. Il Mercato li elenca poi dai più recenti, ciascuno con la distanza a cui si trova. Vedi "Più di una comunità".
 
 La indichi quando ti unisci, in **Più o meno dove sei?**, passaggio che puoi saltare con **Salta per ora**. Puoi modificarla o cancellarla in qualsiasi momento. Appartiene al tuo account nella comunità globale, quindi il tuo telefono e la web app utilizzano la stessa zona.
 

@@ -29,6 +29,7 @@
 
 import path from 'node:path';
 import type Koa from 'koa';
+import { word } from '@beanpool/core';
 import { getLocalConfig, updateLocalConfig, type LightsOutRecord } from '../config/local-config.js';
 import { getNodeRole } from '../state-engine.js';
 import { primaryAddress, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from '../engine/own-addresses.js';
@@ -42,8 +43,11 @@ export { LIGHTS_OUT_ANSWER_FILE, LIGHTS_OUT_REQUEST_FILE, takeLightsOutAnswer, w
 export type LightsOutBy = 'owner-key' | 'password' | 'shell';
 
 /** The refusal §2.7 gives an address change while the switch is on. */
-export const NOT_WHILE_LIGHTS_OUT = 'Not while the lights are out. Turn lights-out off first, once the internet is back.';
-export const NOT_ON_A_STANDBY = 'A standby cannot open the hall. Take over as the main server first, then turn lights-out on.';
+// Marked (member-words.ts): the owner's phone shows them, in the owner's language.
+export const NOT_WHILE_LIGHTS_OUT = word('Not while the lights are out. Turn lights-out off first, once the internet is back.');
+export const NOT_ON_A_STANDBY = word('A standby cannot open the hall. Take over as the main server first, then turn lights-out on.');
+/** No address in the words: a refusal naming a number reads as a server fault (routes/member-error-text.ts). */
+export const BAD_HALL_ADDRESS = word('The hall address must be this laptop\'s own number on the hall Wi-Fi.');
 
 /**
  * The address-change routes refused while on (§2.7): claiming or releasing a name, Take offline, changing the public
@@ -220,7 +224,7 @@ export function setLightsOut(on: boolean, opts: { address?: unknown; by: LightsO
     if (opts.address !== undefined && opts.address !== null && opts.address !== '') {
         address = hallAddressOf(opts.address);
         if (!address) {
-            return { ok: false, status: 400, error: 'The hall address is the laptop\'s number on the hall Wi-Fi, like http://192.168.8.1:8080.' };
+            return { ok: false, status: 400, error: BAD_HALL_ADDRESS };
         }
     }
     const now = new Date().toISOString();

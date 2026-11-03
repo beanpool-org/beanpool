@@ -36,7 +36,7 @@ export const LIGHTS_OUT_ADMIN_PATH = '/api/local/admin/lights-out';
 export const LIGHTS_OUT_OWNER_PATH = '/api/node/owner/lights-out';
 export const HALL_PATH = '/hall';
 
-const OWNER_ONLY = 'Only an owner can turn lights-out on or off.';
+const OWNER_ONLY = word('Only an owner can turn lights-out on or off.');
 
 /** `on` must be a boolean: anything else is a 400, never read as off. */
 function switchBody(body: unknown): { on: boolean; address: unknown; code: unknown } | null {
@@ -87,7 +87,7 @@ export function createLightsOutRoutes(deps: RouteDeps): Router {
         const signer = authSig?.signer;
         if (!signer) {
             ctx.status = 401;
-            ctx.body = { error: 'Sign this request with your member key.' };
+            ctx.body = { error: word('Sign this request with your member key.') };
             return;
         }
         if (!isNodeOwner(signer)) {
@@ -101,13 +101,13 @@ export function createLightsOutRoutes(deps: RouteDeps): Router {
         const now = Date.now();
         if (!Number.isFinite(signedAt) || now - signedAt > FRESH_PROOF_WINDOW_MS || signedAt - now > FRESH_PROOF_WINDOW_MS) {
             ctx.status = 403;
-            ctx.body = { error: 'Press Manage on your phone again, then turn lights-out on or off within 90 seconds.', code: 'step_up_required' };
+            ctx.body = { error: word('Press Manage on your phone again, then turn lights-out on or off within 90 seconds.'), code: 'step_up_required' };
             return;
         }
         const body = switchBody((ctx as any).requestBody);
         if (!body) {
             ctx.status = 400;
-            ctx.body = { error: 'Send { "on": true } or { "on": false }.' };
+            ctx.body = { error: word('Say whether to turn lights-out on or off.') };
             return;
         }
         answerSwitch(ctx, body.on, body.address, 'owner-key', signer);

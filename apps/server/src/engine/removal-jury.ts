@@ -43,7 +43,8 @@ export const JURY_CONFLICT_DAYS = 90;
  * is open is refused in the words a member not drawn is.
  *
  * A branch's vote is on every account on its list (DESIGN-removal-jury-j2-calls-fable.md call 4, J2c): a member with any
- * of these links to any one of them stands aside, so `subjects` may be that list, and none of it is ever a conflict.
+ * of these links to any one of them stands aside, so `subjects` may be that whole list. No account on it is ever one of
+ * the conflicts returned: each is out of the vote's pool already.
  */
 export function juryConflictsOf(subjects: string | readonly string[], atMs: number = Date.now()): Set<string> {
     const judged = new Set(typeof subjects === 'string' ? [subjects] : subjects);

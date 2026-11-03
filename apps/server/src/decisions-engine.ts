@@ -2784,8 +2784,11 @@ type RemovalVoteOpening =
         root: string;
         /** The accounts the vote is on (its card's `branch`). */
         listed: readonly string[];
-        /** The established accounts in the subtree left off the list, which its card names too (`established`). */
-        leftOff: readonly string[];
+        /**
+         * The established accounts in the subtree left off the list, which its card names too (`established`). Not the
+         * other accounts left off (a role holder, one already paused): the card doesn't name those, so they stay in the pool.
+         */
+        established: readonly string[];
         actor: string;
         atMs: number;
     };
@@ -2808,7 +2811,7 @@ function chooseRemovalDecider(vote: RemovalVoteOpening): { decider: 'everyone'; 
         ? drawRemovalJury({ seed: vote.subject, named: [vote.subject], judged: [vote.subject], actor: vote.actor, atMs: vote.atMs })
         : drawRemovalJury({
             seed: vote.root,
-            named: [...vote.listed, ...vote.leftOff],
+            named: [...vote.listed, ...vote.established],
             judged: vote.listed,
             alsoAside: () => inviteBranchOf(vote.root),
             actor: vote.actor,
@@ -3199,7 +3202,7 @@ export function pauseBranch(rootPubkey: string, actor: string, reason: string, o
             // Who decides it, by the community's rule, as one member's removal (chooseRemovalDecider): under a jury rule, one
             // jury for the whole branch (J2c), drawn before anyone in it is paused.
             const draw = chooseRemovalDecider({
-                kind: 'branch', root: rootPubkey, listed: listed.map(a => a.pubkey), leftOff: established.map(a => a.pubkey),
+                kind: 'branch', root: rootPubkey, listed: listed.map(a => a.pubkey), established: established.map(a => a.pubkey),
                 actor, atMs: now.getTime(),
             }).draw;
             const params = {

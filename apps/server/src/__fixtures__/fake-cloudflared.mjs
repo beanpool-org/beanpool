@@ -9,8 +9,12 @@
 //     any start-up delay);
 //   - exits at once with code 1 while <folder>/crash exists (a crash);
 //   - serves GET /ready on the --metrics address: <folder>/ready.json's { status, readyConnections }, else 503;
-//   - prints each line of <folder>/say.jsonl to stderr, as cloudflared prints its log, then deletes the file;
-//   - the three again per name: crash.<id>, ready.<id>.json and say.<id>.jsonl speak only to the child whose TUNNEL_TOKEN
+//   - prints each line of the files <folder>/say.<seq>.jsonl to stderr, in order, as cloudflared prints its log, then deletes
+//     each. A suite writes one whole under another name and renames it into place (tunnel-test-fake.ts say), so the fake never
+//     takes an empty file that is written to a moment later: that line was lost, and a suite waiting for it ran out its time.
+//     It looks every 25 ms, or every <folder>/say-poll-ms when it exists (a loaded machine's late reader:
+//     FAKE_CLOUDFLARED_SAY_POLL_MS), to show a suite waits for the line it said, not for a fixed time;
+//   - the three again per name: crash.<id>, ready.<id>.json and say.<id>.<seq>.jsonl speak only to the child whose TUNNEL_TOKEN
 //     gives that <id> (tokenFileId), so a suite can crash or refuse one name's tunnel and leave another's alone;
 //   - on SIGTERM appends { pid, signal } to <folder>/exits.jsonl and exits 0;
 //   - exits when the server that started it is gone, so a killed test node never leaves one behind.
@@ -39,6 +43,7 @@ process.on('SIGTERM', () => {
 fs.mkdirSync(dir, { recursive: true });
 // The connector's spawn resolves on the 'spawn' event; on a loaded CI runner this process records itself well after that.
 const startDelayMs = Number(readJson('start-delay-ms')) || 0;
+const sayPollMs = Number(readJson('say-poll-ms')) || 25;
 if (startDelayMs > 0) await new Promise((r) => setTimeout(r, startDelayMs));
 fs.appendFileSync(at('runs.jsonl'), JSON.stringify({ pid: process.pid, argv, env: { ...process.env }, at: Date.now(), started: Math.round(performance.timeOrigin) }) + '\n');
 
@@ -61,12 +66,22 @@ server.on('error', (e) => {
 });
 server.listen(Number(port), host);
 
+/** A line said to every fake (`say.<seq>.jsonl`) or to the one on this token (`say.<id>.<seq>.jsonl`): tunnel-test-fake.ts. */
+const SAID = /^say\.(?:([A-Za-z0-9_-]+)\.)?(\d{14}-\d{6})\.jsonl$/;
 setInterval(() => {
     try { process.kill(parent, 0); } catch { process.exit(0); }
-    for (const said of ['say.jsonl', `say.${id}.jsonl`]) {
+    let said = [];
+    try {
+        said = fs.readdirSync(dir)
+            .map((f) => ({ f, m: SAID.exec(f) }))
+            .filter((x) => x.m && (x.m[1] === undefined || x.m[1] === id))
+            .sort((a, b) => (a.m[2] < b.m[2] ? -1 : a.m[2] > b.m[2] ? 1 : 0));
+    } catch { return; }
+    for (const { f } of said) {
+        // A said file appears whole (it is renamed into place), so nothing is read half written or lost to a rename.
         const taken = at(`said.${process.pid}.taken`);
-        try { fs.renameSync(at(said), taken); } catch { continue; }
+        try { fs.renameSync(at(f), taken); } catch { continue; }
         for (const line of fs.readFileSync(taken, 'utf-8').split('\n')) if (line.trim()) process.stderr.write(line + '\n');
         fs.rmSync(taken, { force: true });
     }
-}, 25);
+}, sayPollMs);

@@ -19,7 +19,7 @@
  * (engine/kept-notices.ts). A push's own details (engine/push-notices.ts) have no list a phone can read, so a push
  * missed while the phone was off is not repeated here.
  */
-import { PUSH_NOTICE_TITLE, pushNoticeWords, t } from '@beanpool/core';
+import { PUSH_NOTICE_TITLE, pushNoticeWords, requestsClearedNotice, t } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { LOCAL_NOTICE_DATA } from './push-notice-check';
@@ -75,7 +75,7 @@ export interface LocalNotice {
     data: Record<string, unknown>;
 }
 
-interface Row { id: string; title: string; body: string; createdAt: number }
+interface Row { id: string; title: string; body: string; createdAt: number; data?: Record<string, unknown> }
 
 function clip(text: string, max: number): string {
     return text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -87,11 +87,11 @@ function parseRows(body: unknown): Row[] | null {
     const rows: Row[] = [];
     for (const n of notices) {
         if (!n || typeof n !== 'object') continue;
-        const { id, title, body: text, createdAt } = n as Record<string, unknown>;
+        const { id, title, body: text, createdAt, data } = n as Record<string, unknown>;
         const at = typeof createdAt === 'string' ? Date.parse(createdAt) : NaN;
         if (typeof id !== 'string' || id.length === 0 || id.length > 64 || typeof title !== 'string' || !title.trim()
             || typeof text !== 'string' || !text.trim() || !Number.isFinite(at)) continue;
-        rows.push({ id, title: clip(title.trim(), TITLE_MAX), body: clip(text.trim(), BODY_MAX), createdAt: at });
+        rows.push({ id, title: clip(title.trim(), TITLE_MAX), body: clip(text.trim(), BODY_MAX), createdAt: at, ...(data && typeof data === 'object' && !Array.isArray(data) ? { data: data as Record<string, unknown> } : {}) });
     }
     return rows;
 }
@@ -201,7 +201,9 @@ export async function postNoticesFromSync(deps: SyncNoticeDeps): Promise<number>
         let posted = 0;
         for (const r of recent.filter((row) => mine.has(row.id))) {
             try {
-                await deps.post({ title: r.title, body: r.body, data: { ...LOCAL_NOTICE_DATA } });
+                // "Message requests cleared" is worded here in the member's language (core requests-cleared-words.ts).
+                const own = requestsClearedNotice(r.data);
+                await deps.post({ title: own?.title ?? r.title, body: own?.body ?? r.body, data: { ...LOCAL_NOTICE_DATA } });
                 posted++;
             } catch (e) {
                 console.warn('[Notices] Could not post a notice from the sync', e);

@@ -20,6 +20,7 @@ import { useIdentity } from '../app/IdentityContext';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { createConversationApi, deletePost, reportAbuse, signedRequest } from '../utils/db';
 import { reportedAlertBody } from '../utils/reportReasons';
+import { signedRequestWords } from './signed-request-lines';
 import { EventCopyDoor } from './EventCopyDoor';
 import { PhotoCarousel } from './PhotoCarousel';
 import { PostTagChips } from './PostTagChips';
@@ -80,7 +81,7 @@ export function ListingCopyDetail({ post }: { post: any }) {
             const conv = await createConversationApi('dm', [ask.key, identity.publicKey], identity.publicKey);
             if (conv) router.push(`/chat/${conv.id}`);
         } catch (e: any) {
-            Alert.alert(t('Error'), e?.message ? String(e.message) : t('Could not reach the node.'));
+            Alert.alert(t('Error'), e?.message ? signedRequestWords(String(e.message)) : t('Could not reach the node.'));
         } finally {
             setAsking(false);
         }

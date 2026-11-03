@@ -1,6 +1,9 @@
 import { render, screen, act, waitFor, fireEvent, createEvent, cleanup, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { setLanguage } from '@beanpool/core';
 import { brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -1316,6 +1319,27 @@ describe("MessagesPage: the node's refusal in the composer (G11-e, design G11 §
         await typeAndSend('hello there');
         expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe(LIMITED);
         expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    it('403 dm_requests_limited on a send, in Spanish: the rule worded by the app, still "no puedes" and still dated; the node\'s English is the fallback', async () => {
+        const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+        const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+        setLanguage('es', [es]);
+        onTestFinished(() => setLanguage('en'));
+        vi.mocked(sendMessageApi).mockRejectedValue(refusal(403, 'dm_requests_limited', LIMITED));
+        await typeAndSend('hello there');
+        const said = (await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent;
+        expect(said).toBe('Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.');
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    it('403 dm_requests_limited in words the app does not know (another node\'s): shown as given, even in Spanish', async () => {
+        const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+        setLanguage('es', [es]);
+        onTestFinished(() => setLanguage('en'));
+        vi.mocked(sendMessageApi).mockRejectedValue(refusal(403, 'dm_requests_limited', 'Message requests are paused here.'));
+        await typeAndSend('hello there');
+        expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe('Message requests are paused here.');
     });
 
     it("403 moderation_muted on a send: the node's words, word for word", async () => {

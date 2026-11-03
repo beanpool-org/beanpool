@@ -64,7 +64,9 @@ vi.mock('../../components/PostTagChips', () => ({ PostTagChips: () => null }));
 vi.mock('../../components/ReportReasonBox', () => ({ ReportReasonBox: () => null }));
 vi.mock('../show-on-global', () => ({ copyResultLine: () => null, pairOf: calls.pair, showOnGlobal: calls.show, stopShowing: calls.stop, stopLaterLine: () => 'It comes down later', takeQuestions: calls.take, questionsLaterLine: () => 'It stops later' }));
 
-import { listingCopyHint } from '@beanpool/core';
+import { listingCopyHint, setLanguage } from '@beanpool/core';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { EventCopyDoor } from '../../components/EventCopyDoor';
 import { ListingCopyDetail } from '../../components/ListingCopy';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
@@ -572,6 +574,18 @@ describe('the door on a copy (slice GD)', () => {
             await press('listing-copy-ask-button');
             expect(calls.openChat).toHaveBeenCalledWith('dm', [KEY, world.identity.publicKey], world.identity.publicKey);
             expect(world.pushed).toEqual(['/chat/conv-1']);
+        });
+
+        it('the chat refused because reports cleared their message requests (R1): said in the member\'s language, dated, not in the node\'s English', async () => {
+            const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+            const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+            calls.openChat.mockImplementation(async () => { throw Object.assign(new Error(LIMITED), { code: 'dm_requests_limited' }); });
+            await draw(createElement(ListingCopyDetail, { post: OPEN }));
+            setLanguage('es', [es]);
+            try {
+                await press('listing-copy-ask-button');
+                expect((globalThis as any).__alerts.at(-1)?.[1]).toBe('Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.');
+            } finally { setLanguage('en'); }
         });
 
         it('its author has no ask, and can stop from here: a new phone holds no pair to untick', async () => {

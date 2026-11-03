@@ -130,7 +130,7 @@ const SETTING_NAMES: Record<ShapeSettingName, string> = {
     listed: 'Listed in the BeanPool directory',
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
     sharePhone: 'Share phone', shareHealth: 'Share health', probation: 'Limits on new accounts',
-    autoHide: 'Reported posts hidden automatically', autoMute: 'Repeat offenders muted automatically',
+    autoHide: 'Reported posts hidden and message requests cleared automatically', autoMute: 'Repeat offenders muted automatically',
     recoveryCopies: "Where members' copies go",
 };
 

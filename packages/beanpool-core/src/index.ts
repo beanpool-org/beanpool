@@ -132,3 +132,4 @@ export type {
 export { activityTarget } from './activity-target.js';
 export type { ActivityTarget, ActivityTargetItem } from './activity-target.js';
 export * from './calendar-month.js';
+export * from './requests-cleared-words.js';

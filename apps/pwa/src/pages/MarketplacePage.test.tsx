@@ -1,6 +1,8 @@
 import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
@@ -1281,6 +1283,43 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         fireEvent.click(within(screen.getByTestId('deal-row-tx-a')).getByRole('button', { name: 'Message Marty' }));
         await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-1'));
         expect(chat).toHaveBeenCalledWith('dm', [ME, 'marty-pk'], ME, undefined, 'p');
+    });
+
+    // R1 (engine/request-limits.ts): reports cleared the member's message requests; every screen that starts a chat words the refusal.
+    describe("403 dm_requests_limited on a Message button: the rule in the member's language, dated, not the node's English", () => {
+        const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+        const SPANISH = 'Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.';
+        const refused = () => Object.assign(new Error(LIMITED), { status: 403, code: 'dm_requests_limited' });
+        const inSpanish = () => {
+            const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+            setLanguage('es', [es]);
+            return () => setLanguage('en');
+        };
+
+        it('Message on a listing', async () => {
+            const undo = inSpanish();
+            try {
+                vi.spyOn(api, 'createConversationApi').mockRejectedValue(refused());
+                await open(listing({ title: 'Pottery course' }), []);
+                fireEvent.click(await screen.findByRole('button', { name: /💬/ }));
+                expect(await screen.findByText(SPANISH)).toBeInTheDocument();
+                expect(screen.queryByText(LIMITED)).not.toBeInTheDocument();
+            } finally { undo(); }
+        });
+
+        it("Message on a deal's row (the author's)", async () => {
+            const undo = inSpanish();
+            try {
+                vi.spyOn(api, 'createConversationApi').mockRejectedValue(refused());
+                await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
+                    deal({ id: 'tx-a', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME }),
+                ]);
+                const row = await screen.findByTestId('deal-row-tx-a');
+                fireEvent.click(within(row).getByRole('button', { name: /Marty/ }));
+                expect(await screen.findByText(SPANISH)).toBeInTheDocument();
+                expect(screen.queryByText(LIMITED)).not.toBeInTheDocument();
+            } finally { undo(); }
+        });
     });
 
     it('the author opened at one deal (Home, the header): that row comes first', async () => {

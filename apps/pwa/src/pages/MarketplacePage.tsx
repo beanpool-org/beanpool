@@ -6,7 +6,7 @@
  * Tapping a post opens a full detail view.
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { useCoversScreen } from '../lib/screen-cover';
@@ -31,6 +31,7 @@ import {
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive,
+    MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -337,6 +338,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             return null;
         }
     });
+    // "New since you last looked" (DESIGN-market-order-fable.md §2.9): this browser's one stamp, beside the banner's: the newest
+    // listed time that was on screen, under no search or filter, when the Market was last left. Read as the page opens (a visit
+    // is a mount), written as it closes, so the line is where the member stopped whatever came in since (parity with the phone).
+    const [seenListed] = useState<number | null>(() => {
+        try {
+            return parseSeenListed(localStorage.getItem(MARKET_SEEN_KEY));
+        } catch {
+            return null;
+        }
+    });
+    const newestOnScreen = useRef<number | null>(null);
+    useEffect(() => {
+        const save = () => {
+            const newest = newestOnScreen.current;
+            if (newest === null) return;
+            try { localStorage.setItem(MARKET_SEEN_KEY, String(newest)); } catch { /* storage full or off: no line next time */ }
+        };
+        window.addEventListener('pagehide', save);
+        return () => { window.removeEventListener('pagehide', save); save(); };
+    }, []);
     const [foundingOnlyPicked, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -3964,6 +3985,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 const narrowed = !!searchQuery.trim() || !!selectedTag || !!selectedFree || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
                     || groupFilter !== 'all' || beansOnly || foundingOnly;
+                // The whole Market, under no search, filter or picked distance: where the stamp is taken and the line may show.
+                const seenEligible = !visitor && !narrowed && searchResults === null && near?.from !== 'setting';
+                if (seenEligible) newestOnScreen.current = newestListed(unpinnedFiltered, orderNow) ?? newestOnScreen.current;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: fillPending ? FILL_BELOW : filtered.length + fillRows.length })
                     ? <ExampleListings />
                     : null;
@@ -4232,9 +4256,31 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     // The Events pill is a date list, as on the phone: soonest first, under no heading.
                     if (typeFilter === 'event') return renderSection('', filtered);
 
+                    // "New since you last looked": one line in the heading's style above the first post listed at or before this
+                    // browser's stamp; above the heading where that post starts a day.
+                    const lineAt = seenEligible ? newSinceIndex(sections.flatMap(s => s.posts), seenListed, orderNow) : -1;
+                    const newSinceLine = (
+                        <div key="new-since" data-testid="market-new-since" className="flex items-center gap-3 mt-2 mb-1">
+                            <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
+                                {t(NEW_SINCE_LINE)}
+                            </span>
+                            <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
+                        </div>
+                    );
+                    let seen = 0;
                     return (
                         <>
-                            {sections.map(s => renderSection(t(FEED_SECTION_WORDS[s.id]), s.posts))}
+                            {sections.map(s => {
+                                const title = t(FEED_SECTION_WORDS[s.id]);
+                                const start = seen;
+                                seen += s.posts.length;
+                                if (lineAt === start) return <Fragment key={s.id}>{newSinceLine}{renderSection(title, s.posts)}</Fragment>;
+                                if (lineAt > start && lineAt < seen) {
+                                    const k = lineAt - start;
+                                    return <Fragment key={s.id}>{renderSection(title, s.posts.slice(0, k))}{newSinceLine}{renderSection('', s.posts.slice(k))}</Fragment>;
+                                }
+                                return renderSection(title, s.posts);
+                            })}
                         </>
                     );
                 };

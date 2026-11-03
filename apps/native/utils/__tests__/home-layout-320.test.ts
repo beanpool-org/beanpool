@@ -25,7 +25,7 @@ import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { sheetStyles } from '../../components/home/sheet-parts';
 import { st as arrangeStyles } from '../../components/home/ArrangeParts';
-import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
+import { ADD_CARD_DOT_DP, ADD_CARD_DOT_GAP_DP, ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
 import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
@@ -259,6 +259,17 @@ describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
         const global = pickerGroups({ profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } }, null, null);
         return [...local.groups, ...global.groups].flatMap(g => g.rows);
     };
+
+    it('the hue dot before a row\'s name (S2) is 10dp, never shrinks, and leaves the name at least 140dp at the floor', () => {
+        expect(a.dot).toMatchObject({ width: 10, height: 10, flexShrink: 0 });
+        expect(ADD_CARD_DOT_DP).toBe(10);
+        expect(a.nameRow).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: ADD_CARD_DOT_GAP_DP });
+        expect(a.name).toMatchObject({ flexShrink: 1, minWidth: 0 });
+        const nameRoom = room - ADD_CARD_DOT_DP - ADD_CARD_DOT_GAP_DP;
+        expect(nameRoom, 'name room beside the dot').toBeGreaterThanOrEqual(140);
+        // Every name keeps its longest word (and the dot costs it nothing it had spare: the line below still has the whole room).
+        for (const r of everyRow()) expect(longestWord(r.name, num(a.name.fontSize)), r.name).toBeLessThan(nameRoom);
+    });
 
     it('every row\'s name and line keep their longest word beside a 48dp Add (or "On Home")', () => {
         expect(num(a.add.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);

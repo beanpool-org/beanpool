@@ -19,7 +19,7 @@
  *
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone, barrel-is-universal.test.ts).
  */
-import { PRICING_CATEGORIES } from './pricing-catalog.js';
+import { PRICING_CATEGORIES, type PricingCategory } from './pricing-catalog.js';
 import { readSkySettings } from './sky.js';
 import { isTagId } from './tags/index.js';
 import { POST_TAGS_MAX } from './tags/post-tags.js';
@@ -400,11 +400,35 @@ const RANK: ReadonlyMap<string, number> = new Map(HOME_CARD_TYPES.map((t, i) => 
 export const homeCardType = (type: string): HomeCardType | undefined => TYPES.get(type);
 
 /**
- * A card's hue (S1): the type's hue from the catalogue.
+ * The hue a saved search takes from its category (DESIGN-home-look-fable.md §2.2, slice 2): each category's tile colour
+ * (brand-colours `tile`), as the nearest card hue. Labour is yellow, not amber: amber on Home means "waiting on you" and is
+ * never a default. Typed on the category ids, so a category added to the catalogue without a hue here fails the compiler.
+ */
+export const HOME_CATEGORY_HUES: Readonly<Record<PricingCategory, CardHue>> = {
+    food: 'orange', services: 'blue', labour: 'yellow', tools: 'sand', goods: 'sand', garden: 'lime', housing: 'clay',
+    transport: 'sky', education: 'indigo', arts: 'pink', health: 'teal', care: 'rose', animals: 'green', tech: 'sky',
+    energy: 'yellow', mindset: 'plum', general: 'sage',
+};
+
+/** The hue a chat card takes from the kind of chat it shows: a direct chat sage, a group rose, an event's violet, an enterprise's clay. */
+export const HOME_CHAT_KIND_HUES: Readonly<Record<HomeChatKind, CardHue>> = { dm: 'sage', group: 'rose', event: 'violet', enterprise: 'clay' };
+
+/**
+ * A card's hue: the type's hue from the catalogue (S1); a saved search with a category takes the category's, and a chat card
+ * with a chat picked takes its kind's (S2). A search with no category keeps orange, a chat with none picked keeps sage.
  * Sage for an unknown type or instance.
  */
-export const homeCardHue = (instance?: Pick<HomeCardInstance, 'type'> | null): CardHue =>
-    (instance?.type ? TYPES.get(instance.type)?.hue : undefined) ?? 'sage';
+export const homeCardHue = (instance?: Pick<HomeCardInstance, 'type'> & { settings?: unknown } | null): CardHue => {
+    if (!instance?.type) return 'sage';
+    if (instance.type === 'search') {
+        const category = readSearchSettings(instance.settings).category;
+        if (category) return HOME_CATEGORY_HUES[category as PricingCategory];
+    } else if (instance.type === 'chat') {
+        const chat = readChatSettings(instance.settings);
+        if ('kind' in chat) return HOME_CHAT_KIND_HUES[chat.kind];
+    }
+    return TYPES.get(instance.type)?.hue ?? 'sage';
+};
 
 /** The types always drawn and never in a member's list. */
 export const HOME_FIXED_TYPES: readonly string[] = HOME_CARD_TYPES.filter((t) => t.fixed).map((t) => t.id);

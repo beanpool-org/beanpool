@@ -819,7 +819,9 @@ async function main() {
     closeNow(zedVote);
     const memberStatus = (k: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(k) as { status: string } | undefined)?.status;
     const tokenOf = (k: string) => byKey.get(k)?.token ?? `no token for ${k.slice(0, 8)}`;
-    const phonesOf = (keys: string[]) => new Set(keys.map(tokenOf));
+    /** A member's phones besides the one seedMember gave them (a juror's French phone, below). */
+    const morePhones = new Map<string, string[]>();
+    const phonesOf = (keys: string[]) => new Set(keys.flatMap(k => [tokenOf(k), ...(morePhones.get(k) ?? [])]));
     const sentTo = (kind: string, from = 0) => new Set(sent.slice(from).filter(m => m.k === kind).map(m => m.to));
     const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(x => b.has(x));
     const seatedOf = (id: string) => rollOf(id).filter(r => r.status === 'on').map(r => r.k);
@@ -919,12 +921,13 @@ async function main() {
     const frenchJuror = calJurors[8];
     const frenchPhone = `ExponentPushToken[rj-fr-${crypto.randomBytes(4).toString('hex')}]`;
     se.registerPushToken(frenchJuror.pk, frenchPhone, 'android', null, null, 'fr');
+    morePhones.set(frenchJuror.pk, [frenchPhone]);
     mark = sent.length;
     fresh();
     const replied = await signed('POST', `/api/commons/decisions/${calVote}/reply`, cal, { reply: 'I did nothing of the kind, and here is what happened.' });
     await settle(300);
     const replyPhones = sentTo('decision.jury-reply', mark);
-    assert(replied.status === 200 && sameSet(replyPhones, new Set([...phonesOf(seatedOf(calVote)), frenchPhone])),
+    assert(replied.status === 200 && sameSet(replyPhones, phonesOf(seatedOf(calVote))) && replyPhones.has(frenchPhone),
         `the member answers: every seated juror is pushed, nobody else (${replied.status}; ${replyPhones.size} phones)`);
     const frenchSent = sent.slice(mark).find(m => m.to === frenchPhone);
     const englishSent = sent.slice(mark).find(m => m.to === frenchJuror.token);
@@ -944,7 +947,7 @@ async function main() {
     de.tickDecisions();
     await settle(300);
     const reminded = sentTo('decision.jury-reminder', mark);
-    assert(noAnswer.length === 6 && sameSet(reminded, new Set([...phonesOf(noAnswer), frenchPhone])) && namesNobody(mark),
+    assert(noAnswer.length === 6 && noAnswer.includes(frenchJuror.pk) && sameSet(reminded, phonesOf(noAnswer)) && namesNobody(mark),
         `48 hours after their seat, each of the 6 jurors with no answer is reminded, nobody who answered Serve or voted (${reminded.size} phones)`);
     assert(sent.slice(mark).filter(m => m.k === 'decision.jury-reminder').every(m => m.body === 'A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.'),
         'the reminder says a day is left, and what happens then');
@@ -998,7 +1001,9 @@ async function main() {
     const deeVote = pauseOf(dee);
     const deeJury = seatedOf(deeVote);
     const deeJurors = deeJury.map(k => byKey.get(k)!);
-    const paused = deeJurors.find(j => memberStatus(j.pk) === 'active')!;
+    // One no case was ever brought against, so the cool-down after a vote that kept them doesn't refuse their pause.
+    const wasSubject = new Set(members.slice(2, 2 + subjects).map(m => m.pk));
+    const paused = deeJurors.find(j => memberStatus(j.pk) === 'active' && !wasSubject.has(j.pk))!;
     const others = deeJurors.filter(j => j !== paused);
     for (const j of others) await answerAs(deeVote, j, 'serve');
     const pausedVote = de.castDecisionVote(deeVote, paused.pk, true);

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -28,5 +28,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "Anda sudah meminta {n} kali hari ini. Anda bisa meminta lagi besok.",
   "Please keep this to {n} characters.": "Harap batasi ini hingga {n} karakter.",
   "Please fill in their first name and how you know them.": "Harap isi nama depannya dan bagaimana Anda mengenalnya.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Harap jangan cantumkan nomor telepon dan alamat email. Admin hanya perlu nama depan dan bagaimana Anda mengenalnya."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Harap jangan cantumkan nomor telepon dan alamat email. Admin hanya perlu nama depan dan bagaimana Anda mengenalnya.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "Juri yang terdiri dari anggota yang dipilih secara acak memutuskan pemungutan suara ini. Anda tidak terpilih, jadi Anda tidak bisa memberikan suara.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "Pemilik komunitas Anda mengubah cara kerjanya: setelah komunitas cukup besar, juri yang terdiri dari anggota yang dipilih secara acak akan memutuskan apakah seseorang dikeluarkan. Sampai saat itu, setiap anggota dapat memberikan suara.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "Pemilik komunitas Anda mengubah cara kerjanya: setiap anggota dapat memberikan suara apakah seseorang dikeluarkan.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "Pemilik komunitas Anda mengubah cara kerjanya: juri yang terdiri dari anggota yang dipilih secara acak memutuskan apakah seseorang dikeluarkan."
 }

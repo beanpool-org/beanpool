@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -28,5 +28,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "Сьогодні ви вже просили {n} рази. Знову попросити можна завтра.",
   "Please keep this to {n} characters.": "Скоротіть це до {n} символів.",
   "Please fill in their first name and how you know them.": "Вкажіть ім’я людини та звідки ви її знаєте.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Не вказуйте номери телефонів та адреси пошти. Адміністратору достатньо імені й того, звідки ви знаєте цю людину."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Не вказуйте номери телефонів та адреси пошти. Адміністратору достатньо імені й того, звідки ви знаєте цю людину.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "Це голосування вирішує журі з випадково обраних учасників. Вас не обрали, тож ви не можете в ньому голосувати.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "Власники вашої спільноти змінили, як вона працює: коли спільнота стане достатньо великою, питання про вилучення учасника вирішуватиме журі з випадково обраних учасників. До того часу голосувати може кожен учасник.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "Власники вашої спільноти змінили, як вона працює: кожен учасник може голосувати щодо вилучення учасника.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "Власники вашої спільноти змінили, як вона працює: питання про вилучення учасника вирішує журі з випадково обраних учасників."
 }

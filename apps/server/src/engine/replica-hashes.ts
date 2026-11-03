@@ -101,7 +101,12 @@ export interface TableHashes {
  * 18: message_attachments becomes a copied table (chat photos, gap G4: REPLICA_FORMAT 14), with three new columns (sha256,
  * bytes, updated_at). Raised for the same reason as 8: a standby updated before its main server hashes one more table.
  */
-export const TABLE_HASHES_VERSION = 18;
+/**
+ * 19: a new table, decision_jury_pools (the pool a removal jury was drawn from, DESIGN-removal-jury-fable.md slice J1). Raised
+ * for the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: no
+ * community has a jury until its owners choose one, and a vote's pool comes with it once both sides run this release.
+ */
+export const TABLE_HASHES_VERSION = 19;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

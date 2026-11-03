@@ -389,6 +389,39 @@ export function moveCard(
 }
 
 /**
+ * `items` with the movable card `id` brought to place `to` among the movable ones (a drag's live preview and its drop).
+ * Every card that can't move, and every slot it stands in, stays where it is.
+ */
+export function reorderAmong<T extends Pick<HomeCardInstance, 'id' | 'type'>>(items: readonly T[], id: string, to: number, pinned: readonly string[] = []): T[] {
+    const slots = items.flatMap((c, i) => (canMoveCard(c.type, pinned) ? [i] : []));
+    const order = slots.map(i => items[i]);
+    const from = order.findIndex(c => c.id === id);
+    const out = [...items];
+    if (from < 0) return out;
+    order.splice(to, 0, ...order.splice(from, 1));
+    slots.forEach((slot, k) => { out[slot] = order[k]; });
+    return out;
+}
+
+/**
+ * A drag's drop (L3): the card to place `to` among the movable cards of `among` (every card Arrange folds), saved as the
+ * same list an arrow makes, in the slots those cards already hold. Null when it would not move.
+ */
+export function moveCardTo(
+    layout: HomeLayoutV2 | null, id: string, to: number, among: readonly Pick<HomeCardInstance, 'id' | 'type'>[], now: number,
+    pinned: readonly string[] = [],
+): HomeLayoutV2 | null {
+    const list = listOf(layout);
+    const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
+    const placed = reorderAmong(movable, id, to, pinned);
+    if (placed.every((c, k) => c.id === movable[k].id)) return null;
+    const slots = movable.map(c => list.findIndex(l => l.id === c.id)).sort((x, y) => x - y);
+    const cards = [...list];
+    slots.forEach((slot, k) => { cards[slot] = list.find(l => l.id === placed[k].id)!; });
+    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
+}
+
+/**
  * Reset to defaults: the newcomer's list (§1.3). A schedule's dismissal (the `safety` card) is kept, and so is a card of
  * a type this build doesn't know, at the end: Reset is this app's defaults, not a licence to throw away what it can't see.
  * The columns chosen are kept too (W0): columns are no card.

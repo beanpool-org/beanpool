@@ -11,10 +11,10 @@ const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: 
 import {
     FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
     columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
-    moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
+    moveCard, moveCardTo, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
-import { arrangeCards, cardLine } from './home-layout';
+import { arrangeCards, cardLine, reorderAmong } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
 const H = 3_600_000;
@@ -105,6 +105,33 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         expect(ids(moveCard(l, 'events', 'down', shown, NOW))).toEqual(['steps', 'tips', 'market', 'notices', 'events']);
         expect(moveCard(l, 'steps', 'up', shown, NOW)).toBeNull();
         expect(moveCard(l, 'notices', 'down', shown, NOW)).toBeNull();
+    });
+
+    it('a drop (L3): the card goes to its place among the movable ones, the others keep their slots, and the shape is an arrow\'s', () => {
+        const l: HomeLayoutV2 = { ...starterLayout(), cards: ['steps', 'tips', 'market', 'events', 'notices'].map(id => ({ id, type: id })) };
+        // On screen: tips isn't drawn, so it keeps its slot whatever moves around it.
+        const shown = cardOrder(l).filter(c => c.id !== 'tips');
+        expect(ids(moveCardTo(l, 'notices', 0, shown, NOW)!)).toEqual(['notices', 'tips', 'steps', 'market', 'events']);
+        expect(ids(moveCardTo(l, 'steps', 3, shown, NOW)!)).toEqual(['market', 'tips', 'events', 'notices', 'steps']);
+        // One place is what an arrow does, with the same keys saved.
+        const arrow = moveCard(l, 'events', 'up', shown, NOW)!;
+        const drop = moveCardTo(l, 'events', 1, shown, NOW)!;
+        expect(drop).toEqual(arrow);
+        expect(Object.keys(drop)).toEqual(Object.keys(l));
+        // Where it already stands, or a card that is not there: nothing to save.
+        expect(moveCardTo(l, 'market', 1, shown, NOW)).toBeNull();
+        expect(moveCardTo(l, 'nothing', 0, shown, NOW)).toBeNull();
+    });
+
+    it('a drag\'s preview never moves a card that stays here, and never lets one be passed', () => {
+        const cards = [{ id: 'needs', type: 'needs' }, { id: 'find', type: 'find' }, { id: 'a', type: 'market' }, { id: 'b', type: 'events' }, { id: 'c', type: 'notices' }, { id: 'community', type: 'community' }];
+        const live = (id: string, to: number) => reorderAmong(cards, id, to, ['find']).map(c => c.id);
+        expect(live('c', 0)).toEqual(['needs', 'find', 'c', 'a', 'b', 'community']);
+        expect(live('a', 99)).toEqual(['needs', 'find', 'b', 'c', 'a', 'community']);
+        // The fixed two and a pin are no card to lift: asking changes nothing.
+        expect(live('needs', 2)).toEqual(cards.map(c => c.id));
+        expect(live('find', 0)).toEqual(cards.map(c => c.id));
+        expect(live('community', 0)).toEqual(cards.map(c => c.id));
     });
 
     it('reset: the newcomer\'s list; a schedule\'s dismissal and a newer app\'s card are kept', () => {

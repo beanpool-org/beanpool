@@ -350,6 +350,12 @@ async function main() {
     assert(inGrace?.id === id3, 'each account on the list is in that removal\'s grace window (Settings, Offboard)');
     const liftInGrace = de.adminLiftSuspension(s3.b.pubKeyHex, ada.pubKeyHex);
     assert(!liftInGrace.success && liftInGrace.status === 409, `an admin can't lift one in the window: halt it instead (${liftInGrace.error})`);
+    // The offboarding wizard settles one account early: that one is removed, and the window runs on for the others.
+    const { executeOffboard } = await import('./engine/member-wizards.js');
+    const settledEarly = executeOffboard(s3.a.pubKeyHex, { resolution: 'prune_zero_balance' }, ada.pubKeyHex);
+    assert(settledEarly.success && statusOf(s3.a) === 'pruned' && row(id3).status === 'execution_pending_grace'
+        && [s3.root, s3.b, s3.c].every(i => statusOf(i) === 'disabled'),
+        `Offboard settles one account early; the vote stays in its window for the other 3, still paused (${row(id3).status})`);
     db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), id3);
     de.tickDecisions();
     assert(row(id3).status === 'executed' && s3.all.every(i => statusOf(i) === 'pruned'),

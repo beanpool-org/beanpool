@@ -2183,6 +2183,13 @@ export const SETTLED_BY_OFFBOARDING = "Completed early: an admin settled the mem
  * transaction, after the removal; announceDecisionUpdated tells everyone once it has committed.
  */
 export function closeRemovalSettledEarly(decisionId: string, nowIso: string): void {
+    // A branch's removal closes only once every account on its list is gone: settling one leaves the others in the window,
+    // still paused, for the tick to remove at its end (pruneBranchVote passes over one already removed).
+    const decision = getDecision(decisionId);
+    if (decision && isBranchVote(decision) && removalSubjects(decision).some(pk => {
+        const status = getMember(pk)?.status;
+        return !!status && status !== 'pruned';
+    })) return;
     db.prepare(`
         UPDATE decisions SET status = 'executed', executed_at = ?, execution_reason = ?, updated_at = ?
         WHERE id = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
@@ -3578,18 +3585,22 @@ export const OWNER_DECIDED_NOTICE_BODY = 'Too few members can vote on whether yo
  * undoes it.
  */
 function noticeOwnerDecided(decision: Decision, push: RemovalVotePush): void {
-    if (!decision.subject) return;
-    try {
-        const noticeId = keepNotice(decision.subject, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { kind: 'removal_vote', screen: 'decide' });
-        broadcast({
-            type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body: OWNER_DECIDED_NOTICE_BODY, severity: 'info', kind: 'removal_vote',
-            ...(noticeId ? { noticeId } : {}),
-        }, [decision.subject]);
-    } catch (err) {
-        console.warn('[Decisions] the notice of an owner deciding a removal vote failed:', err);
+    // Each account the vote names: a branch's every one (removalSubjects).
+    const members = removalSubjects(decision);
+    if (!members.length) return;
+    for (const member of members) {
+        try {
+            const noticeId = keepNotice(member, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { kind: 'removal_vote', screen: 'decide' });
+            broadcast({
+                type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body: OWNER_DECIDED_NOTICE_BODY, severity: 'info', kind: 'removal_vote',
+                ...(noticeId ? { noticeId } : {}),
+            }, [member]);
+        } catch (err) {
+            console.warn('[Decisions] the notice of an owner deciding a removal vote failed:', err);
+        }
     }
     try {
-        push([decision.subject], SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.removal-vote');
+        push(members, SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.removal-vote');
     } catch (err) {
         console.warn('[Decisions] the push of an owner deciding a removal vote failed:', err);
     }

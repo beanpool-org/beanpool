@@ -10,7 +10,7 @@
  *    - Trade routes (request, accept, approve, complete) reject polls.
  *    - Search queries exclude polls unless explicitly requested.
  * 3. Rate limits: 1 active poll per member, 5 active polls per node.
- * 4. Franchise rules: Active members only; credit-frozen members cannot create or vote.
+ * 4. Franchise rules: Active members only; credit-frozen members cannot create a poll but do vote (a freeze moves no vote).
  * 5. Re-voting overwrites choice rather than duplicating.
  * 6. Immutability: Question and options cannot be edited once votes exist.
  * 7. Author departure/prune: Closes open polls (status='completed', active=0), retains votes.
@@ -208,15 +208,11 @@ async function main() {
     assert(errThrew, 'Blocked 6th active poll on node');
 
     console.log('\n--- 4. Voting & Franchise ---');
-    // Credit-frozen Dave cannot vote
-    errThrew = false;
-    try {
-        votePoll(poll1!.id, 'pub-dave', 'opt_yes');
-    } catch (e: any) {
-        errThrew = true;
-        assert(e.message.includes('Credit-frozen'), 'Credit-frozen member cannot vote');
-    }
-    assert(errThrew, 'Blocked vote from credit-frozen member');
+    // A freeze is about Beans, not citizenship (RV-S7): credit-frozen Dave answers a poll, and his answer counts.
+    // (Frank's poll: no other section of this suite counts its votes.)
+    const daveVote = votePoll(pollFrank!.id, 'pub-dave', '1');
+    assert(daveVote.success && daveVote.post.totalVotes === 1 && daveVote.post.userVotedOptionId === '1',
+        'Credit-frozen member votes, and the vote counts');
 
     // Inactive Eve cannot vote
     errThrew = false;

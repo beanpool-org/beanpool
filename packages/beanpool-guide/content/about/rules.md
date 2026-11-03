@@ -37,7 +37,7 @@ Any active member whose credit is not frozen, and who has traded in the market. 
 
 ## Who can vote
 
-Any active member whose credit is not frozen, and who joined **before** the Decision opened. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.
+Any active member who joined **before** the Decision opened. A member whose credit the admins froze still votes: a freeze is about Beans, not about having a say. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.
 
 Nobody votes on a Decision to remove them, and they are not counted in its turnout. A member an admin has suspended still votes on every other Decision while the community votes on removing them, and is counted in their turnout, so suspending someone cannot change a vote (see "Emergency suspension").
 
@@ -145,7 +145,7 @@ Your community's server has owners and admins. They look after it.
 - Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.
 - You can have one open Poll at a time. Your community can have 5 open Polls at once.
 - A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.
-- Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.
+- A member whose credit is frozen can still answer a Poll. You can change your answer until the Poll closes. The person who started it can close it early.
 - A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts, and can't be changed in the app after the Poll is posted. An owner's AI assistant can change it on a Poll it made, only until the first vote.
 - On the global community, a closed anonymous Poll also says how many of its votes came from new or 12-word accounts, if any did. Every vote still counts.
 

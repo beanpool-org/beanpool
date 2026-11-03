@@ -2046,12 +2046,11 @@ export function votePoll(
     otherWords?: unknown
 ): { success: boolean; post: MarketplacePost } {
     assertMemberActive(voterPublicKey);
-    const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(voterPublicKey) as any;
+    // A freeze is about Beans, not citizenship: a member whose credit is frozen still answers a poll (RV-S7). Starting one
+    // stays refused (createPost).
+    const memberRow = db.prepare("SELECT status FROM members WHERE public_key = ?").get(voterPublicKey) as any;
     if (!memberRow || memberRow.status !== 'active') {
         throw new Error(word('Only active members can vote in polls'));
-    }
-    if (memberRow.credit_frozen) {
-        throw new Error(word('Credit-frozen members cannot vote in polls'));
     }
 
     const post = getPosts(db, { id: postId, includeAllScopes: true })[0];

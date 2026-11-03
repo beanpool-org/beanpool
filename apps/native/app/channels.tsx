@@ -21,9 +21,15 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    View, Text, StyleSheet, Pressable, TextInput,
-    ActivityIndicator, Switch, Alert,
+    View,
+    Text,
+    StyleSheet,
+    Pressable,
+    TextInput,
+    ActivityIndicator,
+    Switch,
 } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 // react-native's own SafeAreaView is iOS-only — on Android it is a plain View, so under SDK 55's
 // edge-to-edge the header and Back control would sit under the status bar. Every other pushed
 // screen uses this one, and _layout.tsx already provides the SafeAreaProvider.

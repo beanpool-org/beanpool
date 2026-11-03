@@ -5,7 +5,8 @@ import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } f
 export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler, I18nManager } from 'react-native';
+import { LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler, I18nManager } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';

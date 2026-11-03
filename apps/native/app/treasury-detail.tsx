@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, TextInput } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';

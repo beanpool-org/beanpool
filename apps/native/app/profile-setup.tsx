@@ -76,9 +76,10 @@ export default function ProfileSetupScreen() {
     //  - `nodeAvatar`     what this community holds for us, read from the synced `members` row (since
     //                     #725 that is the node's own `/api/avatar/<pk>?size=thumb` URL, and
     //                     null when the node has no photo).
-    // The phone's copy of the last photo chosen in ANY community is neither shown nor sent here (Profile S2):
+    // The phone's copy of the last photo chosen in ANY community is neither shown nor sent here unasked (Profile S2):
     // it was previewed as if it were this community's and then published, so a picture chosen in one community
-    // became the picture in the next. A fresh community shows no photo until one is chosen, and the wizard asks.
+    // became the picture in the next. A fresh community shows no photo until one is chosen, and the wizard asks;
+    // the last photo is only OFFERED, as a tickbox that starts off (`photoOffer`, below, Profile S3).
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [nodeAvatar, setNodeAvatar] = useState<string | null>(null);
     // The photo the member used last, in another community, offered while this one holds none for them (Profile S3,

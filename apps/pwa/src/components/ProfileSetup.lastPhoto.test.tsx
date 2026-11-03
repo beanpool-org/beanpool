@@ -9,6 +9,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import resolveConfig from 'tailwindcss/resolveConfig';
 import { ProfileSetup } from './ProfileSetup';
 import * as api from '../lib/api';
@@ -16,7 +18,6 @@ import { generateIdentity, importIdentity, type BeanPoolIdentity } from '../lib/
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { rememberLastPhoto } from '../lib/last-photo';
-import tailwindConfig from '../../tailwind.config.js';
 
 vi.mock('./OnboardingGuide', () => ({ OnboardingGuide: () => null }));
 const HERE = 'https://second.example.test';
@@ -150,7 +151,10 @@ describe('the web wizard offers the last photo as a tickbox that starts off', ()
 describe('the tickbox at 320 px wide with the text at 130 %, in light and in dark', () => {
     // The classes are what jsdom can read; the palette is the app's own (tailwind.config.js). Chromium measures the same
     // class strings in e2e/dark-class-check.mjs (test-all's pwa_dark_classes).
-    const nature = (resolveConfig(tailwindConfig as any).theme.colors as any).nature as Record<string, string>;
+    const natureShades = async () => {
+        const { default: config } = await import(/* @vite-ignore */ pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href);
+        return (resolveConfig(config).theme.colors as any).nature as Record<string, string>;
+    };
     const lum = (hex: string) => {
         const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -177,6 +181,7 @@ describe('the tickbox at 320 px wide with the text at 130 %, in light and in dar
         expect(classes(offer()!)).toEqual(expect.arrayContaining(['accent-nature-900', 'dark:accent-white']));
 
         // The words read in both (4.5:1): from the palette the classes name.
+        const nature = await natureShades();
         expect(ratio(nature['800'], nature['50'])).toBeGreaterThanOrEqual(4.5);
         expect(ratio(nature['100'], nature['800'])).toBeGreaterThanOrEqual(4.5);
     });

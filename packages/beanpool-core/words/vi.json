@@ -967,6 +967,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "Mở tệp khi tải xong: chạm vào thông báo, hoặc tìm trong mục Tải xuống của điện thoại.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "Lần đầu, Android yêu cầu bạn cho phép trình duyệt cài ứng dụng. Hãy cho phép trong phần cài đặt vừa mở, rồi quay lại.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "Xác nhận cài đặt. Nếu BeanPool đã có trên điện thoại, Android gọi đó là bản cập nhật. Sau đó mở BeanPool.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Tệp này được ký bằng cùng một khóa với BeanPool trên Google Play. Dấu vân tay SHA-256 của chứng chỉ là:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "Máy chủ này chưa có bản sao ứng dụng Android. Lần tới khi có mạng, máy chủ sẽ tự tải về một bản."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Tệp này được ký bằng cùng một khóa với BeanPool trên Google Play. Dấu vân tay SHA-256 của chứng chỉ là:"
 }

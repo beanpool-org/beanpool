@@ -26,6 +26,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import path from 'node:path';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 /** SHA-256 of Google's app-signing certificate for org.beanpool.pillar (Play Console; memory apk-with-every-android-release). */
 export const APK_SIGNING_CERT_SHA256 = '46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81';
@@ -193,17 +195,17 @@ export async function downloadApk(release: ApkRelease, dest: string, source: Apk
     try {
         const res = await fetchFollowing(release.url, source, fetchImpl, { 'User-Agent': 'BeanPool-Node', Accept: 'application/octet-stream' }, signal);
         if (!res.ok || !res.body) throw new Error(`the download answered ${res.status}`);
-        const out = fs.createWriteStream(partial, { mode: 0o644 });
         let bytes = 0;
-        try {
-            for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        const capped = new Transform({
+            transform(chunk: Uint8Array, _encoding, done) {
                 bytes += chunk.byteLength;
-                if (bytes > release.size) throw new Error(`the download is larger than the ${release.size} bytes its release gives`);
-                if (!out.write(chunk)) await new Promise<void>((r) => out.once('drain', () => r()));
-            }
-        } finally {
-            await new Promise<void>((resolve, reject) => out.end((e?: Error | null) => (e ? reject(e) : resolve())));
-        }
+                if (bytes > release.size) done(new Error(`the download is larger than the ${release.size} bytes its release gives`));
+                else done(null, chunk);
+            },
+        });
+        // pipeline, not write() by hand: a failed disk write (ENOSPC, EIO, EACCES) then rejects here and is refused below,
+        // where an 'error' event with no listener would have restarted the node.
+        await pipeline(res.body as unknown as AsyncIterable<Uint8Array>, capped, fs.createWriteStream(partial, { mode: 0o644 }));
         if (bytes !== release.size) throw new Error(`the download is ${bytes} bytes, not the ${release.size} its release gives`);
         const info = await checkApkFile(partial, release);
         await fsp.rename(partial, dest);

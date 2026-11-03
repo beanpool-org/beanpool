@@ -1009,6 +1009,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "Apri il file quando ha finito di scaricarsi: toccalo nella notifica o cercalo nei Download del telefono.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "La prima volta, Android ti chiede di permettere al browser di installare app. Permettilo nelle impostazioni che si aprono, poi torna indietro.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "Conferma l'installazione. Se BeanPool è già sul telefono, Android lo chiama aggiornamento. Poi apri BeanPool.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Questo file è firmato con la stessa chiave di BeanPool su Google Play. L'impronta SHA-256 del suo certificato è:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "Questo server non ha ancora una copia dell'app per Android. Ne scaricherà una da solo la prossima volta che sarà online."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Questo file è firmato con la stessa chiave di BeanPool su Google Play. L'impronta SHA-256 del suo certificato è:"
 }

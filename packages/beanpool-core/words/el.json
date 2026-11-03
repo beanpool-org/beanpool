@@ -1009,6 +1009,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "Άνοιξε το αρχείο μόλις κατέβει: πάτησέ το στην ειδοποίηση ή βρες το στις Λήψεις του τηλεφώνου.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "Την πρώτη φορά, το Android σού ζητά να επιτρέψεις στο πρόγραμμα περιήγησης να εγκαθιστά εφαρμογές. Επίτρεψέ το στις ρυθμίσεις που ανοίγουν και γύρνα πίσω.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "Επιβεβαίωσε την εγκατάσταση. Αν το BeanPool είναι ήδη στο τηλέφωνο, το Android το λέει ενημέρωση. Μετά άνοιξε το BeanPool.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Αυτό το αρχείο είναι υπογεγραμμένο με το ίδιο κλειδί με το BeanPool στο Google Play. Το αποτύπωμα SHA-256 του πιστοποιητικού του είναι:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "Αυτός ο διακομιστής δεν έχει ακόμη αντίγραφο της εφαρμογής Android. Θα το φέρει μόνος του την επόμενη φορά που θα είναι online."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Αυτό το αρχείο είναι υπογεγραμμένο με το ίδιο κλειδί με το BeanPool στο Google Play. Το αποτύπωμα SHA-256 του πιστοποιητικού του είναι:"
 }

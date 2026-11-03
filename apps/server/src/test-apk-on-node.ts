@@ -190,6 +190,14 @@ const a93 = apk('1.2.93');
         { tag: 'android-v1.2.96', version: '1.2.96', versionCode: 318, fileName: 'BeanPool-1.2.96-318.apk', size: a96.length, sha256: fx.sha256Hex(a96) }));
     await mirror.refreshApk(source);
     check('B10 and so does the next check', held() === '', held());
+    // A disk that refuses the write during the download (EACCES stands in for ENOSPC / EIO): refused, never a crash.
+    fs.mkdirSync(apkDir, { recursive: true });
+    fs.chmodSync(apkDir, 0o555);
+    gh.releases = [{ version: '1.2.98', code: 320, apk: apk('1.2.98') }];
+    const denied: { outcome: string } = await mirror.refreshApk(source).catch((e: unknown) => ({ outcome: `threw ${String(e)}` }));
+    fs.chmodSync(apkDir, 0o755);
+    check('B11 a disk that refuses the write: refused, not a crash; nothing left behind, the image\'s APK still served',
+        denied.outcome === 'refused' && held() === '' && mirror.servedApk()?.version === '1.2.97', `${JSON.stringify(denied)} ${held()}`);
 }
 
 // ── C. serving ────────────────────────────────────────────────────────────────────────────────────────────────────

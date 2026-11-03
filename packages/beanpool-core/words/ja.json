@@ -967,6 +967,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "ダウンロードが終わったらファイルを開きます。通知をタップするか、スマートフォンの「ダウンロード」で探してください。",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "初回は、ブラウザにアプリのインストールを許可するよう Android が求めます。開いた設定で許可してから、戻ってください。",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "インストールを確定します。BeanPool がすでにスマートフォンにある場合、Android はこれを更新と呼びます。その後 BeanPool を開いてください。",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "このファイルは、Google Play の BeanPool と同じ鍵で署名されています。その証明書の SHA-256 フィンガープリントは次のとおりです：",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "このサーバーにはまだ Android アプリのコピーがありません。次にオンラインになったときに、自動で取得します。"
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "このファイルは、Google Play の BeanPool と同じ鍵で署名されています。その証明書の SHA-256 フィンガープリントは次のとおりです："
 }

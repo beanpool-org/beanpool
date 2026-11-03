@@ -967,6 +967,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "下载完成后打开文件：在通知中点按它，或在手机的“下载”中找到它。",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "第一次安装时，Android 会请你允许浏览器安装应用。在打开的设置中允许，然后返回。",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "确认安装。如果手机上已有 BeanPool，Android 会称之为更新。然后打开 BeanPool。",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "这个文件与 Google Play 上的 BeanPool 使用同一把密钥签名。其证书的 SHA-256 指纹为：",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "这台服务器还没有 Android 应用的副本。下次联网时，它会自动获取一份。"
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "这个文件与 Google Play 上的 BeanPool 使用同一把密钥签名。其证书的 SHA-256 指纹为："
 }

@@ -20,5 +20,5 @@ export const ANDROID_ON_NODE_WORDS = {
     stepAllow: word('The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.'),
     stepConfirm: word('Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.'),
     certificate: word('This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:'),
-    noneYet: word("This server holds no copy of the Android app yet. It fetches one by itself the next time it is online."),
+    noneYet: word("This server holds no copy of the Android app yet. Ask the person who runs it, or get the app from beanpool.org/android when you are online."),
 } as const;

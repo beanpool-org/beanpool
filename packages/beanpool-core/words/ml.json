@@ -1009,6 +1009,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "ഡൗൺലോഡ് പൂർത്തിയായാൽ ഫയൽ തുറക്കുക: അറിയിപ്പിൽ അതിൽ ടാപ്പ് ചെയ്യുക, അല്ലെങ്കിൽ ഫോണിലെ ഡൗൺലോഡുകളിൽ കണ്ടെത്തുക.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "ആദ്യ തവണ, നിങ്ങളുടെ ബ്രൗസറിന് ആപ്പുകൾ ഇൻസ്റ്റാൾ ചെയ്യാൻ അനുമതി നൽകാൻ Android ആവശ്യപ്പെടും. തുറക്കുന്ന ക്രമീകരണങ്ങളിൽ അനുവദിച്ച്, തിരികെ പോകുക.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "ഇൻസ്റ്റാൾ സ്ഥിരീകരിക്കുക. BeanPool ഇതിനകം ഫോണിൽ ഉണ്ടെങ്കിൽ, Android ഇതിനെ അപ്ഡേറ്റ് എന്ന് വിളിക്കും. തുടർന്ന് BeanPool തുറക്കുക.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "ഈ ഫയൽ Google Play-യിലെ BeanPool-ന്റെ അതേ കീ ഉപയോഗിച്ചാണ് ഒപ്പിട്ടിരിക്കുന്നത്. അതിന്റെ സർട്ടിഫിക്കറ്റിന്റെ SHA-256 ഫിംഗർപ്രിന്റ് ഇതാണ്:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "ഈ സെർവറിൽ ഇതുവരെ Android ആപ്പിന്റെ പകർപ്പില്ല. അടുത്ത തവണ ഓൺലൈനാകുമ്പോൾ ഇത് സ്വയം ഒന്ന് എടുക്കും."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "ഈ ഫയൽ Google Play-യിലെ BeanPool-ന്റെ അതേ കീ ഉപയോഗിച്ചാണ് ഒപ്പിട്ടിരിക്കുന്നത്. അതിന്റെ സർട്ടിഫിക്കറ്റിന്റെ SHA-256 ഫിംഗർപ്രിന്റ് ഇതാണ്:"
 }

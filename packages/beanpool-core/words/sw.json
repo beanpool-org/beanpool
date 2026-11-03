@@ -1009,6 +1009,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "Fungua faili likimaliza kupakuliwa: ligonge kwenye arifa, au litafute kwenye Vipakuliwa vya simu yako.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "Mara ya kwanza, Android inakuomba uruhusu kivinjari chako kusakinisha programu. Ruhusu kwenye mipangilio itakayofunguka, kisha rudi nyuma.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "Thibitisha usakinishaji. Ikiwa BeanPool tayari iko kwenye simu yako, Android inaita hii sasisho. Kisha fungua BeanPool.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Faili hili limetiwa sahihi kwa ufunguo uleule wa BeanPool kwenye Google Play. Alama ya kidole ya SHA-256 ya cheti chake ni:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "Seva hii bado haina nakala ya programu ya Android. Itajipatia moja yenyewe itakapokuwa mtandaoni tena."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Faili hili limetiwa sahihi kwa ufunguo uleule wa BeanPool kwenye Google Play. Alama ya kidole ya SHA-256 ya cheti chake ni:"
 }

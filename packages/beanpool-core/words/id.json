@@ -967,6 +967,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "Buka berkasnya setelah selesai diunduh: ketuk di notifikasi, atau cari di folder Unduhan ponselmu.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "Pertama kali, Android memintamu mengizinkan browser memasang aplikasi. Izinkan di pengaturan yang terbuka, lalu kembali.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "Konfirmasi pemasangan. Kalau BeanPool sudah ada di ponselmu, Android menyebutnya pembaruan. Lalu buka BeanPool.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "File ini ditandatangani dengan kunci yang sama seperti BeanPool di Google Play. Sidik jari SHA-256 sertifikatnya adalah:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "Server ini belum menyimpan salinan aplikasi Android. Server akan mengambilnya sendiri saat berikutnya terhubung ke internet."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "File ini ditandatangani dengan kunci yang sama seperti BeanPool di Google Play. Sidik jari SHA-256 sertifikatnya adalah:"
 }

@@ -1009,6 +1009,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "İndirme bitince dosyayı açın: bildirime dokunun ya da telefonunuzun İndirilenler klasöründe bulun.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "İlk seferde Android, tarayıcınızın uygulama yüklemesine izin vermenizi ister. Açılan ayarlarda izin verin, sonra geri dönün.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "Kurulumu onaylayın. BeanPool telefonunuzda zaten varsa Android buna güncelleme der. Ardından BeanPool'u açın.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Bu dosya, Google Play'deki BeanPool ile aynı anahtarla imzalanmıştır. Sertifikasının SHA-256 parmak izi şudur:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "Bu sunucuda henüz Android uygulamasının bir kopyası yok. Bir sonraki çevrimiçi olduğunda kendisi bir kopya indirir."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Bu dosya, Google Play'deki BeanPool ile aynı anahtarla imzalanmıştır. Sertifikasının SHA-256 parmak izi şudur:"
 }

@@ -967,6 +967,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "다운로드가 끝나면 파일을 여세요. 알림에서 탭하거나 휴대폰의 다운로드에서 찾으면 됩니다.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "처음에는 Android가 브라우저에 앱 설치를 허용하라고 요청합니다. 열리는 설정에서 허용한 뒤 돌아오세요.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "설치를 확인하세요. 휴대폰에 BeanPool이 이미 있으면 Android는 이를 업데이트라고 부릅니다. 그런 다음 BeanPool을 여세요.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "이 파일은 Google Play의 BeanPool과 같은 키로 서명되었습니다. 인증서의 SHA-256 지문은 다음과 같습니다.",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "이 서버에는 아직 Android 앱 사본이 없습니다. 다음에 온라인이 되면 스스로 받아 옵니다."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "이 파일은 Google Play의 BeanPool과 같은 키로 서명되었습니다. 인증서의 SHA-256 지문은 다음과 같습니다."
 }

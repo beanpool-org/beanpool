@@ -1009,6 +1009,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "Buksan ang file kapag tapos na itong ma-download: i-tap ito sa notification, o hanapin sa Downloads ng phone mo.",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "Sa unang beses, hihilingin ng Android na payagan mo ang browser mo na mag-install ng mga app. Payagan ito sa settings na magbubukas, saka bumalik.",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "Kumpirmahin ang pag-install. Kung nasa phone mo na ang BeanPool, tinatawag ito ng Android na update. Pagkatapos ay buksan ang BeanPool.",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Pinirmahan ang file na ito ng parehong key ng BeanPool sa Google Play. Ang SHA-256 fingerprint ng certificate nito ay:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "Wala pang kopya ng Android app ang server na ito. Kukuha ito ng isa nang kusa sa susunod na online ito."
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "Pinirmahan ang file na ito ng parehong key ng BeanPool sa Google Play. Ang SHA-256 fingerprint ng certificate nito ay:"
 }

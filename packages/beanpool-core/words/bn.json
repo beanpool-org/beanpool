@@ -1009,6 +1009,5 @@
   "Open the file once it has downloaded: tap it in the notification, or find it in your phone's Downloads.": "ডাউনলোড শেষ হলে ফাইলটি খুলুন: নোটিফিকেশনে ট্যাপ করুন, বা ফোনের ডাউনলোড-এ খুঁজে নিন।",
   "The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.": "প্রথমবার, Android আপনার ব্রাউজারকে অ্যাপ ইনস্টল করার অনুমতি দিতে বলে। যে সেটিংস খোলে সেখানে অনুমতি দিন, তারপর ফিরে যান।",
   "Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.": "ইনস্টল নিশ্চিত করুন। BeanPool যদি আগে থেকেই আপনার ফোনে থাকে, Android একে আপডেট বলে। তারপর BeanPool খুলুন।",
-  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "এই ফাইলটি Google Play-এর BeanPool-এর মতো একই কী দিয়ে সাইন করা। এর সার্টিফিকেটের SHA-256 ফিঙ্গারপ্রিন্ট হলো:",
-  "This server holds no copy of the Android app yet. It fetches one by itself the next time it is online.": "এই সার্ভারে এখনও Android অ্যাপের কোনো কপি নেই। পরের বার অনলাইনে এলে এটি নিজেই একটি কপি নিয়ে আসবে।"
+  "This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:": "এই ফাইলটি Google Play-এর BeanPool-এর মতো একই কী দিয়ে সাইন করা। এর সার্টিফিকেটের SHA-256 ফিঙ্গারপ্রিন্ট হলো:"
 }

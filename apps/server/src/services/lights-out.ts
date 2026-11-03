@@ -69,8 +69,22 @@ function record(): LightsOutRecord | null {
 }
 
 /** Whether the switch is on here. A standby is never on, whatever its file says (it cannot have been switched there). */
+/**
+ * The gate asks on every request from the local network, the guard after every member write, and the phones' health ping
+ * every 30 seconds: each answer is kept 2 s rather than read from local-config.json every time (the health read is cached
+ * for the same reason: DoS review F4). Every write this module makes forgets them, so its own answers are never stale; a
+ * change made by hand in the file shows within 2 s.
+ */
+const MEMO_MS = 2000;
+let onMemo: { at: number; on: boolean } | null = null;
+let publicMemo: { at: number; value: PublicLightsOut } | null = null;
+function forgetMemos(): void { onMemo = null; publicMemo = null; }
+
 export function lightsOutOn(): boolean {
-    return record()?.on === true && getNodeRole() !== 'backup';
+    if (getNodeRole() === 'backup') return false;
+    const now = Date.now();
+    if (!onMemo || now - onMemo.at > MEMO_MS || now < onMemo.at) onMemo = { at: now, on: record()?.on === true };
+    return onMemo.on;
 }
 
 /**
@@ -137,6 +151,7 @@ function raiseEpochForRestoredCopy(now: string): { raised: boolean; epoch: numbe
     const fileEpoch = Number.isSafeInteger(restored.epoch) && restored.epoch > 0 ? restored.epoch : 0;
     const epoch = Math.max(own.epoch, fileEpoch) + 1;
     updateLocalConfig({ identityEpoch: epoch, identityEpochSince: now, identityReplaced: null });
+    forgetMemos();
     forgetSyncEpochHeaderValue();
     return { raised: true, epoch, why: 'restored from a backup' };
 }
@@ -207,9 +222,14 @@ export function lightsOutStatus(): LightsOutStatus {
  * epoch here: a phone reads that from the node's signed statement (GET /api/node/identity-epoch) and the sync reads'
  * epoch header, never from an unsigned field (and a take-over changes it by design: test-takeover-parity).
  */
-export function publicLightsOut(): { on: boolean; since: string | null; address: string | null; recordAsOf: string | null; home: string | null } {
+export interface PublicLightsOut { on: boolean; since: string | null; address: string | null; recordAsOf: string | null; home: string | null }
+export function publicLightsOut(): PublicLightsOut {
+    const now = Date.now();
+    if (publicMemo && now - publicMemo.at <= MEMO_MS && now >= publicMemo.at) return { ...publicMemo.value };
     const s = lightsOutStatus();
-    return { on: s.on, since: s.on ? s.since : null, address: s.on ? s.address : null, recordAsOf: s.on ? s.recordAsOf : null, home: s.home };
+    const value = { on: s.on, since: s.on ? s.since : null, address: s.on ? s.address : null, recordAsOf: s.on ? s.recordAsOf : null, home: s.home };
+    publicMemo = { at: now, value };
+    return { ...value };
 }
 
 export type SwitchOutcome =
@@ -222,6 +242,7 @@ export type SwitchOutcome =
  */
 export function setLightsOut(on: boolean, opts: { address?: unknown; by: LightsOutBy; actor?: string | null }): SwitchOutcome {
     if (getNodeRole() === 'backup') return { ok: false, status: 403, error: NOT_ON_A_STANDBY };
+    forgetMemos();
     let address: string | null = null;
     if (opts.address !== undefined && opts.address !== null && opts.address !== '') {
         address = hallAddressOf(opts.address);
@@ -250,6 +271,7 @@ export function setLightsOut(on: boolean, opts: { address?: unknown; by: LightsO
         updateLocalConfig({ lightsOut: next });
         next.recordAsOf = recordAsOfNow();
         updateLocalConfig({ lightsOut: next });
+        forgetMemos();
         if (!wasOn) hallWritesNoted = false;
         logger.security('ADMIN', `[LightsOut] Lights-out ON by ${who}${next.address ? ` at ${next.address}` : ''}: the plain port answers the hall Wi-Fi; `
             + (raise.raised ? `identity epoch raised to ${raise.epoch} (${raise.why}).` : `identity epoch unchanged at ${raise.epoch} (${raise.why}).`));
@@ -257,6 +279,7 @@ export function setLightsOut(on: boolean, opts: { address?: unknown; by: LightsO
     }
     const wasOn = before?.on === true;
     if (before) updateLocalConfig({ lightsOut: { ...before, on: false, offAt: wasOn ? now : before.offAt ?? null } });
+    forgetMemos();
     if (wasOn) {
         logger.security('ADMIN', `[LightsOut] Lights-out OFF by ${who}: the plain port is back to its usual rule`
             + `${before?.hallWrites ? '; members wrote in the hall, so this copy is the community now' : '; nobody wrote in the hall'}.`);
@@ -271,6 +294,7 @@ export function noteHallWrite(): void {
     if (!r?.on) return;
     hallWritesNoted = true;
     if (!r.hallWrites) updateLocalConfig({ lightsOut: { ...r, hallWrites: true } });
+    forgetMemos();
 }
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -291,8 +315,8 @@ export async function lightsOutGuard(ctx: Koa.Context, next: Koa.Next): Promise<
         return;
     }
     await next();
-    if (ctx.status >= 200 && ctx.status < 300 && p.startsWith('/api/') && !p.startsWith('/api/local/') && !p.startsWith('/api/manager/')
-        && !p.startsWith('/api/node/owner/lights-out') && lightsOutOn()) {
+    if (!hallWritesNoted && ctx.status >= 200 && ctx.status < 300 && p.startsWith('/api/') && !p.startsWith('/api/local/')
+        && !p.startsWith('/api/manager/') && !p.startsWith('/api/node/owner/lights-out') && lightsOutOn()) {
         try { noteHallWrite(); } catch { /* a note never fails a member's write */ }
     }
 }
@@ -306,6 +330,7 @@ export async function lightsOutGuard(ctx: Koa.Context, next: Koa.Next): Promise<
 export function noteRestoredCopy(notice: { at: string; madeAt: string | null; epoch?: unknown }): void {
     const n = Number(notice.epoch);
     updateLocalConfig({ restoredCopy: { at: validIso(notice.at) ?? new Date().toISOString(), madeAt: validIso(notice.madeAt), epoch: Number.isSafeInteger(n) && n > 0 ? n : 0 } });
+    forgetMemos();
 }
 
 // ── The shell: `beanpool lights-out on|off|status` (lights-out-command.ts) ─────────────────────────────────────────

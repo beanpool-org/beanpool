@@ -95,6 +95,7 @@ import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
 import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/knocks.js';
+import { inviteAskCount } from '../engine/invite-asks.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -194,7 +195,7 @@ export const HOME_INTERESTS_PREF_KEY = 'interests';
 
 // ── what the answer holds ────────────────────────────────────────────────────────────────────────────────────────────
 
-export type NeedsKind = 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
+export type NeedsKind = 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
 /** Where a tap lands: the same targets the header's "needs you" icons use (apps/native utils/needs-you.ts). */
 export type NeedsTarget =
     | { to: 'admin'; section: AdminSettingsSection }
@@ -395,8 +396,8 @@ export interface HomeReader {
 }
 
 /** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
-export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -582,6 +583,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     if (role && active) {
         const queue = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner', forMember: me });
         const work = queue.items.filter(i => i.count > 0 && !(knocksApart && i.kind === 'knocks'));
+        // Asks that an admin invite someone are never in the admin line: its tap opens Settings, which can't answer them.
         const total = work.reduce((n, i) => n + i.count, 0);
         if (total > 0) {
             const parts = work.map(i => adminItemInWords(i, c.switches.decisions));
@@ -598,6 +600,16 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             items.push({
                 kind: 'knock', count: waiting, accent: true,
                 label: waiting === 1 ? '1 person asked to join' : `${waiting} people asked to join`,
+                target: { to: 'people' },
+            });
+        }
+        // A member asked an owner or admin to invite someone (engine/invite-asks.ts): theirs, on any door, a count and no
+        // name, for an app that answers them (lands=asks), in People → Invites.
+        const asks = c.lands.has('asks') && (role === 'owner' || role === 'admin') ? inviteAskCount() : 0;
+        if (asks > 0) {
+            items.push({
+                kind: 'ask', count: asks, accent: true,
+                label: asks === 1 ? '1 member asked you to invite someone' : `${asks} members asked you to invite someone`,
                 target: { to: 'people' },
             });
         }

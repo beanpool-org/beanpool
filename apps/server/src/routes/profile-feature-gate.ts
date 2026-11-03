@@ -98,6 +98,8 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['invites'],
         paths: [
             /^\/api\/invite\/(generate|redeem|redeem-offline|check)\/?$/,
+            // A member's ask that an admin invite someone (routes/invite-asks.ts): answered with an invite.
+            /^\/api\/invite\/asks(\/|$)/,
             /^\/api\/admin\/seed-invite\/?$/,
         ],
     },

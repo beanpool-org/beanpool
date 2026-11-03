@@ -1336,6 +1336,7 @@ async function main(): Promise<void> {
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
             'POST /api/join', 'POST /api/join/knock', 'POST /api/join/knock/cancel',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
+            'POST /api/invite/asks', 'GET /api/invite/asks', 'GET /api/invite/asks/mine', 'POST /api/invite/asks/:id/withdraw', 'POST /api/invite/asks/:id/send', 'POST /api/invite/asks/:id/no',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

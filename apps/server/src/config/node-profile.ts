@@ -314,6 +314,8 @@ export interface NodeFeatures {
     onlineEvents: boolean;
     pins: boolean;
     inviteVouch: boolean;
+    /** A member can ask an admin to invite someone here: with `door` 'admins', what core offersInviteAsk reads. */
+    inviteAsks: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
     /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
@@ -583,6 +585,9 @@ export function getNodeFeatures(): NodeFeatures {
         // And a vouch on an invite (engine/invites.ts), which means nothing where there are no Beans: an app offers one
         // only where the node says so, so a phone newer than its node never shows a choice the node would drop.
         inviteVouch: s.beans,
+        // And an ask that an admin invite someone (engine/invite-asks.ts): answered with an invite, so never where invites
+        // are off. An app offers one only where the node says so, and where only admins invite (`door`).
+        inviteAsks: s.invites,
         probation: s.probation,
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,

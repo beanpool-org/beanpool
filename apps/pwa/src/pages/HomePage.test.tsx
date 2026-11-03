@@ -4495,6 +4495,35 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
         });
     });
+
+    it('calendar-s4: events card links "Calendar ›" to map-calendar and "All events ›" to marketplace events', async () => {
+        const nav = vi.fn();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            events: {
+                items: [{
+                    id: 'e1',
+                    title: 'Community picnic',
+                    startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+                    endsAt: null,
+                    place: 'Park',
+                    rsvp: 'going',
+                }],
+                radiusKm: null,
+            },
+        })));
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        await screen.findByTestId('home-card-events');
+
+        const calLink = screen.getByTestId('home-events-calendar');
+        expect(calLink).toHaveTextContent(/Calendar/);
+        fireEvent.click(calLink);
+        expect(nav).toHaveBeenCalledWith('map-calendar');
+
+        const allLink = screen.getByTestId('home-events-all');
+        expect(allLink).toHaveTextContent(/All events/);
+        fireEvent.click(allLink);
+        expect(nav).toHaveBeenCalledWith('marketplace', 'events');
+    });
 });
 
 

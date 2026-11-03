@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -12,10 +12,13 @@ import {
     t,
 } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
-import { MonthGrid } from '../components/MonthGrid';
+import { MONTH_NAV_HEIGHT, MONTH_WEEKDAY_HEIGHT, MONTH_WEEK_HEIGHT, MonthGrid } from '../components/MonthGrid';
 import { MapStackList } from '../components/MapStackList';
 import { getPosts } from '../utils/db';
 import { eventStateOf } from '../utils/events';
+
+/** The screen's own header row (dp): the month sits under it. */
+const HEADER_MIN_HEIGHT = 52;
 
 export default function CalendarScreen() {
     const { height: screenHeight } = useWindowDimensions();
@@ -35,6 +38,18 @@ export default function CalendarScreen() {
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [dismissedMonthKey, setDismissedMonthKey] = useState<string | null>(null);
     const [events, setEvents] = useState<any[]>([]);
+    const scrollRef = useRef<ScrollView>(null);
+    const reduceMotionRef = useRef(false);
+
+    useEffect(() => {
+        void AccessibilityInfo.isReduceMotionEnabled?.()
+            ?.then(calm => { reduceMotionRef.current = calm; })
+            ?.catch?.(() => {});
+        const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', calm => {
+            reduceMotionRef.current = calm;
+        });
+        return () => sub?.remove?.();
+    }, []);
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         container: {
@@ -46,7 +61,7 @@ export default function CalendarScreen() {
             alignItems: 'center',
             justifyContent: 'space-between',
             paddingHorizontal: 8,
-            minHeight: 52,
+            minHeight: HEADER_MIN_HEIGHT,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border.default,
             backgroundColor: colors.surface.chrome,
@@ -125,6 +140,29 @@ export default function CalendarScreen() {
         }
     }, [monthModel.monthKey, monthModel.firstActiveDate, dismissedMonthKey, selectedDate]);
 
+    const scrollDayClear = useCallback((date: string) => {
+        const parsed = parseLocalDate(date);
+        if (!parsed) return;
+        const firstWeekday = (new Date(Date.UTC(parsed.year, parsed.month - 1, 1)).getUTCDay() + 6) % 7;
+        const weekIndex = Math.floor((firstWeekday + parsed.day - 1) / 7);
+        // In MonthGrid: the nav row, the weekday row, then a row of MONTH_WEEK_HEIGHT for each week down to this one.
+        const dayBottom = MONTH_NAV_HEIGHT + MONTH_WEEKDAY_HEIGHT + (weekIndex + 1) * MONTH_WEEK_HEIGHT;
+        const listHeight = Math.ceil(screenHeight * STACK_LIST_SHARE);
+        const visibleHeight = screenHeight - listHeight - HEADER_MIN_HEIGHT - insets.top;
+        const clearBottom = dayBottom + 24;
+        if (clearBottom > visibleHeight) {
+            const targetY = clearBottom - visibleHeight;
+            requestAnimationFrame(() => {
+                scrollRef.current?.scrollTo({ y: targetY, animated: !reduceMotionRef.current });
+            });
+        }
+    }, [screenHeight, insets.top]);
+
+    // However a day came to be selected (a tap, a jump, the next event's day on opening, or ‹ ›), the month scrolls it clear of the list.
+    useEffect(() => {
+        if (selectedDate) scrollDayClear(selectedDate);
+    }, [selectedDate, scrollDayClear]);
+
     const handleSelectDate = (date: string) => {
         setSelectedDate(date);
         setDismissedMonthKey(null);
@@ -175,12 +213,12 @@ export default function CalendarScreen() {
                 <Pressable
                     testID="calendar-back"
                     accessibilityRole="button"
-                    accessibilityLabel={t('Map', undefined, 'tab')}
+                    accessibilityLabel={t('Back')}
                     onPress={handleGoBack}
                     style={styles.backButton}
                 >
                     <Text style={styles.backButtonArrow}>‹</Text>
-                    <Text style={styles.backButtonText}>{t('Map', undefined, 'tab')}</Text>
+                    <Text style={styles.backButtonText}>{t('Back')}</Text>
                 </Pressable>
                 <Text style={styles.title} accessibilityRole="header">
                     {calendarTitle()}
@@ -189,6 +227,7 @@ export default function CalendarScreen() {
 
             {/* The day's list lies over the bottom of the screen: the month scrolls clear of it, last week included. */}
             <ScrollView
+                ref={scrollRef}
                 testID="calendar-month-scroll"
                 style={styles.content}
                 contentContainerStyle={selectedDate ? { paddingBottom: Math.ceil(screenHeight * STACK_LIST_SHARE) } : undefined}

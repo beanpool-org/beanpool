@@ -388,6 +388,8 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
 
     it('"See all", "All events", "Arrange" go where they say; a step opens its screen', async () => {
         await render();
+        await act(async () => { (document.querySelector('[data-testid="home-events-calendar"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith('/calendar');
         await act(async () => { (document.querySelector('[data-testid="home-events-all"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { filter: 'events' } });
         await act(async () => { (document.querySelector('[data-testid="home-market-all"]') as HTMLElement).click(); });
@@ -781,6 +783,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-deals-line → /post/[id] id=p1&txId=t1',
             'home-enterprise-line → /treasury-manage publicKey=ent1&name=Tool Library',
             'home-event-e1 → /post/[id] id=e1',
+            'home-events-calendar → /calendar',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
             'home-market-all → /(tabs)/market',
@@ -807,6 +810,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-deals-line → /(tabs)/market tab=deals',
             'home-enterprise-line → /treasury-detail publicKey=ent1&name=Tool Library',
             'home-event-e1 → /post/[id] id=e1',
+            'home-events-calendar → /calendar',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
             'home-market-all → /(tabs)/market',
@@ -842,6 +846,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-step-watch → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
+            'home-events-calendar → /calendar',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
             'home-market-all → /(tabs)/market',
@@ -867,6 +872,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-step-watch → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
+            'home-events-calendar → /calendar',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
             'home-market-all → /(tabs)/market',

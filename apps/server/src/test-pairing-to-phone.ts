@@ -178,6 +178,16 @@ function inTheRelay(): void {
         assert(pollPairingSession(b.sessionId, secret).phonePubHex === undefined, "the browser never learns the phone's key");
     }
 
+    // An offer's key is 64 hex, or nothing changes: the session still waits for a phone.
+    {
+        const { b, secret } = open();
+        for (const bad of ['zz'.repeat(32), 'ab'.repeat(31), 'ab'.repeat(33), 42, null]) {
+            const r = offerToPhoneSession(b.sessionId, bad);
+            assert(!r.ok && r.error === 'bad-key', `an offer with the key ${JSON.stringify(bad)?.slice(0, 12)}… is refused`);
+        }
+        assert(pollPairingSession(b.sessionId, secret).status === 'waiting', 'and the session still waits for a phone');
+    }
+
     // The 120 s: an offer, a confirm, a send or a collect past it finds nothing.
     {
         const { b } = open();
@@ -231,7 +241,20 @@ function inTheRelay(): void {
         const busy = sendToPhonePayload(lastId, lastSecret, sealed.nonceHex, sealed.ciphertextHex);
         assert(!busy.ok && busy.error === 'busy', `the ${PAIRING_RELAY_LIMITS.heldPayloads + 1}th held account is refused busy`);
         assert(pollPairingSession(lastId, lastSecret).status === 'released', 'and that session stays released for a retry');
-        assert(!sendToPhonePayload(lastId, lastSecret, '00'.repeat(24), 'f'.repeat(PAIRING_RELAY_LIMITS.ciphertextHex + 2)).ok, 'a seal past 4,096 hex is refused');
+        clearAllPairingSessions();
+    }
+
+    // The seal's size: past 4,096 hex it is refused (the room free, so only the size refuses it), and the session stays
+    // released for one that fits.
+    {
+        const { b, secret } = open();
+        const p = createPairInKey();
+        const o = offerToPhoneSession(b.sessionId, p.publicKeyHex);
+        if (!o.ok) throw new Error('offer');
+        confirmPairingTransfer(b.sessionId, secret, o.confirmCode);
+        const big = sendToPhonePayload(b.sessionId, secret, '00'.repeat(24), 'f'.repeat(PAIRING_RELAY_LIMITS.ciphertextHex + 2));
+        assert(!big.ok && big.error === 'bad-payload' && _pairingRelayCountsForTests().held === 0, 'a seal past 4,096 hex is refused, nothing held');
+        assert(sendToPhonePayload(b.sessionId, secret, '00'.repeat(24), 'f'.repeat(PAIRING_RELAY_LIMITS.ciphertextHex)).ok, 'and one of 4,096 hex is taken');
         clearAllPairingSessions();
     }
 

@@ -1643,12 +1643,13 @@ export function tallyForReader(decision: Decision, tally: DecisionTally): Decisi
 }
 
 /**
- * When a seated juror's answer is due (slice J2b): JURY_ANSWER_HOURS after their seat, or the vote's close if that comes
- * first; null once they answered Serve or voted.
+ * When a seated juror's answer, Serve or Step aside, is due (slice J2b): JURY_ANSWER_HOURS after their seat, or the vote's
+ * close if that comes first; null once they answered Serve. A vote answers too (settleOpenJuries), and the app knows of
+ * one from the reader's own `myVote`; it moves nothing here, so two jurors seated together read the same whoever voted.
  */
 function jurorAnswerBy(decision: Decision, juror: string): string | null {
     const seat = jurySeatsOf(decision.id).find(s => s.key === juror);
-    if (!seat || seat.answeredAt || seat.voted) return null;
+    if (!seat || seat.answeredAt) return null;
     return new Date(Math.min(parseDbTime(seat.seatedAt) + JURY_ANSWER_HOURS * HOUR_MS, parseDbTime(decision.closesAt))).toISOString();
 }
 
@@ -1680,7 +1681,7 @@ export function juryForReader(decision: Decision, reader: string): Record<string
         poolSize: jury.poolSize, size: jury.size, mustVote: jury.mustVote, minYes: jury.minYes,
         pool: pool.map(k => ({ publicKey: k, callsign: callsignOf(k) })),
         you: mine === 'on' ? 'seated' : mine === 'silent' || mine === 'left' ? 'not_seated' : null,
-        // A seated juror's own answer is due by then (slice J2b): null once they serve or vote. Nobody else's is told.
+        // A seated juror's own answer is due by then (slice J2b): null once they answered Serve. Nobody else's is told.
         ...(mine === 'on' && decision.status === 'open' ? { answerBy: jurorAnswerBy(decision, reader) } : {}),
     };
     if (decision.status === 'open') return facts;

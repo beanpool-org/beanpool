@@ -17,6 +17,7 @@ Thank you for your interest in contributing to the BeanPool protocol. This docum
 5. [Code of Conduct](#code-of-conduct)
 6. [Governance](#governance)
 7. [Licensing](#licensing)
+8. [Signing the CLA](#signing-the-cla)
 
 ---
 
@@ -141,7 +142,13 @@ BeanPool is governed as a **commons**. No single organisation or individual owns
 
 BeanPool is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only); see [NOTICE](NOTICE). By contributing to this repository you agree that your contributions are licensed under the same licence.
 
-As Signal does, we will ask outside contributors to sign a short Contributor Licence Agreement before a first contribution is merged, so that the apps can keep shipping in the app stores. Until that is in place, please open an issue before you send a pull request.
+As Signal does, outside contributors sign a short Contributor Licence Agreement; see [Signing the CLA](#signing-the-cla) below.
+
+## Signing the CLA
+
+BeanPool's code is open under the AGPL, and you keep the copyright in what you contribute. The [CLA](CLA.md) gives the project the rights it needs to keep releasing BeanPool, including through places such as Apple's App Store, while the code itself stays open.
+
+The CLA assistant asks you to sign on your first pull request, with one comment on that pull request; you sign once and it covers your later contributions. Bots (such as the Jules bot and Dependabot) and the maintainer's own commits are exempt.
 
 ---
 

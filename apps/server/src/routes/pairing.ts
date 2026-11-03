@@ -9,7 +9,8 @@
  *   POST /api/pair/cancel
  *
  * The other way, browser to phone (front doors S9; pairing-relay.ts explains the order and why the phone shows the digits):
- *   POST /api/pair/init      browser, with `to: 'phone'`: opens a to-phone session, the same binding cookie
+ *   POST /api/pair/init      browser, with `to: 'phone'`: opens a to-phone session, the same binding cookie, which lasts
+ *                            the save window too (the browser reads the phone's 'saved' with it)
  *   POST /api/pair/offer     phone: { sessionId, phonePubHex }; one phone per session; answers the four digits to show
  *                            and the phone's own binding secret, and endsInMs: how long the session has left by the relay's clock
  *   GET  /api/pair/poll      browser: 'confirming' once a phone scanned; after its digits, 'released' with the phone's
@@ -76,7 +77,11 @@ export function createPairingRoutes(deps: RouteDeps): Router {
         ctx.cookies.set(pairBindingCookieName(sessionId), res.secret!, {
             httpOnly: true,
             sameSite: 'strict',
-            maxAge: PAIRING_RELAY_LIMITS.ttlMs + 30_000,
+            // The cookie is the browser's only way to hear its session, so it lasts as long as what it reads. To a phone,
+            // that is the phone's word on the save, kept SAVE_WINDOW_MS after the collect, and the collect may come at the
+            // session's last second (doors-s9-fix2: at ttl + 30 s alone, a 'saved' after 150 s was never heard). It still
+            // reads only this session's own record, nothing else; the other direction keeps ttl + 30 s.
+            maxAge: PAIRING_RELAY_LIMITS.ttlMs + (to === 'phone' ? PAIRING_RELAY_LIMITS.saveWindowMs : 0) + 30_000,
             path: COOKIE_PATH,
         });
         ctx.set('Cache-Control', 'no-store');

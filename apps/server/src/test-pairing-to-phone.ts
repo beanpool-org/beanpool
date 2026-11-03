@@ -12,7 +12,7 @@
  *
  * Every check here that guards the account has a forced-failure proof in the PR (the check taken out, this suite red).
  * Part 1 goes through the real server and middleware; it spends the 'pairing' bucket (15 a minute per address), so it
- * stays under 15 such calls. Part 2 drives the relay itself for what needs many sessions or the clock: the burn, the
+ * stays under 15 such calls (14 now). Part 2 drives the relay itself for what needs many sessions or the clock: the burn, the
  * 120 s, the grace, the held-payload cap, and the existing direction left as it was.
  *
  * Run: SERVER_SUITES_ONLY=test-pairing-to-phone TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
@@ -65,6 +65,22 @@ const cookieOf = (res: Response) => (res.headers.getSetCookie?.() || []).map(c =
 const post = (path: string, body: unknown, cookie = '') => fetch(`${BASE}${path}`, { method: 'POST', headers: { ...json, ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
 const poll = (id: string, cookie: string) => fetch(`${BASE}/api/pair/poll?session=${id}`, { headers: cookie ? { cookie } : {} });
 const otherDigits = (code: string) => String((Number(code) + 1) % 10_000).padStart(4, '0');
+/**
+ * A browser's binding cookie, as a real browser keeps it: only as long as its Set-Cookie says (max-age, or expires counted
+ * from when the answer came). The relay's clock can be moved here and a cookie's cannot, so `at(ms)` is the cookie this
+ * browser would still send `ms` after the init: '' once it has expired.
+ */
+function jarOf(res: Response) {
+    const receivedAt = Date.now();
+    const line = (res.headers.getSetCookie?.() || []).find(c => c.startsWith('bp_pair_')) || '';
+    const attrs = line.split(';').slice(1).map(a => a.trim());
+    const maxAge = attrs.find(a => /^max-age=/i.test(a));
+    const expires = attrs.find(a => /^expires=/i.test(a));
+    const lifetimeMs = maxAge ? Number(maxAge.slice('max-age='.length)) * 1_000
+        : expires ? Date.parse(expires.slice('expires='.length)) - receivedAt
+            : Infinity;
+    return { lifetimeMs, at: (ms: number) => (ms < lifetimeMs ? line.split(';')[0] : '') };
+}
 
 async function throughTheServer(): Promise<void> {
     await initTls();
@@ -169,9 +185,46 @@ async function throughTheServer(): Promise<void> {
     const fromPhone = createPairingSession();
     const fromInit = await post('/api/pair/init', { sessionId: fromPhone.sessionId, desktopPubHex: fromPhone.publicKeyHex });
     const fromCookie = cookieOf(fromInit);
+    const fromJar = jarOf(fromInit);
     const cross = await post('/api/pair/offer', { sessionId: fromPhone.sessionId, phonePubHex: phone.publicKeyHex });
     assert(cross.status === 400 && ((await cross.json()) as any).confirmCode === undefined, 'an offer into a phone-to-browser session: 400, no digits');
     assert(((await (await poll(fromPhone.sessionId, fromCookie)).json()) as any).status === 'waiting', 'and that session still waits for its phone');
+
+    // 11. The phone's word reaches its browser for the whole save window, not only for the session's 120 s
+    // (doors-s9-fix2, the Opus review of 44aec445: the to-phone cookie lived 150 s from init, so a 'saved' said after
+    // that was never heard, and the panel ended at "hasn't said it saved"). The browser here sends its cookie only while
+    // its Set-Cookie allows. The phone's offer goes straight to the relay, to keep part 1 under the 'pairing' bucket.
+    {
+        const L = PAIRING_RELAY_LIMITS;
+        const slow = createPairingSession();
+        const jar = jarOf(await post('/api/pair/init', { sessionId: slow.sessionId, desktopPubHex: slow.publicKeyHex, to: 'phone' }));
+        assert(jar.lifetimeMs >= L.ttlMs + L.saveWindowMs && jar.lifetimeMs <= L.ttlMs + L.saveWindowMs + 31_000,
+            `the to-phone cookie lasts the session and the save window after it: 120 s + 5 min + 30 s (${Math.round(jar.lifetimeMs / 1_000)} s)`);
+        assert(fromJar.lifetimeMs > L.ttlMs + 28_000 && fromJar.lifetimeMs <= L.ttlMs + 31_000,
+            `the phone-to-browser cookie is as before: 120 s + 30 s (${Math.round(fromJar.lifetimeMs / 1_000)} s)`);
+        const slowPhone = createPairInKey();
+        const o = offerToPhoneSession(slow.sessionId, slowPhone.publicKeyHex);
+        if (!o.ok) throw new Error('offer');
+        await post('/api/pair/confirm', { sessionId: slow.sessionId, code: o.confirmCode }, jar.at(0));
+        const rel = (await (await poll(slow.sessionId, jar.at(0))).json()) as any;
+        const sealedSlow = sealPairingPayloadToPhone(ACCOUNT, slow.privateKeyHex, rel.phonePubHex, slow.sessionId);
+        assert((await post('/api/pair/send', { sessionId: slow.sessionId, ...sealedSlow }, jar.at(0))).status === 200, 'a slow member: released and sent');
+        // The phone collects at 90 s (the session lasts 120 s); the member reads the phone, taps, and the save ends at 151 s.
+        _setPairingClockForTests(90_000);
+        const got = (await (await post('/api/pair/collect', { sessionId: slow.sessionId, phoneSecret: o.phoneSecret })).json()) as any;
+        assert(got.status === 'sent', 'the phone collects at 90 s');
+        const late = L.ttlMs + 31_000;
+        _setPairingClockForTests(late);
+        assert(((await (await poll(slow.sessionId, jar.at(late))).json()) as any).status === 'collected', 'at 151 s the browser, with the cookie it still holds, hears collected');
+        const said = await post('/api/pair/saved', { sessionId: slow.sessionId, phoneSecret: o.phoneSecret, saved: true });
+        assert(said.status === 200, 'the phone says it saved the account at 151 s: 200');
+        assert(((await (await poll(slow.sessionId, jar.at(late))).json()) as any).status === 'saved', 'and its browser polls at 151 s: saved');
+        const last = 90_000 + L.saveWindowMs - 1_000;
+        _setPairingClockForTests(last);
+        assert(((await (await poll(slow.sessionId, jar.at(last))).json()) as any).status === 'saved', "and still saved at the save window's last second (6 min 29 s after the init)");
+        assert(((await (await poll(slow.sessionId, '')).json()) as any).status !== 'saved', 'a poll without the cookie learns nothing of it');
+        _setPairingClockForTests(0);
+    }
 }
 
 function inTheRelay(): void {

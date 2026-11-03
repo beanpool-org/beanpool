@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, forwardRef, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { STACK_LIST_SHARE } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -375,12 +376,76 @@ describe('CalendarScreen route component', () => {
         });
 
         // The tapped last-week day should have triggered scrollTo clear of the bottom list
+        const firstWeekday = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+        const weekIndex = Math.floor((firstWeekday + dim - 1) / 7);
+        const dayBottom = 48 + 28 + (weekIndex + 1) * 48;
+        const listHeight = Math.ceil(568 * STACK_LIST_SHARE);
+        const visibleHeight = 568 - listHeight - 52 - 44; // insets.top is 44
+        const expectedY = dayBottom + 24 - visibleHeight;
+
         expect(mockScrollTo).toHaveBeenCalledWith(
             expect.objectContaining({
                 y: expect.any(Number),
                 animated: true,
             })
         );
+        expect(mockScrollTo).toHaveBeenCalledWith({
+            y: expectedY,
+            animated: true,
+        });
+        vi.useRealTimers();
+    });
+
+    it('scrolls clear when jumping to a cross-month date in a late week', async () => {
+        vi.useFakeTimers();
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        const targetYear = m > 10 ? y + 1 : y;
+        const targetMonth = m > 10 ? (m + 2 - 12) : m + 2;
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const targetDim = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+        const targetDate = `${targetYear}-${pad(targetMonth)}-${pad(targetDim)}`;
+
+        fakeDb.events = [
+            {
+                id: 'ev-future',
+                type: 'event',
+                title: 'Future Event',
+                status: 'active',
+                active: 1,
+                event_start_local: `${targetDate}T10:00`,
+                event_end_local: `${targetDate}T12:00`,
+                event_start_at: `${targetDate}T10:00:00.000Z`,
+                event_end_at: `${targetDate}T12:00:00.000Z`,
+            },
+        ];
+
+        await act(async () => {
+            root.render(createElement(CalendarScreen) as any);
+        });
+
+        mockScrollTo.mockClear();
+
+        const jumpBtn = container.querySelector('[data-testid="month-jump-next"]') as HTMLButtonElement;
+        expect(jumpBtn).toBeTruthy();
+
+        await act(async () => {
+            jumpBtn.click();
+            vi.advanceTimersByTime(50);
+        });
+
+        const targetFirstWeekday = (new Date(Date.UTC(targetYear, targetMonth - 1, 1)).getUTCDay() + 6) % 7;
+        const targetWeekIndex = Math.floor((targetFirstWeekday + targetDim - 1) / 7);
+        const targetDayBottom = 48 + 28 + (targetWeekIndex + 1) * 48;
+        const listHeight = Math.ceil(568 * STACK_LIST_SHARE);
+        const visibleHeight = 568 - listHeight - 52 - 44;
+        const expectedTargetY = targetDayBottom + 24 - visibleHeight;
+
+        expect(mockScrollTo).toHaveBeenCalledWith({
+            y: expectedTargetY,
+            animated: true,
+        });
         vi.useRealTimers();
     });
 });

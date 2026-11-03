@@ -138,12 +138,14 @@ export default function CalendarScreen() {
     }, [monthModel.monthKey, monthModel.firstActiveDate, dismissedMonthKey, selectedDate]);
 
     const scrollDayClear = useCallback((date: string) => {
-        const weekIndex = monthModel.weeks.findIndex(w => w.some(c => c.date === date));
-        if (weekIndex < 0) return;
+        const parsed = parseLocalDate(date);
+        if (!parsed) return;
+        const firstWeekday = (new Date(Date.UTC(parsed.year, parsed.month - 1, 1)).getUTCDay() + 6) % 7;
+        const weekIndex = Math.floor((firstWeekday + parsed.day - 1) / 7);
         // In MonthGrid: navHeader (minHeight 48) + weekdayRow (minHeight 28) + weekRows (minHeight 44-48dp each with scaling).
         const dayBottom = 48 + 28 + (weekIndex + 1) * 48;
         const listHeight = Math.ceil(screenHeight * STACK_LIST_SHARE);
-        const visibleHeight = screenHeight - listHeight - 52;
+        const visibleHeight = screenHeight - listHeight - 52 - insets.top;
         const clearBottom = dayBottom + 24;
         if (clearBottom > visibleHeight) {
             const targetY = clearBottom - visibleHeight;
@@ -151,7 +153,7 @@ export default function CalendarScreen() {
                 scrollRef.current?.scrollTo({ y: targetY, animated: !reduceMotionRef.current });
             });
         }
-    }, [monthModel.weeks, screenHeight]);
+    }, [screenHeight, insets.top]);
 
     const handleSelectDate = (date: string) => {
         setSelectedDate(date);

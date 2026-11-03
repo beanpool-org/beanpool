@@ -2798,8 +2798,8 @@ export async function unpinPostOnNode(postId: string): Promise<{ success: boolea
     try {
         const database = await waitForInit();
         await database.runAsync(
-            `UPDATE posts SET pinned_until = NULL, pinned_at = NULL, updated_at = ? WHERE id = ?`,
-            [new Date().toISOString(), postId]
+            `UPDATE posts SET pinned_until = NULL, pinned_at = NULL WHERE id = ?`,
+            [postId]
         );
         emitAppEvent('sync_data_updated');
     } catch (e) {

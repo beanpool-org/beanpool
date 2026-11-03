@@ -528,7 +528,7 @@ export default function MarketScreen() {
     const [viewMode, setViewMode] = useState<'list' | 'grid' | 'compact'>('list');
     const [favCategories, setFavCategories] = useState<string[]>([]);
     const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(true);
-    const [nowTick, setNowTick] = useState(Date.now());
+    const [, setNowTick] = useState(Date.now()); // A live pin redraws the screen; each draw reads the time itself.
 
     // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
     // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
@@ -1086,7 +1086,7 @@ export default function MarketScreen() {
 
     // The rule is utils/pins.ts marketPins, which a test holds: the screen only says what passes the member's filters.
     const pinsRead = marketPins<any>({
-        basePosts, filtered: filteredPosts, narrowed: isNarrowed, now: nowTick,
+        basePosts, filtered: filteredPosts, narrowed: isNarrowed, now: Date.now(),
         visible: p => feedPostVisible(p, filterState, filterCtx)
             && !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode),
     });
@@ -1723,7 +1723,7 @@ export default function MarketScreen() {
                             }
                             return null;
                         })()}
-                        {isPostPinned(item, nowTick) && (
+                        {isPostPinned(item, Date.now()) && (
                             <View style={[styles.gridBadge, { backgroundColor: colors.overlay.scrim, borderColor: colors.overlay.scrimEdge }]} testID="pinned-chip">
                                 <Text style={[styles.gridPriceText, { fontSize: 10, fontWeight: '700' }]}>{t('📌 PINNED')}</Text>
                             </View>
@@ -1889,7 +1889,7 @@ export default function MarketScreen() {
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>{t('👤 YOU')}</Text>
                                     </View>
                                 )}
-                                {isPostPinned(item, nowTick) && (
+                                {isPostPinned(item, Date.now()) && (
                                     <View testID="pinned-chip" style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('📌 PINNED')}</Text>
                                     </View>

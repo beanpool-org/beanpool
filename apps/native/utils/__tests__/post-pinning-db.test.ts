@@ -207,7 +207,11 @@ describe('post pinning: phone columns, sync, and db operations', () => {
         vi.stubGlobal('fetch', globalFetch);
 
         try {
+            const db = await getDb();
+            const before = (await db.getFirstAsync('SELECT updated_at FROM posts WHERE id = ?', ['post-pinned']) as { updated_at: string }).updated_at;
             await unpinPostOnNode('post-pinned');
+            // The phone's clock stays out of it: a fast clock would make the node's next push read as stale.
+            expect((await db.getFirstAsync('SELECT updated_at FROM posts WHERE id = ?', ['post-pinned']) as { updated_at: string }).updated_at).toBe(before);
             expect(globalFetch).toHaveBeenCalledWith(
                 'https://test.beanpool.org/api/marketplace/posts/post-pinned/unpin',
                 expect.objectContaining({ method: 'POST' })

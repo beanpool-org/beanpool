@@ -55,8 +55,10 @@ function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; mad
         }
         const revoke = url.match(/agent\/grants\/([^/]+)\/revoke$/);
         if (revoke) {
+            const held = state.grants.find((g) => g.id === revoke[1])?.takedownsHeld ?? 0;
             state.grants = state.grants.filter((g) => g.id !== revoke[1]);
-            return new Response(JSON.stringify({ revoked: revoke[1] }), { status: 200 });
+            const putBack = body?.putBack === true ? { putBack: { back: Array.from({ length: held }, (_, i) => `p${i}`), stillHidden: held > 1 ? ['p0'] : [], gone: 0 } } : {};
+            return new Response(JSON.stringify({ revoked: revoke[1], ...putBack }), { status: 200 });
         }
         if (url.endsWith('/api/local/admin/agent/posts-per-day')) {
             // The owner's fresh proof (server requireFreshProof): a computer's key session is sent to the phone; the
@@ -318,6 +320,32 @@ describe('ConnectedAssistantsPanel', () => {
         await screen.findByTestId('agent-grant-row');
         expect(screen.queryByTestId('agent-remove-made')).toBeNull();
         expect(screen.queryByTestId('agent-disconnected-list')).toBeNull();
+    });
+
+    it('"Disconnect and put back" (MCP-MODERATION S2): an owner\'s, on a row with takedowns waiting; one confirm, then both at once', async () => {
+        const calls = fakeNode({ grants: [grant({ id: 'aaaaaaaaaaaa', name: 'Stolen laptop', canModerate: true, takedownsToday: 4, takedownsHeld: 3 }), grant({ id: 'bbbbbbbbbbbb', name: 'Quiet one', canModerate: true, takedownsHeld: 0 })] });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        const rows = await screen.findAllByTestId('agent-grant-row');
+        expect(within(rows[0]).getByTestId('agent-grant-moderates')).toHaveTextContent('May take down · 4 today · 3 waiting');
+        expect(within(rows[1]).queryByTestId('agent-grant-revoke-put-back')).toBeNull();
+        fireEvent.click(within(rows[0]).getByRole('button', { name: 'Disconnect Stolen laptop and put back what it took down' }));
+        expect(await screen.findByRole('alertdialog')).toHaveTextContent('the 3 posts it took down that are still waiting go back');
+        await answerInPageConfirm('Disconnect and put back');
+        await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants/aaaaaaaaaaaa/revoke'))?.body).toEqual({ putBack: true }));
+        expect(await screen.findByText('Disconnected. 3 posts put back; 1 stays hidden for the moderators, as before the takedown.')).toBeInTheDocument();
+    });
+
+    it('plain Disconnect puts nothing back, and an admin is offered no "and put back"', async () => {
+        const calls = fakeNode({ grants: [grant({ canModerate: true, takedownsHeld: 2 })] });
+        const { unmount } = render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Disconnect Claude on my laptop' }));
+        await answerInPageConfirm('Disconnect');
+        await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/revoke'))?.body).toEqual({}));
+        unmount();
+        fakeNode({ grants: [grant({ mine: true, role: 'admin', canModerate: true, takedownsHeld: 2 })], role: 'admin', seesAll: false });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        await screen.findByTestId('agent-grant-row');
+        expect(screen.queryByTestId('agent-grant-revoke-put-back')).toBeNull();
     });
 
     it('Disconnect asks, then disconnects that assistant', async () => {

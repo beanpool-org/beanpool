@@ -61,6 +61,7 @@ import { LogsModule, type LogEntry } from './components/modules/LogsModule';
 
 import { IS_FLEET_MODE } from './lib/mode';
 import { downloadNotice, downloadedAlert } from './lib/backup-shortfall';
+import { writeHallNote } from './lib/hall-ready';
 import { AdminLoginCard } from './components/auth/AdminLoginCard';
 import { TotpSetupGate } from './components/auth/TotpSetupGate';
 import { HomeScreen } from './components/modules/HomeScreen';
@@ -330,6 +331,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(downloadUrl);
+            // "Ready for the hall" says when a file was last downloaded in this browser (the server cannot see Downloads), and
+            // whether it was locked: a node with no recovery code sends an unlocked file with no keys (X-Backup-Locked: no).
+            writeHallNote(activeNode.id, res.headers.get('X-Backup-Locked') === 'yes' ? 'downloadedAt' : 'downloadedPlainAt', Date.now());
             // A backup that could not carry every photo is still a backup, and still a 200 — so this is the
             // only place the operator can be told. Saying nothing here is what made the shortfall silent.
             const said = downloadedAlert('Backup', downloadNotice(res));

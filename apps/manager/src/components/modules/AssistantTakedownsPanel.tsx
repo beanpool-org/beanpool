@@ -42,7 +42,8 @@ export interface TakedownCall {
     at: string;
     reasonLabel: string;
     why: string;
-    via: 'ids' | 'reports';
+    /** author: `author_of`, one post and its author's others (MCP-MODERATION S2). */
+    via: 'ids' | 'reports' | 'author';
     finalAfter: string;
     posts: PostLine[];
 }
@@ -222,7 +223,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
                         <li key={t.id} className="border border-nature-800 rounded-xl p-3 sm:p-4 space-y-2 min-w-0" data-testid="agent-takedown">
                             <p className="text-sm text-white m-0 font-semibold break-words">{t.grantName}: {count(t.posts.length)}, {t.reasonLabel}</p>
                             <p className="text-xs text-nature-400 m-0 break-words">
-                                {when(t.at)} · {t.via === 'reports' ? 'by reports' : 'by post'}{t.member ? ` · for ${t.member}` : ''}{held.length > 0 ? ` · final ${when(t.finalAfter)}` : ''}
+                                {when(t.at)} · {t.via === 'reports' ? 'by reports' : t.via === 'author' ? "by one member's posts" : 'by post'}{t.member ? ` · for ${t.member}` : ''}{held.length > 0 ? ` · final ${when(t.finalAfter)}` : ''}
                             </p>
                             <div className="border-l-2 border-nature-700 pl-3 min-w-0">
                                 <p className="text-xs uppercase tracking-wide text-nature-400 m-0">The assistant&apos;s words</p>

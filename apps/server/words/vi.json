@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -28,5 +28,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "Hôm nay bạn đã nhờ {n} lần. Bạn có thể nhờ lại vào ngày mai.",
   "Please keep this to {n} characters.": "Vui lòng giữ trong {n} ký tự.",
   "Please fill in their first name and how you know them.": "Vui lòng điền tên của họ và cách bạn quen họ.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Vui lòng bỏ số điện thoại và địa chỉ email. Quản trị viên chỉ cần tên và cách bạn quen người đó."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Vui lòng bỏ số điện thoại và địa chỉ email. Quản trị viên chỉ cần tên và cách bạn quen người đó.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "Một bồi thẩm đoàn gồm các thành viên được chọn ngẫu nhiên sẽ quyết định cuộc bỏ phiếu này. Bạn không được chọn nên không thể bỏ phiếu.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "Chủ sở hữu cộng đồng của bạn đã thay đổi cách cộng đồng hoạt động: khi cộng đồng đủ lớn, một bồi thẩm đoàn gồm các thành viên được chọn ngẫu nhiên sẽ quyết định có loại một người ra hay không. Cho đến lúc đó, mọi thành viên đều có thể bỏ phiếu.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "Chủ sở hữu cộng đồng của bạn đã thay đổi cách cộng đồng hoạt động: mọi thành viên đều có thể bỏ phiếu về việc có loại một người ra hay không.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "Chủ sở hữu cộng đồng của bạn đã thay đổi cách cộng đồng hoạt động: một bồi thẩm đoàn gồm các thành viên được chọn ngẫu nhiên quyết định có loại một người ra hay không."
 }

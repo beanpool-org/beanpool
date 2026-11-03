@@ -5,6 +5,8 @@
  *
  * FAKE_CLOUDFLARED_START_DELAY_MS (in the suite's environment): every fake waits that long before it records itself, as
  * one does on a loaded CI runner, to show a suite waits for its child rather than for a fixed time.
+ * FAKE_CLOUDFLARED_SAY_POLL_MS: every fake looks for the lines a suite asked it to print that often (default 25), as a loaded
+ * runner's late reader does, to show a suite waits for the line it said rather than for a fixed time.
  */
 
 import crypto from 'node:crypto';
@@ -46,6 +48,19 @@ const lines = (file: string): any[] => {
 /** The fake's per-token files (fake-cloudflared.mjs tokenFileId: keep the same). */
 const tokenFileId = (token: string) => token.replace(/[^A-Za-z0-9_-]/g, '_');
 
+let saidCount = 0;
+/**
+ * `entries` as one file the fake takes whole: written under a name it does not look for, then renamed into place
+ * (fake-cloudflared.mjs SAID). An append to the file it takes by renaming could land after the fake had renamed the empty
+ * file the append had just created, and that line went with the renamed file: said, never printed.
+ */
+export function saidFile(dir: string, id: string | null, entries: unknown[]): void {
+    const seq = `${String(Date.now()).padStart(14, '0')}-${String(++saidCount).padStart(6, '0')}`;
+    const tmp = path.join(dir, `.say-${process.pid}-${saidCount}.tmp`);
+    fs.writeFileSync(tmp, entries.map((e) => (typeof e === 'string' ? e : JSON.stringify(e)) + '\n').join(''));
+    fs.renameSync(tmp, path.join(dir, id === null ? `say.${seq}.jsonl` : `say.${id}.${seq}.jsonl`));
+}
+
 /**
  * A free port for the fake's metrics, from 20000-32767: below the ports any OS hands out on its own (Linux 32768-60999,
  * macOS 49152-65535), so between this check and the fake's own listen no other process is given it by a listen(0) or an
@@ -74,6 +89,8 @@ export async function useFakeCloudflared(dir: string, timings: Parameters<typeof
     fs.mkdirSync(dir, { recursive: true });
     const startDelayMs = Number(process.env.FAKE_CLOUDFLARED_START_DELAY_MS) || 0;
     if (startDelayMs > 0) fs.writeFileSync(path.join(dir, 'start-delay-ms'), String(startDelayMs));
+    const sayPollMs = Number(process.env.FAKE_CLOUDFLARED_SAY_POLL_MS) || 0;
+    if (sayPollMs > 0) fs.writeFileSync(path.join(dir, 'say-poll-ms'), String(sayPollMs));
     const port = await freePort();
     setTunnelConnectorForTests({ command: process.execPath, prefixArgs: [FAKE_CLOUDFLARED, dir], metricsPort: port, ...timings });
     const runs = () => lines(path.join(dir, 'runs.jsonl')) as FakeRun[];
@@ -83,11 +100,11 @@ export async function useFakeCloudflared(dir: string, timings: Parameters<typeof
         lastRun: () => runs().at(-1) ?? null,
         ready: (status, readyConnections = status === 200 ? 4 : 0) =>
             fs.writeFileSync(path.join(dir, 'ready.json'), JSON.stringify({ status, readyConnections })),
-        say: (...entries) => fs.appendFileSync(path.join(dir, 'say.jsonl'), entries.map((e) => (typeof e === 'string' ? e : JSON.stringify(e)) + '\n').join('')),
+        say: (...entries) => saidFile(dir, null, entries),
         crash: (on) => (on ? fs.writeFileSync(path.join(dir, 'crash'), '1') : fs.rmSync(path.join(dir, 'crash'), { force: true })),
         readyFor: (token, status, readyConnections = status === 200 ? 4 : 0) =>
             fs.writeFileSync(path.join(dir, `ready.${tokenFileId(token)}.json`), JSON.stringify({ status, readyConnections })),
-        sayTo: (token, ...entries) => fs.appendFileSync(path.join(dir, `say.${tokenFileId(token)}.jsonl`), entries.map((e) => (typeof e === 'string' ? e : JSON.stringify(e)) + '\n').join('')),
+        sayTo: (token, ...entries) => saidFile(dir, tokenFileId(token), entries),
         crashFor: (token, on) => {
             const f = path.join(dir, `crash.${tokenFileId(token)}`);
             if (on) fs.writeFileSync(f, '1'); else fs.rmSync(f, { force: true });

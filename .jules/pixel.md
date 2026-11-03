@@ -221,3 +221,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-02-06 - Add busy state to cancel initiative button in treasury manage
 **Learning:** In treasury management, the cancel initiative action button renders an `ActivityIndicator` when `cancelling` is true, but lacked `accessibilityState={{ disabled: cancelling, busy: cancelling }}`, leaving screen reader users without feedback during async cancellation.
 **Action:** Supply `accessibilityState={{ disabled: cancelling, busy: cancelling }}` on initiative cancellation action buttons rendering an `ActivityIndicator` when busy.
+
+## 2027-02-13 - Add busy and disabled state to join request button in treasury detail
+**Learning:** In community enterprise detail views, the join request button conditionally replaces its text with an ActivityIndicator during submission and disables interaction when busy or when backing pledge exceeds available standing, but lacked `accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}`, leaving screen readers without state feedback.
+**Action:** Supply `accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}` on join request action buttons rendering an ActivityIndicator when busy.

@@ -953,6 +953,7 @@ export default function TreasuryDetailScreen() {
                                         onPress={handleJoinRequest}
                                         accessibilityRole="button"
                                         accessibilityLabel={project ? t('Request to join as a collaborator') : t('Request to join as a keeper')}
+                                        accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}
                                     >
                                         {submittingJoin ? (
                                             <ActivityIndicator size="small" color={colors.text.inverse} />

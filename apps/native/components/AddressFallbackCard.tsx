@@ -1,8 +1,9 @@
 /**
  * Home's "byron.beanpool.org isn't answering. Your community also answers at mullum.beanpool.org. Use that for now?"
  * (utils/address-fallback.ts; scratch/fable-design/DESIGN-dns-robustness-fable.md §3.2, slice S3): shown only when the
- * phone's address has not answered for about five minutes of tries and another address the community published has
- * proved, by the community's own signed statement, to be the same community. Never a move on its own: "Use that address
+ * phone's address has not answered for about five minutes of tries (or not at all at the app's open), the follow card has
+ * no move to show, and another address the community published has proved, by the community's own signed statement, to
+ * be the same community. Never a move on its own: "Use that address
  * for now" moves the phone (the follow card's move, then Welcome for the community as the BeanPool sheet's switch does),
  * "Not now" hides it for 24 hours for that pair. Asked each time Home comes into view, once a minute while it stays
  * there (the tries are counted in utils/address-fallback.ts, which asks the network far less often), after any switch,

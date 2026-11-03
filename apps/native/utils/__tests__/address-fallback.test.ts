@@ -641,7 +641,10 @@ describe('the follow card\'s move: this card stands aside only when that card wi
             const asked = w.state.asked.length;
             expect(await addressFollowOffer(w.deps)).toEqual({ from: BYRON, to: THIRD, host: 'beans.example.net' });
             expect(w.state.asked).toHaveLength(asked);
-            // An answer that doesn't change tells nobody.
+            // Checked again an hour on, the same answer: nobody is told.
+            w.state.now += HOUR;
+            expect(await addressFollowOffer(w.deps)).toEqual({ from: BYRON, to: THIRD, host: 'beans.example.net' });
+            expect(w.state.asked.length).toBeGreaterThan(asked);
             expect(told).toHaveBeenCalledTimes(1);
         } finally {
             off();

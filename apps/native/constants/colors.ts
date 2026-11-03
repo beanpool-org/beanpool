@@ -336,7 +336,7 @@ export const darkColors = {
         heading: palette.white,
         body: palette.gray100,
         secondary: palette.gray400,
-        muted: '#898f99',        // between gray-400 and gray-500: 5.35 on the card, 4.65 on the sunken row (gray-500 was 3.13)
+        muted: '#898f99',        // between gray-400 and gray-500: 4.63 on the lifted card (#222822, home look S4), 4.65 on the sunken row (gray-500 was 3.13)
         inverse: palette.white,
         link: palette.blue400,
         onBrand: brandDark.commit.on,
@@ -407,7 +407,7 @@ export const darkColors = {
         info: { fg: palette.blue400, bg: palette.indigo950, border: palette.blue600, solid: brandDark.info.fill },
     },
 
-    // violet-300, 9.43:1 on the card (the fill's violet-600 was 3.05 as words).
+    // violet-300, 8.16:1 on the lifted card (the fill's violet-600 was 3.05 as words).
     event: { ink: palette.violet300 },
 
     // Discrete actions

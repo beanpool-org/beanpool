@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global process, console, document, location, getComputedStyle */
+/* global process, console, document, location, getComputedStyle, URL, window */
 /**
  * (home-look-s4) The phone's dark card lifts off the doodle wallpaper: Home's cards on the real doodle tile at 320dp wide
  * with the phone's text at 1.3×, light and dark, with main's tokens ("before") and this branch's ("after"):

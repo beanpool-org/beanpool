@@ -11,9 +11,10 @@ const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: 
 import {
     FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
     columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
-    moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
+    moveCard, moveCardTo, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
+import { arrangeCards, cardLine, reorderAmong } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
 const H = 3_600_000;
@@ -104,6 +105,33 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         expect(ids(moveCard(l, 'events', 'down', shown, NOW))).toEqual(['steps', 'tips', 'market', 'notices', 'events']);
         expect(moveCard(l, 'steps', 'up', shown, NOW)).toBeNull();
         expect(moveCard(l, 'notices', 'down', shown, NOW)).toBeNull();
+    });
+
+    it('a drop (L3): the card goes to its place among the movable ones, the others keep their slots, and the shape is an arrow\'s', () => {
+        const l: HomeLayoutV2 = { ...starterLayout(), cards: ['steps', 'tips', 'market', 'events', 'notices'].map(id => ({ id, type: id })) };
+        // On screen: tips isn't drawn, so it keeps its slot whatever moves around it.
+        const shown = cardOrder(l).filter(c => c.id !== 'tips');
+        expect(ids(moveCardTo(l, 'notices', 0, shown, NOW)!)).toEqual(['notices', 'tips', 'steps', 'market', 'events']);
+        expect(ids(moveCardTo(l, 'steps', 3, shown, NOW)!)).toEqual(['market', 'tips', 'events', 'notices', 'steps']);
+        // One place is what an arrow does, with the same keys saved.
+        const arrow = moveCard(l, 'events', 'up', shown, NOW)!;
+        const drop = moveCardTo(l, 'events', 1, shown, NOW)!;
+        expect(drop).toEqual(arrow);
+        expect(Object.keys(drop)).toEqual(Object.keys(l));
+        // Where it already stands, or a card that is not there: nothing to save.
+        expect(moveCardTo(l, 'market', 1, shown, NOW)).toBeNull();
+        expect(moveCardTo(l, 'nothing', 0, shown, NOW)).toBeNull();
+    });
+
+    it('a drag\'s preview never moves a card that stays here, and never lets one be passed', () => {
+        const cards = [{ id: 'needs', type: 'needs' }, { id: 'find', type: 'find' }, { id: 'a', type: 'market' }, { id: 'b', type: 'events' }, { id: 'c', type: 'notices' }, { id: 'community', type: 'community' }];
+        const live = (id: string, to: number) => reorderAmong(cards, id, to, ['find']).map(c => c.id);
+        expect(live('c', 0)).toEqual(['needs', 'find', 'c', 'a', 'b', 'community']);
+        expect(live('a', 99)).toEqual(['needs', 'find', 'b', 'c', 'a', 'community']);
+        // The fixed two and a pin are no card to lift: asking changes nothing.
+        expect(live('needs', 2)).toEqual(cards.map(c => c.id));
+        expect(live('find', 0)).toEqual(cards.map(c => c.id));
+        expect(live('community', 0)).toEqual(cards.map(c => c.id));
     });
 
     it('reset: the newcomer\'s list; a schedule\'s dismissal and a newer app\'s card are kept', () => {
@@ -350,7 +378,7 @@ describe('this browser\'s own marked save, read back (review of #1701 confirmati
     });
 });
 
-describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {
+describe("a saved search's words on its card and in Arrange (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {
     it('the first line is the words and the distance, the words alone with no point', () => {
         expect(searchFirstLine('eggs', 5)).toBe('eggs · within 5 km');
         expect(searchFirstLine('  duck   eggs ', 25)).toBe('duck eggs · within 25 km');
@@ -363,7 +391,7 @@ describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, �
         expect(SEARCH_OFFLINE_LINE).toBe('Shows when your community answers');
     });
 
-    it("Edit home names a search's row by its words (bounded), any other card by its name", () => {
+    it("Arrange names a search's band by its words (bounded), any other card by its name", () => {
         expect(cardRowName({ type: 'search', settings: { q: 'eggs' } })).toBe('eggs');
         expect(cardRowName({ type: 'search', settings: { q: 'x'.repeat(40) } })).toBe(`${'x'.repeat(24)}…`);
         expect(cardRowName({ type: 'search', settings: {} })).toBe('A saved search');
@@ -615,5 +643,25 @@ describe('settleHeights: a height that keeps turning back stops moving the cards
         const now = settleHeights(was, { tips: 100, market: 150 }, 21 * 16);
         expect(now.tips.height).toBe(140);
         expect(now.market.height).toBe(150);
+    });
+});
+
+describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
+    const order = [{ id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }, { id: 'sky', type: 'sky' }, { id: 'chat', type: 'chat' }, { id: 'community', type: 'community' }];
+    const onNode = (type: string) => type !== 'chat';
+
+    it('what is drawn, and every other card on the list this node can show, in the list\'s order', () => {
+        expect(arrangeCards(order, [{ id: 'market' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['market', 'sky', 'community']);
+    });
+
+    it('a fixed card or a pin only while it is drawn: nothing to show there means no band to say it stays', () => {
+        expect(arrangeCards(order, [{ id: 'needs' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['needs', 'market', 'sky', 'community']);
+        const find = { id: 'find', type: 'find' };
+        expect(arrangeCards([find, ...order], [], () => true, ['find']).map(c => c.id)).toEqual(['market', 'sky', 'chat']);
+    });
+
+    it("a folded card's line is the catalogue's; a type nobody knows has none", () => {
+        expect(cardLine('events')).toBe('Events coming up soon.');
+        expect(cardLine('future-card')).toBe('');
     });
 });

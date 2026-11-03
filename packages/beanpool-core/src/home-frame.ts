@@ -24,7 +24,7 @@ import { readSkySettings } from './sky.js';
 import { isTagId } from './tags/index.js';
 import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { toolHomeCardTypes } from './tools/index.js';
-import { word, type WordKey } from './words.js';
+import { t, word, type WordKey } from './words.js';
 import type { CardHue } from './brand-colours.js';
 
 // ── The shape ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export interface HomeCardType {
     id: string;
     /** The card's hue (S1): brand accent sage for frame cards, a type-specific hue for others. */
     hue: CardHue;
-    /** Its caption, its row in the picker and Edit home. Fixed words, never member text: shown through t(). */
+    /** Its caption, its row in the picker and its band in Arrange. Fixed words, never member text: shown through t(). */
     name: WordKey;
     /** On the worldwide community, where it says something else ("Near you"). */
     globalName?: WordKey;
@@ -311,6 +311,23 @@ export function homeInvitesForReader(features: HomeNodeFacts['features'], role: 
 
 const everywhere = () => true;
 const notGlobal = (a: HomeNodeFacts) => a.profile !== 'global';
+
+/**
+ * Arrange's words, one set for both apps (DESIGN-home-layout-fable.md §3.2, §3.7), shown through t(). The bar says arrows
+ * only: holding a band to drag is slices L3 and L4, and it says so when they land.
+ */
+export const ARRANGE_WORDS = {
+    name: word('Arrange'),
+    more: word('Arrange ›'),
+    link: word('Arrange: move the cards on Home'),
+    bar: word("Arrange Home: use the arrows. Done when you're happy."),
+    opened: word('Arrange Home. Use the arrows on each card.'),
+    stays: word('Stays here'),
+    done: word('Done arranging Home'),
+} as const;
+
+/** What the live line says after a move: where the card now stands among the cards that move. */
+export const arrangeMovedLine = (card: string, n: number, m: number) => t('{card} moved to {n} of {m}', { card, n, m });
 
 /**
  * Every card type, in the catalogue's order (the order `cards=` names them in). Unknown features count as on, as the
@@ -678,7 +695,7 @@ export function endTourLayout(layout: HomeLayoutV2 | null, opts: { pinned?: read
 }
 
 /**
- * The columns chosen in Edit home on a wide screen (D1), dated now so the last write wins as for a move. Unchanged when it
+ * The columns chosen on a wide screen (D1), dated now so the last write wins as for a move. Unchanged when it
  * is already the choice (no view is Auto). A newer app's other keys in the view are kept.
  */
 export function setHomeColumns(layout: HomeLayoutV2 | null, columns: HomeColumns, now: number = Date.now()): HomeLayoutV2 {

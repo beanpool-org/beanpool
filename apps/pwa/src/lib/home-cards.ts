@@ -7,7 +7,7 @@
  * nothing to say is not in the answer at all. What is left to the app is what only the member's own layout decides:
  *
  *   - **the order and which cards** are the member's version-2 list (lib/home-layout.ts, the card frame): `shownFrame`
- *     draws it, `needs` first and `community` last (it carries Add a card and Edit home);
+ *     draws it, `needs` first and `community` last (it carries Add a card and Arrange);
  *   - **the two cards with no data of their own** (§3.1): `interests` while no interest is set (or opened from the
  *     Market card's Tune), and `invite` where invites are on, after the member's first Offer;
  *   - **interests reorder, they never filter** (§4.3): starred categories first, the rest after;
@@ -827,7 +827,7 @@ export function pulseByLine(p: { callsign: string; publishedAt?: string | null }
 
 // ── Sun and moon ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Edit home's line for a sun and moon card with no place to work from. A word() key: shown through t(). */
+/** Arrange's line for a sun and moon card with no place to work from. A word() key: shown through t(). */
 export const SKY_NO_PLACE_LINE = word('Nothing to show now: no place is known.');
 
 /**

@@ -447,6 +447,10 @@ export async function getListedCommunityByHost(host: string): Promise<HomeCommun
         url: typeof row.url === 'string' ? row.url : null,
         memberCount: typeof row.memberCount === 'number' ? row.memberCount : null,
         distanceKm: null,
+        // What its directory push promised (mothership A3); core communityPromiseLines checks the shapes when they are shown.
+        ...(row.promise !== undefined ? { promise: row.promise } : {}),
+        acceptingKnocks: typeof row.acceptingKnocks === 'boolean' ? row.acceptingKnocks : null,
+        closingOn: typeof row.closingOn === 'string' ? row.closingOn : null,
     };
 }
 

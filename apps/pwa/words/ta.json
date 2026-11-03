@@ -2039,7 +2039,6 @@
   "Show QR code": "QR குறியீட்டைக் காட்டு",
   "Show Voters ({n}) ▼": "வாக்காளர்களைக் காட்டு ({n}) ▼",
   "Show all categories": "அனைத்து வகைகளையும் காட்டு",
-  "Show events": "நிகழ்வுகளைக் காட்டு",
   "Show everywhere": "எங்கும் காட்டு",
   "Show its 12 words": "இதன் 12 சொற்களைக் காட்டவும்",
   "Show me as a connection in common": "பொதுவான தொடர்பாளராக என்னைக் காட்டு",
@@ -3702,5 +3701,15 @@
   "Three posts are pinned already. Take one off first.": "மூன்று இடுகைகள் ஏற்கெனவே பொருத்தப்பட்டுள்ளன. முதலில் ஒன்றை நீக்குங்கள்.",
   "📌 PINNED": "📌 பொருத்தப்பட்டது",
   "Remove my working style": "என் வேலை பாணியை அகற்று",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "இது உங்கள் வேலை பாணியை இந்தச் சாதனத்திலிருந்தும் அதிலுள்ள ஒவ்வொரு சமூகத்திலிருந்தும் அகற்றும். வினாடிவினாவை மீண்டும் எடுத்தால் அது திரும்ப வரும்."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "இது உங்கள் வேலை பாணியை இந்தச் சாதனத்திலிருந்தும் அதிலுள்ள ஒவ்வொரு சமூகத்திலிருந்தும் அகற்றும். வினாடிவினாவை மீண்டும் எடுத்தால் அது திரும்ப வரும்.",
+  "All Categories": "அனைத்து வகைகள்",
+  "Food": "உணவு",
+  "Health": "சுகாதாரம்",
+  "Care": "பராமரிப்பு",
+  "Tech": "தொழில்நுட்பம்",
+  "Mindset": "மனப்பாங்கு",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "வடிகட்டிகளை அழி",
+  "Filter by category": "வகை வாரியாக வடிகட்டு"
 }

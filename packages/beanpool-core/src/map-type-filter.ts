@@ -39,18 +39,24 @@ function inCategory(p: any, state: MapFilterState): boolean {
     return normalizeCategory(p.category) === state.category;
 }
 
+/**
+ * Whether a listing (not an event) is one the filter leaves, wherever it sits: active, not an event, and the right type and
+ * category. The web map also pins a listing with no coordinates near the community's centre, so it asks this and keeps its
+ * own say about the place; the phone's `visibleMarketPins` adds the place.
+ */
+export function marketPinMatchesFilter(p: any, state: MapFilterState): boolean {
+    if (p.status && p.status !== 'active') return false;
+    const pt = (p.type || '').toLowerCase();
+    if (pt === 'event') return false;
+    if (state.type === 'events') return false;
+    if (state.type === 'offers' && pt !== 'offer') return false;
+    if (state.type === 'needs' && pt !== 'need') return false;
+    return inCategory(p, state);
+}
+
 /** Offer and Need pins. Events come from visibleEventPins; both draw together. */
 export function visibleMarketPins<T = any>(posts: T[], state: MapFilterState): T[] {
-    return posts.filter((p: any) => {
-        if (p.status && p.status !== 'active') return false;
-        if (!hasCoords(p)) return false;
-        const pt = (p.type || '').toLowerCase();
-        if (pt === 'event') return false;
-        if (state.type === 'events') return false;
-        if (state.type === 'offers' && pt !== 'offer') return false;
-        if (state.type === 'needs' && pt !== 'need') return false;
-        return inCategory(p, state);
-    });
+    return posts.filter((p: any) => hasCoords(p) && marketPinMatchesFilter(p, state));
 }
 
 /**

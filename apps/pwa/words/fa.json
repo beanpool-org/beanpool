@@ -2040,7 +2040,6 @@
   "Show QR code": "نمایش کد QR",
   "Show Voters ({n}) ▼": "نمایش رأی‌دهندگان ({n}) ▼",
   "Show all categories": "نمایش همه دسته‌بندی‌ها",
-  "Show events": "نمایش رویدادها",
   "Show everywhere": "نمایش همه جا",
   "Show its 12 words": "نمایش 12 واژهٔ آن",
   "Show me as a connection in common": "نمایش من به عنوان ارتباط مشترک",
@@ -3703,5 +3702,15 @@
   "Three posts are pinned already. Take one off first.": "سه پست از قبل سنجاق شده‌اند. اول یکی را بردارید.",
   "📌 PINNED": "📌 سنجاق‌شده",
   "Remove my working style": "حذف شیوه کاری من",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "این کار شیوه کاری شما را از این دستگاه و از همه جامعه‌هایی که روی آن هستند حذف می‌کند. با شرکت دوباره در آزمون، دوباره برمی‌گردد."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "این کار شیوه کاری شما را از این دستگاه و از همه جامعه‌هایی که روی آن هستند حذف می‌کند. با شرکت دوباره در آزمون، دوباره برمی‌گردد.",
+  "All Categories": "همه دسته‌بندی‌ها",
+  "Food": "غذا",
+  "Health": "سلامت",
+  "Care": "مراقبت",
+  "Tech": "فناوری",
+  "Mindset": "نگرش و مهارت‌های فردی",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "پاک کردن فیلترها",
+  "Filter by category": "فیلتر بر اساس دسته‌بندی"
 }

@@ -2002,7 +2002,6 @@
   "Show QR code": "QRコードを表示",
   "Show Voters ({n}) ▼": "投票者を表示（{n}人） ▼",
   "Show all categories": "すべてのカテゴリーを表示",
-  "Show events": "イベントを表示",
   "Show everywhere": "全地域を表示",
   "Show its 12 words": "12個の単語を表示",
   "Show me as a connection in common": "共通のつながりとして自分を表示",
@@ -3574,5 +3573,15 @@
   "Three posts are pinned already. Take one off first.": "すでに3件の投稿がピン留めされています。先に1件外してください。",
   "📌 PINNED": "📌 ピン留め",
   "Remove my working style": "自分のワークスタイルを削除",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "この端末と、端末内のすべてのコミュニティからあなたのワークスタイルを削除します。診断をやり直すと元に戻ります。"
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "この端末と、端末内のすべてのコミュニティからあなたのワークスタイルを削除します。診断をやり直すと元に戻ります。",
+  "All Categories": "すべてのカテゴリー",
+  "Food": "食品・料理",
+  "Health": "健康・ウェルネス",
+  "Care": "ケア・見守り",
+  "Tech": "IT・デジタル",
+  "Mindset": "対話・相談",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "絞り込みをクリア",
+  "Filter by category": "カテゴリーで絞り込む"
 }

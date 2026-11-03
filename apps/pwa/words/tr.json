@@ -2040,7 +2040,6 @@
   "Show QR code": "QR kodunu göster",
   "Show Voters ({n}) ▼": "Oy Verenleri Göster ({n}) ▼",
   "Show all categories": "Tüm kategorileri göster",
-  "Show events": "Etkinlikleri göster",
   "Show everywhere": "Her yeri göster",
   "Show its 12 words": "12 kelimesini göster",
   "Show me as a connection in common": "Beni ortak bağlantı olarak göster",
@@ -3703,5 +3702,15 @@
   "Three posts are pinned already. Take one off first.": "Üç gönderi zaten sabitlenmiş. Önce birini kaldır.",
   "📌 PINNED": "📌 SABİTLENDİ",
   "Remove my working style": "Çalışma tarzımı kaldır",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Bu, çalışma tarzınızı bu cihazdan ve cihazdaki her topluluktan kaldırır. Testi yeniden çözerseniz geri gelir."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Bu, çalışma tarzınızı bu cihazdan ve cihazdaki her topluluktan kaldırır. Testi yeniden çözerseniz geri gelir.",
+  "All Categories": "Tüm Kategoriler",
+  "Food": "Gıda",
+  "Health": "Sağlık",
+  "Care": "Bakım",
+  "Tech": "Teknoloji",
+  "Mindset": "Kişisel Gelişim",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "Filtreleri temizle",
+  "Filter by category": "Kategoriye göre filtrele"
 }

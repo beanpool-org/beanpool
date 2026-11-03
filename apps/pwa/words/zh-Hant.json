@@ -2002,7 +2002,6 @@
   "Show QR code": "顯示 QR 碼",
   "Show Voters ({n}) ▼": "顯示投票者 ({n}) ▼",
   "Show all categories": "顯示所有分類",
-  "Show events": "顯示活動",
   "Show everywhere": "顯示所有地區",
   "Show its 12 words": "顯示它的 12 個詞",
   "Show me as a connection in common": "將我顯示為共同好友",
@@ -3574,5 +3573,15 @@
   "Three posts are pinned already. Take one off first.": "已有三則貼文置頂。請先取消一則。",
   "📌 PINNED": "📌 置頂",
   "Remove my working style": "移除我的工作風格",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "這會把你的工作風格從此裝置及裝置上的每個社群中移除。重新測驗後即可恢復。"
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "這會把你的工作風格從此裝置及裝置上的每個社群中移除。重新測驗後即可恢復。",
+  "All Categories": "所有類別",
+  "Food": "食品食物",
+  "Health": "健康醫療",
+  "Care": "照護關懷",
+  "Tech": "科技數位",
+  "Mindset": "心靈成長",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "清除篩選條件",
+  "Filter by category": "依類別篩選"
 }

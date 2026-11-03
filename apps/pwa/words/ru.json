@@ -2116,7 +2116,6 @@
   "Show QR code": "Показать QR-код",
   "Show Voters ({n}) ▼": "Показать голосовавших ({n}) ▼",
   "Show all categories": "Показать все категории",
-  "Show events": "Показать события",
   "Show everywhere": "Показывать отовсюду",
   "Show its 12 words": "Показать его 12 слов",
   "Show me as a connection in common": "Показывать меня как общего знакомого",
@@ -3961,5 +3960,15 @@
   "Three posts are pinned already. Take one off first.": "Уже закреплены три публикации. Сначала снимите одну.",
   "📌 PINNED": "📌 ЗАКРЕПЛЕНО",
   "Remove my working style": "Удалить мой стиль работы",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ваш стиль работы будет удалён с этого устройства и из всех сообществ на нём. Если пройти опрос снова, он вернётся."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ваш стиль работы будет удалён с этого устройства и из всех сообществ на нём. Если пройти опрос снова, он вернётся.",
+  "All Categories": "Все категории",
+  "Food": "Продукты",
+  "Health": "Здоровье",
+  "Care": "Забота",
+  "Tech": "Техника",
+  "Mindset": "Знания",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "Сбросить фильтры",
+  "Filter by category": "Фильтр по категориям"
 }

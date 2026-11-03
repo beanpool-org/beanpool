@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAP_TYPE_FILTERS, mapFiltersActive, visibleEventPins, visibleMarketPins, type MapFilterState } from '../map-type-filter.js';
+import { MAP_TYPE_FILTERS, mapFiltersActive, marketPinMatchesFilter, visibleEventPins, visibleMarketPins, type MapFilterState } from '../map-type-filter.js';
 
 const at = { lat: -28.6, lng: 153.5 };
 const posts = [
@@ -42,6 +42,16 @@ describe('the map type filter (one rule for the phone and the web)', () => {
     it('a post filed under a legacy category name sits under the category it was renamed to', () => {
         const legacy = [{ id: 'old', type: 'offer', category: 'food_produce', status: 'active', ...at }];
         expect(ids(visibleMarketPins(legacy, state({ type: 'offers', category: 'food' })))).toEqual(['old']);
+    });
+
+    it('a listing with no place still matches the filter (the web pins it near the community), and visibleMarketPins alone wants a place', () => {
+        const nowhere = posts.find(p => p.id === 'o-nowhere');
+        expect(marketPinMatchesFilter(nowhere, state({ type: 'offers' }))).toBe(true);
+        expect(marketPinMatchesFilter(nowhere, state({ type: 'needs' }))).toBe(false);
+        expect(marketPinMatchesFilter(nowhere, state({ type: 'offers', category: 'tools' }))).toBe(false);
+        expect(marketPinMatchesFilter(posts.find(p => p.id === 'o-old'), state())).toBe(false);
+        expect(marketPinMatchesFilter(posts.find(p => p.id === 'e-1'), state())).toBe(false);
+        expect(ids(visibleMarketPins([nowhere], state()))).toEqual([]);
     });
 
     it('Events shows no offer or need pin, and under Events the remembered category stops filtering', () => {

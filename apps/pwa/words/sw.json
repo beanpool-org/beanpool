@@ -2040,7 +2040,6 @@
   "Show QR code": "Onyesha msimbo wa QR",
   "Show Voters ({n}) ▼": "Onyesha Wapiga Kura ({n}) ▼",
   "Show all categories": "Onyesha vitengo vyote",
-  "Show events": "Onyesha matukio",
   "Show everywhere": "Onyesha kila mahali",
   "Show its 12 words": "Onyesha maneno yake 12",
   "Show me as a connection in common": "Nionyeshe kama unganisho la pamoja",
@@ -3703,5 +3702,15 @@
   "Three posts are pinned already. Take one off first.": "Machapisho matatu tayari yamebandikwa. Ondoa moja kwanza.",
   "📌 PINNED": "📌 IMEBANDIKWA",
   "Remove my working style": "Ondoa mtindo wangu wa kazi",
-  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Hii inaondoa mtindo wako wa kazi kwenye kifaa hiki na kwenye kila jumuiya iliyomo. Ukifanya tena dodoso, unarudi."
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Hii inaondoa mtindo wako wa kazi kwenye kifaa hiki na kwenye kila jumuiya iliyomo. Ukifanya tena dodoso, unarudi.",
+  "All Categories": "Kategoria Zote",
+  "Food": "Chakula",
+  "Health": "Afya",
+  "Care": "Malezi na Utunzaji",
+  "Tech": "Teknolojia",
+  "Mindset": "Mtazamo wa Akili",
+  "{emoji} {label} ▴": "{emoji} {label} ▴",
+  "{emoji} {label} ▾": "{emoji} {label} ▾",
+  "Clear filters": "Futa vichujio",
+  "Filter by category": "Chuja kwa kitengo"
 }

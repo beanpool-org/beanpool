@@ -102,8 +102,10 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
     const [role, setRole] = useState<string | null | undefined>(undefined);
+    const needsRole = profile?.features?.door === 'admins' || profile?.features?.privatePreview === true;
 
     useEffect(() => {
+        if (!needsRole) return;
         let cancelled = false;
         (async () => {
             const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
@@ -126,7 +128,7 @@ export function EventShareAndCalendar({ post }: { post: any }) {
             }
         })();
         return () => { cancelled = true; };
-    }, []);
+    }, [needsRole]);
 
     const says = shareSays(profile?.features, role);
     const event = shareableEvent(post);

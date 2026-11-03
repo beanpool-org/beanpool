@@ -14,7 +14,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PEEK_WORDS as W, shareSays, t, type WordKey } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
-import { shareOutsideOn } from '../utils/node-profile';
 import { eventLink } from '../utils/event-extras';
 import { makePeekLink, peekStopsHere } from '../utils/peek';
 
@@ -78,8 +77,8 @@ export function ShareOutsideButton({ post }: { post: any }) {
     const profile = useNodeProfile();
     const [busy, setBusy] = useState(false);
     const unsent = useRef<UnsentPeekLink | null>(null);
-    if (!shareOutsideOn(profile?.features) || !shareableOutside(post)) return null;
     const says = shareSays(profile?.features);
+    if (!says.showShareOutside || !shareableOutside(post)) return null;
     return (
         <View style={styles.outsideBlock}>
             <Pressable onPress={() => confirmShareOutside({ id: post.id, title: post.title }, setBusy, unsent)} disabled={busy}
@@ -100,8 +99,10 @@ export function SharePostButtons({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
     const [role, setRole] = useState<string | null | undefined>(undefined);
+    const needsRole = profile?.features?.door === 'admins' || profile?.features?.privatePreview === true;
 
     useEffect(() => {
+        if (!needsRole) return;
         let cancelled = false;
         (async () => {
             const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
@@ -124,7 +125,7 @@ export function SharePostButtons({ post }: { post: any }) {
             }
         })();
         return () => { cancelled = true; };
-    }, []);
+    }, [needsRole]);
 
     const says = shareSays(profile?.features, role);
 

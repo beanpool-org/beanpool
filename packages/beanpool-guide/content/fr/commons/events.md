@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Trouver des événements
 
-- Dans le **Marché**, touchez **Événements**. Choisissez **Aujourd'hui**, **Ce week-end** ou **7 prochains jours**.
+- Dans le **Marché**, touchez **Événements**. Le plus proche dans le temps vient en premier. Choisissez **Aujourd'hui**, **Ce week-end** ou **7 prochains jours**.
+- Dans le **Marché**, sous **Tout**, un événement est de nouveau listé une fois, sous **Aujourd'hui**, la veille de son début, puis descend comme n'importe quelle autre publication. Un événement hebdomadaire revient une fois par semaine.
 - Sur la **Carte**, les événements sont représentés par des repères violets. Sur le téléphone, touchez **Événements** pour n'afficher qu'eux. Dans l'application web, ils sont toujours visibles, et les pastilles de date permettent de restreindre la sélection.
 
 ## Vos événements

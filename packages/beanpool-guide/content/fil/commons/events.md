@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Paghahanap ng mga event
 
-- Sa **Merkado**, i-tap ang **Mga Event**. Pumili ng **Ngayong araw**, **Ngayong weekend** o **Susunod na 7 araw**.
+- Sa **Merkado**, i-tap ang **Mga Event**. Nauuna ang pinakamaaga. Pumili ng **Ngayong araw**, **Ngayong weekend** o **Susunod na 7 araw**.
+- Sa **Merkado**, sa ilalim ng **Lahat**, inililista muli nang isang beses ang isang event, sa ilalim ng **Ngayong araw**, sa araw bago ito magsimula, at pagkatapos ay lumulubog gaya ng ibang post. Ang lingguhang event ay bumabalik nang isang beses sa isang linggo.
 - Sa **Mapa**, ang mga event ay mga lilang pin. Sa telepono, i-tap ang **Mga Event** upang makita lamang ang mga ito. Sa web app palagi silang naroon, at pinapakipot ng mga chip ng petsa ang mga ito.
 
 ## Iyong mga event

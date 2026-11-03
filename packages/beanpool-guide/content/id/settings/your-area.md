@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Apa itu wilayahmu
 
-Di komunitas global, wilayahmu adalah perkiraan tempat kamu berada: radius sekitar 10 km dari suatu kota atau titik, tidak pernah lokasi tepatmu. Komunitas global menggunakannya untuk menunjukkan apa yang ditawarkan di dekatmu: 500 listing terdekat dalam radius 250 km darinya. Lihat "Lebih dari satu komunitas".
+Di komunitas global, wilayahmu adalah perkiraan tempat kamu berada: radius sekitar 10 km dari suatu kota atau titik, tidak pernah lokasi tepatmu. Komunitas global menggunakannya untuk menunjukkan apa yang ditawarkan di dekatmu: 500 listing terdekat dalam radius 250 km darinya. Pasar kemudian menampilkannya dari yang terbaru, masing-masing dengan seberapa jauh jaraknya. Lihat "Lebih dari satu komunitas".
 
 Kamu memberikannya saat bergabung, pada **Kira-kira kamu di mana?**, yang dapat kamu lewati dengan **Lewati dulu**. Kamu dapat mengubah atau menghapusnya kapan saja. Ini milik akunmu di komunitas global, jadi ponselmu dan aplikasi web menggunakan wilayah yang sama.
 

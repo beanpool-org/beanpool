@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Menemukan acara
 
-- Di **Pasar**, ketuk **Acara**. Pilih **Hari ini**, **Akhir pekan ini**, atau **7 hari ke depan**.
+- Di **Pasar**, ketuk **Acara**. Yang paling cepat dimulai muncul pertama. Pilih **Hari ini**, **Akhir pekan ini**, atau **7 hari ke depan**.
+- Di **Pasar**, di bawah **Semua**, acara ditampilkan lagi sekali, di bawah **Hari ini**, sehari sebelum dimulai, lalu tenggelam seperti postingan lain. Acara mingguan kembali sekali seminggu.
 - Di **Peta**, acara berupa pin berwarna ungu. Di ponsel, ketuk **Acara** untuk hanya melihat pin acara. Di web app, pin selalu ada di sana, dan tombol tanggal menyaringnya.
 
 ## Acara Anda

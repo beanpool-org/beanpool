@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Pasar dalam satu urutan
+
+Di ponsel, Anda mendapatkannya dengan aplikasi yang sudah diperbarui; di peramban web, saat server komunitas Anda diperbarui.
+
+- **Terbaru dulu, sama di ponsel dan web.** Pasar menampilkan postingan dari yang terbaru di bawah **Hari ini**, **Kemarin**, **Minggu Ini**, dan **Listing Terdahulu**, menurut hari setiap postingan ditayangkan. Judul **Acara mendatang**, **Jajak Pendapat**, dan **Terdekat dulu** sudah tidak ada.
+- **Acara kembali sekali.** Sehari sebelum dimulai, acara ditampilkan lagi di bawah **Hari ini**. Jajak pendapat melakukan hal yang sama sehari sebelum ditutup. Setelah itu, keduanya tenggelam seperti postingan lain.
+- **Dua tempat sehari.** Postingan ketiga seseorang dalam sehari, dan yang sesudahnya, muncul setelah postingan semua orang lain pada hari itu.
+- **Mengedit postingan tidak menaikkannya.** Agar terlihat lagi, posting lagi.
+- **Di komunitas global**, Pasar menampilkan yang terbaru dalam jarak 250 km dari wilayahmu, setiap postingan dengan seberapa jauh jaraknya. Sebuah baris di atas daftar menyatakannya. Ponsel tidak lagi memerlukan lokasimu untuk ini. Di web app, hal yang sama berlaku untuk **Jarak** yang kamu pilih.
+- **Tidak berubah:** postingan yang disematkan pemilik tetap di atas, **Acara** tetap menampilkan yang paling cepat dimulai lebih dulu, dan pencarian menemukan yang paling cocok dengan kata-katamu. Lihat "Menjelajahi pasar".
+
 ## Komunitas global di dekatmu
 
 Kamu mendapatkan pembaruan ini saat server komunitas global diperbarui. Di ponsel, kamu memerlukan aplikasi versi terbaru.
@@ -15,7 +26,7 @@ Kamu mendapatkan pembaruan ini saat server komunitas global diperbarui. Di ponse
 - **Wilayahmu.** Di web app, bergabung ke komunitas global memiliki satu langkah tambahan setelah foto: **Kira-kira kamu di mana?** Di ponsel, langkah ini ditanyakan saat kamu bergabung menggunakan akun yang sudah kamu miliki; akun ponsel baru dapat mengaturnya nanti di Pengaturan, di bawah **Wilayahmu**. Pada langkah tersebut, ketuk **Pakai lokasiku**, **Ketik nama kota atau daerah**, atau **Lewati dulu**. Wilayah disimpan dalam radius sekitar 10 km, bukan lokasi tepatmu. Ubah atau hapus ini di Pengaturan, di bawah **Wilayahmu**. Lihat "Wilayahmu".
 - **Tanpa wilayah, tidak masalah.** Tanpa mengatur wilayah, kamu melihat postingan terbaru dari mana saja, dan sebuah baris di atas Pasar menyatakannya. Di ponsel, ketuk baris tersebut untuk mengatur wilayahmu.
 - **Postingan baru di dekatmu.** Postingan baru masuk begitu dipasang. Postingan yang jauh tidak lagi dikirim ke ponselmu.
-- **Di web app**, Pasar dan Peta dimulai dari wilayahmu, atau dari lokasi yang kamu pilih dengan **Jarak**: yang terdekat muncul pertama, masing-masing dengan jaraknya. Lihat "Menemukan hal di dekatmu".
+- **Di web app**, Pasar dan Peta dimulai dari wilayahmu, atau dari lokasi yang kamu pilih dengan **Jarak**: masing-masing dengan jaraknya. Peta menampilkan yang terdekat dulu. Pasar menampilkan yang terbaru dulu, seperti yang dikatakan "Pasar dalam satu urutan", di atas. Lihat "Menemukan hal di dekatmu".
 - **Jajak pendapat** tidak memiliki lokasi tersendiri, sehingga masing-masing ditampilkan di wilayah anggota yang membuatnya.
 - **Ketik nama kotamu.** Di komunitas global, **Cari komunitasmu** di Beranda tidak lagi membutuhkan lokasimu: ketuk **atau ketik nama kotamu** dan pilih kotamu. Hanya titik perkiraan yang disimpan. Lihat "Menemukan komunitas di dekatmu".
 - **Memasang tanpa harga.** Di komunitas global, formulir postingan tidak meminta harga, karena Kacang berada di komunitas lokal. Di web app, **Pasang Penawaran** dan **Pasang Permintaan** kini dapat digunakan tanpa harga. Komunitas lokal tetap meminta harga.

@@ -16,9 +16,9 @@ Estos son los límites de la comunidad global. Una comunidad local funciona en s
 
 ## Los límites
 
-- **Una publicación se archiva 90 días después de su último cambio.** Se retira del Mercado y del Mapa, y sus fotos se eliminan. Editarla, pausarla o volver a publicarla cuentan como un cambio: abrirla con **Editar publicación** y tocar **Guardar** la conserva por otros 90 días. Cuando una de las tuyas se archiva, recibes una notificación con tus alertas de **Actividad del mercado**. Puedes volver a publicarla en cualquier momento.
+- **Una publicación se archiva 90 días después de su último cambio.** Se retira del Mercado y del Mapa, y sus fotos se eliminan. Editarla, pausarla o volver a publicarla cuentan como un cambio: abrirla con **Editar publicación** y tocar **Guardar** la conserva por otros 90 días. Nada de esto la sube en el Mercado, que lista las publicaciones de la más reciente a la más antigua. Cuando una de las tuyas se archiva, recibes una notificación con tus alertas de **Actividad del mercado**. Puedes volver a publicarla en cualquier momento.
 - **Hasta 5 fotos por publicación.**
-- **Tu teléfono guarda las 500 publicaciones más cercanas**, dentro de 250 km de tu zona. También guarda las tuyas propias y cualquiera sobre la que tengas un trato o una conversación. La búsqueda del Mercado aún encuentra publicaciones de todas partes. Consulta "Tu zona".
+- **Tu teléfono guarda las 500 publicaciones más cercanas**, dentro de 250 km de tu zona. También guarda las tuyas propias y cualquiera sobre la que tengas un trato o una conversación. El Mercado lista primero lo más reciente de lo que está dentro de 250 km de tu zona, y cada tarjeta indica a qué distancia está. La búsqueda del Mercado aún encuentra publicaciones de todas partes. Consulta "Tu zona".
 - **Puedes seguir hasta 3 lugares** con **Avisarme cuando empiece una aquí**. Para seguir otro, deja de seguir uno. Consulta "Buscar una comunidad cerca".
 
 Una cuenta nueva también tiene algunos límites diarios durante sus primeros días. Consulta "Reportar un problema".

@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Was deine Gegend ist
 
-In der globalen Gemeinschaft ist deine Gegend ungefähr dort, wo du dich befindest: ein Umkreis von etwa 10 km um eine Stadt oder einen Ort, niemals dein genauer Standort. Die globale Gemeinschaft nutzt dies, um dir Angebote in deiner Nähe anzuzeigen: die nächsten 500 Einträge im Umkreis von 250 km. Siehe „Mehrere Communitys“.
+In der globalen Gemeinschaft ist deine Gegend ungefähr dort, wo du dich befindest: ein Umkreis von etwa 10 km um eine Stadt oder einen Ort, niemals dein genauer Standort. Die globale Gemeinschaft nutzt dies, um dir Angebote in deiner Nähe anzuzeigen: die nächsten 500 Einträge im Umkreis von 250 km. Der Markt listet sie dann mit den neuesten zuerst, jeden mit seiner Entfernung. Siehe „Mehrere Communitys“.
 
 Du gibst sie beim Beitritt unter **Ungefähr wo bist du?** an, was du mit **Jetzt überspringen** überspringen kannst. Du kannst sie jederzeit ändern oder löschen. Sie gehört zu deinem Konto in der globalen Gemeinschaft, daher nutzen dein Telefon und die Web-App dieselbe Angabe.
 

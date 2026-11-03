@@ -34,7 +34,7 @@ Vous pouvez avoir un seul sondage ouvert à la fois, et une communauté peut en 
 
 ## Trouver des sondages et y répondre
 
-Les sondages se trouvent sur le Marché. Touchez **Sondages** sur la ligne du haut pour n'afficher que les sondages.
+Les sondages se trouvent sur le Marché. Touchez **Sondages** sur la ligne du haut pour n'afficher que les sondages. Un sondage est de nouveau listé une fois, sous **Aujourd'hui**, la veille de sa clôture.
 
 - Touchez une réponse pour la choisir. Touchez-en une autre pour changer d'avis, jusqu'à la clôture du sondage.
 - La fiche indique combien de personnes ont choisi chaque réponse.

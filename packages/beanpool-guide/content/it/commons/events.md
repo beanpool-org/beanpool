@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Trovare eventi
 
-- Nel **Mercato**, tocca **Eventi**. Scegli **Oggi**, **Questo fine settimana** o **Prossimi 7 giorni**.
+- Nel **Mercato**, tocca **Eventi**. Il più vicino nel tempo viene per primo. Scegli **Oggi**, **Questo fine settimana** o **Prossimi 7 giorni**.
+- Nel **Mercato**, sotto **Tutti**, un evento viene elencato di nuovo una volta, sotto **Oggi**, il giorno prima che inizi, e poi scende come qualsiasi altro post. Un evento settimanale torna una volta a settimana.
 - Sulla **Mappa**, gli eventi sono contrassegnati da pin viola. Sul telefono, tocca **Eventi** per vedere solo quelli. Nell'app web sono sempre visibili, e i filtri delle date permettono di restringerli.
 
 ## I tuoi eventi

@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Etkinlikleri bulma
 
-- **Pazar**'da **Etkinlikler**'e dokunun. **Bugün**, **Bu hafta sonu** veya **Gelecek 7 gün** seçeneklerinden birini belirleyin.
+- **Pazar**'da **Etkinlikler**'e dokunun. En yakın tarihli olan ilk sırada gelir. **Bugün**, **Bu hafta sonu** veya **Gelecek 7 gün** seçeneklerinden birini belirleyin.
+- **Pazar**'da **Tümü** altında bir etkinlik, başlamasından bir gün önce **Bugün** altında bir kez yeniden listelenir, sonra diğer gönderiler gibi aşağı iner. Haftalık bir etkinlik haftada bir geri gelir.
 - **Harita**'da etkinlikler mor iğnelerdir. Telefonda yalnızca onları görmek için **Etkinlikler**'e dokunun. Web uygulamasında her zaman oradadırlar ve tarih filtreleri onları daraltır.
 
 ## Etkinlikleriniz

@@ -9,7 +9,7 @@ source-hash: a02c0f5de7b3d8a7
 
 ## Ano ang iyong lugar
 
-Sa pandaigdigang komunidad, ang iyong lugar ay humigit-kumulang kung nasaan ka: mga 10 km sa paligid ng isang bayan o isang lugar, hindi kailanman ang iyong eksaktong lokasyon. Ginagamit ito ng pandaigdigang komunidad upang ipakita sa iyo kung ano ang iniaalok na malapit sa iyo: ang pinakamalapit na 500 listing sa loob ng 250 km mula rito. Tingnan ang "Higit sa isang komunidad".
+Sa pandaigdigang komunidad, ang iyong lugar ay humigit-kumulang kung nasaan ka: mga 10 km sa paligid ng isang bayan o isang lugar, hindi kailanman ang iyong eksaktong lokasyon. Ginagamit ito ng pandaigdigang komunidad upang ipakita sa iyo kung ano ang iniaalok na malapit sa iyo: ang pinakamalapit na 500 listing sa loob ng 250 km mula rito. Inililista na ng Merkado ang mga ito na pinakabago muna, bawat isa ay may layo nito. Tingnan ang "Higit sa isang komunidad".
 
 Ibinibigay mo ito kapag sumali ka, sa **Saan ka humigit-kumulang?**, na maaari mong laktawan gamit ang **Laktawan muna**. Maaari mo itong palitan o burahin anumang oras. Nabibilang ito sa iyong account sa pandaigdigang komunidad, kaya ang iyong telepono at ang web app ay gumagamit ng parehong isa.
 

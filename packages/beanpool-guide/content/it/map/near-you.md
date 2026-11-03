@@ -3,7 +3,7 @@ slug: near-you
 title: Trovare cose vicino a te
 summary: Mostra solo gli annunci entro una certa distanza da te o da qualsiasi punto tu scelga.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Nella scheda Mercato
@@ -28,8 +28,8 @@ La mappa non ha un filtro di distanza proprio. Tocca il pulsante del mirino a si
 
 La comunità globale presenta annunci da ogni parte del mondo, quindi il **Mercato** e la **Mappa** dell'app web iniziano dalle vicinanze:
 
-- Con una **Distanza** impostata nel Mercato, entrambi mostrano gli annunci più vicini all'interno di essa, dai più vicini. La Mappa mostra fino a 200 pin.
-- Senza di essa, mostrano gli annunci più vicini entro 250 km dalla tua zona: la località approssimativa fornita alla comunità quando ti unisci, o in seguito in **Impostazioni**, sotto **La tua zona**. Una riga sopra l'elenco del Mercato indica **Prima i più vicini alla tua zona, entro 250 km.** Tocca **Mostra ovunque** per i più recenti da ogni luogo, e **Vicino alla tua zona** per tornare indietro.
+- Con una **Distanza** impostata nel Mercato, entrambi mostrano gli annunci al suo interno. Il Mercato li elenca dai più recenti, ciascuno con la distanza a cui si trova, sotto una riga che dice **Il più recente entro 5 km dal luogo che hai scelto.** (con la tua distanza). La Mappa mostra i più vicini, fino a 200 pin.
+- Senza di essa, mostrano gli annunci più vicini entro 250 km dalla tua zona: la località approssimativa fornita alla comunità quando ti unisci, o in seguito in **Impostazioni**, sotto **La tua zona**. Il Mercato li elenca dai più recenti, sotto una riga che dice **Il più recente entro 250 km dalla tua zona.** La Mappa mostra prima i più vicini. Tocca **Mostra ovunque** per i più recenti da ogni luogo, e **Vicino alla tua zona** per tornare indietro.
 - Senza nessuna delle due, vedi i più recenti da ogni luogo, e **Vedi cosa c'è vicino a te** apre il selettore di distanza. Una riga sopra l'elenco del Mercato indica quale di queste viste stai consultando. Con una **Distanza** non ha pulsanti: apri **Distanza** e tocca **Reimposta**. Torni così vicino alla tua zona, o, senza alcuna zona impostata, vedi i più recenti da ogni luogo.
 - Ogni annuncio mostra a quale distanza si trova, come **📍 12 km**. I tuoi annunci personali sono sempre presenti sulla Mappa e nel Mercato vicino alla tua zona, ovunque si trovino. Con una **Distanza**, il Mercato mostra solo ciò che rientra in essa, compresi i tuoi.
 - Quando l'elenco è impostato vicino a te, i post privi di posizione vengono omessi. Un sondaggio pubblicato da chi non ha impostato la propria zona è uno di questi. Per vederli, reimposta la **Distanza** se ne avevi scelta una, poi tocca **Mostra ovunque**.
@@ -40,7 +40,7 @@ La ricerca dell'app web cerca solo tra gli annunci visualizzati sullo schermo. *
 
 ## Sulla comunità globale, sul telefono
 
-Il telefono conserva gli annunci più vicini alla tua zona: fino a 500, entro 250 km. Conserva anche i tuoi annunci personali e qualsiasi annuncio in cui hai un accordo, una chat o una risposta. Il Mercato e la Mappa mostrano ciò che il telefono conserva. Senza alcuna zona impostata, conserva invece gli annunci più recenti, e una riga sopra il Mercato lo segnala. Vedi "La tua zona".
+Il telefono conserva gli annunci più vicini alla tua zona: fino a 500, entro 250 km. Conserva anche i tuoi annunci personali e qualsiasi annuncio in cui hai un accordo, una chat o una risposta. Il Mercato e la Mappa mostrano ciò che il telefono conserva. Il Mercato lo elenca dai più recenti, ciascuno con la distanza a cui si trova, sotto la stessa riga, **Il più recente entro 250 km dalla tua zona.** Non serve che tu consenta all'app di usare la tua posizione. Senza alcuna zona impostata, conserva invece gli annunci più recenti, e una riga sopra il Mercato lo segnala. Vedi "La tua zona".
 
 ## Eventi vicino a te
 

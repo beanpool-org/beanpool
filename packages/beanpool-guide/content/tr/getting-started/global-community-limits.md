@@ -16,9 +16,9 @@ Bunlar küresel topluluğun sınırlarıdır. Yerel bir topluluk kendi sunucusun
 
 ## Sınırlar
 
-- **Bir ilan en son değiştirilmesinden 90 gün sonra arşivlenir.** Pazar'dan ve Harita'dan kaldırılır ve fotoğrafları silinir. Düzenlemek, duraklatmak veya tekrar yayına almak bir değişiklik sayılır: ilanı **İlanı Düzenle** ile açıp **Kaydet**'e dokunmak onu 90 gün daha tutar. Sizin bir ilanınız arşivlendiğinde, **Pazaryeri Etkinliği** uyarılarınızla bir bildirim alırsınız. İstediğiniz zaman tekrar paylaşabilirsiniz.
+- **Bir ilan en son değiştirilmesinden 90 gün sonra arşivlenir.** Pazar'dan ve Harita'dan kaldırılır ve fotoğrafları silinir. Düzenlemek, duraklatmak veya tekrar yayına almak bir değişiklik sayılır: ilanı **İlanı Düzenle** ile açıp **Kaydet**'e dokunmak onu 90 gün daha tutar. Bunların hiçbiri onu, gönderileri en yeniden başlayarak listeleyen Pazar'da yukarı taşımaz. Sizin bir ilanınız arşivlendiğinde, **Pazaryeri Etkinliği** uyarılarınızla bir bildirim alırsınız. İstediğiniz zaman tekrar paylaşabilirsiniz.
 - **Bir ilanda en fazla 5 fotoğraf.**
-- **Telefonunuz**, bölgenizin 250 km yakınındaki **en yakın 500 ilanı tutar**. Ayrıca kendi ilanlarınızı ve bir anlaşmanız ya da hakkında bir sohbetiniz olan tüm ilanları tutar. Pazar'ın araması yine de her yerdeki ilanları bulur. "Bölgeniz" bölümüne bakın.
+- **Telefonunuz**, bölgenizin 250 km yakınındaki **en yakın 500 ilanı tutar**. Ayrıca kendi ilanlarınızı ve bir anlaşmanız ya da hakkında bir sohbetiniz olan tüm ilanları tutar. Pazar, bölgenizin 250 km yakınındakileri en yeniden başlayarak listeler ve her kart ne kadar uzakta olduğunu söyler. Pazar'ın araması yine de her yerdeki ilanları bulur. "Bölgeniz" bölümüne bakın.
 - **Burada bir topluluk başladığında bana haber ver** ile **en fazla 3 yeri izleyebilirsiniz**. Başka birini izlemek için birini izlemeyi durdurun. "Yakınınızda bir topluluk bulma" bölümüne bakın.
 
 Yeni bir hesabın ilk günlerinde birkaç günlük sınırı da vardır. "Sorun bildirme" bölümüne bakın.

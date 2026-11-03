@@ -3,7 +3,7 @@ slug: near-you
 title: Dinge in der Nähe finden
 summary: Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: 2db25a661f8751ec
+source-hash: f519dd5b8dbe3492
 ---
 
 ## Auf dem Tab „Markt“
@@ -28,8 +28,8 @@ Die Karte verfügt über keinen eigenen Entfernungsfilter. Tippe links auf das F
 
 Die globale Community enthält Einträge von überall her, daher starten **Markt** und **Karte** in der Web-App ausgehend von deiner Nähe:
 
-- Wenn im Markt eine **Entfernung** gewählt ist, zeigen beide die nächstgelegenen Einträge innerhalb dieses Umkreises an, die nächsten zuerst. Die Karte zeigt bis zu 200 Stecknadeln.
-- Ohne Entfernungsfilter zeigen sie die nächstgelegenen Einträge im Umkreis von 250 km um deine Gegend an: den ungefähren Ort, den du der Community beim Beitritt mitgeteilt hast oder später in den **Einstellungen** unter **Deine Gegend**. Eine Zeile über der Liste im Markt besagt: **Zuerst die nächsten aus deiner Gegend, innerhalb von 250 km.** Tippe auf **Überall anzeigen**, um die neuesten Einträge von überall zu sehen, und auf **In deiner Nähe**, um zurückzukehren.
+- Wenn im Markt eine **Entfernung** gewählt ist, zeigen beide die Einträge innerhalb dieses Umkreises an. Der Markt listet sie mit den neuesten zuerst, jeden mit seiner Entfernung, unter einer Zeile, die sagt: **Neueste im Umkreis von 5 km um den gewählten Ort.** (mit deiner Entfernung). Die Karte zeigt die nächsten, bis zu 200 Stecknadeln.
+- Ohne Entfernungsfilter zeigen sie die nächstgelegenen Einträge im Umkreis von 250 km um deine Gegend an: den ungefähren Ort, den du der Community beim Beitritt mitgeteilt hast oder später in den **Einstellungen** unter **Deine Gegend**. Der Markt listet sie mit den neuesten zuerst, unter einer Zeile, die sagt: **Neueste im Umkreis von 250 km um deine Gegend.** Die Karte zeigt die nächsten zuerst. Tippe auf **Überall anzeigen**, um die neuesten Einträge von überall zu sehen, und auf **In deiner Nähe**, um zurückzukehren.
 - Ist weder das eine noch das andere gesetzt, siehst du die neuesten Einträge von überall her, und **Finde heraus, was in deiner Nähe ist** öffnet die Entfernungsauswahl. Eine Zeile über der Marktliste zeigt an, welche dieser Ansichten aktiv ist. Bei gesetzter **Entfernung** gibt es keine Schaltfläche: Öffne **Entfernung** und tippe auf **Zurücksetzen**. Du bist dann wieder bei deiner Gegend, oder, falls keine Gegend festgelegt ist, siehst du die neuesten Einträge von überall.
 - Jeder Eintrag zeigt an, wie weit er entfernt ist, wie **📍 12 km**. Deine eigenen Einträge sind immer auf der Karte und im Markt bei deiner Gegend zu finden, wo immer sie liegen. Bei gesetzter **Entfernung** zeigt der Markt nur das an, was innerhalb dieses Umkreises liegt, einschließlich deiner eigenen Einträge.
 - Solange die Liste auf deine Nähe beschränkt ist, bleiben Beiträge ohne Ortsangabe außen vor. Eine Umfrage von jemandem, der seine Gegend nicht festgelegt hat, gehört dazu. Um sie zu sehen, setze die **Entfernung** zurück, falls du eine gewählt hast, und tippe dann auf **Überall anzeigen**.
@@ -40,7 +40,7 @@ Die Suche in der Web-App durchsucht nur die Einträge auf dem Bildschirm. **Übe
 
 ## In der globalen Community, auf dem Smartphone
 
-Das Smartphone speichert die Einträge, die deiner Gegend am nächsten liegen: bis zu 500, innerhalb von 250 km. Es behält auch deine eigenen Einträge sowie alle, zu denen du einen Deal, einen Chat oder eine Antwort hast. Der Markt und die Karte zeigen, was das Smartphone gespeichert hat. Ist keine Gegend festgelegt, speichert es stattdessen die neuesten Einträge, worauf eine Zeile über dem Markt hinweist. Siehe „Deine Gegend“.
+Das Smartphone speichert die Einträge, die deiner Gegend am nächsten liegen: bis zu 500, innerhalb von 250 km. Es behält auch deine eigenen Einträge sowie alle, zu denen du einen Deal, einen Chat oder eine Antwort hast. Der Markt und die Karte zeigen, was das Smartphone gespeichert hat. Der Markt listet es mit den neuesten zuerst, jeden Eintrag mit seiner Entfernung, unter derselben Zeile, **Neueste im Umkreis von 250 km um deine Gegend.** Dafür musst du der App nicht erlauben, deinen Standort zu verwenden. Ist keine Gegend festgelegt, speichert es stattdessen die neuesten Einträge, worauf eine Zeile über dem Markt hinweist. Siehe „Deine Gegend“.
 
 ## Veranstaltungen in deiner Nähe
 

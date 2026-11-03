@@ -8,7 +8,8 @@ source-hash: 643446d9d894aaf0
 
 ## Tìm kiếm sự kiện
 
-- Trên **Chợ**, nhấn **Sự kiện**. Chọn **Hôm nay**, **Cuối tuần này** hoặc **7 ngày tới**.
+- Trên **Chợ**, nhấn **Sự kiện**. Sự kiện sớm nhất hiển thị trước. Chọn **Hôm nay**, **Cuối tuần này** hoặc **7 ngày tới**.
+- Trên **Chợ**, dưới **Tất cả**, một sự kiện được liệt kê lại một lần, dưới **Hôm nay**, vào ngày trước khi bắt đầu, rồi chìm xuống như mọi bài đăng khác. Một sự kiện hằng tuần quay lại mỗi tuần một lần.
 - Trên **Bản đồ**, các sự kiện là những ghim màu tím. Trên điện thoại, nhấn **Sự kiện** để chỉ xem các sự kiện. Trong ứng dụng web, các sự kiện luôn hiển thị ở đó, và các thẻ chọn ngày sẽ giúp thu hẹp phạm vi tìm kiếm.
 
 ## Sự kiện của bạn

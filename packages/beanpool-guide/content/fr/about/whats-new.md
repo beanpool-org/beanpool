@@ -6,6 +6,17 @@ related: home, the-bean, how-it-works, rules, faq, communities
 source-hash: c2a0d89c3be40880
 ---
 
+## Le Marché dans un seul ordre
+
+Sur le téléphone, vous l'obtenez avec une application à jour ; dans un navigateur web, quand le serveur de votre communauté est mis à jour.
+
+- **Les plus récentes d'abord, pareil sur le téléphone et sur le web.** Le Marché liste les publications des plus récentes aux plus anciennes, sous **Aujourd'hui**, **Hier**, **Cette semaine** et **Annonces plus anciennes**, selon le jour où chacune a été publiée. Les titres **Événements à venir**, **Sondages** et **Les plus proches d'abord** n'existent plus.
+- **Un événement revient une fois.** La veille de son début, un événement est de nouveau listé sous **Aujourd'hui**. Un sondage fait de même la veille de sa clôture. Ensuite, ils descendent comme n'importe quelle autre publication.
+- **Deux places par jour.** La troisième publication d'une personne dans une journée, et toutes les suivantes, passent après celles de tous les autres ce jour-là.
+- **Modifier une publication ne la fait pas remonter.** Pour être vu de nouveau, publiez de nouveau.
+- **Sur la communauté globale**, le Marché montre les plus récentes à moins de 250 km de votre zone, chaque publication indiquant à quelle distance elle se trouve. Une ligne au-dessus de la liste le précise. Le téléphone n'a plus besoin de votre position pour cela. Dans l'application web, il en va de même pour une **Distance** que vous choisissez.
+- **Inchangé :** les publications épinglées par un propriétaire restent en haut, **Événements** liste toujours les plus proches dans le temps d'abord, et une recherche trouve ce qui correspond le mieux à vos mots. Voir « Explorer le Marché ».
+
 ## La communauté globale, près de chez vous
 
 Vous bénéficiez de ces nouveautés lorsque le serveur de la communauté globale est mis à jour. Sur le téléphone, une application à jour est nécessaire.
@@ -15,7 +26,7 @@ Vous bénéficiez de ces nouveautés lorsque le serveur de la communauté global
 - **Votre zone.** Dans l'application web, rejoindre la communauté globale comporte une étape supplémentaire après votre photo : **Où êtes-vous à peu près ?** Sur le téléphone, cette question est posée lorsque vous rejoignez avec un compte que vous possédez déjà ; un nouveau compte sur téléphone la définit plus tard dans les Paramètres, sous **Votre zone**. À cette étape, touchez **Utiliser ma position**, **Saisissez une ville ou un quartier**, ou **Ignorer pour l'instant**. Elle est conservée à environ 10 km près, jamais votre position exacte. Modifiez-la ou effacez-la dans les Paramètres, sous **Votre zone**. Voir « Votre zone ».
 - **Pas de zone, pas de problème.** Sans zone définie, vous voyez les annonces les plus récentes de partout, et une ligne au-dessus du Marché vous le signale. Sur le téléphone, touchez-la pour définir votre zone.
 - **Nouvelles annonces près de chez vous.** Elles arrivent au fur et à mesure de leur publication. Celles qui sont éloignées n'arrivent plus sur votre téléphone.
-- **Dans l'application web**, le Marché et la Carte partent de votre zone, ou d'un lieu que vous choisissez avec **Distance** : les plus proches en premier, chaque annonce indiquant à quelle distance elle se trouve. Voir « Trouver près de chez vous ».
+- **Dans l'application web**, le Marché et la Carte partent de votre zone, ou d'un lieu que vous choisissez avec **Distance** : chaque annonce indiquant à quelle distance elle se trouve. La Carte montre les plus proches en premier. Le Marché liste les plus récentes d'abord, comme le dit « Le Marché dans un seul ordre », ci-dessus. Voir « Trouver près de chez vous ».
 - **Les sondages** n'ont pas de lieu propre, chacun s'affiche donc au niveau de la zone du membre qui l'a créé.
 - **Saisir votre ville.** Sur la communauté globale, **Trouver votre communauté** sur l'Accueil ne nécessite plus votre position : touchez **ou saisissez votre ville** et choisissez votre ville. Seul un point approximatif est conservé. Voir « Trouver une communauté proche ».
 - **Publier sans prix.** Sur la communauté globale, le formulaire de publication ne demande aucun prix, car les haricots existent dans les communautés locales. Dans l'application web, **Publier une Offre** et **Publier une Demande** fonctionnent désormais sans prix. Une communauté locale demande toujours un prix.

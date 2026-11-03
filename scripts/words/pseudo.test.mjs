@@ -6,12 +6,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { ROOT } from './words.mjs';
 
 const E2E = path.join(ROOT, 'apps/pwa/e2e');
-const { CHECKS, checksToRun, summaryLine } = await import(pathToFileURL(path.join(E2E, 'words-screens-all.mjs')).href);
+const RUNNER = path.join(E2E, 'words-screens-all.mjs');
+const { CHECKS, checksToRun, summaryLine, startedOnThisFile } = await import(pathToFileURL(RUNNER).href);
 
 test('the nightly runner runs every web words check in apps/pwa/e2e: a new one cannot be left out', () => {
     // The screen checks are words-*check.mjs. words-chunks-check measures the build's chunks, not a screen; the runner is not a check.
@@ -39,6 +42,44 @@ test('the last line names every check that failed, so one red never hides anothe
         'words-screens-all: FAILED screens, w2 (passed w1)',
     );
     assert.equal(summaryLine([{ name: 'w3', status: 1 }]), 'words-screens-all: FAILED w3');
+});
+
+test('the runner knows it was started when its path goes through a symlink (on a Mac /tmp is /private/tmp)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'words-all-link-'));
+    try {
+        const real = fs.realpathSync(RUNNER);
+        const here = pathToFileURL(real).href;
+        const linkedDir = path.join(dir, 'e2e-link');
+        const linkedFile = path.join(dir, 'runner.mjs');
+        fs.symlinkSync(path.dirname(real), linkedDir);
+        fs.symlinkSync(real, linkedFile);
+        assert.equal(startedOnThisFile(real, here), true, 'the real path');
+        assert.equal(startedOnThisFile(path.join(linkedDir, 'words-screens-all.mjs'), here), true, 'a path through a linked folder');
+        assert.equal(startedOnThisFile(linkedFile, here), true, 'a linked file');
+        assert.equal(startedOnThisFile(path.join(E2E, 'words-w1-check.mjs'), here), false, 'another file');
+        assert.equal(startedOnThisFile(path.join(dir, 'gone.mjs'), here), false, 'a path that cannot be resolved is not this file');
+        assert.equal(startedOnThisFile(undefined, here), false, 'no script at all');
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('started by a path through a symlink, the runner runs: it does not skip everything and exit 0 as a pass', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'words-all-run-'));
+    try {
+        const linkedDir = path.join(dir, 'e2e-link');
+        const linkedFile = path.join(dir, 'runner.mjs');
+        fs.symlinkSync(E2E, linkedDir);
+        fs.symlinkSync(RUNNER, linkedFile);
+        // A check name it does not know makes a run that did start fail at once, with no browser; a run that was skipped exits 0.
+        for (const entry of [path.join(linkedDir, 'words-screens-all.mjs'), linkedFile]) {
+            const r = spawnSync(process.execPath, [entry, path.join(dir, 'out')], { encoding: 'utf8', env: { ...process.env, WORDS_ALL_ONLY: 'nope' } });
+            assert.notEqual(r.status, 0, `${entry} exited ${r.status} with no run: ${r.stdout}${r.stderr}`);
+            assert.match(r.stderr, /WORDS_ALL_ONLY names nope, which is no check here/);
+        }
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test('the tripwire runs the runner after the full run, from the package script the runner is named by', () => {

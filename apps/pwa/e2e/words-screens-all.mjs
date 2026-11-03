@@ -69,4 +69,19 @@ function main() {
     process.exit(results.some((r) => r.status !== 0) ? 1 : 0);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+/**
+ * Whether node was started on this file. import.meta.url is the file's real path but process.argv[1] is as typed, so a path
+ * through a symlink (on a Mac /tmp is /private/tmp, and $TMPDIR is under /private/var) is resolved first: without that, a run
+ * by `node /tmp/…/words-screens-all.mjs` skips main() and exits 0 with no output, which reads as a pass. A path that cannot be
+ * resolved is not this file.
+ */
+export function startedOnThisFile(argv1 = process.argv[1], here = import.meta.url) {
+    if (!argv1) return false;
+    try {
+        return here === pathToFileURL(fs.realpathSync(argv1)).href;
+    } catch {
+        return false;
+    }
+}
+
+if (startedOnThisFile()) main();

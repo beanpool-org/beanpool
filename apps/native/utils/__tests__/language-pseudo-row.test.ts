@@ -158,7 +158,8 @@ describe('a development build: Pseudo (test), last in the list', () => {
         expect(row.textContent).toContain('Pseudo (test)');
         expect(row.textContent).not.toContain('Translated by machine');
 
-        // The row is ticked when the list opens again, and "Same as phone" leaves it.
+        // The row is still listed, by name, when the list opens again (the tick itself is not checked: the React Native mock drops
+        // accessibilityState), and "Same as phone" leaves it.
         await click('settings-language');
         expect(byTestId('language-xx')!.getAttribute('aria-label')).toBe('Pseudo (test)');
         await act(async () => { radios()[0].click(); });

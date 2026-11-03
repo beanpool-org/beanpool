@@ -219,7 +219,7 @@ async function main(): Promise<void> {
     await refusedClean('a moderator', () => post({ changes: {}, lock: true }, asModerator()), 403, null);
     await refusedClean('a member, signed', () => call('POST', sam, PATH, { changes: {}, lock: true }), 401, null);
     await refusedClean('nobody', () => post({ changes: {}, lock: true }, {}), 401, null);
-    for (const scope of ['read', 'admin', 'backups'] as const) {
+    for (const scope of ['read', 'admin', 'backups', 'agent'] as const) {
         await refusedClean(`an automation token (${scope}) made by the owner`, () => post({ changes: {}, lock: true }, ownerTokenHeaders(scope, owen.pk)), 403, null);
     }
     await refusedClean("the phone's hand-off past its step-up (6 min)", () => post({ changes: {}, lock: true }, asPhoneAgo(6 * 60_000)), 403, 'step_up_required');
@@ -292,7 +292,7 @@ async function main(): Promise<void> {
     await refusedClean("the password's session, with no code", () => post(turnOn, pwSession()), 401, null, /to change a core setting$/);
     await refusedClean("the password's session, with a wrong code", () => post({ ...turnOn, code: '000000' }, pwSession()), 401, null);
     await refusedClean('an admin', () => post(turnOn, asAdmin()), 403, null);
-    for (const scope of ['read', 'admin', 'backups'] as const) {
+    for (const scope of ['read', 'admin', 'backups', 'agent'] as const) {
         await refusedClean(`an automation token (${scope}) made by the owner`, () => post(turnOn, ownerTokenHeaders(scope, owen.pk)), 403, null);
     }
     // Refused anyway: never asks the code, and never spends it.

@@ -14,7 +14,7 @@ Di ponsel, Anda mendapatkannya dengan aplikasi yang sudah diperbarui; di peramba
 - **Acara kembali sekali.** Sehari sebelum dimulai, acara ditampilkan lagi di bawah **Hari ini**. Jajak pendapat melakukan hal yang sama sehari sebelum ditutup. Setelah itu, keduanya tenggelam seperti postingan lain.
 - **Dua tempat sehari.** Postingan ketiga seseorang dalam sehari, dan yang sesudahnya, muncul setelah postingan semua orang lain pada hari itu.
 - **Mengedit postingan tidak menaikkannya.** Agar terlihat lagi, posting lagi.
-- **Di komunitas global**, Pasar menampilkan yang terbaru dalam jarak 250 km dari wilayahmu, atau dalam **Jarak** milikmu, setiap postingan dengan seberapa jauh jaraknya. Sebuah baris di atas daftar menyatakannya. Ponsel tidak lagi memerlukan lokasimu untuk ini.
+- **Di komunitas global**, Pasar menampilkan yang terbaru dalam jarak 250 km dari wilayahmu, setiap postingan dengan seberapa jauh jaraknya. Sebuah baris di atas daftar menyatakannya. Ponsel tidak lagi memerlukan lokasimu untuk ini. Di web app, hal yang sama berlaku untuk **Jarak** yang kamu pilih.
 - **Tidak berubah:** postingan yang disematkan pemilik tetap di atas, **Acara** tetap menampilkan yang paling cepat dimulai lebih dulu, dan pencarian menemukan yang paling cocok dengan kata-katamu. Lihat "Menjelajahi pasar".
 
 ## Komunitas global di dekatmu

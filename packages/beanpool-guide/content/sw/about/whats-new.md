@@ -14,7 +14,7 @@ Kwenye simu unapata hili ukiwa na programu iliyosasishwa; kwenye kivinjari cha w
 - **Tukio hurudi mara moja.** Siku moja kabla ya kuanza, tukio huorodheshwa tena chini ya **Leo**. Kura ya maoni hufanya vivyo hivyo siku moja kabla ya kufungwa. Kisha huzama kama chapisho lingine lolote.
 - **Nafasi mbili kwa siku.** Chapisho la tatu la mtu katika siku moja, na yoyote baada yake, huja baada ya machapisho ya wengine wote ya siku hiyo.
 - **Kuhariri chapisho hakulipandishi juu.** Ili lionekane tena, chapisha tena.
-- **Kwenye jumuiya ya kimataifa**, Soko huonyesha machapisho mapya zaidi ndani ya km 250 kutoka eneo lako, au ndani ya **Umbali** wako, kila chapisho likiwa na umbali wake. Mstari ulio juu ya orodha husema hivyo. Simu haihitaji tena eneo lako kwa hili.
+- **Kwenye jumuiya ya kimataifa**, Soko huonyesha machapisho mapya zaidi ndani ya km 250 kutoka eneo lako, kila chapisho likiwa na umbali wake. Mstari ulio juu ya orodha husema hivyo. Simu haihitaji tena eneo lako kwa hili. Kwenye programu ya wavuti, hilo hilo hutumika kwa **Umbali** unaochagua.
 - **Visivyobadilika:** machapisho aliyoyabandika mmiliki hubaki juu, **Matukio** bado huorodhesha ya karibu zaidi kwa wakati kwanza, na utafutaji hupata kinacholingana vyema na maneno yako. Tazama "Kuvinjari sokoni".
 
 ## Jumuiya ya kimataifa, karibu nawe

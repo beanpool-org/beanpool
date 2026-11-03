@@ -14,7 +14,7 @@ Auf dem Telefon bekommst du das mit einer aktuellen App; im Webbrowser, sobald d
 - **Eine Veranstaltung kommt einmal wieder.** Am Tag vor ihrem Beginn wird eine Veranstaltung noch einmal unter **Heute** aufgeführt. Eine Umfrage macht das am Tag vor ihrem Ende genauso. Danach sinken sie wie jeder andere Beitrag.
 - **Zwei Plätze am Tag.** Der dritte Beitrag einer Person an einem Tag und alle weiteren kommen nach allen anderen Beiträgen dieses Tages.
 - **Einen Beitrag zu bearbeiten schiebt ihn nicht nach oben.** Um wieder gesehen zu werden, veröffentliche ihn erneut.
-- **In der globalen Community** zeigt der Markt die neuesten im Umkreis von 250 km um deine Gegend oder innerhalb deiner **Entfernung**, jeden Beitrag mit seiner Entfernung. Eine Zeile über der Liste sagt es dir. Das Telefon braucht dafür deinen Standort nicht mehr.
+- **In der globalen Community** zeigt der Markt die neuesten im Umkreis von 250 km um deine Gegend, jeden Beitrag mit seiner Entfernung. Eine Zeile über der Liste sagt es dir. Das Telefon braucht dafür deinen Standort nicht mehr. In der Web-App gilt das Gleiche für eine **Entfernung**, die du wählst.
 - **Nicht geändert:** Beiträge, die ein Owner angepinnt hat, bleiben oben, **Veranstaltungen** listet weiterhin die zeitnächsten zuerst, und eine Suche findet, was am besten zu deinen Wörtern passt. Siehe „Im Markt stöbern“.
 
 ## Die globale Community in deiner Nähe

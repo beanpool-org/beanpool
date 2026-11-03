@@ -14,7 +14,7 @@ Trên điện thoại, bạn có điều này khi dùng ứng dụng đã cập 
 - **Một sự kiện quay lại một lần.** Vào ngày trước khi bắt đầu, sự kiện được liệt kê lại dưới **Hôm nay**. Một cuộc thăm dò cũng vậy vào ngày trước khi kết thúc. Sau đó chúng chìm xuống như mọi bài đăng khác.
 - **Hai chỗ mỗi ngày.** Bài đăng thứ ba của một người trong ngày, và các bài sau đó, xếp sau bài của tất cả những người khác trong ngày đó.
 - **Chỉnh sửa một bài đăng không đẩy nó lên.** Muốn được thấy lại, hãy đăng lại.
-- **Trên cộng đồng toàn cầu**, Chợ hiển thị những bài mới nhất trong vòng 250 km quanh khu vực của bạn, hoặc trong **Khoảng cách** của bạn, mỗi bài kèm khoảng cách bao xa. Một dòng phía trên danh sách cho biết điều đó. Điện thoại không còn cần vị trí của bạn cho việc này.
+- **Trên cộng đồng toàn cầu**, Chợ hiển thị những bài mới nhất trong vòng 250 km quanh khu vực của bạn, mỗi bài kèm khoảng cách bao xa. Một dòng phía trên danh sách cho biết điều đó. Điện thoại không còn cần vị trí của bạn cho việc này. Trong ứng dụng web, điều tương tự áp dụng cho **Khoảng cách** bạn chọn.
 - **Không thay đổi:** các bài đăng mà chủ sở hữu đã ghim vẫn ở trên cùng, **Sự kiện** vẫn liệt kê sự kiện sớm nhất trước, và tìm kiếm tìm ra những gì khớp nhất với từ của bạn. Xem "Xem qua chợ".
 
 ## Cộng đồng toàn cầu, ở gần bạn

@@ -14,7 +14,7 @@ No telefone você recebe isso com um app atualizado; no navegador web, quando o 
 - **Um evento volta uma vez.** No dia anterior ao início, o evento é listado de novo em **Hoje**. Uma enquete faz o mesmo no dia anterior ao encerramento. Depois, eles descem como qualquer outra publicação.
 - **Dois lugares por dia.** A terceira publicação de uma pessoa no dia, e as seguintes, vêm depois das publicações de todas as outras pessoas naquele dia.
 - **Editar uma publicação não a faz subir.** Para ser vista de novo, publique de novo.
-- **Na comunidade global**, o Mercado mostra os mais recentes em até 250 km da sua região, ou dentro da sua **Distância**, cada publicação com a que distância está. Uma linha acima da lista informa isso. O celular não precisa mais da sua localização para isso.
+- **Na comunidade global**, o Mercado mostra os mais recentes em até 250 km da sua região, cada publicação com a que distância está. Uma linha acima da lista informa isso. O celular não precisa mais da sua localização para isso. No aplicativo web, o mesmo vale para uma **Distância** que você escolher.
 - **Não mudou:** as publicações que um proprietário fixou continuam no topo, **Eventos** ainda lista primeiro os que acontecem antes, e uma busca encontra o que melhor corresponde às suas palavras. Consulte "Explorar o Mercado".
 
 ## A comunidade global, perto de você

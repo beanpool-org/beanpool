@@ -13,7 +13,7 @@ On the phone you get these with an up-to-date app; in a web browser, when your c
 - **An event comes back once.** The day before it starts, an event is listed again under **Today**. A poll does the same the day before it closes. Then they sink like any other post.
 - **Two places a day.** A person's third post of a day, and any after it, come after everyone else's from that day.
 - **Editing a post does not move it up.** To be seen again, post again.
-- **On the global community**, the Market shows the newest within 250 km of your area, or within your **Distance**, each post with how far away it is. A line above the list says so. The phone no longer needs your location for it.
+- **On the global community**, the Market shows the newest within 250 km of your area, each post with how far away it is. A line above the list says so. The phone no longer needs your location for it. In the web app the same goes for a **Distance** you pick.
 - **Not changed:** posts an owner pinned stay at the top, **Events** still lists the soonest first, and a search finds what best matches your words. See "Browsing the market".
 
 ## Where your sign-in's copy is kept

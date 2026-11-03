@@ -14,7 +14,7 @@ Sur le téléphone, vous l'obtenez avec une application à jour ; dans un naviga
 - **Un événement revient une fois.** La veille de son début, un événement est de nouveau listé sous **Aujourd'hui**. Un sondage fait de même la veille de sa clôture. Ensuite, ils descendent comme n'importe quelle autre publication.
 - **Deux places par jour.** La troisième publication d'une personne dans une journée, et toutes les suivantes, passent après celles de tous les autres ce jour-là.
 - **Modifier une publication ne la fait pas remonter.** Pour être vu de nouveau, publiez de nouveau.
-- **Sur la communauté globale**, le Marché montre les plus récentes à moins de 250 km de votre zone, ou dans votre **Distance**, chaque publication indiquant à quelle distance elle se trouve. Une ligne au-dessus de la liste le précise. Le téléphone n'a plus besoin de votre position pour cela.
+- **Sur la communauté globale**, le Marché montre les plus récentes à moins de 250 km de votre zone, chaque publication indiquant à quelle distance elle se trouve. Une ligne au-dessus de la liste le précise. Le téléphone n'a plus besoin de votre position pour cela. Dans l'application web, il en va de même pour une **Distance** que vous choisissez.
 - **Inchangé :** les publications épinglées par un propriétaire restent en haut, **Événements** liste toujours les plus proches dans le temps d'abord, et une recherche trouve ce qui correspond le mieux à vos mots. Voir « Explorer le Marché ».
 
 ## La communauté globale, près de chez vous

@@ -14,7 +14,7 @@ Sa telepono, makukuha mo ito gamit ang updated na app; sa web browser, kapag na-
 - **Isang beses bumabalik ang event.** Sa araw bago ito magsimula, inililista muli ang event sa ilalim ng **Ngayong araw**. Ganoon din ang botohan sa araw bago ito magsara. Pagkatapos, lumulubog sila gaya ng ibang post.
 - **Dalawang puwesto sa isang araw.** Ang ikatlong post ng isang tao sa isang araw, at ang mga kasunod nito, ay nasa likod ng mga post ng lahat ng iba pa sa araw na iyon.
 - **Hindi iniaakyat ng pag-edit ang isang post.** Para makitang muli, mag-post muli.
-- **Sa pandaigdigang komunidad**, ipinapakita ng Merkado ang pinakabago sa loob ng 250 km ng iyong lugar, o sa loob ng iyong **Distansya**, bawat post ay may layo nito. Sinasabi ito ng isang linya sa itaas ng listahan. Hindi na kailangan ng telepono ang iyong lokasyon para dito.
+- **Sa pandaigdigang komunidad**, ipinapakita ng Merkado ang pinakabago sa loob ng 250 km ng iyong lugar, bawat post ay may layo nito. Sinasabi ito ng isang linya sa itaas ng listahan. Hindi na kailangan ng telepono ang iyong lokasyon para dito. Sa web app, ganoon din para sa **Distansya** na pipiliin mo.
 - **Hindi nagbago:** nananatili sa itaas ang mga post na ipinin ng may-ari, inililista pa rin ng **Mga Event** ang pinakamaaga muna, at ang paghahanap ay nakakahanap ng pinakaangkop sa iyong mga salita. Tingnan ang "Pag-browse sa merkado".
 
 ## Ang pandaigdigang komunidad, malapit sa iyo

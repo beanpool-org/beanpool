@@ -14,7 +14,7 @@ Telefonda güncel uygulamayla gelir; web tarayıcısında ise topluluğunuzun su
 - **Bir etkinlik bir kez geri gelir.** Başlamasından bir gün önce bir etkinlik **Bugün** altında yeniden listelenir. Bir anket de kapanmasından bir gün önce aynısını yapar. Sonra diğer gönderiler gibi aşağı iner.
 - **Günde iki yer.** Bir kişinin o gün üçüncü gönderisi ve sonrakiler, o günün herkesin gönderilerinden sonra gelir.
 - **Bir gönderiyi düzenlemek onu yukarı taşımaz.** Tekrar görülmek için yeniden paylaşın.
-- **Küresel toplulukta** Pazar, bölgenizin 250 km yakınındaki veya seçtiğiniz **Mesafe** içindeki en yenileri gösterir; her gönderi ne kadar uzakta olduğuyla birlikte gelir. Listenin üzerindeki bir satır bunu belirtir. Telefonun bunun için artık konumunuza ihtiyacı yok.
+- **Küresel toplulukta** Pazar, bölgenizin 250 km yakınındaki en yenileri gösterir; her gönderi ne kadar uzakta olduğuyla birlikte gelir. Listenin üzerindeki bir satır bunu belirtir. Telefonun bunun için artık konumunuza ihtiyacı yok. Web uygulamasında seçtiğiniz **Mesafe** için de aynısı geçerlidir.
 - **Değişmeyenler:** bir sahibin sabitlediği gönderiler en üstte kalır, **Etkinlikler** yine en yakın tarihli olanı ilk sırada listeler ve bir arama sözcüklerinize en iyi uyanı bulur. Bkz. "Pazarda gezinme".
 
 ## Küresel topluluk, yakınınızda

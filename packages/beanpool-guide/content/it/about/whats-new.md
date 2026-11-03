@@ -14,7 +14,7 @@ Sul telefono lo ottieni con un'app aggiornata; in un browser web, quando il serv
 - **Un evento torna una volta.** Il giorno prima che inizi, un evento viene elencato di nuovo sotto **Oggi**. Un sondaggio fa lo stesso il giorno prima che si chiuda. Poi scendono come qualsiasi altro post.
 - **Due posti al giorno.** Il terzo post di una persona in un giorno, e quelli successivi, vengono dopo quelli di tutti gli altri di quel giorno.
 - **Modificare un post non lo fa salire.** Per essere visto di nuovo, pubblica di nuovo.
-- **Nella comunità globale**, il Mercato mostra i più recenti entro 250 km dalla tua zona, oppure entro la tua **Distanza**, ciascun post con la distanza a cui si trova. Una riga sopra l'elenco lo indica. Il telefono non ha più bisogno della tua posizione per questo.
+- **Nella comunità globale**, il Mercato mostra i più recenti entro 250 km dalla tua zona, ciascun post con la distanza a cui si trova. Una riga sopra l'elenco lo indica. Il telefono non ha più bisogno della tua posizione per questo. Nell'app web lo stesso vale per una **Distanza** che scegli.
 - **Non cambia:** i post fissati da un proprietario restano in cima, **Eventi** elenca ancora per primo il più vicino nel tempo, e una ricerca trova ciò che corrisponde meglio alle tue parole. Vedi "Esplorare il mercato".
 
 ## La comunità globale, vicino a te

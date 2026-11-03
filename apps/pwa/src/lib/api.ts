@@ -3380,6 +3380,28 @@ export async function initPairingApi(sessionId: string, desktopPubHex: string): 
     return request<{ success: boolean; expiresAt: number }>('POST', '/api/pair/init', { sessionId, desktopPubHex });
 }
 
+/** The other way (front doors S9): this browser brings its account to a phone. The same session and binding cookie. */
+export async function initPairingToPhoneApi(sessionId: string, desktopPubHex: string): Promise<{ success: boolean; expiresAt: number }> {
+    return request<{ success: boolean; expiresAt: number }>('POST', '/api/pair/init', { sessionId, desktopPubHex, to: 'phone' });
+}
+
+/** This browser's view of a to-phone session: a phone scanned ('confirming'), its digits typed ('released', with its key), sent, collected. */
+export async function pollPairingToPhoneApi(sessionId: string): Promise<{
+    status: 'waiting' | 'confirming' | 'released' | 'sent' | 'collected' | 'burned' | 'expired' | 'wrong-browser';
+    phonePubHex?: string;
+}> {
+    const res = await fetch(`${getNodeApiUrl()}/api/pair/poll?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
+    return res.json().catch(() => ({ status: 'expired' as const }));
+}
+
+/** The account, sealed to the phone's key, sent once its digits matched (the binding cookie goes with it). */
+export async function sendToPhoneApi(sessionId: string, nonceHex: string, ciphertextHex: string): Promise<{ ok: boolean; status: number }> {
+    const res = await fetch(`${getNodeApiUrl()}/api/pair/send`, {
+        method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, nonceHex, ciphertextHex }),
+    });
+    return { ok: res.ok, status: res.status };
+}
+
 /**
  * The four digits the phone shows (number matching). The relay holds the phone's account until this browser, the one
  * holding the session's binding cookie, types them: 'released', 'wrong' (tries left), or 'burned' after three wrong.

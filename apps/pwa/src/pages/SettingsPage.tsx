@@ -26,6 +26,7 @@ import { useCommunityInfo, useReaderFeatures } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines, usePhoneBrowser } from '../lib/global-entry';
 import { isInstalled, useDeferredInstallPrompt, clearDeferredPrompt, DesktopInstallSteps } from '../components/InstallPrompt';
 import { StoreBadges, ApkDownloadLink } from '../components/UsePhoneAppCard';
+import { BringToPhone } from '../components/BringToPhone';
 import { SharedOutsideSection } from '../components/SharedOutsideSection';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
@@ -1191,6 +1192,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             globalCommunity={globalCommunity}
                             phoneLater={phoneLater}
                             onOpenShape={() => setShapeModalOpen(true)}
+                            onRemoveHere={() => {
+                                setDeletionMode('confirm_local');
+                                setPurgeError(null);
+                                setTimeout(() => document.querySelector('[data-testid="sign-out-device-confirm"]')?.scrollIntoView({ block: 'center' }), 0);
+                            }}
                         />
 
                         {/* ─── LEGAL & PRIVACY ─── */}
@@ -2064,13 +2070,15 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
  * Use the phone app (both), Install on this computer (desktop only).
  * The rows come from beanPoolSettingsEntries in @beanpool/core, the same list the member app's Settings uses.
  */
-export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null, phoneLater = null, onOpenShape }: {
+export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null, phoneLater = null, onOpenShape, onRemoveHere }: {
     onHelp: () => void; onSuggest: () => void; feedbackLive?: boolean;
     /** The global community this node names (lib/global-entry.ts globalCommunityLink): a row of its own. Null: none. */
     globalCommunity?: { href: string; host: string } | null;
     /** How to restore on phone (lib/global-entry.ts phoneLaterLines) */
     phoneLater?: string[] | null;
     onOpenShape?: () => void;
+    /** After Put your account on your phone: the Danger zone's own "remove from this device" confirm (front doors S9). */
+    onRemoveHere?: () => void;
 }) {
     const isPhone = usePhoneBrowser();
     const installed = isInstalled();
@@ -2184,6 +2192,8 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         <div className="p-4 bg-nature-50 dark:bg-nature-950/50" data-testid="settings-use-phone-app-details">
                             <StoreBadges />
                             <ApkDownloadLink />
+                            {/* Then bring this browser's account to the app by its code (front doors S9). */}
+                            <BringToPhone isPhone={isPhone} onRemoveHere={onRemoveHere} />
                             {phoneLater && phoneLater.length > 0 && (
                                 <div className="mt-3 space-y-1 text-xs text-nature-600 dark:text-nature-300">
                                     {phoneLater.map((line, i) => (

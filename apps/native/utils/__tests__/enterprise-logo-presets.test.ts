@@ -86,7 +86,7 @@ vi.mock('expo-router', () => ({
     ErrorBoundary: () => null,
 }));
 vi.mock('react-native-keyboard-controller', () => ({
-    KeyboardAvoidingView: ({ children }: any) => createElement('div', null, children),
+    KeyboardAvoidingView: ({ children }: any) => createElement('div', null, children), KeyboardAwareScrollView: ({ children }: any) => createElement('div', null, children), KeyboardStickyView: ({ children }: any) => createElement('div', null, children),
     KeyboardController: { dismiss: vi.fn() },
     useKeyboardState: (cb: any) => cb({ isVisible: false }),
 }));

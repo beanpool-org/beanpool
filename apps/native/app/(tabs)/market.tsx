@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { keyboardAwareList } from '../../components/keyboardAwareList';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
@@ -2026,6 +2027,8 @@ export default function MarketScreen() {
                 data={listData}
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
+                // A poll card's "Other" line is typed mid-feed: the library's scroll view keeps it above the keyboard.
+                renderScrollComponent={keyboardAwareList}
                 ListHeaderComponent={<>{ListHeader}{pinnedCards}</>}
                 ListFooterComponent={fillFooter || (showExamples && realMatchingCount > 0) ? (
                     <>

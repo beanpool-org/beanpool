@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -166,15 +166,12 @@ export default function ProposeProjectModal() {
                 <View style={{ width: 40 }} />
             </View>
 
-            {/* No keyboardVerticalOffset: this KeyboardAvoidingView measures its own frame against the
-                window, so the header above it is already accounted for. The old offset of 64 added 64dp of
-                dead padding above the keyboard. With the footer also showing, a 320dp phone at 1.2x font was
-                left with a ~25dp strip of form and the name field out of sight. */}
-            <KeyboardAvoidingView
-                behavior="padding"
-                style={{ flex: 1 }}
-            >
-                <ScrollView contentContainerStyle={styles.scroll}>
+            {/* The scroll view owns keyboard avoidance (as treasury-post does): it scrolls the field being typed in, and the
+                caret of a growing multiline one, above the keyboard. The Start button is hidden while the keyboard is up
+                (below), so the form gets the whole space and the bottom offset is only a margin. This replaced a
+                KeyboardAvoidingView around a plain ScrollView, which shrank the form but never scrolled to the field. */}
+            <View style={{ flex: 1 }}>
+                <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={24}>
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name="information" size={20} color={colors.brand.primary} style={{ marginRight: 8 }} />
                         <Text style={styles.infoText}>
@@ -361,7 +358,7 @@ export default function ProposeProjectModal() {
                         />
                     </View>
 
-                </ScrollView>
+                </KeyboardAwareScrollView>
 
                 {validationToast ? (
                     <View style={styles.toast}>
@@ -404,7 +401,7 @@ export default function ProposeProjectModal() {
                         </Pressable>
                     </View>
                 )}
-            </KeyboardAvoidingView>
+            </View>
         </SafeAreaView>
     );
 }

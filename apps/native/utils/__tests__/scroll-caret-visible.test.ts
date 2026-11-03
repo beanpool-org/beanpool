@@ -73,7 +73,8 @@ describe('the form sheets use it', () => {
             const src = read(f);
             expect(src).toMatch(/useKeepCaretVisible\(/);
             expect(src).toMatch(/<ScrollView\s+ref=\{(scrollViewRef|scrollRef)\}\s+\{\.\.\.keepCaretVisible\}/);
-            expect(src).toMatch(/import \{ KeyboardAvoidingView \} from 'react-native-keyboard-controller'/);
+            // post/[id] also imports the library's KeyboardAwareScrollView, for its decline-offer card.
+            expect(src).toMatch(/import \{ KeyboardAvoidingView(, KeyboardAwareScrollView)? \} from 'react-native-keyboard-controller'/);
             expect(src).not.toMatch(/KeyboardProvider/);
         });
     }

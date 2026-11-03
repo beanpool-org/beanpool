@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Share, TextInput, Platform, DeviceEventEmitter, Modal, Switch } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Share, TextInput, Platform, DeviceEventEmitter, Modal, Switch } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -362,10 +363,12 @@ export default function BeanPoolSheet() {
                 <View style={{ width: 48 }} />
             </View>
 
-            <ScrollView
+            {/* The guide search sits mid-page: the scroll view keeps it above the keyboard. */}
+            <KeyboardAwareScrollView
                 contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
+                bottomOffset={24}
             >
                 {/* The community in use: its name heads the sheet (the header row no longer shows it). */}
                 <View style={styles.community}>
@@ -546,7 +549,7 @@ export default function BeanPoolSheet() {
                         </Text>
                     </>
                 )}
-            </ScrollView>
+            </KeyboardAwareScrollView>
 
             {optionsCommunity && (
                 <Modal

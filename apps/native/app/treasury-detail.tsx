@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, TextInput } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, TextInput } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
 
@@ -667,10 +667,10 @@ export default function TreasuryDetailScreen() {
                     <Text style={styles.emptyNote}>{t("Couldn't load this group. Check your connection.")}</Text>
                 </View>
             ) : (
-                <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-                    {/* No keyboardVerticalOffset: keyboard-controller measures this view's absolute frame, so the old
-                        64 was added on top and left ~64dp of blank space above the keyboard. */}
-                    <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                // The scroll view owns keyboard avoidance (as treasury-post does): it scrolls the field being typed in (the
+                // thread message, a pledge, the report words) above the keyboard. This replaced a KeyboardAvoidingView
+                // around a plain ScrollView, which shrank the page but never scrolled to the field.
+                <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         {isEffectivePreview && (
                             <View style={{ marginHorizontal: -16, marginTop: -16, marginBottom: 12 }}>
                                 <LocalCommunityMark variant="strip" feature="enterprises" />
@@ -1339,8 +1339,7 @@ export default function TreasuryDetailScreen() {
                             </View>
                         )}
                         </>)}
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                </KeyboardAwareScrollView>
             )}
 
             {cropper.element}

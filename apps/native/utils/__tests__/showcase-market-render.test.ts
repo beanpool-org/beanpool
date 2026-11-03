@@ -13,6 +13,7 @@
  * given (the composer, pickers, cards) are stand-ins; the screen, its hooks and Your deals are real.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: any) => children, KeyboardAvoidingView: ({ children }: any) => children, KeyboardStickyView: ({ children }: any) => children })); // the real one needs the keyboard library's native side
 import Module from 'node:module';
 import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

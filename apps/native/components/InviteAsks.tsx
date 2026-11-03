@@ -226,6 +226,8 @@ function AskCard({ ask, offersVouch, busy, onSend, onNo }: {
                         onChangeText={setReason}
                         maxLength={INVITE_ASK_LIMITS.reason}
                         accessibilityLabel={t(INVITE_ASK_WORDS.reason)}
+                        multiline
+                        textAlignVertical="top"
                         placeholderTextColor={colors.text.muted}
                         testID={`invite-ask-reason-${ask.id}`}
                     />

@@ -27,7 +27,7 @@ export function useRecoveryCopies(nodeUrl: string): RecoveryCopies | null {
 
 /**
  * The claim wizard's line on where members' copies go (vault rethink VR2, design §5.3): the rule, its honest words, and
- * where an owner changes it (How this community works). Before the first members join, so the owner knows where a
+ * where an owner changes it (Core settings). Before the first members join, so the owner knows where a
  * sign-in a member links keeps its copy. Nothing is drawn for a node that doesn't say: there each app's build decides,
  * as before the rule.
  */
@@ -41,8 +41,8 @@ export function RecoveryCopiesLine({ rule }: { rule: RecoveryCopies | null }) {
             </p>
             <p className="text-[11px] text-nature-400 m-0 leading-relaxed break-words">{choice.words}</p>
             <p className="text-[11px] text-nature-400 m-0 leading-relaxed break-words">
-                You can change it any time under <strong>How this community works → Ways back</strong>. Members are told, and
-                nobody's copy moves by itself.
+                You can change it later under <strong>Core settings</strong>; once you confirm them, each change asks you to
+                unlock it first. Members are told, and nobody's copy moves by itself.
             </p>
         </div>
     );

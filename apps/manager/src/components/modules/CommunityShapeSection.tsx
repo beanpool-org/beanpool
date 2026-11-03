@@ -5,21 +5,25 @@ import type { RolesViewer } from './NodeRolesPanel';
 import { getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { t } from '../../lib/fresh-proof';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import {
     type Shape,
     type ShapeSettings,
-    type ShapeLock,
-    type JoinState,
     type KnownFloorShape,
-    type ShapeLogLine,
     fetchCommunityShape,
     updateCommunityShape,
     getConsequenceSentence,
     hoursWording,
-    BEANS_PER_HOUR,
     RECOVERY_COPIES_CHOICES,
     recoveryCopiesName,
+    DOOR_PRESETS,
+    coreLocked,
+    isCoreSetting,
+    typedWordFor,
 } from '../../lib/community-shape';
+import { RowControls, ShapeRow, joinDisplay } from './ShapeRows';
+import { ChangesLog } from './ChangesLog';
+import { CoreWalkthrough, currentDoor, knownFloorProblem } from './CoreWalkthrough';
 
 /** The honest words under a rule for where members' copies go, as the row shows them closed. */
 function recoveryCopiesWords(rule: string): string | undefined {
@@ -30,12 +34,30 @@ export interface CommunityShapeSectionProps {
     activeNode: NodeProfile;
     viewer?: RolesViewer;
     onNavigate?: (tab: string, subTab?: string) => void;
+    /** The Home item opens the walkthrough: at its first step, or (a community with members) at the review. */
+    openWalkthrough?: 'walk' | 'review' | null;
+    /** Told whenever the section learns whether the core settings are locked (the menu's badge follows it). */
+    onLockedChange?: (locked: boolean) => void;
 }
 
+/** "3 Nov 2026": the lock line's date. */
+function lockDate(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Core settings (was "How this community works"; DESIGN-core-settings-fable.md): the seven settings members joined under, one-way
+ * changes and money. An owner walks through them once and locks them; after that every change is Unlock to change, with the
+ * owner's fresh proof. The everyday rules that used to share this page sit where they are used (EverydayRuleRows).
+ */
 export function CommunityShapeSection({
     activeNode,
     viewer,
     onNavigate,
+    openWalkthrough = null,
+    onLockedChange,
 }: CommunityShapeSectionProps) {
     const isOwner = viewer?.kind === 'password' || viewer?.role === 'owner';
 
@@ -47,10 +69,13 @@ export function CommunityShapeSection({
     const [openSetting, setOpenSetting] = useState<keyof ShapeSettings | null>(null);
     const [draftValue, setDraftValue] = useState<any>(null);
     const [note, setNote] = useState('');
+    const [typed, setTyped] = useState('');
     const [saving, setSaving] = useState(false);
     const [rowError, setRowError] = useState<string | null>(null);
     const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+    const [walkStart, setWalkStart] = useState<'intro' | 'review' | null>(openWalkthrough === 'review' ? 'review' : openWalkthrough === 'walk' ? 'intro' : null);
     const successTimer = useTimeout();
+    const proof = useFreshProof();
 
     const loadShape = async () => {
         setLoading(true);
@@ -62,8 +87,9 @@ export function CommunityShapeSection({
                 getTfaSessionToken(activeNode.id),
             );
             setShape(data);
+            onLockedChange?.(coreLocked(data));
         } catch (err: any) {
-            setError(err.message || 'Failed to load community shape');
+            setError(err.message || 'Failed to load core settings');
         } finally {
             setLoading(false);
         }
@@ -75,76 +101,59 @@ export function CommunityShapeSection({
         setDraftValue(null);
         setRowError(null);
         setSaveSuccess(null);
+        proof.close();
     }, [activeNode.id, activeNode.url]);
+
+    useEffect(() => {
+        setWalkStart(openWalkthrough === 'review' ? 'review' : openWalkthrough === 'walk' ? 'intro' : null);
+    }, [openWalkthrough]);
+
+    const locked = coreLocked(shape);
+
+    const closeRow = () => {
+        setOpenSetting(null);
+        setDraftValue(null);
+        setRowError(null);
+        setNote('');
+        setTyped('');
+        proof.close();
+    };
 
     const handleOpenRow = (settingKey: keyof ShapeSettings, currentValue: any) => {
         if (!isOwner || shape?.standby) return;
-        const lock = shape?.settings[settingKey]?.lock;
-        const canOpenWithLock = settingKey === 'listed' && Boolean(
-            lock && (
-                lock.code === 'held_back' ||
-                lock.code === 'schedule_never' ||
-                (lock.code === 'server_env' && shape?.settings.listed.configured)
-            )
-        );
-        if (lock && !canOpenWithLock) return;
+        if (shape?.settings[settingKey]?.lock) return;
 
         if (openSetting === settingKey) {
-            setOpenSetting(null);
-            setDraftValue(null);
-            setRowError(null);
-            setNote('');
+            closeRow();
             return;
         }
 
+        proof.close();
         setOpenSetting(settingKey);
         setRowError(null);
         setSaveSuccess(null);
         setNote('');
+        setTyped('');
 
         if (settingKey === 'knownFloor') {
             const kf = currentValue as KnownFloorShape;
-            setDraftValue({
-                on: kf.on,
-                floor: kf.floor,
-                cap: kf.cap,
-            });
+            setDraftValue({ on: kf.on, floor: kf.floor, cap: kf.cap });
         } else {
             setDraftValue(currentValue);
         }
     };
 
-    const handleCancel = () => {
-        setOpenSetting(null);
-        setDraftValue(null);
-        setRowError(null);
-        setNote('');
-    };
-
-    const handleSave = async (settingKey: keyof ShapeSettings) => {
+    const handleSave = async (settingKey: keyof ShapeSettings, code?: string) => {
         if (!shape || !isOwner || shape.standby) return;
         setSaving(true);
         setRowError(null);
 
-        // Validation for knownFloor
         if (settingKey === 'knownFloor') {
-            const kf = draftValue as { on: boolean; floor: number; cap: number };
-            if (kf.on) {
-                if (kf.floor > kf.cap) {
-                    setRowError(t("The known floor can't be more than the cap."));
-                    setSaving(false);
-                    return;
-                }
-                if (kf.floor < 0) {
-                    setRowError(t("The known floor can't be negative."));
-                    setSaving(false);
-                    return;
-                }
-                if (kf.cap < 2000 || kf.cap > 5000) {
-                    setRowError(t("The cap must be between 2,000 and 5,000 Beans."));
-                    setSaving(false);
-                    return;
-                }
+            const problem = knownFloorProblem(draftValue as { on: boolean; floor: number; cap: number });
+            if (problem) {
+                setRowError(problem);
+                setSaving(false);
+                return;
             }
         }
 
@@ -155,11 +164,14 @@ export function CommunityShapeSection({
                 { [settingKey]: draftValue },
                 note,
                 getTfaSessionToken(activeNode.id),
+                code,
             );
+            proof.close();
             setShape(res.shape);
             setOpenSetting(null);
             setDraftValue(null);
             setNote('');
+            setTyped('');
             setSaveSuccess(
                 res.told === 'members'
                     ? t('Saved, and every member is told.')
@@ -167,6 +179,8 @@ export function CommunityShapeSection({
             );
             successTimer.schedule(() => setSaveSuccess(null), 4000);
         } catch (err: any) {
+            // A locked Core change asks the owner's fresh proof: the box opens, and its Confirm sends this save again.
+            if (proof.checkError(err, (c) => handleSave(settingKey, c), code)) return;
             setRowError(err.message || 'Failed to save change');
         } finally {
             setSaving(false);
@@ -181,7 +195,7 @@ export function CommunityShapeSection({
     if (loading) {
         return (
             <div data-testid="community-shape-section" className="p-4 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl max-w-2xl w-full mx-auto font-sans">
-                <p className="text-sm text-nature-400 m-0">{t('Loading how this community works…')}</p>
+                <p className="text-sm text-nature-400 m-0">{t('Loading core settings…')}</p>
             </div>
         );
     }
@@ -189,7 +203,7 @@ export function CommunityShapeSection({
     if (error || !shape) {
         return (
             <div data-testid="community-shape-section" className="p-4 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl max-w-2xl w-full mx-auto font-sans space-y-4">
-                <p className="text-sm text-red-400 m-0">{error || t('Could not load community shape.')}</p>
+                <p className="text-sm text-red-400 m-0">{error || t('Could not load core settings.')}</p>
                 <button
                     type="button"
                     onClick={loadShape}
@@ -202,6 +216,83 @@ export function CommunityShapeSection({
     }
 
     const { settings, kind, standby, log } = shape;
+    const canEdit = isOwner && !standby;
+    const coreLog = log.filter((l) => {
+        const base = l.setting.split('.')[0];
+        return isCoreSetting(base) || base === 'core';
+    });
+
+    // ── The lock line and the button under a locked Core row ──
+    const lockedBy = shape.core?.lock?.byCallsign ? `@${shape.core.lock.byCallsign}` : t('an owner');
+    const since = lockDate(shape.core?.lock?.at);
+    const lockLine = locked
+        ? (since
+            ? t('Locked since {date} by {callsign}.').replace('{date}', since).replace('{callsign}', lockedBy)
+            : t('Locked.')) + ' ' + (canEdit ? t('Unlock to change: it asks for your proof, and every owner is told.') : t('Only an owner unlocks it.'))
+        : undefined;
+
+    const unlockButton = (key: keyof ShapeSettings, current: unknown) => {
+        if (!locked || !canEdit || settings[key]?.lock) return undefined;
+        const open = openSetting === key;
+        return (
+            <button
+                type="button"
+                data-testid={`shape-unlock-${key}`}
+                aria-expanded={open}
+                onClick={() => handleOpenRow(key, current)}
+                className="min-h-[44px] w-full sm:w-auto px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
+            >
+                {open ? t('Cancel') : t('Unlock to change')}
+            </button>
+        );
+    };
+
+    /** The same controls for every Core row: after the lock, the typed word for a one-way change and the proof box. */
+    const controls = (key: keyof ShapeSettings, saveDisabled: boolean) => {
+        const word = locked ? typedWordFor(key, draftValue) : null;
+        return (
+            <RowControls
+                onSave={() => handleSave(key)}
+                onCancel={closeRow}
+                consequence={consequenceText}
+                note={note}
+                onNoteChange={setNote}
+                saving={saving}
+                error={rowError}
+                saveDisabled={saveDisabled}
+                typedWord={word}
+                typed={typed}
+                onTypedChange={setTyped}
+                below={locked ? <FreshProofBox proof={proof} /> : undefined}
+            />
+        );
+    };
+
+    const checkbox = (label: string) => (
+        <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+            <input
+                type="checkbox"
+                checked={Boolean(draftValue)}
+                onChange={(e) => setDraftValue(e.target.checked)}
+                className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
+            />
+            <span>{label}</span>
+        </label>
+    );
+
+    /** The row's shared props: a locked group has no chevron; an owner opens a row with its Unlock button. */
+    const rowProps = (key: keyof ShapeSettings, current: unknown) => ({
+        isOwner: canEdit && !locked,
+        isOpen: openSetting === key,
+        onToggle: () => handleOpenRow(key, current),
+        coreLockLine: locked ? lockLine : undefined,
+        coreAction: unlockButton(key, current),
+    });
+
+    const door = currentDoor(shape);
+    const joinValueText = settings.join.value === 'paused' ? `${joinDisplay(door)} · ${t('paused now')}` : joinDisplay(settings.join.value);
+
+    const unconfirmedOwner = !locked && canEdit;
 
     return (
         <div data-testid="community-shape-section" className="p-4 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl max-w-2xl w-full mx-auto font-sans space-y-6">
@@ -209,18 +300,18 @@ export function CommunityShapeSection({
             <div>
                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                     <span aria-hidden="true">🧭</span>
-                    <span>{t('How this community works')}</span>
+                    <span>{t('Core settings')}</span>
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-0.5 leading-relaxed">
-                    {t('What this community does right now, and the one place to change it.')}
+                    {t('Set once, when you start your community. Changing one later affects every member, and asks you to unlock it first.')}
                 </p>
                 <p data-testid="shape-role-hint" className="text-xs text-nature-400 m-0 mt-1">
                     {standby ? (
                         <span className="text-bp-ink-warning">{t('This is a standby: change it on the main server.')}</span>
                     ) : !isOwner ? (
-                        <span className="text-nature-300">{t("You're an admin: this page is read-only.")}</span>
+                        <span className="text-nature-300">{t("You're an admin: you can read these.")}</span>
                     ) : (
-                        <span>{t('Only an owner changes these. Members see the same facts on their Home.')}</span>
+                        <span>{t('Only an owner unlocks one. Admins can read these.')}</span>
                     )}
                 </p>
             </div>
@@ -248,144 +339,80 @@ export function CommunityShapeSection({
                 </div>
             )}
 
-            {/* ── WHO CAN JOIN ── */}
-            <div className="space-y-4">
-                <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                    {t('WHO CAN JOIN')}
-                </h4>
-                <div className="space-y-3">
-                    {/* join */}
+            {/* Not confirmed yet: offered, never forced. The community runs on its choices meanwhile. */}
+            {!locked && !standby && !(walkStart && canEdit) && (
+                canEdit ? (
+                    <div data-testid="core-unconfirmed-banner" className="p-3.5 rounded-xl bg-bp-chip-warn-tint border border-amber-800/50 space-y-2">
+                        <p className="text-xs font-bold text-bp-chip-warn-ink m-0">{t('Not confirmed yet.')}</p>
+                        <button
+                            type="button"
+                            data-testid="core-walk-start"
+                            onClick={() => setWalkStart('intro')}
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on"
+                        >
+                            {t('Walk through them ›')}
+                        </button>
+                    </div>
+                ) : (
+                    <p data-testid="core-unconfirmed-admin" className="text-xs text-nature-300 m-0 p-3 rounded-xl bg-nature-950 border border-nature-800">
+                        {t("The owners haven't confirmed the core settings yet. You can read them.")}
+                    </p>
+                )
+            )}
+
+            {walkStart && canEdit && !locked ? (
+                <CoreWalkthrough
+                    activeNode={activeNode}
+                    shape={shape}
+                    startAt={walkStart}
+                    onLeave={() => setWalkStart(null)}
+                    onLocked={(next, told) => {
+                        setShape(next);
+                        setWalkStart(null);
+                        onLockedChange?.(true);
+                        setSaveSuccess(t('Locked. From now on each change asks you to unlock it first, and every owner is told. Admins can read these.'));
+                        successTimer.schedule(() => setSaveSuccess(null), 8000);
+                        void told;
+                    }}
+                />
+            ) : (
+                <div className="space-y-3" data-testid="core-rows">
+                    {/* join: the door (pausing new members is everyday, under Invites & QR) */}
                     <ShapeRow
                         id="join"
                         icon="🚪"
                         name={t('Who can join')}
-                        summary={t('Members make invites and answer requests to join.')}
-                        displayValue={joinDisplay(settings.join.value)}
+                        summary={t('How people get in. Invite is how every community starts. Known keeps the list of who is here with the admins.')}
+                        displayValue={joinValueText}
                         lock={settings.join.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'join'}
-                        onToggle={() => handleOpenRow('join', settings.join.value)}
+                        {...rowProps('join', door)}
                     >
                         <div className="space-y-3 pt-2">
                             <fieldset className="space-y-2 border-0 p-0 m-0" role="radiogroup" aria-label={t('Who can join')}>
                                 <legend className="sr-only">{t('Who can join')}</legend>
-                                {(['members', 'admins', 'paused'] as const).map((opt) => (
-                                    <label key={opt} className="flex items-start gap-2.5 text-xs text-white cursor-pointer select-none">
+                                {DOOR_PRESETS.map((p) => (
+                                    <label key={p.door} className="flex items-start gap-2.5 text-xs text-white cursor-pointer select-none">
                                         <input
                                             type="radio"
                                             name="shape-join-radio"
-                                            value={opt}
-                                            checked={draftValue === opt}
-                                            onChange={() => setDraftValue(opt)}
+                                            value={p.door}
+                                            checked={draftValue === p.door}
+                                            onChange={() => setDraftValue(p.door)}
                                             className="mt-0.5 accent-terra-500"
                                         />
                                         <div>
-                                            <span className="font-bold">{joinRadioTitle(opt)}</span>
-                                            <p className="text-[11px] text-nature-400 m-0 mt-0.5">{joinRadioDescription(opt)}</p>
+                                            <span className="font-bold">{p.name}: {p.plain}</span>
+                                            <p className="text-[11px] text-nature-400 m-0 mt-0.5">{p.detail}</p>
                                         </div>
                                     </label>
                                 ))}
                             </fieldset>
-                            <RowControls
-                                onSave={() => handleSave('join')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.join.value}
-                            />
+                            <p className="text-[11px] text-nature-400 m-0">{t('You can pause new members any time, without unlocking this, under People & Safety → Invites & QR.')}</p>
+                            {controls('join', draftValue === door)}
                         </div>
                     </ShapeRow>
 
-                    {/* knocks */}
-                    <ShapeRow
-                        id="knocks"
-                        icon="🔔"
-                        name={t('Requests to join')}
-                        summary={t('People who find you can ask; a member answers with an invite.')}
-                        displayValue={settings.knocks.value ? t('On') : t('Off')}
-                        lock={settings.knocks.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'knocks'}
-                        onToggle={() => handleOpenRow('knocks', settings.knocks.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Take requests to join')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('knocks')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.knocks.value}
-                            />
-                        </div>
-                    </ShapeRow>
-
-                    {/* shareOutside: next to who can join (front doors S6), on a server that has it */}
-                    {settings.shareOutside !== undefined && (
-                        <ShapeRow
-                            id="shareOutside"
-                            icon="🔗"
-                            name={t('Members may share listings outside the community')}
-                            summary={t('A shared link shows one post for 7 days, without names or faces.')}
-                            displayValue={settings.shareOutside.value ? t('On') : t('Off')}
-                            lock={settings.shareOutside.lock}
-                            isOwner={isOwner && !standby}
-                            isOpen={openSetting === 'shareOutside'}
-                            onToggle={() => handleOpenRow('shareOutside', settings.shareOutside?.value)}
-                        >
-                            <div className="space-y-3 pt-2">
-                                <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={Boolean(draftValue)}
-                                        onChange={(e) => setDraftValue(e.target.checked)}
-                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                    />
-                                    <span>{t('Let members share a post outside')}</span>
-                                </label>
-                                <RowControls
-                                    onSave={() => handleSave('shareOutside')}
-                                    onCancel={handleCancel}
-                                    consequence={consequenceText}
-                                    note={note}
-                                    onNoteChange={setNote}
-                                    saving={saving}
-                                    error={rowError}
-                                    saveDisabled={draftValue === settings.shareOutside?.value}
-                                />
-                            </div>
-                        </ShapeRow>
-                    )}
-
-                    {/* preview */}
-                    <ShapeRow
-                        id="preview"
-                        icon="🔒"
-                        name={t('Private preview')}
-                        summary={t('On, only people the owner or an admin invites get in and visitors see nothing.')}
-                        displayValue={settings.preview.value ? t('On') : t('Off')}
-                        serverBadge={t('Set on the server')}
-                        lock={settings.preview.lock}
-                        isOwner={false}
-                        isOpen={false}
-                        onToggle={() => {}}
-                    />
-
-                    {/* wordsDoor (if present) */}
+                    {/* wordsDoor (global kind) */}
                     {settings.wordsDoor !== undefined && (
                         <ShapeRow
                             id="wordsDoor"
@@ -394,79 +421,15 @@ export function CommunityShapeSection({
                             summary={t('People can join with 12 secret words without a sign-in.')}
                             displayValue={settings.wordsDoor.value ? t('On') : t('Off')}
                             lock={settings.wordsDoor.lock}
-                            isOwner={isOwner && !standby}
-                            isOpen={openSetting === 'wordsDoor'}
-                            onToggle={() => handleOpenRow('wordsDoor', settings.wordsDoor?.value)}
+                            {...rowProps('wordsDoor', settings.wordsDoor.value)}
                         >
                             <div className="space-y-3 pt-2">
-                                <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={Boolean(draftValue)}
-                                        onChange={(e) => setDraftValue(e.target.checked)}
-                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                    />
-                                    <span>{t('Allow joining with 12 secret words')}</span>
-                                </label>
-                                <RowControls
-                                    onSave={() => handleSave('wordsDoor')}
-                                    onCancel={handleCancel}
-                                    consequence={consequenceText}
-                                    note={note}
-                                    onNoteChange={setNote}
-                                    saving={saving}
-                                    error={rowError}
-                                    saveDisabled={draftValue === settings.wordsDoor?.value}
-                                />
+                                {checkbox(t('Allow joining with 12 secret words'))}
+                                {controls('wordsDoor', draftValue === settings.wordsDoor.value)}
                             </div>
                         </ShapeRow>
                     )}
 
-                    {/* doorCheck (if present) */}
-                    {settings.doorCheck !== undefined && (
-                        <ShapeRow
-                            id="doorCheck"
-                            icon="🛡️"
-                            name={t('A person check on busy days')}
-                            summary={t('When lots of people are joining, a 12-words join starts with a Cloudflare check. Needs the TURNSTILE keys on the server; without them it does nothing.')}
-                            displayValue={settings.doorCheck.value ? t('On') : t('Off')}
-                            lock={settings.doorCheck.lock}
-                            isOwner={isOwner && !standby}
-                            isOpen={openSetting === 'doorCheck'}
-                            onToggle={() => handleOpenRow('doorCheck', settings.doorCheck?.value)}
-                        >
-                            <div className="space-y-3 pt-2">
-                                <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={Boolean(draftValue)}
-                                        onChange={(e) => setDraftValue(e.target.checked)}
-                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                    />
-                                    <span>{t('Ask for a person check on busy days')}</span>
-                                </label>
-                                <RowControls
-                                    onSave={() => handleSave('doorCheck')}
-                                    onCancel={handleCancel}
-                                    consequence={consequenceText}
-                                    note={note}
-                                    onNoteChange={setNote}
-                                    saving={saving}
-                                    error={rowError}
-                                    saveDisabled={draftValue === settings.doorCheck?.value}
-                                />
-                            </div>
-                        </ShapeRow>
-                    )}
-                </div>
-            </div>
-
-            {/* ── MONEY ── */}
-            <div className="space-y-4 pt-2 border-t border-nature-800/80">
-                <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                    {t('MONEY')}
-                </h4>
-                <div className="space-y-3">
                     {/* beans */}
                     <ShapeRow
                         id="beans"
@@ -476,30 +439,11 @@ export function CommunityShapeSection({
                         extraLine={t('Includes trades held in escrow, enterprises and crowdfunding.')}
                         displayValue={settings.beans.value ? t('On') : t('Off')}
                         lock={settings.beans.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'beans'}
-                        onToggle={() => handleOpenRow('beans', settings.beans.value)}
+                        {...rowProps('beans', settings.beans.value)}
                     >
                         <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Beans active')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('beans')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.beans.value}
-                            />
+                            {checkbox(t('Beans active'))}
+                            {controls('beans', draftValue === settings.beans.value)}
                         </div>
                     </ShapeRow>
 
@@ -509,12 +453,10 @@ export function CommunityShapeSection({
                         icon="🤝"
                         name={t('Known floor for confirmed members')}
                         summary={t('An admin confirms a member on the names list; they can then owe up to this while they keep an offer listed.')}
-                        extraLine={t('Cap for one member\'s raise: {cap}.').replace('{cap}', settings.knownFloor.value.cap.toLocaleString('en'))}
+                        extraLine={t("Cap for one member's raise: {cap}.").replace('{cap}', settings.knownFloor.value.cap.toLocaleString('en'))}
                         displayValue={settings.knownFloor.value.on ? t('On · {floor} Beans').replace('{floor}', settings.knownFloor.value.floor.toLocaleString('en')) : t('Off')}
                         lock={settings.knownFloor.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'knownFloor'}
-                        onToggle={() => handleOpenRow('knownFloor', settings.knownFloor.value)}
+                        {...rowProps('knownFloor', settings.knownFloor.value)}
                     >
                         <div className="space-y-3 pt-2">
                             <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
@@ -560,75 +502,16 @@ export function CommunityShapeSection({
                                 </div>
                             )}
 
-                            <RowControls
-                                onSave={() => handleSave('knownFloor')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={
-                                    draftValue?.on === settings.knownFloor.value.on &&
+                            {controls(
+                                'knownFloor',
+                                draftValue?.on === settings.knownFloor.value.on &&
                                     draftValue?.floor === settings.knownFloor.value.floor &&
-                                    draftValue?.cap === settings.knownFloor.value.cap
-                                }
-                            />
+                                    draftValue?.cap === settings.knownFloor.value.cap,
+                            )}
                         </div>
                     </ShapeRow>
-                </div>
-            </div>
 
-            {/* ── TALKING ── */}
-            {settings.dmRequests !== undefined && (
-                <div className="space-y-4 pt-2 border-t border-nature-800/80">
-                    <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                        {t('TALKING')}
-                    </h4>
-                    <div className="space-y-3">
-                        <ShapeRow
-                            id="dmRequests"
-                            icon="💬"
-                            name={t('First message from someone new')}
-                            summary={t('On: it waits under Message requests until the person accepts.')}
-                            displayValue={settings.dmRequests.value ? t('Waits under Message requests') : t('Arrives straight away')}
-                            lock={settings.dmRequests.lock}
-                            isOwner={isOwner && !standby}
-                            isOpen={openSetting === 'dmRequests'}
-                            onToggle={() => handleOpenRow('dmRequests', settings.dmRequests?.value)}
-                        >
-                            <div className="space-y-3 pt-2">
-                                <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={Boolean(draftValue)}
-                                        onChange={(e) => setDraftValue(e.target.checked)}
-                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                    />
-                                    <span>{t('Hold first message under Message requests')}</span>
-                                </label>
-                                <RowControls
-                                    onSave={() => handleSave('dmRequests')}
-                                    onCancel={handleCancel}
-                                    consequence={consequenceText}
-                                    note={note}
-                                    onNoteChange={setNote}
-                                    saving={saving}
-                                    error={rowError}
-                                    saveDisabled={draftValue === settings.dmRequests?.value}
-                                />
-                            </div>
-                        </ShapeRow>
-                    </div>
-                </div>
-            )}
-
-            {/* ── DECIDING TOGETHER ── */}
-            <div className="space-y-4 pt-2 border-t border-nature-800/80">
-                <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                    {t('DECIDING TOGETHER')}
-                </h4>
-                <div className="space-y-3">
+                    {/* decisions */}
                     <ShapeRow
                         id="decisions"
                         icon="🗳️"
@@ -636,403 +519,34 @@ export function CommunityShapeSection({
                         summary={t('Members who have completed a trade, and admins, propose; members vote.')}
                         displayValue={settings.decisions.value ? t('On') : t('Off')}
                         lock={settings.decisions.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'decisions'}
-                        onToggle={() => handleOpenRow('decisions', settings.decisions.value)}
+                        {...rowProps('decisions', settings.decisions.value)}
                     >
                         <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Community votes active')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('decisions')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.decisions.value}
-                            />
-                        </div>
-                    </ShapeRow>
-                </div>
-            </div>
-
-            {/* ── BEING FOUND ── */}
-            <div className="space-y-4 pt-2 border-t border-nature-800/80">
-                <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                    {t('BEING FOUND')}
-                </h4>
-                <div className="space-y-3">
-                    {/* listed */}
-                    <ShapeRow
-                        id="listed"
-                        icon="📡"
-                        name={t('Listed in the BeanPool directory')}
-                        summary={t('People nearby can find this community on beanpool.org and in the app.')}
-                        displayValue={settings.listed.value ? t('Yes') : t('No')}
-                        lock={settings.listed.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'listed'}
-                        onToggle={() => handleOpenRow('listed', settings.listed.configured)}
-                        allowExpandWithLock={
-                            isOwner && !standby && Boolean(
-                                settings.listed.lock && (
-                                    settings.listed.lock.code === 'held_back' ||
-                                    settings.listed.lock.code === 'schedule_never' ||
-                                    (settings.listed.lock.code === 'server_env' && settings.listed.configured)
-                                )
-                            )
-                        }
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => {
-                                        if (settings.listed.lock?.code === 'server_env' && e.target.checked) return;
-                                        setDraftValue(e.target.checked);
-                                    }}
-                                    disabled={settings.listed.lock?.code === 'server_env' && !draftValue}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500 disabled:opacity-50"
-                                />
-                                <span>{t('Publish to directory')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('listed')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={
-                                    draftValue === settings.listed.configured ||
-                                    (settings.listed.lock?.code === 'server_env' && draftValue === true)
-                                }
-                            />
+                            {checkbox(t('Community votes active'))}
+                            {controls('decisions', draftValue === settings.decisions.value)}
                         </div>
                     </ShapeRow>
 
-                    {/* shareLocation */}
-                    <ShapeRow
-                        id="shareLocation"
-                        icon="📍"
-                        name={t('Share location & radius')}
-                        summary={t('On: anyone sees roughly where you are (to about a kilometre). Off: only members do.')}
-                        displayValue={settings.shareLocation.value ? t('On') : t('Off')}
-                        lock={settings.shareLocation.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'shareLocation'}
-                        onToggle={() => handleOpenRow('shareLocation', settings.shareLocation.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Share location and radius in directory')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('shareLocation')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.shareLocation.value}
-                            />
-                        </div>
-                    </ShapeRow>
+                    {/* shareOutside (front doors S6), on a server that has it */}
+                    {settings.shareOutside !== undefined && (
+                        <ShapeRow
+                            id="shareOutside"
+                            icon="🔗"
+                            name={t('Members may share listings outside the community')}
+                            summary={t('A shared link shows one post for 7 days, without names or faces.')}
+                            displayValue={settings.shareOutside.value ? t('On') : t('Off')}
+                            lock={settings.shareOutside.lock}
+                            {...rowProps('shareOutside', settings.shareOutside.value)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                {checkbox(t('Let members share a post outside'))}
+                                {controls('shareOutside', draftValue === settings.shareOutside.value)}
+                            </div>
+                        </ShapeRow>
+                    )}
 
-                    {/* shareMemberCount */}
-                    <ShapeRow
-                        id="shareMemberCount"
-                        icon="👥"
-                        name={t('Share member count')}
-                        summary={t('Shows the total number of users registered on your node in the directory.')}
-                        displayValue={settings.shareMemberCount.value ? t('On') : t('Off')}
-                        lock={settings.shareMemberCount.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'shareMemberCount'}
-                        onToggle={() => handleOpenRow('shareMemberCount', settings.shareMemberCount.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Share member count in directory')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('shareMemberCount')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.shareMemberCount.value}
-                            />
-                        </div>
-                    </ShapeRow>
-
-                    {/* shareEmail */}
-                    <ShapeRow
-                        id="shareEmail"
-                        icon="📧"
-                        name={t('Share email')}
-                        summary={t('Puts the contact email in the public directory and on the map.')}
-                        displayValue={settings.shareEmail.value ? t('On') : t('Off')}
-                        lock={settings.shareEmail.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'shareEmail'}
-                        onToggle={() => handleOpenRow('shareEmail', settings.shareEmail.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Share email in directory')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('shareEmail')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.shareEmail.value}
-                            />
-                        </div>
-                    </ShapeRow>
-
-                    {/* sharePhone */}
-                    <ShapeRow
-                        id="sharePhone"
-                        icon="📞"
-                        name={t('Share phone')}
-                        summary={t('Puts the contact phone in the public directory and on the map.')}
-                        displayValue={settings.sharePhone.value ? t('On') : t('Off')}
-                        lock={settings.sharePhone.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'sharePhone'}
-                        onToggle={() => handleOpenRow('sharePhone', settings.sharePhone.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Share phone in directory')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('sharePhone')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.sharePhone.value}
-                            />
-                        </div>
-                    </ShapeRow>
-
-                    {/* shareHealth */}
-                    <ShapeRow
-                        id="shareHealth"
-                        icon="🖥️"
-                        name={t('Share health')}
-                        summary={t('Shares node health diagnostics with the BeanPool team for monitoring.')}
-                        displayValue={settings.shareHealth.value ? t('On') : t('Off')}
-                        lock={settings.shareHealth.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'shareHealth'}
-                        onToggle={() => handleOpenRow('shareHealth', settings.shareHealth.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Share node health diagnostics')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('shareHealth')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.shareHealth.value}
-                            />
-                        </div>
-                    </ShapeRow>
-
-                    {/* visitors */}
-                    <ShapeRow
-                        id="visitors"
-                        icon="👀"
-                        name={t('Visitors')}
-                        summary={t('What visitors see from outside the community.')}
-                        displayValue={visitorsDisplay(settings.visitors.value)}
-                        serverBadge={t('Set by this server\'s kind')}
-                        lock={settings.visitors.lock}
-                        isOwner={false}
-                        isOpen={false}
-                        onToggle={() => {}}
-                    />
-                </div>
-            </div>
-
-            {/* ── SAFETY ── */}
-            <div className="space-y-4 pt-2 border-t border-nature-800/80">
-                <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                    {t('SAFETY')}
-                </h4>
-                <div className="space-y-3">
-                    {/* probation */}
-                    <ShapeRow
-                        id="probation"
-                        icon="⏳"
-                        name={t('Limits on new accounts')}
-                        summary={t('New accounts have small daily limits for their first days.')}
-                        displayValue={settings.probation.value ? t('On') : t('Off')}
-                        lock={settings.probation.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'probation'}
-                        onToggle={() => handleOpenRow('probation', settings.probation.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Apply limits to new accounts')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('probation')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.probation.value}
-                            />
-                        </div>
-                    </ShapeRow>
-
-                    {/* autoHide */}
-                    <ShapeRow
-                        id="autoHide"
-                        icon="🛡️"
-                        name={t('Reported posts hidden and message requests cleared automatically')}
-                        summary={t('Reports from three independent groups hide a post until a moderator looks. Reports from the people a sender wrote to can clear their message requests too.')}
-                        displayValue={settings.autoHide.value ? t('On') : t('Off')}
-                        lock={settings.autoHide.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'autoHide'}
-                        onToggle={() => handleOpenRow('autoHide', settings.autoHide.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Hide reported posts and clear reported message requests')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('autoHide')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.autoHide.value}
-                            />
-                        </div>
-                    </ShapeRow>
-
-                    {/* autoMute */}
-                    <ShapeRow
-                        id="autoMute"
-                        icon="🔇"
-                        name={t('Repeat offenders muted automatically')}
-                        summary={t('Three posts removed in 30 days stop a member posting and messaging until a moderator lifts it.')}
-                        displayValue={settings.autoMute.value ? t('On') : t('Off')}
-                        lock={settings.autoMute.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'autoMute'}
-                        onToggle={() => handleOpenRow('autoMute', settings.autoMute.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Mute members after repeat removals')}</span>
-                            </label>
-                            <RowControls
-                                onSave={() => handleSave('autoMute')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={draftValue === settings.autoMute.value}
-                            />
-                        </div>
-                    </ShapeRow>
-                </div>
-            </div>
-
-            {/* ── WAYS BACK: where members' copies go (vault rethink VR2) ── */}
-            {settings.recoveryCopies !== undefined && (
-                <div className="space-y-4 pt-2 border-t border-nature-800/80">
-                    <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                        {t('WAYS BACK')}
-                    </h4>
-                    <div className="space-y-3">
+                    {/* recoveryCopies (vault rethink VR2) */}
+                    {settings.recoveryCopies !== undefined && (
                         <ShapeRow
                             id="recoveryCopies"
                             icon="🗝️"
@@ -1041,9 +555,7 @@ export function CommunityShapeSection({
                             extraLine={recoveryCopiesWords(settings.recoveryCopies.value)}
                             displayValue={recoveryCopiesName(settings.recoveryCopies.value)}
                             lock={settings.recoveryCopies.lock}
-                            isOwner={isOwner && !standby}
-                            isOpen={openSetting === 'recoveryCopies'}
-                            onToggle={() => handleOpenRow('recoveryCopies', settings.recoveryCopies?.value)}
+                            {...rowProps('recoveryCopies', settings.recoveryCopies.value)}
                         >
                             <div className="space-y-3 pt-2">
                                 <fieldset className="space-y-2 border-0 p-0 m-0" role="radiogroup" aria-label={t("Where members' copies go")}>
@@ -1065,364 +577,26 @@ export function CommunityShapeSection({
                                         </label>
                                     ))}
                                 </fieldset>
-                                <RowControls
-                                    onSave={() => handleSave('recoveryCopies')}
-                                    onCancel={handleCancel}
-                                    consequence={consequenceText}
-                                    note={note}
-                                    onNoteChange={setNote}
-                                    saving={saving}
-                                    error={rowError}
-                                    saveDisabled={draftValue === settings.recoveryCopies.value}
-                                />
+                                {controls('recoveryCopies', draftValue === settings.recoveryCopies.value)}
                             </div>
                         </ShapeRow>
-                    </div>
+                    )}
                 </div>
             )}
 
-            {/* ── CONNECTIONS ── */}
-            <div className="space-y-4 pt-2 border-t border-nature-800/80">
-                <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
-                    {t('CONNECTIONS')}
-                </h4>
-                <div className="space-y-3">
-                    <ShapeRow
-                        id="connections"
-                        icon="🌐"
-                        name={t('Connections to other communities')}
-                        summary={t('Connect to other BeanPool communities over the network.')}
-                        displayValue={settings.connections.value ? t('On') : t('Off')}
-                        serverBadge={t('Set on the server')}
-                        lock={settings.connections.lock}
-                        isOwner={false}
-                        isOpen={false}
-                        onToggle={() => {}}
-                    />
-                </div>
-            </div>
+            {/* Where the everyday rules went */}
+            {onNavigate && (
+                <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
+                    {t('Everyday rules sit where you use them: pausing new members under Invites & QR, the safety switches under Triage & Moderation, being found under Node Identity.')}
+                </p>
+            )}
 
             {/* ── CHANGES (Audit Trail) ── */}
             <div className="space-y-4 pt-4 border-t border-nature-800/80">
                 <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
                     {t('CHANGES')}
                 </h4>
-                {log.length === 0 ? (
-                    <p className="text-xs text-nature-400 m-0">{t('No changes recorded yet.')}</p>
-                ) : (
-                    <div data-testid="shape-audit-log" className="space-y-2">
-                        {log.slice(0, 50).map((entry) => {
-                            const actor = logActorDisplay(entry);
-                            const settingName = logSettingName(entry.setting);
-                            const fromVal = logValueDisplay(entry.setting, entry.from);
-                            const toVal = logValueDisplay(entry.setting, entry.to);
-                            return (
-                                <div key={`${entry.kept}-${entry.id}`} className="text-xs text-nature-300 py-1 border-b border-nature-800/50 break-words leading-relaxed">
-                                    <span className="font-mono text-nature-400">
-                                        {formatLogDate(entry.at)}
-                                    </span>{' '}
-                                    ·{' '}
-                                    <span className="font-semibold text-white">
-                                        {actor.name}
-                                    </span>
-                                    {actor.role && (
-                                        <span className="text-nature-400"> ({actor.role})</span>
-                                    )}{' '}
-                                    ·{' '}
-                                    <span className="text-white">{settingName}</span>
-                                    {entry.from !== null && entry.to !== null && (
-                                        <span>: {fromVal} → {toVal}</span>
-                                    )}
-                                    {entry.note && (
-                                        <span className="text-nature-400 italic"> · &ldquo;{entry.note}&rdquo;</span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ── Helpers & Subcomponents ──────────────────────────────────────────────────
-
-function joinDisplay(val: JoinState): string {
-    switch (val) {
-        case 'members': return t('Any member invites');
-        case 'admins': return t('Only admins invite');
-        case 'paused': return t('Paused');
-        case 'open': return t('Open');
-        default: return String(val);
-    }
-}
-
-function joinRadioTitle(opt: 'members' | 'admins' | 'paused'): string {
-    switch (opt) {
-        case 'members': return t('Invite: any member invites');
-        case 'admins': return t('Known: only admins invite');
-        case 'paused': return t('Paused: nobody new for now');
-    }
-}
-
-function joinRadioDescription(opt: 'members' | 'admins' | 'paused'): string {
-    switch (opt) {
-        case 'members': return t('Any member can make an invite, from the app or the web app, and answer a request to join. This is how every community starts.');
-        case 'admins': return t('Only owners and admins can make invites and answer requests to join. Members are told to ask an admin, and their app shows no invite to make.');
-        case 'paused': return t('Nobody new can join. Invites already made cannot be used while new members are paused.');
-    }
-}
-
-function visitorsDisplay(val: 'nothing' | 'listings' | 'open'): string {
-    switch (val) {
-        case 'nothing': return t('See nothing');
-        case 'listings': return t('Listings only');
-        case 'open': return t('Open');
-        default: return String(val);
-    }
-}
-
-export function logActorDisplay(entry: ShapeLogLine): { name: string; role?: string } {
-    if (entry.actor === 'owner:password' || entry.actor === 'password') {
-        return { name: t('the owner (password)') };
-    }
-    if (entry.actorCallsign) {
-        return { name: `@${entry.actorCallsign}`, role: entry.actorRole ?? undefined };
-    }
-    const shortKey = entry.actor.length > 12 ? `${entry.actor.slice(0, 8)}…` : entry.actor;
-    return { name: shortKey, role: entry.actorRole ?? undefined };
-}
-
-export function logSettingName(setting: string): string {
-    const table: Record<string, string> = {
-        join: t('Who can join'),
-        wordsDoor: t('12 words at the open door'),
-        doorCheck: t('A person check on busy days'),
-        knocks: t('Requests to join'),
-        beans: t('Beans'),
-        knownFloor: t('Known floor for confirmed members'),
-        'knownFloor.on': t('Known floor for confirmed members'),
-        'knownFloor.floor': t('Confirmed members owe up to'),
-        'knownFloor.cap': t('Floor cap'),
-        dmRequests: t('First message from someone new'),
-        shareOutside: t('Members may share listings outside the community'),
-        decisions: t('Community votes (Decisions)'),
-        listed: t('Listed in the BeanPool directory'),
-        shareLocation: t('Share location & radius'),
-        shareMemberCount: t('Share member count'),
-        shareEmail: t('Share email'),
-        sharePhone: t('Share phone'),
-        shareHealth: t('Share health'),
-        probation: t('Limits on new accounts'),
-        autoHide: t('Reported posts hidden and message requests cleared automatically'),
-        autoHideReports: t('Reported posts hidden and message requests cleared automatically'),
-        autoMute: t('Repeat offenders muted automatically'),
-        recoveryCopies: t("Where members' copies go"),
-    };
-    return table[setting] ?? setting;
-}
-
-export function logValueDisplay(setting: string, val: string | null): string {
-    if (val === null || val === undefined) return '';
-    if (setting === 'join') {
-        return joinDisplay(val as JoinState);
-    }
-    if (setting === 'recoveryCopies') return recoveryCopiesName(val);
-    if (val === 'on' || val === 'true') return t('On');
-    if (val === 'off' || val === 'false') return t('Off');
-    return val;
-}
-
-function formatLogDate(isoDate: string): string {
-    try {
-        const d = new Date(isoDate);
-        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-        return isoDate;
-    }
-}
-
-interface ShapeRowProps {
-    id: string;
-    icon: string;
-    name: string;
-    summary: string;
-    extraLine?: string;
-    displayValue: string;
-    serverBadge?: string;
-    lock?: ShapeLock | null;
-    isOwner: boolean;
-    isOpen: boolean;
-    onToggle: () => void;
-    children?: React.ReactNode;
-    allowExpandWithLock?: boolean;
-}
-
-function ShapeRow({
-    id,
-    icon,
-    name,
-    summary,
-    extraLine,
-    displayValue,
-    serverBadge,
-    lock,
-    isOwner,
-    isOpen,
-    onToggle,
-    children,
-    allowExpandWithLock,
-}: ShapeRowProps) {
-    const isLocked = Boolean(lock);
-    const canExpand = isOwner && (!isLocked || Boolean(allowExpandWithLock)) && !serverBadge;
-
-    const headerContent = (
-        <>
-            <div className="flex items-start justify-between gap-2 flex-wrap min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base select-none shrink-0" aria-hidden="true">{icon}</span>
-                    <span className="text-xs font-bold text-white break-words">{name}</span>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto min-w-0 max-w-full">
-                    <span data-testid={`shape-val-${id}`} className="text-xs font-medium text-white break-words">
-                        {displayValue}
-                    </span>
-                    {serverBadge && (
-                        <span className="text-[10px] text-nature-400 bg-nature-900 border border-nature-800 px-1.5 py-0.5 rounded break-words text-right">
-                            {serverBadge}
-                        </span>
-                    )}
-                    {canExpand && (
-                        <span className="text-nature-400 text-xs font-mono select-none" aria-hidden="true">
-                            {isOpen ? '▲' : '›'}
-                        </span>
-                    )}
-                </div>
-            </div>
-            <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{summary}</p>
-            {extraLine && (
-                <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{extraLine}</p>
-            )}
-        </>
-    );
-
-    return (
-        <div
-            data-testid={`shape-row-${id}`}
-            className="p-3.5 sm:p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-2 transition-all"
-        >
-            {canExpand ? (
-                <button
-                    type="button"
-                    data-testid={`shape-expand-${id}`}
-                    aria-expanded={isOpen}
-                    onClick={onToggle}
-                    className="w-full text-left bg-transparent border-0 p-0 m-0 min-h-[48px] space-y-1.5 cursor-pointer hover:opacity-90 focus:outline-none focus-visible:ring-1 focus-visible:ring-terra-500 rounded"
-                >
-                    {headerContent}
-                </button>
-            ) : (
-                <div
-                    data-testid={`shape-expand-${id}`}
-                    className="min-h-[48px] space-y-1.5"
-                >
-                    {headerContent}
-                </div>
-            )}
-
-            {/* Lock Line */}
-            {lock && (
-                <div
-                    data-testid={`shape-lock-${id}`}
-                    role="status"
-                    className={`text-[11px] leading-relaxed p-2 rounded-lg ${
-                        lock.code === 'auth_hatch_open'
-                            ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink font-semibold'
-                            : 'bg-nature-900/60 text-nature-300'
-                    }`}
-                >
-                    <span className="mr-1" aria-hidden="true">🔒</span>
-                    <span>{lock.why}</span>
-                    {lock.unlock && (
-                        <span className="block mt-0.5 text-nature-400">{lock.unlock}</span>
-                    )}
-                </div>
-            )}
-
-            {/* In-place expansion */}
-            {isOpen && children && (
-                <div className="pt-2 border-t border-nature-800/80">
-                    {children}
-                </div>
-            )}
-        </div>
-    );
-}
-
-interface RowControlsProps {
-    onSave: () => void;
-    onCancel: () => void;
-    consequence?: string;
-    note: string;
-    onNoteChange: (val: string) => void;
-    saving: boolean;
-    error?: string | null;
-    saveDisabled?: boolean;
-}
-
-function RowControls({
-    onSave,
-    onCancel,
-    consequence,
-    note,
-    onNoteChange,
-    saving,
-    error,
-    saveDisabled,
-}: RowControlsProps) {
-    return (
-        <div className="space-y-3 pt-2">
-            {consequence && (
-                <p data-testid="shape-consequence" className="text-xs text-bp-ink-warning font-medium m-0 leading-relaxed break-words">
-                    {consequence}
-                </p>
-            )}
-
-            <div>
-                <input
-                    type="text"
-                    maxLength={200}
-                    value={note}
-                    onChange={(e) => onNoteChange(e.target.value)}
-                    placeholder={t('Optional note to members (e.g. why this changed)')}
-                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500 placeholder:text-nature-500"
-                />
-            </div>
-
-            {error && (
-                <div role="alert" className="p-2.5 rounded-xl bg-bp-chip-danger-tint text-bp-chip-danger-ink text-xs font-medium break-words">
-                    {error}
-                </div>
-            )}
-
-            <div className="flex items-center gap-2 pt-1">
-                <button
-                    type="button"
-                    disabled={saving || saveDisabled}
-                    onClick={onSave}
-                    className="py-2 px-4 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50 min-h-[40px]"
-                >
-                    {saving ? t('Saving...') : t('Save')}
-                </button>
-                <button
-                    type="button"
-                    disabled={saving}
-                    onClick={onCancel}
-                    className="py-2 px-4 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-nature-300 hover:text-white transition-all min-h-[40px]"
-                >
-                    {t('Cancel')}
-                </button>
+                <ChangesLog lines={coreLog} />
             </div>
         </div>
     );

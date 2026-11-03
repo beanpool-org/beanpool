@@ -5,6 +5,7 @@ import { useSectionSubTab } from '../../lib/sections';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
+import { EverydayRuleRows } from './EverydayRuleRows';
 import { CommunityHealthPanel } from './CommunityHealthPanel';
 import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
@@ -361,6 +362,15 @@ export function PeopleSafetySection({
                     <SectionErrorBoundary sectionName="Community health" resetKey={activeNode.id}>
                         <CommunityHealthPanel activeNode={activeNode} viewer={rolesViewer} />
                     </SectionErrorBoundary>
+                    <SectionErrorBoundary sectionName="Taking new members" resetKey={activeNode.id}>
+                        <EverydayRuleRows
+                            activeNode={activeNode}
+                            viewer={rolesViewer}
+                            group="taking"
+                            title="Taking new members"
+                            intro="Pause new members, and who can ask to join. The door itself (who can invite) is under Core settings."
+                        />
+                    </SectionErrorBoundary>
                     <InvitesModule activeNode={activeNode} />
                 </div>
             )}
@@ -386,6 +396,15 @@ export function PeopleSafetySection({
 
             {subTab === 'moderation' && (
                 <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Rules the server applies" resetKey={activeNode.id}>
+                        <EverydayRuleRows
+                            activeNode={activeNode}
+                            viewer={rolesViewer}
+                            group="rules"
+                            title="Rules the server applies"
+                            intro="What the server does by itself, before a moderator looks."
+                        />
+                    </SectionErrorBoundary>
                     <SectionErrorBoundary sectionName="Message requests cleared by reports" resetKey={activeNode.id}>
                         <RequestLimitsCard nodeUrl={activeNode.url} reloadKey={limitsReload} adminPassword={nodeCredential(activeNode)} tfaToken={getTfaSessionToken(activeNode.id)} />
                     </SectionErrorBoundary>

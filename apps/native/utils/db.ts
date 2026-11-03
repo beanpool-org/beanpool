@@ -4307,17 +4307,17 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
+                   archetype = CASE WHEN ? THEN excluded.archetype
+                                    ELSE COALESCE(excluded.archetype, members.archetype) END,
                    avatar_url = CASE WHEN ? THEN excluded.avatar_url
                                      ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
-                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                   archetype = CASE WHEN ? THEN excluded.archetype
-                                    ELSE COALESCE(excluded.archetype, members.archetype) END`,
-                // The CASE placeholders are the 9th and 10th `?` in the statement text, so they bind AFTER
-                // the eight VALUES parameters.
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, avatarNullClears ? 1 : 0, archetypeNullClears ? 1 : 0]
+                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by)`,
+                // The CASE placeholders are the 9th (archetype) and 10th (avatar, last) `?` in the statement text, so
+                // they bind AFTER the eight VALUES parameters.
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, archetypeNullClears ? 1 : 0, avatarNullClears ? 1 : 0]
             );
         }
 

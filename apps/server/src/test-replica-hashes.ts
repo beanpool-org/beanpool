@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     const hashedColumns = createHash('sha256')
         .update(JSON.stringify(hashedTables(db).map((t) => [t.table, t.columns]).sort()))
         .digest('hex').slice(0, 16);
-    const COLUMNS_OF_VERSION: Record<number, string> = { 12: '94ccf348f3c0a4d2', 13: '1eddae5ac2206a8f', 14: '328e536e828a0c8f', 15: 'e000deb40cdb8c0b', 16: '81b5a378f62edbe1', 17: '5b6e068af63cda88' };
+    const COLUMNS_OF_VERSION: Record<number, string> = { 12: '94ccf348f3c0a4d2', 13: '1eddae5ac2206a8f', 14: '328e536e828a0c8f', 15: 'e000deb40cdb8c0b', 16: '81b5a378f62edbe1', 17: '5b6e068af63cda88', 18: 'c2401834954f6eca' };
     assert(COLUMNS_OF_VERSION[TABLE_HASHES_VERSION] === hashedColumns,
         `the hashed columns belong to version ${TABLE_HASHES_VERSION} (they read ${hashedColumns})`);
 

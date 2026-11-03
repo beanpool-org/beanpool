@@ -15,13 +15,13 @@
 import { db } from '../db/db.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** How far back a report, a trade or a payment with the subject stands a member aside (§4). */
+/** How far back a report on the subject, or a deal completed with them, stands a member aside (§4). */
 export const JURY_CONFLICT_DAYS = 90;
 
 /**
  * Who stands aside from judging `subject`, from data only this node holds (§4): who reported them or something they
- * posted in the last 90 days; who invited them and whom they invited; a block either way; a completed trade or a payment
- * between them in the last 90 days; an open deal; a direct conversation. None of it is ever said: a member passed over
+ * posted in the last 90 days; who invited them and whom they invited; a block either way; a deal completed with them in
+ * the last 90 days, or one still open; a direct conversation with them. None of it is ever said: a member passed over
  * for any of these is listed after close exactly as one who stepped aside themselves.
  */
 export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set<string> {
@@ -38,8 +38,6 @@ export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set
          WHERE (buyer_pubkey = @s OR seller_pubkey = @s)
            AND (status IN ('requested', 'pending', 'disputed')
                 OR (status = 'completed' AND julianday(COALESCE(completed_at, updated_at, created_at)) >= julianday(@since)))
-        UNION SELECT CASE WHEN from_pubkey = @s THEN to_pubkey ELSE from_pubkey END FROM transactions
-         WHERE (from_pubkey = @s OR to_pubkey = @s) AND julianday(timestamp) >= julianday(@since)
         UNION SELECT other.public_key FROM conversation_participants mine
           JOIN conversations c ON c.id = mine.conversation_id AND c.type = 'dm'
           JOIN conversation_participants other ON other.conversation_id = mine.conversation_id AND other.public_key != mine.public_key

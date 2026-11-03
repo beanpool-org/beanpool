@@ -3560,6 +3560,8 @@
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "这是你的首页。在底部添加卡片，或长按卡片进行排列。",
   "Move {card} earlier": "将{card}前移",
   "Move {card} later": "将{card}后移",
+  "Messages in your other communities show on your phone, or when you open that community here.": "你在其他社区的消息会显示在手机上，或者在你在网页端打开该社区时显示。",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "来自你保存的每个社区的提醒都会发送到你的手机。你可以在 BeanPool 面板中关闭某个社区的提醒。",
   "Remove my working style": "移除我的工作风格",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "这会把你的工作风格从此设备及设备上的每个社区中移除。重新测试后会恢复。"
 }

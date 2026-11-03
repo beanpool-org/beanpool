@@ -63,7 +63,7 @@
   "Your account there was closed.": "Tài khoản của bạn ở đó đã bị đóng.",
   "Your own community isn't affected.": "Cộng đồng của riêng bạn không bị ảnh hưởng.",
   "Global community, {state}": "Cộng đồng toàn cầu, {state}",
-  "Switches to this community. Long press to remove it.": "Chuyển sang cộng đồng này. Nhấn giữ để xóa.",
+  "Switches to this community. Long press for its options.": "Chuyển sang cộng đồng này. Nhấn giữ để xem các tùy chọn của cộng đồng.",
   "Guest": "Khách",
   "Explore BeanPool worldwide": "Khám phá BeanPool toàn cầu",
   "🌍 Explore BeanPool worldwide": "🌍 Khám phá BeanPool toàn cầu",
@@ -5955,6 +5955,14 @@
   "on the global community": "trên cộng đồng toàn cầu",
   "Open their requests there": "Mở các yêu cầu của họ ở đó",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Đây là Trang chủ của bạn. Thêm thẻ ở dưới cùng, hoặc giữ một thẻ để sắp xếp.",
+  "Alerts from this community": "Thông báo từ cộng đồng này",
+  "Stops notifications and unread message checks from this community": "Dừng nhận thông báo và kiểm tra tin nhắn chưa đọc từ cộng đồng này",
+  "Remove from your saved list": "Xóa khỏi danh sách đã lưu",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{n} tin nhắn mới trong {community} · Chuyển"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Thông báo gửi đến điện thoại của bạn từ mọi cộng đồng bạn lưu. Bạn có thể tắt thông báo cho một cộng đồng trên bảng BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Thông báo đang tắt trên điện thoại này. Điện thoại chưa liên hệ được với cộng đồng này để dừng thông báo ở đó, và sẽ thử lại.",
   "Remove my working style": "Xóa phong cách làm việc của tôi",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Thao tác này xóa phong cách làm việc của bạn khỏi thiết bị này và khỏi mọi cộng đồng trên đó. Làm lại bài trắc nghiệm sẽ đưa nó trở lại."
 }

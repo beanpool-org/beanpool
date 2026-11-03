@@ -17,8 +17,8 @@
  * round.
  *
  * **What is asked, and of whom.** Only communities the phone keeps and may send alerts from (push-registrations.ts
- * `communitiesForAlerts`: not one with alerts off, not a guest's look, not an address that isn't plain), one of each however
- * it is spelled (push-pins.ts `sameCommunity`). Being kept isn't belonging, and no mark says which it is, so the first
+ * `communitiesForAlerts`: not one with alerts off, not an address that isn't plain, and not a guest's look except that a
+ * closed round asks the community in use, as sync does), one of each however it is spelled (push-pins.ts `sameCommunity`). Being kept isn't belonging, and no mark says which it is, so the first
  * question is the test, as the membership probe is: it carries no push token, and a community that says the account isn't
  * theirs is left alone for {@link NOT_THEIRS_WAIT_MS}. Each request is signed by the member's key for that community's own
  * host, carries nothing of any other community, and no community is told of another.
@@ -58,7 +58,7 @@ import { communityName } from './community-name';
 import type { BeanPoolIdentity } from './identity';
 import { dropCounts, noteServerUnread, noticeCountsSum } from './notice-counts';
 import { LOCAL_NOTICE_DATA, UNREAD_NOTICE_TYPE } from './push-notice-check';
-import { communityAddress, readKeptCommunities, sameCommunity } from './push-pins';
+import { readKeptCommunities, sameCommunity } from './push-pins';
 import { communitiesForAlerts } from './push-registrations';
 import { SAVED_NODES_STORE_KEY, UNREAD_ROUNDS_STORE_KEY } from './storage-keys';
 import { bounded, postAllNoticesFromSync, pushLandedAt, signedAnswer, SYNC_NOTICES_TIMEOUT_MS, type LocalNotice } from './sync-notices';
@@ -210,6 +210,19 @@ async function tell(community: string, name: string, account: Account, deps: Rou
     }
 }
 
+/**
+ * Whether `community` still has alerts on, read afresh: the answer to a round can come after the member turned them off
+ * (the sheet's switch), and an answer from a community that is off is not counted, told, or written down. A list that can't
+ * be read says no (a number shown for a community the member silenced is worse than none missed).
+ */
+async function stillForAlerts(storage: RoundDeps['storage'], community: string): Promise<boolean> {
+    try {
+        return (await communitiesForAlerts(storage)).some((c) => sameCommunity(c, community));
+    } catch {
+        return false;
+    }
+}
+
 /** One community's turn: its count written down, and a notice if it rose where no push can have said so. True if one went out. */
 async function askOne(community: string, account: Account, deps: RoundDeps, signal: AbortSignal, name: string, onNotTheirs: () => void): Promise<boolean> {
     const count = await countAt(community, account, deps, signal);
@@ -218,8 +231,10 @@ async function askOne(community: string, account: Account, deps: RoundDeps, sign
         await dropCounts(deps.storage, [community]);
         return false;
     }
-    if (!count || !await noteServerUnread(deps.storage, community, count.unread, count.alerts)) return false;
-    return tell(community, name, account, deps);
+    if (!count || !await stillForAlerts(deps.storage, community)) return false;
+    if (!await noteServerUnread(deps.storage, community, count.unread, count.alerts)) return false;
+    // Again before the notice: the switch can go off between the number and the telling.
+    return await stillForAlerts(deps.storage, community) && tell(community, name, account, deps);
 }
 
 /**
@@ -237,6 +252,8 @@ async function askInUse(
         return false;
     }
     if (!count) return false;
+    // Not if the member turned its alerts off while it answered, nor if the account left the phone: nothing is written back.
+    if (!await stillForAlerts(deps.storage, community)) { onNumber(0); return false; }
     // Not if the account left the phone while it answered: nothing of it is written back after the wipe.
     if (!(await readKeptCommunities(deps.storage)).kept.includes(community)) return false;
     onNumber(count.unread);

@@ -63,7 +63,7 @@
   "Your account there was closed.": "أُغلق حسابك هناك.",
   "Your own community isn't affected.": "مجتمعك الخاص لم يتأثر.",
   "Global community, {state}": "المجتمع العالمي، {state}",
-  "Switches to this community. Long press to remove it.": "ينقلك إلى هذا المجتمع. اضغط مطولًا لإزالته.",
+  "Switches to this community. Long press for its options.": "ينقلك إلى هذا المجتمع. اضغط مطولًا لعرض خياراته.",
   "Guest": "ضيف",
   "Explore BeanPool worldwide": "استكشف BeanPool حول العالم",
   "🌍 Explore BeanPool worldwide": "🌍 استكشف BeanPool حول العالم",
@@ -7156,6 +7156,19 @@
   "on the global community": "في المجتمع العالمي",
   "Open their requests there": "افتح طلباتهم هناك",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "هذه رئيسيتك. أضف بطاقة في الأسفل، أو اضغط مطولًا على بطاقة لترتيبها.",
+  "Alerts from this community": "تنبيهات من هذا المجتمع",
+  "Stops notifications and unread message checks from this community": "إيقاف الإشعارات والتحقق من الرسائل غير المقروءة من هذا المجتمع",
+  "Remove from your saved list": "إزالة من قائمتك المحفوظة",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "zero": "{n} رسالة جديدة في {community} · تبديل",
+    "one": "{n} رسالة جديدة في {community} · تبديل",
+    "two": "{n} رسالتان جديدتان في {community} · تبديل",
+    "few": "{n} رسائل جديدة في {community} · تبديل",
+    "many": "{n} رسالة جديدة في {community} · تبديل",
+    "other": "{n} رسالة جديدة في {community} · تبديل"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "تصل التنبيهات إلى هاتفك من كل مجتمع تحتفظ به. يمكنك إيقاف تشغيلها لمجتمع ما في ورقة BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "التنبيهات متوقفة على هذا الهاتف. لم يتمكن من الوصول إلى هذا المجتمع لإيقافها هناك بعد، وسيحاول مرة أخرى.",
   "Remove my working style": "إزالة أسلوب عملي",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "يُزيل هذا أسلوب عملك من هذا الجهاز ومن كل مجتمع عليه. إعادة الاختبار تعيده."
 }

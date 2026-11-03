@@ -63,7 +63,7 @@
   "Your account there was closed.": "Ваш аккаунт там закрыт.",
   "Your own community isn't affected.": "Ваше собственное сообщество это не затрагивает.",
   "Global community, {state}": "Глобальное сообщество, {state}",
-  "Switches to this community. Long press to remove it.": "Переключает на это сообщество. Нажмите и удерживайте, чтобы убрать его.",
+  "Switches to this community. Long press for its options.": "Переключает на это сообщество. Нажмите и удерживайте, чтобы открыть его параметры.",
   "Guest": "Гость",
   "Explore BeanPool worldwide": "Посмотреть BeanPool по всему миру",
   "🌍 Explore BeanPool worldwide": "🌍 Посмотреть BeanPool по всему миру",
@@ -6676,6 +6676,17 @@
   "on the global community": "в глобальном сообществе",
   "Open their requests there": "Открыть их запросы там",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Это ваша главная. Добавьте карточку внизу или удерживайте карточку, чтобы упорядочить.",
+  "Alerts from this community": "Оповещения от этого сообщества",
+  "Stops notifications and unread message checks from this community": "Отключает уведомления и проверку непрочитанных сообщений из этого сообщества",
+  "Remove from your saved list": "Удалить из сохраненного списка",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} новое сообщение в {community} · Перейти",
+    "few": "{n} новых сообщения в {community} · Перейти",
+    "many": "{n} новых сообщений в {community} · Перейти",
+    "other": "{n} нового сообщения в {community} · Перейти"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Оповещения приходят на ваш телефон из каждого сохраненного сообщества. Вы можете отключить их для сообщества на панели BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Оповещения на этом телефоне отключены. Телефон пока не смог связаться с этим сообществом, чтобы остановить их там, и попробует снова.",
   "Remove my working style": "Удалить мой стиль работы",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ваш стиль работы будет удалён с этого устройства и из всех сообществ на нём. Если пройти опрос снова, он вернётся."
 }

@@ -63,7 +63,7 @@
   "Your account there was closed.": "সেখানে আপনার অ্যাকাউন্ট বন্ধ করা হয়েছে।",
   "Your own community isn't affected.": "আপনার নিজের কমিউনিটি এতে প্রভাবিত হয়নি।",
   "Global community, {state}": "বৈশ্বিক কমিউনিটি, {state}",
-  "Switches to this community. Long press to remove it.": "এই কমিউনিটিতে চলে যায়। সরাতে চেপে ধরে রাখুন।",
+  "Switches to this community. Long press for its options.": "এই কমিউনিটিতে চলে যায়। এর বিকল্পগুলির জন্য চেপে ধরে রাখুন।",
   "Guest": "অতিথি",
   "Explore BeanPool worldwide": "সারা বিশ্বে BeanPool ঘুরে দেখুন",
   "🌍 Explore BeanPool worldwide": "🌍 সারা বিশ্বে BeanPool ঘুরে দেখুন",
@@ -6195,6 +6195,15 @@
   "on the global community": "বিশ্বব্যাপী সম্প্রদায়ে",
   "Open their requests there": "সেখানে তাদের অনুরোধ খুলুন",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "এটি আপনার হোম। নিচে একটি কার্ড যোগ করুন, অথবা সাজাতে একটি কার্ড চেপে ধরুন।",
+  "Alerts from this community": "এই সম্প্রদায়ের সতর্কতা",
+  "Stops notifications and unread message checks from this community": "এই সম্প্রদায়ের বিজ্ঞপ্তি এবং অপঠিত বার্তা পরীক্ষা বন্ধ করে",
+  "Remove from your saved list": "সংরক্ষিত তালিকা থেকে সরান",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community}-এ {n}টি নতুন বার্তা · পরিবর্তন করুন",
+    "other": "{community}-এ {n}টি নতুন বার্তা · পরিবর্তন করুন"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "আপনার সংরক্ষিত প্রতিটি সম্প্রদায় থেকে সতর্কতা আপনার ফোনে পৌঁছায়। আপনি BeanPool শিটে একটি সম্প্রদায়ের জন্য সেগুলি বন্ধ করতে পারেন।",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "এই ফোনে সতর্কতা বন্ধ আছে। সেখানে সেগুলো বন্ধ করতে এই কমিউনিটির সঙ্গে এখনও যোগাযোগ করা যায়নি; ফোনটি আবার চেষ্টা করবে।",
   "Remove my working style": "আমার কাজের ধরন সরান",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "এতে আপনার কাজের ধরন এই ডিভাইস থেকে এবং এতে থাকা প্রতিটি কমিউনিটি থেকে সরে যাবে। আবার কুইজ দিলে তা ফিরে আসবে।"
 }

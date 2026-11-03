@@ -64,7 +64,7 @@
   "Your account there was closed.": "Dein Konto dort wurde geschlossen.",
   "Your own community isn't affected.": "Deine eigene Gemeinschaft ist nicht betroffen.",
   "Global community, {state}": "Globale Gemeinschaft, {state}",
-  "Switches to this community. Long press to remove it.": "Wechselt zu dieser Community. Lange drücken, um sie zu entfernen.",
+  "Switches to this community. Long press for its options.": "Wechselt zu dieser Community. Lange drücken für ihre Optionen.",
   "Guest": "Gast",
   "Explore BeanPool worldwide": "BeanPool weltweit entdecken",
   "🌍 Explore BeanPool worldwide": "🌍 BeanPool weltweit entdecken",
@@ -6194,6 +6194,15 @@
   "on the global community": "in der globalen Community",
   "Open their requests there": "Ihre Anfragen dort öffnen",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Das ist deine Startseite. Füge unten eine Karte hinzu oder halte eine Karte gedrückt, um sie anzuordnen.",
+  "Alerts from this community": "Benachrichtigungen aus dieser Community",
+  "Stops notifications and unread message checks from this community": "Stoppt Benachrichtigungen und Prüfungen auf ungelesene Nachrichten aus dieser Community",
+  "Remove from your saved list": "Aus deiner gespeicherten Liste entfernen",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} neue Nachricht in {community} · Wechseln",
+    "other": "{n} neue Nachrichten in {community} · Wechseln"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Benachrichtigungen erreichen dein Telefon von jeder gespeicherten Community. Du kannst sie auf dem BeanPool-Blatt für eine Community ausschalten.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Benachrichtigungen sind auf diesem Telefon aus. Die Community war noch nicht erreichbar, um sie dort zu beenden; das Telefon versucht es erneut.",
   "Remove my working style": "Meinen Arbeitsstil entfernen",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Das nimmt deinen Arbeitsstil von diesem Gerät und aus jeder Community darauf. Ein erneutes Quiz bringt ihn zurück."
 }

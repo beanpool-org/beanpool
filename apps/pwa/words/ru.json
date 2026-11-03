@@ -3947,6 +3947,8 @@
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Это ваша главная. Добавьте карточку внизу или удерживайте карточку, чтобы упорядочить.",
   "Move {card} earlier": "Переместить {card} раньше",
   "Move {card} later": "Переместить {card} позже",
+  "Messages in your other communities show on your phone, or when you open that community here.": "Сообщения в других ваших сообществах отображаются на вашем телефоне или когда вы открываете это сообщество здесь.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Оповещения приходят на ваш телефон из каждого сохраненного сообщества. Вы можете отключить их для сообщества на панели BeanPool.",
   "Remove my working style": "Удалить мой стиль работы",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ваш стиль работы будет удалён с этого устройства и из всех сообществ на нём. Если пройти опрос снова, он вернётся."
 }

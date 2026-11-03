@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapCalendar } from './MapCalendar';
 import type { MarketplacePost } from '../lib/api';
@@ -243,5 +243,111 @@ describe('MapCalendar (DESIGN-map-calendar-fable.md §1, §4, §8 S3)', () => {
         expect(screen.queryByRole('grid')).toBeNull();
         expect(screen.queryByRole('row')).toBeNull();
         expect(screen.queryByRole('columnheader')).toBeNull();
+    });
+
+    it('is a dialog, and sets the tab bar\'s room to nothing: the overlay covers the bar, so the list keeps no strip for it', () => {
+        render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+        const calendar = screen.getByRole('dialog', { name: 'Calendar' });
+        expect(calendar).toBe(screen.getByTestId('map-calendar'));
+        // The grid's padding and the day list both read this variable; on the page it sits at the shell's nav height.
+        expect(calendar.style.getPropertyValue('--bottom-nav-offset')).toBe('0px');
+        const list = screen.getByTestId('map-stack-list');
+        expect(list.style.height).toContain('var(--bottom-nav-offset');
+        expect(list.style.paddingBottom).toBe('var(--bottom-nav-offset, 0px)');
+        // A covered calendar is still hidden, with the variable kept.
+        cleanup();
+        render(<MapCalendar posts={[localEvent]} covered={true} onClose={vi.fn()} />);
+        expect(screen.getByTestId('map-calendar')).toHaveStyle({ display: 'none' });
+    });
+
+    it('moves focus into the calendar on opening, and puts it back where it was on closing', () => {
+        const opener = document.createElement('button');
+        opener.textContent = 'Calendar';
+        document.body.appendChild(opener);
+        opener.focus();
+        expect(document.activeElement).toBe(opener);
+
+        const { unmount } = render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+        const heading = screen.getByRole('heading', { level: 1, name: 'Calendar' });
+        expect(document.activeElement).toBe(heading);
+        expect(screen.getByTestId('map-calendar').contains(document.activeElement)).toBe(true);
+
+        unmount();
+        expect(document.activeElement).toBe(opener);
+        opener.remove();
+    });
+
+    it('does not pull focus back to an opener that has left the page (a door on another tab)', () => {
+        const opener = document.createElement('button');
+        document.body.appendChild(opener);
+        opener.focus();
+        const { unmount } = render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+        opener.remove();
+        expect(() => unmount()).not.toThrow();
+        expect(document.activeElement).toBe(document.body);
+    });
+
+    describe('scrolls the selected day clear of the day\'s list', () => {
+        let scrollTo: ReturnType<typeof vi.fn>;
+        const realMatchMedia = window.matchMedia;
+        const had = Object.prototype.hasOwnProperty.call(HTMLElement.prototype, 'scrollTo');
+        let rectSpy: ReturnType<typeof vi.spyOn>;
+
+        function calm(on: boolean) {
+            window.matchMedia = vi.fn().mockImplementation((q: string) => ({
+                matches: on && q.includes('prefers-reduced-motion'), media: q, onchange: null,
+                addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+            })) as any;
+        }
+
+        beforeEach(() => {
+            scrollTo = vi.fn();
+            Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, writable: true, value: scrollTo });
+            // No layout in jsdom: the selected day's cell ends at 500, the list starts at 400.
+            rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+                const r = { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON() {} };
+                if (this.dataset.date) return { ...r, bottom: 500 } as DOMRect;
+                if (this.dataset.testid === 'map-stack-list') return { ...r, top: 400 } as DOMRect;
+                return r as DOMRect;
+            });
+        });
+        afterEach(() => {
+            rectSpy.mockRestore();
+            window.matchMedia = realMatchMedia;
+            if (!had) delete (HTMLElement.prototype as any).scrollTo;
+        });
+
+        it('on opening, for the next event\'s day nobody tapped, gliding', () => {
+            calm(false);
+            render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+            expect(scrollTo).toHaveBeenCalledWith({ top: 108, behavior: 'smooth' }); // 500 + 8 - 400
+        });
+
+        it('jumps, with no glide, under reduced motion', () => {
+            calm(true);
+            render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+            expect(scrollTo).toHaveBeenCalledWith({ top: 108, behavior: 'auto' });
+        });
+
+        it('after ‹ ›, for the day that month selects by itself', () => {
+            calm(false);
+            render(<MapCalendar posts={[localEvent, decemberEvent]} onClose={vi.fn()} />);
+            scrollTo.mockClear();
+            fireEvent.click(screen.getByTestId('month-next-button'));
+            expect(screen.getByTestId('map-stack-list')).toBeInTheDocument();
+            expect(scrollTo).toHaveBeenCalledWith({ top: 108, behavior: 'smooth' });
+        });
+
+        it('not at all when the day is already clear', () => {
+            calm(false);
+            rectSpy.mockImplementation(function (this: HTMLElement) {
+                const r = { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON() {} };
+                if (this.dataset.date) return { ...r, bottom: 200 } as DOMRect;
+                if (this.dataset.testid === 'map-stack-list') return { ...r, top: 400 } as DOMRect;
+                return r as DOMRect;
+            });
+            render(<MapCalendar posts={[localEvent]} onClose={vi.fn()} />);
+            expect(scrollTo).not.toHaveBeenCalled();
+        });
     });
 });

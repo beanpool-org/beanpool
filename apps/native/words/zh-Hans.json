@@ -63,7 +63,7 @@
   "Your account there was closed.": "你在那里的账户已被关闭。",
   "Your own community isn't affected.": "你自己的社区不受影响。",
   "Global community, {state}": "全球社区，{state}",
-  "Switches to this community. Long press to remove it.": "切换到这个社区。长按可移除。",
+  "Switches to this community. Long press for its options.": "切换到这个社区。长按可查看它的选项。",
   "Guest": "访客",
   "Explore BeanPool worldwide": "探索全球 BeanPool",
   "🌍 Explore BeanPool worldwide": "🌍 探索全球 BeanPool",
@@ -5956,6 +5956,14 @@
   "on the global community": "在全球社区",
   "Open their requests there": "在那里打开他们的请求",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "这是你的首页。在底部添加卡片，或长按卡片进行排列。",
+  "Alerts from this community": "来自此社区的提醒",
+  "Stops notifications and unread message checks from this community": "停止接收来自此社区的通知和未读消息检查",
+  "Remove from your saved list": "从已保存列表中移除",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{community} 中有 {n} 条新消息 · 切换"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "来自你保存的每个社区的提醒都会发送到你的手机。你可以在 BeanPool 面板中关闭某个社区的提醒。",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "这部手机上的提醒已关闭。手机暂时还没能联系上这个社区来停止那边的提醒，会再试一次。",
   "Remove my working style": "移除我的工作风格",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "这会把你的工作风格从此设备及设备上的每个社区中移除。重新测试后会恢复。"
 }

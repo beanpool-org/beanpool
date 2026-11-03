@@ -63,7 +63,7 @@
   "Your account there was closed.": "Ο λογαριασμός σου εκεί έκλεισε.",
   "Your own community isn't affected.": "Η δική σου κοινότητα δεν επηρεάζεται.",
   "Global community, {state}": "Παγκόσμια κοινότητα, {state}",
-  "Switches to this community. Long press to remove it.": "Μεταβαίνει σε αυτή την κοινότητα. Πάτησε παρατεταμένα για να την αφαιρέσεις.",
+  "Switches to this community. Long press for its options.": "Μεταβαίνει σε αυτή την κοινότητα. Πάτησε παρατεταμένα για τις επιλογές της.",
   "Guest": "Επισκέπτης",
   "Explore BeanPool worldwide": "Εξερεύνηση του BeanPool σε όλο τον κόσμο",
   "🌍 Explore BeanPool worldwide": "🌍 Εξερεύνηση του BeanPool σε όλο τον κόσμο",
@@ -6195,6 +6195,15 @@
   "on the global community": "στην παγκόσμια κοινότητα",
   "Open their requests there": "Άνοιξε τα αιτήματά τους εκεί",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Αυτή είναι η Αρχική σας. Προσθέστε μια κάρτα στο κάτω μέρος ή κρατήστε πατημένη μια κάρτα για να τακτοποιήσετε.",
+  "Alerts from this community": "Ειδοποιήσεις από αυτή την κοινότητα",
+  "Stops notifications and unread message checks from this community": "Διακόπτει τις ειδοποιήσεις και τον έλεγχο μη αναγνωσμένων μηνυμάτων από αυτή την κοινότητα",
+  "Remove from your saved list": "Αφαίρεση από την αποθηκευμένη λίστα σας",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} νέο μήνυμα στο {community} · Αλλαγή",
+    "other": "{n} νέα μηνύματα στο {community} · Αλλαγή"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Οι ειδοποιήσεις φτάνουν στο τηλέφωνό σας από κάθε κοινότητα που διατηρείτε. Μπορείτε να τις απενεργοποιήσετε για μια κοινότητα στην καρτέλα BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Οι ειδοποιήσεις είναι απενεργοποιημένες σε αυτό το τηλέφωνο. Δεν μπόρεσε να φτάσει ακόμη σε αυτή την κοινότητα για να τις σταματήσει εκεί και θα ξαναδοκιμάσει.",
   "Remove my working style": "Αφαίρεση του στυλ εργασίας μου",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Αυτό αφαιρεί το στυλ εργασίας σου από αυτή τη συσκευή και από κάθε κοινότητα που έχει. Αν ξανακάνεις το κουίζ, επιστρέφει."
 }

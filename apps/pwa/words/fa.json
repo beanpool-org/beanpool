@@ -3691,6 +3691,17 @@
   "Move {card} later": "جابه‌جایی {card} به بعد",
   "Messages in your other communities show on your phone, or when you open that community here.": "پیام‌های سایر انجمن‌های شما در تلفنتان نشان داده می‌شوند یا وقتی که آن انجمن را اینجا باز می‌کنید.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "هشدارها از هر انجمنی که نگه می‌دارید به تلفن شما می‌رسند. می‌توانید آنها را برای یک انجمن در برگه BeanPool خاموش کنید.",
+  "For 1 day": "به مدت ۱ روز",
+  "For 1 week": "به مدت ۱ هفته",
+  "For 3 days": "به مدت ۳ روز",
+  "Only an owner, an admin or the post's author can take a pin off.": "فقط مالک، مدیر یا نویسنده پست می‌تواند سنجاق را بردارد.",
+  "Options": "گزینه‌ها",
+  "Pin to the top…": "سنجاق کردن در بالا…",
+  "Pinned": "سنجاق‌شده",
+  "Pinned by your community · until {date}": "سنجاق‌شده توسط جامعه شما · تا {date}",
+  "Take the pin off": "برداشتن سنجاق",
+  "Three posts are pinned already. Take one off first.": "سه پست از قبل سنجاق شده‌اند. اول یکی را بردارید.",
+  "📌 PINNED": "📌 سنجاق‌شده",
   "Remove my working style": "حذف شیوه کاری من",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "این کار شیوه کاری شما را از این دستگاه و از همه جامعه‌هایی که روی آن هستند حذف می‌کند. با شرکت دوباره در آزمون، دوباره برمی‌گردد."
 }

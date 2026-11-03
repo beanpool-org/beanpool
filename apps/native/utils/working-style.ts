@@ -277,7 +277,8 @@ export async function removalToSend(community: string, identity: Signer): Promis
     if (await onGuestVisit(community)) return false;
     const member = await saysMember(community, identity.publicKey);
     if (member === false) {
-        await clearWaitingRemoval(community, removal.removedOn);
+        // Not a member: nothing to send, but the row on the phone goes before the removal does, as below.
+        await finishRemoval(community, identity.publicKey, removal.removedOn);
         return false;
     }
     if (member !== true) return false;

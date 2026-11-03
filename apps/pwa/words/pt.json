@@ -3692,6 +3692,17 @@
   "Move {card} later": "Mover {card} para depois",
   "Messages in your other communities show on your phone, or when you open that community here.": "As mensagens em suas outras comunidades aparecem no seu telefone ou quando você abre essa comunidade aqui.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Os alertas chegam ao seu telefone de cada comunidade que você mantém. Você pode desativá-los para uma comunidade na aba BeanPool.",
+  "For 1 day": "Por 1 dia",
+  "For 1 week": "Por 1 semana",
+  "For 3 days": "Por 3 dias",
+  "Only an owner, an admin or the post's author can take a pin off.": "Só o proprietário, um administrador ou quem fez a publicação pode remover a fixação.",
+  "Options": "Opções",
+  "Pin to the top…": "Fixar no topo…",
+  "Pinned": "Fixado",
+  "Pinned by your community · until {date}": "Fixado pela sua comunidade · até {date}",
+  "Take the pin off": "Remover a fixação",
+  "Three posts are pinned already. Take one off first.": "Já há três publicações fixadas. Remova uma primeiro.",
+  "📌 PINNED": "📌 FIXADO",
   "Remove my working style": "Remover meu estilo de trabalho",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Isso remove seu estilo de trabalho deste dispositivo e de todas as comunidades nele. Refazer o teste o traz de volta."
 }

@@ -1192,6 +1192,40 @@ describe('Remove my working style', () => {
             expect(await waitingArchetype(B, ME)).toBeNull();
         });
 
+        it('a copy that could not be cleared, at a community that now says no member: the row is cleared before the removal goes, and nothing comes back', async () => {
+            await holdingOldResult();
+            const sqlite = await import('expo-sqlite');
+            const open = vi.mocked(sqlite.openDatabaseAsync);
+            const real = open.getMockImplementation()!;
+            open.mockImplementation(async (name: string, opts?: any) => {
+                const handle = await (real as any)(name, opts);
+                if (name !== 'beanpool_a.beanpool.org.db') return handle;
+                return new Proxy(handle, {
+                    get: (t, k) => k === 'execAsync'
+                        ? async (q: string) => {
+                            if (q.trim() === 'PRAGMA busy_timeout = 30000;') throw new Error('database is locked');
+                            return t.execAsync(q);
+                        }
+                        : t[k],
+                });
+            });
+            await removeWorkingStyle(ME);
+            open.mockImplementation(real);
+            // A has dropped the key since: it says no member and holds no result for it.
+            nodeAt(A).member = 'no';
+            nodeAt(A).held.archetype = null;
+            await openCommunity(A);
+            expect((await getMemberProfile(ME))?.archetype).toBe(publicOf(OLD));
+
+            await performSync();
+            expect(sentTo(A)).toEqual([]);
+            expect(await waitingRemoval(A, ME)).toBeNull();
+            expect((await getMemberProfile(ME))?.archetype ?? null).toBeNull();
+            await firstRunWorkingStyle();
+            expect((await getCanonicalProfile())?.archetype).toBeNull();
+            expect(await waitingArchetype(B, ME)).toBeNull();
+        });
+
         it('a result taken on another device after the removal stands: no null is sent, and the phone takes it', async () => {
             await holdingOldResult();
             await removeWorkingStyle(ME);

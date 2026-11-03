@@ -3562,6 +3562,17 @@
   "Move {card} later": "{card} 뒤로 옮기기",
   "Messages in your other communities show on your phone, or when you open that community here.": "다른 커뮤니티의 메시지는 휴대전화에 표시되거나 여기에서 해당 커뮤니티를 열 때 표시됩니다.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "저장된 모든 커뮤니티의 알림이 휴대전화로 전송됩니다. BeanPool 시트에서 커뮤니티별로 알림을 끌 수 있습니다.",
+  "For 1 day": "1일 동안",
+  "For 1 week": "1주일 동안",
+  "For 3 days": "3일 동안",
+  "Only an owner, an admin or the post's author can take a pin off.": "소유자, 관리자 또는 게시물 작성자만 고정을 해제할 수 있어요.",
+  "Options": "옵션",
+  "Pin to the top…": "맨 위에 고정…",
+  "Pinned": "고정됨",
+  "Pinned by your community · until {date}": "커뮤니티에서 고정함 · {date}까지",
+  "Take the pin off": "고정 해제",
+  "Three posts are pinned already. Take one off first.": "이미 세 개의 게시물이 고정되어 있어요. 먼저 하나를 해제하세요.",
+  "📌 PINNED": "📌 고정됨",
   "Remove my working style": "내 일하는 방식 제거",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "이 기기와 이 기기에 있는 모든 커뮤니티에서 내 일하는 방식을 없앱니다. 퀴즈를 다시 풀면 돌아옵니다."
 }

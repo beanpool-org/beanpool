@@ -4207,6 +4207,17 @@
   "Move {card} later": "انقل {card} إلى موضع لاحق",
   "Messages in your other communities show on your phone, or when you open that community here.": "تظهر الرسائل في مجتمعاتك الأخرى على هاتفك، أو عند فتح ذلك المجتمع هنا.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "تصل التنبيهات إلى هاتفك من كل مجتمع تحتفظ به. يمكنك إيقاف تشغيلها لمجتمع ما في ورقة BeanPool.",
+  "For 1 day": "لمدة يوم واحد",
+  "For 1 week": "لمدة أسبوع واحد",
+  "For 3 days": "لمدة 3 أيام",
+  "Only an owner, an admin or the post's author can take a pin off.": "يمكن للمالك أو المشرف أو كاتب المنشور فقط إزالة التثبيت.",
+  "Options": "خيارات",
+  "Pin to the top…": "تثبيت في الأعلى…",
+  "Pinned": "مثبت",
+  "Pinned by your community · until {date}": "مثبت بواسطة مجتمعك · حتى {date}",
+  "Take the pin off": "إزالة التثبيت",
+  "Three posts are pinned already. Take one off first.": "هناك ثلاثة منشورات مثبتة بالفعل. أزل واحدًا أولًا.",
+  "📌 PINNED": "📌 مثبت",
   "Remove my working style": "إزالة أسلوب عملي",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "يُزيل هذا أسلوب عملك من هذا الجهاز ومن كل مجتمع عليه. إعادة الاختبار تعيده."
 }

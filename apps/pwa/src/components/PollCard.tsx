@@ -27,7 +27,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { marked, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine, type LocalCommunityWays } from './LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, pinLive, t, tn } from '@beanpool/core';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSealed, pollOtherLines, pollOtherOption, POLL_OTHER_WORDS_MAX } from '@beanpool/core';
 import { PollOtherAnswers } from './PollOtherAnswers';
 
@@ -177,6 +177,14 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* Header: Badges & Actions */}
             <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-1.5 flex-wrap">
+                    {pinLive(post as any) && (
+                        <span
+                            data-testid="poll-pinned-chip"
+                            className="bg-bp-chip-accent-tint text-bp-chip-accent-ink font-black text-[10px] tracking-wider uppercase px-2.5 py-1 rounded-lg border border-transparent shadow-xs"
+                        >
+                            {t('📌 PINNED')}
+                        </span>
+                    )}
                     <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-black text-[10px] tracking-wider uppercase px-2.5 py-1 rounded-lg border border-purple-300/40">
                         <span aria-hidden="true">🗳️ </span>{t('POLL')}
                     </span>

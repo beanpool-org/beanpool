@@ -3562,6 +3562,17 @@
   "Move {card} later": "將{card}後移",
   "Messages in your other communities show on your phone, or when you open that community here.": "你在其他社群的訊息會顯示在你的手機上，或當你在這裡開啟該社群時顯示。",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "來自你保留的每個社群的通知都會傳送到你的手機。你可以在 BeanPool 頁面上關閉特定社群的通知。",
+  "For 1 day": "1 天",
+  "For 1 week": "1 週",
+  "For 3 days": "3 天",
+  "Only an owner, an admin or the post's author can take a pin off.": "只有擁有者、管理員或貼文作者可以取消置頂。",
+  "Options": "選項",
+  "Pin to the top…": "置頂貼文…",
+  "Pinned": "置頂",
+  "Pinned by your community · until {date}": "已被你的社群置頂 · 截止至 {date}",
+  "Take the pin off": "取消置頂",
+  "Three posts are pinned already. Take one off first.": "已有三則貼文置頂。請先取消一則。",
+  "📌 PINNED": "📌 置頂",
   "Remove my working style": "移除我的工作風格",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "這會把你的工作風格從此裝置及裝置上的每個社群中移除。重新測驗後即可恢復。"
 }

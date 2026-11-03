@@ -3691,6 +3691,17 @@
   "Move {card} later": "{card} kartını sona taşı",
   "Messages in your other communities show on your phone, or when you open that community here.": "Diğer topluluklarınızdaki mesajlar telefonunuzda veya o topluluğu burada açtığınızda gösterilir.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Bildirimler, kayıtlı tuttuğunuz her topluluktan telefonunuza ulaşır. BeanPool sayfasında bir topluluk için bunları kapatabilirsiniz.",
+  "For 1 day": "1 günlüğüne",
+  "For 1 week": "1 haftalığına",
+  "For 3 days": "3 günlüğüne",
+  "Only an owner, an admin or the post's author can take a pin off.": "Sabitlemeyi yalnızca sahip, yönetici veya gönderinin yazarı kaldırabilir.",
+  "Options": "Seçenekler",
+  "Pin to the top…": "Başa sabitle…",
+  "Pinned": "Sabitlendi",
+  "Pinned by your community · until {date}": "Topluluğunuz tarafından sabitlendi · {date} tarihine kadar",
+  "Take the pin off": "Sabitlemeyi kaldır",
+  "Three posts are pinned already. Take one off first.": "Üç gönderi zaten sabitlenmiş. Önce birini kaldır.",
+  "📌 PINNED": "📌 SABİTLENDİ",
   "Remove my working style": "Çalışma tarzımı kaldır",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Bu, çalışma tarzınızı bu cihazdan ve cihazdaki her topluluktan kaldırır. Testi yeniden çözerseniz geri gelir."
 }

@@ -3691,6 +3691,17 @@
   "Move {card} later": "{card} പിന്നിലേക്ക് നീക്കുക",
   "Messages in your other communities show on your phone, or when you open that community here.": "നിങ്ങളുടെ മറ്റ് കമ്മ്യൂണിറ്റികളിലെ സന്ദേശങ്ങൾ നിങ്ങളുടെ ഫോണിൽ കാണാം, അല്ലെങ്കിൽ ആ കമ്മ്യൂണിറ്റി ഇവിടെ തുറക്കുമ്പോൾ കാണാം.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "നിങ്ങൾ സൂക്ഷിക്കുന്ന ഓരോ കമ്മ്യൂണിറ്റിയിൽ നിന്നും നിങ്ങളുടെ ഫോണിൽ അറിയിപ്പുകൾ എത്തും. BeanPool ഷീറ്റിൽ ഒരു കമ്മ്യൂണിറ്റിക്കായി നിങ്ങൾക്ക് അവ ഓഫാക്കാം.",
+  "For 1 day": "1 ദിവസത്തേക്ക്",
+  "For 1 week": "1 ആഴ്ചത്തേക്ക്",
+  "For 3 days": "3 ദിവസത്തേക്ക്",
+  "Only an owner, an admin or the post's author can take a pin off.": "ഉടമയ്ക്കോ അഡ്മിനോ പോസ്റ്റിന്റെ രചയിതാവിനോ മാത്രമേ പിൻ നീക്കാനാകൂ.",
+  "Options": "ഓപ്ഷനുകൾ",
+  "Pin to the top…": "മുകളിൽ പിൻ ചെയ്യുക…",
+  "Pinned": "പിൻ ചെയ്തവ",
+  "Pinned by your community · until {date}": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റി പിൻ ചെയ്തത് · {date} വരെ",
+  "Take the pin off": "പിൻ നീക്കുക",
+  "Three posts are pinned already. Take one off first.": "മൂന്ന് പോസ്റ്റുകൾ ഇതിനകം പിൻ ചെയ്തിട്ടുണ്ട്. ആദ്യം ഒന്ന് നീക്കുക.",
+  "📌 PINNED": "📌 പിൻ ചെയ്തവ",
   "Remove my working style": "എന്റെ പ്രവർത്തന ശൈലി നീക്കം ചെയ്യുക",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "ഇത് നിങ്ങളുടെ പ്രവർത്തന ശൈലി ഈ ഉപകരണത്തിൽ നിന്നും അതിലുള്ള എല്ലാ കമ്മ്യൂണിറ്റികളിൽ നിന്നും നീക്കം ചെയ്യും. ക്വിസ് വീണ്ടും ചെയ്താൽ അത് തിരികെ വരും."
 }

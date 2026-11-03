@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { copyPriceLine, eventCopyOf, formatNumber, listPhotoUrl, listingChipWords, t, type ListingChip } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, listPhotoUrl, listingChipWords, pinLive, t, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 
@@ -146,6 +146,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const pulsePill = isPulse ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">{t('🗞️ Daily Pulse')}</span>
     ) : null;
+    const isPinned = pinLive(post as any);
+    const pinnedChip = isPinned ? (
+        <span
+            data-testid="card-pinned-chip"
+            className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-accent-tint text-bp-chip-accent-ink border border-transparent shadow-xs"
+        >
+            {t('📌 PINNED')}
+        </span>
+    ) : null;
 
     const elderCard = !beansMarked && isElder(authorEnergy);
     const isGroupScope = post.audienceScope === 'group' || !!post.targetGroupId;
@@ -194,6 +203,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     parts={{ you: <span className="text-blue-600 dark:text-blue-400 font-bold">{t('👤 (You)')}</span> }}
                                 />
                             ) : elderCard ? t('by {name} ⛰️', { name: authorName }) : t('by {name}', { name: authorName })}
+                            {pinnedChip}
                             {dealPill}
                             {distanceTag}
                             {foundingChip && (
@@ -285,6 +295,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <div className="flex justify-between items-center mb-1">
                         {/* Wraps, so at 320 px / 130% the distance tag drops to a second line rather than past the card edge. */}
                         <div className="flex flex-wrap gap-x-2 gap-y-1 items-center min-w-0">
+                            {pinnedChip}
                             {!isPulse && (
                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                     post.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
@@ -475,6 +486,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     isFounding={!beansMarked && !!post.authorFoundingNeeded}
                     onOpenProfile={onOpenProfile}
                 />}
+
+                {pinnedChip && (
+                    <div className="mt-0.5">
+                        {pinnedChip}
+                    </div>
+                )}
 
                 {/* Recurring pill under the photo (market-card-43) */}
                 {post.repeatable && !isOwnPost && post.status !== 'pending' && (

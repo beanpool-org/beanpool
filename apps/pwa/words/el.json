@@ -3690,6 +3690,17 @@
   "Move {card} later": "Μετακίνηση {card} αργότερα",
   "Messages in your other communities show on your phone, or when you open that community here.": "Τα μηνύματα στις άλλες κοινότητές σας εμφανίζονται στο τηλέφωνό σας ή όταν ανοίγετε αυτή την κοινότητα εδώ.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Οι ειδοποιήσεις φτάνουν στο τηλέφωνό σας από κάθε κοινότητα που διατηρείτε. Μπορείτε να τις απενεργοποιήσετε για μια κοινότητα στην καρτέλα BeanPool.",
+  "For 1 day": "Για 1 ημέρα",
+  "For 1 week": "Για 1 εβδομάδα",
+  "For 3 days": "Για 3 ημέρες",
+  "Only an owner, an admin or the post's author can take a pin off.": "Μόνο ο ιδιοκτήτης, ο διαχειριστής ή ο συντάκτης της ανάρτησης μπορεί να βγάλει το καρφίτσωμα.",
+  "Options": "Επιλογές",
+  "Pin to the top…": "Καρφίτσωμα στην κορυφή…",
+  "Pinned": "Καρφιτσωμένο",
+  "Pinned by your community · until {date}": "Καρφιτσώθηκε από την κοινότητά σας · έως {date}",
+  "Take the pin off": "Αφαίρεση καρφιτσώματος",
+  "Three posts are pinned already. Take one off first.": "Τρεις αναρτήσεις είναι ήδη καρφιτσωμένες. Βγάλτε πρώτα μία.",
+  "📌 PINNED": "📌 ΚΑΡΦΙΤΣΩΜΕΝΟ",
   "Remove my working style": "Αφαίρεση του στυλ εργασίας μου",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Αυτό αφαιρεί το στυλ εργασίας σου από αυτή τη συσκευή και από κάθε κοινότητα που έχει. Αν ξανακάνεις το κουίζ, επιστρέφει."
 }

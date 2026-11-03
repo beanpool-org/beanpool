@@ -29,12 +29,12 @@ import {
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
-    tagIndex, freshBanner, recordFreshBannerDismissal,
+    tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
-import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
+import { marked, readsOwn, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -46,6 +46,7 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle, NODE_PAGE_DEFAULT } from '../lib/listings-near';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { PostPinDetail } from '../components/PostPinDetail';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
@@ -59,6 +60,7 @@ import {
 import { TRANSACTION_FEE_RATE, eventCopyOf } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
+    myNodeRoleOnce,
     getMemberProfile, createConversationApi, sendTransfer,
     submitRating, getMemberRatings, reportAbuse, getRatingsGiven,
     getNodeInfo, getRemotePosts, sendRemoteTransfer,
@@ -431,6 +433,35 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     useEffect(() => {
         getNodeConfig().then(setNodeConfig).catch(console.error);
     }, []);
+
+    const communityInfo = useCommunityInfo();
+    const featuresPins = (communityInfo?.features as { pins?: boolean } | undefined)?.pins === true;
+    const [myNodeRole, setMyNodeRole] = useState<string | null>(null);
+    useEffect(() => {
+        let alive = true;
+        if (!identity?.publicKey) {
+            setMyNodeRole(null);
+            return;
+        }
+        myNodeRoleOnce().then(r => { if (alive) setMyNodeRole(r); }).catch(() => {});
+        return () => { alive = false; };
+    }, [identity?.publicKey]);
+    const isOwnerOrAdmin = Boolean(identity?.publicKey) && (myNodeRole === 'owner' || myNodeRole === 'admin');
+
+    // Clock state for real-time pin expiration without reload (scratch/fable-design/DESIGN-pinning-fable.md §2.5)
+    const [clockNow, setClockNow] = useState(() => Date.now());
+    useEffect(() => {
+        const futureExpirations = posts
+            .map(p => (p.pinnedUntil ? Date.parse(p.pinnedUntil) : 0))
+            .filter(t => t > Date.now());
+        if (futureExpirations.length === 0) return;
+        const earliest = Math.min(...futureExpirations);
+        const delay = Math.max(100, Math.min(earliest - Date.now() + 50, 60_000));
+        const timer = setTimeout(() => {
+            setClockNow(Date.now());
+        }, delay);
+        return () => clearTimeout(timer);
+    }, [posts, clockNow]);
 
     // Whether this node asks for example cards on a nearly empty Market, and whether its polls are labelled informal (the
     // global community), from the page's one shared read of /api/community/info (the lobby has already made it).
@@ -1561,6 +1592,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         <span className="text-xl leading-none">←</span> {t('Back to Market')}
                     </button>
+                    <PostPinDetail
+                        post={selectedPost}
+                        identity={identity}
+                        isOwnerOrAdmin={isOwnerOrAdmin}
+                        featuresPins={featuresPins}
+                        onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                    />
                     <EventDetail
                         post={selectedPost}
                         identity={identity}
@@ -1593,6 +1631,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         <span className="text-xl leading-none">←</span> {t('Back to Market')}
                     </button>
+                    <PostPinDetail
+                        post={selectedPost}
+                        identity={identity}
+                        isOwnerOrAdmin={isOwnerOrAdmin}
+                        featuresPins={featuresPins}
+                        onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                    />
                     <PollCard
                         post={selectedPost}
                         identity={identity}
@@ -1873,6 +1918,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                     {/* Content */}
                     <div className="p-5 md:p-6">
+                        <PostPinDetail
+                            post={selectedPost}
+                            identity={identity}
+                            isOwnerOrAdmin={isOwnerOrAdmin}
+                            featuresPins={featuresPins}
+                            onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                        />
                         {/* Enterprise Season State Banners */}
                         {authorEnterpriseInactive?.paused && authorEnterpriseInactive?.status !== 'winding_up' && authorEnterpriseInactive?.status !== 'completed' && (
                             <div
@@ -3821,6 +3873,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     return 0;
                 });
 
+                // Pinned block (scratch/fable-design/DESIGN-pinning-fable.md §0.2, §2.4, §2.9):
+                // A pin rises within what the member asked to see (clientFilter already applied).
+                // Under search, tags, or member-picked distance (near.from === 'setting' or radiusSettings),
+                // the pinned block is suppressed (departure 3 from PR #2754).
+                const isUnderNarrowing = Boolean(searchQuery.trim()) || searchResults !== null || Boolean(selectedTag) || Boolean(selectedFree) || Boolean(radiusSettings) || near?.from === 'setting';
+                // The time now, not the timer's clock: that stands still in a tab with no pin ahead of it.
+                const drawnAt = Date.now();
+                const livePins = !isUnderNarrowing ? filtered.filter(p => pinLive(p as any, drawnAt)) : [];
+                livePins.sort((a, b) => {
+                    const timeA = Date.parse((a as any).pinnedAt || (a as any).pinned_at || a.createdAt || '') || 0;
+                    const timeB = Date.parse((b as any).pinnedAt || (b as any).pinned_at || b.createdAt || '') || 0;
+                    return timeB - timeA;
+                });
+                const pinnedPosts = livePins.slice(0, PINS_MAX);
+                const pinnedIds = new Set(pinnedPosts.map(p => p.id));
+                const unpinnedFiltered = pinnedPosts.length > 0 ? filtered.filter(p => !pinnedIds.has(p.id)) : filtered;
+
                 // The fill beneath a short nearby list (see clientFilter): none of them already shown, and not the node's own
                 // Daily Pulse, which is not from elsewhere. Pending while the read is out; nothing if it failed or came back empty.
                 const fillRead = fillWanted && elsewhere?.key === fillKey ? elsewhere.posts : undefined;
@@ -3959,7 +4028,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <>
                             {fillHeading && (
                                 <div className="flex items-center gap-3 mt-2 mb-2">
-                                    <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">{fillHeading}</span>
+                                    <span
+                                        data-testid={fillHeading === t('Pinned') ? 'market-pinned-heading' : undefined}
+                                        className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap"
+                                    >
+                                        {fillHeading}
+                                    </span>
                                     <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
                                 </div>
                             )}
@@ -3972,7 +4046,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     post={post}
                                                     identity={identity}
                                                     viewMode={viewMode}
-                                                    distanceKm={fillHeading ? null : eventDistance(post)}
+                                                    distanceKm={fillHeading && fillHeading !== t('Pinned') ? null : eventDistance(post)}
                                                     onOpen={() => setSelectedPost(post)}
                                                     onRsvpChange={() => { refresh().catch(() => {}); }}
                                                 />
@@ -4029,7 +4103,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             viewMode={viewMode}
                                             isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                             dealChip={dealChips.get(post.id) ?? null}
-                                            distanceKm={near && !fillHeading ? distanceOf(post) : null}
+                                            distanceKm={near && (fillHeading ? fillHeading === t('Pinned') : true) ? distanceOf(post) : null}
                                             beansMarked={priceMarked}
                                             onPhotoClick={(photos, idx, e) => {
                                                 setLightboxState({
@@ -4075,7 +4149,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         return (
                             <div key={title} className="flex flex-col gap-1.5 mb-2">
                                 <div className="flex items-center gap-3 mt-2 mb-1">
-                                    <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
+                                    <span
+                                        data-testid={title === t('Pinned') ? 'market-pinned-heading' : undefined}
+                                        className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap"
+                                    >
                                         {title}
                                     </span>
                                     <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
@@ -4089,7 +4166,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         post={post}
                                                         identity={identity}
                                                         viewMode={viewMode}
-                                                        distanceKm={fillHeading ? null : eventDistance(post)}
+                                                        distanceKm={fillHeading && fillHeading !== t('Pinned') ? null : eventDistance(post)}
                                                         onOpen={() => setSelectedPost(post)}
                                                         onRsvpChange={() => { refresh().catch(() => {}); }}
                                                     />
@@ -4133,7 +4210,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             viewMode={viewMode}
                                             isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                             dealChip={dealChips.get(post.id) ?? null}
-                                            distanceKm={near && !fillHeading ? distanceOf(post) : null}
+                                            distanceKm={near && (fillHeading ? fillHeading === t('Pinned') : true) ? distanceOf(post) : null}
                                             beansMarked={priceMarked}
                                             onPhotoClick={(photos, idx, e) => {
                                                 setLightboxState({
@@ -4168,6 +4245,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </>
                     );
                 };
+
+                const pinnedSection = pinnedPosts.length > 0 ? (
+                    <div data-testid="market-pinned-block" className="mb-4">
+                        {renderCards(pinnedPosts, t('Pinned'))}
+                    </div>
+                ) : null;
 
                 const fillSection = fillRows.length > 0 ? (
                     <div data-testid="market-fill" className="mt-4">
@@ -4356,7 +4439,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     />
                                 </div>
                             )
-                        ) : renderCards(filtered)}
+                        ) : (
+                            <>
+                                {pinnedSection}
+                                {unpinnedFiltered.length > 0 && renderCards(unpinnedFiltered)}
+                            </>
+                        )}
                         {filtered.length > 0 && fillSection}
                         {filtered.length > 0 && examples}
                     </div>

@@ -3692,6 +3692,17 @@
   "Move {card} later": "Déplacer {card} plus tard",
   "Messages in your other communities show on your phone, or when you open that community here.": "Les messages de vos autres communautés s'affichent sur votre téléphone, ou lorsque vous ouvrez cette communauté ici.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Les alertes arrivent sur votre téléphone depuis chaque communauté que vous gardez. Vous pouvez les désactiver pour une communauté sur la feuille BeanPool.",
+  "For 1 day": "Pour 1 jour",
+  "For 1 week": "Pour 1 semaine",
+  "For 3 days": "Pour 3 jours",
+  "Only an owner, an admin or the post's author can take a pin off.": "Seul un propriétaire, un administrateur ou l'auteur de la publication peut retirer une épingle.",
+  "Options": "Options",
+  "Pin to the top…": "Épingler en haut…",
+  "Pinned": "Épinglé",
+  "Pinned by your community · until {date}": "Épinglé par votre communauté · jusqu'au {date}",
+  "Take the pin off": "Retirer l'épingle",
+  "Three posts are pinned already. Take one off first.": "Trois publications sont déjà épinglées. Retirez-en une d'abord.",
+  "📌 PINNED": "📌 ÉPINGLÉ",
   "Remove my working style": "Retirer mon style de travail",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "Cela retire votre style de travail de cet appareil et de chaque communauté qui s'y trouve. Refaire le quiz le rétablit."
 }

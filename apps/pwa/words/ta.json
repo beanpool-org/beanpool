@@ -3690,6 +3690,17 @@
   "Move {card} later": "{card} ஐ பின்னே நகர்த்து",
   "Messages in your other communities show on your phone, or when you open that community here.": "உங்கள் பிற சமூகங்களில் உள்ள செய்திகள் உங்கள் தொலைபேசியில் அல்லது அந்த சமூகத்தை இங்கே திறக்கும்போது காட்டப்படும்.",
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "நீங்கள் வைத்திருக்கும் ஒவ்வொரு சமூகத்திலிருந்தும் அறிவிப்புகள் உங்கள் தொலைபேசியை அடைகின்றன. BeanPool தாளில் ஒரு சமூகத்திற்கு அவற்றை முடக்கலாம்.",
+  "For 1 day": "1 நாளுக்கு",
+  "For 1 week": "1 வாரத்திற்கு",
+  "For 3 days": "3 நாட்களுக்கு",
+  "Only an owner, an admin or the post's author can take a pin off.": "உரிமையாளர், நிர்வாகி அல்லது இடுகையின் ஆசிரியர் மட்டுமே பொருத்தலை நீக்க முடியும்.",
+  "Options": "விருப்பங்கள்",
+  "Pin to the top…": "மேலே பொருத்தவும்…",
+  "Pinned": "பொருத்தப்பட்டது",
+  "Pinned by your community · until {date}": "உங்கள் சமூகத்தால் பொருத்தப்பட்டது · {date} வரை",
+  "Take the pin off": "பொருத்தலை நீக்கு",
+  "Three posts are pinned already. Take one off first.": "மூன்று இடுகைகள் ஏற்கெனவே பொருத்தப்பட்டுள்ளன. முதலில் ஒன்றை நீக்குங்கள்.",
+  "📌 PINNED": "📌 பொருத்தப்பட்டது",
   "Remove my working style": "என் வேலை பாணியை அகற்று",
   "This takes your working style off this device and out of every community on it. A retake brings it back.": "இது உங்கள் வேலை பாணியை இந்தச் சாதனத்திலிருந்தும் அதிலுள்ள ஒவ்வொரு சமூகத்திலிருந்தும் அகற்றும். வினாடிவினாவை மீண்டும் எடுத்தால் அது திரும்ப வரும்."
 }

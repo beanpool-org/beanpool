@@ -10,7 +10,6 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share, Alert, DeviceEventEmitter } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PEEK_WORDS as W, shareSays, t, type WordKey } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -88,7 +87,7 @@ export function ShareOutsideButton({ post }: { post: any }) {
                 <Text style={styles.btnText}>{t(W.shareOutside)}</Text>
             </Pressable>
             {says.outsideLine && (
-                <Text style={styles.note} testID="share-outside-note">
+                <Text style={styles.note} testID="share-outside-line">
                     {t(says.outsideLine)}
                 </Text>
             )}
@@ -102,32 +101,30 @@ export function SharePostButtons({ post }: { post: any }) {
     const profile = useNodeProfile();
     const [role, setRole] = useState<string | null | undefined>(undefined);
 
-    useFocusEffect(
-        React.useCallback(() => {
-            let cancelled = false;
-            (async () => {
-                const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-                if (!anchor) {
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            if (!anchor) {
+                if (!cancelled) setRole(null);
+                return;
+            }
+            try {
+                const { loadIdentity } = await import('../utils/identity');
+                const identity = await loadIdentity().catch(() => null);
+                if (!identity) {
                     if (!cancelled) setRole(null);
                     return;
                 }
-                try {
-                    const { loadIdentity } = await import('../utils/identity');
-                    const identity = await loadIdentity().catch(() => null);
-                    if (!identity) {
-                        if (!cancelled) setRole(null);
-                        return;
-                    }
-                    const { cachedNodeRole } = await import('../utils/node-admin');
-                    const res = await cachedNodeRole(anchor, identity);
-                    if (!cancelled) setRole(res.role);
-                } catch {
-                    if (!cancelled) setRole(null);
-                }
-            })();
-            return () => { cancelled = true; };
-        }, [])
-    );
+                const { cachedNodeRole } = await import('../utils/node-admin');
+                const res = await cachedNodeRole(anchor, identity);
+                if (!cancelled) setRole(res.role);
+            } catch {
+                if (!cancelled) setRole(null);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     const says = shareSays(profile?.features, role);
 
@@ -144,7 +141,9 @@ export function SharePostButtons({ post }: { post: any }) {
 
     const onInviteSomeone = () => {
         DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
-        router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
+        void import('expo-router').then(({ router }) => {
+            router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
+        });
     };
 
     return (

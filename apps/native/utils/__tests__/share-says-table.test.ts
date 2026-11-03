@@ -139,7 +139,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-outside-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
-        expect(get('share-outside-note')?.textContent).toBe('Anyone can read this listing for 7 days, then ask to join.');
+        expect(get('share-outside-line')?.textContent).toBe('Anyone can read this listing for 7 days, then ask to join.');
         expect(get('invite-someone-button')).toBeNull();
     });
 
@@ -160,7 +160,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(inviteBtn?.textContent).toBe('Invite someone');
         expect(get('share-outside-button')).toBeNull();
 
-        act(() => {
+        await act(async () => {
             (inviteBtn as HTMLElement).click();
         });
         expect(nav.emit).toHaveBeenCalledWith('set_people_view', { view: 'invites' });
@@ -255,7 +255,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')).toBeNull();
-        expect(get('share-outside-note')).toBeNull();
+        expect(get('share-outside-line')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
     });
 });

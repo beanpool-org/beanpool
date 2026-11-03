@@ -57,7 +57,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-outside-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
-        expect(screen.getByTestId('share-outside-note')).toHaveTextContent('Anyone can read this listing for 7 days, then ask to join.');
+        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone can read this listing for 7 days, then ask to join.');
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
     });
 
@@ -79,6 +79,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(inviteBtn).toBeInTheDocument();
         expect(inviteBtn).toHaveTextContent('Invite someone');
         expect(screen.queryByTestId('share-outside-button')).toBeNull();
+        expect(screen.queryByTestId('share-outside-line')).toBeNull();
 
         fireEvent.click(inviteBtn);
         expect(onNavigate).toHaveBeenCalledWith('people-invites');
@@ -183,7 +184,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
-        expect(screen.queryByTestId('share-outside-note')).toBeNull();
+        expect(screen.queryByTestId('share-outside-line')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
     });
 });

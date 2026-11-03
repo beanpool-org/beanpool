@@ -19,7 +19,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share, Alert, Linking, Platform, ActivityIndicator, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -104,32 +103,30 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     const profile = useNodeProfile();
     const [role, setRole] = useState<string | null | undefined>(undefined);
 
-    useFocusEffect(
-        useCallback(() => {
-            let cancelled = false;
-            (async () => {
-                const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-                if (!anchor) {
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            if (!anchor) {
+                if (!cancelled) setRole(null);
+                return;
+            }
+            try {
+                const { loadIdentity } = await import('../utils/identity');
+                const identity = await loadIdentity().catch(() => null);
+                if (!identity) {
                     if (!cancelled) setRole(null);
                     return;
                 }
-                try {
-                    const { loadIdentity } = await import('../utils/identity');
-                    const identity = await loadIdentity().catch(() => null);
-                    if (!identity) {
-                        if (!cancelled) setRole(null);
-                        return;
-                    }
-                    const { cachedNodeRole } = await import('../utils/node-admin');
-                    const res = await cachedNodeRole(anchor, identity);
-                    if (!cancelled) setRole(res.role);
-                } catch {
-                    if (!cancelled) setRole(null);
-                }
-            })();
-            return () => { cancelled = true; };
-        }, [])
-    );
+                const { cachedNodeRole } = await import('../utils/node-admin');
+                const res = await cachedNodeRole(anchor, identity);
+                if (!cancelled) setRole(res.role);
+            } catch {
+                if (!cancelled) setRole(null);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     const says = shareSays(profile?.features, role);
     const event = shareableEvent(post);

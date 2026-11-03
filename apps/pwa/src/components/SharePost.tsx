@@ -115,9 +115,9 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
             <button type="button" data-testid="share-outside-button" onClick={share} disabled={busy} className={BUTTON}>
                 {t(W.shareOutside)}
             </button>
-            {says.outsideLine && <p data-testid="share-outside-note" className="m-0 text-xs text-text-secondary break-words">{t(says.outsideLine)}</p>}
+            {says.outsideLine && <p data-testid="share-outside-line" className="m-0 text-xs text-text-secondary break-words">{t(says.outsideLine)}</p>}
             {note && (
-                <p role="status" data-testid="share-outside-status" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
+                <p role="status" data-testid="share-outside-note" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
                     {note.text}
                 </p>
             )}

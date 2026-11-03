@@ -24,6 +24,7 @@ import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t, tn, upperCase } from '@beanpool/core';
 import { claimOutcomeWords, keyLineWords } from '../components/key-lines';
+import { coreSettingsNextWords } from '../components/settings/settings-lines';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -490,6 +491,7 @@ export default function ClaimCommunityScreen() {
                 <Text style={styles.title}>{named ? t('You own {name}', { name: named }) : t('You own this community')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
                 <Text style={styles.lead}>{t("This phone's screen lock is how you manage it; keep it on. Add a second owner soon.")}</Text>
+                <Text style={styles.note} testID="claim-core-settings-next">{coreSettingsNextWords()}</Text>
                 {numberOnly ? <Text style={styles.note} testID="claim-number-nudge">{numberNudge(numberOnly)}</Text> : null}
                 {actions.includes('set-address') || actions.includes('open-settings') ? (
                     <Pressable style={styles.primary} onPress={() => manage.start(name)} disabled={manage.busy} accessibilityRole="button">

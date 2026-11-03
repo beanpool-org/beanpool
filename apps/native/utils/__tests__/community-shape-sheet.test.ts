@@ -146,6 +146,45 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         expect(routes.pushed).toEqual([{ pathname: '/guide/[slug]', params: { slug: 'how-your-community-works' } }]);
     });
 
+    describe('for an owner or admin: "Core settings" (core settings C3)', () => {
+        const sheetText = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
+        const FOOTER = 'Change them on a computer, or press Manage: Settings opens there.';
+
+        it.each([[false], [true]])('locked: the title, the lock line with its date, the same facts, the footer last (dark: %s)', async (dark) => {
+            theme.dark = dark;
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: true, at: '2026-11-03T10:00:00.000Z' } } }));
+            expect(sheetText()).toContain('🧭 Core settings');
+            expect(sheetText()).not.toContain('How this community works');
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe('🔒 Locked since 3 Nov. An owner unlocks one to change it, and every owner is told.');
+            expect(sheetText()).toContain('any member can invite someone');
+            expect(sheetText()).toContain('Beans: on');
+            expect(sheetText()).toContain('Read more in the guide');
+            expect(host.querySelector('[data-testid="community-shape-footer"]')?.textContent).toBe(FOOTER);
+            // The footer is the sheet's last line, after the guide button.
+            expect(sheetText().endsWith(FOOTER)).toBe(true);
+        });
+
+        it('not confirmed yet: says so', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: false } } }));
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe('Not confirmed yet. An owner confirms and locks them in Settings.');
+        });
+
+        it('the node said nothing of the lock: no lock line, but still the name and the footer', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: null } }));
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')).toBeNull();
+            expect(sheetText()).toContain('🧭 Core settings');
+            expect(sheetText()).toContain(FOOTER);
+        });
+
+        it('a member\'s sheet is as it was: its name, no lock line, no footer', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn() }));
+            expect(sheetText()).toContain('How this community works');
+            expect(sheetText()).not.toContain('Core settings');
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')).toBeNull();
+            expect(host.querySelector('[data-testid="community-shape-footer"]')).toBeNull();
+        });
+    });
+
     it('renders in dark theme cleanly without error', async () => {
         theme.dark = true;
         const onClose = vi.fn();

@@ -34,9 +34,30 @@ function base(nodeUrl: string): string {
     return nodeUrl.replace(/\/+$/, '');
 }
 
+/**
+ * Whether the community's core settings are confirmed and locked, as GET /api/node-admin/me says it to an owner or
+ * admin (DESIGN-core-settings-fable.md §8.4). `at` is when, only while locked. Absent for a moderator, a member and an
+ * older node: "not told" is never read as "not confirmed".
+ */
+export interface CoreSettingsState {
+    locked: boolean;
+    at?: string;
+}
+
 export interface MyNodeRole {
     role: ManageRole | null;
     communityName: string | null;
+    /** An owner's or admin's only; undefined when the node did not say. */
+    coreSettings?: CoreSettingsState;
+}
+
+/** The node's `coreSettings`, or undefined unless it is the shape the node sends (a boolean `locked`, a parseable `at`). */
+export function readCoreSettings(raw: unknown): CoreSettingsState | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const { locked, at } = raw as { locked?: unknown; at?: unknown };
+    if (typeof locked !== 'boolean') return undefined;
+    if (!locked) return { locked: false };
+    return typeof at === 'string' && Number.isFinite(Date.parse(at)) ? { locked: true, at } : { locked: true };
 }
 
 /**
@@ -60,10 +81,14 @@ export async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): 
         delete headers['Content-Type'];
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
         if (!res.ok) return res.status < 500 ? NO_ROLE : null;
-        const body = await res.json() as { role?: unknown; communityName?: unknown };
+        const body = await res.json() as { role?: unknown; communityName?: unknown; coreSettings?: unknown };
+        const role = canManageNode(body.role) ? body.role : null;
+        // Only an owner's or admin's: a node never says it to anyone else, and a phone never reads it for anyone else.
+        const coreSettings = role === 'owner' || role === 'admin' ? readCoreSettings(body.coreSettings) : undefined;
         return {
-            role: canManageNode(body.role) ? body.role : null,
+            role,
             communityName: typeof body.communityName === 'string' && body.communityName.trim() ? body.communityName.trim() : null,
+            ...(coreSettings ? { coreSettings } : {}),
         };
     } catch {
         return null;

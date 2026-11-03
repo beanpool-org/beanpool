@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { keyboardAwareList } from '../../components/keyboardAwareList';
 import * as SecureStore from 'expo-secure-store';

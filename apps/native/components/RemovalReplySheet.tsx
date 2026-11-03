@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, StyleSheet, ScrollView } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { t } from '@beanpool/core';
 import { replyToRemovalCase } from '../utils/db';

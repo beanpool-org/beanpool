@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { askPhotoSource } from '../../utils/post-photo';
-import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
+import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
 import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, type RequestReportOutcome } from '@beanpool/core';

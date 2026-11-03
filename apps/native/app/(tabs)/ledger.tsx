@@ -1,6 +1,18 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Image,
-    DeviceEventEmitter, Alert, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import {
+    View,
+    Text,
+    StyleSheet,
+    FlatList,
+    Pressable,
+    TextInput,
+    Image,
+    DeviceEventEmitter,
+    ScrollView,
+    type NativeSyntheticEvent,
+    type NativeScrollEvent,
+} from 'react-native';
+import { Alert } from '../../utils/keyboard-alert';
 import { keyboardAwareList } from '../../components/keyboardAwareList';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';

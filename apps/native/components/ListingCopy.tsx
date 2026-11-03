@@ -11,7 +11,8 @@
  * Its author can stop from here too: a new phone holds no pair to tick (utils/show-on-global.ts).
  */
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { router } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

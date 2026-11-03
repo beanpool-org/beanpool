@@ -9,7 +9,8 @@
  * for an observer, who watches, or in a group its members closed.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     GROUP_DECISIONS_NOTE, GROUP_SOMEONE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,

@@ -214,11 +214,9 @@ export function nearbyCircle(profile: NodeProfile | null | undefined, area: Poin
     return { area: { lat: area.lat, lng: area.lng }, radiusKm: n.radiusKm };
 }
 
-/** The one line above the list inside the circle: "Newest within 250 km of your area." A word() key, shown through t(). */
-export const NEWEST_WITHIN_LINE = word('Newest within {distance} of your area.');
-
+/** The one line above the list inside the circle: "Newest within 250 km of your area." */
 export function newestWithinLine(circle: NearbyCircle): string {
-    return t(NEWEST_WITHIN_LINE, { distance: formatDistance(circle.radiusKm) ?? '' });
+    return t('Newest within {distance} of your area.', { distance: formatDistance(circle.radiusKm) ?? '' });
 }
 
 /** Each placed post's distance from the member's area in km, by post id. A post with no place has none. */

@@ -99,6 +99,8 @@ async function throughTheServer(): Promise<void> {
     const offered = (await offer.json()) as any;
     assert(offer.status === 200 && /^\d{4}$/.test(offered.confirmCode) && /^[0-9a-f]{64}$/.test(offered.phoneSecret),
         'the phone offers its key: 200, four digits and a 64-hex secret for it alone');
+    assert(typeof offered.endsInMs === 'number' && offered.endsInMs > 0 && offered.endsInMs <= PAIRING_RELAY_LIMITS.ttlMs,
+        "and how long the session has left by the relay's clock (the phone's digits end then)");
     assert(offer.headers.get('cache-control') === 'no-store', 'the offer answer is no-store');
 
     // 4. One phone per session: a second offer (someone else who saw the QR) changes nothing.

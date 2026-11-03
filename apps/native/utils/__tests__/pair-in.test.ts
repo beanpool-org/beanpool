@@ -13,7 +13,7 @@ vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined
 vi.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => webcrypto.getRandomValues(new Uint8Array(n)) }));
 
 import { createPairingSession, createPairInKey, openPairingPayloadOnPhone, sealPairingPayloadToPhone, recoveryWordsFromEntropy } from '@beanpool/core';
-import { isPairInLink, isUnreadablePairInQr, pairInLinkFromRoute, pairInRouteFromSystemPath, pairInUrls, parsePairInQr, readPairInAccount } from '../pair-in';
+import { isPairInLink, isUnreadablePairInQr, pairInDigitsEndAt, pairInLinkFromRoute, pairInRouteFromSystemPath, pairInUrls, parsePairInQr, readPairInAccount } from '../pair-in';
 import { isPairLink } from '../pair-link';
 import { parsePairingQr } from '../pair-device-target';
 import { setupRedirect } from '../auth-return';
@@ -63,8 +63,18 @@ describe("the browser's code, read strictly", () => {
 
     it('sends only to fixed paths on the code\'s community', () => {
         expect(pairInUrls(parsePairInQr(LINK)!)).toEqual({
-            offer: `${NODE}/api/pair/offer`, collect: `${NODE}/api/pair/collect`, cancel: `${NODE}/api/pair/cancel`,
+            offer: `${NODE}/api/pair/offer`, collect: `${NODE}/api/pair/collect`, saved: `${NODE}/api/pair/saved`, cancel: `${NODE}/api/pair/cancel`,
         });
+    });
+
+    it("the digits end when the relay says the session does, by the relay's clock, never past 120 s", () => {
+        const now = 1_000_000;
+        expect(pairInDigitsEndAt({ endsInMs: 47_000, expiresAt: 5 }, now)).toBe(now + 47_000);
+        // A phone clock minutes out doesn't matter: expiresAt (the relay's clock) is not read.
+        expect(pairInDigitsEndAt({ endsInMs: 30_000, expiresAt: now + 10 * 60_000 }, now)).toBe(now + 30_000);
+        expect(pairInDigitsEndAt({ endsInMs: 10 * 60_000 }, now)).toBe(now + 120_000);
+        expect(pairInDigitsEndAt({ endsInMs: -5 }, now)).toBe(now);
+        for (const odd of [{}, null, { endsInMs: '40000' }, { endsInMs: Number.NaN }]) expect(pairInDigitsEndAt(odd, now)).toBe(now + 120_000);
     });
 });
 

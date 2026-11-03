@@ -11,7 +11,7 @@
  * The other way, browser to phone (front doors S9; pairing-relay.ts explains the order and why the phone shows the digits):
  *   POST /api/pair/init      browser, with `to: 'phone'`: opens a to-phone session, the same binding cookie
  *   POST /api/pair/offer     phone: { sessionId, phonePubHex }; one phone per session; answers the four digits to show
- *                            and the phone's own binding secret
+ *                            and the phone's own binding secret, and endsInMs: how long the session has left by the relay's clock
  *   GET  /api/pair/poll      browser: 'confirming' once a phone scanned; after its digits, 'released' with the phone's
  *                            key; then 'sent', 'collected'. Never a payload
  *   POST /api/pair/confirm   browser types the digits the phone shows, as above
@@ -186,7 +186,7 @@ export function createPairingRoutes(deps: RouteDeps): Router {
             ctx.body = { error: res.error };
             return;
         }
-        ctx.body = { success: true, confirmCode: res.confirmCode, phoneSecret: res.phoneSecret, expiresAt: res.expiresAt };
+        ctx.body = { success: true, confirmCode: res.confirmCode, phoneSecret: res.phoneSecret, expiresAt: res.expiresAt, endsInMs: res.endsInMs };
     });
 
     /**

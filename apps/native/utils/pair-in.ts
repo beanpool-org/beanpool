@@ -63,8 +63,24 @@ export function isUnreadablePairInQr(raw: unknown): boolean {
 }
 
 /** Every address one pairing sends to: the QR's canonical origin and fixed paths only. */
-export function pairInUrls(qr: PairInQr): { offer: string; collect: string; cancel: string } {
-    return { offer: `${qr.nodeUrl}/api/pair/offer`, collect: `${qr.nodeUrl}/api/pair/collect`, cancel: `${qr.nodeUrl}/api/pair/cancel` };
+export function pairInUrls(qr: PairInQr): { offer: string; collect: string; saved: string; cancel: string } {
+    return {
+        offer: `${qr.nodeUrl}/api/pair/offer`, collect: `${qr.nodeUrl}/api/pair/collect`, saved: `${qr.nodeUrl}/api/pair/saved`,
+        cancel: `${qr.nodeUrl}/api/pair/cancel`,
+    };
+}
+
+/** The longest a session lives (the relay's 120 s): the digits never show past it, whatever an answer says. */
+const SESSION_MS = 120_000;
+
+/**
+ * When the phone's digits step ends, by this phone's clock: the relay's `endsInMs` (how long the session has left by its
+ * own clock, so a phone clock that is minutes out doesn't matter), never more than 120 s. An answer without it: 120 s.
+ */
+export function pairInDigitsEndAt(offerBody: unknown, nowMs: number): number {
+    const left = (offerBody as { endsInMs?: unknown } | null)?.endsInMs;
+    const ms = typeof left === 'number' && Number.isFinite(left) ? Math.min(Math.max(left, 0), SESSION_MS) : SESSION_MS;
+    return nowMs + ms;
 }
 
 /** The account the browser sealed, as the phone takes it: the words, the key they must make, and the name to show. */

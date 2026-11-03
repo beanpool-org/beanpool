@@ -8,6 +8,11 @@
  * it with the QR's key, checks that its 12 words make the key it names, shows whose account it is and from which
  * community → at the member's tap, restores it from the words (restoreFromWords, which never replaces another account).
  * The phone's private half of the offer key lives in a ref for this screen only and is dropped when it closes.
+ *
+ * Then (doors-s9-fix1) the phone tells the relay, with its own secret, whether it SAVED the account: 'saved' once
+ * restoreFromWords has finished, else 'not saved' (the seal didn't read, the save failed, or the member left). Only
+ * 'saved' lets the browser offer to remove the account there. One offer per scan (two taps on Continue send one), and
+ * the four digits go when the session ends by the relay's clock, network or not.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, ScrollView } from 'react-native';
@@ -20,7 +25,7 @@ import { useIdentity } from './IdentityContext';
 import ScanCodeModal from '../components/ScanCodeModal';
 import { PairInView, PAIR_IN_WORDS, type PairInStep } from '../components/PairInView';
 import {
-    isUnreadablePairInQr, pairInLinkFromRoute, pairInUrls, parsePairInQr, readPairInAccount, type PairInAccount, type PairInQr,
+    isUnreadablePairInQr, pairInDigitsEndAt, pairInLinkFromRoute, pairInUrls, parsePairInQr, readPairInAccount, type PairInAccount, type PairInQr,
 } from '../utils/pair-in';
 import { restoreFromWords, RestoreStopped } from '../utils/restore-account';
 import { fetchNodeCallsign } from '../utils/db';
@@ -55,15 +60,27 @@ export default function PairInScreen() {
     const [step, setStep] = useState<PairInStep>(() => identity ? { kind: 'refused', text: t(PAIR_IN_WORDS.hasAccount) } : { kind: 'start' });
     const [scanning, setScanning] = useState(false);
     const phoneKey = useRef<{ privateKeyHex: string; publicKeyHex: string } | null>(null);
-    const session = useRef<{ qr: PairInQr; secret: string } | null>(null);
+    const session = useRef<{ qr: PairInQr; secret: string; endsAt: number } | null>(null);
     const alive = useRef(true);
+    /** An offer is out or made: no second one (two taps on Continue before the screen redraws) until Scan again. */
+    const offering = useRef(false);
+    /** Collected: the browser waits to hear, once, whether this phone saved the account. */
+    const toTell = useRef<{ qr: PairInQr; secret: string } | null>(null);
+
+    const tellBrowser = useCallback((saved: boolean) => {
+        const r = toTell.current;
+        toTell.current = null;
+        if (r) void postJson(pairInUrls(r.qr).saved, { sessionId: r.qr.sessionId, phoneSecret: r.secret, saved }).catch(() => {});
+    }, []);
 
     const cancelRelay = useCallback(() => {
+        // Leaving after the collect, before a save: nothing was saved here, and the browser keeps the account.
+        tellBrowser(false);
         const s = session.current;
         session.current = null;
         phoneKey.current = null;
         if (s) void postJson(pairInUrls(s.qr).cancel, { sessionId: s.qr.sessionId }).catch(() => {});
-    }, []);
+    }, [tellBrowser]);
 
     useEffect(() => {
         alive.current = true;
@@ -75,10 +92,13 @@ export default function PairInScreen() {
         if (identity || !params.qr) return;
         const link = pairInLinkFromRoute(params.qr);
         const qr = parsePairInQr(link);
+        offering.current = false;
         setStep(qr ? { kind: 'ask', qr } : { kind: 'refused', text: t(PAIR_IN_WORDS.unreadable) });
     }, [params.qr]);
 
     const offer = useCallback(async (qr: PairInQr) => {
+        if (offering.current) return;
+        offering.current = true;
         setStep({ kind: 'working', qr });
         const key = createPairInKey();
         phoneKey.current = key;
@@ -96,7 +116,7 @@ export default function PairInScreen() {
             setStep({ kind: 'refused', text });
             return;
         }
-        session.current = { qr, secret: res.body.phoneSecret };
+        session.current = { qr, secret: res.body.phoneSecret, endsAt: pairInDigitsEndAt(res.body, Date.now()) };
         setStep({ kind: 'digits', qr, code: res.body.confirmCode, sending: false });
     }, []);
 
@@ -105,6 +125,13 @@ export default function PairInScreen() {
     useEffect(() => {
         if (!waitingFor) return;
         let stop = false;
+        // The session's end: past it nothing can come, so the digits go then, even with no network to say so.
+        const until = setTimeout(() => {
+            if (stop || !alive.current) return;
+            stop = true;
+            cancelRelay();
+            setStep({ kind: 'refused', text: t(PAIR_IN_WORDS.expired) });
+        }, Math.max(0, (session.current?.endsAt ?? Date.now()) - Date.now()));
         const tick = async () => {
             const s = session.current;
             const key = phoneKey.current;
@@ -117,11 +144,14 @@ export default function PairInScreen() {
             const status = res?.body?.status;
             if (status === 'sent') {
                 stop = true;
+                clearTimeout(until);
+                toTell.current = { qr: s.qr, secret: s.secret };
                 let account: PairInAccount | null = null;
                 try {
                     account = readPairInAccount(openPairingPayloadOnPhone(res!.body.ciphertextHex, res!.body.nonceHex, s.qr.browserPubHex, key.privateKeyHex, s.qr.sessionId));
                 } catch { account = null; }
                 phoneKey.current = null;
+                if (!account) tellBrowser(false);
                 setStep(account ? { kind: 'confirm', qr: s.qr, account } : { kind: 'refused', text: t(PAIR_IN_WORDS.badAccount) });
                 return;
             }
@@ -136,7 +166,7 @@ export default function PairInScreen() {
             timer = setTimeout(tick, POLL_MS);
         };
         let timer: ReturnType<typeof setTimeout> = setTimeout(tick, POLL_MS);
-        return () => { stop = true; clearTimeout(timer); };
+        return () => { stop = true; clearTimeout(timer); clearTimeout(until); };
     }, [waitingFor]);
 
     const bring = useCallback(async (qr: PairInQr, account: PairInAccount) => {
@@ -149,13 +179,16 @@ export default function PairInScreen() {
             const restored = await restoreFromWords(account.words, qr.nodeUrl, {
                 nameOnNode: (publicKey, privateKey) => fetchNodeCallsign(qr.nodeUrl, publicKey, privateKey),
             });
+            // Saved: only now may the browser offer to remove the account there.
+            tellBrowser(true);
             setIdentity(restored);
             router.replace('/');
         } catch (err) {
+            tellBrowser(false);
             if (!alive.current) return;
             setStep({ kind: 'refused', text: err instanceof RestoreStopped ? t(PAIR_IN_WORDS.hasAccount) : t(PAIR_IN_WORDS.badAccount) });
         }
-    }, [setIdentity]);
+    }, [setIdentity, tellBrowser]);
 
     const onScan = (data: string): boolean => {
         const qr = parsePairInQr(data);
@@ -177,7 +210,7 @@ export default function PairInScreen() {
         if (router.canGoBack()) router.back();
         else router.replace('/welcome');
     };
-    const again = () => { cancelRelay(); setStep({ kind: 'start' }); };
+    const again = () => { cancelRelay(); offering.current = false; setStep({ kind: 'start' }); };
 
     return (
         <SafeAreaView style={styles.container}>

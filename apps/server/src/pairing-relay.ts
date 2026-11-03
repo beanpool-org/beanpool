@@ -407,7 +407,7 @@ function phoneBound(session: { phoneSecretHash?: Buffer }, secret: unknown): boo
 }
 
 export type OfferResult =
-    | { ok: true; confirmCode: string; phoneSecret: string; expiresAt: number }
+    | { ok: true; confirmCode: string; phoneSecret: string; expiresAt: number; endsInMs: number }
     | { ok: false; error: 'expired' | 'not-to-phone' | 'taken' | 'bad-key' };
 
 /**
@@ -428,7 +428,7 @@ export function offerToPhoneSession(sessionId: string, phonePubHex: unknown): Of
     session.phoneSecretHash = sha256(phoneSecret);
     session.confirmCode = String(crypto.randomInt(10 ** CONFIRM_DIGITS)).padStart(CONFIRM_DIGITS, '0');
     session.confirmTries = 0;
-    return { ok: true, confirmCode: session.confirmCode, phoneSecret, expiresAt: session.expiresAt };
+    return { ok: true, confirmCode: session.confirmCode, phoneSecret, expiresAt: session.expiresAt, endsInMs: Math.max(0, session.expiresAt - now()) };
 }
 
 export type SendResult =

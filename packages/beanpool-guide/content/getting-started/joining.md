@@ -117,6 +117,8 @@ A community's admins can turn invites off for the whole community.
 - A ticket made without a connection can't carry a vouch. To make one, choose **None**.
 - There is no vouch where a community has no Beans, so the global community doesn't show this.
 
+**Inviting from a post.** A post or an event also has **Invite and share**, which makes one invite (with the same **Vouch for them** choice) and sends your friend a link that brings them to that post once they have joined. See "Browsing the Market".
+
 **Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. On the web app the **Tree** stays, and so do the codes you made earlier: they still work until they lapse. An owner or admin with no signal can still make a paper ticket, from the last role the community gave them. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
 
 - Invite codes you made before the community chose this still work until their 30 days are up.

@@ -6203,5 +6203,20 @@
     "other": "{n} پیام جدید در {community} · تغییر"
   },
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "هشدارها از هر انجمنی که نگه می‌دارید به تلفن شما می‌رسند. می‌توانید آنها را برای یک انجمن در برگه BeanPool خاموش کنید.",
-  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "هشدارها در این گوشی خاموش است. هنوز نتوانسته به این جامعه برسد تا آن‌ها را آنجا متوقف کند و دوباره تلاش می‌کند."
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "هشدارها در این گوشی خاموش است. هنوز نتوانسته به این جامعه برسد تا آن‌ها را آنجا متوقف کند و دوباره تلاش می‌کند.",
+  "Pinned": "سنجاق‌شده",
+  "📌 PINNED": "📌 سنجاق‌شده",
+  "Pin to the top…": "سنجاق به بالا…",
+  "Pin to the top": "سنجاق به بالا",
+  "Take the pin off": "برداشتن سنجاق",
+  "For 1 day": "برای ۱ روز",
+  "For 3 days": "برای ۳ روز",
+  "For 1 week": "برای ۱ هفته",
+  "Pinned by your community · until {date}": "سنجاق‌شده توسط جامعه شما · تا {date}",
+  "Choose how long to pin this post to the top of the Market:": "مدت زمان سنجاق کردن این پست در بالای بازار را انتخاب کنید:",
+  "Post options": "گزینه‌های پست",
+  "Event options": "گزینه‌های رویداد",
+  "Poll options": "گزینه‌های نظرسنجی",
+  "Failed to pin post": "سنجاق کردن پست ناموفق بود",
+  "Failed to unpin post": "برداشتن سنجاق پست ناموفق بود"
 }

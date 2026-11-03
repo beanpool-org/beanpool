@@ -152,6 +152,12 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
 (function(){
   var params = new URLSearchParams(location.search);
   var code = (params.get('invite') || '').trim();
+  // The listing an invite-and-share link was sent from (&post=<id>): only ever a place to open after the join, so it is
+  // carried across the install and read for nothing else, nothing is looked up here and nothing is shown. Checked as an id
+  // (an id is letters, digits, _ and -, as @beanpool/core landingPostId); anything else is no listing, and the invite
+  // goes on without it exactly as it always has.
+  var rawPost = (params.get('post') || '').trim();
+  var post = /^[A-Za-z0-9_-]{1,100}$/.test(rawPost) ? rawPost : '';
   var origin = location.origin;
   var ua = navigator.userAgent || '';
   var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
@@ -163,14 +169,14 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
 
   var APP_STORE = ${JSON.stringify(APP_STORE_URL)};
   var PLAY_BASE = ${JSON.stringify(PLAY_BASE_URL)};
-  function playUrl(){ return PLAY_BASE + '&referrer=' + encodeURIComponent('invite=' + code + '&server=' + origin); }
+  function playUrl(){ return PLAY_BASE + '&referrer=' + encodeURIComponent('invite=' + code + '&server=' + origin + (post ? '&post=' + post : '')); }
 
   var codeEl = document.getElementById('code');
   codeEl.textContent = code || '—';
   // Copy the FULL invite link (not just the bare code): it carries the node
   // origin, which the app needs to know WHICH node to join. The app's
   // clipboard/paste parser extracts both the code and the server from it.
-  var inviteLink = origin + '/?invite=' + code;
+  var inviteLink = origin + '/?invite=' + code + (post ? '&post=' + post : '');
 
   function copyInvite(){
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(inviteLink);
@@ -191,7 +197,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
   var openAppBtn = document.getElementById('openAppBtn');
   if (isAndroid || isIOS) {
     openAppBtn.style.display = 'block';
-    openAppBtn.href = 'beanpool://welcome?invite=' + encodeURIComponent(code) + '&server=' + encodeURIComponent(origin);
+    openAppBtn.href = 'beanpool://welcome?invite=' + encodeURIComponent(code) + '&server=' + encodeURIComponent(origin) + (post ? '&post=' + post : '');
     openAppBtn.addEventListener('click', function(){
       copyInvite().catch(function(){});
     });
@@ -261,7 +267,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
     document.getElementById('hatch').addEventListener('click', function(e){ e.preventDefault(); modal.classList.add('open'); });
     document.getElementById('cancelWeb').addEventListener('click', function(){ modal.classList.remove('open'); });
     document.getElementById('proceedWeb').addEventListener('click', function(){
-      location.href = '/app?invite=' + encodeURIComponent(code) + '&webjoin=1';
+      location.href = '/app?invite=' + encodeURIComponent(code) + '&webjoin=1' + (post ? '&post=' + post : '');
     });
     modal.addEventListener('click', function(e){ if (e.target === modal) modal.classList.remove('open'); });
   } else {

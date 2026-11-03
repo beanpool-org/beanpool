@@ -19,6 +19,17 @@ vi.mock('../lib/api', async () => {
     return {
         ...actual,
         myNodeRoleOnce: vi.fn(),
+        // The real Invite and share button asks the node for the role and the vouch standing itself.
+        request: vi.fn(),
+        getBalance: vi.fn(),
+    };
+});
+
+vi.mock('../lib/identity', async () => {
+    const actual = await vi.importActual('../lib/identity');
+    return {
+        ...actual,
+        loadIdentity: vi.fn(async () => ({ publicKey: 'pk-me', privateKey: 'sk', callsign: 'Ana', createdAt: '2026-09-27T00:00:00.000Z' })),
     };
 });
 
@@ -42,6 +53,8 @@ const samplePost: MarketplacePost = {
 describe('SharePostButtons — share-says table rows (web)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(api.request).mockResolvedValue({ role: null });
+        vi.mocked(api.getBalance).mockResolvedValue({ canVouch: false } as any);
     });
 
     it('Row 1: Sharing outside on — keeps both buttons, says members only and 7 days line', async () => {
@@ -59,31 +72,33 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.getByTestId('share-outside-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
         expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone can read this listing for 7 days, then ask to join.');
+        // One flow: Invite and share is the only invite action, here too (the member may invite).
+        await screen.findByTestId('invite-and-share-button');
+        expect(screen.getAllByTestId('invite-and-share-button')).toHaveLength(1);
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
     });
 
-    it('Row 2: Sharing outside off, any member may invite — Share with members, members only line, Invite someone button', async () => {
+    it('Row 2: Sharing outside off, any member may invite — Share with members, members only line, ONE invite action (Invite and share)', async () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({
             profile: 'local',
             features: { shareOutside: false, door: 'members' },
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 
-        const onNavigate = vi.fn();
         await act(async () => {
-            render(<SharePostButtons post={samplePost} onNavigate={onNavigate} />);
+            render(<SharePostButtons post={samplePost} />);
         });
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
-        const inviteBtn = screen.getByTestId('invite-someone-button');
-        expect(inviteBtn).toBeInTheDocument();
-        expect(inviteBtn).toHaveTextContent('Invite someone');
+        const inviteBtn = await screen.findByTestId('invite-and-share-button');
+        expect(inviteBtn).toHaveTextContent('Invite and share');
+        // Exactly one invite action: the old Invite someone button never shows beside it.
+        expect(screen.getAllByTestId('invite-and-share-button')).toHaveLength(1);
+        expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+        expect(screen.queryByText('Invite someone')).toBeNull();
         expect(screen.queryByTestId('share-outside-button')).toBeNull();
         expect(screen.queryByTestId('share-outside-line')).toBeNull();
-
-        fireEvent.click(inviteBtn);
-        expect(onNavigate).toHaveBeenCalledWith('people-invites');
     });
 
     it('Row 3: Sharing outside off, only admins invite, member not an admin — Share with members, only admins invite line, no button', async () => {
@@ -101,7 +116,10 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only, and only admins invite here.');
         });
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
+        // The line, and no invite action at all (the seam for Ask an admin, #2775). Give the button's own lookups time to land.
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share')).toBeNull();
         expect(screen.queryByTestId('share-outside-button')).toBeNull();
     });
 
@@ -111,14 +129,16 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: false, door: 'admins' },
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue('admin');
+        vi.mocked(api.request).mockResolvedValue({ role: 'admin' });
 
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
 
         await waitFor(() => {
-            expect(screen.getByTestId('invite-someone-button')).toBeInTheDocument();
+            expect(screen.getByTestId('invite-and-share-button')).toBeInTheDocument();
         });
+        expect(screen.queryByTestId('invite-someone-button')).toBeNull();
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
         expect(screen.queryByTestId('share-outside-button')).toBeNull();
@@ -165,13 +185,15 @@ describe('SharePostButtons — share-says table rows (web)', () => {
 
         // Admin member
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue('owner');
+        vi.mocked(api.request).mockResolvedValue({ role: 'owner' });
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
 
         await waitFor(() => {
-            expect(screen.getByTestId('invite-someone-button')).toBeInTheDocument();
+            expect(screen.getByTestId('invite-and-share-button')).toBeInTheDocument();
         });
+        expect(screen.queryByTestId('invite-someone-button')).toBeNull();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
     });
 
@@ -187,6 +209,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.queryByTestId('share-members-note')).toBeNull();
         expect(screen.queryByTestId('share-outside-line')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share')).toBeNull();
     });
 
     it('Row 1 with joining paused: the outside line never promises to ask to join', async () => {
@@ -229,8 +252,11 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
+        vi.mocked(api.request).mockResolvedValue({ role: 'owner' });
         await act(async () => { answer('owner'); });
-        expect(screen.getByTestId('invite-someone-button')).toBeInTheDocument();
+        await screen.findByTestId('invite-and-share-button');
+        expect(screen.queryByTestId('invite-someone-button')).toBeNull();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
     });
 
@@ -244,27 +270,30 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share')).toBeNull();
     });
 
-    it('a guest here (not a member) is not offered Invite someone; a member and a page that does not say are', async () => {
+    it('a guest here (not a member) is not offered Invite and share; a member and a page that does not say are', async () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({
             profile: 'local',
             features: { shareOutside: false, door: 'members' },
         } as any);
         const { unmount } = render(<SharePostButtons post={samplePost} isMember={false} />);
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         unmount();
         const second = render(<SharePostButtons post={samplePost} isMember={null} />);
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
         second.unmount();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         const third = render(<SharePostButtons post={samplePost} isMember={true} />);
-        expect(screen.getByTestId('invite-someone-button')).toBeInTheDocument();
+        await screen.findByTestId('invite-and-share-button');
         third.unmount();
         render(<SharePostButtons post={samplePost} />);
-        expect(screen.getByTestId('invite-someone-button')).toBeInTheDocument();
+        await screen.findByTestId('invite-and-share-button');
     });
 
-    it('invites off with a members door: no Invite someone and no members line', async () => {
+    it('invites off with a members door: no invite action and no members line', async () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({
             profile: 'local',
             features: { shareOutside: false, door: 'members', invites: false },

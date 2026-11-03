@@ -9,7 +9,7 @@
  * false success.
  */
 import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Share, Alert, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Share, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PEEK_WORDS as W, shareSays, t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -18,6 +18,7 @@ import { useShareRole } from '../utils/use-share-role';
 import { useNodeStatus } from '../app/NodeStatusContext';
 import { eventLink } from '../utils/event-extras';
 import { makePeekLink, peekStopsHere } from '../utils/peek';
+import { InviteAndShareButton } from './InviteAndShare';
 
 /**
  * Whether a post may be offered for sharing outside: one everyone here sees, on the board, and not an event that has
@@ -103,7 +104,7 @@ export function SharePostButtons({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
     const role = useShareRole(profile?.features);
-    // Invite someone is a member's: a guest here, or one the node has not yet recognised, is not offered it.
+    // Invite and share is a member's: a guest here, or one the node has not yet recognised, is not offered it.
     const { recognition } = useNodeStatus();
     const says = shareSays(profile?.features, role, post?.type === 'event' ? 'event' : 'listing');
     const showInvite = says.showInviteButton && recognition === 'member';
@@ -119,13 +120,6 @@ export function SharePostButtons({ post }: { post: any }) {
         }
     };
 
-    const onInviteSomeone = () => {
-        DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
-        void import('expo-router').then(({ router }) => {
-            router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
-        });
-    };
-
     return (
         <View style={styles.column} testID="share-post">
             <Pressable onPress={shareWithMembers} style={styles.btn} accessibilityRole="button" testID="share-members-button">
@@ -136,12 +130,11 @@ export function SharePostButtons({ post }: { post: any }) {
                     {t(says.membersLine)}
                 </Text>
             )}
-            {showInvite && (
-                <Pressable onPress={onInviteSomeone} style={styles.btn} accessibilityRole="button" testID="invite-someone-button">
-                    <Text style={styles.btnText}>{t('Invite someone')}</Text>
-                </Pressable>
-            )}
             {says.showShareOutside && <ShareOutsideButton post={post} />}
+            {/* ONE invite action (share-one-flow): Invite and share, where this member may invite and the line above does not
+                say only admins do. Where only admins invite and this member is none, the line stands and nothing is offered:
+                the seam for "Ask an admin" (#2775) is here. */}
+            {showInvite && <InviteAndShareButton post={post} />}
         </View>
     );
 }

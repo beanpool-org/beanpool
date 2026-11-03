@@ -103,7 +103,7 @@ describe('the Market screen draws them only where the rule says, and nothing on 
 
     it('the rule is fed the list\'s own filters and its real posts in view (the fill beneath them counts), after the first sync', () => {
         // While the fill is still being read the list counts as full, so the examples do not flash in before it lands.
-        expect(screen).toMatch(/const showExamples = showExampleListings\(\{\s*on: exampleListingsOn\(nodeProfile\?\.features\), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending \? FILL_BELOW : filteredPosts\.length \+ fillRows\.length,\s*\}\);/);
+        expect(screen).toMatch(/const showExamples = showExampleListings\(\{\s*on: exampleListingsOn\(nodeProfile\?\.features\), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending \? FILL_BELOW : realMatchingCount \+ fillRows\.length,\s*\}\);/);
         // hasActiveFilters counts a search as a filter, and a tag filter too (a tag from a listing's chip narrows the list), a typed tag's as well.
         expect(screen).toMatch(/const hasActiveFilters = marketFiltersActive\(filterState\) \|\| searchQuery\.trim\(\)\.length > 0 \|\| !!selectedTag \|\| !!selectedFree;/);
     });
@@ -112,7 +112,7 @@ describe('the Market screen draws them only where the rule says, and nothing on 
         expect(screen.match(/<ExampleListings \/>/g)).toHaveLength(2);
         expect(screen).toMatch(/\{showExamples && <ExampleListings \/>\}\s*<ActivityWaterfall onCreatePostPress=/);
         // After the real listings, and the fill beneath them: not before there is one to follow.
-        expect(screen).toMatch(/\{fillFooter\}\s*\{showExamples && filteredPosts\.length \+ fillRows\.length > 0 \? <ExampleListings \/> : null\}/);
+        expect(screen).toMatch(/\{fillFooter\}\s*\{showExamples && realMatchingCount \+ fillRows\.length > 0 \? <ExampleListings \/> : null\}/);
     });
 
     it('never in the list\'s data, so a search, a count or a tap on a row never meets one', () => {

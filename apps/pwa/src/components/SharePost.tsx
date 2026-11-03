@@ -15,6 +15,8 @@ import { useCommunityInfo } from '../lib/features';
 import { useShareRole } from '../lib/use-share-role';
 import { eventLink } from '../lib/event-extras';
 import { makePeekLink } from '../lib/peek';
+import { handOver } from '../lib/hand-over';
+import { InviteAndShareButton } from './InviteAndShare';
 import { nodeOrigin } from './EventExtras';
 
 const BUTTON = 'flex-1 min-w-[8rem] min-h-[48px] px-3 rounded-xl border text-sm font-bold bg-transparent cursor-pointer break-words '
@@ -33,32 +35,6 @@ export function shareableOutside(
     const scope = post.audienceScope ?? 'public';
     if (post.type === 'event' && (post.eventState === 'cancelled' || (!!post.eventEndAt && Date.parse(post.eventEndAt) <= now))) return false;
     return scope === 'public' && post.active !== false && (post.status === 'active' || post.status === 'pending');
-}
-
-/** Hand `link` to the share sheet, or copy it: 'shared', 'copied', 'cancelled' (they closed the sheet) or 'failed'. */
-async function handOver(title: string, link: string): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
-    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-    if (typeof nav.share === 'function') {
-        try {
-            await nav.share({ title, text: title, url: link });
-            return 'shared';
-        } catch (e) {
-            if ((e as Error)?.name === 'AbortError') return 'cancelled';
-        }
-    }
-    try {
-        await navigator.clipboard.writeText(link);
-        return 'copied';
-    } catch {
-        const el = document.createElement('textarea');
-        el.value = link;
-        document.body.appendChild(el);
-        el.select();
-        let ok = false;
-        try { ok = document.execCommand('copy'); } catch { ok = false; }
-        document.body.removeChild(el);
-        return ok ? 'copied' : 'failed';
-    }
 }
 
 /**
@@ -139,11 +115,11 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
 }
 
 /** A listing's two shares: the members' link, and outside where the community allows it. */
-export function SharePostButtons({ post, onNavigate, isMember }: { post: MarketplacePost; onNavigate?: (tab: string) => void; isMember?: boolean | null }) {
+export function SharePostButtons({ post, isMember }: { post: MarketplacePost; isMember?: boolean | null }) {
     const info = useCommunityInfo();
     const role = useShareRole(info?.features);
     const says = shareSays(info?.features, role, post.type === 'event' ? 'event' : 'listing');
-    // Invite someone is a member's: a guest here, or one not yet known to be a member, is not offered it. (Omitted means a member.)
+    // Invite and share is a member's: a guest here, or one not yet known to be a member, is not offered it. (Omitted means a member.)
     const showInvite = says.showInviteButton && isMember !== false && isMember !== null;
     const [note, setNote] = useState<string | null>(null);
     const shareWithMembers = async () => {
@@ -161,17 +137,11 @@ export function SharePostButtons({ post, onNavigate, isMember }: { post: Marketp
                 </p>
             )}
             {note && <p role="status" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{note}</p>}
-            {showInvite && (
-                <button
-                    type="button"
-                    data-testid="invite-someone-button"
-                    onClick={() => onNavigate?.('people-invites')}
-                    className={BUTTON}
-                >
-                    {t('Invite someone')}
-                </button>
-            )}
             {says.showShareOutside && <ShareOutsideButton post={post} />}
+            {/* ONE invite action (share-one-flow): Invite and share, where this member may invite and the line above does not
+                say only admins do. Where only admins invite and this member is none, the line stands and nothing is offered:
+                the seam for "Ask an admin" (#2775) is here. */}
+            {showInvite && <InviteAndShareButton post={post} />}
         </div>
     );
 }

@@ -1,26 +1,30 @@
 /**
- * Share says (scratch/fable-design/DESIGN-share-says-fable.md):
+ * Share says (scratch/fable-design/DESIGN-share-says-fable.md; one flow with Invite and share, 3 Nov):
  * Before the member taps Share on a listing or an event, one plain line under the buttons tells them
- * what the link will do, chosen by this community's settings and this member's standing:
+ * what the link will do, chosen by this community's settings and this member's standing. There is ONE invite
+ * action: **Invite and share** (packages/beanpool-core invite-and-share.ts). `showInviteButton` is its gate on both apps;
+ * the old separate "Invite someone" button is gone, and must never show beside it.
  *
  *   - Sharing outside on:
  *       Keep both buttons.
  *       Under Share with members: "This link opens for members only."
  *       Under Share outside: "Anyone can read this listing for 7 days, then ask to join." Where joining is paused
  *       (features.knocks off, or not said) it stops at "...for 7 days."; for an event it says "event".
+ *       Invite and share shows where this member may invite (below).
  *   - Sharing outside off, any member may invite:
- *       Share with members, "This link opens for members only.", and an "Invite someone" button.
+ *       Share with members, "This link opens for members only.", and Invite and share.
  *   - Sharing outside off, only admins invite, member not an admin:
- *       Share with members, "This link opens for members only, and only admins invite here."
+ *       Share with members, "This link opens for members only, and only admins invite here." No invite action
+ *       (the seam for "Ask an admin", #2775).
  *   - Sharing outside off, only admins invite, member is owner/admin:
- *       As the second row (Share with members, "This link opens for members only.", "Invite someone").
+ *       As the second row (Share with members, "This link opens for members only.", Invite and share).
  *   - Open door (global):
- *       No line: the link already opens for anyone.
+ *       No line: the link already opens for anyone. No invite action.
  *   - Private preview:
  *       Only the owner's or an admin's invite: same as third row for a member, second row for admin.
- *   - Invites off (features.invites false) with a members' door: no Invite someone, and no line about who may invite.
+ *   - Invites off (features.invites false) with a members' door: no invite action, and no line about who may invite.
  *   - Fallback (settings cannot be read, or the member's role is still loading or failed where it matters):
- *       Show today's buttons and no line. Never guess.
+ *       Show today's buttons, no line and no invite action. Never guess.
  */
 
 import { PEEK_WORDS as W } from './peek-ticket.js';
@@ -47,7 +51,7 @@ export interface ShareSaysResult {
     membersLine: WordKey | null;
     /** Plain line under Share outside, or null if no line. */
     outsideLine: WordKey | null;
-    /** Whether the "Invite someone" button should be shown. */
+    /** Whether Invite and share (the one invite action) may be shown: this member may invite here, and their role is known where it matters. */
     showInviteButton: boolean;
     /** Whether the "Share outside" button should be offered (subject to post shareability). */
     showShareOutside: boolean;
@@ -90,7 +94,8 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
         return {
             membersLine: W.membersOnlyLine,
             outsideLine,
-            showInviteButton: false,
+            // Where only admins invite the role must be known: not heard yet is no invite action, as in the rows below.
+            showInviteButton: features.invites !== false && (!onlyAdmins || isAdmin),
             showShareOutside: true,
         };
     }

@@ -7,11 +7,23 @@ describe('shareSays table rules', () => {
         const res = shareSays({ shareOutside: true, door: 'members', knocks: true });
         expect(res.membersLine).toBe(W.membersOnlyLine);
         expect(res.outsideLine).toBe(W.shareOutsideLine);
-        expect(res.showInviteButton).toBe(false);
+        // One flow (share-one-flow, 3 Nov): Invite and share shows wherever the member may invite, sharing outside on or not.
+        // (This row used to say false, when #2774 offered no invite button here; #2777's Invite and share showed here anyway.)
+        expect(res.showInviteButton).toBe(true);
         expect(res.showShareOutside).toBe(true);
     });
 
-    it('Row 2: Sharing outside off, any member may invite — Share with members, members only line, Invite someone button', () => {
+    it('Row 1: the invite action follows who may invite, the same as without sharing outside', () => {
+        const on = { shareOutside: true, knocks: true };
+        expect(shareSays({ ...on, door: 'members', invites: false }).showInviteButton).toBe(false);
+        expect(shareSays({ ...on, door: 'admins' }, undefined).showInviteButton).toBe(false);
+        expect(shareSays({ ...on, door: 'admins' }, null).showInviteButton).toBe(false);
+        expect(shareSays({ ...on, door: 'admins' }, 'moderator').showInviteButton).toBe(false);
+        expect(shareSays({ ...on, door: 'admins' }, 'admin').showInviteButton).toBe(true);
+        expect(shareSays({ ...on, door: 'admins' }, 'owner').showInviteButton).toBe(true);
+    });
+
+    it('Row 2: Sharing outside off, any member may invite — Share with members, members only line, Invite and share', () => {
         const res = shareSays({ shareOutside: false, door: 'members' });
         expect(res.membersLine).toBe(W.membersOnlyLine);
         expect(res.outsideLine).toBeNull();
@@ -124,7 +136,7 @@ describe('shareSays table rules', () => {
         expect(shareSays({ shareOutside: false, door: 'members' }, undefined).showInviteButton).toBe(true);
     });
 
-    it('invites off with a members door (an override): no Invite someone and no line about who may invite, for a member and an admin', () => {
+    it('invites off with a members door (an override): no invite action and no line about who may invite, for a member and an admin', () => {
         const nothing = { membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false };
         expect(shareSays({ shareOutside: false, door: 'members', invites: false }, null)).toEqual(nothing);
         expect(shareSays({ shareOutside: false, door: 'members', invites: false }, 'owner')).toEqual(nothing);

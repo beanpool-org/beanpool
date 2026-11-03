@@ -34,7 +34,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
+import { archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -434,7 +434,9 @@ async function _doInitDB() {
             carried_banner TEXT,
             tags TEXT NOT NULL DEFAULT '',
             free_tags TEXT NOT NULL DEFAULT '',
-            shown_from TEXT
+            shown_from TEXT,
+            pinned_until TEXT,
+            pinned_at TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -804,6 +806,9 @@ ${TOOL_DOCS_TABLE}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT;`); } catch (e) {}
         // Lendable offers (S3): whether an Offer is lendable (tool store / lending)
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN lendable INTEGER DEFAULT 0;`); } catch (e) {}
+        // A pin (DESIGN-pinning-fable.md §2; apps/server engine/pins.ts): until when, and when made.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_until TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_at TEXT;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS event_rsvps (
@@ -1072,6 +1077,8 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
         r.audienceScope = r.audience_scope || 'public';
+        r.pinnedUntil = r.pinned_until || r.pinnedUntil || undefined;
+        r.pinnedAt = r.pinned_at || r.pinnedAt || undefined;
         if (r.type === 'event') {
             r.goingCount = r.event_going_count ?? 0;
             r.interestedCount = r.event_interested_count ?? 0;
@@ -1130,6 +1137,8 @@ export async function getMyPosts(pubkey: string) {
     return rows.map((r: any) => {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
+        r.pinnedUntil = r.pinned_until || r.pinnedUntil || undefined;
+        r.pinnedAt = r.pinned_at || r.pinnedAt || undefined;
         if (typeof r.photos === 'string') {
             try {
                 r.photos = JSON.parse(r.photos);
@@ -1170,7 +1179,7 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     }
     const p = posts[0];
     const before = await database.getFirstAsync<any>(
-        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags, free_tags FROM posts WHERE id = ?', [id]
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags, free_tags, pinned_until, pinned_at FROM posts WHERE id = ?', [id]
     );
     await acquireSyncLock();
     try {
@@ -1193,7 +1202,9 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
         (before.lendable ? 1 : 0) !== (p.lendable ? 1 : 0) ||
         (before.photos ?? null) !== syncedPhotosColumn(p) ||
         (before.tags ?? '') !== syncedTagsColumn(p) ||
-        (before.free_tags ?? '') !== syncedFreeTagsColumn(p);
+        (before.free_tags ?? '') !== syncedFreeTagsColumn(p) ||
+        (before.pinned_until || null) !== (p.pinned_until || p.pinnedUntil || null) ||
+        (before.pinned_at || null) !== (p.pinned_at || p.pinnedAt || null);
     if (changed) {
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -1235,6 +1246,8 @@ export async function getPost(id: string) {
     if (row) {
         row.authorFoundingNeeded = row.author_founding_needed === 1;
         row.author_energy_cycled = row.author_energy_cycled ?? 0;
+        row.pinnedUntil = row.pinned_until || row.pinnedUntil || undefined;
+        row.pinnedAt = row.pinned_at || row.pinnedAt || undefined;
 
         if (typeof row.photos === 'string') {
             try { 
@@ -2754,6 +2767,47 @@ export async function closePoll(postId: string) {
     return json;
 }
 
+/**
+ * Pins a post for 1, 3 or 7 days (DESIGN-pinning-fable.md §2).
+ * Signed member route: role check happens on the node, refusal returns node's words.
+ */
+export async function pinPostOnNode(postId: string, days: PinDays): Promise<{ success: boolean; postId: string; pinnedUntil: string; pinnedAt: string }> {
+    // The shared signed request: it signs, sends X-Language so a refusal comes back in the member's language, and throws
+    // the node's own sentence (with `nodeAnswered` set) for the screen to show (utils/pins.ts pinFailureText).
+    const json = await _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/pin`, { days });
+    try {
+        const database = await waitForInit();
+        await database.runAsync(
+            `UPDATE posts SET pinned_until = ?, pinned_at = ?, updated_at = ? WHERE id = ?`,
+            [json.pinnedUntil || null, json.pinnedAt || null, json.pinnedAt || new Date().toISOString(), postId]
+        );
+        emitAppEvent('sync_data_updated');
+    } catch (e) {
+        console.warn('[DB] Failed to update local post pin status:', e);
+    }
+    return json;
+}
+
+/**
+ * Takes the pin off a post early (DESIGN-pinning-fable.md §0.2, §2.5).
+ * Signed member route: owners, admins, or the post's author may unpin.
+ */
+export async function unpinPostOnNode(postId: string): Promise<{ success: boolean; postId: string }> {
+    // `{}` as every other phone POST sends; the signed actor is the only input the node reads.
+    const json = await _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/unpin`, {});
+    try {
+        const database = await waitForInit();
+        await database.runAsync(
+            `UPDATE posts SET pinned_until = NULL, pinned_at = NULL WHERE id = ?`,
+            [postId]
+        );
+        emitAppEvent('sync_data_updated');
+    } catch (e) {
+        console.warn('[DB] Failed to clear local post pin status:', e);
+    }
+    return json;
+}
+
 export async function createEnterpriseApi(data: {
     name: string;
     purpose?: string;
@@ -3865,7 +3919,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
     await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3918,6 +3972,8 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             syncedAuthorAvatar(p),
             p.id ?? null,
             syncedAuthorBanner(p),
+            p.pinnedUntil || p.pinned_until || null,
+            p.pinnedAt || p.pinned_at || null,
         ]
     );
 }

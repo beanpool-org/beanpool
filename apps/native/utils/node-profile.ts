@@ -33,6 +33,8 @@ export interface NodeFeatures {
     openJoin?: boolean;
     knocks?: boolean;
     distanceSearch?: boolean;
+    /** Owners and admins can pin a post for 1, 3 or 7 days (DESIGN-pinning-fable.md §2). Hidden when not said. */
+    pins?: boolean;
     probation?: boolean;
     autoHideReports?: boolean;
     autoMute?: boolean;
@@ -114,6 +116,7 @@ export type NodeDoor = 'open' | 'members' | 'admins';
 const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'knownFloor'>> = [
+    'pins',
     'pollOther',
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',

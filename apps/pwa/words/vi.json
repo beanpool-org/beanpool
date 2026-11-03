@@ -3561,5 +3561,16 @@
   "Move {card} earlier": "Chuyển {card} lên trước",
   "Move {card} later": "Chuyển {card} ra sau",
   "Messages in your other communities show on your phone, or when you open that community here.": "Tin nhắn trong các cộng đồng khác hiển thị trên điện thoại của bạn hoặc khi bạn mở cộng đồng đó ở đây.",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Thông báo gửi đến điện thoại của bạn từ mọi cộng đồng bạn lưu. Bạn có thể tắt thông báo cho một cộng đồng trên bảng BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Thông báo gửi đến điện thoại của bạn từ mọi cộng đồng bạn lưu. Bạn có thể tắt thông báo cho một cộng đồng trên bảng BeanPool.",
+  "For 1 day": "Trong 1 ngày",
+  "For 1 week": "Trong 1 tuần",
+  "For 3 days": "Trong 3 ngày",
+  "Only an owner, an admin or the post's author can take a pin off.": "Chỉ chủ sở hữu, quản trị viên hoặc tác giả bài đăng mới có thể bỏ ghim.",
+  "Options": "Tùy chọn",
+  "Pin to the top…": "Ghim lên đầu…",
+  "Pinned": "Đã ghim",
+  "Pinned by your community · until {date}": "Được cộng đồng của bạn ghim · đến {date}",
+  "Take the pin off": "Bỏ ghim",
+  "Three posts are pinned already. Take one off first.": "Đã có ba bài đăng được ghim. Hãy bỏ ghim một bài trước.",
+  "📌 PINNED": "📌 ĐÃ GHIM"
 }

@@ -73,6 +73,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('../db', () => ({
     signedRequestWithMethod: vi.fn(),
     signedGet: vi.fn(),
+    askCanVouch: vi.fn(async () => false),
+}));
+
+// The real Invite and share button (one invite action) asks who this phone is and whether it is a guest.
+vi.mock('../nodes', () => ({
+    isGuestNode: vi.fn(async () => false),
 }));
 
 vi.mock('../use-node-profile', () => ({
@@ -81,6 +87,7 @@ vi.mock('../use-node-profile', () => ({
 
 vi.mock('../node-admin', () => ({
     cachedNodeRoleHeard: vi.fn(async () => (mockState.answered ? { role: mockState.role, communityName: 'Test Node' } : null)),
+    askNodeRole: vi.fn(async () => (mockState.answered ? { role: mockState.role, communityName: 'Test Node' } : null)),
     persistNodeRole: vi.fn(async () => {}),
     readPersistedNodeRole: vi.fn(async () => mockState.kept),
 }));
@@ -94,14 +101,16 @@ vi.mock('../identity', () => ({
     loadIdentity: async () => ({ publicKey: 'user-pk' }),
 }));
 
+const themeColors = {
+    text: { body: '#000', secondary: '#666', onBrand: '#fff' },
+    border: { strong: '#ccc', default: '#ddd' },
+    surface: { card: '#fff' },
+    brand: { fill: '#060' },
+    feedback: { danger: { fg: '#900' } },
+};
 vi.mock('../../app/ThemeContext', () => ({
-    useStyles: (fn: any) => fn({
-        colors: {
-            text: { body: '#000', secondary: '#666' },
-            border: { strong: '#ccc' },
-            surface: { card: '#fff' },
-        },
-    }),
+    useStyles: (fn: any) => fn({ colors: themeColors }),
+    useTheme: () => ({ colors: themeColors }),
 }));
 
 const samplePost = {
@@ -154,10 +163,13 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-outside-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
         expect(get('share-outside-line')?.textContent).toBe('Anyone can read this listing for 7 days, then ask to join.');
+        // One flow: Invite and share is the only invite action, here too (the member may invite).
+        expect(get('invite-and-share-button')).not.toBeNull();
+        expect(container.querySelectorAll('[data-testid="invite-and-share-button"]')).toHaveLength(1);
         expect(get('invite-someone-button')).toBeNull();
     });
 
-    it('Row 2: Sharing outside off, any member may invite — Share with members, members only line, Invite someone button', async () => {
+    it('Row 2: Sharing outside off, any member may invite — Share with members, members only line, ONE invite action (Invite and share)', async () => {
         mockState.profile = {
             profile: 'local',
             features: { shareOutside: false, door: 'members' },
@@ -169,16 +181,14 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
-        const inviteBtn = get('invite-someone-button');
+        const inviteBtn = get('invite-and-share-button');
         expect(inviteBtn).not.toBeNull();
-        expect(inviteBtn?.textContent).toBe('Invite someone');
+        expect(inviteBtn?.textContent).toBe('Invite and share');
+        // Exactly one invite action: the old Invite someone button never shows beside it.
+        expect(container.querySelectorAll('[data-testid="invite-and-share-button"]')).toHaveLength(1);
+        expect(get('invite-someone-button')).toBeNull();
+        expect(container.textContent).not.toContain('Invite someone');
         expect(get('share-outside-button')).toBeNull();
-
-        await act(async () => {
-            (inviteBtn as HTMLElement).click();
-        });
-        expect(nav.emit).toHaveBeenCalledWith('set_people_view', { view: 'invites' });
-        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     });
 
     it('Row 3: Sharing outside off, only admins invite, member not an admin — Share with members, only admins invite line, no button', async () => {
@@ -195,6 +205,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull(); // the seam for Ask an admin (#2775)
         expect(get('share-outside-button')).toBeNull();
     });
 
@@ -211,7 +222,8 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
-        expect(get('invite-someone-button')).not.toBeNull();
+        expect(get('invite-and-share-button')).not.toBeNull();
+        expect(get('invite-someone-button')).toBeNull();
         expect(get('share-outside-button')).toBeNull();
     });
 
@@ -228,6 +240,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
         expect(get('share-outside-button')).toBeNull();
     });
 
@@ -245,6 +258,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
 
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
         expect(get('share-outside-button')).toBeNull();
 
         act(() => { root.unmount(); });
@@ -257,7 +271,8 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         });
 
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
-        expect(get('invite-someone-button')).not.toBeNull();
+        expect(get('invite-and-share-button')).not.toBeNull();
+        expect(get('invite-someone-button')).toBeNull();
     });
 
     it('Fallback: settings cannot be read — shows today buttons and no line', async () => {
@@ -271,6 +286,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-note')).toBeNull();
         expect(get('share-outside-line')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
     });
 
     const render = async (post: any = samplePost) => {
@@ -302,6 +318,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
     });
 
     it('only admins invite, no answer from the node: the role kept on the phone is used, so an owner offline keeps the button', async () => {
@@ -309,7 +326,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         mockState.answered = false;
         mockState.kept = 'owner';
         await render();
-        expect(get('invite-someone-button')).not.toBeNull();
+        expect(get('invite-and-share-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
     });
 
@@ -320,24 +337,28 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         await render();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
     });
 
-    it('a guest here (or one the node has not recognised yet) is not offered Invite someone', async () => {
+    it('a guest here (or one the node has not recognised yet) is not offered Invite and share', async () => {
         mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'members' } };
         mockState.recognition = 'stranger';
         await render();
         expect(get('share-members-button')).not.toBeNull();
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
         mockState.recognition = 'unknown';
         await render();
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
     });
 
-    it('invites off with a members door: no Invite someone and no members line', async () => {
+    it('invites off with a members door: no invite action and no members line', async () => {
         mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'members', invites: false } };
         await render();
         expect(get('share-members-button')).not.toBeNull();
         expect(get('invite-someone-button')).toBeNull();
+        expect(get('invite-and-share')).toBeNull();
         expect(get('share-members-note')).toBeNull();
     });
 });

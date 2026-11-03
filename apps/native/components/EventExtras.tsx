@@ -43,9 +43,11 @@ import {
 import { shareSays, t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { useShareRole } from '../utils/use-share-role';
+import { useNodeStatus } from '../app/NodeStatusContext';
 import { EVENT_ACCENT } from './EventCard';
 import { Sentence } from './Sentence';
 import { ShareOutsideButton } from './SharePost';
+import { InviteAndShareButton } from './InviteAndShare';
 import { reminderBeforeWords } from './settings/settings-lines';
 import { eventLineWords } from './event-lines';
 
@@ -104,6 +106,7 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     const profile = useNodeProfile();
     const role = useShareRole(profile?.features);
     const says = shareSays(profile?.features, role, 'event');
+    const { recognition } = useNodeStatus();
     const event = shareableEvent(post);
     // Labelled with the place's zone ("Sat 17 Oct, 20:50 Lagos time"), so it is right wherever it is pasted (§4).
     const when = eventShareWhen(post);
@@ -180,6 +183,10 @@ export function EventShareAndCalendar({ post }: { post: any }) {
             )}
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />
+            {/* The one invite action (share-one-flow): a friend who lands on this event once they have joined. Where only admins
+                invite and this member is none, the line above stands and nothing is offered (the seam for "Ask an admin", #2775);
+                a role not heard yet offers nothing either. A guest, or one the node has not recognised, is offered none. */}
+            {says.showInviteButton && recognition === 'member' && <InviteAndShareButton post={post} />}
 
             <Modal
                 visible={choiceOpen}

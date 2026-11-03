@@ -84,7 +84,7 @@ function Harness() {
                 <div className="text-sm text-text-secondary mb-3">
                     {samplePost.description}
                 </div>
-                <SharePostButtons post={samplePost} onNavigate={(tab) => console.log('Navigate to:', tab)} />
+                <SharePostButtons post={samplePost} />
             </div>
         </div>
     );

@@ -35,7 +35,7 @@ export const ADMIN_ONE_A_CALL = "Only an owner's assistant takes many posts down
     + "an admin's assistant takes one post a call, with take_down. Nothing was taken down.";
 /** An admin's assistant asking for takedowns_list (S3), which stays an owner's (S2). */
 const ADMIN_NO_LIST = "Only an owner's assistant lists what it took down: an admin's is told what it took down in each take_down answer, "
-    + 'and Settings → Moderation → Taken down by assistants lists every one. Nothing was read.';
+    + 'and Settings → Triage & Moderation → Taken down by assistants lists every one. Nothing was read.';
 
 /** The posts a call may take: an owner's assistant TAKEDOWN.maxPerCall, an admin's one (S3). */
 const perCallFor = (grant: AgentGrant): number => (grant.role === 'owner' ? TAKEDOWN.maxPerCall : 1);

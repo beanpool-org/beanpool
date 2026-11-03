@@ -14,7 +14,8 @@
  *      words, listed or not, and the tool's own run refuses too; a refused call writes nothing.
  *   6. An owner's assistant connected the same way has all three; demoted to admin mid-day, at its next call take_down_many is
  *      refused in words (from a tools list read while an owner) and gone from the list, take_down is left, the day's count carries
- *      on; made an owner again, it has them again (the role is read at every call, never kept); a moderator or no role: 401, nothing written.
+ *      on; made an owner again, it has them again (the role is read at every call, never kept); a moderator or no role: 401, nothing
+ *      written. Disconnect and put back (S2, an owner's) reaches an assistant approved from the page too.
  *   7. Who else is refused before anything is written: a standby, a member with no role, an owner's token without the tick.
  *   8. The owners' page says it; the ledger audit is the same after as before (no Bean moved); nothing left the server.
  *
@@ -38,7 +39,7 @@ import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetPairingsForTests } from './settings-signin-pairing.js';
-import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { issueAutomationToken } from './automation-tokens.js';
 import { db } from './db/db.js';
 import { setSecurityAlertHandler } from './services/security-signal.js';
@@ -319,7 +320,7 @@ async function main(): Promise<void> {
             assert(out.isError === true && ONE_A_CALL.test(errorText(out)) && written() === before5, `take_down_many by ${what}: refused in words, nothing written (${errorText(out).slice(0, 60)}…)`);
         }
         const adList = await ad.callTool({ name: 'takedowns_list', arguments: {} });
-        assert(adList.isError === true && /^Only an owner's assistant lists what it took down/.test(errorText(adList)) && /Settings → Moderation → Taken down by assistants/.test(errorText(adList)),
+        assert(adList.isError === true && /^Only an owner's assistant lists what it took down/.test(errorText(adList)) && /Settings → Triage & Moderation → Taken down by assistants/.test(errorText(adList)),
             `takedowns_list: refused in words, with where the list is (${errorText(adList).slice(0, 70)}…)`);
         assert(!row(a1).hidden_by_reports_at && !row(a2).hidden_by_reports_at && (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(r1) as any).status === 'pending', 'both posts are up and their reports open');
         // The tool's own run, as if a list had offered it: it refuses an admin's grant by itself.
@@ -366,6 +367,14 @@ async function main(): Promise<void> {
         revokeNodeRole(otto.pub, 'moderator', owner.pub);
         const asMember = await call('POST', '/mcp', { headers: { ...MCP_HEADERS, ...bearer(ottoGrant.access) }, body: rpcCall('take_down', { post_id: b4, reason: 'spam', why: WHY }) });
         assert(asMember.status === 401 && written() === before6b && !row(b4).hidden_by_reports_at, `no role at all: 401, nothing written (${asMember.status})`);
+        // An assistant approved from the page could take nothing down before S3, so S2's "Disconnect and put back" never met one: it
+        // works on it, an owner's only, as on a token.
+        const byAdmin = await call('POST', `${GRANTS}/${ottoGrant.grantId}/revoke`, { headers: ownerSessionHeaders(admin.pub), body: { putBack: true } });
+        assert(byAdmin.status === 403 && !!oauthRecord(ottoGrant.grantId) && [b1, b2, b3].every(id => !!row(id).hidden_by_reports_at), `an admin's session can't put another's back, and nothing changed (${byAdmin.status})`);
+        const oneTap = await call('POST', `${GRANTS}/${ottoGrant.grantId}/revoke`, { headers: ownerPhoneSessionHeaders(owner.pub), body: { putBack: true } });
+        assert(oneTap.status === 200 && oneTap.body?.revoked === ottoGrant.grantId && oneTap.body?.putBack?.back?.length === 3 && !oauthRecord(ottoGrant.grantId)
+            && [b1, b2, b3].every(id => !row(id).hidden_by_reports_at && !row(id).removed_by_moderator_at),
+            `Disconnect and put back on an assistant approved from the page: its three takedowns, as an owner's and as an admin's, are up again (${show(oneTap)})`);
 
         // ── 7. Who else is refused ───────────────────────────────────────────────────────────────────
         console.log('── 7. A standby, a member, a token without the tick ──');

@@ -35,7 +35,7 @@ An alert on your phone says only what kind of news it is, for example:
 
 It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it.
 
-On a phone that can't get alerts from a community, BeanPool tells you itself: "You have new messages in Castlemaine." That line comes from BeanPool on your phone, not through those servers. It names the community, so anyone who can read your lock screen can read that name, and it says nothing else. It stays quiet where an alert would: for a chat you've muted, with **Direct Messages** off, and for an event's chat.
+On a phone that can't get alerts from a community, BeanPool tells you itself: "You have new messages in Castlemaine." That line comes from BeanPool on your phone, not through those servers. It names the community, so anyone who can read your lock screen can read that name, and it says nothing else. It stays quiet where an alert would: for a chat you've muted, with **Direct Messages** off, and for an event's chat. While BeanPool is closed, your phone checks for new messages about every 15 minutes at best. If you leave messages unread in the community you are currently using, your phone will tell you about them again after each time you open the app.
 
 BeanPool never asks for your 12 words or a password in an alert.
 
@@ -61,6 +61,8 @@ On the phone, tap the bean at the top left. Under **Your communities**, a small 
 Your phone asks each of your other communities how many messages wait for you: at most every 5 minutes while BeanPool is open, and about every 15 minutes at best when it isn't. It asks no more than six at a time, and takes turns if you have more. Each question goes to that community alone, signed by you, and tells it nothing about your other communities. Message requests aren't counted. A community that can't be reached keeps the number it had, and between questions an alert your phone has checked can raise it.
 
 The number on BeanPool's icon adds your communities together. While BeanPool isn't open, your phone asks the community you're in as well, in the same way and among the same six, so that community's messages are on the icon too. If it can't be reached, the icon stays as it was.
+
+When you allow notifications, BeanPool sends your phone's notification token to every community you keep, signed by your account key. To stop alerts and unread message checks for a community, tap the bean at the top left to open the BeanPool sheet, press and hold that community, and switch off **Alerts from this community**.
 
 ## Notices when BeanPool checks in
 

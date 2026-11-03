@@ -3687,5 +3687,7 @@
   "Event · {from}": "நிகழ்வு · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "இது உங்கள் முகப்பு. கீழே ஒரு அட்டையைச் சேர்க்கவும், அல்லது வரிசைப்படுத்த ஒரு அட்டையை அழுத்திப் பிடிக்கவும்.",
   "Move {card} earlier": "{card} ஐ முன்னே நகர்த்து",
-  "Move {card} later": "{card} ஐ பின்னே நகர்த்து"
+  "Move {card} later": "{card} ஐ பின்னே நகர்த்து",
+  "Messages in your other communities show on your phone, or when you open that community here.": "உங்கள் பிற சமூகங்களில் உள்ள செய்திகள் உங்கள் தொலைபேசியில் அல்லது அந்த சமூகத்தை இங்கே திறக்கும்போது காட்டப்படும்.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "நீங்கள் வைத்திருக்கும் ஒவ்வொரு சமூகத்திலிருந்தும் அறிவிப்புகள் உங்கள் தொலைபேசியை அடைகின்றன. BeanPool தாளில் ஒரு சமூகத்திற்கு அவற்றை முடக்கலாம்."
 }

@@ -64,7 +64,7 @@
   "Your account there was closed.": "அங்குள்ள உங்கள் கணக்கு மூடப்பட்டது.",
   "Your own community isn't affected.": "உங்கள் சொந்த சமூகம் இதனால் பாதிக்கப்படவில்லை.",
   "Global community, {state}": "உலகளாவிய சமூகம், {state}",
-  "Switches to this community. Long press to remove it.": "இந்தச் சமூகத்துக்கு மாறும். நீக்க நீண்ட நேரம் அழுத்துங்கள்.",
+  "Switches to this community. Long press for its options.": "இந்தச் சமூகத்துக்கு மாறும். அதன் விருப்பங்களுக்கு நீண்ட நேரம் அழுத்துங்கள்.",
   "Guest": "விருந்தினர்",
   "Explore BeanPool worldwide": "உலகெங்கிலும் உள்ள BeanPool-ஐப் பாருங்கள்",
   "🌍 Explore BeanPool worldwide": "🌍 உலகெங்கிலும் உள்ள BeanPool-ஐப் பாருங்கள்",
@@ -6193,6 +6193,16 @@
   "Stop taking questions": "கேள்விகளை ஏற்பதை நிறுத்து",
   "on the global community": "உலகளாவிய சமூகத்தில்",
   "Open their requests there": "அவர்களின் கோரிக்கைகளை அங்கே திறக்கவும்",
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "இது உங்கள் முகப்பு. கீழே ஒரு அட்டையைச் சேர்க்கவும், அல்லது வரிசைப்படுத்த ஒரு அட்டையை அழுத்திப் பிடிக்கவும்.",
+  "Alerts from this community": "இந்தச் சமூகத்தின் அறிவிப்புகள்",
+  "Stops notifications and unread message checks from this community": "இந்தச் சமூகத்தின் அறிவிப்புகள் மற்றும் படிக்காத செய்தி சோதனைகளை நிறுத்துகிறது",
+  "Remove from your saved list": "சேமித்த பட்டியலிலிருந்து அகற்று",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community} இல் {n} புதிய செய்தி · மாறு",
+    "other": "{community} இல் {n} புதிய செய்திகள் · மாறு"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "நீங்கள் வைத்திருக்கும் ஒவ்வொரு சமூகத்திலிருந்தும் அறிவிப்புகள் உங்கள் தொலைபேசியை அடைகின்றன. BeanPool தாளில் ஒரு சமூகத்திற்கு அவற்றை முடக்கலாம்.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "இந்தத் தொலைபேசியில் அறிவிப்புகள் அணைக்கப்பட்டுள்ளன. அங்கே அவற்றை நிறுத்த இந்தச் சமூகத்தை இன்னும் தொடர்புகொள்ள முடியவில்லை; தொலைபேசி மீண்டும் முயலும்.",
   "Pinned": "பொருத்தப்பட்டது",
   "📌 PINNED": "📌 பொருத்தப்பட்டது",
   "Pin to the top…": "மேலே பொருத்துக…",
@@ -6207,6 +6217,5 @@
   "Event options": "நிகழ்வு விருப்பங்கள்",
   "Poll options": "வாக்கெடுப்பு விருப்பங்கள்",
   "Failed to pin post": "இடுகையைப் பொருத்துவதில் தோல்வி",
-  "Failed to unpin post": "பொருத்தலை நீக்குவதில் தோல்வி",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "இது உங்கள் முகப்பு. கீழே ஒரு அட்டையைச் சேர்க்கவும், அல்லது வரிசைப்படுத்த ஒரு அட்டையை அழுத்திப் பிடிக்கவும்."
+  "Failed to unpin post": "பொருத்தலை நீக்குவதில் தோல்வி"
 }

@@ -181,62 +181,73 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)));
 
     for (const scheme of ['light', 'dark']) {
-        await page.goto(`${base}/?scheme=${scheme}`);
-        await page.waitForSelector('[data-testid="month-grid"]', { timeout: 15000 }).catch((e) => {
-            throw new Error(`${e.message}\npage errors: ${errors.join('\n') || 'none'}`);
-        });
-        // Give time for async posts to load into replica view
-        await page.waitForTimeout(300);
+        for (const motion of ['normal', 'reduced']) {
+            await page.emulateMedia({ reducedMotion: motion === 'reduced' ? 'reduce' : 'no-preference' });
+            await page.goto(`${base}/?scheme=${scheme}`);
+            await page.waitForSelector('[data-testid="month-grid"]', { timeout: 15000 }).catch((e) => {
+                throw new Error(`${e.message}\npage errors: ${errors.join('\n') || 'none'}`);
+            });
+            // Give time for async posts to load into replica view
+            await page.waitForTimeout(300);
 
-        const found = await page.evaluate((WIDTH) => {
-            const out = [];
-            if (document.scrollingElement.scrollWidth > WIDTH) out.push(`the page scrolls sideways (${document.scrollingElement.scrollWidth}px)`);
-
-            // Check buttons
-            for (const el of document.querySelectorAll('[role="button"]')) {
-                const r = el.getBoundingClientRect();
-                // If button is displayed and visible
-                if (r.width > 0 && r.height > 0) {
-                    if (r.height < 43.5) out.push(`a button is ${Math.round(r.height * 10) / 10}px tall: ${el.getAttribute('aria-label') || el.textContent}`);
-                    if (r.right > WIDTH + 0.5) out.push(`a button runs past the edge: ${el.getAttribute('aria-label') || el.textContent}`);
+            // Tap a last-week day: at 320 x 568 it must scroll clear of the day's list, reduced motion honoured.
+            // Tapping (not Playwright's auto-scrolling click) tests whether the screen scrolls the tapped day clear.
+            await page.evaluate(() => {
+                const days = document.querySelectorAll('[data-testid^="month-day-"]');
+                if (days.length > 0) {
+                    days[days.length - 1].click();
                 }
+            });
+            await page.waitForTimeout(300);
+
+            const found = await page.evaluate((WIDTH) => {
+                const out = [];
+                if (document.scrollingElement.scrollWidth > WIDTH) out.push(`the page scrolls sideways (${document.scrollingElement.scrollWidth}px)`);
+
+                // Check buttons
+                for (const el of document.querySelectorAll('[role="button"]')) {
+                    const r = el.getBoundingClientRect();
+                    // If button is displayed and visible
+                    if (r.width > 0 && r.height > 0) {
+                        if (r.height < 43.5) out.push(`a button is ${Math.round(r.height * 10) / 10}px tall: ${el.getAttribute('aria-label') || el.textContent}`);
+                        if (r.right > WIDTH + 0.5) out.push(`a button runs past the edge: ${el.getAttribute('aria-label') || el.textContent}`);
+                    }
+                }
+
+                // Check text elements
+                for (const el of document.querySelectorAll('[dir="auto"]')) {
+                    const s = getComputedStyle(el);
+                    const r = el.getBoundingClientRect();
+                    if (r.right > WIDTH + 0.5) out.push(`words past the edge: ${el.textContent}`);
+                    const cutsOnPurpose = s.webkitLineClamp !== 'none' || s.textOverflow === 'ellipsis';
+                    if (!cutsOnPurpose && el.scrollWidth > el.clientWidth + 1) out.push(`words cut: ${el.textContent}`);
+                }
+
+                const monthHeading = document.querySelector('[data-testid="month-heading"]')?.textContent || '';
+                const stackPanel = document.querySelector('[data-testid="map-stack-list"]');
+
+                // The day's list lies over the screen's bottom: a tapped last-week day must scroll clear of it.
+                const days = [...document.querySelectorAll('[data-testid^="month-day-"]')];
+                if (!stackPanel || !days.length) out.push('no day open: the last-week check read nothing');
+                else {
+                    const last = days[days.length - 1].getBoundingClientRect();
+                    const top = stackPanel.getBoundingClientRect().top;
+                    if (last.bottom > top + 0.5) out.push(`the last day ends at ${Math.round(last.bottom)}, under the day's list from ${Math.round(top)}`);
+                }
+                const stackHeading = stackPanel?.querySelector('[role="heading"]')?.textContent || '';
+                const dayButtons = document.querySelectorAll('[data-testid^="month-day-"]').length;
+                const stackRows = stackPanel?.querySelectorAll('[role="button"]').length ? stackPanel.querySelectorAll('[role="button"]').length - 1 : 0;
+
+                return { out, monthHeading, stackHeading, dayButtons, stackRows };
+            }, WIDTH);
+
+            problems.push(...found.out.map((p) => `${scheme} (${motion} motion): ${p}`));
+            console.log(`${scheme} (${motion} motion): "${found.monthHeading}", "${found.stackHeading}", ${found.dayButtons} days, ${found.stackRows} rows`);
+
+            if (SHOTS && motion === 'normal') {
+                fs.mkdirSync(SHOTS, { recursive: true });
+                await page.screenshot({ path: path.join(SHOTS, `calendar-320-${scheme}.png`) });
             }
-
-            // Check text elements
-            for (const el of document.querySelectorAll('[dir="auto"]')) {
-                const s = getComputedStyle(el);
-                const r = el.getBoundingClientRect();
-                if (r.right > WIDTH + 0.5) out.push(`words past the edge: ${el.textContent}`);
-                const cutsOnPurpose = s.webkitLineClamp !== 'none' || s.textOverflow === 'ellipsis';
-                if (!cutsOnPurpose && el.scrollWidth > el.clientWidth + 1) out.push(`words cut: ${el.textContent}`);
-            }
-
-            const monthHeading = document.querySelector('[data-testid="month-heading"]')?.textContent || '';
-            const stackPanel = document.querySelector('[data-testid="map-stack-list"]');
-
-            // The day's list lies over the screen's bottom: the month must scroll clear of it, last week included.
-            const scroller = document.querySelector('[data-testid="calendar-month-scroll"]');
-            const days = [...document.querySelectorAll('[data-testid^="month-day-"]')];
-            if (!stackPanel || !days.length) out.push('no day open: the last-week check read nothing');
-            else {
-                if (scroller) scroller.scrollTop = scroller.scrollHeight;
-                const last = days[days.length - 1].getBoundingClientRect();
-                const top = stackPanel.getBoundingClientRect().top;
-                if (last.bottom > top + 0.5) out.push(`the last day ends at ${Math.round(last.bottom)}, under the day's list from ${Math.round(top)}`);
-            }
-            const stackHeading = stackPanel?.querySelector('[role="heading"]')?.textContent || '';
-            const dayButtons = document.querySelectorAll('[data-testid^="month-day-"]').length;
-            const stackRows = stackPanel?.querySelectorAll('[role="button"]').length ? stackPanel.querySelectorAll('[role="button"]').length - 1 : 0;
-
-            return { out, monthHeading, stackHeading, dayButtons, stackRows };
-        }, WIDTH);
-
-        problems.push(...found.out.map((p) => `${scheme}: ${p}`));
-        console.log(`${scheme}: "${found.monthHeading}", "${found.stackHeading}", ${found.dayButtons} days, ${found.stackRows} rows`);
-
-        if (SHOTS) {
-            fs.mkdirSync(SHOTS, { recursive: true });
-            await page.screenshot({ path: path.join(SHOTS, `calendar-320-${scheme}.png`) });
         }
     }
 } finally {

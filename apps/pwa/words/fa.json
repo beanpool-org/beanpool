@@ -3688,5 +3688,7 @@
   "Event · {from}": "رویداد · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "این خانه شماست. در پایین کارتی اضافه کنید، یا برای چیدمان، کارتی را نگه دارید.",
   "Move {card} earlier": "جابه‌جایی {card} به قبل",
-  "Move {card} later": "جابه‌جایی {card} به بعد"
+  "Move {card} later": "جابه‌جایی {card} به بعد",
+  "Messages in your other communities show on your phone, or when you open that community here.": "پیام‌های سایر انجمن‌های شما در تلفنتان نشان داده می‌شوند یا وقتی که آن انجمن را اینجا باز می‌کنید.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "هشدارها از هر انجمنی که نگه می‌دارید به تلفن شما می‌رسند. می‌توانید آنها را برای یک انجمن در برگه BeanPool خاموش کنید."
 }

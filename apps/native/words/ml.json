@@ -63,7 +63,7 @@
   "Your account there was closed.": "അവിടെയുള്ള നിങ്ങളുടെ അക്കൗണ്ട് അടച്ചു.",
   "Your own community isn't affected.": "നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റിയെ ഇത് ബാധിക്കുന്നില്ല.",
   "Global community, {state}": "ആഗോള കമ്മ്യൂണിറ്റി, {state}",
-  "Switches to this community. Long press to remove it.": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് മാറുന്നു. നീക്കം ചെയ്യാൻ ദീർഘനേരം അമർത്തൂ.",
+  "Switches to this community. Long press for its options.": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് മാറുന്നു. ഓപ്ഷനുകൾക്കായി ദീർഘനേരം അമർത്തൂ.",
   "Guest": "അതിഥി",
   "Explore BeanPool worldwide": "ലോകമെമ്പാടുമുള്ള BeanPool കാണൂ",
   "🌍 Explore BeanPool worldwide": "🌍 ലോകമെമ്പാടുമുള്ള BeanPool കാണൂ",
@@ -6194,6 +6194,16 @@
   "Stop taking questions": "ചോദ്യങ്ങൾ സ്വീകരിക്കുന്നത് നിർത്തുക",
   "on the global community": "ആഗോള കമ്മ്യൂണിറ്റിയിൽ",
   "Open their requests there": "അവരുടെ അഭ്യർത്ഥനകൾ അവിടെ തുറക്കുക",
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "ഇതാണ് നിങ്ങളുടെ ഹോം. താഴെ ഒരു കാർഡ് ചേർക്കുക, അല്ലെങ്കിൽ ക്രമപ്പെടുത്താൻ ഒരു കാർഡ് അമർത്തിപ്പിടിക്കുക.",
+  "Alerts from this community": "ഈ കമ്മ്യൂണിറ്റിയിൽ നിന്നുള്ള അറിയിപ്പുകൾ",
+  "Stops notifications and unread message checks from this community": "ഈ കമ്മ്യൂണിറ്റിയിൽ നിന്നുള്ള അറിയിപ്പുകളും വായിക്കാത്ത സന്ദേശ പരിശോധനകളും നിർത്തുന്നു",
+  "Remove from your saved list": "സേവ് ചെയ്ത ലിസ്റ്റിൽ നിന്ന് നീക്കം ചെയ്യുക",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community}-ൽ {n} പുതിയ സന്ദേശം · മാറുക",
+    "other": "{community}-ൽ {n} പുതിയ സന്ദേശങ്ങൾ · മാറുക"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "നിങ്ങൾ സൂക്ഷിക്കുന്ന ഓരോ കമ്മ്യൂണിറ്റിയിൽ നിന്നും നിങ്ങളുടെ ഫോണിൽ അറിയിപ്പുകൾ എത്തും. BeanPool ഷീറ്റിൽ ഒരു കമ്മ്യൂണിറ്റിക്കായി നിങ്ങൾക്ക് അവ ഓഫാക്കാം.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "ഈ ഫോണിൽ അറിയിപ്പുകൾ ഓഫാണ്. അവിടെ അവ നിർത്താൻ ഈ കമ്മ്യൂണിറ്റിയെ ഇതുവരെ ബന്ധപ്പെടാനായില്ല; ഫോൺ വീണ്ടും ശ്രമിക്കും.",
   "Pinned": "പിൻ ചെയ്തത്",
   "📌 PINNED": "📌 പിൻ ചെയ്തത്",
   "Pin to the top…": "മുകളിൽ പിൻ ചെയ്യുക…",
@@ -6208,6 +6218,5 @@
   "Event options": "ഇവന്റ് ഓപ്ഷനുകൾ",
   "Poll options": "പോൾ ഓപ്ഷനുകൾ",
   "Failed to pin post": "പോസ്റ്റ് പിൻ ചെയ്യാനായില്ല",
-  "Failed to unpin post": "പോസ്റ്റ് അൺപിൻ ചെയ്യാനായില്ല",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "ഇതാണ് നിങ്ങളുടെ ഹോം. താഴെ ഒരു കാർഡ് ചേർക്കുക, അല്ലെങ്കിൽ ക്രമപ്പെടുത്താൻ ഒരു കാർഡ് അമർത്തിപ്പിടിക്കുക."
+  "Failed to unpin post": "പോസ്റ്റ് അൺപിൻ ചെയ്യാനായില്ല"
 }

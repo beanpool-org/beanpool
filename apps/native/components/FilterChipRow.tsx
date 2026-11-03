@@ -114,6 +114,8 @@ interface FilterChipRowProps<Id extends string> {
     /** Extra style for every chip, e.g. narrower side padding so a row of short labels fits one line. */
     chipStyle?: StyleProp<ViewStyle>;
     accessibilityLabel?: string;
+    /** Content placed after the chips (e.g. the calendar button at the end of the date chips row). */
+    trailing?: React.ReactNode;
 }
 
 /**
@@ -124,7 +126,7 @@ interface FilterChipRowProps<Id extends string> {
  * When it scrolls, on mount it brings the selected chip into view, so a choice remembered across a switch
  * (say Next 7 days, far to the right) is on screen when the row comes back.
  */
-export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, activeTextColor, style, fill, wrap, moreHint, chipStyle, accessibilityLabel }: FilterChipRowProps<Id>) {
+export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, activeTextColor, style, fill, wrap, moreHint, chipStyle, accessibilityLabel, trailing }: FilterChipRowProps<Id>) {
     const scrollRef = useRef<ScrollView>(null);
     const scrolledOnce = useRef(false);
 
@@ -153,6 +155,7 @@ export function FilterChipRow<Id extends string>({ chips, selected, onSelect, ac
                     />
                 );
             })}
+            {trailing}
         </FilterChipBar>
     );
 }

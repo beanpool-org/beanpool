@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
     buildCalendarMonth,
     calendarDayHeading,
@@ -94,6 +94,32 @@ export function MapCalendar({
         }
     }, [month.firstActiveDate, selectedByTap]);
 
+    // A dialog to a screen reader: focus moves in on opening (a door gives the member no other cue) and goes back to
+    // where it was on closing, when that place is still on the page.
+    const headingRef = useRef<HTMLHeadingElement>(null);
+    useEffect(() => {
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        headingRef.current?.focus({ preventScroll: true });
+        return () => {
+            if (opener && opener !== document.body && opener.isConnected) opener.focus({ preventScroll: true });
+        };
+    }, []);
+
+    // The selected day scrolls clear of the day's list lying over the bottom of the month, however it was selected:
+    // a tap, a jump, the next event's day on opening, or ‹ ›. Reduced motion jumps instead of gliding.
+    const scrollRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const scroller = scrollRef.current;
+        if (!scroller || !selectedDate || covered) return;
+        const cell = scroller.querySelector<HTMLElement>(`[data-date="${selectedDate}"]`);
+        const list = scroller.parentElement?.querySelector<HTMLElement>('[data-testid="map-stack-list"]');
+        if (!cell || !list) return;
+        const over = cell.getBoundingClientRect().bottom + 8 - list.getBoundingClientRect().top;
+        if (over <= 0) return;
+        const calm = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        scroller.scrollTo?.({ top: scroller.scrollTop + over, behavior: calm ? 'auto' : 'smooth' });
+    }, [selectedDate, month.monthKey, covered]);
+
     // Keyboard accessibility: Escape closes the calendar overlay
     useEffect(() => {
         if (covered) return;
@@ -118,13 +144,21 @@ export function MapCalendar({
     return (
         <aside
             data-testid="map-calendar"
+            role="dialog"
             aria-label={calendarTitle()}
             className="absolute top-0 bottom-0 left-0 right-0 md:left-auto md:right-0 md:w-1/3 md:min-w-[320px] md:max-w-[480px] z-[120] flex flex-col bg-white dark:bg-nature-900 md:border-l md:border-nature-200 md:dark:border-nature-800 shadow-2xl overflow-hidden"
-            style={covered ? { display: 'none' } : undefined}
+            // The overlay covers the tab bar, so nothing under it needs room kept for the bar (the list and the grid read this).
+            style={{ '--bottom-nav-offset': '0px', ...(covered ? { display: 'none' } : {}) } as CSSProperties}
         >
             {/* Header: Calendar title and close button */}
             <header className="flex items-center justify-between pl-4 pr-1 min-h-[52px] flex-shrink-0 border-b border-nature-200 dark:border-nature-800">
-                <h1 className="text-base font-extrabold text-gray-900 dark:text-white m-0">
+                <h1
+                    ref={headingRef}
+                    tabIndex={-1}
+                    // Takes focus so the title is read out; not a control, so no ring round it.
+                    style={{ outline: 'none' }}
+                    className="text-base font-extrabold text-gray-900 dark:text-white m-0"
+                >
                     {calendarTitle()}
                 </h1>
                 <button
@@ -139,6 +173,7 @@ export function MapCalendar({
 
             {/* Scrollable grid area */}
             <div
+                ref={scrollRef}
                 className="flex-1 overflow-y-auto overscroll-contain"
                 style={{
                     paddingBottom: selectedDate

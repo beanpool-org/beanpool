@@ -63,7 +63,7 @@
   "Your account there was closed.": "وہاں آپ کا اکاؤنٹ بند کر دیا گیا۔",
   "Your own community isn't affected.": "آپ کی اپنی کمیونٹی اس سے متاثر نہیں ہوتی۔",
   "Global community, {state}": "عالمی کمیونٹی، {state}",
-  "Switches to this community. Long press to remove it.": "اس کمیونٹی پر لے جاتا ہے۔ ہٹانے کے لیے دیر تک دبائیں۔",
+  "Switches to this community. Long press for its options.": "اس کمیونٹی پر لے جاتا ہے۔ اس کے اختیارات کے لیے دیر تک دبائیں۔",
   "Guest": "مہمان",
   "Explore BeanPool worldwide": "پوری دنیا میں BeanPool دیکھیں",
   "🌍 Explore BeanPool worldwide": "🌍 پوری دنیا میں BeanPool دیکھیں",
@@ -6194,6 +6194,16 @@
   "Stop taking questions": "سوال قبول کرنا بند کریں",
   "on the global community": "عالمی کمیونٹی پر",
   "Open their requests there": "ان کی درخواستیں وہاں کھولیں",
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "یہ آپ کا ہوم ہے۔ نیچے کارڈ شامل کریں، یا ترتیب دینے کے لیے کسی کارڈ کو دبائے رکھیں۔",
+  "Alerts from this community": "اس کمیونٹی کے الرٹس",
+  "Stops notifications and unread message checks from this community": "اس کمیونٹی سے اطلاعات اور نہ پڑھے گئے پیغامات کی جانچ روکتا ہے",
+  "Remove from your saved list": "اپنی محفوظ شدہ فہرست سے ہٹائیں",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community} میں {n} نیا پیغام · تبدیل کریں",
+    "other": "{community} میں {n} نئے پیغامات · تبدیل کریں"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "الرٹس آپ کے فون پر ہر اس کمیونٹی سے پہنچتے ہیں جسے آپ رکھتے ہیں۔ آپ BeanPool شیٹ پر کسی کمیونٹی کے لیے انہیں بند کر سکتے ہیں۔",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "اس فون پر الرٹس بند ہیں۔ انہیں وہاں روکنے کے لیے یہ فون ابھی اس کمیونٹی تک نہیں پہنچ سکا، اور دوبارہ کوشش کرے گا۔",
   "Pinned": "پن کیا گیا",
   "📌 PINNED": "📌 پن کیا گیا",
   "Pin to the top…": "سب سے اوپر پن کریں…",
@@ -6208,6 +6218,5 @@
   "Event options": "ایونٹ کے اختیارات",
   "Poll options": "پول کے اختیارات",
   "Failed to pin post": "پوسٹ پن کرنے میں ناکامی",
-  "Failed to unpin post": "پن ہٹانے میں ناکامی",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "یہ آپ کا ہوم ہے۔ نیچے کارڈ شامل کریں، یا ترتیب دینے کے لیے کسی کارڈ کو دبائے رکھیں۔"
+  "Failed to unpin post": "پن ہٹانے میں ناکامی"
 }

@@ -240,6 +240,26 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(screen.queryByText('Spring fair')).not.toBeInTheDocument();
     });
 
+    it('calendar-s4: openFilter="event" selects Events pill and calendar button calls onNavigate("map-calendar")', async () => {
+        const onNavigate = vi.fn();
+        const onFilterOpened = vi.fn();
+        render(
+            <MarketplacePage
+                identity={identity}
+                openFilter="event"
+                onFilterOpened={onFilterOpened}
+                onNavigate={onNavigate}
+            />
+        );
+        await screen.findByText('Working bee');
+        expect(onFilterOpened).toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Events' }).getAttribute('aria-pressed')).toBe('true');
+        const calButton = screen.getByTestId('market-calendar-button');
+        expect(calButton).toBeInTheDocument();
+        fireEvent.click(calButton);
+        expect(onNavigate).toHaveBeenCalledWith('map-calendar');
+    });
+
     it('opens an event that has left the feed when a link names it (the chat\'s View event), asking the node by id (A4)', async () => {
         const cancelled = event('ev-cancelled', 'Cancelled working bee', { status: 'cancelled', eventState: 'cancelled', active: false, eventRsvps: [] });
         vi.mocked(api.getMarketplacePosts).mockImplementation(async (filter?: any) =>

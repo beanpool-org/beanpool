@@ -64,7 +64,7 @@
   "Your account there was closed.": "Oradaki hesabın kapatıldı.",
   "Your own community isn't affected.": "Kendi topluluğun bundan etkilenmez.",
   "Global community, {state}": "Küresel topluluk, {state}",
-  "Switches to this community. Long press to remove it.": "Bu topluluğa geçer. Kaldırmak için uzun bas.",
+  "Switches to this community. Long press for its options.": "Bu topluluğa geçer. Seçenekleri için uzun bas.",
   "Guest": "Misafir",
   "Explore BeanPool worldwide": "BeanPool'u dünya çapında keşfet",
   "🌍 Explore BeanPool worldwide": "🌍 BeanPool'u dünya çapında keşfet",
@@ -6194,6 +6194,16 @@
   "Stop taking questions": "Soru kabul etmeyi durdur",
   "on the global community": "küresel toplulukta",
   "Open their requests there": "İsteklerini orada aç",
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Burası Ana Sayfanız. Alttan kart ekleyin veya sıralamak için bir karta basılı tutun.",
+  "Alerts from this community": "Bu topluluktan gelen bildirimler",
+  "Stops notifications and unread message checks from this community": "Bu topluluktan gelen bildirimleri ve okunmamış mesaj kontrollerini durdurur",
+  "Remove from your saved list": "Kayıtlı listenizden kaldırın",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community} topluluğunda {n} yeni mesaj · Değiştir",
+    "other": "{community} topluluğunda {n} yeni mesaj · Değiştir"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Bildirimler, kayıtlı tuttuğunuz her topluluktan telefonunuza ulaşır. BeanPool sayfasında bir topluluk için bunları kapatabilirsiniz.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Bu telefonda bildirimler kapalı. Bildirimleri orada durdurmak için bu topluluğa henüz ulaşılamadı; telefon yeniden deneyecek.",
   "Pinned": "Sabitlendi",
   "📌 PINNED": "📌 SABİTLENDİ",
   "Pin to the top…": "Başa sabitle…",
@@ -6208,6 +6218,5 @@
   "Event options": "Etkinlik seçenekleri",
   "Poll options": "Anket seçenekleri",
   "Failed to pin post": "Gönderi sabitlenemedi",
-  "Failed to unpin post": "Sabitleme kaldırılamadı",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Burası Ana Sayfanız. Alttan kart ekleyin veya sıralamak için bir karta basılı tutun."
+  "Failed to unpin post": "Sabitleme kaldırılamadı"
 }

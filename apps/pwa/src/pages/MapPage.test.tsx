@@ -3459,5 +3459,49 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
             // Composer modal must open
             expect(await view!.findByTestId('map-new-post-panel')).toBeInTheDocument();
         });
+
+        it('calendar-s4: opens calendar when openCalendar prop is true and calls onOpenCalendarHandled', async () => {
+            const onOpenCalendarHandled = vi.fn();
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(
+                    <MapPage
+                        identity={mockIdentity}
+                        openCalendar={true}
+                        onOpenCalendarHandled={onOpenCalendarHandled}
+                    />
+                );
+            });
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            expect(onOpenCalendarHandled).toHaveBeenCalled();
+        });
+
+        it('calendar-s4: ✕ and Esc on a calendar a door opened take the member back; one the map\'s own button opened do not', async () => {
+            const onCalendarClosedBack = vi.fn();
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(<MapPage identity={mockIdentity} openCalendar={true} onCalendarClosedBack={onCalendarClosedBack} />);
+            });
+            // ✕
+            await act(async () => { fireEvent.click(within(view!.getByTestId('map-calendar')).getByRole('button', { name: 'Close' })); });
+            expect(view!.queryByTestId('map-calendar')).toBeNull();
+            expect(onCalendarClosedBack).toHaveBeenCalledTimes(1);
+
+            // The map's own button, then ✕: the member is already on the Map.
+            await act(async () => { fireEvent.click(view!.getByTestId('map-calendar-button')); });
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            await act(async () => { fireEvent.click(within(view!.getByTestId('map-calendar')).getByRole('button', { name: 'Close' })); });
+            expect(onCalendarClosedBack).toHaveBeenCalledTimes(1);
+
+            // A door again, then Esc.
+            view!.rerender(<MapPage identity={mockIdentity} openCalendar={false} onCalendarClosedBack={onCalendarClosedBack} />);
+            await act(async () => {
+                view!.rerender(<MapPage identity={mockIdentity} openCalendar={true} onCalendarClosedBack={onCalendarClosedBack} />);
+            });
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            await act(async () => { fireEvent.keyDown(window, { key: 'Escape' }); });
+            expect(view!.queryByTestId('map-calendar')).toBeNull();
+            expect(onCalendarClosedBack).toHaveBeenCalledTimes(2);
+        });
     });
 });

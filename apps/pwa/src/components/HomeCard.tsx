@@ -122,6 +122,10 @@ export interface ArrangeBand {
     /** The cards stand side by side: earlier and later, since "up" can be "left" there. */
     across?: boolean;
     onMove?: (direction: 'up' | 'down') => void;
+    /** The band can be dragged (L3): the press that lifts it. Absent on a card that stays here. */
+    drag?: { onPointerDown: (e: React.PointerEvent<HTMLElement>) => void };
+    /** The card is in the air: a ring in its ink, over the others. */
+    lifted?: boolean;
 }
 
 /** Holding a band this long enters Arrange, on touch or with a mouse. */
@@ -255,11 +259,16 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                 data-testid={`home-card-${id}`}
                 data-card-wide={wide ? 'true' : 'false'}
                 data-container-width={width}
-                style={{ containerType: 'inline-size', ...(accent ? { borderColor: 'var(--bp-card-amber-ink)' } : {}), ...style }}
+                style={{
+                    containerType: 'inline-size', ...(accent ? { borderColor: 'var(--bp-card-amber-ink)' } : {}), ...style,
+                    ...(arrange?.lifted ? { boxShadow: `0 0 0 2px var(--bp-card-${cardHue}-ink)`, zIndex: 10 } : {}),
+                }}
+                data-lifted={arrange?.lifted ? 'true' : undefined}
                 className={`bg-bg-card rounded-2xl shadow-sm border p-4 ${arrange ? 'pb-2' : ''} mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
             >
                 <div
                     {...hold}
+                    {...(arrange?.drag ? { onPointerDown: arrange.drag.onPointerDown } : {})}
                     data-testid={`card-band-${id}`}
                     className={`-mx-4 -mt-4 px-4 ${arrange ? 'mb-2' : 'mb-3'} py-1 rounded-t-2xl flex items-center justify-between min-h-[48px] gap-2 min-w-0`}
                     style={{
@@ -267,6 +276,8 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                         color: `var(--bp-card-${cardHue}-ink)`,
                         // The hold is the band's own: no text selected or system menu under a thumb.
                         ...(hold ? { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } as React.CSSProperties : {}),
+                        // A band that drags is the pointer's, in Arrange only: the page can't scroll from under a finger on it.
+                        ...(arrange?.drag ? { touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', cursor: arrange.lifted ? 'grabbing' : 'grab' } as React.CSSProperties : {}),
                     }}
                 >
                     {/* Focusable from the page (never by Tab): where focus goes when the card above it is hidden. */}

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "പൊതു പോസ്റ്റ് മാത്രമേ പിൻ ചെയ്യാനാകൂ.",
   "Only this community's own posts can be pinned.": "ഈ കമ്മ്യൂണിറ്റിയുടെ സ്വന്തം പോസ്റ്റുകൾ മാത്രമേ പിൻ ചെയ്യാനാകൂ.",
   "This post has ended, so it can't be pinned.": "ഈ പോസ്റ്റ് അവസാനിച്ചു, അതിനാൽ പിൻ ചെയ്യാനാകില്ല.",
-  "Three posts are pinned already. Take one off first.": "മൂന്ന് പോസ്റ്റുകൾ ഇതിനകം പിൻ ചെയ്തിട്ടുണ്ട്. ആദ്യം ഒന്ന് നീക്കുക."
+  "Three posts are pinned already. Take one off first.": "മൂന്ന് പോസ്റ്റുകൾ ഇതിനകം പിൻ ചെയ്തിട്ടുണ്ട്. ആദ്യം ഒന്ന് നീക്കുക.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "ക്ഷണത്തിലെ സാക്ഷ്യപ്പെടുത്തൽ 25, 50 അല്ലെങ്കിൽ 100 പയർ ആണ്, അല്ലെങ്കിൽ ഒന്നുമില്ല.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "ഉടമകൾക്കും അഡ്മിൻമാർക്കും നിയമിത സാക്ഷ്യപ്പെടുത്തുന്നവർക്കും മാത്രമേ ക്ഷണത്തിൽ ഒരാളെ സാക്ഷ്യപ്പെടുത്താനാകൂ."
 }

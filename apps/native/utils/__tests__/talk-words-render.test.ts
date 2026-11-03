@@ -40,6 +40,7 @@ vi.mock('react-native', () => {
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {}, nativeEvent: {} }); };
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
+        if (disabled) attrs.disabled = true;
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -176,6 +177,17 @@ vi.mock('../global-join-existing', () => ({ isGlobalCommunity: () => globalDoor.
 vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => globalDoor.entry }));
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)));
+const openNoticeCalls = vi.hoisted(() => ({ calls: [] as Array<{ url: string; id: string | null; route: unknown }> }));
+vi.mock('../push-notice-switch', async (importOriginal) => {
+    const orig = await importOriginal<Record<string, unknown>>();
+    return {
+        ...orig,
+        openNoticeIn: vi.fn(async (url: string, id: string | null, route: unknown) => {
+            openNoticeCalls.calls.push({ url, id, route });
+            return 'switched';
+        }),
+    };
+});
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
@@ -825,5 +837,125 @@ describe("Talk's per-person chip counts the deals that need the member (core's d
         await renderIn('en');
         expect(host.textContent).toContain('Waiting on you: answer');
         expect(host.textContent).not.toContain('Fulfill Order');
+    });
+});
+
+// ── S1.4 Cross-community messages waiting (design R6) ──
+describe('Cross-community unread notices at top of Chat (design R6)', () => {
+    beforeEach(() => {
+        openNoticeCalls.calls = [];
+        store.map.delete('beanpool_notice_counts');
+        store.map.delete('beanpool_saved_nodes');
+        store.map.set('beanpool_anchor_url', 'https://mullum.example');
+    });
+
+    it('renders singular notice and opens the community on tap', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({
+            'https://castlemaine.example': { n: 1, seen: {} },
+        }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([
+            { url: 'https://castlemaine.example', name: 'Castlemaine' },
+        ]));
+        await renderIn('en');
+
+        const row = buttonWithText('1 new message in Castlemaine · Switch');
+        expect(row).not.toBeNull();
+        expect(row?.textContent).toBe('1 new message in Castlemaine · Switch');
+        await click(row, 'Castlemaine notice row');
+        expect(openNoticeCalls.calls.length).toBe(1);
+        expect(openNoticeCalls.calls[0].url).toBe('https://castlemaine.example');
+    });
+
+    it('renders plural notice when multiple messages wait', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({
+            'https://castlemaine.example': { n: 3, seen: {} },
+        }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([
+            { url: 'https://castlemaine.example', name: 'Castlemaine' },
+        ]));
+        await renderIn('en');
+
+        const row = buttonWithText('3 new messages in Castlemaine · Switch');
+        expect(row).not.toBeNull();
+        expect(row?.textContent).toBe('3 new messages in Castlemaine · Switch');
+    });
+
+    it('notice row is disabled and does not re-enter when a switch is in flight', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({
+            'https://castlemaine.example': { n: 1, seen: {} },
+        }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([
+            { url: 'https://castlemaine.example', name: 'Castlemaine' },
+        ]));
+
+        let resolveSwitch: () => void;
+        const pendingSwitch = new Promise<void>((r) => { resolveSwitch = r; });
+        const { openNoticeIn } = await import('../push-notice-switch');
+        vi.mocked(openNoticeIn).mockImplementationOnce(async (url: string, id: string | null, route: any) => {
+            openNoticeCalls.calls.push({ url, id, route });
+            await pendingSwitch;
+            return 'switched';
+        });
+
+        await renderIn('en');
+
+        const row = buttonWithText('1 new message in Castlemaine · Switch') as HTMLButtonElement;
+        expect(row).not.toBeNull();
+        expect(row.disabled).toBe(false);
+
+        // First click triggers switch
+        await act(async () => {
+            row.click();
+        });
+        expect(openNoticeCalls.calls.length).toBe(1);
+        expect(row.disabled).toBe(true);
+
+        // Second click while in flight does not call openNoticeIn again
+        await act(async () => {
+            row.click();
+        });
+        expect(openNoticeCalls.calls.length).toBe(1);
+
+        // Switch completes
+        await act(async () => {
+            resolveSwitch!();
+        });
+        await settle();
+        expect(row.disabled).toBe(false);
+    });
+
+    // PR #2772 review, finding 6: a tap that moved nothing says so, and one that moved something says nothing.
+    for (const result of ['held', 'failed'] as const) {
+        it(`a tap that came back ${result} says so under the rows, in words`, async () => {
+            store.map.set('beanpool_notice_counts', JSON.stringify({ 'https://castlemaine.example': { n: 1, seen: {} } }));
+            store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: 'https://castlemaine.example', name: 'Castlemaine' }]));
+            const { openNoticeIn } = await import('../push-notice-switch');
+            vi.mocked(openNoticeIn).mockImplementationOnce(async () => result);
+            await renderIn('en');
+            expect(host.querySelector('[data-testid="other-community-note"]')).toBeNull();
+            await click(buttonWithText('1 new message in Castlemaine · Switch'), 'Castlemaine notice row');
+            await settle();
+            expect(host.querySelector('[data-testid="other-community-note"]')?.textContent).toBe('Something went wrong. Try again in a moment.');
+            // And the row is there to press again.
+            expect((buttonWithText('1 new message in Castlemaine · Switch') as HTMLButtonElement).disabled).toBe(false);
+        });
+    }
+
+    it('a tap that switched says nothing', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({ 'https://castlemaine.example': { n: 1, seen: {} } }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: 'https://castlemaine.example', name: 'Castlemaine' }]));
+        await renderIn('en');
+        await click(buttonWithText('1 new message in Castlemaine · Switch'), 'Castlemaine notice row');
+        await settle();
+        expect(host.querySelector('[data-testid="other-community-note"]')).toBeNull();
+    });
+
+    it('a community with alerts off has no row, even with a number still written for it', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({ 'https://castlemaine.example': { n: 4, seen: {} } }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: 'https://castlemaine.example', name: 'Castlemaine' }]));
+        store.map.set('beanpool_push_alerts_off', JSON.stringify(['https://castlemaine.example']));
+        await renderIn('en');
+        expect(buttonWithText('4 new messages in Castlemaine · Switch')).toBeNull();
+        store.map.delete('beanpool_push_alerts_off');
     });
 });

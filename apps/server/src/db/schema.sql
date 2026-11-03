@@ -186,6 +186,10 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
     names_entry_id TEXT,
     names_bind_outcome TEXT,
+    -- A vouch the invite carries, for someone who can vouch to give in one step (engine/invites.ts): 1, 2 or 3, as core
+    -- vouchCreditForLevel, applied at the redeem by the invite's maker if the maker still may. NULL for every other
+    -- invite. Offline tickets and seed invites never carry one. Declared here for the same reason as genesis_type.
+    vouch_level INTEGER,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

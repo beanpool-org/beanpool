@@ -3688,5 +3688,7 @@
   "Event · {from}": "Tukio · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Hii ndiyo Nyumbani yako. Ongeza kadi chini, au shikilia kadi ili kupanga.",
   "Move {card} earlier": "Hamisha {card} mapema",
-  "Move {card} later": "Hamisha {card} baadaye"
+  "Move {card} later": "Hamisha {card} baadaye",
+  "Messages in your other communities show on your phone, or when you open that community here.": "Ujumbe katika jumuiya zako zingine huonekana kwenye simu yako, au unapofungua jumuiya hiyo hapa.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Arifa hufika kwenye simu yako kutoka kwa kila jumuiya unayoweka. Unaweza kuzizima kwa ajili ya jumuiya kwenye ukurasa wa BeanPool."
 }

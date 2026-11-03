@@ -3689,5 +3689,7 @@
   "Event · {from}": "Evento · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Questa è la tua home. Aggiungi una scheda in basso, oppure tieni premuta una scheda per disporla.",
   "Move {card} earlier": "Sposta {card} prima",
-  "Move {card} later": "Sposta {card} dopo"
+  "Move {card} later": "Sposta {card} dopo",
+  "Messages in your other communities show on your phone, or when you open that community here.": "I messaggi nelle tue altre comunità vengono mostrati sul tuo telefono o quando apri quella comunità qui.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Gli avvisi raggiungono il tuo telefono da ogni comunità che mantieni. Puoi disattivarli per una comunità nella scheda BeanPool."
 }

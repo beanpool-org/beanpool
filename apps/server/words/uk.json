@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "Закріпити можна лише відкритий допис.",
   "Only this community's own posts can be pinned.": "Закріпити можна лише дописи цієї спільноти.",
   "This post has ended, so it can't be pinned.": "Цей допис завершено, тому його не можна закріпити.",
-  "Three posts are pinned already. Take one off first.": "Вже закріплено три дописи. Спочатку зніміть один."
+  "Three posts are pinned already. Take one off first.": "Вже закріплено три дописи. Спочатку зніміть один.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Порука в запрошенні — це 25, 50 або 100 бобів чи жодної.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Поручитися за когось у запрошенні можуть лише власники, адміністратори та призначені поручителі."
 }

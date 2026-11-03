@@ -3559,5 +3559,7 @@
   "Event · {from}": "活動 · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "這是你的首頁。在底部新增卡片，或長按卡片進行排列。",
   "Move {card} earlier": "將{card}前移",
-  "Move {card} later": "將{card}後移"
+  "Move {card} later": "將{card}後移",
+  "Messages in your other communities show on your phone, or when you open that community here.": "你在其他社群的訊息會顯示在你的手機上，或當你在這裡開啟該社群時顯示。",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "來自你保留的每個社群的通知都會傳送到你的手機。你可以在 BeanPool 頁面上關閉特定社群的通知。"
 }

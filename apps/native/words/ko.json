@@ -63,7 +63,7 @@
   "Your account there was closed.": "그곳의 계정이 닫혔어요.",
   "Your own community isn't affected.": "내 커뮤니티에는 영향이 없어요.",
   "Global community, {state}": "글로벌 커뮤니티, {state}",
-  "Switches to this community. Long press to remove it.": "이 커뮤니티로 전환해요. 길게 눌러 삭제하세요.",
+  "Switches to this community. Long press for its options.": "이 커뮤니티로 전환해요. 길게 눌러 옵션을 확인하세요.",
   "Guest": "게스트",
   "Explore BeanPool worldwide": "전 세계 BeanPool 둘러보기",
   "🌍 Explore BeanPool worldwide": "🌍 전 세계 BeanPool 둘러보기",
@@ -5955,5 +5955,13 @@
   "Stop taking questions": "질문 받기 중단",
   "on the global community": "글로벌 커뮤니티에서",
   "Open their requests there": "거기서 요청 열기",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "여기가 내 홈이에요. 아래에서 카드를 추가하거나, 카드를 길게 눌러 정렬하세요."
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "여기가 내 홈이에요. 아래에서 카드를 추가하거나, 카드를 길게 눌러 정렬하세요.",
+  "Alerts from this community": "이 커뮤니티의 알림",
+  "Stops notifications and unread message checks from this community": "이 커뮤니티의 알림 및 읽지 않은 메시지 확인을 중지합니다",
+  "Remove from your saved list": "저장된 목록에서 제거",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{community}에 새 메시지 {n}개 · 전환"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "저장된 모든 커뮤니티의 알림이 휴대전화로 전송됩니다. BeanPool 시트에서 커뮤니티별로 알림을 끌 수 있습니다.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "이 휴대폰에서는 알림이 꺼져 있어요. 그 커뮤니티에서 알림을 멈추도록 아직 연결하지 못했고, 휴대폰이 다시 시도해요."
 }

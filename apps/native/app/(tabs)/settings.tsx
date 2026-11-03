@@ -2641,6 +2641,9 @@ export default function SettingsScreen() {
                     <Text style={styles.infoText}>
                         {t("Control which push notifications wake up your device. Changes are saved automatically.")}
                     </Text>
+                    <Text style={[styles.infoText, { marginTop: 4 }]}>
+                        {t('Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.')}
+                    </Text>
 
                     {notifLoading ? (
                         <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 20 }} />

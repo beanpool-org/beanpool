@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "Yalnızca herkese açık bir gönderi sabitlenebilir.",
   "Only this community's own posts can be pinned.": "Yalnızca bu topluluğun kendi gönderileri sabitlenebilir.",
   "This post has ended, so it can't be pinned.": "Bu gönderi sona erdi, bu yüzden sabitlenemez.",
-  "Three posts are pinned already. Take one off first.": "Üç gönderi zaten sabitlenmiş. Önce birini kaldır."
+  "Three posts are pinned already. Take one off first.": "Üç gönderi zaten sabitlenmiş. Önce birini kaldır.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Davetteki kefalet 25, 50 veya 100 Fasulye’dir ya da hiç yoktur.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Davette birine yalnızca sahipler, yöneticiler ve atanmış kefiller kefil olabilir."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "Si può fissare solo un post pubblico.",
   "Only this community's own posts can be pinned.": "Si possono fissare solo i post di questa comunità.",
   "This post has ended, so it can't be pinned.": "Questo post è terminato, quindi non si può fissare.",
-  "Three posts are pinned already. Take one off first.": "Ci sono già tre post fissati. Togline prima uno."
+  "Three posts are pinned already. Take one off first.": "Ci sono già tre post fissati. Togline prima uno.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Una garanzia su un invito è di 25, 50 o 100 fagioli, oppure nessuna.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Solo i proprietari, gli admin e i garanti nominati possono garantire per qualcuno su un invito."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "Μόνο μια δημόσια ανάρτηση μπορεί να καρφιτσωθεί.",
   "Only this community's own posts can be pinned.": "Μόνο οι αναρτήσεις αυτής της κοινότητας μπορούν να καρφιτσωθούν.",
   "This post has ended, so it can't be pinned.": "Αυτή η ανάρτηση έχει λήξει, οπότε δεν μπορεί να καρφιτσωθεί.",
-  "Three posts are pinned already. Take one off first.": "Τρεις αναρτήσεις είναι ήδη καρφιτσωμένες. Βγάλτε πρώτα μία."
+  "Three posts are pinned already. Take one off first.": "Τρεις αναρτήσεις είναι ήδη καρφιτσωμένες. Βγάλτε πρώτα μία.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Η εγγύηση σε μια πρόσκληση είναι 25, 50 ή 100 φασόλια ή καμία.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Μόνο οι ιδιοκτήτες, οι διαχειριστές και οι ορισμένοι εγγυητές μπορούν να εγγυηθούν για κάποιον σε μια πρόσκληση."
 }

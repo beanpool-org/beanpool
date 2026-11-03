@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning, neutral forms)",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,7 @@
   "Only a public post can be pinned.": "Só uma publicação pública pode ser fixada.",
   "Only this community's own posts can be pinned.": "Só as publicações desta comunidade podem ser fixadas.",
   "This post has ended, so it can't be pinned.": "Esta publicação terminou, por isso não pode ser fixada.",
-  "Three posts are pinned already. Take one off first.": "Já há três publicações fixadas. Remova uma primeiro."
+  "Three posts are pinned already. Take one off first.": "Já há três publicações fixadas. Remova uma primeiro.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Um apoio em um convite é de 25, 50 ou 100 feijões, ou nenhum.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Só donos, administradores e apoiadores nomeados podem apoiar alguém em um convite."
 }

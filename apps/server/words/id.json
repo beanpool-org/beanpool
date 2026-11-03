@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "Hanya postingan publik yang dapat disematkan.",
   "Only this community's own posts can be pinned.": "Hanya postingan komunitas ini yang dapat disematkan.",
   "This post has ended, so it can't be pinned.": "Postingan ini sudah berakhir, jadi tidak dapat disematkan.",
-  "Three posts are pinned already. Take one off first.": "Sudah ada tiga postingan yang disematkan. Lepaskan satu dulu."
+  "Three posts are pinned already. Take one off first.": "Sudah ada tiga postingan yang disematkan. Lepaskan satu dulu.",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Jaminan pada undangan adalah 25, 50, atau 100 Kacang, atau tidak ada.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Hanya pemilik, admin, dan penjamin yang ditunjuk yang dapat menjamin seseorang pada undangan."
 }

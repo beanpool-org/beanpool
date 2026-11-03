@@ -35,6 +35,7 @@ import { WaysBackSection } from '../components/WaysBackSection';
 import { CommunityAdminsSection } from '../components/CommunityAdminsSection';
 import { webCommunityCopyStatus, type WebCommunityCopyStatus } from '../lib/community-copy';
 import { MemberAvatar } from '../components/MemberAvatar';
+import { CopyPhotoHere } from '../components/CopyPhotoHere';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../lib/event-extras';
@@ -1010,6 +1011,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
+                                {/* Copy on request (Profile S4): the photo this browser kept from another community, into this one, only on the tap. */}
+                                <CopyPhotoHere publicKey={identity.publicKey} />
 
 
 

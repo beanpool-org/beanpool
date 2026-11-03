@@ -43,6 +43,9 @@
  *   shareHealth: no lock.
  *   recoveryCopies  'vault' | 'server' | 'none' (config/recovery-copies.ts, vault rethink VR2): no lock. Only where new
  *               copies go; every copy a member already has stays theirs, and the members' sentence says so.
+ *   removalDecider  'automatic' | 'everyone' | 'jury' (config/removal-decider.ts, DESIGN-removal-jury-fable.md §6): a jury
+ *               refused while fewer than JURY_MIN_POOL members could serve on one (`pool_too_small`). A vote already open
+ *               keeps the decider it opened with (params.decider).
  * The other locks only say why a value is what it is (held back, an auth hatch, members on demand, a standby's Listed):
  * nothing here changes them, and they refuse nothing.
  *
@@ -58,6 +61,7 @@ import { getNodeRole } from './node-role.js';
 import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './node-profile.js';
 import { setDoor, doorSettingRefusal, type CommunityDoor } from './door.js';
 import { isRecoveryCopies, setRecoveryCopies, type RecoveryCopies } from './recovery-copies.js';
+import { isRemovalDecider, setRemovalDecider, type RemovalDecider } from './removal-decider.js';
 import { NOTICE_LIMITS } from '../engine/kept-notices.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type KnownFloorPlan } from './known-floor.js';
 import { readShape, configuredJoinOf, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
@@ -109,7 +113,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 const SETTINGS_IN_ORDER = [
     'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'dmRequests', 'decisions', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
-    'recoveryCopies',
+    'recoveryCopies', 'removalDecider',
 ] as const;
 export type ShapeSettingName = (typeof SETTINGS_IN_ORDER)[number];
 
@@ -132,6 +136,7 @@ const SETTING_NAMES: Record<ShapeSettingName, string> = {
     sharePhone: 'Share phone', shareHealth: 'Share health', probation: 'Limits on new accounts',
     autoHide: 'Reported posts hidden and message requests cleared automatically', autoMute: 'Repeat offenders muted automatically',
     recoveryCopies: "Where members' copies go",
+    removalDecider: 'Who decides a removal',
 };
 
 // ── What members are told (design §8.2): one whole sentence per change, the owner's note quoted after ─────────────
@@ -166,6 +171,10 @@ const NOTICE = {
     copiesVault: word("Your community's owners changed how it works: BeanPool's key vault keeps members' sign-in copies now. Any copy you have stays where it is until you move or remove it."),
     copiesServer: word("Your community's owners changed how it works: this community's server keeps members' sign-in copies now. Any copy you have stays where it is until you move or remove it."),
     copiesNone: word("Your community's owners changed how it works: this community keeps no copies of members' accounts now, and doesn't use BeanPool's key vault. Any copy you have stays where it is until you remove it."),
+    // Who decides a removal (config/removal-decider.ts, DESIGN-removal-jury-fable.md §6).
+    deciderAutomatic: word("Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it."),
+    deciderEveryone: word("Your community's owners changed how it works: every member can vote on whether someone is removed."),
+    deciderJury: word("Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed."),
     note: word('From the owners: “{note}”'),
 } satisfies Record<string, WordKey>;
 
@@ -186,6 +195,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'autoHide': return on ? tr(NOTICE.autoHideOn) : tr(NOTICE.autoHideOff);
         case 'autoMute': return on ? tr(NOTICE.autoMuteOn) : tr(NOTICE.autoMuteOff);
         case 'recoveryCopies': return change.to === 'none' ? tr(NOTICE.copiesNone) : change.to === 'server' ? tr(NOTICE.copiesServer) : tr(NOTICE.copiesVault);
+        case 'removalDecider': return change.to === 'jury' ? tr(NOTICE.deciderJury) : change.to === 'everyone' ? tr(NOTICE.deciderEveryone) : tr(NOTICE.deciderAutomatic);
         default: return null;
     }
 }
@@ -257,6 +267,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
     let door: CommunityDoor | null = null;
     let floorPlan: KnownFloorPlan | null = null;
     let copies: RecoveryCopies | null = null;
+    let decider: RemovalDecider | null = null;
 
     // Who can join: the door row, and the `invites` override (paused).
     let join: JoinState | undefined;
@@ -428,6 +439,20 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         }
     }
 
+    // Who decides a removal: a jury refused while the pool is too small for one (config/removal-decider.ts).
+    if (asked.removalDecider !== undefined) {
+        if (!isRemovalDecider(asked.removalDecider)) {
+            bad('removalDecider', "removalDecider is 'automatic' (a jury from 100 members), 'everyone' or 'jury'.");
+        }
+        const v = asked.removalDecider as RemovalDecider;
+        if (v === 'jury' && S.removalDecider.lock) refuse('removalDecider', S.removalDecider.lock);
+        // Stored as a row whatever it is (setRemovalDecider), so a later change of default never overrides a choice.
+        if (v !== S.removalDecider.configured) {
+            planned.push({ setting: 'removalDecider', from: S.removalDecider.configured, to: v });
+            decider = v;
+        }
+    }
+
     if (planned.length === 0) return { shape: before, told: 'nobody', changed: [] };
 
     // ── Written, all of it or none ──
@@ -444,6 +469,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);
         if (copies) setRecoveryCopies(copies);
+        if (decider) setRemovalDecider(decider);
         for (const line of planned) insertLine.run(by.actor, 'owner', line.setting, line.from, line.to, note, at);
     })();
 

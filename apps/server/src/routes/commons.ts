@@ -20,7 +20,7 @@ import {
 import { projectEndDate } from '../engine/unfunded-pledges.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
-import { decisionsOn, madeWithoutVote, replyToRemovalCase, removalCaseReport } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, replyToRemovalCase, removalCaseReport, tallyForReader, juryForReader } from '../decisions-engine.js';
 import { noteNewReport } from '../services/alerts.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -205,7 +205,7 @@ router.get('/api/commons/decisions', async (ctx) => {
         decisions: decisions.map(d => ({
             // A member's balance recorded in a Decision about them goes to that Decision's voters only.
             ...decisionForReader(d, actor),
-            tally: tallyDecision(d.id),
+            tally: tallyForReader(d, tallyDecision(d.id)),
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
         myPoolVoting: myPoolVoting(actor),
@@ -223,12 +223,25 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
         ctx.body = { error: word('Decision not found') };
         return;
     }
-    const tally = tallyDecision(decision.id);
+    const tally = tallyForReader(decision, tallyDecision(decision.id));
     // Voice credits are the signer's own: taken from authentication only, never from a query parameter.
     const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
     const myVote = actor ? getOwnDecisionVotes(actor, [decision.id]).get(decision.id) ?? null : null;
     ctx.body = { decision: decisionForReader(decision, actor), tally, voiceCredits, myVote };
+});
+
+// The jury of a vote a jury decides (DESIGN-removal-jury-fable.md §3, §8; decisions-engine juryForReader): the pool it was
+// drawn from and the draw's facts, so a member can check it (@beanpool/core checkJuryDraw); once it closes, who sat, who
+// stood aside and who voted, never which way. A members' read (the ordinary gate in front of every route not on the public
+// lists); the signer is the reader. 404 for a vote no jury decides, as for one that doesn't exist.
+router.get('/api/commons/decisions/:id/jury', async (ctx) => {
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
+    const decision = getDecision(ctx.params.id);
+    const jury = decision && decision.scopeKind === 'community' ? juryForReader(decision, actor) : null;
+    if (!jury) { ctx.status = 404; ctx.body = { error: word('Decision not found') }; return; }
+    ctx.body = { jury };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {

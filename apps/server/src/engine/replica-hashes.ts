@@ -97,7 +97,12 @@ export interface TableHashes {
  * before its main server hashes one more table. REPLICA_FORMAT stays: what an older importer drops is an ask still waiting,
  * which its member can see is unanswered and ask again.
  */
-export const TABLE_HASHES_VERSION = 17;
+/**
+ * 18: a new table, decision_jury_pools (the pool a removal jury was drawn from, DESIGN-removal-jury-fable.md slice J1). Raised
+ * for the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: no
+ * community has a jury until its owners choose one, and a vote's pool comes with it once both sides run this release.
+ */
+export const TABLE_HASHES_VERSION = 18;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

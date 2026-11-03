@@ -414,6 +414,9 @@ export const TABLES: Record<string, TableEntry> = {
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
     decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
+    // The pool a removal jury was drawn from (engine/removal-jury.ts, DESIGN-removal-jury-fable.md §3): with the roll above
+    // and the decision's params, a restored node serves the same draw and never redraws.
+    decision_jury_pools: plain('decision_id pool created_at updated_at'),
     // A chat group closed by its members' Decision (decisions-engine.ts closeGroupByVote, DESIGN-group-decisions §2.3).
     group_closures: plain('group_id decision_id closed_at created_at updated_at'),
     // A role held aside by a suspension or by a removal in its grace period (decisions-engine.ts). A row whose Decision
@@ -754,6 +757,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     directory_promise: { kind: 'community-settings', reason: "the listing promise's two ticked lines and the closing day (engine/directory-promise.ts)" },
     recovery_copies: { kind: 'community-settings', reason: "where members' copies go: BeanPool's key vault, this server, or nowhere (config/recovery-copies.ts)" },
+    removal_decider: { kind: 'community-settings', reason: 'who decides a removal: a jury from 100 members, everyone, or a jury (config/removal-decider.ts)' },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

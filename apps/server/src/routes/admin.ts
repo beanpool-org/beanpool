@@ -46,7 +46,7 @@ import {
 import {
     decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply,
     emergencySuspendRefusal, pauseChainRefusal, OPEN_PAUSES_PROOF_CODE, PAUSE_REFUSAL_CODES, ownerDecideTooFew, ownerDecisionRefusal,
-    type OwnerOnlyAdminAction, type PauseRefusal,
+    tallyForReader, type OwnerOnlyAdminAction, type PauseRefusal,
 } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
@@ -2373,7 +2373,8 @@ router.post('/api/local/admin/decisions', async (ctx) => {
     const reader = (ctx.state as any)?.isKeySession ? (ctx.state as any).actor as string | undefined : undefined;
     const shown = (d: (typeof actionable)[number]) => {
         const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
-        return { ...decisionForAdmin(d, reader), subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
+        // A vote a jury decides shows its turnout while open, never the split, to admins as to members (tallyForReader).
+        return { ...decisionForAdmin(d, reader), subjectName: subject?.callsign ?? null, tally: tallyForReader(d, tallyDecision(d.id)) };
     };
     // Votes on removing a member that have closed, newest first: an admin can still hide the case of one (removal by vote,
     // Amendment A point 4), which is most often shown false after its vote.

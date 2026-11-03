@@ -1306,6 +1306,19 @@ describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (w
         expect(drawn()).toEqual({ offers: [3], events: [], enterprises: [] });
     });
 
+    it('Show on map with a filter on turns every filter off, so the listing has its pin under its card', async () => {
+        let view!: ReturnType<typeof render>;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(drawn().events.length).toBeGreaterThan(0));
+        await click('map-type-offers');
+        expect(drawn().offers).toEqual([1, 2]);
+        mockCreatedMarkers.length = 0;
+        // The need 'lift' is not drawn under Offers; Show on map opens it.
+        await act(async () => { view.rerender(<MapPage identity={mockIdentity} focusPostId="lift" onFocusPostHandled={() => {}} />); });
+        await waitFor(() => expect(screen.getByTestId('map-type-all').getAttribute('aria-pressed')).toBe('true'));
+        await waitFor(() => expect(drawn().offers).toContain(3));
+    });
+
     it('Events shows event pins only, with the date chips and the calendar button', async () => {
         await draw();
         await click('map-type-events');

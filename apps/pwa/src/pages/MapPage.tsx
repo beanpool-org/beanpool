@@ -2086,6 +2086,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             centredRef.current = true;
             mapRef.current.setView([target.lat, target.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 16));
         }
+        // Every filter off, not just the date window: the pins follow the filter, and a card with no pin under it reads as lost.
+        setMapType('all');
+        setMapCategory('all');
+        setCategoryOpen(false);
         setEventWindow('all');
         setPreviewPost(target);
         onFocusPostHandled?.();

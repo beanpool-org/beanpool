@@ -95,6 +95,8 @@ const MIN_FEED_UNDER_PANEL = 48;
 
 /** The headings the list view draws between its rows: word() keys, shown through t() (renderItem). */
 const YOUR_EVENTS_HEADING = word('Your events');
+/** The "New since you last looked" line's words (core's key, shown through t()). */
+const NEW_SINCE_WORDS = { line: NEW_SINCE_LINE };
 const FOR_YOU_HEADING = word('★ For You Feed');
 
 /** A listing's type badge, in the member's language (the listing branch only: polls and events have cards of their own). */
@@ -1696,7 +1698,7 @@ export default function MarketScreen() {
         if (item.isNewSince) {
             return (
                 <View style={styles.sectionHeader} testID="new-since-line">
-                    <Text style={styles.sectionHeaderText}>{upperCase(t(NEW_SINCE_LINE))}</Text>
+                    <Text style={styles.sectionHeaderText}>{upperCase(t(NEW_SINCE_WORDS.line))}</Text>
                     <View style={styles.sectionHeaderLine} />
                 </View>
             );

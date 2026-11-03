@@ -1048,10 +1048,13 @@ function decideCard(c: Ctx, settings?: Record<string, unknown>): HomeCards['deci
     built('decide');
     const { show } = readDecideSettings(settings);
     // The community's Decisions only: this card opens Commons → Decide, which never lists a keepers' vote. The Needs-you
-    // line carries those and lands on the enterprise (lands=enterprise).
+    // line carries those and lands on the enterprise (lands=enterprise). A branch's vote only to an app that draws it
+    // (lands=branch-vote), as the decisions list it opens serves it (routes/commons.ts drawsBranchVotes): an older app is
+    // never shown a row it can't open, nor counts it.
     const open = decisionsOn()
         ? getOpenDecisions()
-            .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
+            .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
+                && (c.lands.has('branch-vote') || !isBranchVote(d)))
         : [];
     // W3 (§2): the rows, soonest closing first, each saying whether the signer has voted (their own ballots only: a
     // Decision is a secret ballot).

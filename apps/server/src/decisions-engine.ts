@@ -106,7 +106,7 @@ import {
 } from './state-engine.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
-const { t: tr } = wordsFor('en');
+const { t: tr, tn: trn } = wordsFor('en');
 
 /** What a Decision touches: a member, the Commons pool, or only its own scope's things (an enterprise's account and keepers). */
 export type DecisionTouch = 'member' | 'pool' | 'scope';
@@ -480,7 +480,7 @@ function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecisi
     }
     return {
         ...shown,
-        title: isBranchVote(decision) ? tr('Remove these {count} accounts?', { count: removalSubjects(decision).length }) : tr('Remove {name}?', { name }),
+        title: isBranchVote(decision) ? branchVoteTitle(removalSubjects(decision).length) : tr('Remove {name}?', { name }),
         description: tr('An admin hid the case for this vote, as one shown to be false. Their reason: {reason}', { reason: decision.caseHiddenReason ?? '' }),
         params,
         ownerDecidedReason: null,
@@ -1761,6 +1761,21 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'reinstate_member': {
                     setUserStatusRow(decision.subject!, 'active');
                     db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject!);
+                    // A branch's vote that lists them (its subject null: pauseBranch), still open or in its grace window:
+                    // they leave its list, its record naming this vote (dropFromBranch), and it runs on for the others, so it
+                    // never removes them. Their last account, it is cancelled as one member's removal is, below.
+                    const branchRemovals = (db.prepare(`
+                        SELECT * FROM decisions d
+                        WHERE d.subject IS NULL AND ${namesMemberSql('d', '@pk')} AND d.status IN ('open', 'execution_pending_grace')
+                    `).all({ pk: decision.subject! }) as any[]).map(rowToDecision).filter(d => isBranchVote(d));
+                    for (const b of branchRemovals) {
+                        cancelledDecisionIds.push(b.id);
+                        if (dropFromBranch(b, decision.subject!, now, decision.id)) continue;
+                        db.prepare(`
+                            UPDATE decisions SET status = 'failed', execution_reason = 'Cancelled by member reinstatement decision', updated_at = ?
+                            WHERE id = ? AND status IN ('open', 'execution_pending_grace')
+                        `).run(now, b.id);
+                    }
                     // Cancel any pending removal grace periods for this subject
                     const cancelledDecisions = db.prepare(
                         "SELECT id FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
@@ -2673,23 +2688,58 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
 }
 
 /** What a branch's vote records for an account an admin lifted out of it (dropFromBranch): their name, and when. */
-export interface BranchLifted { pubkey: string; name: string; at: string }
+export interface BranchLifted {
+    pubkey: string;
+    name: string;
+    at: string;
+    /** The community's own vote that brought them back (unsuspend_member / reinstate_member), in its grace window. */
+    byVote?: string;
+}
 
 /**
- * An admin lifted one account's pause on a branch's open vote (adminLiftSuspension): they leave its list, so its vote no
- * longer names them nor removes them, and its record keeps their name and when (`lifted`). What the list owes is counted
- * again. The vote runs on for the others; returns false when nobody is left on it, for the caller to close it as halted.
- * Rows only, inside the caller's transaction.
+ * An account leaves a branch's list: an admin lifted its pause on the open vote (adminLiftSuspension), or the community's
+ * own vote brought it back in the grace window (executeDecision's unsuspend_member / reinstate_member, `byVote`). Its vote
+ * no longer names them nor removes them, and its record keeps their name and when (`lifted`). What the list owes is counted
+ * again, and the title and description say the count left. The vote runs on for the others; returns false when nobody is
+ * left on it, writing nothing, for the caller to close it. Rows only, inside the caller's transaction.
  */
-function dropFromBranch(decision: Decision, pubkey: string, nowIso: string): boolean {
+function dropFromBranch(decision: Decision, pubkey: string, nowIso: string, byVote?: string): boolean {
     const branch = (decision.params.branch as BranchEntry[]).filter(e => e?.pubkey !== pubkey);
     if (!branch.length) return false;
     const gone = branchEntryOf(decision, pubkey);
     const lifted: BranchLifted[] = [...(Array.isArray(decision.params.lifted) ? decision.params.lifted : []),
-        { pubkey, name: gone?.name || pubkey.slice(0, 8), at: nowIso }];
+        { pubkey, name: gone?.name || pubkey.slice(0, 8), at: nowIso, ...(byVote ? { byVote } : {}) }];
     const params = { ...decision.params, branch, lifted, branchDebt: branchDebtOf(branch) };
-    db.prepare('UPDATE decisions SET params = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(params), nowIso, decision.id);
+    // Its title and description say the count on the list now: a voter never reads 4 for a vote that removes 3.
+    const { title, description } = branchVoteWords(params);
+    db.prepare('UPDATE decisions SET params = ?, title = ?, description = ?, updated_at = ? WHERE id = ?')
+        .run(JSON.stringify(params), title, description, nowIso, decision.id);
     return true;
+}
+
+/** A branch's vote's title, for the count of accounts on its list now. */
+function branchVoteTitle(count: number): string {
+    return trn(count, 'Remove this account?', 'Remove these {n} accounts?');
+}
+
+/**
+ * A branch's vote's title and description (pauseBranch), from its params: the count on its list now (`branch`), so one
+ * lifted out of it (dropFromBranch) leaves both saying the count the vote decides on. Through the words layer, plural and all.
+ */
+function branchVoteWords(params: Record<string, any>): { title: string; description: string } {
+    const count = Array.isArray(params.branch) ? params.branch.length : 0;
+    const values = {
+        name: typeof params.root?.name === 'string' ? params.root.name : '',
+        date: typeof params.pausedAt === 'string' ? params.pausedAt.slice(0, 10) : '',
+        reason: typeof params.reason === 'string' ? params.reason : '',
+    };
+    return {
+        title: branchVoteTitle(count),
+        description: trn(count,
+            'An owner paused the invite branch of {name} on {date}. This vote is on the one account still paused in it. Reason given: {reason}',
+            'An owner paused the invite branch of {name} on {date}. This vote is on the {n} accounts still paused in it. Reason given: {reason}',
+            values),
+    };
 }
 
 /** What the accounts on a branch's list owe together: what the Commons would absorb if the vote removes them. */
@@ -2842,9 +2892,7 @@ export function pauseBranch(rootPubkey: string, actor: string, reason: string, o
                 established: accounts.filter(a => a.leftOff === 'established').map(a => ({ pubkey: a.pubkey, name: a.name })),
             };
             for (const a of listed) setUserStatusRow(a.pubkey, 'disabled', { actor, how: 'suspended' });
-            const title = tr('Remove these {count} accounts?', { count: listed.length });
-            const description = tr('An owner paused {count} accounts in the invite branch of {name} on {date}. Reason given: {reason}',
-                { count: listed.length, name: rootName, date: opensAt.slice(0, 10), reason: cleanReason });
+            const { title, description } = branchVoteWords(params);
             db.prepare(`
                 INSERT INTO decisions (
                     id, author_pubkey, title, description, touches, effect, subject, params,
@@ -2896,9 +2944,16 @@ function startBranchGrace(decision: Decision, now: string): { success: boolean; 
  */
 function pruneBranchVote(decision: Decision, now: string, how: string): void {
     const notRemoved: string[] = [];
+    const notPaused: string[] = [];
     for (const pk of removalSubjects(decision)) {
         const member = getMember(pk);
         if (!member || member.status === 'pruned') continue;
+        // No longer paused (brought back by a way that left them on the list): this vote holds them no more, so it removes
+        // nobody who walks free, and its record names them.
+        if (member.status !== 'disabled') {
+            notPaused.push(branchEntryOf(decision, pk)?.name || pk.slice(0, 8));
+            continue;
+        }
         try {
             adminPruneUser(pk, COMMUNITY_DECISION_ACTOR);
         } catch (e: any) {
@@ -2907,7 +2962,15 @@ function pruneBranchVote(decision: Decision, now: string, how: string): void {
             console.warn(`[Decisions] ${decision.id}: a branch removal of ${pk.slice(0, 8)} failed: ${e?.message || e}`);
         }
     }
-    const reason = notRemoved.length ? `${how}. Not removed, still paused: ${notRemoved.join('; ')}` : how;
+    // Those the community's own vote brought back in the window left the list (dropFromBranch `byVote`): named too.
+    const broughtBack = (Array.isArray(decision.params.lifted) ? decision.params.lifted as BranchLifted[] : [])
+        .filter(l => l && typeof l.byVote === 'string').map(l => l.name);
+    const reason = [
+        how,
+        ...(broughtBack.length ? [`Brought back by a community vote, so not removed: ${broughtBack.join('; ')}`] : []),
+        ...(notPaused.length ? [`No longer paused, so not removed: ${notPaused.join('; ')}`] : []),
+        ...(notRemoved.length ? [`Not removed, still paused: ${notRemoved.join('; ')}`] : []),
+    ].join('. ');
     db.prepare(`
         UPDATE decisions SET status = 'executed', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?
     `).run(now, reason, now, decision.id);

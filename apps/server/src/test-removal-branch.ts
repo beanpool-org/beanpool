@@ -8,18 +8,22 @@
  *     role, a branch of one, an owner from a computer (asked the phone).
  *  2. The pause: every listed account 'disabled' at once, nobody removed; one vote whose subject is null and whose params
  *     list them with the Beans each owes and their total; each listed account told, and every voter.
- *  3. The gate: the list and the vote by its id serve it only to an app that says it draws it (`draws=branch`), so an app
- *     from before never gets a card it can't draw.
+ *  3. The gate: the list and the vote by its id serve it only to an app that says it draws it (`draws=branch`), and Home's
+ *     Decide card only to one that says it opens it (`lands=branch-vote`), so an app from before never gets a card it can't draw.
  *  4. Balances: a voter reads every account's and the total; a listed account its own only; anyone else none.
  *  5. The vote: nobody on the list votes on it or counts in its electorate; each keeps their vote on another Decision.
  *  6. Replies (Amendment A point 2, as S3b allows): each listed account replies on its own entry; someone not on it can't;
  *     an admin takes one down by naming the member, and they can't write another.
  *  7. Endings: No lifts every pause; a missed quorum lifts every pause; Yes opens one grace window, every account frozen,
  *     and its end removes each; a halt in the window gives them all back; lifting one by hand takes them off the list and
- *     the vote runs on for the others.
+ *     the vote runs on for the others, its title and description saying the count left.
  *  8. The chain rules hold: after a branch's vote said No, an admin can't pause one of its accounts again, and an owner
  *     can't pause the branch again with the same reason.
  *  9. Votes off: no branch pause (404 feature_off), and the owner's prune branch works as before.
+ * 10. A re-key of an account on the list (engine/key-move.ts) moves it on the vote, mid-vote and mid-grace: No lifts its new
+ *     key's pause, Yes removes its new key, a halt gives it back, and Offboard settling the others leaves the window open.
+ * 11. The community's own vote to bring one account back (unsuspend_member), passed in the window, takes it off the list:
+ *     the window's end removes the others, never them, and the record names them.
  *
  * Boots the real server; the routes go over HTTPS through the real admin sessions and the real signature middleware.
  * Expo is answered here: nothing leaves this machine.
@@ -269,6 +273,17 @@ async function main() {
     fresh();
     const newOne = await signed('GET', `/api/commons/decisions/${id1}?draws=branch`, voters[0]);
     assert(oldOne.status === 404 && newOne.status === 200, `nor by its id (${oldOne.status}), unless it says so (${newOne.status})`);
+    // Home's Decide card opens that list: an older app gets no row for it there, nor counts it (lands=branch-vote).
+    const decideOf = (a: Answer) => a.body?.cards?.decide;
+    fresh();
+    const homeOld = await signed('GET', '/api/home?cards=decide', voters[0]);
+    fresh();
+    const homeNew = await signed('GET', '/api/home?cards=decide&lands=branch-vote', voters[0]);
+    assert(homeOld.status === 200 && !(decideOf(homeOld)?.items ?? []).some((i: any) => i.id === id1)
+        && (decideOf(homeOld)?.open ?? 0) === (decideOf(homeNew)?.open ?? 0) - 1,
+        `Home's Decide card gives an older app no row for it, nor counts it (${JSON.stringify(decideOf(homeOld) ?? null)})`);
+    assert((decideOf(homeNew)?.items ?? []).some((i: any) => i.id === id1 && i.title === 'Remove these 4 accounts?'),
+        'an app that says lands=branch-vote is given its row');
 
     // ── 4. Balances ─────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n4. Who reads the Beans each account owes');
@@ -377,6 +392,13 @@ async function main() {
         && !p5.branch.some((e: any) => e.pubkey === s5.b.pubKeyHex) && p5.lifted?.[0]?.name === 'LiftB',
         `lifting one by hand takes them off the list; the vote runs on for the other ${p5.branch.length}`);
     assert([s5.root, s5.a, s5.c].every(i => statusOf(i) === 'disabled'), 'the others stay paused');
+    assert(row(id5).title === 'Remove these 3 accounts?' && /the 3 accounts still paused in it/.test(row(id5).description)
+        && !/\b4\b/.test(row(id5).description),
+        `its title and description say the count left ("${row(id5).title}" / "${row(id5).description}")`);
+    fresh();
+    const liftedHome = await signed('GET', '/api/home?cards=decide&lands=branch-vote', voters[0]);
+    assert((decideOf(liftedHome)?.items ?? []).some((i: any) => i.id === id5 && i.title === 'Remove these 3 accounts?'),
+        'Home reads the count left too');
     vote(id5, voters, []);
     closeNow(id5);
     db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), id5);
@@ -406,6 +428,83 @@ async function main() {
     const offPrune = await admin('POST', `/api/local/admin/branches/${s6.root.pubKeyHex}/prune`, ottoPhone(), {});
     assert(offPrune.status === 200 && s6.all.every(i => statusOf(i) === 'pruned'), `the owner's prune branch works as before (${offPrune.status} ${offPrune.body?.error ?? ''})`);
     setSwitchOverride('decisions', true);
+
+    // ── 10. A re-key moves an account on the list ───────────────────────────────────────────────────────────────────
+    console.log('\n10. A re-key moves an account on the list: mid-vote and mid-grace, then No, Yes and a halt');
+    // The accounts the sections above brought back count in every electorate now: they leave, so the 7 voters reach quorum.
+    for (const id of [...s1.all, ...s2.all, ...s4.all, s5.b, settled, modInBranch, loner, other]) {
+        db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(id.pubKeyHex);
+    }
+    const { completeRekey, issueRekeyCode } = await import('./engine/member-wizards.js');
+    /** The member's key replaced, as Settings → Re-Key does (completeRekey): the same person on a new key. */
+    const rekey = (from: Id): Id => {
+        const to = keypair(from.callsign);
+        completeRekey(from.pubKeyHex, to.pubKeyHex, issueRekeyCode(from.pubKeyHex, 'owner:password').code, 'owner:password');
+        return to;
+    };
+    const listedKeys = (decisionId: string) => (JSON.parse(row(decisionId).params).branch as any[]).map((e) => e.pubkey);
+    const gone = (id: Id) => (db.prepare('SELECT COUNT(*) AS c FROM members WHERE public_key = ?').get(id.pubKeyHex) as { c: number }).c === 0;
+
+    const k1 = branchOf('KeyNo');
+    const idK1 = await pauseBranchNow(k1.root);
+    const k1b = rekey(k1.b);
+    assert(gone(k1.b) && statusOf(k1b) === 'disabled' && listedKeys(idK1).includes(k1b.pubKeyHex) && !listedKeys(idK1).includes(k1.b.pubKeyHex),
+        'a re-key mid-vote moves the account on the list to its new key, still paused');
+    vote(idK1, voters.slice(0, 2), voters.slice(2, 5));
+    closeNow(idK1);
+    assert(row(idK1).status === 'failed' && [k1.root, k1.a, k1b, k1.c].every(i => statusOf(i) === 'active'),
+        `No: every pause lifts, the new key's included (${[k1.root, k1.a, k1b, k1.c].map(statusOf).join(',')})`);
+
+    const k2 = branchOf('KeyYes');
+    const idK2 = await pauseBranchNow(k2.root);
+    const k2c = rekey(k2.c);
+    vote(idK2, voters.slice(0, 5), voters.slice(5, 6));
+    closeNow(idK2);
+    assert(row(idK2).status === 'execution_pending_grace' && statusOf(k2c) === 'disabled' && frozenOf(k2c) === 1,
+        `Yes: the account re-keyed mid-vote waits out the window on its new key, frozen (${statusOf(k2c)}, ${frozenOf(k2c)})`);
+    const k2a = rekey(k2.a);
+    assert(listedKeys(idK2).includes(k2a.pubKeyHex) && se.removalInGraceOf(k2a.pubKeyHex)?.id === idK2 && statusOf(k2a) === 'disabled',
+        'a re-key mid-grace keeps the new key on the list, in the window, paused');
+    // Offboard settles the two not re-keyed: the window runs on for the two re-keyed, as their new keys are still here.
+    executeOffboard(k2.root.pubKeyHex, { resolution: 'prune_zero_balance' }, ada.pubKeyHex);
+    executeOffboard(k2.b.pubKeyHex, { resolution: 'prune_zero_balance' }, ada.pubKeyHex);
+    assert(statusOf(k2.root) === 'pruned' && statusOf(k2.b) === 'pruned' && row(idK2).status === 'execution_pending_grace',
+        `Offboard settling the others leaves the vote in its window for the re-keyed two (${row(idK2).status})`);
+    db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), idK2);
+    de.tickDecisions();
+    assert(row(idK2).status === 'executed' && statusOf(k2a) === 'pruned' && statusOf(k2c) === 'pruned' && !/not removed/i.test(row(idK2).execution_reason ?? ''),
+        `the window's end removes both re-keyed accounts on their new keys (${statusOf(k2a)}, ${statusOf(k2c)}; "${row(idK2).execution_reason}")`);
+
+    const k3 = branchOf('KeyHalt');
+    const idK3 = await pauseBranchNow(k3.root);
+    vote(idK3, voters, []);
+    closeNow(idK3);
+    const k3b = rekey(k3.b);
+    const haltK3 = de.adminHaltDecision(idK3, ada.pubKeyHex, 'We checked: these invites were real people after all');
+    assert(haltK3.success && [k3.root, k3.a, k3b, k3.c].every(i => statusOf(i) === 'active' && frozenOf(i) === 0),
+        `a halt in the window gives back the account re-keyed mid-grace too, unfrozen (${statusOf(k3b)}, ${frozenOf(k3b)})`);
+
+    // ── 11. The community's own vote brings one back ────────────────────────────────────────────────────────────────
+    console.log('\n11. A vote to bring one account back, passed in the window, takes it off the list');
+    const b1 = branchOf('Back');
+    const idB1 = await pauseBranchNow(b1.root);
+    vote(idB1, voters.slice(0, 5), []);
+    closeNow(idB1);
+    const bringBack = de.createDecision({ authorPubkey: ada.pubKeyHex, title: 'Bring BackB back', description: 'BackB is a real neighbour; we know them',
+        touches: 'member', effect: 'unsuspend_member', subject: b1.b.pubKeyHex });
+    vote(bringBack.id, voters.slice(0, 5), []);
+    closeNow(bringBack.id);
+    const pB1 = JSON.parse(row(idB1).params);
+    assert(row(bringBack.id).status === 'executed' && statusOf(b1.b) === 'active' && frozenOf(b1.b) === 0,
+        `the vote to bring them back is carried out (${row(bringBack.id).status}, ${statusOf(b1.b)})`);
+    assert(row(idB1).status === 'execution_pending_grace' && !listedKeys(idB1).includes(b1.b.pubKeyHex)
+        && pB1.lifted?.some((l: any) => l.pubkey === b1.b.pubKeyHex && l.byVote === bringBack.id) && row(idB1).title === 'Remove these 3 accounts?',
+        `they leave the branch's list, its record naming that vote; it runs on for the other 3 (${row(idB1).status}, "${row(idB1).title}")`);
+    db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), idB1);
+    de.tickDecisions();
+    assert(statusOf(b1.b) === 'active' && [b1.root, b1.a, b1.c].every(i => statusOf(i) === 'pruned')
+        && /Brought back by a community vote, so not removed: BackB/.test(row(idB1).execution_reason ?? ''),
+        `the window's end removes the others, never them, and the record says so ("${row(idB1).execution_reason}")`);
 
     assert(offMachine.length === 0, `nothing was asked of a server off this machine (${offMachine.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} passed`);

@@ -33,7 +33,7 @@ export function InviteVouchChoice({ value, onChange, colors }: { value: VouchLev
                                     : { backgroundColor: colors.surface.card, borderColor: colors.border.strong },
                             ]}
                         >
-                            <Text style={[styles.choiceText, { color: on ? colors.text.inverse : colors.text.heading }]}>{shown}</Text>
+                            <Text style={[styles.choiceText, { color: on ? colors.text.onBrand : colors.text.heading }]}>{shown}</Text>
                         </Pressable>
                     );
                 })}

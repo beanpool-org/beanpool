@@ -112,7 +112,7 @@ A community's admins can turn invites off for the whole community.
 
 **Vouching on an invite.** If you can vouch for people (owners, admins and members the community has appointed to vouch), **Invites** also shows **Vouch for them**: **None**, **25**, **50** or **100**. It starts on **None** every time. Pick an amount and you vouch for that person the moment they join, so you don't have to look out for them under a name you may not recognise. It is the same as vouching from their profile: **Vouched by** shows you, and you can withdraw it the same way.
 
-- If you can no longer vouch when they join, they still join, with no vouch.
+- If you lose the right to vouch before they join, they still join, with no vouch.
 - The invite doesn't tell them beforehand. Once they have joined, the vouch shows as any vouch does.
 - A ticket made without a connection can't carry a vouch. To make one, choose **None**.
 - There is no vouch where a community has no Beans, so the global community doesn't show this.

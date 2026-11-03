@@ -4,7 +4,7 @@ title: Explorar o Mercado
 summary: Encontre Ofertas e Pedidos com busca, filtros e distância.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Ofertas e Pedidos de pessoas perto de você. Busque, filtre por categoria ou distância, ou toque em + PUBLICAR para criar o seu.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## A aba Mercado
@@ -15,6 +15,7 @@ Toque em **Mercado** na barra de abas. Você verá o que as pessoas da sua comun
 - **Uma enquete também volta uma vez**, no dia anterior ao encerramento.
 - **Ninguém ocupa mais de dois lugares por dia.** A terceira publicação de uma pessoa no dia, e as seguintes, vêm depois das publicações de todas as outras pessoas naquele dia.
 - **Editar uma publicação não a faz subir.** Pausá-la, ou uma resposta a ela, também não. Para ser vista de novo, publique de novo.
+- **Uma linha mostra onde você parou.** **Novidades desde a última vez que você olhou** fica acima da primeira publicação que já estava listada quando você saiu do Mercado pela última vez neste telefone ou neste navegador; ela não aparece na primeira vez, quando nada é mais novo, nem enquanto você busca ou filtra, e a grade do telefone não a mostra.
 - **Uma publicação que um proprietário fixou** fica bem no topo, sob **Fixado**, qualquer que seja a sua idade.
 
 Nas exibições em lista e compacta, você vê os títulos dos dias. A grade mostra a mesma ordem, sem eles. No celular, o Mercado abre em forma de lista; no aplicativo web, em forma de cartões. **Para Você** mantém sua própria ordem. Sob **Eventos**, o que acontece antes vem primeiro, com **Hoje**, **Este fim de semana** e **Próximos 7 dias**. Uma busca mostra as publicações que melhor correspondem às suas palavras. No celular, puxe a lista para baixo para atualizá-la.

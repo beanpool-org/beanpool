@@ -4,7 +4,7 @@ title: Im Markt stöbern
 summary: Angebote und Gesuche über Suche, Filter und Entfernung finden.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Angebote und Gesuche aus deiner Nähe. Suchen, nach Kategorie oder Distanz filtern, oder mit + BEITRAG ERSTELLEN inserieren.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## Der Tab „Markt“
@@ -15,6 +15,7 @@ Tippe in der Tab-Leiste auf **Markt**. Du siehst, was die Menschen in deiner Com
 - **Eine Umfrage kommt auch einmal wieder**, am Tag vor ihrem Ende.
 - **Niemand belegt mehr als zwei Plätze am Tag.** Der dritte Beitrag einer Person an einem Tag und alle weiteren kommen nach allen anderen Beiträgen dieses Tages.
 - **Einen Beitrag zu bearbeiten schiebt ihn nicht nach oben.** Auch Pausieren nicht, und auch keine Antwort darauf. Um wieder gesehen zu werden, veröffentliche ihn erneut.
+- **Eine Zeile zeigt, wo du aufgehört hast.** **Neu seit deinem letzten Besuch** steht über dem ersten Beitrag, der schon gelistet war, als du den Markt zuletzt auf diesem Telefon oder in diesem Browser verlassen hast; beim ersten Mal, wenn nichts Neueres da ist und während du suchst oder filterst, erscheint sie nicht, und das Raster auf dem Telefon zeigt sie nicht.
 - **Ein Beitrag, den ein Owner angepinnt hat,** steht ganz oben, unter **Angepinnt**, egal wie alt er ist.
 
 In der Listen- und Kompaktansicht siehst du die Tagesüberschriften. Das Raster zeigt dieselbe Reihenfolge ohne sie. Auf dem Telefon öffnet sich der Markt als Liste, in der Web-App als Kacheln. **Für dich** behält seine eigene Reihenfolge bei. Unter **Veranstaltungen** steht die zeitnächste zuerst, mit **Heute**, **Dieses Wochenende** und **Nächste 7 Tage**. Eine Suche zeigt die Beiträge, die am besten zu deinen Wörtern passen. Ziehe die Liste auf dem Telefon nach unten, um sie zu aktualisieren.

@@ -4,7 +4,7 @@ title: Xem qua chợ
 summary: Tìm Lời đề nghị và Nhu cầu bằng tìm kiếm, bộ lọc và khoảng cách.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Lời đề nghị và Nhu cầu từ mọi người gần bạn. Tìm kiếm, lọc theo danh mục hoặc khoảng cách, hoặc nhấn ĐĂNG TIN để đăng tin của bạn.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## Tab Chợ
@@ -15,6 +15,7 @@ Nhấn **Chợ** trong hàng các tab. Bạn sẽ thấy những gì mọi ngư�
 - **Một cuộc thăm dò cũng quay lại một lần**, vào ngày trước khi kết thúc.
 - **Không ai chiếm quá hai chỗ mỗi ngày.** Bài đăng thứ ba của một người trong ngày, và các bài sau đó, xếp sau bài của tất cả những người khác trong ngày đó.
 - **Chỉnh sửa một bài đăng không đẩy nó lên.** Tạm dừng nó, hay một câu trả lời cho nó, cũng không. Muốn được thấy lại, hãy đăng lại.
+- **Một dòng cho biết bạn đã dừng ở đâu.** **Mới kể từ lần xem trước của bạn** nằm phía trên bài đăng đầu tiên đã được đăng khi bạn rời Chợ lần gần nhất trên điện thoại này hoặc trong trình duyệt này; dòng này không có ở lần đầu, khi không có gì mới hơn, hay khi bạn đang tìm kiếm hoặc lọc, và lưới trên điện thoại cũng không vẽ nó.
 - **Bài đăng mà chủ sở hữu đã ghim** nằm trên cùng, dưới **Đã ghim**, dù cũ đến đâu.
 
 Ở chế độ xem danh sách và thu gọn, bạn thấy các tiêu đề ngày. Chế độ lưới cho thấy cùng thứ tự đó mà không có chúng. Trên điện thoại, Chợ mở ra dưới dạng danh sách; trong ứng dụng web, dưới dạng các thẻ. Tab **★ Dành cho bạn** giữ thứ tự riêng của nó. Dưới **Sự kiện**, sự kiện sớm nhất hiển thị trước, cùng với **Hôm nay**, **Cuối tuần này** và **7 ngày tới**. Tìm kiếm hiển thị các bài đăng khớp nhất với từ của bạn. Trên điện thoại, kéo danh sách xuống để làm mới.

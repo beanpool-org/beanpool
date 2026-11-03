@@ -144,11 +144,11 @@ export default function PairInScreen() {
         session.current = null;
         try {
             // The same gate as the 12-word restore: the key is made from the words, never taken from the relay, and no
-            // other account on this phone is replaced (no confirmReplace: it refuses instead).
+            // other account on this phone is replaced (no confirmReplace: it refuses instead). That the words make the key
+            // the browser named was checked before the member's tap (readPairInAccount), never after this saves.
             const restored = await restoreFromWords(account.words, qr.nodeUrl, {
                 nameOnNode: (publicKey, privateKey) => fetchNodeCallsign(qr.nodeUrl, publicKey, privateKey),
             });
-            if (restored.publicKey !== account.publicKey) throw new Error('mismatch');
             setIdentity(restored);
             router.replace('/');
         } catch (err) {

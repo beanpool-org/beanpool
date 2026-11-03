@@ -21,7 +21,7 @@ import { cancelPairingApi, confirmPairingApi, getNodeApiUrl, initPairingToPhoneA
 import { getMnemonic, loadIdentity } from '../lib/identity';
 
 // qrcode.react's types predate this React's JSX types (WelcomePage casts it the same way).
-const QRCode: React.FC<{ value: string; size: number; level: string; marginSize: number }> = QRCodeSVG as any;
+const QRCode: React.FC<{ value: string; size: number; level: string; marginSize: number; style?: React.CSSProperties }> = QRCodeSVG as any;
 
 export const BRING_TO_PHONE_WORDS = {
     open: word('Put your account on your phone'),
@@ -146,7 +146,7 @@ export function BringToPhone({ isPhone = false, onRemoveHere }: { isPhone?: bool
         end(res.result === 'burned' ? 'burned' : 'expired');
     };
 
-    const box = 'mt-3 p-4 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700';
+    const box = 'mt-3 p-3 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700';
     const primary = 'min-h-[44px] px-5 py-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold border-none cursor-pointer disabled:opacity-60';
     const quiet = 'min-h-[44px] px-4 py-2 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-100 font-bold border-none cursor-pointer';
     const line = 'm-0 mt-2 text-sm leading-relaxed text-nature-700 dark:text-nature-200';
@@ -165,9 +165,10 @@ export function BringToPhone({ isPhone = false, onRemoveHere }: { isPhone?: bool
             {phase === 'code' && (
                 <>
                     <p className={line}>{t(BRING_TO_PHONE_WORDS.steps)}</p>
-                    {/* The code on white in both themes: a camera reads dark on light. */}
-                    <div role="img" aria-label={t(BRING_TO_PHONE_WORDS.qrLabel)} className="mt-3 mx-auto w-fit max-w-full p-3 rounded-lg bg-white">
-                        <QRCode value={qrValue} size={200} level="M" marginSize={2} />
+                    {/* The code on white in both themes: a camera reads dark on light. It shrinks with its box, never past it:
+                        at 320 px with text at 130% the box is narrower than 200 px, and a code cut at its edge may not scan. */}
+                    <div role="img" aria-label={t(BRING_TO_PHONE_WORDS.qrLabel)} className="mt-3 mx-auto w-full max-w-[216px] box-border p-2 rounded-lg bg-white">
+                        <QRCode value={qrValue} size={200} level="M" marginSize={2} style={{ display: 'block', width: '100%', height: 'auto' }} />
                     </div>
                     {isPhone && (
                         <>

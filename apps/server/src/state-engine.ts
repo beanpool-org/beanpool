@@ -1121,8 +1121,8 @@ function armMainServerTimers(): void {
         // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
         // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
         try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
-        // Retention, where the node profile's `retention` switch is on (the global node): a poll that has closed leaves the
-        // board, and an event a week past its end loses its photos (engine/posts.ts archiveEndedPosts). Safe every minute.
+        // Retention, where the node profile's `retention` switch is on (the global node): a poll a week past its close leaves
+        // the board, and an event a week past its end loses its photos (engine/posts.ts archiveEndedPosts). Safe every minute.
         try { archiveEndedPosts(); } catch (e) { console.warn('[Retention] Event and poll archive failed:', e); }
         // Repeating events whose date has ended move to their next date (DESIGN-event-times §8), and RSVPs for dates a
         // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
@@ -1479,8 +1479,8 @@ export function archiveStaleListings(nowMs = Date.now()): ReturnType<typeof arch
 export function archiveEndedPosts(nowMs = Date.now()): ReturnType<typeof archiveEndedPostsEngine> {
     const run = archiveEndedPostsEngine(broadcast, nowMs);
     if (run.events > 0 || run.polls > 0) {
-        console.log(`🗄️  Took ${run.polls} closed poll(s) off the board and the photos off ${run.events} event(s) `
-            + `${profileLimits().eventArchiveDays} days past their end: ${run.photosDropped} photo(s) deleted`
+        console.log(`🗄️  Took ${run.polls} poll(s) ${profileLimits().pollArchiveDays} days past their close off the board and the photos `
+            + `off ${run.events} event(s) ${profileLimits().eventArchiveDays} days past their end: ${run.photosDropped} photo(s) deleted`
             + `${run.more ? '; more wait for the next minute' : ''}`);
     }
     return run;

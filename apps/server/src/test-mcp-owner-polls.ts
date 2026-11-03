@@ -663,13 +663,16 @@ async function main(): Promise<void> {
         const voteOnGlobal = await signed(`/api/marketplace/posts/${structured(withArea)?.postId}/vote`, { optionId: 'opt_1' }, newOnGlobal);
         assert(voteOnGlobal.status === 200, `a brand new member answers there too (${voteOnGlobal.status} ${JSON.stringify(voteOnGlobal.body?.error ?? '')})`);
         assert(getPosts({ id: structured(withArea)?.postId, includeAllScopes: true })[0]?.totalVotes === 1, 'and it counts');
-        // Retention on global (engine/posts.ts archiveEndedPosts): a closed poll leaves the board at the next minute's run, and
-        // its author keeps its counts.
+        // Retention on global (engine/posts.ts archiveEndedPosts): a closed poll stays on the board for a week after it closed,
+        // then leaves it, and its author keeps its counts.
         assert(!(await tool('close_poll', { post_id: structured(withArea)?.postId })).isError, 'the owner closes it');
+        archiveEndedPosts();
+        assert(row(structured(withArea)?.postId)?.active === 1, 'the minute\'s run leaves the poll it closed just now on the board, closed, for its week');
+        db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(), structured(withArea)?.postId);
         const archivedRun = archiveEndedPosts();
         const afterArchive = structured(await results(structured(withArea)?.postId));
         assert(archivedRun.polls >= 1 && row(structured(withArea)?.postId)?.active === 0 && afterArchive?.status === 'closed' && afterArchive?.totalVotes === 1,
-            `the minute's run takes the closed poll off the board, and poll_results still reads its counts (${JSON.stringify({ run: archivedRun, status: afterArchive?.status, total: afterArchive?.totalVotes })})`);
+            `a week after it closed the minute's run takes it off the board, and poll_results still reads its counts (${JSON.stringify({ run: archivedRun, status: afterArchive?.status, total: afterArchive?.totalVotes })})`);
 
         // ── 12b. A typed Other ───────────────────────────────────────────────────────────────────────
         section('── 12b. A typed Other ──');

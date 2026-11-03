@@ -481,6 +481,10 @@ CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_
 CREATE INDEX IF NOT EXISTS idx_posts_event_start ON posts(event_start_at, id) WHERE type = 'event';
 -- The minute roll (engine/event-series-roll.ts rollDueSeries): the repeating events whose date has ended, and only them.
 CREATE INDEX IF NOT EXISTS idx_posts_event_series ON posts(event_end_at) WHERE type = 'event' AND event_repeat IS NOT NULL;
+-- Retention's minute run, where it is on (engine/posts.ts archiveEndedPosts): the events that have ended, in end order, and
+-- the closed polls still on the board, and only them, so neither scan reads every post the node holds.
+CREATE INDEX IF NOT EXISTS idx_posts_event_end ON posts(event_end_at) WHERE type = 'event' AND event_end_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_poll_closed_on_board ON posts(updated_at) WHERE type = 'poll' AND status = 'completed' AND active = 1;
 -- The 30-day prune of old dates' reminder marks (pruneStaleRsvps).
 CREATE INDEX IF NOT EXISTS idx_event_reminders_sent_occurrence ON event_reminders_sent(occurrence_at);
 

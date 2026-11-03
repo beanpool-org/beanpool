@@ -12,6 +12,8 @@
 // open vote's report goes the same way, so the queue reads alike. Its row holds no words, because an admin reads that queue.
 //
 // A poll taken off takes its words, however it went: pollWordsGoWithThePoll, one trigger, so no path can leave them behind.
+// A closed poll that only leaves the board (retention, a week after it closed: engine/posts.ts archiveEndedPosts) is not taken
+// off: it keeps them, for its maker and the owners, as a closed poll does.
 
 import crypto from 'node:crypto';
 import { getPosts, readsAsMember, type MarketplacePost } from '@beanpool/engine';
@@ -54,8 +56,13 @@ export interface PollOtherRead {
 
 /** The poll, for someone who may read its words; else refused, as an id nobody has where they can't see it. */
 function pollForWords(postId: string, reader: string): MarketplacePost {
-    const post = getPosts(db, { id: postId, includeAllScopes: true, viewerPubkey: reader })[0];
-    if (!post || post.type !== 'poll' || marketplacePostOutOfSight(post, reader) || !pollOtherOption(post.pollOptions)) {
+    // A closed poll retention took off the board (engine/posts.ts archiveEndedPosts) is read by id by its maker (@beanpool/engine
+    // getPosts), and by an owner here, so a line its maker reports after that can still be read and removed. Never a poll taken
+    // down: its words went with it.
+    const owner = isNodeOwner(reader);
+    const post = getPosts(db, { id: postId, includeAllScopes: true, viewerPubkey: reader, ...(owner ? { includeInactive: true } : {}) })[0];
+    if (!post || post.type !== 'poll' || marketplacePostOutOfSight(post, reader) || !pollOtherOption(post.pollOptions)
+        || (post.active === false && post.status !== 'completed')) {
         throw new PollOtherError(404, word('Poll not found'));
     }
     // A pruned account's or an old key's row still says it made the poll: only someone who reads as a member here reads on.
@@ -115,6 +122,11 @@ export function removePollOtherAnswer(postId: string, answerId: string, actor: s
     truncateWalAfterDelete('a typed answer was removed');
 }
 
+/** SQL: a report of one of this poll's lines waits for an owner. `post` is SQL too (a column, say `p.id`). */
+export const pollLineReportWaitsSql = (post: string) => `EXISTS (SELECT 1 FROM abuse_reports r WHERE json_valid(r.disclosure)
+    AND json_extract(r.disclosure, '$.kind') = '${POLL_ANSWER_DISCLOSURE_KIND}' AND json_extract(r.disclosure, '$.postId') = ${post}
+    AND (r.status = 'pending' OR r.status IS NULL))`;
+
 /** What waits on a poll's lines, done with, as SQL: `post` and `answer` are SQL too, and an answer of NULL means every line's. */
 const closeReportsSql = (post: string, answer: string) => `UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
     WHERE json_valid(disclosure) AND json_extract(disclosure, '$.kind') = '${POLL_ANSWER_DISCLOSURE_KIND}' AND json_extract(disclosure, '$.postId') = ${post}
@@ -147,6 +159,10 @@ export function takeBackPollLine(postId: string, answerId: string): void {
  * In the transaction that took the poll off: its words go, its rows stay, as its ballots and its counts do, and a report of any
  * line closes. Each path has moved the poll (posts_touch_updated_at moves it for one that didn't), so a standby hears, and the
  * WAL is emptied once it has committed. A closing keeps `active` at 1: the words are what it opens, and nothing here runs.
+ * Nor does a closed poll that only leaves the board, closed before and closed after (retention's archive, a week after it closed:
+ * engine/posts.ts archiveEndedPosts): its maker still reads it, and polls.md promises "A poll that has closed keeps them". So
+ * its words stay, and a report of a line waits for an owner. The paths that close a poll and take it off in one UPDATE (a
+ * leaver's open poll) and the removals (`cancelled`) still run it.
  *
  * Main server only: a standby takes the poll's lines from the copy, which names them all (engine/sync.ts replacePollAnswers), and
  * its reports with them, so the two end up the same. TEMP, like the other triggers that call a connection function: nothing lands
@@ -161,7 +177,8 @@ export function pollWordsGoWithThePoll(): void {
         return null;
     });
     db.exec(`CREATE TEMP TRIGGER IF NOT EXISTS poll_off_takes_its_words AFTER UPDATE OF active ON main.posts
-        WHEN NEW.active = 0 AND NEW.type = 'poll' AND poll_words_go_here() = 1
+        WHEN NEW.active = 0 AND NEW.type = 'poll' AND NOT (OLD.status IS 'completed' AND NEW.status IS 'completed')
+             AND poll_words_go_here() = 1
         BEGIN
             SELECT poll_words_went() WHERE EXISTS (SELECT 1 FROM poll_answers WHERE post_id = NEW.id AND words IS NOT NULL);
             UPDATE poll_answers SET words = NULL, words_removed = 1 WHERE post_id = NEW.id AND words IS NOT NULL;

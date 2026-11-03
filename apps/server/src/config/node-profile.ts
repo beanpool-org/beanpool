@@ -179,8 +179,8 @@ export interface ProfileSwitches {
     /** A listing (an Offer or a Need) is archived `profileLimits().listingArchiveDays` after it last changed: taken off
      *  the Market as its author's own removal takes it, and its photos deleted (engine/posts.ts archiveStaleListings;
      *  DESIGN-global-mothership-fable §4.2, decision 7, Marty 2026-10-18); an event's photos are deleted a week after it ends,
-     *  and a poll leaves the board when it closes (engine/posts.ts archiveEndedPosts). On (the global node): photos are the
-     *  cost that grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local
+     *  and a poll leaves the board a week after it closes (engine/posts.ts archiveEndedPosts). On (the global node): photos
+     *  are the cost that grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local
      *  community): a listing stays until its author takes it down, and a closed poll stays on the board, as before. */
     retention: boolean;
     /** A member's first message to someone who hasn't added them, written to them or traded with them waits as a request
@@ -521,6 +521,10 @@ export const LISTING_ARCHIVE_DAYS_DEFAULT = 90;
  *  after they end"). Not an env: the 30-day scrub takes the rest of an ended event on every node, so a longer number
  *  would mean nothing and a shorter one would take photos the people who went still look at. */
 export const EVENT_ARCHIVE_DAYS = 7;
+/** A closed poll leaves the board this many days after it closed, where `retention` is on: as an ended event's week (the
+ *  director, 3 Nov, for Marty; reversible). Its result, its typed Other answers and, on the global node, where its votes
+ *  came from show only once it has closed, so the week is when members read them. Not an env, as EVENT_ARCHIVE_DAYS. */
+export const POLL_ARCHIVE_DAYS = 7;
 /** LISTING_ARCHIVE_DAYS's range: under a month would take listings their authors still mean; ten years is "keep them". */
 const LISTING_ARCHIVE_DAYS_MIN = 30;
 const LISTING_ARCHIVE_DAYS_MAX = 3_650;
@@ -539,9 +543,9 @@ export interface ProfileLimits {
     listingArchiveDays: number | null;
     /** Days after it ended an event loses its photos: EVENT_ARCHIVE_DAYS, 7. Null where `retention` is off. */
     eventArchiveDays: number | null;
-    /** A poll is taken off the board when it closes; its author still reads it by id. False where `retention` is off: a
-     *  closed poll stays on the board with its result, as before. */
-    pollArchiveAtClose: boolean;
+    /** Days after it closed a poll is taken off the board: POLL_ARCHIVE_DAYS, 7. Its author still reads it by id, with its
+     *  result and its typed answers. Null where `retention` is off: a closed poll stays on the board with its result. */
+    pollArchiveDays: number | null;
     /** Photos a listing or an event may carry: 5 on every node, as the apps' five photo slots are (@beanpool/engine
      *  MAX_POST_PHOTOS). Not an env: a lower number would meet five slots in the apps. */
     photosPerListing: number;
@@ -572,7 +576,7 @@ export function profileLimits(): ProfileLimits {
     return {
         listingArchiveDays: s.retention ? archiveDaysSetting() : null,
         eventArchiveDays: s.retention ? EVENT_ARCHIVE_DAYS : null,
-        pollArchiveAtClose: s.retention,
+        pollArchiveDays: s.retention ? POLL_ARCHIVE_DAYS : null,
         photosPerListing: MAX_POST_PHOTOS,
         nearbyListingsMax: s.nearbyListings ? nearbyListingsLimits().max : null,
         placeWatches: envLimit('PLACE_WATCHES_MAX', PLACE_WATCHES_DEFAULT, 1, PLACE_WATCHES_CEILING),
@@ -966,7 +970,7 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     if (configured.retention) {
         console.log(`🗄️  Retention is on: a listing is archived ${archiveDaysSetting()} days after it last changed, and its photos are `
             + `deleted (LISTING_ARCHIVE_DAYS); an event loses its photos ${EVENT_ARCHIVE_DAYS} days after it ends; a poll leaves the `
-            + 'board when it closes.');
+            + `board ${POLL_ARCHIVE_DAYS} days after it closes.`);
     }
     return { profile, previous };
 }

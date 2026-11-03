@@ -4,7 +4,7 @@
 
 import { isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
-import { takeBackPollLine } from './poll-other.js';
+import { pollLineReportWaitsSql, takeBackPollLine } from './poll-other.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
@@ -2615,7 +2615,7 @@ function tellArchivedAuthors(push: PushFn, archived: ArchiveRow[], days: number)
     }
 }
 
-// ===================== EVENTS A WEEK AFTER, POLLS AT CLOSE =====================
+// ===================== EVENTS A WEEK AFTER THEY END, POLLS A WEEK AFTER THEY CLOSE =====================
 
 /** At most this many events and this many polls a run; the rest wait for the next minute's run. */
 export const ENDED_POST_ARCHIVE_BATCH = 200;
@@ -2633,32 +2633,41 @@ export interface EndedPostArchiveRun {
 
 /**
  * The rest of retention (config/node-profile.ts `retention`, on for the global node; DESIGN-global-mothership-fable §4.2:
- * "events a week after they end, polls when they close"), beside the listings' archive (archiveStaleListings).
+ * "events a week after they end, polls when they close", the polls' week the director's, 3 Nov), beside the listings'
+ * archive (archiveStaleListings).
  *
  * - An event that ended `profileLimits().eventArchiveDays` (7) ago loses its photos. Nothing else of it changes here: every
  *   list, the map, Home and search already leave an event out from the moment it ends (getPosts), so its photos are what
  *   is left to archive. Its host and the people who went still open it by id, its chat is kept, and the 30-day scrub
  *   (scrubEndedEvents) takes its RSVPs and chat on every node as before: retention never cuts a chat short. Left alone:
- *   a repeating event whose series goes on (its next date rolls in), one changed inside the week (a host adding photos
- *   after the day, an RSVP), one a report waits on or hidden for the moderators, and another community's copy.
- * - A poll that has closed (by its author, or at its closing time: closeExpiredPolls, the line before this one in the
- *   minute's tick) is taken off the board (`active = 0`, its status stays `completed`) and its audience told `post_removed`.
- *   A poll carries no photos (createPost strips them). Its votes and answers stay in their tables: its author still reads
- *   it by id, with its result (@beanpool/engine getPosts), and an owner's assistant its counts (agent/owner-posts.ts
- *   poll_results). Left alone as an event is: a report waiting, hidden for the moderators, another community's copy.
+ *   a repeating event whose series goes on (its next date rolls in), one changed inside the week (its host's edits after
+ *   the day, adding photos, say: an ended event refuses RSVPs), one a report waits on or hidden for the moderators, and
+ *   another community's copy.
+ * - A poll that closed `profileLimits().pollArchiveDays` (7) ago (by its author, or at its closing time: closeExpiredPolls,
+ *   the line before this one in the minute's tick, and each stamps the row as it closes it) is taken off the board
+ *   (`active = 0`, its status stays `completed`) and its audience told `post_removed`. For that week it stays on the board,
+ *   closed: its result, where an anonymous poll's votes came from (shown only once it has closed, from each vote's own stamp,
+ *   so the week changes no count: a closed poll takes no vote) and its typed answers for its maker are read then. A poll
+ *   carries no photos (createPost strips them). Its votes and answers stay in their tables, its typed Other answers too
+ *   (engine/poll-other.ts pollWordsGoWithThePoll leaves a poll closed before and after alone): its author still reads it by
+ *   id, with its result and its lines (@beanpool/engine getPosts), and an owner's assistant its counts (agent/owner-posts.ts
+ *   poll_results). Left alone as an event is: a report waiting, of the poll or of one of its lines (an owner removes a line
+ *   from the poll's card), hidden for the moderators, another community's copy, one changed inside the week (an owner
+ *   removing a line stamps it).
  *
  * An event's photos go as archiveStaleListings sends a listing's: each row DELETEd with its `post_photos` tombstone, so a
  * standby deletes its copy too, the objects left to the image store's orphan sweep, brought forward. The post row is stamped, so a phone's
  * delta and a standby's next copy carry the change; nothing in it shrinks.
  *
  * Safe on every tick: each post is its own transaction, and its end state (an event with no photo, a poll off the board)
- * is what keeps the next run from finding it. Main server only. A no-op where `retention` is off.
+ * is what keeps the next run from finding it. Main server only. A no-op where `retention` is off. Each scan reads a partial
+ * index (db/schema.sql idx_posts_event_end, idx_posts_poll_closed_on_board), not every post the node holds.
  */
 export function archiveEndedPosts(broadcast: BroadcastFn, nowMs = Date.now(), batch = ENDED_POST_ARCHIVE_BATCH): EndedPostArchiveRun {
     const run: EndedPostArchiveRun = { events: 0, polls: 0, photosDropped: 0, more: false };
     if (getNodeRole() !== 'primary') return run;
     const limits = profileLimits();
-    if (limits.eventArchiveDays === null && !limits.pollArchiveAtClose) return run;
+    if (limits.eventArchiveDays === null && limits.pollArchiveDays === null) return run;
 
     // What leaves every archive alone: a moderator's case, and another community's copy.
     const notHeld = `p.origin_node IS NULL AND p.hidden_by_reports_at IS NULL
@@ -2681,14 +2690,17 @@ export function archiveEndedPosts(broadcast: BroadcastFn, nowMs = Date.now(), ba
         if (events.length > batch) { run.more = true; events = events.slice(0, batch); }
     }
     let polls: CancelledPostRow[] = [];
-    if (limits.pollArchiveAtClose) {
+    if (limits.pollArchiveDays !== null) {
+        const cutoff = new Date(nowMs - limits.pollArchiveDays * DAY_MS).toISOString();
         polls = db.prepare(`
             SELECT p.id, p.type, p.title, p.author_pubkey, p.target_group_id, p.audience_scope, p.target_pubkey, p.assigned_to
               FROM posts p
              WHERE p.type = 'poll' AND p.status = 'completed' AND p.active = 1
+               AND COALESCE(p.updated_at, p.created_at) < ?
                AND ${notHeld}
+               AND NOT ${pollLineReportWaitsSql('p.id')}
              ORDER BY COALESCE(p.updated_at, p.created_at), p.id
-             LIMIT ?`).all(batch + 1) as CancelledPostRow[];
+             LIMIT ?`).all(cutoff, batch + 1) as CancelledPostRow[];
         if (polls.length > batch) { run.more = true; polls = polls.slice(0, batch); }
     }
     if (events.length === 0 && polls.length === 0) return run;

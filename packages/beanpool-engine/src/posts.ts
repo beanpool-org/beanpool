@@ -2141,8 +2141,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // By id, a cancelled event stays readable (to its host and the people going, checked below) until the
         // 30-day scrub marks it completed: the host has to be able to open the page and see it CANCELLED,
         // not just its chat (events §1, "host and attendees can still see it for 30 days").
-        // A closed poll taken off the board (a node with retention on archives a poll at close; apps/server engine/posts.ts
-        // archiveEndedPosts) stays readable by id to its author, with its result: the author keeps their own copy.
+        // A closed poll taken off the board (a node with retention on archives a poll a week after it closed; apps/server
+        // engine/posts.ts archiveEndedPosts) stays readable by id to its author, with its result: the author keeps their own copy.
         if (viewer) {
             where += " AND (p.active = 1 OR (p.type = 'event' AND p.status = 'cancelled' AND p.event_state = 'cancelled')"
                 + " OR (p.type = 'poll' AND p.status = 'completed' AND p.author_pubkey = ?))";

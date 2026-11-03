@@ -1,7 +1,7 @@
 ---
 slug: global-limits
 title: Limits on a global community
-summary: The limits that keep a global community's cost flat: listings archived after 90 days without a change, an event's photos deleted a week after it ends, polls off the board a week after they close, 5 photos a listing, the nearest 500 listings on a phone, 3 place watches. What each does, and how to change it.
+summary: The limits that keep a global community's cost flat: listings archived after 90 days unchanged, an event's photos deleted a week after it ends, polls off the board a week after they close, 5 photos a listing, the nearest 500 listings on a phone, 3 place watches. What each does, and how to change it.
 related: showcase, rate-limits, backups-and-replicas, updates-and-health
 ---
 

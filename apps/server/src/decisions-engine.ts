@@ -57,8 +57,8 @@ import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/nod
 import { unmutedRecipients } from './engine/chat-mutes.js';
 import { keepNotice } from './engine/kept-notices.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
-import { JURY_SERVE_AFTER_DAYS, juryDraw, juryPasses, juryRuleFor, jurySnapshotAt, jurySnapshotDate, type JuryRule } from '@beanpool/core';
-import { juryConflictsOf, juryPoolOf, juryRollOf, seatedJuror, writeJuryRecords } from './engine/removal-jury.js';
+import { JURY_SERVE_AFTER_DAYS, juryDraw, juryOrder, juryPasses, juryRuleFor, jurySnapshotAt, jurySnapshotDate, type JuryRule } from '@beanpool/core';
+import { juryConflictsOf, juryDrawnAs, juryPoolOf, juryRollOf, seatedJuror, writeJuryRecords } from './engine/removal-jury.js';
 import { deciderFor, removalDecider } from './config/removal-decider.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -317,6 +317,12 @@ export interface DecisionTally {
     tooFewToVote?: boolean;
     /** A vote a drawn jury decides (DESIGN-removal-jury-fable.md §5): its electorate is the jury, its quorum the jury's. */
     decider?: 'jury';
+    /**
+     * A jury's turnout in its own words (DESIGN-removal-jury-j2-calls-fable.md §5.5, J2a): how many jurors voted, how many
+     * were seated, and how many must vote, served beside the turnout tally while it is open, so an app reads "12 jurors, 7
+     * have voted" without working a share out of a split that isn't served. Never a placeholder Yes or No.
+     */
+    turnout?: { voted: number; size: number; mustVote: number };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -853,12 +859,15 @@ function pausedOnlyByOpenVote(pubkey: string): boolean {
 
 /**
  * Who may serve on a removal jury drawn on `snapshotDate` (DESIGN-removal-jury-fable.md §2), sorted, `exclude` left out
- * (the subject, and the admin who paused them). Public facts only, so a member can hold the pool the node serves against
- * the People list: a member who could vote (active, or paused and held by nothing but their own pause's vote, who keeps
- * their place in every electorate but that one, design §3.3, so pausing someone can't shape a jury either), not frozen,
- * not an enterprise or a visitor's row, and joined at least JURY_SERVE_AFTER_DAYS before the snapshot (00:00 UTC that day),
- * so members invited since can't pack it. No activity, trade or standing test: removal is one member one vote, and a juror
- * who doesn't answer is replaced (slice J2). Who stands aside is private and decided after (juryConflictsOf).
+ * (the subject). Public facts only, so a member can hold the pool the node serves against the People list: a member who
+ * could vote (active, or paused and held by nothing but their own pause's vote, who keeps their place in every electorate
+ * but that one, design §3.3, so pausing someone can't shape a jury either), not an enterprise or a visitor's row, and
+ * joined at least JURY_SERVE_AFTER_DAYS before the snapshot (00:00 UTC that day), so members invited since can't pack it.
+ * No activity, trade or standing test: removal is one member one vote, and a juror who doesn't answer is replaced (slice
+ * J2). Nothing private either (DESIGN-removal-jury-j2-calls-fable.md call 1, J2a): a member whose credit an admin froze
+ * is in it, since a freeze is private and any admin's, and leaving them out let an admin freeze a few members for a
+ * minute, pause, and unfreeze to pick the jury; and the admin who paused is in it too, stood aside at the walk instead
+ * (drawRemovalJury), so which admin pauses moves nothing. Who stands aside is private and decided after (juryConflictsOf).
  */
 export function removalJuryPool(snapshotDate: string, exclude: ReadonlyArray<string | null | undefined>): string[] {
     const cutoff = new Date(jurySnapshotAt(snapshotDate) - JURY_SERVE_AFTER_DAYS * DAY_MS).toISOString();
@@ -867,7 +876,6 @@ export function removalJuryPool(snapshotDate: string, exclude: ReadonlyArray<str
         SELECT m.public_key FROM members m
         WHERE (m.status = 'active' OR ${pausedOnlyByOpenVoteSql('m')})
           AND COALESCE(m.is_treasury, 0) = 0
-          AND COALESCE(m.credit_frozen, 0) = 0
           AND m.is_visitor = 0
           AND m.public_key NOT IN ('SYSTEM', 'COMMONS_POOL')
           AND m.public_key NOT LIKE 'escrow_%'
@@ -876,8 +884,13 @@ export function removalJuryPool(snapshotDate: string, exclude: ReadonlyArray<str
     return rows.map(r => r.public_key).filter(k => !out.has(k)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-/** What a vote a jury decides records when it opens (pauseMember): the draw's public facts, and the jury's rule (§5). */
-export interface JuryParams extends JuryRule { snapshotDate: string; rosterHash: string; poolSize: number }
+/**
+ * What a vote a jury decides records when it opens (pauseMember): the draw's public facts, and the jury's rule (§5).
+ * `subject` is the key the draw was made for, as it was then (DESIGN-removal-jury-j2-calls-fable.md §5.1, J2a): a re-key
+ * moves the vote's subject to the member's new key (engine/key-move.ts) and never this, so Check the draw still seeds
+ * with the key it was drawn from. A vote opened before J2a has none, and its subject is the vote's own.
+ */
+export interface JuryParams extends JuryRule { snapshotDate: string; rosterHash: string; poolSize: number; subject?: string }
 
 /** The jury of a vote a jury decides (params.decider 'jury'), or null for any other vote. */
 export function juryOf(decision: Pick<Decision, 'effect' | 'scopeKind' | 'params'>): JuryParams | null {
@@ -886,10 +899,29 @@ export function juryOf(decision: Pick<Decision, 'effect' | 'scopeKind' | 'params
     return j && typeof j === 'object' && Number.isInteger(j.size) && Number.isInteger(j.mustVote) && Number.isInteger(j.minYes) ? j as JuryParams : null;
 }
 
-/** Whether `reader` may vote on this Decision: the eligibility test, and on a vote a jury decides, a seat on it. */
+/** Whether `reader` may vote on this Decision: the eligibility test, and on a vote a jury decides, the juror's test. */
 function mayVoteOn(reader: string, decision: Decision): boolean {
-    if (!checkVoterEligibility(reader, decision).ok) return false;
-    return !juryOf(decision) || seatedJuror(decision.id, reader);
+    return (juryOf(decision) ? checkJurorEligibility(reader, decision) : checkVoterEligibility(reader, decision)).ok;
+}
+
+/**
+ * Whether `voter` may vote on a vote a jury decides (DESIGN-removal-jury-j2-calls-fable.md call 1, J2a): a member's account
+ * that could vote (active, or paused and held by nothing but its own pause's vote), not its subject, and seated on it now.
+ * Not the freeze: a juror serves whatever their credit, or a freeze made after the draw would pass them over in all but
+ * name. Not "joined before it opened" either: the pool already asked 30 days of every juror (removalJuryPool). The account's
+ * own standing is asked first and the seat last, so a member passed over is refused in exactly the words a member not
+ * drawn is.
+ */
+function checkJurorEligibility(voter: string, decision: Decision): { ok: boolean; error?: string } {
+    const member = getActingMember(voter);
+    if (!member) return { ok: false, error: word('Member not found') };
+    if (removalSubjects(decision).includes(voter)) return { ok: false, error: OWN_REMOVAL_VOTE_ERROR };
+    if (member.status !== 'active' && !(member.status === 'disabled' && pausedOnlyByOpenVote(voter))) {
+        return { ok: false, error: word('Voter account is not active') };
+    }
+    if (member.isTreasury) return { ok: false, error: word('Enterprise accounts cannot vote') };
+    if (!seatedJuror(decision.id, voter)) return { ok: false, error: JURY_ONLY_VOTE_ERROR };
+    return { ok: true };
 }
 
 /** A member not seated on the jury a vote is decided by, voting on it (castDecisionVote). */
@@ -1388,10 +1420,10 @@ export function castDecisionVote(
 
     if (decision.scopeKind !== 'community') return castScopedVote(decision, voterPubkey, support, signature);
 
-    const elig = checkVoterEligibility(voterPubkey, decision);
-    if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
     // A vote a jury decides takes its jurors' votes only (DESIGN-removal-jury-fable.md §8): everyone else reads the card.
-    if (juryOf(decision) && !seatedJuror(decision.id, voterPubkey)) return { success: false, creditsUsed: 0, error: JURY_ONLY_VOTE_ERROR };
+    // And a juror's whatever their credit (checkJurorEligibility).
+    const elig = juryOf(decision) ? checkJurorEligibility(voterPubkey, decision) : checkVoterEligibility(voterPubkey, decision);
+    if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
 
     const num = Number(voteCount);
     if (!Number.isFinite(num) || num < 1) {
@@ -1556,12 +1588,7 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
  * Yes, and more Yes than No (juryPasses); fewer cast is a missed quorum, which lifts the pause as any removal's does.
  */
 function tallyJury(decision: Decision, jury: JuryParams): DecisionTally {
-    const rows = db.prepare(`
-        SELECT v.support FROM decision_votes v
-        JOIN decision_electors e ON e.decision_id = v.decision_id AND e.member_pubkey = v.voter_pubkey
-             AND e.role_at_open = 'juror' AND e.status = 'on'
-        WHERE v.decision_id = ? AND v.voter_pubkey != ?
-    `).all(decision.id, decision.subject ?? '') as Array<{ support: number }>;
+    const rows = countedJuryVotes(decision);
     const yes = rows.filter(r => r.support === 1).length;
     const no = rows.length - yes;
     return {
@@ -1581,7 +1608,18 @@ function tallyJury(decision: Decision, jury: JuryParams): DecisionTally {
         minYes: jury.minYes,
         tooFewToVote: false,
         decider: 'jury',
+        turnout: { voted: rows.length, size: jury.size, mustVote: jury.mustVote },
     };
+}
+
+/** The votes a jury's tally counts (tallyJury), by voter: each of a juror seated (`on`) now, never its subject's. */
+function countedJuryVotes(decision: Decision): Array<{ voter: string; support: number }> {
+    return db.prepare(`
+        SELECT v.voter_pubkey AS voter, v.support FROM decision_votes v
+        JOIN decision_electors e ON e.decision_id = v.decision_id AND e.member_pubkey = v.voter_pubkey
+             AND e.role_at_open = 'juror' AND e.status = 'on'
+        WHERE v.decision_id = ? AND v.voter_pubkey != ?
+    `).all(decision.id, decision.subject ?? '') as Array<{ voter: string; support: number }>;
 }
 
 /** A tally with which way the votes went left off: how many voted, and what it needs. */
@@ -1601,31 +1639,42 @@ export function tallyForReader(decision: Decision, tally: DecisionTally): Decisi
 /**
  * What a member reads of a jury (GET /api/commons/decisions/:id/jury; DESIGN-removal-jury-fable.md §3, §8): the pool it was
  * drawn from, sorted as hashed, each with their name here now, so anyone can recompute the hash and the draw (@beanpool/core
- * checkJuryDraw) and hold the pool against the People list; the draw's public facts; and where the reader stands on it.
- * While it is open nobody else on it is named. Once it closes: who sat (`jury`), who was passed over or stepped aside,
- * never why (`stoodAside`), who voted and who didn't, never which way. Null for a vote no jury decides.
+ * checkJuryDraw) and hold the pool against the People list; the draw's public facts, its `subject` the key it was drawn
+ * for (JuryParams.subject); and where the reader stands on it, in neutral words (DESIGN-removal-jury-j2-calls-fable.md
+ * call 2 point 4, J2a): `seated`, `not_seated` for a juror who was seated and is no longer (slice J2b's silence and
+ * leaving), or null. A member passed over at the draw reads null, as a member not drawn does, so nothing they read says
+ * the node knows of a link between them and the member.
+ *
+ * While it is open nobody else on it is named. Once it closes, two lists and no more (call 2 point 2): `voted`, the seated
+ * jurors whose votes are the tally, never which way; and `didNotServe`, everyone else the walk reached, passed over at the
+ * draw, stepped aside, gone silent, gone, or seated and not voting, never which of those or when. Both in draw order, each
+ * entry the same shape: the key now, the name now, and `drawnAs`, the key it was drawn as (juryDrawnAs, the same unless a
+ * re-key moved it since), so Check the draw runs over the two lists together. Null for a vote no jury decides.
  */
 export function juryForReader(decision: Decision, reader: string): Record<string, unknown> | null {
     const jury = juryOf(decision);
     const pool = jury ? juryPoolOf(decision.id) : null;
     if (!jury || !pool) return null;
-    const named = (keys: readonly string[]) => keys.map(k => ({ publicKey: k, callsign: callsignOf(k) }));
+    const drawnFor = jury.subject ?? decision.subject ?? '';
     const roll = juryRollOf(decision.id);
+    const mine = roll.find(r => r.key === reader)?.status;
     const facts = {
-        decisionId: decision.id, subject: decision.subject, snapshotDate: jury.snapshotDate, rosterHash: jury.rosterHash,
+        decisionId: decision.id, subject: drawnFor, snapshotDate: jury.snapshotDate, rosterHash: jury.rosterHash,
         poolSize: jury.poolSize, size: jury.size, mustVote: jury.mustVote, minYes: jury.minYes,
-        pool: named(pool), you: roll.find(r => r.key === reader)?.status ?? null,
+        pool: pool.map(k => ({ publicKey: k, callsign: callsignOf(k) })),
+        you: mine === 'on' ? 'seated' : mine === 'silent' || mine === 'left' ? 'not_seated' : null,
     };
     if (decision.status === 'open') return facts;
-    const voted = new Set((db.prepare('SELECT voter_pubkey FROM decision_votes WHERE decision_id = ?').all(decision.id) as Array<{ voter_pubkey: string }>)
-        .map(r => r.voter_pubkey));
-    const sat = roll.filter(r => r.status !== 'stood_aside').map(r => r.key);
+    const drawnAs = juryDrawnAs(roll.map(r => r.key), new Set(pool));
+    const rank = new Map(juryOrder(pool, drawnFor, jury.snapshotDate).order.map((k, i) => [k, i]));
+    const place = (k: string) => rank.get(drawnAs.get(k) ?? k) ?? Number.MAX_SAFE_INTEGER;
+    const inOrder = roll.map(r => r.key).sort((a, b) => place(a) - place(b) || (a < b ? -1 : a > b ? 1 : 0));
+    const counted = new Set(countedJuryVotes(decision).map(v => v.voter));
+    const entry = (k: string) => ({ publicKey: k, callsign: callsignOf(k), drawnAs: drawnAs.get(k) ?? k });
     return {
         ...facts,
-        jury: named(sat),
-        stoodAside: named(roll.filter(r => r.status === 'stood_aside').map(r => r.key)),
-        voted: named(sat.filter(k => voted.has(k))),
-        didNotVote: named(sat.filter(k => !voted.has(k))),
+        voted: inOrder.filter(k => counted.has(k)).map(entry),
+        didNotServe: inOrder.filter(k => !counted.has(k)).map(entry),
     };
 }
 
@@ -2728,21 +2777,25 @@ function chooseRemovalDecider(vote: { kind: 'branch' } | { kind: 'member'; subje
 
 /**
  * The jury for a pause made at `atMs`, or null when everyone decides it (DESIGN-removal-jury-fable.md §2–§6). The pool is
- * that day's (00:00 UTC), without the subject and the admin pausing them; the community's rule and that pool's size say
- * whether a jury decides (config/removal-decider.ts deciderFor); the draw is @beanpool/core juryDraw, with every member
- * who has a conflict with the subject passed over (juryConflictsOf). A pool that can't seat a whole jury once they are
+ * that day's (00:00 UTC), without the subject; the community's rule and that pool's size say whether a jury decides
+ * (config/removal-decider.ts deciderFor); the draw is @beanpool/core juryDraw, with every member who has a conflict with
+ * the subject passed over (juryConflictsOf), and the admin pausing them. A pool that can't seat a whole jury once they are
  * passed over is decided by everyone, as a pool under the line is. Reads only: pauseMember writes what it returns.
  */
 function drawRemovalJury(subject: string, actor: string | null, atMs: number): RemovalJuryDraw | null {
     const snapshotDate = jurySnapshotDate(atMs);
-    const pool = removalJuryPool(snapshotDate, [subject, actor]);
+    const pool = removalJuryPool(snapshotDate, [subject]);
     if (deciderFor(removalDecider(), pool.length) !== 'jury') return null;
     const rule = juryRuleFor(pool.length);
     const conflicts = juryConflictsOf(subject, atMs);
+    // The admin who paused stands aside at the walk, as the inviter does, rather than leaving the pool: so the roster is the
+    // day's and the subject's alone, whichever admin pauses (DESIGN-removal-jury-j2-calls-fable.md call 1, J2a). The admin
+    // password has no key, and is in no pool.
+    if (actor) conflicts.add(actor);
     const drawn = juryDraw({ pool, subject, snapshotDate, size: rule.size, standsAside: k => conflicts.has(k) });
     if (drawn.jury.length < rule.size) return null;
     return {
-        params: { snapshotDate, rosterHash: drawn.rosterHash, poolSize: drawn.poolSize, ...rule },
+        params: { snapshotDate, rosterHash: drawn.rosterHash, poolSize: drawn.poolSize, subject, ...rule },
         pool,
         jury: drawn.jury,
         stoodAside: drawn.stoodAside,

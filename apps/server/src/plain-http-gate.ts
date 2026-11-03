@@ -67,7 +67,7 @@ export interface PlainRequest {
  * Everything else, /api/ledger/transfer among it, keeps the redirect until the switch is on.
  */
 const HALL_PATHS_WHILE_OFF_EXACT = new Set([
-    '/settings', '/hall', '/api/local/admin/lights-out', '/api/node/owner/lights-out',
+    '/settings', '/hall', '/api/local/admin/lights-out', '/api/node/owner/lights-out', '/api/local/admin/csrf-token',
     '/api/community/health', '/api/community/info', '/api/local/community-info', '/api/node/identity-epoch', '/api/attest',
 ]);
 const HALL_PATH_PREFIXES_WHILE_OFF = ['/settings/', '/api/local/admin/auth/'];

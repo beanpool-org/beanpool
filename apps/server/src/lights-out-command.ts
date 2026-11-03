@@ -11,7 +11,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { LIGHTS_OUT_REQUEST_FILE, takeLightsOutAnswer, writeLightsOutRequest } from './services/lights-out-files.js';
+import {
+    LIGHTS_OUT_ANSWER_MS, LIGHTS_OUT_PICKUP_MS, LIGHTS_OUT_REQUEST_FILE, takeLightsOutAnswer, writeLightsOutRequest,
+} from './services/lights-out-files.js';
 
 export const LIGHTS_OUT_USAGE = `Usage: beanpool lights-out on [--address http://<the laptop's number>:8080] | off | status
 
@@ -23,9 +25,10 @@ The node must be running. Only the server's own shell can do this, or an owner i
 
 interface Io { out: (l: string) => void; err: (l: string) => void }
 
-/** The node takes the file within ~2 s; past this it is probably not running. */
-const PICKUP_MS = 15_000;
-const ANSWER_MS = 10_000;
+/** The node takes the file within ~2 s; past this it is probably not running. The node refuses a request older than the two
+ *  together (services/lights-out-files.ts LIGHTS_OUT_REQUEST_MAX_AGE_MS). */
+const PICKUP_MS = LIGHTS_OUT_PICKUP_MS;
+const ANSWER_MS = LIGHTS_OUT_ANSWER_MS;
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

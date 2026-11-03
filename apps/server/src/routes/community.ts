@@ -855,8 +855,8 @@ router.get('/api/community/info', async (ctx) => {
         // read it where a copy is made; an app from before it ignores it.
         recoveryCopies: recoveryCopies(),
         // Lights-out (services/lights-out.ts publicLightsOut, design §2.1 item 2): whether the hall is open here, at what
-        // address, how old the record is, where phones go home to, and the identity epoch. Always present on a node that
-        // knows lights-out, so the phone tells it from an older one (absent).
+        // address, how old the record is, and where phones go home to (`{ on: false, home }` while off). Always present on a
+        // node that knows lights-out, so the phone tells it from an older one (absent).
         lightsOut: publicLightsOut(),
     };
     // A tag of the reader and the answer, so an app asking again for what it holds gets a 304 (slice L0). Never shared:

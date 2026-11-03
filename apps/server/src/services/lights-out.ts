@@ -70,7 +70,7 @@ function record(): LightsOutRecord | null {
 
 /** Whether the switch is on here. A standby is never on, whatever its file says (it cannot have been switched there). */
 /**
- * The gate asks on every request from the local network, the guard after every member write, and the phones' health ping
+ * The gate asks on every request from the local network, the guard after every write, and the phones' health ping
  * every 30 seconds: each answer is kept 2 s rather than read from local-config.json every time (the health read is cached
  * for the same reason: DoS review F4). Every write this module makes forgets them, so its own answers are never stale; a
  * change made by hand in the file shows within 2 s.
@@ -156,7 +156,7 @@ function raiseEpochForRestoredCopy(now: string): { raised: boolean; epoch: numbe
     return { raised: true, epoch, why: 'restored from a backup' };
 }
 
-/** A fingerprint of everything members wrote here, so OFF can tell whether anyone wrote in the hall (the stand-down offer). */
+/** Whether anything changed the record here while the hall was open, so OFF can tell (the stand-down offer). */
 let hallWritesNoted = false;
 
 export interface LightsOutStatus {
@@ -167,7 +167,7 @@ export interface LightsOutStatus {
     home: string | null;
     epoch: number;
     epochSince: string | null;
-    /** Whether members wrote anything here since it last went on. */
+    /** Whether anyone (a member, an owner or an admin) changed the record here since it last went on. */
     hallWrites: boolean;
     /** Off, after a hall with no writes, on a server that took over or was restored: "Stand down" is offered (§3.6 case 2). */
     standDown: StandDownOffer | null;
@@ -217,17 +217,24 @@ export function lightsOutStatus(): LightsOutStatus {
 
 /**
  * What /api/community/health and /api/community/info carry (the fields H2 reads), the design's shape (§2.1 item 2):
- * `{ on, since, address, recordAsOf, home }`. Always present, so a phone tells a node that knows lights-out from one that
- * doesn't (absent). Public: nothing in it is a secret, and a stranger on the hall Wi-Fi can read the poster anyway. No
- * epoch here: a phone reads that from the node's signed statement (GET /api/node/identity-epoch) and the sync reads'
- * epoch header, never from an unsigned field (and a take-over changes it by design: test-takeover-parity).
+ * `{ on, since, address, recordAsOf, home }` while on, and `{ on: false, home }` while off: off, the other three are
+ * nothing by definition, and the health ping every phone sends every 30 s keeps its byte budget (test-app-floors: the
+ * public payload stays under 800 bytes). The phone (H2 lightsOutOf) reads `on`, `recordAsOf` and `home`, a missing one as
+ * none. Always present, so a phone tells a node that knows lights-out from one that doesn't (absent). Public: nothing in
+ * it is a secret, and a stranger on the hall Wi-Fi can read the poster anyway. No epoch here: a phone reads that from the
+ * node's signed statement (GET /api/node/identity-epoch) and the sync reads' epoch header, never from an unsigned field
+ * (and a take-over changes it by design: test-takeover-parity).
  */
-export interface PublicLightsOut { on: boolean; since: string | null; address: string | null; recordAsOf: string | null; home: string | null }
+export type PublicLightsOut =
+    | { on: true; since: string | null; address: string | null; recordAsOf: string | null; home: string | null }
+    | { on: false; home: string | null };
 export function publicLightsOut(): PublicLightsOut {
     const now = Date.now();
     if (publicMemo && now - publicMemo.at <= MEMO_MS && now >= publicMemo.at) return { ...publicMemo.value };
     const s = lightsOutStatus();
-    const value = { on: s.on, since: s.on ? s.since : null, address: s.on ? s.address : null, recordAsOf: s.on ? s.recordAsOf : null, home: s.home };
+    const value: PublicLightsOut = s.on
+        ? { on: true, since: s.since, address: s.address, recordAsOf: s.recordAsOf, home: s.home }
+        : { on: false, home: s.home };
     publicMemo = { at: now, value };
     return { ...value };
 }
@@ -282,12 +289,12 @@ export function setLightsOut(on: boolean, opts: { address?: unknown; by: LightsO
     forgetMemos();
     if (wasOn) {
         logger.security('ADMIN', `[LightsOut] Lights-out OFF by ${who}: the plain port is back to its usual rule`
-            + `${before?.hallWrites ? '; members wrote in the hall, so this copy is the community now' : '; nobody wrote in the hall'}.`);
+            + `${before?.hallWrites ? '; the record changed in the hall, so this copy is the community now' : '; nobody wrote in the hall'}.`);
     }
     return { ok: true, status: lightsOutStatus(), changed: wasOn, epochRaised: false };
 }
 
-/** A member's write answered 2xx while the switch is on: noted once, so OFF knows the hall copy holds something new. */
+/** A write answered 2xx while the switch is on: noted once, so OFF knows the hall copy holds something new. */
 export function noteHallWrite(): void {
     if (hallWritesNoted) return;
     const r = record();
@@ -300,10 +307,56 @@ export function noteHallWrite(): void {
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
+ * The writes that change nothing in the community's record, as the routers declare them (`METHOD /path/:param`). Every
+ * other write answered 2xx while the switch is on is a hall write, an owner's or an admin's in Settings as much as a
+ * member's (resolving a dispute, a re-key, the treasury, an offboarding): standing down would lose it, so OFF offers no
+ * "Stand down" after one. Named here, one by one:
+ *   - the switch itself (Settings' and the phone's);
+ *   - signing in or out of Settings on this server: a session, a challenge, a CSRF token, the sign-in pairing, the live
+ *     updates' ticket (each held by this server alone, none in the record). Signing a member out everywhere (revoke-all)
+ *     raises their session epoch, so it counts;
+ *   - the reads Settings sends as POST (the body carries the password or a filter): what opening Settings asks for, so an
+ *     owner who opens it in the hall to turn the switch off still gets the offer. Each was read for a write (#2822);
+ *     POST /api/local/admin/community-health is not one (it saves the health settings) and counts.
+ *
+ * Kept complete by its shape: a route is a hall write unless it is named here, so a new route counts until someone shows
+ * it changes nothing, and a read left off this list only withholds the offer (§3.6 case 1 then: the hall's copy is the
+ * community), never loses a change. test-lights-out section 5 walks every write route the node serves, holds each one to
+ * this rule, and refuses an entry here that names no route.
+ */
+export const NOT_HALL_WRITES: readonly string[] = [
+    'POST /api/local/admin/lights-out', 'POST /api/node/owner/lights-out',
+    'POST /api/local/admin/csrf-token', 'POST /api/local/admin/ws-ticket',
+    'POST /api/local/admin/auth/challenge', 'POST /api/local/admin/auth/verify-challenge', 'POST /api/local/admin/auth/exchange',
+    'POST /api/local/admin/auth/password', 'POST /api/local/admin/auth/logout',
+    'POST /api/local/admin/auth/pairing', 'POST /api/local/admin/auth/pairing/:id/wait',
+    'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/approve',
+    'POST /api/local/admin/auth/pairing/:id/decline',
+    'POST /api/local/admin/data', 'POST /api/local/admin/health', 'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/logs',
+    'POST /api/local/admin/diagnostics', 'POST /api/local/admin/shutdown-status', 'POST /api/local/admin/ws-connections',
+    'POST /api/local/admin/onboarding-funnel', 'POST /api/local/admin/inbox', 'POST /api/local/admin/alerts/status',
+    'POST /api/local/admin/backup-status', 'POST /api/local/admin/standby-health',
+    'POST /api/local/admin/offbox-backups/status', 'POST /api/local/admin/offbox-backups/list',
+    'POST /api/local/admin/app-addresses/check',
+];
+const NOT_HALL_WRITE_SET = new Set(NOT_HALL_WRITES);
+
+/**
+ * Whether a write answered 2xx changes the hall copy's record: `route` is the route the router matched (Koa's
+ * `ctx._matchedRoute`, the pattern as declared), or nothing when no route answered it (then it counts: an unknown write is
+ * never assumed harmless). Never the request's own path, so no casing or spelling of it gets around the count.
+ */
+export function countsAsHallWrite(method: string, route: unknown): boolean {
+    const m = method.toUpperCase();
+    if (!MUTATING.has(m)) return false;
+    if (typeof route !== 'string' || !route) return true;
+    return !NOT_HALL_WRITE_SET.has(`${m} ${route}`);
+}
+
+/**
  * Koa middleware on the app (after the split-brain guard): while the switch is on, the address changes of §2.7 are refused
- * (409), and the first member write answered 2xx is noted (the stand-down offer). Members' writes are every POST, PUT,
- * PATCH or DELETE under /api/ but the owners' and operators' own (/api/local/, /api/manager/), as the split-brain guard
- * counts them.
+ * (409), and the first write answered 2xx that changes the record (countsAsHallWrite) is noted, whoever made it: the
+ * stand-down offer is only for a hall where nothing changed.
  */
 export async function lightsOutGuard(ctx: Koa.Context, next: Koa.Next): Promise<void> {
     if (!MUTATING.has(ctx.method)) return next();
@@ -315,9 +368,9 @@ export async function lightsOutGuard(ctx: Koa.Context, next: Koa.Next): Promise<
         return;
     }
     await next();
-    if (!hallWritesNoted && ctx.status >= 200 && ctx.status < 300 && p.startsWith('/api/') && !p.startsWith('/api/local/')
-        && !p.startsWith('/api/manager/') && !p.startsWith('/api/node/owner/lights-out') && lightsOutOn()) {
-        try { noteHallWrite(); } catch { /* a note never fails a member's write */ }
+    if (!hallWritesNoted && ctx.status >= 200 && ctx.status < 300 && countsAsHallWrite(ctx.method, (ctx as any)._matchedRoute)
+        && lightsOutOn()) {
+        try { noteHallWrite(); } catch { /* a note never fails the write */ }
     }
 }
 

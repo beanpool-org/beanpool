@@ -7,22 +7,26 @@
  *
  *   0. no certificate of its own: /hall answers the hall Wi-Fi (closed while off), never the Internet or a tunnel;
  *   1. with one, the switch OFF: the hall Wi-Fi gets a 301 except Settings, the sign-in, the switch, /hall and the door's
- *      four reads; /api/ledger/transfer stays 301; a proxy header, a public Host, a public source or a dot segment: 301;
- *      the socket the same;
- *   2. the switch: unsigned 401; a member, an admin, a stale owner signature, an automation token, an assistant's token, a
- *      computer's session, an admin's session, the password with 2FA off, the password without a current code, a standby:
- *      refused, nothing changed. The owner signed for the community's NAME over plain http at the number: on (request
- *      binding unchanged); signed for the NUMBER on this named node: 421. The phone's Manage session and the password with
- *      a current code: on/off through Settings' route. "On" twice is "on";
+ *      four reads; a Settings reload (the session, then its CSRF token) is answered; health says `{ on: false, home }`;
+ *      /api/ledger/transfer stays 301; a proxy header, a public Host, a public source or a dot segment: 301; the socket
+ *      the same;
+ *   2. the switch: unsigned 401; a member, an admin, a stale owner signature, the owner's old-format (unbound) signature
+ *      (426), an automation token, an assistant's token, a computer's session, an admin's session, the password with 2FA
+ *      off, the password without a current code, a standby: refused, nothing changed. The owner signed for the
+ *      community's NAME over plain http at the number: on (request binding unchanged); signed for the NUMBER on this named
+ *      node: 421. The phone's Manage session and the password with a current code: on/off through Settings' route. "On"
+ *      twice is "on";
  *   3. ON: the hall Wi-Fi is served (a page, a write, the socket); the Internet, a tunnel-shaped request and a proxy's are
  *      still redirected; loopback always; /hall shows the lines and the door link; health + info carry `lightsOut`;
  *   4. §2.7: address changes refused while on (409), allowed again once off;
  *   5. the epoch: a server never restored is not raised; a restored copy is raised once (max(own, file) + 1, since now) and
  *      never again for that restore; one that took over after its restore is not; recordAsOf is the backup's made-at;
- *      the stand-down offer on OFF with no hall writes, none after a member wrote;
+ *      the stand-down offer on OFF with no hall writes or only Settings' reads, none after a member wrote or an owner
+ *      changed something in Settings; every write route the node serves counts but the ones NOT_HALL_WRITES names;
  *   6. the switch is in no copy: a sealed backup's node_config.json and its take-over bundle, a snapshot, the redacted
  *      config; the manifest says per-server; the stager leaves it out;
- *   7. `beanpool lights-out`: the node takes the request within 2 s and answers; the log keeps a SECURITY line;
+ *   7. `beanpool lights-out`: the node takes the request within 2 s and answers; the log keeps a SECURITY line; a request
+ *      file 60 s old, with no time, or dated ahead is dropped and the switch is unchanged;
  *   8. the no-mothership pattern: a second node (the real index.ts, its own process and data folder) restores section 6's
  *      sealed file with `beanpool restore` and starts on it: its health and info read lightsOut off, its local-config.json
  *      holds none, and the boot keeps it as a restored copy.
@@ -188,8 +192,18 @@ console.log('\n1. The switch off: the hall Wi-Fi reaches Settings, the sign-in a
         const a = await send(LAN, 'GET', p, HALL);
         check(`${p} is reached (not redirected)`, a.status !== 301 && a.status !== 0, String(a.status));
     }
+    // A reload of Settings in the hall (apps/manager key-session.ts startKeySession): the live session is asked for, then a
+    // CSRF token for it. Without the second, the owner is back at the sign-in with a good cookie (review of #2822).
+    const cookie = { Cookie: `admin_session=${harness.ownerSessionHeaders(owner.pk)['X-Admin-Session']}` };
+    const session = await send(LAN, 'GET', '/api/local/admin/auth/session', HALL, cookie);
+    check('a Settings reload in the hall: the session is read, signed in', session.status === 200 && session.json?.authenticated === true, `${session.status} ${session.body.slice(0, 120)}`);
+    const csrf = await send(LAN, 'POST', '/api/local/admin/csrf-token', HALL, { ...cookie, 'Content-Length': '0' });
+    check('… and POST /api/local/admin/csrf-token answers its token (not a 301 to the name)', csrf.status === 200 && typeof csrf.json?.csrfToken === 'string' && csrf.json.csrfToken.length > 0,
+        `${csrf.status} ${csrf.headers.location ?? ''} ${csrf.body.slice(0, 80)}`);
     const hall = await send(LAN, 'GET', '/hall', HALL);
     check('/hall is reached and says the hall is closed', hall.status === 200 && hall.body.includes('data-hall="closed"'), String(hall.status));
+    const offHealth = (await send(LAN, 'GET', '/api/community/health', HALL)).json?.lightsOut;
+    check('health while off: exactly { on: false, home } (the phone reads `on` and `home`)', JSON.stringify(offHealth) === JSON.stringify({ on: false, home: `https://${OWN}` }), JSON.stringify(offHealth));
     check('a proxy header → 301 (not straight from the Wi-Fi)', r301(await send(BRIDGE, 'GET', '/settings', HALL, { 'X-Forwarded-For': PUBLIC })));
     check('the public name from a private source → 301 (not the hall)', r301(await send(LAN, 'GET', '/settings/', 'other.example.net')));
     check('a public source → 301', r301(await send(PUBLIC, 'GET', '/settings', HALL)));
@@ -214,6 +228,18 @@ console.log('\n2. Who may flip it');
     check('the owner\'s signature from 2 minutes ago → 403 step_up_required (fresh proof is 90 s)', stale.status === 403 && stale.json?.code === 'step_up_required' && !isOn(), `${stale.status} ${stale.body.slice(0, 100)}`);
     const forNumber = await phoneSwitch(owner, { on: true }, { signFor: ADDRESS });
     check('signed for the number on this named node → 421 (binding unchanged)', forNumber.status === 421 && !isOn(), `${forNumber.status} ${forNumber.body.slice(0, 100)}`);
+    // The old format (1) names no community: one an owner sent to another community could be replayed here (design §2.3).
+    // Refused as break-glass refuses it (AUTH-01), the middleware having accepted it until UNBOUND_SIGNATURES_UNTIL.
+    {
+        const body = JSON.stringify({ on: true });
+        const ts = String(Date.now());
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const text = core.unboundRequestText({ method: 'POST', path: '/api/node/owner/lights-out', timestamp: ts, nonce, body });
+        const sig = Buffer.from(ed25519.sign(new TextEncoder().encode(text), owner.seed)).toString('base64');
+        const old = await send(LAN, 'POST', '/api/node/owner/lights-out', HALL, { 'X-Public-Key': owner.pk, 'X-Timestamp': ts, 'X-Nonce': nonce, 'X-Signature': sig }, body);
+        check('the owner\'s old-format (unbound, format 1) request → 426 app_too_old, nothing changed', old.status === 426 && old.json?.code === 'app_too_old' && !isOn(),
+            `${old.status} ${old.body.slice(0, 120)}`);
+    }
     const badBody = await phoneSwitch(owner, { on: 'yes' });
     check('`on` that is not a boolean → 400', badBody.status === 400 && !isOn(), String(badBody.status));
 
@@ -353,6 +379,44 @@ console.log('\n5. The epoch raise on a restored copy, the record as of, stand do
     off = await offPhone();
     check('off after a member wrote in the hall → hallWrites, no stand-down', off.json?.lightsOut?.hallWrites === true && off.json?.lightsOut?.standDown === null, JSON.stringify(off.json?.lightsOut));
 
+    // Settings in the hall (review of #2822): opening it (its reads sent as POST, a CSRF token) changes nothing, so the
+    // offer stands; an owner's change in it (an announcement here; a dispute resolved, a re-key, the treasury alike) is a
+    // hall write as much as a member's, so standing down would lose it and OFF offers none.
+    const settings = harness.ownerSessionHeaders(owner.pk);
+    const fresh = await onPhone();
+    check('a new hall starts with no writes', fresh.status === 200 && fresh.json?.lightsOut?.hallWrites === false, JSON.stringify(fresh.json?.lightsOut));
+    const reads: Array<[string, string]> = [['/api/local/admin/csrf-token', ''], ['/api/local/admin/data', '{}'], ['/api/local/admin/alerts-summary', '{"alerts":"summary"}'],
+        ['/api/local/admin/backup-status', '{}'], ['/api/local/admin/logs', '{}']];
+    const readStatus: string[] = [];
+    for (const [p, b] of reads) readStatus.push(`${p} ${(await send(LAN, 'POST', p, HALL, settings, b)).status}`);
+    check('opening Settings in the hall: its POST reads answer 200', readStatus.every((s) => s.endsWith(' 200')), readStatus.join(', '));
+    off = await offPhone();
+    check('off after only Settings\' reads → still the stand-down offer', off.json?.lightsOut?.hallWrites === false && off.json?.lightsOut?.standDown?.offered === true, JSON.stringify(off.json?.lightsOut));
+    await onPhone();
+    const annBody = JSON.stringify({ title: 'Hall', body: 'We are in the hall tonight.' });
+    const announced = await send(LAN, 'POST', '/api/local/admin/announcements', HALL, settings, annBody);
+    check('an owner\'s change in Settings over the hall Wi-Fi (an announcement) → 200', announced.status === 200, `${announced.status} ${announced.body.slice(0, 100)}`);
+    off = await offPhone();
+    check('off after an owner\'s change in Settings → hallWrites, no stand-down', off.json?.lightsOut?.hallWrites === true && off.json?.lightsOut?.standDown === null, JSON.stringify(off.json?.lightsOut));
+
+    // How the list is kept complete: every write route the node serves counts unless NOT_HALL_WRITES names it, and each
+    // name there is a route the node serves.
+    const app = (await import('./https-server.js')).getKoaApp() as any;
+    const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+    const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
+        .flatMap((l: any) => (l.methods as string[]).filter((m) => MUTATING.has(m)).map((m) => `${m} ${l.path}`)))].sort();
+    const notCounted = writes.filter((r) => !lo.countsAsHallWrite(r.slice(0, r.indexOf(' ')), r.slice(r.indexOf(' ') + 1)));
+    const named = [...lo.NOT_HALL_WRITES].sort();
+    const settingsWrites = writes.filter((r) => / \/api\/(local|manager)\//.test(r) && !named.includes(r));
+    check(`the node serves ${writes.length} write routes; every one counts as a hall write but the ${named.length} NOT_HALL_WRITES names`,
+        writes.length > 200 && notCounted.join() === named.join(), `not counted: ${notCounted.filter((r) => !named.includes(r)).join(', ')}; named but not served: ${named.filter((r) => !writes.includes(r)).join(', ')}`);
+    check(`… ${settingsWrites.length} of them Settings' own (/api/local/, /api/manager/), the ones the review named among them`,
+        settingsWrites.length > 100 && ['POST /api/local/admin/disputes/:id/resolve', 'POST /api/local/admin/members/:pubkey/rekey/complete',
+            'POST /api/local/admin/treasury', 'POST /api/local/admin/members/:pubkey/offboard', 'POST /api/local/admin/community-health'].every((r) => settingsWrites.includes(r)),
+        settingsWrites.slice(0, 5).join(', '));
+    check('a write no route answered counts (never assumed harmless); a read never does', lo.countsAsHallWrite('POST', undefined) && lo.countsAsHallWrite('delete', '')
+        && !lo.countsAsHallWrite('GET', '/api/local/admin/disputes/:id/resolve'));
+
     // A server that took over AFTER its restore: its take-over raised it; the switch doesn't again.
     updateLocalConfig({ lightsOut: null, restoredCopy: { at: '2026-11-02T00:00:00.000Z', madeAt: '2026-11-01T23:00:00.000Z', epoch: 5 },
         identityEpoch: 6, identityEpochSince: '2026-11-03T00:00:00.000Z', lastPromotionAudit: { at: '2026-11-03T00:10:00.000Z', ok: true, sumBalances: 0, drift: 0, strandedEscrows: 0, copy: { match: true, here: { accounts: 0, holdings: 0 }, lastCopy: { accounts: 0, holdings: 0, generatedAt: '2026-11-02T23:59:00.000Z' } } } });
@@ -424,6 +488,27 @@ console.log('\n7. beanpool lights-out');
     check('a bad address → 1, nothing changed', bad === 1 && getLocalConfig().lightsOut?.address === ADDRESS, out.join(' | '));
     const usage = await runLightsOut(['sideways'], io);
     check('an unknown action → usage (2)', usage === 2);
+
+    // An abandoned `beanpool lights-out on` (review of #2822): the command was stopped before the node took its file, and
+    // the node starts later. Older than the command's own pickup and answer windows, or with no time on it: dropped, and
+    // the switch is as it was ("Never automatic", §2.1).
+    out.length = 0;
+    check('(off first)', await runLightsOut(['off'], io) === 0 && !isOn(), out.join(' | '));
+    const reqFile = path.join(dataDir, lo.LIGHTS_OUT_REQUEST_FILE);
+    const leave = (at: number | undefined) => fs.writeFileSync(reqFile, JSON.stringify({ v: 1, id: crypto.randomBytes(12).toString('hex'), action: 'on', address: ADDRESS,
+        ...(at === undefined ? {} : { at }) }), { mode: 0o600 });
+    const taken = async () => { const end = Date.now() + 5000; while (fs.existsSync(reqFile) && Date.now() < end) await new Promise((r) => setTimeout(r, 100)); return !fs.existsSync(reqFile); };
+    const offBefore = JSON.stringify(getLocalConfig().lightsOut);
+    leave(Date.now() - 60_000);
+    check('a request file 60 s old → removed, the switch unchanged (off)', await taken() && !isOn() && JSON.stringify(getLocalConfig().lightsOut) === offBefore, JSON.stringify(getLocalConfig().lightsOut));
+    leave(undefined);
+    check('a request file with no time on it → removed, the switch unchanged', await taken() && !isOn() && JSON.stringify(getLocalConfig().lightsOut) === offBefore);
+    leave(Date.now() + 60_000);
+    check('one dated a minute ahead → removed, the switch unchanged', await taken() && !isOn() && JSON.stringify(getLocalConfig().lightsOut) === offBefore);
+    leave(Date.now());
+    const end = Date.now() + 5000;
+    while (!isOn() && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+    check('… and one made just now is taken: on (the watch is live, so the three above prove something)', await taken() && isOn() && getLocalConfig().lightsOut?.address === ADDRESS);
     lo.stopLightsOutRequestWatch();
     (logger as any).security = realSecurity;
 }
@@ -495,10 +580,13 @@ console.log('\n8. A second node restores the file made while the switch was on: 
         check('it starts again on the restored data', again.live, again.tail());
         const health = again.live ? await getJson(again.port, '/api/community/health') : { status: 0, json: null };
         const hl = health.json?.lightsOut;
-        check('its health reads lightsOut off: { on: false, since: null, address: null, recordAsOf: null }', health.status === 200 && hl?.on === false
-            && hl.since === null && hl.address === null && hl.recordAsOf === null, `${health.status} ${JSON.stringify(hl)}`);
+        // Off is `{ on: false, home }` and nothing else (services/lights-out.ts publicLightsOut): no since, no hall address, no
+        // record date, so the first node's hall can't show through.
+        check('its health reads lightsOut off: exactly { on: false, home }', health.status === 200 && hl?.on === false
+            && Object.keys(hl).sort().join() === 'home,on' && !JSON.stringify(health.json).includes(ADDRESS), `${health.status} ${JSON.stringify(hl)}`);
         const info = again.live ? await getJson(again.port, '/api/community/info') : { status: 0, json: null };
-        check('its info reads the same', info.status === 200 && info.json?.lightsOut?.on === false && info.json.lightsOut.address === null, JSON.stringify(info.json?.lightsOut));
+        check('its info reads the same', info.status === 200 && JSON.stringify(info.json?.lightsOut) === JSON.stringify(hl) && !JSON.stringify(info.json).includes(ADDRESS),
+            JSON.stringify(info.json?.lightsOut));
         const booted = secondConfig();
         check('its local-config.json after the boot: still no lightsOut, and the hall address of the first node nowhere',
             (!('lightsOut' in booted) || booted.lightsOut == null) && !JSON.stringify(booted).includes(ADDRESS), JSON.stringify(booted.lightsOut));

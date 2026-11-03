@@ -17,6 +17,18 @@ export const LIGHTS_OUT_REQUEST_FILE = 'lights-out-request.json';
 export const LIGHTS_OUT_ANSWER_FILE = 'lights-out-answer.json';
 
 export interface LightsOutRequest { v: 1; id: string; action: 'on' | 'off' | 'status'; address: string | null; at: number }
+
+/** How long the command waits for the node to take its request, then for the answer (lights-out-command.ts). */
+export const LIGHTS_OUT_PICKUP_MS = 15_000;
+export const LIGHTS_OUT_ANSWER_MS = 10_000;
+/**
+ * A request older than the command's own pickup and answer windows is one nobody is waiting for any more (the command was
+ * stopped, the shell closed, `docker compose exec` cut off while the node was down): the node refuses it, so an abandoned
+ * `beanpool lights-out on` never turns the switch on at the node's next start (design §2.1, "Never automatic").
+ */
+export const LIGHTS_OUT_REQUEST_MAX_AGE_MS = LIGHTS_OUT_PICKUP_MS + LIGHTS_OUT_ANSWER_MS;
+/** The command and the node share one clock (the same container): a request dated ahead of it by more is refused too. */
+const AHEAD_MS = 5_000;
 export interface LightsOutAnswer { v: 1; id: string; ok: boolean; lines: string[] }
 
 function readSmall(file: string): string | null {
@@ -49,8 +61,11 @@ export function takeLightsOutAnswer(id: string, dir = dataDir()): LightsOutAnswe
     }
 }
 
-/** In the node: the request, and the file gone; null when there is none (anything that is not one is removed). */
-export function takeLightsOutRequest(dir = dataDir()): LightsOutRequest | null {
+/**
+ * In the node: the request, and the file gone; null when there is none (anything that is not one is removed). A request
+ * with no time on it (`at`), or one older than LIGHTS_OUT_REQUEST_MAX_AGE_MS, is not one: removed, and nothing changes.
+ */
+export function takeLightsOutRequest(dir = dataDir(), now = Date.now()): LightsOutRequest | null {
     const file = path.join(dir, LIGHTS_OUT_REQUEST_FILE);
     let there = false;
     try { there = !!fs.lstatSync(file); } catch { return null; }
@@ -61,7 +76,14 @@ export function takeLightsOutRequest(dir = dataDir()): LightsOutRequest | null {
         const r = JSON.parse(text);
         if (!r || r.v !== 1 || typeof r.id !== 'string' || !/^[0-9a-f]{16,32}$/.test(r.id)) return null;
         if (r.action !== 'on' && r.action !== 'off' && r.action !== 'status') return null;
-        return { v: 1, id: r.id, action: r.action, address: typeof r.address === 'string' ? r.address : null, at: Number(r.at) || Date.now() };
+        // Never a default time: a request that does not say when it was made could be any age.
+        const at = typeof r.at === 'number' && Number.isFinite(r.at) ? r.at : NaN;
+        if (!Number.isFinite(at) || now - at > LIGHTS_OUT_REQUEST_MAX_AGE_MS || at - now > AHEAD_MS) {
+            console.warn(`[LightsOut] A lights-out request ${Number.isFinite(at) ? `made ${Math.round((now - at) / 1000)} s ago` : 'with no time on it'} `
+                + 'was dropped: nobody is waiting for its answer. Nothing was changed.');
+            return null;
+        }
+        return { v: 1, id: r.id, action: r.action, address: typeof r.address === 'string' ? r.address : null, at };
     } catch {
         return null;
     }

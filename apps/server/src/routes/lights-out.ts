@@ -11,7 +11,9 @@
  *   POST /api/node/owner/lights-out     owner, signed           { on: true|false, address? }: the phone's switch. The owner's
  *                                                               own signature on this very request, made in the last 90 s
  *                                                               (the fresh proof: tighter than the 5-minute window), bound
- *                                                               to the community's name (§2.3), once (the nonce).
+ *                                                               to the community's name (§2.3: format 2 only; the old,
+ *                                                               unbound format 1 gets 426, as break-glass does), once (the
+ *                                                               nonce).
  *   GET  /hall                          the hall Wi-Fi only     the poster (served by the plain listener, http-server.ts)
  *
  * On a standby every switch answers 403: take over first. The answers carry the switch as it stands
@@ -25,6 +27,7 @@ import { brandCssVariableMap, timestampOfSignedText, word, WEB_INK_GROUNDS, type
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import { FRESH_PROOF_WINDOW_MS } from '../admin-key-auth.js';
 import { isNodeOwner } from '../engine/node-roles.js';
+import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR } from '../engine/member-signature.js';
 import { primaryAddress } from '../engine/own-addresses.js';
 import { lightsOutStatus, setLightsOut, type LightsOutStatus } from '../services/lights-out.js';
 import { readNodeIdentity } from '../services/takeover-envelope.js';
@@ -83,11 +86,21 @@ export function createLightsOutRoutes(deps: RouteDeps): Router {
     });
 
     router.post(LIGHTS_OUT_OWNER_PATH, async (ctx) => {
-        const authSig = (ctx.state as any)?.authSig as { signer?: string; payload?: string } | undefined;
+        const authSig = (ctx.state as any)?.authSig as { signer?: string; payload?: string; format?: number } | undefined;
         const signer = authSig?.signer;
         if (!signer) {
             ctx.status = 401;
             ctx.body = { error: word('Sign this request with your member key.') };
+            return;
+        }
+        // Only a request signed for this community (format 2), as break-glass (routes/node-admin.ts, AUTH-01): an old-format
+        // request names no community, so one an owner sent to another community they own could be replayed here within its
+        // window and flip this hall (design §2.3, "the format-1 problem"). No app that has this switch signs the old format:
+        // the route is newer than format 2 (#1219).
+        if (authSig?.format !== 2) {
+            ctx.set('Cache-Control', 'no-store');
+            ctx.status = 426;
+            ctx.body = { error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE };
             return;
         }
         if (!isNodeOwner(signer)) {

@@ -1577,7 +1577,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.
     app.use(identityReadOnlyGuard);
     // Lights-out (services/lights-out.ts, design §2.7): while the hall is open, address changes are refused, and the first
-    // member write is noted for the stand-down offer.
+    // write that changes the record (a member's, an owner's or an admin's) is noted for the stand-down offer.
     app.use(lightsOutGuard);
 
     // JSON body parser middleware

@@ -22,7 +22,10 @@
  *      the stand-down offer on OFF with no hall writes, none after a member wrote;
  *   6. the switch is in no copy: a sealed backup's node_config.json and its take-over bundle, a snapshot, the redacted
  *      config; the manifest says per-server; the stager leaves it out;
- *   7. `beanpool lights-out`: the node takes the request within 2 s and answers; the log keeps a SECURITY line.
+ *   7. `beanpool lights-out`: the node takes the request within 2 s and answers; the log keeps a SECURITY line;
+ *   8. the no-mothership pattern: a second node (the real index.ts, its own process and data folder) restores section 6's
+ *      sealed file with `beanpool restore` and starts on it: its health and info read lightsOut off, its local-config.json
+ *      holds none, and the boot keeps it as a restored copy.
  *
  * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-lights-out.ts
  */
@@ -31,7 +34,8 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import https from 'node:https';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import selfsigned from 'selfsigned';
 
@@ -359,6 +363,8 @@ console.log('\n5. The epoch raise on a restored copy, the record as of, stand do
 
 // ── 6. In no copy ────────────────────────────────────────────────────────────────────────────────────────────────
 console.log('\n6. The switch travels in no copy');
+/** Section 6's sealed file, made while the switch was on, and what section 8 restores on a second node. */
+const copyMadeOn = { file: '', code: '', epoch: 0, madeAt: '' };
 {
     check('it is on as the copies are made', isOn() && !!getLocalConfig().restoredCopy);
     const red = redactLocalConfig(getLocalConfig()) as any;
@@ -386,6 +392,7 @@ console.log('\n6. The switch travels in no copy');
     check('a sealed backup\'s node_config.json: no lightsOut, no restoredCopy', !('lightsOut' in nodeConfig) && !('restoredCopy' in nodeConfig) && 'identityEpoch' in nodeConfig);
     const bundle = readBundleFrom(unpacked, header) as any;
     check('its take-over bundle: no lightsOut anywhere', !!bundle && !JSON.stringify(bundle).includes('lightsOut') && !JSON.stringify(bundle).includes('restoredCopy'));
+    Object.assign(copyMadeOn, { file: sealedFile, code: code.code, epoch: Number(bundle?.identityEpoch) || 0, madeAt: String(header.createdAt) });
     const { createSnapshot, resolveSnapshotPath } = await import('./services/snapshot-scheduler.js');
     const snap = createSnapshot('scheduled');
     const snapBytes = fs.readFileSync(resolveSnapshotPath(snap.name)!).toString('latin1');
@@ -419,6 +426,90 @@ console.log('\n7. beanpool lights-out');
     check('an unknown action → usage (2)', usage === 2);
     lo.stopLightsOutRequestWatch();
     (logger as any).security = realSecurity;
+}
+
+// ── 8. A second node restores the file ──────────────────────────────────────────────────────────────────────────
+// The no-mothership pattern (test-no-mothership.ts, test-beanpool-restore.ts step 9): the REAL entry point (index.ts), its
+// own process and data folder, nothing of ours reachable. It starts once (its own genesis), stops, takes section 6's sealed
+// file with `beanpool restore` as an owner does on a laptop with no internet, and starts again on the restored data. What
+// reaches its local-config.json from a file is the take-over bundle's field list (takeover-envelope.ts); with 'lightsOut'
+// added to that list this section goes red (the second node reads ON, with the first node's hall address).
+console.log('\n8. A second node restores the file made while the switch was on: the switch is off there');
+{
+    const SRC = path.dirname(fileURLToPath(import.meta.url));
+    const second = fs.mkdtempSync(path.join(path.dirname(dataDir), 'lights-out-second-'));
+    const secondConfig = () => JSON.parse(fs.readFileSync(path.join(second, 'local-config.json'), 'utf8'));
+    const env = {
+        ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(BEANPOOL_ADDRESSES|NODE_ROLE|ADMIN_PASSWORD|CF_|PUBLIC_ADDRESS_|PUBLIC_IP)/.test(k))),
+        BEANPOOL_DATA_DIR: second, PORT_HTTP: '0', PORT_HTTPS: '0', PORT_P2P: '0', PORT_P2P_WS: '0',
+        DISABLE_UPDATE_CHECK: 'true', DIRECTORY_REGISTRY_URL: 'http://127.0.0.1:9/',
+    } as NodeJS.ProcessEnv;
+    const started: import('node:child_process').ChildProcess[] = [];
+    const startSecond = async () => {
+        const child = spawn(process.execPath, ['--import', 'tsx', path.join(SRC, 'index.ts')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+        started.push(child);
+        let out = '';
+        child.stdout!.on('data', (d) => { out += d; });
+        child.stderr!.on('data', (d) => { out += d; });
+        const exited = new Promise<void>((resolve) => child.on('exit', () => resolve()));
+        const t0 = Date.now();
+        while (!out.includes('BeanPool Node is live') && child.exitCode === null && child.signalCode === null && Date.now() - t0 < 150_000) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        const port = Number(/listening on https:\/\/0\.0\.0\.0:(\d+)/.exec(out)?.[1] ?? 0);
+        return { child, exited, port, live: out.includes('BeanPool Node is live') && !!port, tail: () => out.trim().split('\n').slice(-3).join(' | ').slice(0, 300) };
+    };
+    const stopSecond = async (n: { child: import('node:child_process').ChildProcess; exited: Promise<void> }) => {
+        n.child.kill('SIGTERM');
+        await Promise.race([n.exited, new Promise((r) => setTimeout(r, 30_000))]);
+        if (n.child.exitCode === null && n.child.signalCode === null) { n.child.kill('SIGKILL'); await n.exited; }
+    };
+    /** A GET on the second node's own HTTPS port (its self-signed certificate), as the phone's health ping reads it. */
+    const getJson = (port: number, p: string) => new Promise<{ status: number; json: any }>((resolve, reject) => {
+        const req = https.get({ host: '127.0.0.1', port, path: p, rejectUnauthorized: false, timeout: 15_000 }, (res) => {
+            let body = '';
+            res.on('data', (d) => { body += d; });
+            res.on('end', () => { let json: any = null; try { json = JSON.parse(body); } catch { /* not json */ } resolve({ status: res.statusCode ?? 0, json }); });
+        });
+        req.on('timeout', () => req.destroy(new Error('timed out')));
+        req.on('error', reject);
+    });
+    try {
+        check('section 6 left a sealed file made while the switch was on', !!copyMadeOn.file && fs.existsSync(copyMadeOn.file) && !!copyMadeOn.code);
+        const first = await startSecond();
+        check('the second node starts on its own, a community of its own', first.live, first.tail());
+        await stopSecond(first);
+
+        const codeFile = path.join(second, '..', `lights-out-code-${process.pid}`);
+        fs.writeFileSync(codeFile, copyMadeOn.code, { mode: 0o600 });
+        const r = spawnSync(process.execPath, ['--import', 'tsx', path.join(SRC, 'recover-cli.ts'), 'restore', '--code-file', codeFile, copyMadeOn.file], {
+            env, encoding: 'utf8', timeout: 120_000, input: 'yes\n',
+        });
+        fs.rmSync(codeFile, { force: true });
+        const said = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split('\n').slice(-2).join(' | ').slice(0, 300);
+        check('`beanpool restore` on the second node, the node stopped: restored (exit 0)', r.status === 0, `exit ${r.status}: ${said}`);
+        const afterRestore = secondConfig();
+        check('its local-config.json after the restore: no lightsOut', !('lightsOut' in afterRestore) || afterRestore.lightsOut == null, JSON.stringify(afterRestore.lightsOut));
+
+        const again = await startSecond();
+        check('it starts again on the restored data', again.live, again.tail());
+        const health = again.live ? await getJson(again.port, '/api/community/health') : { status: 0, json: null };
+        const hl = health.json?.lightsOut;
+        check('its health reads lightsOut off: { on: false, since: null, address: null, recordAsOf: null }', health.status === 200 && hl?.on === false
+            && hl.since === null && hl.address === null && hl.recordAsOf === null, `${health.status} ${JSON.stringify(hl)}`);
+        const info = again.live ? await getJson(again.port, '/api/community/info') : { status: 0, json: null };
+        check('its info reads the same', info.status === 200 && info.json?.lightsOut?.on === false && info.json.lightsOut.address === null, JSON.stringify(info.json?.lightsOut));
+        const booted = secondConfig();
+        check('its local-config.json after the boot: still no lightsOut, and the hall address of the first node nowhere',
+            (!('lightsOut' in booted) || booted.lightsOut == null) && !JSON.stringify(booted).includes(ADDRESS), JSON.stringify(booted.lightsOut));
+        check('the boot kept it as a restored copy: the file\'s made-at and take-over count (what a later switch raises past)',
+            booted.restoredCopy?.madeAt === copyMadeOn.madeAt && booted.restoredCopy?.epoch === copyMadeOn.epoch,
+            `${JSON.stringify(booted.restoredCopy)} vs ${copyMadeOn.madeAt}/${copyMadeOn.epoch}`);
+        await stopSecond(again);
+    } finally {
+        for (const ch of started) if (ch.exitCode === null && ch.signalCode === null) ch.kill('SIGKILL');
+        fs.rmSync(second, { recursive: true, force: true });
+    }
 }
 
 _setPlainConnectionHookForTests(null);

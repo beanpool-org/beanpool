@@ -4,7 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
-import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
+import { getPosts, getNearbyKeptPostIds, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
 import { marketCardPicture } from '../../utils/market-card-picture';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { refusalHere, type Refusal } from '../../utils/members-only-listings';
@@ -600,6 +600,9 @@ export default function MarketScreen() {
     const [selectedFree, setSelectedFree] = useState<string | null>(null);
     const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
     const [posts, setPosts] = useState<any[]>([]);
+    // The posts tied to the member on this phone (a deal, a chat, an answer): the Market's circle never cuts them, as the copy keeps them.
+    // Null until read: the circle waits for it, so a tie is never cut for a moment.
+    const [keptIds, setKeptIds] = useState<ReadonlySet<string> | null>(null);
     // The clock that ends a pin on screen by the time, without a sync. It runs only while a pin is live in the list: a
     // Market with none (most of them) wakes nothing every 30 seconds. A pin that arrives with a sync changes `posts`.
     const hasLivePin = anyLivePin(posts);
@@ -979,6 +982,9 @@ export default function MarketScreen() {
         const runLoad = async () => {
             const data = await getPosts(queryFilter);
             setPosts(data);
+            // The ties the circle never cuts. Not waited for: the list and the deals below never depend on it, and a read that
+            // fails leaves the circle off (nothing cut), never an empty Market.
+            getNearbyKeptPostIds(identity?.publicKey).then(setKeptIds, () => {});
             // The member's own deals: only where deals are live (or read-only) and known to be; an answer that lands
             // after a switch to preview is dropped.
             if (identity && readsOwnDeals()) {
@@ -1095,14 +1101,17 @@ export default function MarketScreen() {
         });
         // The worldwide community: the same order, cut to the circle round the member's area. Not under Events, a search or a
         // Distance, which have their own say.
-        const circle = !narrowed && filter !== 'events' ? nearbyCircle(nodeProfile, memberArea) : null;
+        const circle = !narrowed && filter !== 'events' && keptIds ? nearbyCircle(nodeProfile, memberArea) : null;
         const stream = marketStream(pinsRead.rest, nowMs, {
-            eventsOnly: filter === 'events', narrowedBySearch: searching, circle, ownKey: identity?.publicKey,
+            eventsOnly: filter === 'events', narrowedBySearch: searching, circle, ownKey: identity?.publicKey, keptIds,
         });
         const distances = circle ? distancesFrom([...pinsRead.pinned, ...stream], circle.area) : null;
-        return { pinned: pinsRead.pinned, stream, allMatching: pinsRead.allMatching, realMatchingCount: pinsRead.realMatchingCount, circle, distances };
+        // What the fill, the empty state and the example listings weigh is what is drawn: inside the circle a cut post counts for
+        // nothing, and the fill may bring it back under Newest from elsewhere.
+        const drawn = circle ? [...stream, ...pinsRead.pinned] : pinsRead.allMatching;
+        return { pinned: pinsRead.pinned, stream, allMatching: drawn, realMatchingCount: drawn.length, circle, distances };
     }, [basePosts, posts, filter, categoryFilter, eventWindow, trustFilter, beansOnly, radiusKm, locationCenter, groupFilter, blockedUsers, favCategories,
-        searchQuery, answerStands, selectedTag, selectedFree, isSearching, searchResults, nodeProfile, memberArea, identity?.publicKey, nowTick, nowMinute]);
+        searchQuery, answerStands, selectedTag, selectedFree, isSearching, searchResults, nodeProfile, memberArea, identity?.publicKey, keptIds, nowTick, nowMinute]);
     const pinnedPosts = market.pinned;
     const filteredPosts = market.stream;
     const allMatchingPosts = market.allMatching;

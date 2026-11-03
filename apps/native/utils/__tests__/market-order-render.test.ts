@@ -148,7 +148,7 @@ import MarketScreen from '../../app/(tabs)/market';
 import { nearbyAreaKeyOf } from '../nearby-area';
 
 const NODE = 'https://local.example';
-const EMPTY: Record<string, unknown> = { getPosts: [], getBalance: { isBlockedFromTrading: false }, getMarketplaceTransactions: [], getMyPosts: [], fetchGroups: [], fetchMyEvents: [] };
+const EMPTY: Record<string, unknown> = { getPosts: [], getBalance: { isBlockedFromTrading: false }, getMarketplaceTransactions: [], getNearbyKeptPostIds: new Set<string>(), getMyPosts: [], fetchGroups: [], fetchMyEvents: [] };
 const listing = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
     id, title, type: 'offer', status: 'active', category: 'services', author_pubkey: 'other-member-key', author_callsign: 'Other', author_energy_cycled: 0,
     credits: 0, photos: '[]', lat: -28.6, lng: 153.4, created_at: new Date().toISOString(), ...extra,
@@ -294,6 +294,18 @@ describe('the Market on the worldwide community: the same order inside a circle'
         expect(distances).toHaveLength(2);
         expect(distances[0]).toMatch(/^📍 \d+(\.\d)? km$/);
         for (const gone of ['NEAREST FIRST', 'UPCOMING EVENTS']) expect(text).not.toContain(gone);
+    });
+
+    it('a listing tied to the member (a deal, a chat, an answer) stays whatever its distance, in its newest-first place, once', async () => {
+        net.answer = (name) => (name === 'getPosts' ? Promise.resolve(posts())
+            : name === 'getNearbyKeptPostIds' ? Promise.resolve(new Set(['far']))
+            : name in EMPTY ? Promise.resolve(EMPTY[name]) : undefined);
+        await render();
+        const text = host.textContent ?? '';
+        // Melbourne is 1,300 km away but tied: it is drawn, once, above the nearer ones it is newer than.
+        expect(text.split('Melbourne bike')).toHaveLength(2);
+        expect(text.indexOf('Melbourne bike')).toBeLessThan(text.indexOf('Surplus pumpkins'));
+        expect(text.indexOf('Surplus pumpkins')).toBeLessThan(text.indexOf('Sourdough starter'));
     });
 
     it('a pinned listing is above the line and has its distance too', async () => {

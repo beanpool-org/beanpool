@@ -230,12 +230,16 @@ export function distancesFrom(posts: readonly Record<string, any>[], from: Point
 }
 
 /**
- * Drop what lies beyond the circle. A post with no place (a poll, an online event) stays, and so does the member's own, as the
- * node's area read keeps the member's own beside the circle.
+ * Drop what lies beyond the circle. A post with no place (a poll, an online event) stays, and so does the member's own and every
+ * post tied to them (`keptIds`: a listing they took, a deal or chat on it, an event they answered; utils/posts-nearby.ts "kept"),
+ * whatever its distance: the phone's copy keeps these on purpose, so a deal never loses its listing. The order is the input's.
  */
-export function cutToCircle<T extends Record<string, any>>(posts: readonly T[], circle: NearbyCircle, ownKey?: string | null): T[] {
+export function cutToCircle<T extends Record<string, any>>(
+    posts: readonly T[], circle: NearbyCircle, ownKey?: string | null, keptIds?: ReadonlySet<string> | null,
+): T[] {
     return posts.filter(p => {
         if (ownKey && (p.author_pubkey === ownKey || p.authorPublicKey === ownKey)) return true;
+        if (keptIds && p.id != null && keptIds.has(String(p.id))) return true;
         const at = placeOf(p);
         return !at || km(circle.area, at) <= circle.radiusKm;
     });
@@ -250,6 +254,8 @@ export interface MarketStreamOptions {
     circle?: NearbyCircle | null;
     /** The member, whose own posts are never cut. */
     ownKey?: string | null;
+    /** The ids of the posts tied to the member (db getNearbyKeptPostIds): never cut, whatever their distance. */
+    keptIds?: ReadonlySet<string> | null;
 }
 
 function eventStartMs(p: Record<string, any>): number {
@@ -268,7 +274,7 @@ export function marketStream<T extends Record<string, any>>(posts: readonly T[],
         return pulseFirst([...posts].sort((a, b) => eventStartMs(a) - eventStartMs(b)));
     }
     if (o.narrowedBySearch) return pulseFirst([...posts]);
-    const cut = o.circle ? cutToCircle(posts, o.circle, o.ownKey) : [...posts];
+    const cut = o.circle ? cutToCircle(posts, o.circle, o.ownKey, o.keptIds) : [...posts];
     return pulseFirst(marketOrder(cut, nowMs));
 }
 
@@ -278,7 +284,7 @@ export function marketStream<T extends Record<string, any>>(posts: readonly T[],
  * Upcoming events, Polls and Nearest first are gone.
  */
 export function marketFeedSections<T extends Record<string, any>>(
-    posts: T[], profile: NodeProfile | null | undefined, point: Point | null, nowMs: number = Date.now(), ownKey?: string | null,
+    posts: T[], profile: NodeProfile | null | undefined, point: Point | null, nowMs: number = Date.now(), ownKey?: string | null, keptIds?: ReadonlySet<string> | null,
 ): FeedSection<T>[] {
-    return sectionsOfOrdered(marketStream(posts, nowMs, { circle: nearbyCircle(profile, point), ownKey }), nowMs);
+    return sectionsOfOrdered(marketStream(posts, nowMs, { circle: nearbyCircle(profile, point), ownKey, keptIds }), nowMs);
 }

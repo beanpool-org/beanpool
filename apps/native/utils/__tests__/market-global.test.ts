@@ -190,6 +190,19 @@ describe('nearest first', () => {
         expect(ids).not.toContain('melbourne');
     });
 
+    it("a post tied to the member (a deal, a chat, an answer) is never cut, however far, and keeps its newest-first place", () => {
+        const kept = new Set(['melbourne']);
+        const ids = idsOf(marketFeedSections(posts, BY_AREA, here, now, 'me', kept));
+        // Melbourne (about 1,200 km) stays because it is tied; without the tie it goes. The order is the same newest-first order.
+        expect(ids).toEqual(['zero', 'noplace', 'melbourne', 'event', 'brisbane', 'byron']);
+        expect(idsOf(marketFeedSections(posts, BY_AREA, here, now, 'me', new Set()))).not.toContain('melbourne');
+        expect(idsOf(marketFeedSections(posts, BY_AREA, here, now, 'me', null))).not.toContain('melbourne');
+        // Only the tied one is spared: a far post that is not tied is still cut.
+        const ids2 = idsOf(marketFeedSections([...posts, { id: 'perth', type: 'offer', lat: -31.95, lng: 115.86, created_at: '2026-09-26T07:00:00Z' }], BY_AREA, here, now, 'me', kept));
+        expect(ids2).toContain('melbourne');
+        expect(ids2).not.toContain('perth');
+    });
+
     it('a local community, or no area yet, keeps every post', () => {
         for (const profile of [LOCAL, GLOBAL, null]) {
             expect(idsOf(marketFeedSections(posts, profile, here, now))).toHaveLength(posts.length);

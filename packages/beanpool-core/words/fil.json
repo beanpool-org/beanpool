@@ -977,8 +977,8 @@
   "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Iniulat ng mga taong sinulatan mo ang mga hiling mong magpadala ng mensahe, kaya nabura ang mga ito at hindi ka makapagpapadala ng bago hanggang {date}. Maaari ka pa ring sumagot sa mga sumulat sa iyo, at mag-post.",
   "This link opens for members only.": "Magbubukas lang ang link na ito para sa mga miyembro.",
   "This link opens for members only, and only admins invite here.": "Magbubukas lang ang link na ito para sa mga miyembro, at mga admin lang ang nag-iimbita rito.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Mababasa ng sinuman ang listahang ito sa loob ng 7 araw, pagkatapos ay humiling na sumali.",
-  "Anyone can read this listing for 7 days.": "Mababasa ng sinuman ang listahang ito sa loob ng 7 araw.",
-  "Anyone can read this event for 7 days, then ask to join.": "Mababasa ng sinuman ang event na ito sa loob ng 7 araw, pagkatapos ay humiling na sumali.",
-  "Anyone can read this event for 7 days.": "Mababasa ng sinuman ang event na ito sa loob ng 7 araw."
+  "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.": "Mababasa ng sinumang may link ang listahang ito sa loob ng 7 araw, walang pangalan o mukha, pagkatapos ay humiling na sumali. Maaari mo itong ihinto anumang oras.",
+  "Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.": "Mababasa ng sinumang may link ang listahang ito sa loob ng 7 araw, walang pangalan o mukha. Maaari mo itong ihinto anumang oras.",
+  "Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.": "Mababasa ng sinumang may link ang event na ito sa loob ng 7 araw, walang pangalan o mukha, pagkatapos ay humiling na sumali. Maaari mo itong ihinto anumang oras.",
+  "Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.": "Mababasa ng sinumang may link ang event na ito sa loob ng 7 araw, walang pangalan o mukha. Maaari mo itong ihinto anumang oras."
 }

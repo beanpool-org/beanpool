@@ -85,9 +85,9 @@ You cannot save a post yet.
 
 Before you tap, a plain line under the buttons tells you what the link will do, based on your community's rules and your standing:
 
-- **Sharing outside allowed:** You see **Share with members** and **Share outside the community**. Under **Share with members**, the line reminds you that this link opens for members only. Under **Share outside the community**, it tells you that anyone can read this listing (or event) for 7 days, and, where your community has joining open to requests, that they can then ask to join. Where joining is paused, it stops at the 7 days. A short note there also reminds you that the link shows no names or faces, and that you can stop it any time.
+- **Sharing outside allowed:** You see **Share with members** and **Share outside the community**. Under **Share with members**, the line reminds you that this link opens for members only. Under **Share outside the community**, it tells you that anyone can read this listing (or event) for 7 days, and, where your community has joining open to requests, that they can then ask to join. Where joining is paused, it leaves that out. The same short note says the link shows no names or faces, and that you can stop it any time.
 - **Sharing outside off:** You see **Share with members** and the line that it opens for members only.
-- **Only admins invite:** Members see **Share with members** and the line that it opens for members only and only admins invite here. Owners and admins see the usual line.
+- **Only admins invite:** Members see **Share with members** and the line that it opens for members only and only admins invite here. Where your community takes it, one more button sits under that line: **Ask an admin to invite someone**. It opens the same short form as **People**, then **Invites**: a first name and how you know them. An admin reads it and decides, and the answer reaches you under **Invites**. Owners and admins see the usual line and **Invite and share**.
 - **On an open community:** The link already opens for anyone, so no extra line is shown.
 - **In a private preview:** Only owners and admins invite, so members see that only admins invite here.
 

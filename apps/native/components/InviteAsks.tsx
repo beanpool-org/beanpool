@@ -113,16 +113,82 @@ function Answered({ answer, onShare }: { answer: InviteAskAnswer; onShare: (code
     );
 }
 
-/** For a member where only admins invite: the small button, the short sheet, and what they've asked. */
-export function AskAnAdmin({ anchorUrl, identity, onShare }: { anchorUrl: string; identity: BeanPoolIdentity; onShare: (code: string) => void }) {
+/**
+ * The short ask form (Their first name, How you know them, Send to the admins). ONE form: People → Invites and the Share
+ * sheet's "Ask an admin to invite someone" both open this one. `onSent` runs after the node took the ask.
+ */
+export function AskSheet({ anchorUrl, identity, open, onClose, onSent }: {
+    anchorUrl: string; identity: BeanPoolIdentity; open: boolean; onClose: () => void; onSent: () => void;
+}) {
     const { colors } = useTheme();
     const styles = useAskStyles();
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8);
-    const [mine, setMine] = useState<{ waiting: InviteAskWaiting[]; answers: InviteAskAnswer[] } | null>(null);
-    const [open, setOpen] = useState(false);
     const [firstName, setFirstName] = useState('');
     const [howKnown, setHowKnown] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [refusal, setRefusal] = useState<string | null>(null);
+
+    const close = () => { setRefusal(null); onClose(); };
+    const send = async () => {
+        setBusy(true);
+        const r = await askAnAdmin(anchorUrl, identity, firstName, howKnown);
+        setBusy(false);
+        if (!r.ok) { setRefusal(r.message ?? t(INVITE_ASK_WORDS.unreachable)); return; }
+        setFirstName('');
+        setHowKnown('');
+        setRefusal(null);
+        onSent();
+    };
+    return (
+        <Modal visible={open} animationType="slide" transparent onRequestClose={close}>
+            <View style={[styles.backdrop, { paddingTop: insets.top + 8 }]}>
+                <View style={[styles.sheet, { paddingBottom: insets.bottom + 16, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="invite-ask-sheet">
+                    <ScrollView keyboardShouldPersistTaps="handled">
+                        <Text style={styles.sheetTitle} accessibilityRole="header">{t(INVITE_ASK_WORDS.button)}</Text>
+                        <Text style={styles.help}>{t(INVITE_ASK_WORDS.help)}</Text>
+                        <Text style={styles.label}>{t(INVITE_ASK_WORDS.firstName)}</Text>
+                        <TextInput
+                            style={styles.field}
+                            value={firstName}
+                            onChangeText={setFirstName}
+                            maxLength={INVITE_ASK_LIMITS.firstName}
+                            accessibilityLabel={t(INVITE_ASK_WORDS.firstName)}
+                            autoCapitalize="words"
+                            autoCorrect={false}
+                            placeholderTextColor={colors.text.muted}
+                            testID="invite-ask-first-name"
+                        />
+                        <Text style={styles.label}>{t(INVITE_ASK_WORDS.howKnown)}</Text>
+                        <TextInput
+                            style={styles.field}
+                            value={howKnown}
+                            onChangeText={setHowKnown}
+                            maxLength={INVITE_ASK_LIMITS.howKnown}
+                            accessibilityLabel={t(INVITE_ASK_WORDS.howKnown)}
+                            // One line to the node (it closes up line breaks), wrapped here so all of it shows at 320 dp.
+                            multiline
+                            textAlignVertical="top"
+                            placeholderTextColor={colors.text.muted}
+                            testID="invite-ask-how-known"
+                        />
+                        {!!refusal && <Text style={styles.refusal} accessibilityLiveRegion="polite">{refusal}</Text>}
+                        <View style={[styles.actions, { marginTop: 0 }]}>
+                            <Button label={t(INVITE_ASK_WORDS.send)} strong onPress={() => void send()} disabled={busy || !inviteAskReady(firstName, howKnown)} testID="invite-ask-send" />
+                            <Button label={t('Cancel')} onPress={close} />
+                        </View>
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
+/** For a member where only admins invite: the small button, the short sheet, and what they've asked. */
+export function AskAnAdmin({ anchorUrl, identity, onShare }: { anchorUrl: string; identity: BeanPoolIdentity; onShare: (code: string) => void }) {
+    const styles = useAskStyles();
+    const [mine, setMine] = useState<{ waiting: InviteAskWaiting[]; answers: InviteAskAnswer[] } | null>(null);
+    const [open, setOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<string | null>(null);
 
@@ -132,17 +198,6 @@ export function AskAnAdmin({ anchorUrl, identity, onShare }: { anchorUrl: string
     }, [anchorUrl, identity]);
     useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-    const close = () => { setOpen(false); setRefusal(null); };
-    const send = async () => {
-        setBusy(true);
-        const r = await askAnAdmin(anchorUrl, identity, firstName, howKnown);
-        setBusy(false);
-        if (!r.ok) { setRefusal(r.message ?? t(INVITE_ASK_WORDS.unreachable)); return; }
-        setFirstName('');
-        setHowKnown('');
-        close();
-        void load();
-    };
     const takeBack = async (id: string) => {
         setBusy(true);
         const r = await takeBackAsk(anchorUrl, identity, id);
@@ -159,46 +214,7 @@ export function AskAnAdmin({ anchorUrl, identity, onShare }: { anchorUrl: string
             {shown && <Text style={styles.heading} accessibilityRole="header">{t(INVITE_ASK_WORDS.mine)}</Text>}
             {mine?.waiting.map(ask => <Waiting key={ask.id} ask={ask} busy={busy} onTakeBack={() => void takeBack(ask.id)} />)}
             {mine?.answers.map(answer => <Answered key={answer.id} answer={answer} onShare={onShare} />)}
-            <Modal visible={open} animationType="slide" transparent onRequestClose={close}>
-                <View style={[styles.backdrop, { paddingTop: insets.top + 8 }]}>
-                    <View style={[styles.sheet, { paddingBottom: insets.bottom + 16, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="invite-ask-sheet">
-                        <ScrollView keyboardShouldPersistTaps="handled">
-                            <Text style={styles.sheetTitle} accessibilityRole="header">{t(INVITE_ASK_WORDS.button)}</Text>
-                            <Text style={styles.help}>{t(INVITE_ASK_WORDS.help)}</Text>
-                            <Text style={styles.label}>{t(INVITE_ASK_WORDS.firstName)}</Text>
-                            <TextInput
-                                style={styles.field}
-                                value={firstName}
-                                onChangeText={setFirstName}
-                                maxLength={INVITE_ASK_LIMITS.firstName}
-                                accessibilityLabel={t(INVITE_ASK_WORDS.firstName)}
-                                autoCapitalize="words"
-                                autoCorrect={false}
-                                placeholderTextColor={colors.text.muted}
-                                testID="invite-ask-first-name"
-                            />
-                            <Text style={styles.label}>{t(INVITE_ASK_WORDS.howKnown)}</Text>
-                            <TextInput
-                                style={styles.field}
-                                value={howKnown}
-                                onChangeText={setHowKnown}
-                                maxLength={INVITE_ASK_LIMITS.howKnown}
-                                accessibilityLabel={t(INVITE_ASK_WORDS.howKnown)}
-                                // One line to the node (it closes up line breaks), wrapped here so all of it shows at 320 dp.
-                                multiline
-                                textAlignVertical="top"
-                                placeholderTextColor={colors.text.muted}
-                                testID="invite-ask-how-known"
-                            />
-                            {!!refusal && <Text style={styles.refusal} accessibilityLiveRegion="polite">{refusal}</Text>}
-                            <View style={[styles.actions, { marginTop: 0 }]}>
-                                <Button label={t(INVITE_ASK_WORDS.send)} strong onPress={() => void send()} disabled={busy || !inviteAskReady(firstName, howKnown)} testID="invite-ask-send" />
-                                <Button label={t('Cancel')} onPress={close} />
-                            </View>
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            <AskSheet anchorUrl={anchorUrl} identity={identity} open={open} onClose={() => setOpen(false)} onSent={() => { setOpen(false); void load(); }} />
         </View>
     );
 }

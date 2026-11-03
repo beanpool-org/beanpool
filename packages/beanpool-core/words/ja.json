@@ -936,8 +936,8 @@
   "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "あなたがメッセージを送った人たちがあなたのメッセージリクエストを報告したため、リクエストは削除され、{date}まで新しいリクエストは送れません。あなたに書いてきた人への返信と、投稿はこれまでどおりできます。",
   "This link opens for members only.": "このリンクはメンバーのみ開くことができます。",
   "This link opens for members only, and only admins invite here.": "このリンクはメンバーのみ開くことができ、ここでは管理者のみが招待できます。",
-  "Anyone can read this listing for 7 days, then ask to join.": "誰でもこの投稿を7日間閲覧でき、その後参加を申請できます。",
-  "Anyone can read this listing for 7 days.": "誰でもこの投稿を7日間閲覧できます。",
-  "Anyone can read this event for 7 days, then ask to join.": "誰でもこのイベントを7日間閲覧でき、その後参加を申請できます。",
-  "Anyone can read this event for 7 days.": "誰でもこのイベントを7日間閲覧できます。"
+  "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.": "リンクを知っている人なら誰でも、この投稿を名前や顔なしで7日間閲覧でき、その後参加を申請できます。共有はいつでも止められます。",
+  "Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.": "リンクを知っている人なら誰でも、この投稿を名前や顔なしで7日間閲覧できます。共有はいつでも止められます。",
+  "Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.": "リンクを知っている人なら誰でも、このイベントを名前や顔なしで7日間閲覧でき、その後参加を申請できます。共有はいつでも止められます。",
+  "Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.": "リンクを知っている人なら誰でも、このイベントを名前や顔なしで7日間閲覧できます。共有はいつでも止められます。"
 }

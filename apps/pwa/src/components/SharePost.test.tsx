@@ -71,7 +71,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-outside-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
-        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone can read this listing for 7 days, then ask to join.');
+        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.');
         // One flow: Invite and share is the only invite action, here too (the member may invite).
         await screen.findByTestId('invite-and-share-button');
         expect(screen.getAllByTestId('invite-and-share-button')).toHaveLength(1);
@@ -218,7 +218,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: true, door: 'members', knocks: false },
         } as any);
         await act(async () => { render(<SharePostButtons post={samplePost} />); });
-        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone can read this listing for 7 days.');
+        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.');
         expect(screen.getByTestId('share-outside-line').textContent).not.toMatch(/ask to join/);
     });
 
@@ -228,7 +228,10 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: true, door: 'members', knocks: true },
         } as any);
         await act(async () => { render(<SharePostButtons post={samplePost} />); });
-        expect(screen.getByTestId('share-outside-privacy')).toHaveTextContent('without names or faces. You can stop it any time.');
+        // ONE note: the 7 days, no names or faces and "you can stop it" read together, not as two notes.
+        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('for 7 days, without names or faces');
+        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('You can stop it any time.');
+        expect(screen.queryByTestId('share-outside-privacy')).toBeNull();
     });
 
     it('an event says "event" under Share outside, not "listing"', async () => {
@@ -237,7 +240,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: true, door: 'members', knocks: true },
         } as any);
         await act(async () => { render(<SharePostButtons post={{ ...samplePost, type: 'event' } as MarketplacePost} />); });
-        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone can read this event for 7 days, then ask to join.');
+        expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
         expect(screen.getByTestId('share-outside-line').textContent).not.toMatch(/listing/);
     });
 

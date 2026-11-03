@@ -977,8 +977,8 @@
   "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "நீங்கள் எழுதியவர்கள் உங்கள் செய்தி கோரிக்கைகளைப் புகாரளித்தனர்; அதனால் அவை நீக்கப்பட்டன, {date} வரை புதியவற்றை உங்களால் அனுப்ப முடியாது. உங்களுக்கு எழுதியவர்களுக்குப் பதிலளிக்கவும் பதிவிடவும் உங்களால் இன்னும் முடியும்.",
   "This link opens for members only.": "இந்த இணைப்பு உறுப்பினர்களுக்கு மட்டுமே திறக்கும்.",
   "This link opens for members only, and only admins invite here.": "இந்த இணைப்பு உறுப்பினர்களுக்கு மட்டுமே திறக்கும், இங்கு நிர்வாகிகள் மட்டுமே அழைக்கலாம்.",
-  "Anyone can read this listing for 7 days, then ask to join.": "யாரும் இந்த இடுகையை 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம்.",
-  "Anyone can read this listing for 7 days.": "யாரும் இந்த இடுகையை 7 நாட்களுக்குப் படிக்கலாம்.",
-  "Anyone can read this event for 7 days, then ask to join.": "யாரும் இந்த நிகழ்வை 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம்.",
-  "Anyone can read this event for 7 days.": "யாரும் இந்த நிகழ்வை 7 நாட்களுக்குப் படிக்கலாம்."
+  "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.": "இணைப்பு உள்ள யாரும் இந்த இடுகையை பெயர்களும் முகங்களும் இல்லாமல் 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம். நீங்கள் எப்போது வேண்டுமானாலும் இதை நிறுத்தலாம்.",
+  "Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.": "இணைப்பு உள்ள யாரும் இந்த இடுகையை பெயர்களும் முகங்களும் இல்லாமல் 7 நாட்களுக்குப் படிக்கலாம். நீங்கள் எப்போது வேண்டுமானாலும் இதை நிறுத்தலாம்.",
+  "Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.": "இணைப்பு உள்ள யாரும் இந்த நிகழ்வை பெயர்களும் முகங்களும் இல்லாமல் 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம். நீங்கள் எப்போது வேண்டுமானாலும் இதை நிறுத்தலாம்.",
+  "Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.": "இணைப்பு உள்ள யாரும் இந்த நிகழ்வை பெயர்களும் முகங்களும் இல்லாமல் 7 நாட்களுக்குப் படிக்கலாம். நீங்கள் எப்போது வேண்டுமானாலும் இதை நிறுத்தலாம்."
 }

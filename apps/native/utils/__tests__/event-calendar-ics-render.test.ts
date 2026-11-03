@@ -409,14 +409,14 @@ describe('the event Share row says what the link does (share-says)', () => {
         shareState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
         await renderComponent();
         expect(text('event-share-members-note')).toBe('This link opens for members only.');
-        expect(text('share-outside-privacy')).toContain('without names or faces');
-        expect(text('share-outside-line')).toBe('Anyone can read this event for 7 days, then ask to join.');
+        // ONE note, not two: the privacy facts and the 7 days read together.
+        expect(text('share-outside-line')).toBe('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
     });
 
     it('sharing outside on but joining paused: the line never promises to ask to join', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: false } };
         await renderComponent();
-        expect(text('share-outside-line')).toBe('Anyone can read this event for 7 days.');
+        expect(text('share-outside-line')).toBe('Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.');
     });
 
     it('only admins invite and the role could not be read: no line (never "only admins invite")', async () => {
@@ -430,5 +430,30 @@ describe('the event Share row says what the link does (share-says)', () => {
         shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
         await renderComponent();
         expect(text('event-share-members-note')).toBe('This link opens for members only, and only admins invite here.');
+        // The node does not say it takes asks: the line, and no button.
+        expect(text('share-ask-admin-button')).toBeNull();
+    });
+
+    it('only admins invite, the node takes asks, the member is no admin: the line and "Ask an admin to invite someone", no Invite and share', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
+        await renderComponent();
+        expect(text('event-share-members-note')).toBe('This link opens for members only, and only admins invite here.');
+        expect(text('share-ask-admin-button')).toBe('Ask an admin to invite someone');
+        expect(text('invite-and-share-button')).toBeNull();
+    });
+
+    it('only admins invite, the node takes asks, an owner or admin: the plain members line and no Ask (Invite and share is share-ask-admin.test.ts)', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
+        shareState.role = 'admin';
+        await renderComponent();
+        expect(text('event-share-members-note')).toBe('This link opens for members only.');
+        expect(text('share-ask-admin-button')).toBeNull();
+    });
+
+    it('only admins invite, the node takes asks, the role could not be read: no line and no Ask', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
+        shareState.answered = false;
+        await renderComponent();
+        expect(text('share-ask-admin-button')).toBeNull();
     });
 });

@@ -377,9 +377,9 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members', shareOutside: true, knocks: true } } as any);
         render(<EventDetail post={event} identity={identity} />);
         const line = screen.getByTestId('share-outside-line');
-        expect(line).toHaveTextContent('Anyone can read this event for 7 days, then ask to join.');
+        expect(line).toHaveTextContent('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
         expect(line.textContent).not.toMatch(/listing/);
-        expect(screen.getByTestId('share-outside-privacy')).toHaveTextContent('without names or faces');
+        expect(screen.queryByTestId('share-outside-privacy')).toBeNull();
     });
 
     it('where only admins invite, an event row says nothing until the role is known, and nothing if it could not be read', async () => {

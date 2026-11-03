@@ -4,7 +4,8 @@
  * ONE share flow on the phone (share-one-flow): a listing's share sheet (components/SharePost.tsx, the real one, through
  * react-native-web) at the floor (320dp wide, the phone's text at 1.3x), light and dark, for three people:
  *   - a member where any member may invite: the line, and exactly ONE invite action (Invite and share);
- *   - a member where only admins invite: the line that only admins invite here, and no invite action;
+ *   - a member where only admins invite: the line that only admins invite here, no invite action, and ONE more button,
+ *     "Ask an admin to invite someone" (none where the node does not take asks);
  *   - an admin where only admins invite: the line, and exactly ONE invite action.
  * Never an "Invite someone" button, beside it or alone. Plus sharing outside on (Share outside and its lines, one invite action).
  *
@@ -79,6 +80,8 @@ const STUBS = {
     'NodeStatusContext': `export const useNodeStatus = () => ({ recognition: 'member', nodeUrl: 'https://castlemaine.beanpool.org', recheck: async () => 'member' });`,
     'db': `export const askCanVouch = async () => !!globalThis.__canVouch;`,
     'crypto': `export const buildSignedHeaders = async () => ({});`,
+    // The ask form is opened by a tap, which these shots never make: the button is what they look at.
+    'InviteAsks': `export const AskSheet = () => null;`,
     'peek': `export const makePeekLink = async () => ({ link: 'https://castlemaine.beanpool.org/?post=p&peek=t', expiresAt: '' }); export const peekStopsHere = () => 0;`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
@@ -86,7 +89,7 @@ const stubFor = (spec, importer = '') => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
     const base = path.basename(spec);
-    if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'NodeStatusContext'].includes(base)) return base;
+    if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'NodeStatusContext', 'InviteAsks'].includes(base)) return base;
     // The key, the stored communities, the role and the balance are the button's own reads: stubbed for it alone, so the
     // real modules still serve everything else that imports them.
     return ['identity', 'nodes', 'node-admin', 'db', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare|use-share-role)\./.test(path.basename(importer)) ? base : null;
@@ -109,8 +112,8 @@ const colors = scheme === 'dark' ? darkColors : lightColors;
 globalThis.__theme = { theme: scheme, colors };
 if (q.get('lang') === 'ta') setLanguage('ta', [ta]);
 const who = q.get('who') || 'member';
-const onlyAdmins = who === 'admins-only' || who === 'admin';
-globalThis.__features = { shareOutside: who === 'outside', knocks: true, invites: true, door: onlyAdmins ? 'admins' : 'members' };
+const onlyAdmins = who === 'admins-only' || who === 'admins-only-no-asks' || who === 'admin';
+globalThis.__features = { shareOutside: who === 'outside', knocks: true, invites: true, inviteAsks: who !== 'admins-only-no-asks', door: onlyAdmins ? 'admins' : 'members' };
 globalThis.__canVouch = false;
 globalThis.__role = who === 'admin' ? 'admin' : null;
 const POST_ID = '3f0c8a8e-1b2c-4d5e-8f90-123456789abc';
@@ -227,22 +230,29 @@ try {
     const countInvites = () => page.evaluate(() => ({
         shareAndInvite: document.querySelectorAll('[data-testid="invite-and-share-button"]').length,
         oldButton: document.querySelectorAll('[data-testid="invite-someone-button"]').length + ([...document.querySelectorAll('[role="button"]')].filter((el) => el.textContent.trim() === 'Invite someone').length),
+        asks: document.querySelectorAll('[data-testid="share-ask-admin-button"]').length,
         line: document.querySelector('[data-testid="share-members-note"]')?.textContent ?? null,
+        outside: document.querySelector('[data-testid="share-outside-line"]')?.textContent ?? null,
     }));
     const cases = [
-        ['open invite, a member', 'member', 1, 'This link opens for members only.'],
-        ['only admins invite, a member', 'admins-only', 0, 'This link opens for members only, and only admins invite here.'],
-        ['only admins invite, an admin', 'admin', 1, 'This link opens for members only.'],
-        ['sharing outside on, a member', 'outside', 1, 'This link opens for members only.'],
+        ['open invite, a member', 'member', 1, 'This link opens for members only.', 0],
+        ['only admins invite, a member', 'admins-only', 0, 'This link opens for members only, and only admins invite here.', 1],
+        ['only admins invite, asks off, a member', 'admins-only-no-asks', 0, 'This link opens for members only, and only admins invite here.', 0],
+        ['only admins invite, an admin', 'admin', 1, 'This link opens for members only.', 0],
+        ['sharing outside on, a member', 'outside', 1, 'This link opens for members only.', 0],
     ];
+    const ONE_NOTE = 'Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.';
     for (const scheme of ['light', 'dark']) {
-        for (const [name, who, wantInvites, wantLine] of cases) {
+        for (const [name, who, wantInvites, wantLine, wantAsks] of cases) {
             const tag = `${scheme} · ${name}`;
             await open(`scheme=${scheme}&lang=en&who=${who}`);
             await page.locator('[data-testid="share-members-button"]').waitFor();
             await page.waitForTimeout(500);
             const c = await countInvites();
             if (c.shareAndInvite !== wantInvites) problems.push(`${tag}: ${c.shareAndInvite} Invite and share button(s), wanted ${wantInvites}`);
+            if (c.asks !== wantAsks) problems.push(`${tag}: ${c.asks} Ask an admin button(s), wanted ${wantAsks}`);
+            if (c.asks && c.shareAndInvite) problems.push(`${tag}: Invite and share and Ask an admin show together`);
+            if (who === 'outside' && c.outside !== ONE_NOTE) problems.push(`${tag}: the Share outside note is ${JSON.stringify(c.outside)}, wanted the one note`);
             if (c.oldButton) problems.push(`${tag}: the old Invite someone button shows`);
             if (c.line !== wantLine) problems.push(`${tag}: the line is ${JSON.stringify(c.line)}, wanted ${JSON.stringify(wantLine)}`);
             await measure(tag);

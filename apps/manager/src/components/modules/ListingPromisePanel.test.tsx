@@ -1,7 +1,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { ListingPromisePanel, dayText, readPromise, type PromiseStatus } from './ListingPromisePanel';
+import { ListingPromisePanel, dayBounds, dayText, readPromise, type PromiseStatus } from './ListingPromisePanel';
 import type { NodeProfile } from '../../lib/profiles';
 
 /**
@@ -39,6 +39,11 @@ describe('readPromise: the node\'s answer, checked', () => {
         for (const bad of [null, {}, { promise: 'yes' }, { promise: { kept: 'true' } }, { promise: { ...status(), owners: '2' } }]) {
             expect(readPromise(bad)).toEqual({ ok: false });
         }
+    });
+
+    it('the date box offers the node\'s own (UTC) day: 17:00 on 3 Nov in UTC-8 is already 4 Nov at the node', () => {
+        const at = Date.UTC(2026, 10, 4, 1, 0, 0);
+        expect(dayBounds(at)).toEqual({ min: '2026-11-04', max: '2027-12-08' });
     });
 
     it('dayText writes the day itself in any zone', () => {

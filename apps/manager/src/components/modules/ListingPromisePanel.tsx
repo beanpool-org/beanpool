@@ -61,9 +61,12 @@ export function dayText(day: string | null): string {
     return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/** Today, and the last day the node takes, as the date box writes them (the browser's own day). */
-function dayBounds(now: number = Date.now()): { min: string; max: string } {
-    const iso = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+/**
+ * Today, and the last day the node takes, as the date box writes them: the node's own (UTC) day, not the browser's, so the
+ * box never offers a day the node refuses as already past (a browser west of UTC late in its day).
+ */
+export function dayBounds(now: number = Date.now()): { min: string; max: string } {
+    const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
     return { min: iso(now), max: iso(now + (MAX_CLOSING_DAYS - 1) * 86_400_000) };
 }
 

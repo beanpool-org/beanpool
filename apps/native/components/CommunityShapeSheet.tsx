@@ -2,6 +2,11 @@
  * The members' read-only community shape sheet (design §4, slice S5).
  * Lists the facts from Table 4.2 as paragraphs with bold tokens.
  * "Read more in the guide" button links to `/guide/how-your-community-works`.
+ *
+ * For an owner or admin (`forOwners`, NodeAdminEntry; DESIGN-core-settings-fable.md §6.3, slice C3) it is the same facts under
+ * the members' title, with a line on whether the core settings (it names them: the sheet also lists everyday settings the lock
+ * does not cover) are confirmed and locked and a last line saying where to change them: the phone shows the facts, the controls
+ * are the node's Settings page (Manage). Only the row is called "Core settings" (design §6.3).
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
@@ -18,15 +23,20 @@ import { useTheme } from '../app/ThemeContext';
 import { anchorUrl } from '../utils/node-post';
 import { fetchKnownRule } from '../utils/known-rule';
 import type { AppColors } from '../constants/colors';
+import type { CoreSettingsState } from '../utils/node-admin';
+import { coreSettingsFooterWords, coreSettingsLockLineWords } from './settings/settings-lines';
 
 export function CommunityShapeSheet({
     features,
     visible,
     onClose,
+    forOwners,
 }: {
     features: CommunityShapeFeatures | null | undefined;
     visible: boolean;
     onClose: () => void;
+    /** Present for an owner or admin: `core` is whether the node said the core settings are locked (null: it did not say). */
+    forOwners?: { core: CoreSettingsState | null };
 }) {
     const { colors } = useTheme();
     const s = sheetStyles(colors);
@@ -40,6 +50,7 @@ export function CommunityShapeSheet({
         return () => { live = false; };
     }, [visible, known]);
     const lines = communityShapeLines(features, rule);
+    const lockLine = forOwners ? coreSettingsLockLineWords(forOwners.core) : null;
 
     const onReadMore = () => {
         onClose();
@@ -66,6 +77,7 @@ export function CommunityShapeSheet({
                 </View>
 
                 <ScrollView contentContainerStyle={s.content}>
+                    {lockLine ? <Text style={s.lockLine} testID="community-shape-lock-line">{lockLine}</Text> : null}
                     {lines.map((line, idx) => (
                         <Text key={idx} style={s.lineParagraph}>
                             {splitBold(line).map((part, i) => (
@@ -89,6 +101,7 @@ export function CommunityShapeSheet({
                             {t(COMMUNITY_SHAPE_CARD_WORDS.readMoreInGuide)}
                         </Text>
                     </Pressable>
+                    {forOwners ? <Text style={s.footer} testID="community-shape-footer">{coreSettingsFooterWords()}</Text> : null}
                 </ScrollView>
             </View>
         </Modal>
@@ -142,6 +155,17 @@ const sheetStyles = (colors: AppColors) => StyleSheet.create({
         fontSize: 15,
         lineHeight: 22,
         color: colors.text.body,
+    },
+    lockLine: {
+        fontSize: 15,
+        lineHeight: 22,
+        fontWeight: '700',
+        color: colors.text.body,
+    },
+    footer: {
+        fontSize: 14,
+        lineHeight: 20,
+        color: colors.text.muted,
     },
     boldText: {
         fontWeight: '700',

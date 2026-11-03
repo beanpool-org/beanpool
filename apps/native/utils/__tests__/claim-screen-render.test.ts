@@ -399,6 +399,21 @@ describe('claimed at the server\'s number, the owner is told a name follows the 
         expect(button(host, 'Make Beans Town my community')).toBeDefined();
     });
 
+    it('core settings C3: the owner\'s card says the next step, once, under the screen-lock sentence, and the buttons stay', async () => {
+        const host = await claimAt(ORIGIN);
+        const NEXT = "Next: confirm your community's core settings in Settings. About five minutes; your community runs meanwhile.";
+        const next = q(host, '[data-testid="claim-core-settings-next"]');
+        expect(next?.textContent).toBe(NEXT);
+        expect(host.textContent!.split(NEXT).length - 1).toBe(1);
+        // It wraps, and sits after the sentence it follows.
+        expect(style(next).width).toBeUndefined();
+        const lock = "This phone's screen lock is how you manage it; keep it on. Add a second owner soon.";
+        expect(host.textContent!.indexOf(lock)).toBeGreaterThanOrEqual(0);
+        expect(host.textContent!.indexOf(lock)).toBeLessThan(host.textContent!.indexOf(NEXT));
+        // Words only: the card's button is still there, nothing is gated.
+        expect(button(host, 'Make Beans Town my community')).toBeDefined();
+    });
+
     it('a node that says nothing of its addresses, at its number, gets the sentence too', async () => {
         server.addresses = null;
         const host = await claimAt(NUMBER);

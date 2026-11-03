@@ -27,7 +27,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
-import { fetchMyNodeRole, rememberNodeRole, canManageNode, type ManageRole } from '../utils/node-admin';
+import { fetchMyNodeRole, rememberNodeRole, canManageNode, type CoreSettingsState, type ManageRole } from '../utils/node-admin';
 import { useManageNode } from './useManageNode';
 import { useNodeProfile } from '../utils/use-node-profile';
 import type { NodeFeatures } from '../utils/node-profile';
@@ -38,7 +38,7 @@ import { turnAppLockOnForRole } from '../utils/LocalAuth';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 import { t } from '@beanpool/core';
 import {
-    appLockOnForRoleWords, computerSigninLabelWords, howThisCommunityWorksLabelWords, howThisCommunityWorksSubtitleWords, manageLabelWords, manageSubtitleWords, settingsLineWords, signOutEverywhereWarningWords,
+    appLockOnForRoleWords, computerSigninLabelWords, coreSettingsLabelWords, coreSettingsSubtitleWords, howThisCommunityWorksLabelWords, howThisCommunityWorksSubtitleWords, manageLabelWords, manageSubtitleWords, settingsLineWords, signOutEverywhereWarningWords,
 } from './settings/settings-lines';
 import { CommunityShapeSheet } from './CommunityShapeSheet';
 
@@ -61,6 +61,8 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
     const { colors } = useTheme();
     const [role, setRole] = useState<ManageRole | null>(null);
     const [shapeOpen, setShapeOpen] = useState(false);
+    // Whether the owners have confirmed and locked the core settings: told to an owner or admin only (utils/node-admin.ts).
+    const [core, setCore] = useState<CoreSettingsState | null>(null);
     const [communityName, setCommunityName] = useState<string | null>(null);
     // The community's address on this phone, for the owner's nudge when it is the server's number.
     const [anchor, setAnchor] = useState<string | null>(null);
@@ -80,13 +82,14 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
             let cancelled = false;
             (async () => {
                 const url = await getAnchorUrl();
-                if (!url || !identity?.privateKey) { if (!cancelled) { setRole(null); onRoleChange?.(null); } return; }
+                if (!url || !identity?.privateKey) { if (!cancelled) { setRole(null); setCore(null); onRoleChange?.(null); } return; }
                 const mine = await fetchMyNodeRole(url, identity);
                 // A new owner/admin/moderator: the header's 🛡️ icon picks it up now rather than when its own answer
                 // expires. Only a positive: "no role" here may just mean the node was unreachable.
                 if (canManageNode(mine.role)) rememberNodeRole(url, identity.publicKey, mine);
                 if (cancelled) return;
                 setRole(mine.role);
+                setCore(mine.coreSettings ?? null);
                 onRoleChange?.(mine.role);
                 setCommunityName(mine.communityName);
                 setAnchor(url);
@@ -94,7 +97,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     onAppLockTurnedOn?.();
                     Alert.alert(t('App Lock is on'), appLockOnForRoleWords(mine.communityName || fallbackCommunityName || t('your community')));
                 }
-            })().catch(() => { if (!cancelled) { setRole(null); onRoleChange?.(null); } });
+            })().catch(() => { if (!cancelled) { setRole(null); setCore(null); onRoleChange?.(null); } });
             return () => { cancelled = true; };
         }, [identity, onAppLockTurnedOn, fallbackCommunityName])
     );
@@ -156,6 +159,9 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
     const name = communityName || fallbackCommunityName || t('this community');
     const label = manageLabelWords(role, name);
     const computerLabel = computerSigninLabelWords(role);
+    // An owner or admin reads the community's rules as "Core settings"; a moderator keeps the members' name (their Settings is Reports only).
+    const coreRow = role === 'owner' || role === 'admin';
+    const shapeLabel = coreRow ? coreSettingsLabelWords() : howThisCommunityWorksLabelWords();
     // Public Address is the owners' (the node's Settings), so the nudge is theirs. The addresses are the profile's copy.
     const numberOnly = role === 'owner' ? numberOnlyAddress(anchor, profile?.addresses) : null;
 
@@ -191,13 +197,13 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     onPress={() => setShapeOpen(true)}
                     disabled={busy}
                     accessibilityRole="button"
-                    accessibilityLabel={howThisCommunityWorksLabelWords()}
+                    accessibilityLabel={shapeLabel}
                     testID="settings-how-this-community-works"
                 >
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🧭</Text></View>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.menuText}>{howThisCommunityWorksLabelWords()}</Text>
-                        <Text style={styles.menuSub}>{howThisCommunityWorksSubtitleWords()}</Text>
+                        <Text style={styles.menuText}>{shapeLabel}</Text>
+                        <Text style={styles.menuSub}>{coreRow ? coreSettingsSubtitleWords(core) : howThisCommunityWorksSubtitleWords()}</Text>
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>
@@ -274,6 +280,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                 features={activeFeatures ?? profile?.features}
                 visible={shapeOpen}
                 onClose={() => setShapeOpen(false)}
+                forOwners={coreRow ? { core } : undefined}
             />
         </>
     );

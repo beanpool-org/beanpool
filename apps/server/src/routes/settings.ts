@@ -21,7 +21,7 @@ import {
 } from '../config/local-config.js';
 import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession, revokeAdminSession, ADMIN_SESSION_COOKIE } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
-import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, requireFreshProof, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent, actingAs } from '../services/security-signal.js';
 import qrcode from 'qrcode';
@@ -33,7 +33,7 @@ import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } fr
 import { KnownFloorError, knownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException, knownFloorForMember } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { readShape } from '../config/community-shape.js';
-import { applyShapeChanges, ShapeChangeError, SHAPE_OWNER_ONLY } from '../config/community-shape-write.js';
+import { applyShapeChanges, shapeChangeAsksFreshProof, ShapeChangeError, SHAPE_OWNER_ONLY, CORE_PROOF_ACTION } from '../config/community-shape-write.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
@@ -348,12 +348,20 @@ router.get('/api/local/admin/community-shape', async (ctx) => {
 // all or nothing. An owner only: an admin is refused (403), and so is every automation token and the phone's hand-off past
 // its step-up (requireAdminRole); a standby changes nothing (409). Each lock answers 409 with its own sentence and code,
 // a bad request 400, and nothing is written. Answers `{ shape, told: 'members' | 'nobody' }`.
+// Core settings (config/core-settings.ts, DESIGN-core-settings-fable.md §8.3, slice C1): `lock: true` confirms and locks
+// them (no fresh proof: nothing is undone). Once locked, a request that changes a Core setting is written only with the
+// owner's fresh proof (requireFreshProof: the phone's unlock within 90 s of Manage, or the password with a current code as
+// `code` or X-Fresh-Proof; never a token, a computer's session or a break-glass code), refused in its own words otherwise
+// and nothing written. The request is checked whole first, so one refused anyway never asks for, or spends, a code.
 router.post('/api/local/admin/community-shape', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], SHAPE_OWNER_ONLY)) return;
     ctx.set('Cache-Control', 'no-store');
+    const body = (ctx as any).requestBody || {};
     try {
-        const { shape, told } = applyShapeChanges(actingAs(ctx.state, 'owner'), (ctx as any).requestBody || {});
+        const asksProof = shapeChangeAsksFreshProof(body);
+        if (asksProof && !(await requireFreshProof(ctx, body.code ?? ctx.get('x-fresh-proof'), CORE_PROOF_ACTION))) return;
+        const { shape, told } = applyShapeChanges(actingAs(ctx.state, 'owner'), body, { freshProof: asksProof });
         ctx.body = { shape, told };
     } catch (e) {
         if (!(e instanceof ShapeChangeError)) throw e;

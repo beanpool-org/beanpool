@@ -780,15 +780,16 @@ describe('Settings → Community admin: an owner\'s and admin\'s row is "Core se
         expect(rowText()).not.toContain('Who can join');
     });
 
-    it('an owner\'s sheet: Core settings, the lock line, the facts, the way to change them', async () => {
+    it('an owner\'s sheet: the members\' title, the lock line naming the core settings, the facts, the way to change them', async () => {
         node.role = 'owner';
         node.core = { locked: true, at: '2026-11-03T10:00:00.000Z' };
         node.me = { beans: true, escrow: true, door: 'members' };
         await renderIn('en');
         await click(host.querySelector('[data-testid="settings-how-this-community-works"]'), 'the row');
         const sheet = host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
-        expect(sheet).toContain('🧭 Core settings');
-        expect(sheet).toContain('🔒 Locked since 3 Nov.');
+        // Only the row is "Core settings": the sheet also lists everyday settings, so its lock line names what it covers (review of #2809).
+        expect(sheet).toContain('🧭 How this community works');
+        expect(sheet).toContain('🔒 Core settings (who can join, Beans, votes, sharing outside, where copies go) locked since 3 Nov.');
         expect(sheet).toContain('Beans: on');
         expect(sheet).toContain('Change them on a computer, or press Manage: Settings opens there.');
     });

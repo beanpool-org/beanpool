@@ -289,14 +289,17 @@ export function coreSettingsSubtitleWords(core?: CoreSettingsState | null): stri
         : t('Who can join, Beans, votes, sharing outside, where copies go · Locked');
 }
 
-/** The sheet's line about the lock, above the facts; null where the node did not say. */
+/**
+ * The sheet's line about the lock, above the facts; null where the node did not say. It names the core settings it covers
+ * (the server asks an owner's fresh proof for these only, never for the everyday ones the sheet also lists).
+ */
 export function coreSettingsLockLineWords(core?: CoreSettingsState | null): string | null {
     if (!core) return null;
-    if (!core.locked) return t('Not confirmed yet. An owner confirms and locks them in Settings.');
+    if (!core.locked) return t('Core settings (who can join, Beans, votes, sharing outside, where copies go) are not confirmed yet. An owner confirms and locks them in Settings.');
     const at = core.at ? Date.parse(core.at) : NaN;
     return Number.isFinite(at)
-        ? t('🔒 Locked since {date}. An owner unlocks one to change it, and every owner is told.', { date: formatDate(new Date(at), 'day-month') })
-        : t('🔒 Locked. An owner unlocks one to change it, and every owner is told.');
+        ? t('🔒 Core settings (who can join, Beans, votes, sharing outside, where copies go) locked since {date}. An owner unlocks one to change it, and every owner is told.', { date: formatDate(new Date(at), 'day-month') })
+        : t('🔒 Core settings (who can join, Beans, votes, sharing outside, where copies go) locked. An owner unlocks one to change it, and every owner is told.');
 }
 
 /** The sheet's last line, for an owner or admin: the phone shows the facts, the controls are on the Settings page. */

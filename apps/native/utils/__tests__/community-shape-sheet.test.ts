@@ -146,16 +146,18 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         expect(routes.pushed).toEqual([{ pathname: '/guide/[slug]', params: { slug: 'how-your-community-works' } }]);
     });
 
-    describe('for an owner or admin: "Core settings" (core settings C3)', () => {
+    describe('for an owner or admin: the members\' sheet with a lock line and a footer (core settings C3)', () => {
         const sheetText = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
         const FOOTER = 'Change them on a computer, or press Manage: Settings opens there.';
 
-        it.each([[false], [true]])('locked: the title, the lock line with its date, the same facts, the footer last (dark: %s)', async (dark) => {
+        const CORE = 'Core settings (who can join, Beans, votes, sharing outside, where copies go)';
+
+        it.each([[false], [true]])('locked: the members\' title, the lock line naming the core settings with its date, the same facts, the footer last (dark: %s)', async (dark) => {
             theme.dark = dark;
             await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: true, at: '2026-11-03T10:00:00.000Z' } } }));
-            expect(sheetText()).toContain('🧭 Core settings');
-            expect(sheetText()).not.toContain('How this community works');
-            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe('🔒 Locked since 3 Nov. An owner unlocks one to change it, and every owner is told.');
+            // The sheet lists everyday settings too, so it is not itself called "Core settings"; only the lock line is, and it says what it covers.
+            expect(host.querySelector('[data-testid="community-shape-sheet"] [role="heading"]')?.textContent).toBe('🧭 How this community works');
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe(`🔒 ${CORE} locked since 3 Nov. An owner unlocks one to change it, and every owner is told.`);
             expect(sheetText()).toContain('any member can invite someone');
             expect(sheetText()).toContain('Beans: on');
             expect(sheetText()).toContain('Read more in the guide');
@@ -166,13 +168,18 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
 
         it('not confirmed yet: says so', async () => {
             await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: false } } }));
-            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe('Not confirmed yet. An owner confirms and locks them in Settings.');
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe(`${CORE} are not confirmed yet. An owner confirms and locks them in Settings.`);
         });
 
-        it('the node said nothing of the lock: no lock line, but still the name and the footer', async () => {
+        it('locked with no date: the same line, naming the core settings, without a date', async () => {
+            await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: { locked: true } } }));
+            expect(host.querySelector('[data-testid="community-shape-lock-line"]')?.textContent).toBe(`🔒 ${CORE} locked. An owner unlocks one to change it, and every owner is told.`);
+        });
+
+        it('the node said nothing of the lock: no lock line, but still the footer', async () => {
             await render(createElement(CommunityShapeSheet, { features: FULL_FEATURES, visible: true, onClose: vi.fn(), forOwners: { core: null } }));
             expect(host.querySelector('[data-testid="community-shape-lock-line"]')).toBeNull();
-            expect(sheetText()).toContain('🧭 Core settings');
+            expect(sheetText()).toContain('🧭 How this community works');
             expect(sheetText()).toContain(FOOTER);
         });
 

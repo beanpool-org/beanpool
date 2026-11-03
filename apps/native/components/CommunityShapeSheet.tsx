@@ -4,8 +4,9 @@
  * "Read more in the guide" button links to `/guide/how-your-community-works`.
  *
  * For an owner or admin (`forOwners`, NodeAdminEntry; DESIGN-core-settings-fable.md §6.3, slice C3) it is the same facts under
- * the name "Core settings", with a line on whether they are confirmed and locked and a last line saying where to change them:
- * the phone shows the facts, the controls are the node's Settings page (Manage). A member's sheet is unchanged.
+ * the members' title, with a line on whether the core settings (it names them: the sheet also lists everyday settings the lock
+ * does not cover) are confirmed and locked and a last line saying where to change them: the phone shows the facts, the controls
+ * are the node's Settings page (Manage). Only the row is called "Core settings" (design §6.3).
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
@@ -23,7 +24,7 @@ import { anchorUrl } from '../utils/node-post';
 import { fetchKnownRule } from '../utils/known-rule';
 import type { AppColors } from '../constants/colors';
 import type { CoreSettingsState } from '../utils/node-admin';
-import { coreSettingsFooterWords, coreSettingsLabelWords, coreSettingsLockLineWords } from './settings/settings-lines';
+import { coreSettingsFooterWords, coreSettingsLockLineWords } from './settings/settings-lines';
 
 export function CommunityShapeSheet({
     features,
@@ -62,7 +63,7 @@ export function CommunityShapeSheet({
             <View style={s.sheet} testID="community-shape-sheet">
                 <View style={s.header}>
                     <Text style={s.title} accessibilityRole="header">
-                        {'🧭 '}<Text>{forOwners ? coreSettingsLabelWords() : t(COMMUNITY_SHAPE_CARD_WORDS.title)}</Text>
+                        {'🧭 '}<Text>{t(COMMUNITY_SHAPE_CARD_WORDS.title)}</Text>
                     </Text>
                     <Pressable
                         style={s.closeBtn}

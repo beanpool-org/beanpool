@@ -24,7 +24,7 @@ With these three there is a community to bring up. Without any one of them there
 - **Step 3.** Run cd beanpool. You see: the prompt shows the folder beanpool.
 - **Step 4.** Run docker network create beanpool-shared. You see: a long line of letters and digits. If it says the network already exists, carry on.
 - **Step 5.** Run docker compose pull. You see: the downloads finish with no red error line.
-- **Step 6.** In a file named .env in that folder, add the line NODE_ROLE=backup. This laptop will be your community's standby (see A standby server in Backups and replicas). You see: the line in the file.
+- **Step 6.** In a file named .env in that folder, add the line NODE_ROLE=backup. This laptop will be your community's standby (see A standby server in Backups and replicas). A standby refuses trades, so on the day When the lights go out makes it the main server. You see: the line in the file.
 - **Step 7.** Run docker compose up -d once, so the data folder is made. You see: docker compose ps lists beanpool-node as running.
 
 After every BeanPool update, run docker compose pull and docker compose up -d again. A main server refuses to copy to a standby that is older than it, so a laptop left behind copies nothing.

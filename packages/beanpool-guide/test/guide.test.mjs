@@ -949,6 +949,45 @@ test('lights-out, When the lights go out: both paths, the owner step a standby n
     for (const need of ['Byron', 'docker compose stop beanpool-node', 'Never start the old main server again', 'read-only', 'one copy is the community, and the other is retired whole']) assert.ok(back.includes(need), `the way back: ${need}`);
 });
 
+// The checklist makes the laptop a standby (NODE_ROLE=backup). A standby refuses every trade and send
+// (apps/server/src/config/node-role.ts assertLedgerWritable), and nothing in the shell restore writes `nodeRole`
+// (sealed-backup.ts applyBundle writes only the admin, 2FA and break-glass fields). Path A's take-over writes it itself
+// (services/takeover.ts); path B has no take-over, so it needs a step of its own (Opus review of #2823, finding 1).
+test('lights-out, path B: the laptop is made the main server after the restore and before docker compose up -d (a standby refuses every trade)', () => {
+    const page = lightsOutPage(LIGHTS_OUT_PAGES[1]);
+    const b = textsOf(underHeading(page, 'Path B: you have a locked backup file'));
+    const at = (needle) => b.findIndex(i => i.includes(needle));
+    const stop = at('docker compose stop beanpool-node');
+    const restore = at('beanpool restore /data/FILE.bpsealed');
+    const typed = at('Type the recovery code at the prompt');
+    const role = at('NODE_ROLE=primary');
+    const up = at('docker compose up -d');
+    for (const [name, i] of Object.entries({ stop, restore, typed, role, up })) assert.ok(i >= 0, `path B has the step: ${name}`);
+    assert.ok(stop < restore && restore < typed, 'stop, then the restore, then the code typed at its prompt');
+    assert.ok(role > typed, 'the role is changed AFTER the restore (the restore counts the standby\'s pin only while the role is still backup)');
+    assert.ok(up > role, 'and BEFORE docker compose up -d, which is what starts the laptop with the new role');
+    // One action in the step, and what you see after it; it changes the very line the checklist added.
+    const step = b[role];
+    assert.ok(/^\*\*Step \d+\.\*\*/.test(step), 'it is a numbered step');
+    assert.ok(step.includes('NODE_ROLE=backup') && step.includes('.env'), 'it changes the .env line NODE_ROLE=backup that Before the lights go out added');
+    assert.ok(step.includes('You see:'), 'and says what you see after it');
+    assert.ok(!step.includes('docker compose up -d'), 'one action: starting the laptop is the next step, not this one');
+    assert.ok(/after the restore|never before/i.test(step), 'and says why the order matters');
+    // The checklist is what puts NODE_ROLE=backup there: the two pages agree.
+    const before = textsOf(underHeading(lightsOutPage(LIGHTS_OUT_PAGES[0]), '1. The software is on the laptop')).join('\n');
+    assert.ok(before.includes('NODE_ROLE=backup'));
+    // A restore done from Settings with an owner's phone (no recovery code) leaves the same standby: the page says to do the step then too.
+    const phone = b.find(i => i.includes('Restore from a locked backup')) ?? '';
+    assert.ok(phone.includes('NODE_ROLE=primary') && phone.includes('docker compose up -d'), 'the restore from Settings is followed by the same role change and the same start');
+});
+
+test('lights-out, the way back: the laptop that was made the main server is a standby again by NODE_ROLE=backup in a fresh .env', () => {
+    const page = lightsOutPage(LIGHTS_OUT_PAGES[1]);
+    const back = textsOf(underHeading(page, 'When the internet comes back'));
+    const cloud = back.find(i => i.startsWith('**Step 6.**')) ?? '';
+    assert.ok(cloud.includes('NODE_ROLE=backup'), 'step 6 says the laptop is set up again as a standby with NODE_ROLE=backup in its .env');
+});
+
 test('lights-out, In the hall: what is readable, what is out, the age of the record and the way home', () => {
     const text = blockTexts(lightsOutPage(LIGHTS_OUT_PAGES[2])).join('\n');
     for (const need of [

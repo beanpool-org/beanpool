@@ -47,6 +47,16 @@ describe('Taken down by assistants', () => {
         expect(why.querySelector('img')).toBeNull();
     });
 
+    it("says how each call named its posts: by post, by reports, or by one member's posts (MCP-MODERATION S2)", async () => {
+        serve({ canActOnMany: true, takedowns: [{ ...CALL, id: 't3', via: 'author' }, { ...CALL, id: 't2', via: 'reports' }, CALL] });
+        const { container } = render(<AssistantTakedownsPanel activeNode={NODE} />);
+        await screen.findAllByText(/Spam sweeper: 3 posts, spam or a scam/);
+        const text = container.textContent ?? '';
+        expect(text).toContain("by one member's posts");
+        expect(text).toContain('by reports');
+        expect(text).toContain('by post');
+    });
+
     it('puts back one post, and clears nothing else', async () => {
         const calls = serve({ canActOnMany: false, takedowns: [CALL] });
         render(<AssistantTakedownsPanel activeNode={NODE} />);

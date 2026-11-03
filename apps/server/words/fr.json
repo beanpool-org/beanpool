@@ -47,6 +47,6 @@
   "You have {n} asks waiting. Take one back, or wait for an answer.": "Vous avez {n} demandes en attente. Retirez-en une ou attendez une réponse.",
   "You’ve asked {n} times today. You can ask again tomorrow.": "Vous avez demandé {n} fois aujourd’hui. Vous pourrez redemander demain.",
   "Please keep this to {n} characters.": "Limitez ce texte à {n} caractères.",
-  "Please fill in their first name and how you know them.": "Indiquez son prénom et comment vous la connaissez.",
+  "Please fill in their first name and how you know them.": "Indiquez son prénom et comment vous connaissez cette personne.",
   "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Ne mettez ni numéro de téléphone ni adresse e-mail. Un prénom et la façon dont vous connaissez cette personne suffisent à un administrateur."
 }

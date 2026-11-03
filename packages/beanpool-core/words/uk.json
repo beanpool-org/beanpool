@@ -1029,7 +1029,7 @@
   "Take it back": "Відкликати",
   "An admin made an invite for you to pass on. It works once, for 30 days.": "Адміністратор створив запрошення, щоб ви його передали. Воно діє один раз, 30 днів.",
   "Someone has joined with this invite.": "Хтось приєднався за цим запрошенням.",
-  "This invite lapsed before anyone used it.": "Це запрошення сплило, ним ніхто не скористався.",
+  "This invite lapsed before anyone used it.": "Термін дії цього запрошення минув, ніхто ним не скористався.",
   "An admin said no.": "Адміністратор відмовив.",
   "Asked {date}": "Прохання від {date}",
   "Members asking you to invite someone": "Учасники просять вас запросити людину",

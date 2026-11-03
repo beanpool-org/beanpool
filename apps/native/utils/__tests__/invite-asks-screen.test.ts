@@ -70,7 +70,7 @@ const type = async (el: HTMLElement | null, text: string) => {
         el!.dispatchEvent(new Event('input', { bubbles: true }));
     });
 };
-const mount = async (el: Parameters<Root['render']>[0]) => { await act(async () => { root.render(el); }); await flush(); };
+const mount = async (el: unknown) => { await act(async () => { root.render(el as any); }); await flush(); };
 const member = (onShare = vi.fn()) => mount(createElement(AskAnAdmin, { anchorUrl: 'https://node.example', identity: IDENTITY, onShare }));
 const admin = (offersVouch = false) => mount(createElement(InviteAsksToAnswer, { anchorUrl: 'https://node.example', identity: IDENTITY, offersVouch }));
 const posted = () => node.calls.filter((c) => c.body !== undefined);

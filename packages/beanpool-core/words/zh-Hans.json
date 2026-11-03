@@ -916,7 +916,7 @@
   "Send invite makes an ordinary invite, and the code goes to the member who asked, to pass on.": "“发送邀请”会创建一份普通邀请，邀请码交给提出请求的成员，由其转交。",
   "Asked by {name}": "{name} 的请求",
   "Send invite": "发送邀请",
-  "No\u0004button: refuse a request": "不",
+  "No\u0004button: refuse a request": "拒绝",
   "A short reason (you can leave this out)": "简短理由（可不填）",
   "Sent. The code is with the member now.": "已发送。邀请码已交给该成员。",
   "Done. The member has been told.": "已完成。已告知该成员。",

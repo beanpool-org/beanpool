@@ -46,7 +46,7 @@
   "You’re an owner or admin here, so you can make the invite yourself.": "É proprietário ou administrador aqui, por isso pode criar o convite você mesmo.",
   "You have {n} asks waiting. Take one back, or wait for an answer.": "Tem {n} pedidos à espera. Retire um ou aguarde uma resposta.",
   "You’ve asked {n} times today. You can ask again tomorrow.": "Pediu {n} vezes hoje. Pode pedir de novo amanhã.",
-  "Please keep this to {n} characters.": "Mantenha isto em {n} caracteres.",
+  "Please keep this to {n} characters.": "Use no máximo {n} caracteres.",
   "Please fill in their first name and how you know them.": "Preencha o primeiro nome e como conhece a pessoa.",
   "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Não inclua números de telefone nem endereços de e-mail. Um primeiro nome e como conhece a pessoa é tudo o que um administrador precisa."
 }

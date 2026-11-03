@@ -941,7 +941,7 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "ഉടമകൾക്കും അഡ്മിൻമാർക്കും നിയമിത സാക്ഷ്യപ്പെടുത്തുന്നവർക്കും മാത്രമേ ക്ഷണത്തിൽ ഒരാളെ സാക്ഷ്യപ്പെടുത്താനാകൂ.",
   "Ask an admin to invite someone": "ആരെയെങ്കിലും ക്ഷണിക്കാൻ ഒരു അഡ്മിനോട് ആവശ്യപ്പെടുക",
   "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "ഒരു അഡ്മിൻ ഇത് വായിച്ച് തീരുമാനിക്കും. പേരിന്റെ ആദ്യഭാഗവും അവരെ എങ്ങനെ അറിയാം എന്നതും മാത്രം: ഫോൺ നമ്പറോ ഇമെയിലോ വേണ്ട.",
-  "Their first name": "അവരുടെ പേര്",
+  "Their first name": "അവരുടെ ആദ്യ പേര്",
   "How you know them": "അവരെ എങ്ങനെ അറിയാം",
   "Send to the admins": "അഡ്മിൻമാർക്ക് അയയ്ക്കുക",
   "What you’ve asked": "നിങ്ങൾ ആവശ്യപ്പെട്ടത്",

@@ -27,6 +27,6 @@
   "You have {n} asks waiting. Take one back, or wait for an answer.": "回答待ちの依頼が{n}件あります。1件取り下げるか、回答をお待ちください。",
   "You’ve asked {n} times today. You can ask again tomorrow.": "今日はすでに{n}回依頼しました。明日また依頼できます。",
   "Please keep this to {n} characters.": "{n}文字以内にしてください。",
-  "Please fill in their first name and how you know them.": "その人の名前と知り合った経緯を入力してください。",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "電話番号やメールアドレスは書かないでください。管理者に必要なのは名前と知り合った経緯だけです。"
+  "Please fill in their first name and how you know them.": "その人の下の名前と知り合った経緯を入力してください。",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "電話番号やメールアドレスは書かないでください。管理者に必要なのは下の名前と知り合った経緯だけです。"
 }

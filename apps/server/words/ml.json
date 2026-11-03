@@ -27,6 +27,6 @@
   "You have {n} asks waiting. Take one back, or wait for an answer.": "നിങ്ങളുടെ {n} അഭ്യർത്ഥനകൾ കാത്തിരിക്കുന്നു. ഒന്ന് പിൻവലിക്കുക അല്ലെങ്കിൽ മറുപടിക്കായി കാത്തിരിക്കുക.",
   "You’ve asked {n} times today. You can ask again tomorrow.": "ഇന്ന് നിങ്ങൾ {n} തവണ ആവശ്യപ്പെട്ടു. നാളെ വീണ്ടും ആവശ്യപ്പെടാം.",
   "Please keep this to {n} characters.": "ഇത് {n} അക്ഷരങ്ങളിൽ ഒതുക്കുക.",
-  "Please fill in their first name and how you know them.": "അവരുടെ പേരും അവരെ എങ്ങനെ അറിയാം എന്നതും പൂരിപ്പിക്കുക.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "ഫോൺ നമ്പറുകളും ഇമെയിൽ വിലാസങ്ങളും ഒഴിവാക്കുക. ഒരു അഡ്മിന് പേരും അവരെ എങ്ങനെ അറിയാം എന്നതും മതി."
+  "Please fill in their first name and how you know them.": "അവരുടെ ആദ്യ പേരും അവരെ എങ്ങനെ അറിയാം എന്നതും പൂരിപ്പിക്കുക.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "ഫോൺ നമ്പറുകളും ഇമെയിൽ വിലാസങ്ങളും ഒഴിവാക്കുക. ഒരു അഡ്മിന് ആദ്യ പേരും അവരെ എങ്ങനെ അറിയാം എന്നതും മതി."
 }

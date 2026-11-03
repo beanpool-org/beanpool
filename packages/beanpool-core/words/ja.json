@@ -901,7 +901,7 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "招待で推薦（保証）できるのは、オーナー、管理者、任命された推薦人だけです。",
   "Ask an admin to invite someone": "管理者に招待を頼む",
   "An admin reads this and decides. Just a first name and how you know them: no phone number or email.": "管理者が読んで判断します。名前(下の名前)と知り合った経緯だけ:電話番号やメールは書かないでください。",
-  "Their first name": "その人の名前",
+  "Their first name": "その人の下の名前",
   "How you know them": "知り合った経緯",
   "Send to the admins": "管理者に送る",
   "What you’ve asked": "あなたの依頼",

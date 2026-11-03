@@ -50,6 +50,6 @@
   "You have {n} asks waiting. Take one back, or wait for an answer.": "Tienes {n} peticiones en espera. Retira una o espera una respuesta.",
   "You’ve asked {n} times today. You can ask again tomorrow.": "Has pedido {n} veces hoy. Puedes volver a pedir mañana.",
   "Please keep this to {n} characters.": "Limita esto a {n} caracteres.",
-  "Please fill in their first name and how you know them.": "Escribe su nombre de pila y cómo la conoces.",
+  "Please fill in their first name and how you know them.": "Escribe su nombre de pila y cómo conoces a esa persona.",
   "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "No incluyas números de teléfono ni direcciones de correo. A un administrador le basta con un nombre de pila y cómo conoces a esa persona."
 }

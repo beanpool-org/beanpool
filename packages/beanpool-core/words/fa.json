@@ -964,7 +964,7 @@
   "An admin answered. Open Invites to read it.": "یک مدیر پاسخ داد. برای خواندن، دعوت‌ها را باز کنید.",
   "An admin answered your ask to invite someone.": "یک مدیر به درخواست شما برای دعوت از کسی پاسخ داد.",
   "{n} member asked you to invite someone|{n} members asked you to invite someone": {
-    "one": "{n} عضو از شما خواسته کسی را دعوت کنید",
+    "one": "{n} عضو از شما خواسته است کسی را دعوت کنید",
     "other": "{n} عضو از شما خواسته‌اند کسی را دعوت کنید"
   }
 }

@@ -519,6 +519,7 @@ export default function MarketScreen() {
         filterRow: { marginBottom: 4, borderWidth: 1, borderColor: colors.border.default, borderRadius: 26, overflow: 'hidden' },
         filterGrow: { flexGrow: 1 },
         typePill: { paddingHorizontal: 8 },
+        calendarButton: { minWidth: 44, minHeight: 44, paddingHorizontal: 10, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     }));
 
     const [trustFilter, setTrustFilter] = useState<string>('all');
@@ -1259,6 +1260,17 @@ export default function MarketScreen() {
                         moreHint
                         style={styles.filterRow}
                         accessibilityLabel={t('Filter events by date')}
+                        trailing={
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Calendar')}
+                                testID="market-calendar-button"
+                                style={styles.calendarButton}
+                                onPress={() => router.push('/calendar')}
+                            >
+                                <MaterialCommunityIcons name="calendar-month" size={20} color={colors.text.secondary} />
+                            </Pressable>
+                        }
                     />
                 ) : (
                     <FilterChipBar key="filters" fill moreHint style={styles.filterRow} accessibilityLabel={t('Filters')}>

@@ -2737,7 +2737,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 </HomeLine>
                             );
                         })}
-                        <HomeMore onClick={() => onNavigate('map')}>{t('All events ›')}</HomeMore>
+                        <div className="flex flex-wrap justify-end gap-x-4">
+                            <HomeMore onClick={() => onNavigate('map-calendar')} testId="home-events-calendar" label={t('Calendar')}>{t('Calendar')}<span aria-hidden="true"> ›</span></HomeMore>
+                            <HomeMore onClick={() => onNavigate('marketplace', 'events')} testId="home-events-all">{t('All events ›')}</HomeMore>
+                        </div>
                     </HomeCard>
                 );
             }

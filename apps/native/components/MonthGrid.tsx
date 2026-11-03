@@ -12,6 +12,11 @@ import {
 } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 
+/** The grid's measures (dp), one place: the calendar screen counts them to scroll a day clear of the day's list. */
+export const MONTH_NAV_HEIGHT = 48;
+export const MONTH_WEEKDAY_HEIGHT = 28;
+export const MONTH_WEEK_HEIGHT = 44;
+
 export interface MonthGridProps {
     month: CalendarMonth;
     selectedDate: string | null;
@@ -40,7 +45,7 @@ export function MonthGrid({
             alignItems: 'center',
             justifyContent: 'space-between',
             paddingHorizontal: 8,
-            minHeight: 48,
+            minHeight: MONTH_NAV_HEIGHT,
         },
         navBtn: {
             width: 44,
@@ -67,7 +72,7 @@ export function MonthGrid({
         weekdayRow: {
             flexDirection: 'row',
             paddingHorizontal: 4,
-            minHeight: 28,
+            minHeight: MONTH_WEEKDAY_HEIGHT,
             alignItems: 'center',
         },
         weekdayLabel: {
@@ -86,12 +91,12 @@ export function MonthGrid({
         dayCellEmpty: {
             flex: 1,
             minWidth: 44,
-            minHeight: 44,
+            minHeight: MONTH_WEEK_HEIGHT,
         },
         dayCell: {
             flex: 1,
             minWidth: 44,
-            minHeight: 44,
+            minHeight: MONTH_WEEK_HEIGHT,
             alignItems: 'center',
             justifyContent: 'center',
             paddingVertical: 2,

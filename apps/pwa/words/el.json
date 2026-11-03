@@ -3687,5 +3687,7 @@
   "Event · {from}": "Εκδήλωση · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Αυτή είναι η Αρχική σας. Προσθέστε μια κάρτα στο κάτω μέρος ή κρατήστε πατημένη μια κάρτα για να τακτοποιήσετε.",
   "Move {card} earlier": "Μετακίνηση {card} νωρίτερα",
-  "Move {card} later": "Μετακίνηση {card} αργότερα"
+  "Move {card} later": "Μετακίνηση {card} αργότερα",
+  "Messages in your other communities show on your phone, or when you open that community here.": "Τα μηνύματα στις άλλες κοινότητές σας εμφανίζονται στο τηλέφωνό σας ή όταν ανοίγετε αυτή την κοινότητα εδώ.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Οι ειδοποιήσεις φτάνουν στο τηλέφωνό σας από κάθε κοινότητα που διατηρείτε. Μπορείτε να τις απενεργοποιήσετε για μια κοινότητα στην καρτέλα BeanPool."
 }

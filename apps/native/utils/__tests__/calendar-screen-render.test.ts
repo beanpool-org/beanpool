@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
+import { act, createElement, forwardRef, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { STACK_LIST_SHARE } from '@beanpool/core';
+import { MONTH_NAV_HEIGHT, MONTH_WEEKDAY_HEIGHT } from '../../components/MonthGrid';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+const mockScrollTo = vi.fn();
+// What the phone says about reduced motion: the screen asks for it and listens for a change.
+const motion = vi.hoisted(() => ({ calm: false }));
 
 const mockRouter = {
     back: vi.fn(),
@@ -52,7 +58,10 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        ScrollView: ({ children, testID, contentContainerStyle }: any) => createElement('div', { 'data-testid': testID, 'data-pad-bottom': contentContainerStyle?.paddingBottom ?? 0 }, children),
+        ScrollView: forwardRef(({ children, testID, contentContainerStyle }: any, ref: any) => {
+            useImperativeHandle(ref, () => ({ scrollTo: mockScrollTo }));
+            return createElement('div', { 'data-testid': testID, 'data-pad-bottom': contentContainerStyle?.paddingBottom ?? 0 }, children);
+        }),
         useWindowDimensions: () => ({ width: 320, height: 568 }),
         FlatList: ({ data, renderItem, keyExtractor }: any) => createElement('div', { 'data-testid': 'flat-list' },
             (data || []).map((item: any, idx: number) => {
@@ -60,7 +69,11 @@ vi.mock('react-native', () => {
                 return createElement('div', { key }, renderItem({ item, index: idx }));
             })
         ),
-        AccessibilityInfo: { announceForAccessibility: vi.fn() },
+        AccessibilityInfo: {
+            announceForAccessibility: vi.fn(),
+            isReduceMotionEnabled: vi.fn(async () => motion.calm),
+            addEventListener: vi.fn(() => ({ remove() {} })),
+        },
         StyleSheet: { create: (s: unknown) => s, flatten: (s: unknown) => flat(s), hairlineWidth: 1 },
         DeviceEventEmitter: {
             addListener: (event: string, fn: (...args: any[]) => void) => {
@@ -112,6 +125,7 @@ describe('CalendarScreen route component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        motion.calm = false;
         fakeDb.events = [];
         container = document.createElement('div');
         document.body.appendChild(container);
@@ -130,7 +144,9 @@ describe('CalendarScreen route component', () => {
 
         const backBtn = container.querySelector('[data-testid="calendar-back"]') as HTMLButtonElement;
         expect(backBtn).toBeTruthy();
-        expect(backBtn.getAttribute('aria-label')).toBe('Map');
+        // It says Back, not Map: a member may have come from Home or the Market, where Back returns them.
+        expect(backBtn.getAttribute('aria-label')).toBe('Back');
+        expect(backBtn.textContent).toContain('Back');
         act(() => backBtn.click());
         expect(mockRouter.back).toHaveBeenCalledTimes(1);
     });
@@ -328,5 +344,140 @@ describe('CalendarScreen route component', () => {
 
         // Panel should be closed immediately during transition
         expect(container.querySelector('[data-testid="map-stack-list"]')).toBeNull();
+    });
+
+    // The y the screen scrolls to for a day: counted from the heights the component renders (the header's, the week
+    // cell's) and the grid's own exported measures, not from numbers restated here.
+    function expectedClearY(date: string): number {
+        const [y, m, d] = date.split('-').map(Number);
+        const header = Number((container.querySelector('[data-testid="calendar-back"]')!.parentElement as HTMLElement).getAttribute('data-min-height'));
+        const weekHeight = Number((container.querySelector(`[data-testid="month-day-${date}"]`) as HTMLElement).getAttribute('data-min-height'));
+        const firstWeekday = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+        const weekIndex = Math.floor((firstWeekday + d - 1) / 7);
+        const dayBottom = MONTH_NAV_HEIGHT + MONTH_WEEKDAY_HEIGHT + (weekIndex + 1) * weekHeight;
+        const visible = 568 - Math.ceil(568 * STACK_LIST_SHARE) - header - 44; // insets.top is 44
+        return dayBottom + 24 - visible;
+    }
+
+    const lateEvent = (date: string) => ({
+        id: `ev-${date}`,
+        type: 'event',
+        title: 'A late event',
+        status: 'active',
+        active: 1,
+        event_start_local: `${date}T10:00`,
+        event_end_local: `${date}T12:00`,
+        event_start_at: `${date}T10:00:00.000Z`,
+        event_end_at: `${date}T12:00:00.000Z`,
+    });
+
+    // The scroll waits one animation frame, after the effect that asks for it: advance the clock once the change has rendered.
+    async function settle() {
+        await act(async () => { vi.advanceTimersByTime(50); });
+    }
+
+    // Nov 2026 starts on a Sunday, so the 30th is in week 6; today is the 3rd.
+    function pinToday() {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-11-03T10:00:00'));
+    }
+
+    it('scrolls a tapped last-week day clear of the list', async () => {
+        pinToday();
+        fakeDb.events = [lateEvent('2026-11-05')];
+
+        await act(async () => { root.render(createElement(CalendarScreen) as any); });
+        mockScrollTo.mockClear();
+
+        const dayBtn = container.querySelector('[data-testid="month-day-2026-11-30"]') as HTMLButtonElement;
+        expect(dayBtn).toBeTruthy();
+        expect(Number(dayBtn.getAttribute('data-min-height'))).toBe(44); // the real week row is 44, not 48
+        await act(async () => { dayBtn.click(); });
+        await settle();
+
+        const y = expectedClearY('2026-11-30');
+        expect(y).toBeGreaterThan(0);
+        expect(mockScrollTo).toHaveBeenCalledWith({ y, animated: true });
+        vi.useRealTimers();
+    });
+
+    it('scrolls the next event\'s day clear when the screen opens on it, with no tap', async () => {
+        pinToday();
+        fakeDb.events = [lateEvent('2026-11-30')];
+
+        await act(async () => { root.render(createElement(CalendarScreen) as any); });
+        await settle();
+
+        expect(container.querySelector('[data-testid="map-stack-list"]')).toBeTruthy();
+        expect(mockScrollTo).toHaveBeenCalledWith({ y: expectedClearY('2026-11-30'), animated: true });
+        vi.useRealTimers();
+    });
+
+    it('scrolls the auto-selected day clear after ‹ ›', async () => {
+        pinToday();
+        // December 2026 starts on a Tuesday: the 31st is in week 5.
+        fakeDb.events = [lateEvent('2026-11-05'), lateEvent('2026-12-31')];
+
+        await act(async () => { root.render(createElement(CalendarScreen) as any); });
+        mockScrollTo.mockClear();
+
+        const nextBtn = container.querySelector('[data-testid="month-next"]') as HTMLButtonElement;
+        await act(async () => { nextBtn.click(); });
+        await settle();
+
+        expect(mockScrollTo).toHaveBeenCalledWith({ y: expectedClearY('2026-12-31'), animated: true });
+        vi.useRealTimers();
+    });
+
+    it('scrolls clear when jumping to a cross-month date in a late week', async () => {
+        pinToday();
+        fakeDb.events = [lateEvent('2027-01-29')];
+
+        await act(async () => { root.render(createElement(CalendarScreen) as any); });
+        mockScrollTo.mockClear();
+
+        const jumpBtn = container.querySelector('[data-testid="month-jump-next"]') as HTMLButtonElement;
+        expect(jumpBtn).toBeTruthy();
+        await act(async () => { jumpBtn.click(); });
+        await settle();
+
+        expect(mockScrollTo).toHaveBeenCalledWith({ y: expectedClearY('2027-01-29'), animated: true });
+        vi.useRealTimers();
+    });
+
+    it('jumps, with no glide, when the phone asks for reduced motion', async () => {
+        pinToday();
+        motion.calm = true;
+        fakeDb.events = [lateEvent('2026-11-30')];
+
+        await act(async () => { root.render(createElement(CalendarScreen) as any); });
+        mockScrollTo.mockClear();
+
+        const dayBtn = container.querySelector('[data-testid="month-day-2026-11-30"]') as HTMLButtonElement;
+        // Tapped again after the screen has heard the setting: scrolls, animated: false.
+        await act(async () => { dayBtn.click(); });
+        await settle();
+        const other = container.querySelector('[data-testid="month-day-2026-11-29"]') as HTMLButtonElement;
+        await act(async () => { other.click(); });
+        await settle();
+
+        const calls = mockScrollTo.mock.calls.map(c => c[0]);
+        expect(calls.length).toBeGreaterThan(0);
+        expect(calls.every(c => c.animated === false)).toBe(true);
+        vi.useRealTimers();
+    });
+
+    it('glides when the phone does not ask for reduced motion', async () => {
+        pinToday();
+        motion.calm = false;
+        fakeDb.events = [lateEvent('2026-11-30')];
+
+        await act(async () => { root.render(createElement(CalendarScreen) as any); });
+        await settle();
+
+        const calls = mockScrollTo.mock.calls.map(c => c[0]);
+        expect(calls.length).toBeGreaterThan(0);
+        expect(calls.every(c => c.animated === true)).toBe(true);
+        vi.useRealTimers();
     });
 });

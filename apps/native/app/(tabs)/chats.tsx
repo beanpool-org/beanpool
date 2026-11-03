@@ -27,6 +27,12 @@ import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, Ne
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { openNoticeIn } from '../../utils/push-notice-switch';
+import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-communities';
+import { getPendingOnboarding } from '../../utils/onboarding-state';
+import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
+import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
 import { listPhotoUrl, t, tn, word, type WordKey } from '@beanpool/core';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
@@ -90,7 +96,30 @@ export default function ChatsScreen() {
     // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
     const [onGlobal, setOnGlobal] = useState(0);
     const { recheck } = useNodeStatus();
+    const otherNotices = useOtherCommunitiesNotices();
     const requestsHere = requests ?? (onGlobal > 0 ? { count: 0, conversations: [] } : null);
+    const [switchingCommunity, setSwitchingCommunity] = useState(false);
+    // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
+    const [switchNote, setSwitchNote] = useState<string | null>(null);
+
+    const openOtherCommunity = async (url: string) => {
+        if (!identity?.publicKey || switchingCommunity) return;
+        setSwitchNote(null);
+        setSwitchingCommunity(true);
+        try {
+            const result = await openNoticeIn(url, null, async () => '/(tabs)/chats', {
+                storage: AsyncStorage,
+                publicKey: identity.publicKey,
+                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+                switchUnderWay: communitySwitchUnderWay,
+                switchTo: switchCommunity,
+                recheck,
+            });
+            if (result !== 'switched') setSwitchNote(t("Something went wrong. Try again in a moment."));
+        } finally {
+            setSwitchingCommunity(false);
+        }
+    };
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
@@ -886,6 +915,10 @@ export default function ChatsScreen() {
                     <MaterialCommunityIcons name="pencil-outline" size={22} color={colors.accent.primary} />
                 </Pressable>
             </View>
+            {/* One row per other community where messages wait (design R6): lands in that community's Talk. */}
+            {messagesFilter !== 'requests' && (
+                <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
+            )}
             {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
             {requestsHere && requestsHere.count + onGlobal > 0 && messagesFilter !== 'requests' && (
                 <Pressable

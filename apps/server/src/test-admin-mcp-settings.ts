@@ -336,9 +336,9 @@ async function main(): Promise<void> {
         assert(modList.status === 403, `a moderator sees none (${show(modList)})`);
         const row = (ownerList.body?.grants ?? []).find((g: any) => g.name === "Adam's Claude");
         assert(!!row && row.member === 'Adam' && row.role === 'admin' && row.via === 'token' && row.lastUsedAt === null && row.callsToday === 0 && row.mine === false
-            && Object.keys(row).sort().join() === 'callsToday,canPost,createdAt,expired,expiresAt,id,lastUsedAt,madePosts,member,mine,name,postsToday,role,via'
-            && row.canPost === false && row.postsToday === 0 && row.madePosts === 0,
-        `each row: member, name, role, via, last used, calls today, "May post for me", posts today and its posts still up (slice S2), and nothing else (${JSON.stringify(row)})`);
+            && Object.keys(row).sort().join() === 'callsToday,canModerate,canPost,createdAt,expired,expiresAt,id,lastUsedAt,madePosts,member,mine,name,postsToday,role,takedownsToday,via'
+            && row.canPost === false && row.postsToday === 0 && row.madePosts === 0 && row.canModerate === false && row.takedownsToday === 0,
+        `each row: member, name, role, via, last used, calls today, "May post for me", posts today, its posts still up (slice S2), "May take down posts for me" and its takedowns today, and nothing else (${JSON.stringify(row)})`);
         assert(ownerList.body?.mcpUrl === `https://localhost:${port}/mcp` && ownerList.body?.defaultDays === 30 && ownerList.body?.maxDays === 90,
             `the list gives the address to paste and the days (${ownerList.body?.mcpUrl})`);
 
@@ -439,7 +439,7 @@ async function main(): Promise<void> {
         assert(deadOnes.join() === '401,401' && storedAgents === AGENT_GRANTS_PER_MEMBER + 2 && card.body?.assistants?.connected === AGENT_GRANTS_PER_MEMBER,
             `connected counts only those that can call now: ${card.body?.assistants?.connected} of ${storedAgents} stored (the expired one and the demoted maker's answer ${deadOnes.join(', ')})`);
         // S4 adds today's suggestions and approvals (design §8), counts too.
-        assert(Object.keys(card.body?.assistants ?? {}).sort().join() === 'approved,calls,connected,suggestions', 'counts only: no names, no grants');
+        assert(Object.keys(card.body?.assistants ?? {}).sort().join() === 'approved,calls,connected,suggestions,takedowns', 'counts only: no names, no grants');
         resetAgentLimits();
         assert(getAlertsStatus().assistants.calls === 0, 'a new day (or a restart) starts from 0');
     } catch (e) {

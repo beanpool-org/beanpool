@@ -15,6 +15,8 @@ vi.mock('./PostModerationPanel', () => ({ PostModerationPanel: () => null }));
 vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
 // So does the card of who reports stopped from sending message requests (its own tests: RequestLimitsCard.test.tsx).
 vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => null }));
+// So does "Taken down by assistants" (its own tests: AssistantTakedownsPanel.test.tsx).
+vi.mock('./AssistantTakedownsPanel', () => ({ AssistantTakedownsPanel: () => null }));
 
 const mockProfile: NodeProfile = {
     id: 'test-node',

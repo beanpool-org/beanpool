@@ -2,11 +2,17 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ آپ کی پوسٹ ہٹا دی گئی",
+  "🛡️ Your posts were taken down": "🛡️ آپ کی پوسٹس ہٹا دی گئیں",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "کمیونٹی کے ماڈریٹرز نے آپ کی پوسٹ {title} ہٹا دی۔ وجہ: {reason}۔ یہ باقی سب سے چھپی ہوئی ہے؛ اگر 7 دن میں واپس نہ لائی گئی تو حذف کر دی جائے گی۔",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "کمیونٹی کے ماڈریٹرز نے آپ کی پوسٹ ہٹا دی۔ وجہ: {reason}۔ یہ باقی سب سے چھپی ہوئی ہے؛ اگر 7 دن میں واپس نہ لائی گئی تو حذف کر دی جائے گی۔",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "کمیونٹی کے ماڈریٹرز نے آپ کی {n} پوسٹس ہٹا دیں۔ وجہ: {reason}۔ یہ باقی سب سے چھپی ہوئی ہیں؛ اگر 7 دن میں واپس نہ لائی گئیں تو حذف کر دی جائیں گی۔",
   "Only an owner or admin can pin a post.": "صرف مالک یا ایڈمن کسی پوسٹ کو پن کر سکتے ہیں۔",
   "Only an owner, an admin or the post's author can take a pin off.": "صرف مالک، ایڈمن یا پوسٹ کا مصنف پن ہٹا سکتے ہیں۔",
   "A pin lasts 1 day, 3 days or 1 week.": "پن 1 دن، 3 دن یا 1 ہفتے تک رہتا ہے۔",

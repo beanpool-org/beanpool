@@ -10,6 +10,7 @@ import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
+import { AssistantTakedownsPanel } from './AssistantTakedownsPanel';
 import { RequestLimitsCard } from './RequestLimitsCard';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
@@ -416,6 +417,11 @@ export function PeopleSafetySection({
                     {/* An AI assistant's suggestions (admin MCP S4): approved by its member, the report beside each. */}
                     <SectionErrorBoundary sectionName="AI assistant suggestions" resetKey={activeNode.id}>
                         <AgentSuggestionsPanel activeNode={activeNode} viewer={rolesViewer} onChanged={refreshReports} />
+                    </SectionErrorBoundary>
+
+                    {/* What an owner's assistant took down (MCP-MODERATION S1): Put back and Remove now, a person's. */}
+                    <SectionErrorBoundary sectionName="Taken down by assistants" resetKey={activeNode.id}>
+                        <AssistantTakedownsPanel activeNode={activeNode} viewer={rolesViewer} onChanged={refreshReports} />
                     </SectionErrorBoundary>
 
                     {/* Pending Reports List */}

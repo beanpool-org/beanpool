@@ -333,8 +333,8 @@ async function main(): Promise<void> {
         assert(phoneMod.status === 200 && !(phoneMod.body?.items ?? []).some((i: any) => i.kind === 'agent_suggestions'), 'a moderator\'s queue has none');
         const card = await call('POST', '/api/local/admin/alerts/status', { headers: asSession(ownerS) });
         const as = card.body?.assistants;
-        assert(card.status === 200 && Object.keys(as ?? {}).sort().join() === 'approved,calls,connected,suggestions' && as.approved === 3 && as.suggestions >= 33,
-            `the owners' daily line: calls, connected, suggestions, approved, counts only (${JSON.stringify(as)})`);
+        assert(card.status === 200 && Object.keys(as ?? {}).sort().join() === 'approved,calls,connected,suggestions,takedowns' && as.approved === 3 && as.suggestions >= 33,
+            `the owners' daily line: calls, connected, suggestions, approved, takedowns, counts only (${JSON.stringify(as)})`);
 
         // The owners' switch off: waiting cards are hidden, uncounted and can't be approved; on again before 48 h, they wait again.
         const sw = (allowed: boolean) => call('POST', '/api/local/admin/agent/switch', { headers: asSession(ownerS), body: { allowed } });

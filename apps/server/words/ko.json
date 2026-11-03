@@ -2,11 +2,17 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ 게시물이 내려졌습니다",
+  "🛡️ Your posts were taken down": "🛡️ 게시물이 내려졌습니다",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "커뮤니티 운영자가 회원님의 게시물 {title}을(를) 내렸습니다. 사유: {reason}. 다른 사람에게는 숨겨져 있으며, 7일 안에 복원되지 않으면 삭제됩니다.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "커뮤니티 운영자가 회원님의 게시물을 내렸습니다. 사유: {reason}. 다른 사람에게는 숨겨져 있으며, 7일 안에 복원되지 않으면 삭제됩니다.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "커뮤니티 운영자가 회원님의 게시물 {n}개를 내렸습니다. 사유: {reason}. 다른 사람에게는 숨겨져 있으며, 7일 안에 복원되지 않으면 삭제됩니다.",
   "Only an owner or admin can pin a post.": "소유자나 관리자만 게시물을 고정할 수 있어요.",
   "Only an owner, an admin or the post's author can take a pin off.": "소유자, 관리자 또는 게시물 작성자만 고정을 해제할 수 있어요.",
   "A pin lasts 1 day, 3 days or 1 week.": "고정은 1일, 3일 또는 1주일 동안 유지돼요.",

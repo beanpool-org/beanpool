@@ -2,11 +2,17 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ 投稿が取り下げられました",
+  "🛡️ Your posts were taken down": "🛡️ 投稿が取り下げられました",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "コミュニティのモデレーターがあなたの投稿 {title} を取り下げました。理由: {reason}。この投稿は他の人には表示されません。7日以内に戻されない場合は削除されます。",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "コミュニティのモデレーターがあなたの投稿を取り下げました。理由: {reason}。この投稿は他の人には表示されません。7日以内に戻されない場合は削除されます。",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "コミュニティのモデレーターがあなたの投稿 {n} 件を取り下げました。理由: {reason}。これらは他の人には表示されません。7日以内に戻されない場合は削除されます。",
   "Only an owner or admin can pin a post.": "投稿をピン留めできるのはオーナーまたは管理者のみです。",
   "Only an owner, an admin or the post's author can take a pin off.": "ピン留めを外せるのはオーナー、管理者、または投稿者のみです。",
   "A pin lasts 1 day, 3 days or 1 week.": "ピン留めの期間は1日、3日、または1週間です。",

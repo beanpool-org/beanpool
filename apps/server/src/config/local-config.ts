@@ -253,6 +253,8 @@ export interface AutomationTokenRecord {
     hash: string;
     /** An agent token's "May post for me", ticked when it was made (agent/owner-posts.ts): left out, it may not. */
     canPost?: boolean;
+    /** An agent token's "May take down posts for me", ticked when it was made (agent/owner-takedowns.ts): left out, it may not. */
+    canModerate?: boolean;
 }
 
 /**

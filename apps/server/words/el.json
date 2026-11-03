@@ -2,11 +2,17 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ Η ανάρτησή σας αποσύρθηκε",
+  "🛡️ Your posts were taken down": "🛡️ Οι αναρτήσεις σας αποσύρθηκαν",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Οι συντονιστές της κοινότητας απέσυραν την ανάρτησή σας {title}. Λόγος: {reason}. Είναι κρυφή για όλους τους άλλους· αν δεν επαναφερθεί μέσα σε 7 ημέρες, θα διαγραφεί.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Οι συντονιστές της κοινότητας απέσυραν την ανάρτησή σας. Λόγος: {reason}. Είναι κρυφή για όλους τους άλλους· αν δεν επαναφερθεί μέσα σε 7 ημέρες, θα διαγραφεί.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Οι συντονιστές της κοινότητας απέσυραν {n} αναρτήσεις σας. Λόγος: {reason}. Είναι κρυφές για όλους τους άλλους· αν δεν επαναφερθούν μέσα σε 7 ημέρες, θα διαγραφούν.",
   "Only an owner or admin can pin a post.": "Μόνο ο ιδιοκτήτης ή ο διαχειριστής μπορεί να καρφιτσώσει μια ανάρτηση.",
   "Only an owner, an admin or the post's author can take a pin off.": "Μόνο ο ιδιοκτήτης, ο διαχειριστής ή ο συντάκτης της ανάρτησης μπορεί να βγάλει το καρφίτσωμα.",
   "A pin lasts 1 day, 3 days or 1 week.": "Το καρφίτσωμα διαρκεί 1 ημέρα, 3 ημέρες ή 1 εβδομάδα.",

@@ -1158,6 +1158,42 @@ CREATE TABLE IF NOT EXISTS burst_action_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_burst_action_posts_post ON burst_action_posts(post_id);
 
+-- What an owner's AI assistant took down (engine/agent-takedowns.ts): one row per call, with the posts it hid, so a person can
+-- put them back for 7 days and the sweep can make them final. This server's own record (a standby never copies it; the posts
+-- travel hidden in posts.hidden_by_reports_at). `grant_name`: the assistant's name then, kept for a grant since disconnected.
+-- `why`: the assistant's own words, cleaned, read only in Settings, never by an author or a reporter. Foreign keys are off on
+-- this database: the posts go with their call by hand. What Put back needs to return a post to where it stood: `hidden_before`, its
+-- hide from before the takedown (NULL: it was up); `reports_closed`, the ids (JSON) of the reports this takedown closed.
+-- `muted_author`: this takedown was on hold when a mute was written for its author, whoever made the third removal (every one on hold
+-- then is marked, by evaluateAutoMute); `last_lift`: then, the last lift of a mute before that, which the new mute wrote over and which
+-- the count needs (engine/auto-moderation.ts liftMuteATakedownBrought).
+CREATE TABLE IF NOT EXISTS agent_takedowns (
+    id TEXT PRIMARY KEY,
+    grant_id TEXT NOT NULL,
+    grant_name TEXT NOT NULL,
+    member_pubkey TEXT NOT NULL,
+    at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (reason IN ('spam', 'offensive', 'misleading', 'unsafe', 'rules')),
+    why TEXT NOT NULL DEFAULT '',
+    via TEXT NOT NULL CHECK (via IN ('ids', 'reports')),
+    posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_takedowns_at ON agent_takedowns(at);
+CREATE INDEX IF NOT EXISTS idx_agent_takedowns_grant_at ON agent_takedowns(grant_id, at);
+CREATE TABLE IF NOT EXISTS agent_takedown_posts (
+    takedown_id TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    put_back_at TEXT,
+    final_at TEXT,
+    muted_author INTEGER NOT NULL DEFAULT 0,
+    hidden_before TEXT,
+    reports_closed TEXT NOT NULL DEFAULT '[]',
+    last_lift TEXT,
+    PRIMARY KEY (takedown_id, post_id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_post ON agent_takedown_posts(post_id);
+CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts(takedown_id) WHERE put_back_at IS NULL AND final_at IS NULL;
+
 -- 14d. The communities directory as this node last fetched it (global profile G5, services/directory-mirror.ts).
 --
 -- On every node, empty unless `directoryMirror` is on (the global profile's default). Written only by the hourly

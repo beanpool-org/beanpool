@@ -174,7 +174,6 @@ vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ busy:
 
 // The node, the key vault and the phone's lock, as the cases set them.
 const node = vi.hoisted(() => ({
-    consent: null as Record<string, unknown> | null,
     sessions: [] as Array<{ collectionId: string; startedAt: string }>,
     role: null as null | 'owner' | 'admin' | 'moderator',
     /** Whether `GET /api/node-admin/me` answered at all (false: offline, a timeout, a 5xx). */
@@ -186,6 +185,10 @@ const node = vi.hoisted(() => ({
     lastPlan: false,
     /** The community's rule for copies, as its info says it (vault rethink VR2); undefined: it says none, the default. */
     rule: undefined as undefined | 'vault' | 'server' | 'none',
+    /** `features` on GET /api/community/me; null: the reader's own read goes unanswered. */
+    me: null as null | Record<string, unknown>,
+    /** GET /api/community/known-rule's answer; null: a 404, as an older node. */
+    knownRule: null as null | Record<string, unknown>,
 }));
 const vault = vi.hoisted(() => ({ on: false, holds: [] as any[], offer: null as any, note: null as null | string }));
 vi.mock('../db', () => ({
@@ -193,7 +196,6 @@ vi.mock('../db', () => ({
     updateMemberProfile: async () => {},
     signedRequest: async (route: string) => (route === '/api/recovery/collect/mine' ? { collections: node.sessions, count: node.sessions.length } : {}),
     signedGet: async (route: string) => {
-        if (route === '/api/names/consent') return node.consent ? new Response(JSON.stringify(node.consent), { status: 200 }) : new Response('{}', { status: 404 });
         return new Response(JSON.stringify({ show_as_connection_in_common: 'true' }), { status: 200 });
     },
     signedRequestWithMethod: async () => ({}),
@@ -209,6 +211,9 @@ vi.mock('../node-post', async (importOriginal) => {
     const { PURGE_NO_ANSWER, PURGE_TIMEOUT_MS } = await importOriginal<typeof import('../node-post')>();
     return {
         signedPost: async () => new Response(JSON.stringify({ keepers: [], enrolledSso: [], threshold: 1, recoverable: false, total: 0 }), { status: 200 }),
+        signedGet: async (_url: string, route: string) => (route === '/api/community/me' && node.me
+            ? new Response(JSON.stringify({ features: node.me }), { status: 200 })
+            : new Response('{}', { status: 404 })),
         anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
         // The node doesn't answer the delete in time: what purgeAccountOnNode throws then.
         purgeAccountOnNode: async () => { throw new Error(PURGE_NO_ANSWER); },
@@ -284,14 +289,13 @@ vi.mock('../use-global-guest-visit', () => ({
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider, DrawnInLanguage } from '../../components/LanguageProvider';
-import { CONSENT_LINES, consentLineWords } from '../../components/KnownConsentCard';
 import { ownerRowWords } from '../../components/OwnerWordsCard';
 import { holdEndsWords } from '../../components/RecoveryAlertBanner';
-import { consentHeading, saveKnownConsent } from '../known-consent';
 import { OWNER_WORDS_COPY } from '../owner-words';
 import { holdEndsText } from '../vault';
 import { copiesRuleNow } from '../copies-rule';
 import { PUSH_REGISTERED_AT_STORE_KEY } from '../storage-keys';
+import { readerFeaturesHeld } from '../reads-own';
 import SettingsScreen from '../../app/(tabs)/settings';
 
 const NODE = 'https://mullum.example';
@@ -319,7 +323,6 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: { beans: true, escrow: true, nearbyListings: { radiusKm: 10, max: 500 } }, checkedAt: new Date().toISOString() } }));
     who.identity = { publicKey: KEY, privateKey: 'me-priv', callsign: 'Ana', mnemonic: WORDS };
-    node.consent = null;
     node.sessions = [];
     node.role = null;
     node.heard = true;
@@ -328,6 +331,9 @@ beforeEach(() => {
     node.blocked = [];
     node.lastPlan = false;
     node.rule = undefined;
+    node.me = null;
+    node.knownRule = null;
+    readerFeaturesHeld.clear();
     sheet.props = null;
     vault.on = false;
     vault.holds = [];
@@ -336,6 +342,7 @@ beforeEach(() => {
     globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
         const u = String(url);
         if (u.includes('/api/members/preferences')) return new Response(JSON.stringify({ holiday_mode: 'false' }), { status: 200 });
+        if (u.includes('/api/community/known-rule') && node.knownRule) return new Response(JSON.stringify(node.knownRule), { status: 200 });
         if (u.includes('/api/community/info')) return new Response(JSON.stringify({ memberCount: 14, postCount: 30, transactionCount: 9, ...(node.rule ? { recoveryCopies: node.rule } : {}) }), { status: 200 });
         return new Response('{}', { status: 404 });
     }) as typeof fetch;
@@ -426,8 +433,7 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(bypassing()).toEqual([]);
     });
 
-    it('what only Settings draws: the consent card, a recovery underway, a restore at the key vault, the move card, Community Admin and Community Keys', async () => {
-        node.consent = { known: true, version: '2', text: 'Admins can see your balance.', consentedVersion: '1', consentedAt: new Date(Date.UTC(2026, 9, 5)).toISOString() };
+    it('what only Settings draws: a recovery underway, a restore at the key vault, the move card, Community Admin and Community Keys', async () => {
         node.sessions = [{ collectionId: 'c1', startedAt: new Date(Date.now() - 3600_000).toISOString() }, { collectionId: 'c2', startedAt: new Date().toISOString() }];
         node.role = 'owner';
         node.ownerChecked = Date.UTC(2026, 9, 3);
@@ -435,8 +441,6 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         vault.holds = [{ holdId: 'h1', provider: 'google', openedAt: Date.now() - 3600_000, releaseAt: Date.now() + 5 * 3600_000 }];
         vault.offer = { kind: 'move', provider: 'google', communityUrl: NODE };
         await renderIn('xx');
-        OTHERS.push('Admins can see your balance.');
-        expect(host.textContent).toContain(pseudoLocalise('Your community changed what its admins can see'));
         expect(host.textContent).toContain(pseudoLocalise('Someone is recovering your account'));
         expect(host.textContent).toContain(pseudoLocalise('Someone is getting back into your account'));
         expect(host.textContent).toContain(pseudoLocalise('COMMUNITY ADMIN'));
@@ -453,7 +457,6 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         await click(row('Sign out everywhere'), 'Sign out everywhere');
         expect(alerts.said.length).toBeGreaterThan(8);
         expect(bypassing()).toEqual([]);
-        OTHERS.splice(OTHERS.indexOf('Admins can see your balance.'), 1);
     });
 
     it('Account Protection: My key code, the vault\'s word when it can\'t say, the 12 words shown, copied and put away', async () => {
@@ -723,17 +726,62 @@ describe('Settings → COMMUNITY: "How this community works" for a member, and i
     });
 });
 
+describe('Settings → "How this community works": the floor and the rule through both rows, from what the node sends (review of #2746)', () => {
+    // What GET /api/community/me says to a member of a known community (apps/server config/features-for.ts), through the
+    // screen's real reader read, profile and sheet: nothing of the path is stubbed but the node.
+    const WIRE = { beans: true, escrow: true, door: 'members', knownFloor: 1000, debtLinePct: 50, quietDays: 60 };
+    const RULE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    const shapeSheet = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
+    const open = () => click(host.querySelector('[data-testid="settings-how-this-community-works"]'), 'the row');
+
+    it('a member, from the COMMUNITY section: the floor, then the rule', async () => {
+        node.me = WIRE;
+        await renderIn('en');
+        expect(host.textContent).toContain('COMMUNITY');
+        expect(host.textContent).not.toContain('COMMUNITY ADMIN');
+        await open();
+        expect(shapeSheet()).toContain(`(the known floor)${RULE}`);
+    });
+
+    it.each([['owner', 'COMMUNITY ADMIN'], ['admin', 'COMMUNITY ADMIN'], ['moderator', 'COMMUNITY MODERATION']] as const)('a role holder (%s), from the group NodeAdminEntry draws: the floor, then the rule', async (role, group) => {
+        node.role = role;
+        node.me = WIRE;
+        await renderIn('en');
+        expect(host.textContent).toContain(group);
+        await open();
+        expect(shapeSheet()).toContain(`(the known floor)${RULE}`);
+    });
+
+    it.each([['member', null], ['role holder', 'admin']] as const)('a line of its own and a tightened date reach the %s too', async (_who, role) => {
+        node.role = role;
+        node.me = { ...WIRE, debtLinePct: 30, quietDays: 90 };
+        node.knownRule = { known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 90, ruleFrom: '2026-11-01T04:00:00.000Z', debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null };
+        await renderIn('en');
+        await open();
+        expect(shapeSheet()).toContain("more than 30% of their credit line, or are in debit and haven't made a sale for 90 days");
+        expect(shapeSheet()).toContain('The line of 30% applies from 16 November.');
+    });
+
+    it('a node older than the rule: the floor alone, and the sheet still opens', async () => {
+        node.me = { beans: true, escrow: true, door: 'members', knownFloor: 1000 };
+        await renderIn('en');
+        await open();
+        expect(shapeSheet()).toContain('(the known floor)');
+        expect(shapeSheet()).not.toContain('admins can see');
+    });
+
+    it('a community that doesn\'t confirm its members says none of it, and draws no floor or rule', async () => {
+        node.me = { beans: true, escrow: true, door: 'members' };
+        await renderIn('en');
+        await open();
+        expect(shapeSheet()).toContain('How this community works');
+        expect(shapeSheet()).not.toContain('(the known floor)');
+        expect(shapeSheet()).not.toContain('admins can see');
+    });
+});
+
 describe('the lower layers\' lines the cards translate where they show them, held to their sources', () => {
-    it('known-consent.ts\'s heading and refusals; owner-words.ts\'s row lines; vault.ts holdEndsText\'s shape', async () => {
-        for (const consentedVersion of ['1', undefined]) {
-            const heading = consentHeading({ known: true, version: '2', text: '', confirmed: false, consentedAt: null, consentedVersion: consentedVersion ?? null, withdrawnAt: null });
-            expect(consentLineWords(heading)).toBe(heading);
-            expect(Object.keys(CONSENT_LINES)).toContain(heading);
-        }
-        for (const failure of [new TypeError('offline'), new Error('Request failed: 500'), new SyntaxError('x')]) {
-            const out = await saveKnownConsent(async () => { throw failure; });
-            expect(Object.keys(CONSENT_LINES)).toContain((out as { error: string }).error);
-        }
+    it('owner-words.ts\'s row lines; vault.ts holdEndsText\'s shape', async () => {
         for (const line of [OWNER_WORDS_COPY.title, OWNER_WORDS_COPY.notChecked, OWNER_WORDS_COPY.unlockTitle, OWNER_WORDS_COPY.unlockSub]) {
             expect(ownerRowWords(line)).toBe(line);
             setLanguage('xx');

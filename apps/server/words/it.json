@@ -2,11 +2,17 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ Il tuo post è stato rimosso",
+  "🛡️ Your posts were taken down": "🛡️ I tuoi post sono stati rimossi",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "I moderatori della comunità hanno rimosso il tuo post {title}. Motivo: {reason}. È nascosto agli altri; se non viene ripristinato entro 7 giorni, verrà eliminato.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "I moderatori della comunità hanno rimosso il tuo post. Motivo: {reason}. È nascosto agli altri; se non viene ripristinato entro 7 giorni, verrà eliminato.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "I moderatori della comunità hanno rimosso {n} dei tuoi post. Motivo: {reason}. Sono nascosti agli altri; se non vengono ripristinati entro 7 giorni, verranno eliminati.",
   "Only an owner or admin can pin a post.": "Solo un proprietario o un amministratore può fissare un post.",
   "Only an owner, an admin or the post's author can take a pin off.": "Solo un proprietario, un amministratore o chi ha scritto il post può togliere la fissazione.",
   "A pin lasts 1 day, 3 days or 1 week.": "Una fissazione dura 1 giorno, 3 giorni o 1 settimana.",

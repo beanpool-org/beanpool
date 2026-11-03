@@ -46,7 +46,6 @@ import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../../utils/words-put-away';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { CommunityAdminsRow } from '../../components/CommunityAdminsRow';
-import { KnownConsentCard } from '../../components/KnownConsentCard';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../../components/WordsOnScreen';
@@ -1854,9 +1853,6 @@ export default function SettingsScreen() {
                 />
             }
         >
-            {/* A known community's consent (community modes slice 6): offered, never required. */}
-            <KnownConsentCard />
-
             {/* ─── Identity Dashboard Card ─── */}
             <View style={styles.identityCard}>
                 <View style={styles.identityInner}>

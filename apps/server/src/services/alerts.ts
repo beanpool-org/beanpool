@@ -107,6 +107,7 @@ import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, OW
 import { registrarNames } from '../engine/registrar-names.js';
 import { listAutomationTokens } from '../automation-tokens.js';
 import { agentCallsTodayAll } from '../agent/limits.js';
+import { takedownsToday } from '../engine/agent-takedowns.js';
 import { listOAuthGrants } from '../agent/oauth.js';
 import { suggestionCountsToday } from '../agent/suggestions.js';
 
@@ -210,8 +211,8 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.keys': { title: 'a sign-in key or code changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.replaced': { title: 'replaced by another server', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
-    /** An AI assistant connected to /mcp or disconnected (admin MCP design §8): told as a role change is. */
-    'sec.agent': { title: 'an AI assistant connected or disconnected', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    /** An AI assistant connected to /mcp or disconnected (admin MCP design §8), told as a role change is; or it took posts down. */
+    'sec.agent': { title: 'an AI assistant connected, disconnected or took posts down', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** Owner-delete S5 (design case 18 §7): a restore or roll-back, and refused uploads of another community's backup. */
     'sec.restore': { title: 'restored from a backup', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** A change to where backups go or who copies this server: one line each, folded hourly past the actor's bound. */
@@ -1826,9 +1827,9 @@ export interface AlertsStatus {
     acknowledge: boolean;
     /**
      * AI assistants today (admin MCP design §8), counts only: calls let in since midnight UTC, how many are connected, and
-     * the suggestions they filed and the ones approved (agent/suggestions.ts).
+     * the suggestions they filed and the ones approved (agent/suggestions.ts), and the posts they took down (engine/agent-takedowns.ts).
      */
-    assistants: { calls: number; connected: number; suggestions: number; approved: number };
+    assistants: { calls: number; connected: number; suggestions: number; approved: number; takedowns: number };
 }
 
 /**
@@ -1859,6 +1860,6 @@ export function getAlertsStatus(): AlertsStatus {
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
         recent: recentSecurityEvents(s, t).map((e) => ({ ...e, title: ROWS[e.key].title })),
         acknowledge: recentSecurityEvents(s, t).length > 0 || (!!s.raised['sec.replaced'] && s.raised['sec.replaced'].endedAt === undefined),
-        assistants: { calls: agentCallsTodayAll(t), connected: connectedAssistants(t), ...suggestionCountsToday(t) },
+        assistants: { calls: agentCallsTodayAll(t), connected: connectedAssistants(t), ...suggestionCountsToday(t), takedowns: takedownsToday(t) },
     };
 }

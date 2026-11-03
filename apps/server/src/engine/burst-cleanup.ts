@@ -43,7 +43,7 @@
  * and a moderator can still restore or remove each one as it is. Each author is told once, without why or by whom. The
  * action is recorded (`burst_actions`, `burst_action_posts`), and every socket hears one doorbell for it, never one per
  * post. Its undo un-hides each of its posts that still carries its stamp, unless reports from enough independent circles
- * would hide it now, weighed with the whole hide undone (engine/auto-moderation.ts hideTally), and tells each author once. A post restored, removed or re-hidden on its own meanwhile is left as it is. The record is this
+ * would hide it now, weighed with the whole hide undone (engine/auto-moderation.ts hideTally), and tells each author once. A post restored, removed, re-hidden or taken down by an assistant (engine/agent-takedowns.ts) meanwhile is left as it is; a takedown put back returns this hide's stamp, and the undo reaches the post again. The record is this
  * server's (a standby never copies it): after a take-over the posts stay hidden, and are restored one at a time. Records
  * go after `BURST.keepActionsDays` days, and a member who deletes their own account, and so their label, leaves them
  * (`forgetBurstActionsOf`).
@@ -159,7 +159,7 @@ function openReportsOn(pubkey: string, notBy: string | null = null): number {
     `).get(notBy, pubkey, pubkey) as { c: number }).c;
 }
 
-function holdsRole(pubkey: string): boolean {
+export function holdsRole(pubkey: string): boolean {
     return !!db.prepare('SELECT 1 FROM node_roles WHERE member_pubkey = ? UNION ALL SELECT 1 FROM suspended_node_roles WHERE member_pubkey = ? LIMIT 1')
         .get(pubkey, pubkey);
 }
@@ -386,7 +386,8 @@ export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, n
         const posts = db.prepare(`SELECT p.id, p.author_pubkey, p.active, p.status, p.updated_at, m.status AS author_status
                                     FROM burst_action_posts bp JOIN posts p ON p.id = bp.post_id
                                     LEFT JOIN members m ON m.public_key = p.author_pubkey
-                                   WHERE bp.action_id = ? AND p.hidden_by_reports_at = ?`)
+                                   WHERE bp.action_id = ? AND p.hidden_by_reports_at = ?
+                                     AND NOT (p.removed_by_moderator_at IS NOT NULL AND p.active = 1 AND p.status != 'cancelled')`)
             .all(actionId, action.at) as { id: string; author_pubkey: string | null; active: number; status: string; updated_at: string | null; author_status: string | null }[];
         // Every post of the action un-hidden first. This write moves updated_at (schema.sql posts_touch_updated_at): the
         // posts that come back keep a new one below, the ones that go back get their old one back.

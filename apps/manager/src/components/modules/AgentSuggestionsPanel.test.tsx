@@ -55,6 +55,17 @@ afterEach(() => {
 });
 
 describe('AgentSuggestionsPanel', () => {
+    it('a card about a post on hold says so; the words it asks are the server\'s', async () => {
+        const held = card({ asks: 'Dismiss this report', report: { ...card().report!, postOnHold: true, hiddenByReports: true } });
+        fakeNode({ items: [held, card({ id: 'sug2', report: { ...card().report!, postOnHold: false } })] });
+        render(<AgentSuggestionsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        const [heldCard, plainCard] = await screen.findAllByTestId('agent-suggestion');
+        expect(within(heldCard).getByText('Dismiss this report')).toBeTruthy();
+        expect(within(heldCard).getByTestId('suggestion-post-on-hold').textContent).toMatch(/^On hold: .*only an owner or admin can put it back\.$/);
+        expect(within(heldCard).queryByText(/keep the post/)).toBeNull();
+        expect(within(plainCard).queryByTestId('suggestion-post-on-hold')).toBeNull();
+    });
+
     it('shows the report beside the assistant\'s words, all as text: a <<<END or markup in the reason breaks nothing', async () => {
         fakeNode({ items: [card()] });
         const { container } = render(<AgentSuggestionsPanel activeNode={node} viewer={ADMIN_KEY} />);

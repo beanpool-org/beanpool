@@ -15,7 +15,7 @@
  *   real control: the Start a community screen), and "Tell me when one starts here" (a place watch) on both.
  */
 
-import { t, tn, word } from './words.js';
+import { formatDate, t, tn, word } from './words.js';
 
 /** "Near you", in km: see the header. */
 export const NEAR_COMMUNITY_KM = 250;
@@ -100,6 +100,11 @@ export const FIND_COMMUNITY_WORDS = {
     answersWeek: word('Usually answers within a week'),
     answersSlow: word("Hasn't answered requests lately"),
     answersNone: word('Not taking requests right now'),
+    /** The listing promise (mothership A3): the Find card's lines, from what the community's directory push carries (A2). */
+    keepsPromise: word('Keeps the listing promise'),
+    newListing: word('New listing'),
+    acceptingMembers: word('Accepting members'),
+    closingOn: word('Closing on {date}'),
     /** Honest waiting card status and cancellation words. */
     requestArrived: word('Your request arrived.'),
     cancelRequest: word('Cancel my request'),
@@ -121,6 +126,58 @@ export function communityAnswersLine(answers?: 'week' | 'slow' | 'none' | null):
         case 'none': return t(FIND_COMMUNITY_WORDS.answersNone);
         default: return null;
     }
+}
+
+/**
+ * The listing promise a directory row carries (design §1.2, A2: apps/server engine/directory-promise.ts), read again here:
+ * the row is a stranger's publication, so only the exact shape counts. `true`: the community keeps it. `false`: the node
+ * said it has none (`null`): "New listing". `null`: the node said nothing, or something that is not the promise (an
+ * older global node, a forged shape): nothing is said, for or against.
+ */
+export function listingPromiseKept(promise: unknown): boolean | null {
+    if (promise === null) return false;
+    if (promise === undefined || typeof promise !== 'object' || Array.isArray(promise)) return null;
+    const p = promise as Record<string, unknown>;
+    const keys = Object.keys(p);
+    const exact = keys.length === 5 && ['v', 'owners', 'backups', 'reports', 'notice'].every((k) => keys.includes(k));
+    const owners = p.owners;
+    const ok = exact && p.v === 1 && typeof owners === 'number' && Number.isInteger(owners) && owners >= 2 && owners <= 1000
+        && p.backups === true && p.reports === true && p.notice === true;
+    return ok ? true : null;
+}
+
+/**
+ * The day a community says it closes (`closingOn`, YYYY-MM-DD) when it is today (UTC) or still to come: a real calendar day,
+ * or null. A day already past is not said ("Closing on" a day gone would read as a mistake; the mirror keeps one two days).
+ */
+export function closingDayAhead(closingOn: unknown, now: number = Date.now()): { y: number; m: number; d: number } | null {
+    if (typeof closingOn !== 'string') return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(closingOn);
+    if (!m) return null;
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const at = Date.UTC(y, mo - 1, d);
+    if (!Number.isFinite(at) || new Date(at).toISOString().slice(0, 10) !== closingOn) return null;
+    return closingOn >= new Date(now).toISOString().slice(0, 10) ? { y, m: mo, d } : null;
+}
+
+/**
+ * The Find card's promise lines for a listed community, in the member's language, in the design's order: "Keeps the
+ * listing promise" or "New listing", "Accepting members", "Closing on <date>". Each only when the directory said it; nothing
+ * negative is ever said (a community that takes no requests, or has no promise yet, has no line for the first, and "New
+ * listing" is the only word for the second). The phone's find screen and Home card, and the web's Home card, say it through this.
+ */
+export function communityPromiseLines(
+    c: { promise?: unknown; acceptingKnocks?: unknown; closingOn?: unknown },
+    now: number = Date.now(),
+): string[] {
+    const lines: string[] = [];
+    const kept = listingPromiseKept(c.promise);
+    if (kept === true) lines.push(t(FIND_COMMUNITY_WORDS.keepsPromise));
+    else if (kept === false) lines.push(t(FIND_COMMUNITY_WORDS.newListing));
+    if (c.acceptingKnocks === true) lines.push(t(FIND_COMMUNITY_WORDS.acceptingMembers));
+    const day = closingDayAhead(c.closingOn, now);
+    if (day) lines.push(t(FIND_COMMUNITY_WORDS.closingOn, { date: formatDate(new Date(day.y, day.m - 1, day.d, 12), 'day-month-year') }));
+    return lines;
 }
 
 /**

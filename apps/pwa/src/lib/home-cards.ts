@@ -21,7 +21,7 @@ import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
 import { copyFromLine, eventCopyOf } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
-import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
@@ -121,6 +121,12 @@ export interface HomeCommunity {
     lastSeenAt?: string | null;
     /** How quickly it answers requests to join (Lounge L1, entry S1: 'week' | 'slow' | 'none' | null). */
     answers?: 'week' | 'slow' | 'none' | null;
+    /** The listing promise its push carried: an object, null for none, left out by an older global node (core communityPromiseLines reads it). */
+    promise?: unknown;
+    /** Whether it takes requests to join. */
+    acceptingKnocks?: boolean | null;
+    /** The day it says it closes (YYYY-MM-DD). */
+    closingOn?: string | null;
 }
 export interface HomeFind {
     point: 'request' | 'area' | null;
@@ -658,6 +664,16 @@ export function communityFacts(c: Pick<HomeCommunity, 'distanceKm' | 'memberCoun
  */
 export function notAnsweringLine(c: Pick<HomeCommunity, 'lastSeenAt'>, now: number = Date.now()): string | null {
     return notAnsweringLately(c.lastSeenAt, now) ? t(FIND_COMMUNITY_WORDS.notAnswering) : null;
+}
+
+/**
+ * "Keeps the listing promise · Accepting members · Closing on 3 Dec", in the member's language, whatever of that the
+ * directory said under a listed community (core communityPromiseLines), or null. The phone's find screen says the same
+ * (apps/native/utils/community-directory.ts promiseLine).
+ */
+export function promiseLine(c: Pick<HomeCommunity, 'promise' | 'acceptingKnocks' | 'closingOn'>, now: number = Date.now()): string | null {
+    const lines = communityPromiseLines(c, now);
+    return lines.length ? lines.join(' · ') : null;
 }
 
 /**

@@ -39,6 +39,7 @@ import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
+import { clusterIcon, elderHaloHtml } from '../lib/map-pin-style';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -52,7 +53,8 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
 } from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
-import { MapCalendar } from '../components/MapCalendar';
+import { MapCalendar, CARD_STOPS_AT_CALENDAR_CLASS, CHIPS_STOP_AT_CALENDAR_CLASS, calendarPanelWidth } from '../components/MapCalendar';
+import { ScrollHintRow } from '../components/ScrollHintRow';
 import { MapStackList } from '../components/MapStackList';
 import { bubblesOnMap, planBubbleTap, stackPins, stackPinFromPost, type StackPin } from '../lib/map-stack';
 import { EventCard } from '../components/EventCard';
@@ -734,13 +736,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             // 2 Nov). The library's zoom has no cap and its spiral is what the list replaces.
             zoomToBoundsOnClick: false,
             spiderfyOnMaxZoom: false,
-            iconCreateFunction: (cluster) => {
-                return L.divIcon({
-                    html: `<div style="background-color: #1f2937; color: white; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 18px; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${cluster.getChildCount()}</div>`,
-                    className: 'custom-cluster-icon',
-                    iconSize: [36, 36],
-                });
-            }
+            // The phone's bubble (lib/map-pin-style.ts): blue, a white ring and a glow, sized by the pins inside, 99+ from 99.
+            iconCreateFunction: (cluster) => L.divIcon({ ...clusterIcon(cluster.getChildCount()), className: 'custom-cluster-icon' }),
         });
         clusterGroup.on('clusterclick clusterkeypress', (e: any) => {
             if (e.type === 'clusterkeypress' && e.originalEvent?.keyCode !== 13) return;
@@ -1719,12 +1716,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             if (useModernMarkers) {
                 html = `
                 <div style="position: relative; width: 40px; height: 48px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.15));">
+                    ${elderHaloHtml(hasElderGlow, 40)}
                     <div style="
                         width: 40px; height: 40px; border-radius: 50%;
                         background: rgba(255,255,255,0.95); border: 2.5px solid ${borderColor};
                         display: flex; align-items: center; justify-content: center;
                         box-sizing: border-box; z-index: 2; position: relative;
-                        ${hasElderGlow ? 'border-color: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.8);' : ''}
                     ">
                         <span style="font-size: 22px; line-height: 1; padding-bottom: 2px;">${emoji}</span>
                     </div>
@@ -1739,6 +1736,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             } else {
                 html = `
                 <div style="position: relative; width: 44px; height: 56px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));">
+                    ${elderHaloHtml(hasElderGlow, 44)}
                     <div style="
                         width: 44px; height: 44px; border-radius: 50%;
                         background: rgba(255,255,255,0.95); border: 2.5px solid ${borderColor};
@@ -2105,6 +2103,36 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         onOpenCalendarHandled?.();
     }, [openCalendar, onOpenCalendarHandled]);
 
+    // Where a pin card (event, offer, need) stands. On a phone it is centred and as wide as the screen allows. From md up
+    // (a tablet and wider) it stands at the LEFT of the map, so it never sits in the middle of the pins, and with the calendar
+    // open it stops where the panel starts, so the two cannot meet at any width. The panel's width rule is written once, in
+    // MapCalendar, as the panel's classes, as this clamp and as a number, and its test pins that they agree.
+    const previewWrapClass = `absolute bottom-0 left-0 right-0 ${calendarOpen ? CARD_STOPS_AT_CALENDAR_CLASS : 'md:right-0'} z-[150] flex flex-col justify-end items-center md:items-start pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4`;
+
+    // A card beside the open calendar needs about 19.5rem of map to its left (a card's width with its 0.75rem gutters). Where
+    // the map is too narrow for that, on a phone (the panel covers the map) and on a tablet whose side bar leaves little
+    // map, a card opening closes the calendar: the phone does the same (map.tsx drops the stack list when a card opens), and
+    // a card squeezed to a sliver or lying over the panel is the thing this is here to prevent. Measured when the card opens
+    // and when the map's width changes, in rem so larger text asks for more room.
+    useEffect(() => {
+        if (!calendarOpen || !previewPost) return;
+        const fit = () => {
+            const el = mapContainer.current;
+            if (!el) return;
+            const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+            const wide = typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 768px)').matches;
+            if (el.clientWidth - calendarPanelWidth(el.clientWidth, wide) < 19.5 * rem) {
+                calendarFromDoor.current = false;
+                setCalendarOpen(false);
+            }
+        };
+        fit();
+        if (typeof ResizeObserver === 'undefined' || !mapContainer.current) return;
+        const watch = new ResizeObserver(fit);
+        watch.observe(mapContainer.current);
+        return () => watch.disconnect();
+    }, [calendarOpen, previewPost]);
+
     // The notes about where the pins were read from take the filter bar's spot, so they sit under it, whatever its height (two
     // rows, and more at large text): the bar's measured height, then a 0.25rem gap. The bar is at 4.25rem, under the header.
     const noteTop = 'top-[calc(4.25rem+var(--map-filter-h,0px)+0.25rem)]';
@@ -2321,12 +2349,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     ref={filterBarRef}
                     data-testid="map-filter-bar"
                     // Over the locate pill and the + button while the panel is open: the phone hides them then, and the tiles under them are taps.
-                    className={`absolute top-[4.25rem] left-0 ${categoryOpen ? 'z-[120]' : 'z-[100]'} w-fit max-w-full px-3 py-1 flex flex-col items-start gap-1.5 pointer-events-none`}
+                    className={`absolute top-[4.25rem] left-0 ${categoryOpen ? 'z-[120]' : 'z-[100]'} w-fit max-w-full ${calendarOpen ? CHIPS_STOP_AT_CALENDAR_CLASS : ''} px-3 py-1 flex flex-col items-start gap-1.5 pointer-events-none`}
                 >
-                    <div
-                        data-testid="map-filter-row"
-                        className="pointer-events-auto max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
-                        style={{ scrollbarWidth: 'none' }}
+                    <ScrollHintRow
+                        testId="map-filter-row"
+                        className="max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
                     >
                         <div
                             data-testid="map-type-pills"
@@ -2391,15 +2418,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 <circle cx="15.5" cy="14.5" r="0.6" fill="currentColor" />
                             </svg>
                         </button>
-                    </div>
+                    </ScrollHintRow>
 
                     {mapType === 'events' ? (
-                        <div
-                            data-testid="event-window-chips"
+                        <ScrollHintRow
+                            testId="event-window-chips"
                             role="group"
                             aria-label={t('Filter events by date')}
-                            className="pointer-events-auto max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
-                            style={{ scrollbarWidth: 'none' }}
+                            className="max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
                         >
                             {MAP_EVENT_WINDOWS.map(w => (
                                 <button
@@ -2416,7 +2442,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                     {w.id === 'all' ? t('All events') : w.id === 'today' ? t('Today') : w.id === 'weekend' ? t('This weekend') : t('Next 7 days')}
                                 </button>
                             ))}
-                        </div>
+                        </ScrollHintRow>
                     ) : (
                         <div className="relative pointer-events-auto max-w-full">
                             <button
@@ -2461,8 +2487,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 </div>
             )}
 
-            {/* FAB Pill - Bottom Left (avoids header overlap). It gives way to the list or calendar, which would cut it in half. */}
-            <div className={`${stackOpen || calendarOpen ? 'hidden' : 'flex'} absolute bottom-[6.5rem] left-3 flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden`}>
+            {/* FAB Pill - Bottom Left (avoids header overlap). It gives way to the list or calendar, which would cut it in half, and from md up to a pin card, which stands at the same left edge. */}
+            <div className={`${stackOpen || calendarOpen ? 'hidden' : previewPost ? 'flex md:hidden' : 'flex'} absolute bottom-[6.5rem] left-3 flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden`}>
                 <button
                     onClick={handleLocate}
                     aria-label={t('My location')}
@@ -2553,7 +2579,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
         {/* Map Preview Card — an event shows its own card (§3) */}
         {previewPost && previewPost.type === 'event' && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+            <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
                 <div className="m-3 w-[calc(100%-1.5rem)] max-w-[28rem] pointer-events-auto relative flex flex-col gap-2 bg-white dark:bg-nature-900 rounded-[24px] p-2 shadow-[0_10px_20px_rgba(0,0,0,0.15)] border border-nature-200 dark:border-nature-800">
                     <EventCard
                         post={previewPost}
@@ -2591,7 +2617,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         {previewPost && previewPost.type !== 'event' && visitor && (
             // A visitor's pin card (G9a §7): the listing's title and "near here", since the pin is its area's centre, and
             // the way to its detail sheet. No price, no name, no badge.
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+            <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
                 <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
                     {/* A 44 px target, as the event card's ✕ (48 px) is: the small circle sits where it was, inside it. */}
                     <button
@@ -2623,7 +2649,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             </div>
         )}
         {previewPost && previewPost.type !== 'event' && !visitor && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+            <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
                 <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
                         onClick={() => setPreviewPost(null)}

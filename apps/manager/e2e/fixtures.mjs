@@ -1503,6 +1503,17 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/update-identity') return ok({ success: true });
     if (pathname === '/api/local/admin/directory/push') return ok({ success: true, lastDirectoryPush: '2026-09-19T00:00:00.000Z' });
     if (pathname === '/api/directory/info') return ok({ communityName: COMMUNITY_NAME, callsign: CALLSIGN });
+    // The listing promise (Mothership A3, Node Identity): a new listing with one owner; a POST answers the same shape with the ticks.
+    if (pathname === '/api/local/admin/directory/promise') {
+        const body = m === 'POST' && bodyText ? JSON.parse(bodyText) : {};
+        const reports = body.reports === true, notice = body.notice === true;
+        return ok({
+            promise: {
+                kept: false, owners: 1, backupsLocked: true, backupsRunning: true, reports, notice,
+                closingOn: typeof body.closingOn === 'string' ? body.closingOn : null, acceptingKnocks: true, why: [],
+            },
+        });
+    }
 
     // ---- registrar ----
     if (pathname === '/api/local/admin/registrar/pending') return ok({ allocations: REGISTRAR_ALLOCATIONS });

@@ -47,6 +47,7 @@ import {
 import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-posts.js';
 import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
+import { OWNER_SEED_TOOLS } from './owner-seeds.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -657,7 +658,8 @@ AGENT_TOOLS.push({
 
 // An owner's assistant posts for them: Offers, Needs, events, enterprise listings and polls (agent/owner-posts.ts); slice S2, what it
 // reads for seeding, and its own undo: my_posts, update_post, remove_post, remove_all_i_made (agent/owner-reads.ts).
-AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_READ_TOOLS);
+// Slice S3: groups, a group's post and enterprises, content only (agent/owner-seeds.ts).
+AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS);
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {

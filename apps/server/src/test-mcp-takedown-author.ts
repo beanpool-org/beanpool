@@ -43,6 +43,8 @@ import { sweepTakedowns, TAKEDOWN } from './engine/agent-takedowns.js';
 import { muteOf } from './engine/auto-moderation.js';
 import { resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
 import { getNodeRole, setNodeRole } from './config/node-role.js';
+import Database from 'better-sqlite3';
+import { addTakedownByAuthor } from './db/db.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -442,6 +444,25 @@ async function main(): Promise<void> {
         const ownersPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/operators/server/ai-assistant.md', import.meta.url), 'utf8');
         assert(/everything one member has up/.test(ownersPage) && /never by their name/.test(ownersPage) && /\*\*Disconnect and put back\*\*/.test(ownersPage),
             "the owners' page says how to take a member's posts by one of theirs, and Disconnect and put back");
+
+        // A node that already runs S1 has agent_takedowns without by_author: the column is added, its rows read as what they were.
+        {
+            const old = new Database(':memory:');
+            old.exec(`CREATE TABLE agent_takedowns (id TEXT PRIMARY KEY, grant_id TEXT NOT NULL, grant_name TEXT NOT NULL, member_pubkey TEXT NOT NULL, at TEXT NOT NULL,
+                reason TEXT NOT NULL CHECK (reason IN ('spam', 'offensive', 'misleading', 'unsafe', 'rules')), why TEXT NOT NULL DEFAULT '',
+                via TEXT NOT NULL CHECK (via IN ('ids', 'reports')), posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0))`);
+            old.prepare("INSERT INTO agent_takedowns (id, grant_id, grant_name, member_pubkey, at, reason, via, posts) VALUES ('t', 'g', 'n', 'm', 'now', 'spam', 'reports', 1)").run();
+            const added = addTakedownByAuthor(old);
+            const again = addTakedownByAuthor(old);
+            const kept = old.prepare('SELECT via, by_author FROM agent_takedowns').get() as { via: string; by_author: number };
+            let checked = '';
+            try { old.prepare("INSERT INTO agent_takedowns (id, grant_id, grant_name, member_pubkey, at, reason, via, by_author) VALUES ('u', 'g', 'n', 'm', 'now', 'spam', 'ids', 2)").run(); } catch (e: any) { checked = String(e?.message ?? e); }
+            const fresh = new Database(':memory:');
+            assert(added && !again && kept.via === 'reports' && kept.by_author === 0 && /CHECK/.test(checked) && addTakedownByAuthor(fresh) === false,
+                `an S1 table gains by_author once, its rows 0, the CHECK holds, and a node without the table is left alone (${JSON.stringify([added, again, kept, checked.slice(0, 40)])})`);
+            old.close();
+            fresh.close();
+        }
 
         // ── 11. No Bean moved ────────────────────────────────────────────────────────────────────────
         const auditAfter = runLedgerAudit();

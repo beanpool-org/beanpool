@@ -257,7 +257,7 @@ export function postsByAuthorOf(anchorId: string): { postIds: string[]; left: nu
 
 /** What one assistant took down in the last `days` (≤ the hold), newest first, for `takedowns_list`: ids, kinds and states, no words. */
 export function takedownsBy(grantId: string, days: number, now: number = Date.now()): {
-    at: string; reason: string; via: TakedownVia; postId: string; kind: string | null; state: TakedownPostLine['state']; finalAfter: string;
+    at: string; reason: string; via: TakedownVia; postId: string; kind: string | null; state: 'hidden' | 'put_back' | 'final'; finalAfter: string;
 }[] {
     const since = iso(now - days * DAY_MS);
     const rows = db.prepare(`SELECT t.at, t.reason, t.via, t.by_author, tp.post_id, tp.put_back_at, tp.final_at, p.type
@@ -267,7 +267,8 @@ export function takedownsBy(grantId: string, days: number, now: number = Date.no
         { at: string; reason: string; via: 'ids' | 'reports'; by_author: number; post_id: string; put_back_at: string | null; final_at: string | null; type: string | null }[];
     return rows.map((r) => {
         const finalAfter = iso(Date.parse(r.at) + TAKEDOWN.holdDays * DAY_MS);
-        const state = r.put_back_at ? 'put_back' as const : r.final_at ? 'final' as const : Date.parse(finalAfter) <= now ? 'left_hidden' as const : 'hidden' as const;
+        // Held is hidden, past the 7 days or not: why one waits (a deal, a Child safety report) is Settings', where a person acts on it.
+        const state = r.put_back_at ? 'put_back' as const : r.final_at ? 'final' as const : 'hidden' as const;
         return { at: r.at, reason: r.reason, via: r.by_author ? 'author' as const : r.via, postId: r.post_id, kind: r.type, state, finalAfter };
     });
 }

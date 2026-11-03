@@ -20,6 +20,7 @@ vi.mock('../lib/api', () => ({
     // A photo is there already, so the steps are the name, then on.
     getMemberProfile: vi.fn(async () => ({ avatar: 'data:image/jpeg;base64,AAAA', bio: '', contact: null })),
     registerMember: vi.fn(),
+    nodeAddress: vi.fn(() => 'https://node.example.test'),
 }));
 
 let saved: BeanPoolIdentity;

@@ -92,6 +92,8 @@ export interface AgentTool {
     posts?: boolean;
     /** Only a grant ticked "May take down posts for me" (agent/owner-takedowns.ts): listed and callable. */
     moderates?: boolean;
+    /** A `posts` read a grant ticked "May take down posts for me" has too (listings_search, categories: MCP-MODERATION S2). */
+    alsoModerates?: boolean;
     write?: boolean;
     /** Takes something down (remove_post, remove_all_i_made, take_down, take_down_many): the MCP annotation says so. */
     destructive?: boolean;
@@ -681,7 +683,9 @@ AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS, 
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {
-    return AGENT_TOOLS.filter((t) => (!t.ownerOnly || grant.role === 'owner') && (!t.posts || grant.canPost) && (!t.moderates || grant.canModerate));
+    return AGENT_TOOLS.filter((t) => (!t.ownerOnly || grant.role === 'owner')
+        && (!t.posts || grant.canPost || (t.alsoModerates === true && grant.canModerate === true))
+        && (!t.moderates || grant.canModerate));
 }
 
 /** Whether this grant posts: an owner's, ticked "May post for me" (agent/owner-posts.ts). */

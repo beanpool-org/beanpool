@@ -54,7 +54,7 @@ import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { dmPublicKeyOf, groupMessageKey, openGroupLineWithMessageKey, sealGroupLine, type GroupLinePart } from '@beanpool/core';
-import { getImageStore } from './storage/image-store.js';
+import { attachmentKey, getImageStore, readObject } from './storage/image-store.js';
 import { freshGroupEpoch } from './group-test-payload.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { AGENT_TOOLS, type AgentGrant } from './agent/tools.js';
@@ -499,13 +499,12 @@ async function main(): Promise<void> {
     const delta: any = await exportSyncState(nodeId, since);
     const lateCarried = (delta.abuseReports ?? []).find((r: any) => r.id === lateRep.body?.report?.id);
     assert(!!lateCarried && lateCarried.targetMessageId === late.id && typeof lateCarried.disclosure === 'string', 'and a delta carries a new one the same');
+    // The rows go with the copied tables (message_attachments is copied to a standby, G4: emptyCopiedTables empties it); the
+    // objects stay, as a standby holds them after its puller fetched them (fetchPhotoObjects, which doesn't run here): what
+    // opens after the take-over is the copied row against the object a standby holds.
     emptyCopiedTables(db);
-    // This server holds no chat photo of its own: the row and the object are removed here, so that what opens after the
-    // take-over is what the copy carried (chat photos are copied to a standby, G4).
-    for (const a of db.prepare('SELECT message_id FROM message_attachments').all() as { message_id: string }[]) {
-        try { getImageStore().delete(`attachments/${a.message_id}.bin`); } catch { /* gone already */ }
-    }
-    db.prepare('DELETE FROM message_attachments').run();
+    assert((db.prepare('SELECT COUNT(*) AS n FROM message_attachments').get() as { n: number }).n === 0,
+        '(the copied tables are empty before the copy lands, chat photo rows included)');
     setNodeRole('backup');
     await importRemoteState(payload);
     setNodeRole('primary');
@@ -517,7 +516,17 @@ async function main(): Promise<void> {
     assert(v.status === 200 && v.body?.message?.words?.state === 'verified' && v.body?.message?.words?.text === photo.text,
         `on a server that took over, the words open, verified (got ${show(v)})`);
     assert(v.body?.message?.photo?.state === 'verified' && v.body?.message?.photo?.dataUri === photo.uri,
-        `and the photo opens, verified the same: the copy carried it (got ${v.body?.message?.photo?.state})`);
+        `and the photo opens, verified the same: the copied row against the object the standby holds (got ${v.body?.message?.photo?.state})`);
+    // A copied row whose object never arrived (the state G4 brings: the row came, the puller hasn't fetched the object): the
+    // report view reads the photo as unavailable, with no image, and the words still open (group-chat-report.ts !att || !data).
+    const photoKey = attachmentKey(photo.id);
+    getImageStore().delete(photoKey);
+    assert((await readObject(getImageStore(), photoKey)) === null, '(the reported photo\'s object is gone from the store)');
+    assert(!!db.prepare('SELECT 1 FROM message_attachments WHERE message_id = ?').get(photo.id), '(and its copied row is still there)');
+    v = await viewOf(repId);
+    assert(v.status === 200 && v.body?.message?.photo?.state === 'unavailable' && !v.body?.message?.photo?.dataUri
+        && v.body?.message?.words?.state === 'verified',
+        `a copied row whose object never arrived: the photo reads unavailable, no image, the words still open (got ${show(v)})`);
     // A report changed to Child safety on the main server reaches a standby that holds it already (the review of #2470):
     // the delta carries the new reason with its updated_at, and the copy takes both, so a server that took over lists it
     // first. The change is made here as the main server makes it, then this copy is put back to the standby's.

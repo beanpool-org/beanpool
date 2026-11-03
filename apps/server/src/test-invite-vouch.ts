@@ -26,9 +26,11 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 
 import crypto from 'node:crypto';
 import { buildInviteTicket } from '@beanpool/core';
+import { setMemberPhoto } from '@beanpool/engine';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState, adminSetVoucher, adminSetTier, setUserStatusRow, getBalance, canVouch } from './state-engine.js';
+import { initStateEngine, exportSyncState, adminSetVoucher, adminSetTier, setUserStatusRow, getBalance, canVouch, hasListedOffer, hasLiveOffer, createPost as rawCreatePost } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
@@ -38,6 +40,8 @@ import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { TABLES } from './engine/replication-manifest.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 
 let BASE = '';
 const ADMIN_PW = 'Invite-Vouch-Admin-Pw-71!';
@@ -252,6 +256,23 @@ async function main(): Promise<void> {
     assert(calBalance.floor === -100 && calBalance.usableFloor === 0, `6. vouched, no live Offer: floor -100, usable 0 (${calBalance.floor}, ${calBalance.usableFloor})`);
     const spend = await call(cal.who, 'POST', '/api/ledger/transfer', { from: cal.who.pk, to: owen.pk, amount: calBalance.balance + 1, memo: 'over' });
     assert(spend.status >= 400 && getBalance(cal.who.pk).balance === calBalance.balance, `6. and a send past nothing is refused (${show(spend)})`);
+    // A direct send never reaches a floor, whoever sends it (state-engine transfer: 0 unless it is a marketplace spend). The
+    // covenant bites on a marketplace spend, so that is what has to be refused, by the covenant and not by something beside it.
+    for (const pk of [owen.pk, cal.who.pk]) setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
+    const stall = createPost('offer', 'produce', 'Owen mends bikes', 'Bike repairs', 10, 'fixed', owen.pk)!.id;
+    const take = () => call(cal.who, 'POST', '/api/marketplace/posts/accept', { postId: stall, buyerPublicKey: cal.who.pk });
+    const noOffer = await take();
+    assert(noOffer.status === 400 && !hasListedOffer(cal.who.pk) && getBalance(cal.who.pk).balance === calBalance.balance, `6. a marketplace spend with no Offer listed: refused (${show(noOffer)})`);
+    const calsOffer = createPost('offer', 'produce', 'Cal bakes bread', 'Bread', 5, 'fixed', cal.who.pk)!.id;
+    const takenOff = await call(cal.who, 'POST', '/api/marketplace/posts/remove', { id: calsOffer, authorPublicKey: cal.who.pk });
+    require_(takenOff.status === 200 && hasListedOffer(cal.who.pk) && !hasLiveOffer(cal.who.pk), `Cal's Offer is listed but no longer live, so only the covenant is left to answer (${show(takenOff)})`);
+    const notLive = await take();
+    assert(notLive.status === 400 && !notLive.body?.transaction && getBalance(cal.who.pk).balance === calBalance.balance && getBalance(cal.who.pk).usableFloor === 0,
+        `6. the covenant refuses it: an Offer listed but not live opens no room (${show(notLive)})`);
+    createPost('offer', 'produce', 'Cal bakes bread again', 'Bread', 5, 'fixed', cal.who.pk);
+    const live = await take();
+    assert(live.status === 200 && live.body?.transaction?.id && getBalance(cal.who.pk).usableFloor === -100 && getBalance(cal.who.pk).balance < 0,
+        `6. with a live Offer the same spend goes through, into the vouched line: that was the covenant (${show(live)}; balance ${getBalance(cal.who.pk).balance})`);
 
     // ── 7. What the person holding the code can read ─────────────────────────────────────────────
     console.log('── 7. what the holder reads ──');
@@ -298,7 +319,10 @@ async function main(): Promise<void> {
     const info = await call(null, 'GET', '/api/community/info');
     assert(info.body?.features?.inviteVouch === true, `10. with Beans on the node says it takes one (${JSON.stringify(info.body?.features?.inviteVouch)})`);
     const madeBefore = await generate(owen, 2);
+    // Beans switch off only on a node whose ledger never moved (config/node-profile.ts ledgerHistory), and section 6 traded.
     db.prepare('DELETE FROM transactions').run();
+    db.prepare('DELETE FROM marketplace_transactions').run();
+    db.prepare('UPDATE accounts SET balance = 0').run();
     setOverride('beans', 'false');
     if (getProfileSwitches().beans === false) {
         const offInfo = await call(null, 'GET', '/api/community/info');

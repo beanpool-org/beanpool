@@ -336,9 +336,9 @@ async function main(): Promise<void> {
         assert(modList.status === 403, `a moderator sees none (${show(modList)})`);
         const row = (ownerList.body?.grants ?? []).find((g: any) => g.name === "Adam's Claude");
         assert(!!row && row.member === 'Adam' && row.role === 'admin' && row.via === 'token' && row.lastUsedAt === null && row.callsToday === 0 && row.mine === false
-            && Object.keys(row).sort().join() === 'callsToday,canModerate,canPost,createdAt,expired,expiresAt,id,lastUsedAt,madePosts,member,mine,name,postsToday,role,takedownsToday,via'
-            && row.canPost === false && row.postsToday === 0 && row.madePosts === 0 && row.canModerate === false && row.takedownsToday === 0,
-        `each row: member, name, role, via, last used, calls today, "May post for me", posts today, its posts still up (slice S2), "May take down posts for me" and its takedowns today, and nothing else (${JSON.stringify(row)})`);
+            && Object.keys(row).sort().join() === 'callsToday,canModerate,canPost,createdAt,expired,expiresAt,id,lastUsedAt,madePosts,member,mine,name,postsToday,role,takedownsHeld,takedownsToday,via'
+            && row.canPost === false && row.postsToday === 0 && row.madePosts === 0 && row.canModerate === false && row.takedownsToday === 0 && row.takedownsHeld === 0,
+        `each row: member, name, role, via, last used, calls today, "May post for me", posts today, its posts still up (slice S2), "May take down posts for me", its takedowns today and those still waiting, and nothing else (${JSON.stringify(row)})`);
         assert(ownerList.body?.mcpUrl === `https://localhost:${port}/mcp` && ownerList.body?.defaultDays === 30 && ownerList.body?.maxDays === 90,
             `the list gives the address to paste and the days (${ownerList.body?.mcpUrl})`);
 
@@ -378,6 +378,9 @@ async function main(): Promise<void> {
                 if (t.name === 'connection_info') continue;
                 // An owner-only read (my_enterprises, agent/owner-posts.ts) is not an admin's assistant's: its lists above say so.
                 if (t.ownerOnly && who === 'admin') continue;
+                // A read only a grant ticked "May take down posts for me" has (takedowns_list): neither grant here is ticked, so
+                // neither has it; test-mcp-takedown-author.ts reads it with the tick.
+                if (t.moderates) continue;
                 const viaMcp = await client.callTool({ name: t.name, arguments: argsFor(t.name) });
                 const viaPreview = await call('POST', PREVIEW, { headers: asSession(s), body: { grant: grantId, tool: t.name, args: argsFor(t.name) } });
                 const a = sameBoundary(viaMcp.structuredContent).replace(VOLATILE, '"$1":~');
@@ -385,7 +388,7 @@ async function main(): Promise<void> {
                 if (viaPreview.status !== 200 || viaPreview.body?.ok !== true || a !== b) differs.push(`${who} ${t.name}: ${a.slice(0, 120)} ≠ ${b.slice(0, 120)}`);
             }
         }
-        assert(differs.length === 0, `every reading tool's preview equals its /mcp answer, fences and redaction included, for an owner's and an admin's (${differs.join(' || ') || `${reads.length - 1} tools for an owner, ${reads.filter(t => !t.ownerOnly).length - 1} for an admin`})`);
+        assert(differs.length === 0, `every reading tool's preview equals its /mcp answer, fences and redaction included, for an owner's and an admin's (${differs.join(' || ') || `${reads.filter(t => !t.moderates).length - 1} tools for an owner, ${reads.filter(t => !t.ownerOnly && !t.moderates).length - 1} for an admin`})`);
         const pvReport = await call('POST', PREVIEW, { headers: asSession(adminS), body: { tool: 'report_get', args: { report_id: r1!.id } } });
         const fenced = JSON.stringify(pvReport.body?.result ?? {});
         assert(pvReport.body?.ok === true && /untrusted/.test(fenced) && /<<<MEMBER-TEXT [0-9a-f]{8}/.test(fenced) && !fenced.includes(reporter.pub) && !fenced.includes('Reggie'),

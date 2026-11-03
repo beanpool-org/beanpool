@@ -652,8 +652,9 @@ async function main() {
         `every row it held is kept (${kept.length})`);
     assert(JSON.stringify(triggers()) === JSON.stringify(triggersBefore) && !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_decision_electors_member'").get(),
         `its index and its triggers are back (${triggers().join(', ') || 'no triggers'})`);
-    db.prepare("UPDATE decision_electors SET status = 'stood_aside' WHERE decision_id = ? AND member_pubkey = ?").run(wilVote, rollOf(wilVote)[0].k);
-    assert(rollOf(wilVote)[0].status === 'stood_aside', 'and a juror can be stood aside in it');
+    // Wil's roll, which section 7 drew; with none, this fails here rather than throwing, so the sections after it still run.
+    db.prepare("UPDATE decision_electors SET status = 'stood_aside' WHERE decision_id = ? AND member_pubkey = ?").run(wilVote, rollOf(wilVote)[0]?.k ?? '');
+    assert(rollOf(wilVote)[0]?.status === 'stood_aside', 'and a juror can be stood aside in it');
 
     // ── 10. A branch vote with a jury rule ──────────────────────────────────────────────────────────────────────────
     // The director's call for J1 (3 Nov, reversible): a branch's vote (removal by vote S5) is decided by the whole community

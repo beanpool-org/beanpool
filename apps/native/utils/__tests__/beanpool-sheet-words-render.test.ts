@@ -350,6 +350,22 @@ describe('the BeanPool sheet in the pseudo-locale: every word on it came through
         await settle();
         expect(host.textContent).not.toContain('Stops notifications and unread message checks from this community');
     });
+
+    it('long-pressing active community options modal does not show Remove button even if URL formatting differs', async () => {
+        store.map.set('beanpool_anchor_url', RIVERSIDE);
+        store.map.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: RIVERSIDE + '/' }]));
+        await renderIn('en');
+
+        const riversideBtn = host.querySelector('[aria-label="Riverside, Connected. You are a member here., in use"]');
+        expect(riversideBtn).not.toBeNull();
+        await act(async () => {
+            (riversideBtn as any).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        });
+        await settle();
+
+        expect(host.textContent).toContain('Alerts from this community');
+        expect(host.textContent).not.toContain('Remove from your saved list');
+    });
 });
 
 // ── 320 dp with text at 1.3× (checked with the pseudo-locale) ─────────────────────────────────────────────────────────

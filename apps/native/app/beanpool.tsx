@@ -564,7 +564,7 @@ export default function BeanPoolSheet() {
                                     accessibilityLabel={t('Alerts from this community')}
                                 />
                             </View>
-                            {optionsCommunity.url !== communities.active && (
+                            {communities.active && !sameCommunity(optionsCommunity.url, communities.active) && (
                                 <>
                                     <View style={styles.optionsDivider} />
                                     <Pressable

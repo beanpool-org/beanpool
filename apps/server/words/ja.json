@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "ピン留めできるのは公開の投稿のみです。",
   "Only this community's own posts can be pinned.": "ピン留めできるのはこのコミュニティの投稿のみです。",
   "This post has ended, so it can't be pinned.": "この投稿は終了しているため、ピン留めできません。",
-  "Three posts are pinned already. Take one off first.": "すでに3件の投稿がピン留めされています。先に1件外してください。"
+  "Three posts are pinned already. Take one off first.": "すでに3件の投稿がピン留めされています。先に1件外してください。",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "招待に付ける推薦（保証）は25、50、100豆、またはなしです。",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "招待で推薦（保証）できるのは、オーナー、管理者、任命された推薦人だけです。"
 }

@@ -3,7 +3,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { AddedYouLines } from '../../components/AddedYouLines';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
+import { askCanVouch, getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { useIdentity } from '../IdentityContext';
 import { buildSignedHeaders } from '../../utils/crypto';
@@ -25,7 +25,8 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, word, type WordKey } from '@beanpool/core';
+import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteVouchRefusalWords, offersInviteVouch, t, tn, word, type VouchLevel, type WordKey } from '@beanpool/core';
+import { InviteVouchChoice } from '../../components/InviteVouchChoice';
 import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import {
@@ -183,6 +184,8 @@ export default function PeopleScreen() {
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('set_people_view', (data) => {
             if (data && data.view && ['friends', 'community', 'invites'].includes(data.view)) {
+                // The +person button comes here: the screen opens on None, whatever was picked before.
+                if (data.view === 'invites') setVouchLevel(null);
                 setView(data.view as SubView);
                 router.setParams({ view: data.view });
             }
@@ -200,6 +203,9 @@ export default function PeopleScreen() {
     const [generating, setGenerating] = useState(false);
     const [intendedFor, setIntendedFor] = useState('');
     const [newCode, setNewCode] = useState('');
+    // A vouch on this invite (InviteVouchChoice): None each time the screen opens and after each invite.
+    const [vouchLevel, setVouchLevel] = useState<VouchLevel | null>(null);
+    const [canVouch, setCanVouch] = useState(false);
     
     const [redeemCode, setRedeemCode] = useState('');
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
@@ -270,6 +276,19 @@ export default function PeopleScreen() {
         return () => { alive = false; };
     }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
     const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
+    // The vouch control: the node says who can vouch (their own balance), asked each time the screen opens, and decides again
+    // when the invite is made. An offline ticket carries no vouch, so it isn't offered while this phone is offline; the
+    // button says Offline Ticket then.
+    const offersVouch = !isGuest && !invitesPreview && makesInvites && mayInvite && isOnline && offersInviteVouch(nodeProfile?.features, canVouch);
+    useFocusEffect(useCallback(() => {
+        setVouchLevel(null);
+        if (view !== 'invites') return;
+        const me = identity?.publicKey;
+        if (!me || nodeProfile?.features.inviteVouch !== true) { setCanVouch(false); return; }
+        let alive = true;
+        askCanVouch(me).then(can => { if (alive) setCanVouch(can); }).catch(() => { if (alive) setCanVouch(false); });
+        return () => { alive = false; };
+    }, [view, identity?.publicKey, nodeProfile?.features.inviteVouch]));
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -476,12 +495,15 @@ export default function PeopleScreen() {
     const handleGenerate = async () => {
         if (!identity || invitesPreview) return;
         setGenerating(true);
+        // Only what the control on screen shows: a level never rides along once it has gone.
+        const vouch = offersVouch ? vouchLevel : null;
         try {
             // First attempt Online generation via API
             try {
                 const apiPayload = {
                     publicKey: identity.publicKey,
-                    intendedFor: intendedFor || undefined
+                    intendedFor: intendedFor || undefined,
+                    vouchLevel: vouch ?? undefined
                 };
                 const apiPayloadStr = JSON.stringify(apiPayload);
                 const generateUrl = `${anchorUrl}/api/invite/generate`;
@@ -498,6 +520,7 @@ export default function PeopleScreen() {
                     if (data.success && data.invite) {
                         const code = data.invite.code;
                         setNewCode(code);
+                        setVouchLevel(null);
                         setIntendedFor('');
                         
                         const inviteObj = {
@@ -538,9 +561,21 @@ export default function PeopleScreen() {
                         Alert.alert(t('No invites for now'), paused);
                         return;
                     }
+                    // The node refused the vouch: its words, and no ticket, which would quietly carry none.
+                    if (vouch !== null) {
+                        Alert.alert(t('Could not vouch'), typeof body?.error === 'string' ? inviteVouchRefusalWords(body.error) : t('Please try again.'));
+                        return;
+                    }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
+            }
+
+            // A vouch needs the node, which can't be reached: no ticket, because it would carry none, and the member would
+            // think it did. They choose None for a ticket, or try again connected.
+            if (vouch !== null) {
+                Alert.alert(t('Could not vouch'), t(INVITE_VOUCH_WORDS.noOfflineVouch));
+                return;
             }
 
             // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
@@ -1238,6 +1273,8 @@ export default function PeopleScreen() {
                                 style={styles.input}
                                 placeholderTextColor={colors.text.muted}
                             />
+
+                            {offersVouch && <InviteVouchChoice value={vouchLevel} onChange={setVouchLevel} colors={colors} />}
 
                             {invitesPreview ? (
                                 <LocalCommunityMark variant="action" feature="invites" label={isOnline ? t('✨ Generate Ticket') : t('✨ Generate Offline Ticket')} />

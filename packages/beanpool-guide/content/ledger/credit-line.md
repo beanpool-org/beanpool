@@ -22,7 +22,7 @@ On the phone, tap the bar for **Credit Slider Info**, which explains each part.
 
 ## How it opens
 
-It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when someone chosen to welcome newcomers vouches for you. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
+It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when someone chosen to welcome newcomers vouches for you, on your profile or on the invite that brought you in. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
 
 ## How it grows
 

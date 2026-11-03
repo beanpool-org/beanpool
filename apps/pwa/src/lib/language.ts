@@ -24,6 +24,7 @@ import {
     type Catalog, type DateWords, type Lang, type UiLang,
 } from '@beanpool/core';
 import { addGuideTitles } from './guide-titles';
+import { applyPageWords } from './page-words';
 
 export const LANGUAGE_STORAGE_KEY = 'beanpool-language';
 
@@ -151,6 +152,8 @@ function applyToDocument(lang: UiLang): void {
     // The pseudo-locale is English underneath: en-XA is the tag Android gives its own accented pseudo-locale.
     root.lang = lang === PSEUDO_LANG ? 'en-XA' : lang;
     root.dir = 'ltr';
+    // The tab title and the page description are words too (lib/page-words.ts): they follow the language like <html lang>.
+    applyPageWords(document);
 }
 
 /**

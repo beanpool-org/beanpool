@@ -19,6 +19,7 @@ import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVo
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { useLanguage } from './lib/useLanguage';
+import { setTitleUnread } from './lib/page-words';
 import { useOwnAvatar } from './lib/useOwnAvatar';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
@@ -903,8 +904,9 @@ export function App() {
     }, [identity]);
 
     // The browser tab shows the Chat badge's number, so a tab in the background still says a message is waiting.
+    // The title is a words-layer sentence (lib/page-words.ts), so a language switch redraws it with the number still on it.
     useEffect(() => {
-        document.title = totalUnread > 0 ? `(${totalUnread > 99 ? '99+' : totalUnread}) BeanPool` : 'BeanPool';
+        setTitleUnread(totalUnread);
     }, [totalUnread]);
 
     // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).

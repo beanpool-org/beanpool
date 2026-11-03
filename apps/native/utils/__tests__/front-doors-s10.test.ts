@@ -77,7 +77,11 @@ describe('Recover with Social asks "Which community?" first', () => {
         expect(screen).not.toContain('<SavedNodePicker');
         // The address field is drawn only for "another address" (or before anything is chosen).
         expect(screen).toMatch(/\{anotherAddress && \(\s*<TextInput/);
-        expect(screen).toMatch(/const anotherAddress = chosenCommunity === null \|\| chosenCommunity === 'another';/);
+        // ...decided by what the member did, never by what the text spells (typing the bare name `global` is a chip's address).
+        expect(screen).toContain('const anotherAddress = addressFieldShown(anchorAddressPick, recoveryAnchorUrl, restoreCommunityChoices(savedNodes));');
+        expect(screen).toContain('pick={anchorAddressPick}');
+        expect(screen).toContain("onChangeText={(text) => { setAnchorAddressPick('another'); setRecoveryAnchorUrl(text); }}");
+        expect(screen).not.toContain('chosenRestoreChoice');
         expect(screen).toContain("'Choose your community, then enter your callsign to restore your account with any linked sign-in.'");
         // The restore itself and its address checks are the same as before.
         expect(screen).toContain('handleSsoRecoverAtCommunity');
@@ -101,6 +105,14 @@ describe('Recover with Social asks "Which community?" first', () => {
         expect(welcome).toContain('if (first && !ssoCommunityPicked.current) setSsoCommunity(fieldTextFor(first.url));');
         const step = between("The sign-in finds your account: there's no name or address to type.", '{!waitingUntil && (');
         expect(step).toContain('ssoCommunityPicked.current = true');
+    });
+
+    it('with a key vault too, the address field follows what the member did, not what the text spells', () => {
+        const step = between("The sign-in finds your account: there's no name or address to type.", '{!waitingUntil && (');
+        expect(step).toContain('pick={ssoAddressPick}');
+        expect(step).toContain('{addressFieldShown(ssoAddressPick, ssoCommunity, restoreCommunityChoices(savedNodes)) && (');
+        expect(step).toContain("onChangeText={(text) => { ssoCommunityPicked.current = true; setSsoAddressPick('another'); setSsoCommunity(text); }}");
+        expect(step).not.toContain('chosenRestoreChoice');
     });
 });
 

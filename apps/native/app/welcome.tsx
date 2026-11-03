@@ -103,7 +103,7 @@ import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
 import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
-import { chosenRestoreChoice, fieldTextFor, releaseFieldHints, restoreCommunityChoices, withCopyCommunities } from '../utils/restore-community-choices';
+import { addressFieldShown, fieldTextFor, releaseFieldHints, restoreCommunityChoices, withCopyCommunities } from '../utils/restore-community-choices';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -299,6 +299,16 @@ export default function WelcomeScreen() {
     const [ssoCommunity, setSsoCommunity] = useState(GLOBAL_NODE_URL.replace(/^https:\/\//, ''));
     /** The member tapped a community before signing in (front doors S10): the copy's own first community must not overwrite it. */
     const ssoCommunityPicked = useRef(false);
+    /**
+     * What the member did in the sign-in restore's community choice, which decides whether its address field is drawn (not
+     * what the text spells: typing the bare name `global` or `mullum` reads back as a chip's address, and a field that left
+     * mid-word closed the keyboard and could not be typed in again). `another` = they tapped "another address" or typed in
+     * the field; `chip` = they tapped a chip; null = neither yet. `utils/restore-community-choices.ts` addressFieldShown.
+     */
+    const [ssoAddressPick, setSsoAddressPick] = useState<'chip' | 'another' | null>(null);
+    /** The same for the no-vault sign-in restore, whose address is `recoveryAnchorUrl`; cleared when the screen changes. */
+    const [anchorAddressPick, setAnchorAddressPick] = useState<'chip' | 'another' | null>(null);
+    useEffect(() => { setAnchorAddressPick(null); }, [mode]);
     const [ssoChecking, setSsoChecking] = useState(false);
     /** Stops a sign-in restore whose sign-in has finished and not yet been sent, when this screen goes away. */
     const recoveryAbortRef = useRef<AbortController | null>(null);
@@ -3678,9 +3688,8 @@ export default function WelcomeScreen() {
     if (mode === 'ssoRecover' && (!hasVault() || ssoAtCommunity)) {
         /** The providers this screen offers: every one without a vault; with one, only the provider the vault has no copy for. */
         const offeredHere = (p: SsoProvider) => !hasVault() || ssoAtCommunity === p;
-        const chosenCommunity = chosenRestoreChoice(recoveryAnchorUrl, restoreCommunityChoices(savedNodes));
         /** Typed only for "another address", or before a chip is chosen: a chip already carries its address. */
-        const anotherAddress = chosenCommunity === null || chosenCommunity === 'another';
+        const anotherAddress = addressFieldShown(anchorAddressPick, recoveryAnchorUrl, restoreCommunityChoices(savedNodes));
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -3709,8 +3718,9 @@ export default function WelcomeScreen() {
                             <RestoreCommunityChips
                                 saved={savedNodes}
                                 value={recoveryAnchorUrl}
-                                onChoose={(text) => { setRecoveryAnchorUrl(text); setError(null); }}
-                                onAnother={(text) => { setRecoveryAnchorUrl(text); setError(null); setTimeout(() => recoveryAddressRef.current?.focus(), 50); }}
+                                pick={anchorAddressPick}
+                                onChoose={(text) => { setAnchorAddressPick('chip'); setRecoveryAnchorUrl(text); setError(null); }}
+                                onAnother={(text) => { setAnchorAddressPick('another'); setRecoveryAnchorUrl(text); setError(null); setTimeout(() => recoveryAddressRef.current?.focus(), 50); }}
                                 disabled={loading}
                             />
 
@@ -3786,7 +3796,7 @@ export default function WelcomeScreen() {
                                     placeholder={t('Community name or address (e.g. mullum)')}
                                     placeholderTextColor={colors.text.muted}
                                     value={recoveryAnchorUrl}
-                                    onChangeText={setRecoveryAnchorUrl}
+                                    onChangeText={(text) => { setAnchorAddressPick('another'); setRecoveryAnchorUrl(text); }}
                                     autoCapitalize="none"
                                     autoCorrect={false}
                                     keyboardType="url"
@@ -3955,11 +3965,12 @@ export default function WelcomeScreen() {
                                     <RestoreCommunityChips
                                         saved={savedNodes}
                                         value={ssoCommunity}
-                                        onChoose={(text) => { ssoCommunityPicked.current = true; setSsoCommunity(text); setError(null); }}
-                                        onAnother={(text) => { ssoCommunityPicked.current = true; setSsoCommunity(text); setError(null); }}
+                                        pick={ssoAddressPick}
+                                        onChoose={(text) => { ssoCommunityPicked.current = true; setSsoAddressPick('chip'); setSsoCommunity(text); setError(null); }}
+                                        onAnother={(text) => { ssoCommunityPicked.current = true; setSsoAddressPick('another'); setSsoCommunity(text); setError(null); }}
                                         disabled={loading}
                                     />
-                                    {[null, 'another'].includes(chosenRestoreChoice(ssoCommunity, restoreCommunityChoices(savedNodes)) as string | null) && (
+                                    {addressFieldShown(ssoAddressPick, ssoCommunity, restoreCommunityChoices(savedNodes)) && (
                                         <TextInput
                                             accessibilityLabel={t('Community name or node address')}
                                             accessibilityHint={t('Enter your community name, like mullum, or its full address')}
@@ -3967,7 +3978,7 @@ export default function WelcomeScreen() {
                                             placeholder={t('Community name or address (e.g. mullum)')}
                                             placeholderTextColor={colors.text.muted}
                                             value={ssoCommunity}
-                                            onChangeText={(text) => { ssoCommunityPicked.current = true; setSsoCommunity(text); }}
+                                            onChangeText={(text) => { ssoCommunityPicked.current = true; setSsoAddressPick('another'); setSsoCommunity(text); }}
                                             autoCapitalize="none"
                                             autoCorrect={false}
                                             keyboardType="url"

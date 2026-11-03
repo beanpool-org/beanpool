@@ -2,11 +2,17 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ Tinanggal ang post mo",
+  "🛡️ Your posts were taken down": "🛡️ Tinanggal ang mga post mo",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Tinanggal ng mga moderator ng komunidad ang post mong {title}. Dahilan: {reason}. Nakatago ito sa lahat ng iba; kung hindi ito maibalik sa loob ng 7 araw, buburahin ito.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Tinanggal ng mga moderator ng komunidad ang post mo. Dahilan: {reason}. Nakatago ito sa lahat ng iba; kung hindi ito maibalik sa loob ng 7 araw, buburahin ito.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Tinanggal ng mga moderator ng komunidad ang {n} sa mga post mo. Dahilan: {reason}. Nakatago ang mga ito sa lahat ng iba; kung hindi maibalik sa loob ng 7 araw, buburahin ang mga ito.",
   "Only an owner or admin can pin a post.": "Ang may-ari o admin lang ang puwedeng mag-pin ng post.",
   "Only an owner, an admin or the post's author can take a pin off.": "Ang may-ari, admin o sumulat ng post lang ang puwedeng mag-alis ng pin.",
   "A pin lasts 1 day, 3 days or 1 week.": "Tumatagal ang pin nang 1 araw, 3 araw o 1 linggo.",

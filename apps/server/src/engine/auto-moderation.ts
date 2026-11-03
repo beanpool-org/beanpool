@@ -18,7 +18,8 @@
  *   - a moderator has not already answered them on this post (a dismissed report, 'reviewed', means "looked at, and
  *     kept", so after a moderator keeps a post only NEW reporters can hide it again);
  *   - a moderator has not kept 3 or more of the posts they reported in the last 30 days (dismissed their report on a
- *     post that is still up): a reporter the moderators keep overruling stops counting, everywhere, for a while.
+ *     post that is still up, which a takedown on hold is not): a reporter the moderators keep overruling stops counting,
+ *     everywhere, for a while.
  * Reporters who count are then grouped into circles, and each circle counts once, however many of them reported:
  *   - the same connection: they joined through the open door from one internet address (an IPv6 /64) within 24 hours
  *     of each other (`open_joins.join_cohort`, a random label given at the join: engine/open-join.ts JOIN_COHORT_HOURS).
@@ -65,7 +66,7 @@ import { isWordsNewcomer, probationState } from './probation.js';
 import { bumpActivityVersion, bumpMembersVersion, bumpPostsVersion } from './versions.js';
 import { nodeRoleOf } from './node-roles.js';
 import {
-    notifyPostHidden, notifyPostBack, notifyMuted, notifyUnmuted, notifyReportDismissed, mutedBody,
+    notifyPostHidden, notifyPostBack, notifyMuted, notifyUnmuted, notifyReportDismissed, mutedBody, reopenClosedReports,
     type ModerationNoticeCallbacks,
 } from './moderation-notices.js';
 
@@ -94,17 +95,27 @@ export const MUTED_UNTIL_LIFTED = '9999-12-31T23:59:59.999Z';
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
-interface PostForModeration { id: string; title: string | null; author_pubkey: string | null; active: number; status: string; hidden_by_reports_at: string | null }
+interface PostForModeration { id: string; title: string | null; author_pubkey: string | null; active: number; status: string; hidden_by_reports_at: string | null; removed_by_moderator_at: string | null }
 
 function postRow(postId: string): PostForModeration | undefined {
-    return db.prepare('SELECT id, title, author_pubkey, active, status, hidden_by_reports_at FROM posts WHERE id = ?')
+    return db.prepare('SELECT id, title, author_pubkey, active, status, hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?')
         .get(postId) as PostForModeration | undefined;
 }
 
 const forNotice = (p: PostForModeration) => ({ id: p.id, title: p.title, authorPubkey: p.author_pubkey });
 
 /** Still up: not taken down by its author or a moderator. Only then is "your post is back" true. */
-const isLive = (p: PostForModeration) => p.active === 1 && p.status !== 'cancelled';
+const isLive = (p: Pick<PostForModeration, 'active' | 'status'>) => p.active === 1 && p.status !== 'cancelled';
+
+/**
+ * An assistant's takedown on hold (engine/agent-takedowns.ts): hidden, stamped removed by a moderator, and not removed yet. Read from
+ * the row, not the record, because the record is this server's and the stamps travel: it holds on a standby that took over too.
+ * Nobody has kept such a post: dismissing a report on it doesn't bring it back, so it is never told or counted as kept. The hide is
+ * part of it: a takedown always sets one, and a Daily Pulse post a moderator removed can be revived the same day with its removal's
+ * stamp still on and everyone able to see it (daily-pulse.ts).
+ */
+export const onHold = (p: Pick<PostForModeration, 'active' | 'status' | 'hidden_by_reports_at' | 'removed_by_moderator_at'>) =>
+    isLive(p) && !!p.hidden_by_reports_at && !!p.removed_by_moderator_at;
 
 export function isHiddenByReports(postId: string): boolean {
     return !!postRow(postId)?.hidden_by_reports_at;
@@ -179,7 +190,7 @@ function keptReportsTooMany(pubkey: string, now: number): boolean {
         `SELECT COUNT(*) AS c FROM (SELECT DISTINCT ar.target_post_id FROM abuse_reports ar
            JOIN posts p ON p.id = ar.target_post_id
           WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ? AND ar.target_pulse_item_id IS NULL
-            AND p.active = 1 AND p.status != 'cancelled'
+            AND p.active = 1 AND p.status != 'cancelled' AND p.removed_by_moderator_at IS NULL
           LIMIT ?)`
     ).get(pubkey, since, AUTO_HIDE.keptReportsToStopCounting) as { c: number };
     return row.c >= AUTO_HIDE.keptReportsToStopCounting;
@@ -350,11 +361,19 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
     if (!post.hidden_by_reports_at) return 'not_hidden';
     let reporters: string[] = [];
     let restored = false;
+    // A takedown on hold comes back whole, by this route or Settings' Put back: nothing of it counts against its author, a mute it
+    // brought goes with it (liftMuteATakedownBrought), and the reports it closed go back to the queue. On a standby that took over
+    // there is no record, so neither happens. Unlike Put back this is a person looking at this one post, so it un-hides it.
+    const held = onHold(post);
     db.transaction(() => {
-        const res = db.prepare('UPDATE posts SET hidden_by_reports_at = NULL, updated_at = ? WHERE id = ? AND hidden_by_reports_at IS NOT NULL')
-            .run(iso(now), postId);
+        const res = db.prepare(`UPDATE posts SET hidden_by_reports_at = NULL, updated_at = ?${held ? ', removed_by_moderator_at = NULL' : ''}
+                                 WHERE id = ? AND hidden_by_reports_at IS NOT NULL`).run(iso(now), postId);
         if (res.changes === 0) return;
         restored = true;
+        const closedByTakedown = held
+            ? (db.prepare('SELECT reports_closed FROM agent_takedown_posts WHERE post_id = ? AND put_back_at IS NULL AND final_at IS NULL').all(postId) as { reports_closed: string }[])
+            : [];
+        if (held) db.prepare('UPDATE agent_takedown_posts SET put_back_at = ? WHERE post_id = ? AND put_back_at IS NULL AND final_at IS NULL').run(iso(now), postId);
         reporters = (db.prepare(
             `SELECT DISTINCT reporter_pubkey FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
         ).all(postId) as { reporter_pubkey: string }[]).map(r => r.reporter_pubkey);
@@ -362,6 +381,8 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
             `UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
               WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
         ).run(postId);
+        // After the dismissal above, which is for the reports this person could see: these left the queue before anyone read them.
+        for (const r of closedByTakedown) reopenClosedReports(JSON.parse(r.reports_closed) as string[]);
     })();
     if (!restored) return 'not_hidden';
     console.log(`🛡️ Post ${postId} restored by a moderator; ${reporters.length} open report(s) on it dismissed.`);
@@ -369,6 +390,7 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
     // "it's back" only when it is still up, not after they or a moderator took it down.
     announceVisibilityChange(cb, postId);
     if (isLive(post)) notifyPostBack(cb, forNotice(post));
+    if (held && post.author_pubkey) liftMuteATakedownBrought(cb, post.author_pubkey, now);
     for (const r of reporters) if (r !== post.author_pubkey) notifyReportDismissed(cb, r, postId, isLive(post));
     return 'restored';
 }
@@ -381,6 +403,8 @@ export function recheckHiddenPost(cb: ModerationNoticeCallbacks, postId: string 
     if (!postId) return false;
     const post = postRow(postId);
     if (!post?.hidden_by_reports_at) return false;
+    // Reports did not hide a takedown, so a report dismissed later (one filed while it is hidden) can't bring it back.
+    if (onHold(post)) return false;
     const tally = hideTally(postId, now);
     if (tally.circles.length >= tally.circlesNeeded) return false;
     return unhide(cb, post, now);
@@ -391,7 +415,8 @@ export function recheckHiddenPost(cb: ModerationNoticeCallbacks, postId: string 
 /** A moderator took this post down (one post, not the stale-post prune): what auto-mute counts. */
 export function recordModeratorRemoval(postId: string, now: number = Date.now()): void {
     const at = iso(now);
-    db.prepare('UPDATE posts SET removed_by_moderator_at = ?, updated_at = ? WHERE id = ?').run(at, at, postId);
+    // A takedown on hold has its time already: a removal now moving it would count it again after a lift.
+    db.prepare('UPDATE posts SET removed_by_moderator_at = COALESCE(removed_by_moderator_at, ?), updated_at = ? WHERE id = ?').run(at, at, postId);
 }
 
 export interface MuteState { muted: boolean; until: string | null }
@@ -427,6 +452,12 @@ export function assertNotMuted(pubkey: string | null | undefined, now: number = 
  */
 export const REMOVALS_SINCE_SQL = 'SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ? AND removed_by_moderator_at > ?';
 
+/** What the mute's rule counts at `now`: this member's removals in the window, and since `liftMs`, a lift of their mute, if that is later. */
+function removalsCounted(pubkey: string, now: number, liftMs: number): number {
+    const since = Math.max(now - AUTO_MUTE.windowDays * DAY_MS, Number.isFinite(liftMs) ? liftMs : -Infinity);
+    return (db.prepare(REMOVALS_SINCE_SQL).get(pubkey, iso(since)) as { c: number }).c;
+}
+
 /**
  * After a moderator removed one of this member's posts: mute them when it is the 3rd within 30 days (since the last
  * lift, if later). True when this call muted them. Does nothing where `autoMute` is off.
@@ -437,11 +468,18 @@ export function evaluateAutoMute(cb: ModerationNoticeCallbacks, authorPubkey: st
     if (!row) return false;
     const current = row.moderation_muted_until ? Date.parse(row.moderation_muted_until) : NaN;
     if (Number.isFinite(current) && current > now) return false;
-    const since = Math.max(now - AUTO_MUTE.windowDays * DAY_MS, Number.isFinite(current) ? current : -Infinity);
-    const removals = (db.prepare(REMOVALS_SINCE_SQL).get(authorPubkey, iso(since)) as { c: number }).c;
+    const removals = removalsCounted(authorPubkey, now, current);
     if (removals < AUTO_MUTE.removals) return false;
-    db.prepare('UPDATE members SET moderation_muted_until = ?, updated_at = ? WHERE public_key = ?')
-        .run(MUTED_UNTIL_LIFTED, iso(now), authorPubkey);
+    db.transaction(() => {
+        db.prepare('UPDATE members SET moderation_muted_until = ?, updated_at = ? WHERE public_key = ?')
+            .run(MUTED_UNTIL_LIFTED, iso(now), authorPubkey);
+        // The one place a mute is written, so whoever made the third removal, this is what lets Put back weigh it (liftMuteATakedownBrought).
+        // Marks are this mute's alone: one left from an old mute would make a moderator's own mute look like a takedown's.
+        const mine = 'post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)';
+        db.prepare(`UPDATE agent_takedown_posts SET muted_author = 0 WHERE muted_author = 1 AND ${mine}`).run(authorPubkey);
+        db.prepare(`UPDATE agent_takedown_posts SET muted_author = 1, last_lift = ? WHERE put_back_at IS NULL AND final_at IS NULL AND ${mine}`)
+            .run(row.moderation_muted_until ?? null, authorPubkey);
+    })();
     bumpMembersVersion();
     console.log(`🛡️ Member ${authorPubkey.slice(0, 12)}… muted: ${removals} posts removed by moderators in ${AUTO_MUTE.windowDays} days.`);
     notifyMuted(cb, authorPubkey);
@@ -456,6 +494,22 @@ export function liftMute(cb: ModerationNoticeCallbacks, pubkey: string, now: num
     bumpMembersVersion();
     notifyUnmuted(cb, pubkey);
     return true;
+}
+
+/**
+ * A takedown put back no longer counts (engine/agent-takedowns.ts): the mute goes too if a takedown of this member's was on hold when
+ * it was written (`evaluateAutoMute` marks them, whoever made the third removal), unless what still counts adds up to one. Which
+ * of them is put back first doesn't decide it, nor which of the removals came last. The count is the rule that muted them
+ * (`removalsCounted`), from the last lift that mute wrote over (`last_lift`). A mute with no takedown on hold stays a moderator's to
+ * lift, and on a standby that took over there is no record, so no lift.
+ */
+export function liftMuteATakedownBrought(cb: ModerationNoticeCallbacks, pubkey: string, now: number = Date.now()): boolean {
+    const brought = db.prepare(`SELECT tp.last_lift FROM agent_takedown_posts tp
+                                  JOIN agent_takedowns t ON t.id = tp.takedown_id JOIN posts p ON p.id = tp.post_id
+                                 WHERE p.author_pubkey = ? AND tp.muted_author = 1 ORDER BY t.at DESC LIMIT 1`).get(pubkey) as { last_lift: string | null } | undefined;
+    if (!brought) return false;
+    const liftMs = brought.last_lift ? Date.parse(brought.last_lift) : NaN;
+    return removalsCounted(pubkey, now, liftMs) < AUTO_MUTE.removals && liftMute(cb, pubkey, now);
 }
 
 /** Everyone muted now, for the moderators' list. */

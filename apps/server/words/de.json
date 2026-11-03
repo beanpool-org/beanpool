@@ -2,11 +2,17 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ Dein Beitrag wurde entfernt",
+  "🛡️ Your posts were taken down": "🛡️ Deine Beiträge wurden entfernt",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Die Moderatoren der Gemeinschaft haben deinen Beitrag {title} entfernt. Grund: {reason}. Er ist für alle anderen verborgen; wird er nicht innerhalb von 7 Tagen wiederhergestellt, wird er gelöscht.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Die Moderatoren der Gemeinschaft haben deinen Beitrag entfernt. Grund: {reason}. Er ist für alle anderen verborgen; wird er nicht innerhalb von 7 Tagen wiederhergestellt, wird er gelöscht.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Die Moderatoren der Gemeinschaft haben {n} deiner Beiträge entfernt. Grund: {reason}. Sie sind für alle anderen verborgen; werden sie nicht innerhalb von 7 Tagen wiederhergestellt, werden sie gelöscht.",
   "Only an owner or admin can pin a post.": "Nur Inhaber oder Admins können einen Beitrag anpinnen.",
   "Only an owner, an admin or the post's author can take a pin off.": "Nur Inhaber, Admins oder wer den Beitrag verfasst hat, können eine Anpinnung entfernen.",
   "A pin lasts 1 day, 3 days or 1 week.": "Eine Anpinnung gilt 1 Tag, 3 Tage oder 1 Woche.",

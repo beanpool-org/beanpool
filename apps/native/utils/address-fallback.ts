@@ -15,9 +15,12 @@
  * public route the follow card reads): at most once a minute while it isn't answering, and not again for five minutes
  * after it answered. A try fails when no statement comes, or one that isn't the community the phone first verified
  * there (another server answering at the name, or an older one of the community). The card is offered once the tries
- * have failed for five minutes with no answer between them. The failed tries are kept on the phone, so a member who
- * opens the app again within the hour picks up where they left off ("at app open with a connection error", design
- * §3.2); a try more than an hour after the last starts the count again, so an old failure never stands for a new one.
+ * have failed for five minutes with no answer between them, or at once when the app's first look since it opened (or
+ * came back to the front, addressFallbackAppOpened) gets no statement at all from its address: design §3.2, "~5 minutes
+ * of tries (or at app open with a connection error)", as the director read it (review of 90712eba). That run's card stays
+ * due until the address answers. The failed tries are kept on the phone, so a member who opens the app again within the
+ * hour picks up where they left off; a try more than an hour after the last starts the count again, so an old failure
+ * never stands for a new one.
  *
  * To where. Only to an address the community itself published, and only once that address has proved, by a statement
  * signed with the key its PeerId names, to be the same community the phone first verified at its own address (the same
@@ -25,8 +28,10 @@
  * phone that kept nothing for its address has nothing to check another against, and is offered nothing. Never from or
  * to http (whoever is in the middle of a home network could name both the address and the identity), never from or to
  * the worldwide community, never to a bare number (a number does not survive a change of server, D3, and the phone
- * falls back for now, to a name), and only to an address communityOrigin takes. While the community says it lives
- * somewhere else now, the follow card says so and this card stays out of its way.
+ * falls back for now, to a name), and only to an address communityOrigin takes. While the follow card offers the
+ * community's new main address (utils/address-follow.ts addressFollowOffer: not snoozed, and checked to be the same
+ * community), this card stays out of its way. Only then: when that card can't show (the member said "Not now" to it, or
+ * the main address doesn't answer either, design §3.1), this one goes ahead, so a member is never left with neither.
  *
  * It costs nothing while there is nothing to fall back to: with no other published name, nobody is asked. "Not now"
  * hides the card for 24 hours, for that pair of addresses only.
@@ -37,9 +42,9 @@ import { communityOrigin } from './community-origin';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { isPlainNodeAddress } from './node-url';
 import {
-    COMMUNITY_IDENTITY_KEY, IPV4_HOST, depsWith, followCandidate, followableOrigin, keptIdentityAt, moveCommunity, readMap,
+    COMMUNITY_IDENTITY_KEY, IPV4_HOST, addressFollowOffer, depsWith, followableOrigin, keptIdentityAt, moveCommunity, readMap,
     sameCommunity, sameIdentity, writeEntry,
-    type AddressFollowDeps, type CommunityIdentity, type FollowCheck, type FollowResult,
+    type AddressFollowDeps, type CommunityIdentity, type FollowResult,
 } from './address-follow';
 import type { NodeProfile } from './node-profile';
 
@@ -49,7 +54,10 @@ export const FALLBACK_AFTER_MS = 5 * 60 * 1000;
 export const FALLBACK_SNOOZE_MS = 24 * 60 * 60 * 1000;
 /** `{ ["<from> <to>"]: until }`: the pairs declined, until when. */
 export const FALLBACK_SNOOZE_KEY = 'beanpool_address_fallback_snooze';
-/** `{ [the phone's address]: { since, last } }`: when its run of failed tries began, and the latest. */
+/**
+ * `{ [the phone's address]: { since, last, due? } }`: when its run of failed tries began, the latest, and whether a
+ * connection error at the app's open made its card due at once.
+ */
 export const FALLBACK_TRIES_KEY = 'beanpool_address_fallback_tries';
 /** The phone's address is asked at most this often while it isn't answering. */
 export const ASK_EVERY_MS = 60 * 1000;
@@ -80,9 +88,9 @@ export interface AddressFallbackOffer {
 
 /**
  * Every other address the phone could fall back to, in the community's own order, or none. Pure: no network, no
- * storage. None unless the phone's address is one a move may start from (https, not the worldwide community's), and
- * none while the community says it lives somewhere else now (the follow card's move). Each is an address communityOrigin
- * takes on another host, never a number, never the worldwide community.
+ * storage. None unless the phone's address is one a move may start from (https, not the worldwide community's). The
+ * community's main address is among them: whether the follow card offers it instead is addressFallbackOffer's to ask.
+ * Each is an address communityOrigin takes on another host, never a number, never the worldwide community.
  */
 export function fallbackCandidates(
     anchor: string | null | undefined, profile: Pick<NodeProfile, 'addresses' | 'primaryAddress'> | null | undefined,
@@ -90,7 +98,6 @@ export function fallbackCandidates(
     const from = followableOrigin(anchor);
     const here = from ? audienceOf(from) : null;
     if (!from || !here) return [];
-    if (followCandidate(anchor, profile)) return [];
     const global = audienceOf(GLOBAL_NODE_URL);
     const seen = new Set([here]);
     const out: AddressFallbackOffer[] = [];
@@ -104,33 +111,49 @@ export function fallbackCandidates(
     return out;
 }
 
-interface Tries { since: number; last: number }
+interface Tries { since: number; last: number; due?: true }
 
 function readTries(v: unknown): Tries | null {
     const t = v as Partial<Tries> | null | undefined;
-    return t && typeof t.since === 'number' && typeof t.last === 'number' && t.since <= t.last ? { since: t.since, last: t.last } : null;
+    if (!t || typeof t.since !== 'number' || typeof t.last !== 'number' || t.since > t.last) return null;
+    return t.due === true ? { since: t.since, last: t.last, due: true } : { since: t.since, last: t.last };
 }
 
 /** This run's last ask of each phone address: when, and whether it answered (ASK_EVERY_MS, ANSWERED_FOR_MS). */
 const asked = new Map<string, { at: number; answered: boolean }>();
-/** This run's checks of other addresses: `"<from> <to>"` → the answer and when. */
-const checked = new Map<string, { verdict: FollowCheck; at: number }>();
+/**
+ * This run's asks of other addresses: `"<from> <to>"` → the statement there (null: none) and when. The statement, not a
+ * verdict: it is judged each round against what is kept then, so a take-over seen since at the phone's address counts.
+ */
+const checked = new Map<string, { there: CommunityIdentity | null; at: number }>();
+/** Whether the next look is the app's first since it opened: true when the app starts, and again via addressFallbackAppOpened. */
+let opening = true;
 
-/** Forget this run's asks and checks (tests). */
+/**
+ * The app came back to the front (from the background): its next look is at app open again, so a connection error then
+ * makes the card due at once (design §3.2). Home's card calls it (components/AddressFallbackCard.tsx).
+ */
+export function addressFallbackAppOpened(): void {
+    opening = true;
+}
+
+/** Forget this run's asks and checks (tests). A test starts mid-run: a cold start is this, then addressFallbackAppOpened. */
 export function forgetFallbackChecks(): void {
     asked.clear();
     checked.clear();
+    opening = false;
 }
 
 /**
- * Whether the phone's address `from` has not answered as its community for FALLBACK_AFTER_MS of tries. Asks it, unless
- * it was asked within the minute (or answered within five). A statement of the same community with more take-overs
- * raises what is kept, as the follow card's check does, so the replaced server is never a way back in.
+ * Whether the phone's address `from` has not answered as its community for FALLBACK_AFTER_MS of tries, or gave no
+ * statement at all at the app's open (`atOpen`: asked then whatever the last ask was). Asks it, unless it was asked within
+ * the minute (or answered within five). A statement of the same community with more take-overs raises what is kept, as
+ * the follow card's check does, so the replaced server is never a way back in.
  */
-async function notAnswering(from: string, kept: CommunityIdentity, deps: AddressFollowDeps): Promise<boolean> {
+async function notAnswering(from: string, kept: CommunityIdentity, deps: AddressFollowDeps, atOpen: boolean): Promise<boolean> {
     const now = deps.now();
     const last = asked.get(from);
-    const fresh = last && now - last.at >= 0 && now - last.at < (last.answered ? ANSWERED_FOR_MS : ASK_EVERY_MS);
+    const fresh = !atOpen && last && now - last.at >= 0 && now - last.at < (last.answered ? ANSWERED_FOR_MS : ASK_EVERY_MS);
     let answered: boolean;
     if (fresh) {
         answered = last.answered;
@@ -144,19 +167,15 @@ async function notAnswering(from: string, kept: CommunityIdentity, deps: Address
             if (run) await writeEntry(FALLBACK_TRIES_KEY, from, undefined);
         } else {
             const goesOn = run && now - run.last >= 0 && now - run.last <= TRIES_GAP_MS;
-            await writeEntry<Tries>(FALLBACK_TRIES_KEY, from, { since: goesOn ? run.since : now, last: now });
+            // A connection error at the app's open (no statement at all) makes this run's card due from now on.
+            const due = (goesOn && run.due) || (atOpen && !said);
+            const next: Tries = { since: goesOn ? run.since : now, last: now };
+            await writeEntry<Tries>(FALLBACK_TRIES_KEY, from, due ? { ...next, due: true } : next);
         }
     }
     if (answered) return false;
     const run = readTries((await readMap<Tries>(FALLBACK_TRIES_KEY))[from]);
-    return !!run && now - run.since >= FALLBACK_AFTER_MS;
-}
-
-/** Whether `offer.to` is the community the phone kept at `offer.from`: its statement, verified, never fewer take-overs. */
-async function checkOther(offer: AddressFallbackOffer, kept: CommunityIdentity, deps: AddressFollowDeps): Promise<FollowCheck> {
-    const there = await deps.statement(offer.to);
-    if (!there) return 'unreachable';
-    return sameCommunity(kept, there) ? 'same' : 'not-same';
+    return !!run && (run.due === true || now - run.since >= FALLBACK_AFTER_MS);
 }
 
 async function snoozed(offer: AddressFallbackOffer, now: number): Promise<boolean> {
@@ -165,12 +184,16 @@ async function snoozed(offer: AddressFallbackOffer, now: number): Promise<boolea
 }
 
 /**
- * The card's question, or null: the phone's address hasn't answered as its community for five minutes of tries, and
- * another address the community published answers as that same community, checked by its signed statement. The first
- * such in the community's own order, skipping a pair the member said "Not now" to in the last 24 hours. Writes nothing
- * but the run of failed tries and what the phone verified of its own community: never the community's address.
+ * The card's question, or null: the phone's address hasn't answered as its community for five minutes of tries (or gave
+ * no statement at the app's open), the follow card has no move to show, and another address the community published
+ * answers as that same community, checked by its signed statement. The first such in the community's own order,
+ * skipping a pair the member said "Not now" to in the last 24 hours. Writes nothing but the run of failed tries and what
+ * the phone verified of its own community: never the community's address.
  */
 export async function addressFallbackOffer(injected?: Partial<AddressFollowDeps>): Promise<AddressFallbackOffer | null> {
+    // The first look since the app opened, whatever it finds: a later look is not at app open.
+    const atOpen = opening;
+    opening = false;
     const deps = await depsWith(injected);
     const anchor = await deps.anchor().catch(() => null);
     const from = followableOrigin(anchor);
@@ -182,18 +205,28 @@ export async function addressFallbackOffer(injected?: Partial<AddressFollowDeps>
     const open: AddressFallbackOffer[] = [];
     for (const c of all) if (!(await snoozed(c, deps.now()))) open.push(c);
     if (!open.length) return null;
-    if (!(await notAnswering(from, kept, deps))) return null;
-    const verdicts = await Promise.all(open.slice(0, MAX_ASKED).map(async (c) => {
+    if (!(await notAnswering(from, kept, deps, atOpen))) return null;
+    // The follow card shows the community's new main address: this card stays out of its way. Only when that card will
+    // show (not snoozed, and checked to be the community), never merely because the community names another main address.
+    if (await addressFollowOffer(deps)) return null;
+    // What is kept now: the follow card's check may have raised it just now.
+    const keptNow = (await keptIdentityAt(from)) ?? kept;
+    const same = await Promise.all(open.slice(0, MAX_ASKED).map(async (c) => {
         const id = `${c.from} ${c.to}`;
         const memo = checked.get(id);
-        const ttl = memo?.verdict === 'unreachable' ? UNREACHABLE_TTL_MS : VERDICT_TTL_MS;
+        const ttl = memo && !memo.there ? UNREACHABLE_TTL_MS : VERDICT_TTL_MS;
         const now = deps.now();
-        if (memo && now - memo.at >= 0 && now - memo.at < ttl) return memo.verdict;
-        const verdict = await checkOther(c, kept, deps);
-        checked.set(id, { verdict, at: now });
-        return verdict;
+        let there: CommunityIdentity | null;
+        if (memo && now - memo.at >= 0 && now - memo.at < ttl) {
+            there = memo.there;
+        } else {
+            there = await deps.statement(c.to);
+            checked.set(id, { there, at: now });
+        }
+        // Its statement, verified, never fewer take-overs than kept now: judged each round, never a verdict kept.
+        return !!there && sameCommunity(keptNow, there);
     }));
-    const i = verdicts.indexOf('same');
+    const i = same.indexOf(true);
     return i >= 0 ? open[i] : null;
 }
 

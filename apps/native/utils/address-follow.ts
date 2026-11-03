@@ -291,6 +291,20 @@ export function forgetFollowChecks(): void {
     unanswered.clear();
 }
 
+/** Told when a check's answer for a move differs from the last one (onFollowOfferChanged). */
+const changeListeners = new Set<() => void>();
+
+/**
+ * Call `listener` whenever a check of a move comes out other than the one before it: the follow card asks again (from the
+ * check just made, so nothing more is asked of the network). The fallback card's check (utils/address-fallback.ts) asks
+ * this one too and stands aside when it finds a move to offer, so the follow card must show what that check found, not
+ * only what it found itself when Home came into view. Returns the unsubscribe.
+ */
+export function onFollowOfferChanged(listener: () => void): () => void {
+    changeListeners.add(listener);
+    return () => { changeListeners.delete(listener); };
+}
+
 /**
  * Keep who the phone's community is at `url` (its signed statement there, verified), the first time the phone reads its
  * community at that address: the tab strip's read, at each app start and switch (app/(tabs)/_layout.tsx). So a move
@@ -343,6 +357,7 @@ export async function addressFollowOffer(injected?: Partial<AddressFollowDeps>):
     if (!verdict) {
         verdict = await checkFollow(offer, deps);
         checked.set(id, { verdict, at: deps.now() });
+        if (verdict !== memo?.verdict) for (const l of [...changeListeners]) l();
     }
     return verdict === 'same' ? offer : null;
 }

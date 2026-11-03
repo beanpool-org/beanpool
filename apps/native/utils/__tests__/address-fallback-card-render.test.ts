@@ -5,8 +5,8 @@
  * (320 x 569 dp, text at 1.3x): react-dom in jsdom, React Native's host components as plain tags carrying their
  * accessibility props and styles, as address-follow-card-render.test.ts does. utils/address-fallback.ts is stubbed here
  * (address-fallback.test.ts runs it for real): what is checked is what the card says, its two targets and what each does,
- * that it asks again while Home stays in view, and that nothing in it is fixed-width or cut to a line count, so two long
- * addresses wrap rather than running off a 320 dp screen, in light and dark.
+ * that it asks again while Home stays in view and when the app comes back to the front, and that nothing in it is
+ * fixed-width or cut to a line count, so two long addresses wrap rather than running off a 320 dp screen, in light and dark.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, useEffect } from 'react';
@@ -35,9 +35,14 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1 },
         Alert: { alert: vi.fn() },
+        AppState: {
+            currentState: 'active',
+            addEventListener: vi.fn((_e: string, l: (s: string) => void) => { appState.listeners.push(l); return { remove: () => { appState.listeners = appState.listeners.filter(x => x !== l); } }; }),
+        },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
+const appState = vi.hoisted(() => ({ listeners: [] as Array<(s: string) => void> }));
 const nav = vi.hoisted(() => ({ router: { replace: vi.fn(), dismissAll: vi.fn(), canDismiss: vi.fn(() => true) } }));
 vi.mock('expo-router', () => ({
     router: nav.router,
@@ -53,6 +58,7 @@ vi.mock('../address-fallback', () => ({
     addressFallbackOffer: vi.fn(async () => fallback.offer),
     acceptAddressFallback: vi.fn(async () => fallback.result),
     snoozeAddressFallback: vi.fn(async () => undefined),
+    addressFallbackAppOpened: vi.fn(),
 }));
 const switches = vi.hoisted(() => ({ listeners: [] as Array<() => void> }));
 vi.mock('../community-switch', () => ({
@@ -61,7 +67,7 @@ vi.mock('../community-switch', () => ({
 
 import { Alert } from 'react-native';
 import { AddressFallbackCard, FALLBACK_RECHECK_MS } from '../../components/AddressFallbackCard';
-import { acceptAddressFallback, addressFallbackOffer, snoozeAddressFallback } from '../address-fallback';
+import { acceptAddressFallback, addressFallbackAppOpened, addressFallbackOffer, snoozeAddressFallback } from '../address-fallback';
 import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 
 const OFFER = {
@@ -86,6 +92,7 @@ beforeEach(() => {
     fallback.offer = OFFER;
     fallback.result = 'moved';
     switches.listeners = [];
+    vi.mocked(addressFallbackAppOpened).mockClear();
     vi.mocked(Alert.alert).mockClear();
     vi.mocked(acceptAddressFallback).mockClear();
     vi.mocked(snoozeAddressFallback).mockClear();
@@ -204,6 +211,31 @@ describe('the fallback card at 320 dp, text at 1.3x', () => {
         for (const r of roots.splice(0)) await act(async () => { r.unmount(); });
         await act(async () => { vi.advanceTimersByTime(5 * FALLBACK_RECHECK_MS); });
         expect(addressFallbackOffer).toHaveBeenCalledTimes(3);
+    });
+
+    it('back in front from the background is the app opened again: marked, and asked at once; a prompt over the app is not', async () => {
+        fallback.offer = null;
+        const host = await render();
+        expect(addressFallbackOffer).toHaveBeenCalledTimes(1);
+        expect(appState.listeners).toHaveLength(1);
+        const change = (s: string) => act(async () => { for (const l of appState.listeners) l(s); });
+        // A prompt over the app (inactive, then active): not an open.
+        await change('inactive');
+        await change('active');
+        expect(addressFallbackAppOpened).not.toHaveBeenCalled();
+        expect(addressFallbackOffer).toHaveBeenCalledTimes(1);
+        // Away in the background, then back: an open, asked at once, and the card the module found shows.
+        fallback.offer = OFFER;
+        await change('background');
+        await change('active');
+        await act(async () => {});
+        expect(addressFallbackAppOpened).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(addressFallbackAppOpened).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(addressFallbackOffer).mock.invocationCallOrder[1]);
+        expect(addressFallbackOffer).toHaveBeenCalledTimes(2);
+        expect(card(host)).not.toBeNull();
+        // Gone with Home: no listener left.
+        for (const r of roots.splice(0)) await act(async () => { r.unmount(); });
+        expect(appState.listeners).toHaveLength(0);
     });
 
     it('draws from the theme\'s own colours, light and dark', async () => {

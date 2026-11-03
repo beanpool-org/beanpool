@@ -7,6 +7,9 @@
  * What is pinned here, through the module's own functions with real Ed25519 node keys and statements signed in the
  * server's own bytes (apps/server services/identity-epoch.ts), as address-follow.test.ts does:
  *   - one card once the phone's address has failed for five minutes of tries, kept across a cold start within the hour;
+ *     at once when the app's first look since it opened (or came back to the front) gets no answer there (design §3.2,
+ *     "or at app open with a connection error", the director's reading);
+ *   - it stands aside for the follow card only when that card will show: never left with neither (review of 90712eba);
  *   - only to an address whose statement is the community the phone first verified at its own address: another key,
  *     another community, a forged statement, or fewer take-overs is never offered;
  *   - "Not now" is per pair of addresses, for 24 hours;
@@ -45,11 +48,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import {
-    acceptAddressFallback, addressFallbackOffer, fallbackCandidates, forgetFallbackChecks, snoozeAddressFallback,
+    acceptAddressFallback, addressFallbackAppOpened, addressFallbackOffer, fallbackCandidates, forgetFallbackChecks, snoozeAddressFallback,
     ANSWERED_FOR_MS, ASK_EVERY_MS, FALLBACK_AFTER_MS, FALLBACK_SNOOZE_KEY, FALLBACK_SNOOZE_MS, FALLBACK_TRIES_KEY, TRIES_GAP_MS,
     type AddressFallbackOffer,
 } from '../address-fallback';
-import { addressFollowOffer, forgetFollowChecks, readIdentityStatement, COMMUNITY_IDENTITY_KEY, type AddressFollowDeps } from '../address-follow';
+import {
+    addressFollowOffer, forgetFollowChecks, onFollowOfferChanged, readIdentityStatement, snoozeAddressFollow, COMMUNITY_IDENTITY_KEY,
+    FOLLOW_SNOOZE_MS, type AddressFollowDeps,
+} from '../address-follow';
 import { communitySwitched } from '../community-switch';
 import { carryCommunityCopy } from '../community-copy-carry';
 import { GLOBAL_NODE_URL } from '../global-node-url';
@@ -136,6 +142,13 @@ async function failForFiveMinutes(w: ReturnType<typeof world>) {
     return out;
 }
 
+/** The app closed and opened again: this run's memory goes, and its first look is at app open. */
+function coldStart() {
+    forgetFallbackChecks();
+    forgetFollowChecks();
+    addressFallbackAppOpened();
+}
+
 const anchorWrites = () => vi.mocked(AsyncStorage.setItem).mock.calls.filter(([k]) => k === 'beanpool_anchor_url');
 const triesAt = (origin: string) => JSON.parse(store.get(FALLBACK_TRIES_KEY) ?? '{}')[origin];
 
@@ -185,9 +198,12 @@ describe('where the phone could fall back to (fallbackCandidates)', () => {
         }
     });
 
-    it('none while the community says it lives somewhere else now: that is the follow card\'s move', () => {
-        expect(fallbackCandidates(BYRON, profile({ primaryAddress: 'mullum.example.org' }))).toEqual([]);
-        expect(fallbackCandidates(BYRON, profile({ addresses: ['byron.example.org', 'mullum.example.org', 'beans.example.net'], primaryAddress: 'beans.example.net' }))).toEqual([]);
+    it('the community\'s main address is among them: whether the follow card offers it instead is asked with that card\'s check', () => {
+        // Before review of 90712eba this list was empty whenever a follow move existed, so a follow card snoozed or a main
+        // address down too left the phone with neither card. addressFallbackOffer now asks whether the follow card will show.
+        expect(fallbackCandidates(BYRON, profile({ primaryAddress: 'mullum.example.org' }))).toEqual([OFFER]);
+        expect(fallbackCandidates(BYRON, profile({ addresses: ['byron.example.org', 'mullum.example.org', 'beans.example.net'], primaryAddress: 'beans.example.net' })))
+            .toEqual([OFFER, { ...OFFER, to: THIRD, host: 'beans.example.net' }]);
     });
 
     it('none with nothing published, or no address', () => {
@@ -252,6 +268,18 @@ describe('unreachable: one card after five minutes of failed tries', () => {
         forgetFallbackChecks();
         w.state.now += 20 * MIN;
         expect(await addressFallbackOffer(w.deps)).toEqual(OFFER);
+        // The run kept is what brings it, not only a connection error at the open: another server answering at byron, at
+        // a real cold start (its first look at app open), within the hour of a run already five minutes old.
+        store.clear();
+        const other = world({ answers: { [BYRON]: statement(nodeKey(), COMMUNITY), [MULLUM]: statement(node, COMMUNITY) } });
+        expect(await addressFallbackOffer(other.deps)).toBeNull();
+        other.state.now += 6 * MIN;
+        coldStart();
+        expect(await addressFallbackOffer(other.deps)).toEqual(OFFER);
+        store.clear();
+        const fresh = world({ answers: { [BYRON]: statement(nodeKey(), COMMUNITY), [MULLUM]: statement(node, COMMUNITY) } });
+        coldStart();
+        expect(await addressFallbackOffer(fresh.deps)).toBeNull();
     });
 
     it('an old failure never stands for a new one: a try more than an hour after the last starts again', async () => {
@@ -367,6 +395,27 @@ describe('an address whose statement names another key is never offered', () => 
         w.state.answers[BYRON] = undefined;
         w.state.now += ANSWERED_FOR_MS;
         expect((await failForFiveMinutes(w))[5]).toBeNull();
+    });
+
+    it('a check from before a take-over seen at the phone\'s address never stands after it: the replaced server is not offered again', async () => {
+        const w = world({ answers: { [MULLUM]: statement(node, COMMUNITY, 0) } });
+        // Byron doesn't answer for five minutes: mullum (as many take-overs as kept, none) is offered.
+        expect((await failForFiveMinutes(w))[5]).toEqual(OFFER);
+        // Byron answers again, after a take-over there (one): what is kept is raised to one.
+        w.state.now += MIN;
+        w.state.answers[BYRON] = statement(node, COMMUNITY, 1);
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        expect(JSON.parse(store.get(COMMUNITY_IDENTITY_KEY)!)[BYRON]).toEqual(kept(1));
+        // Byron fails again, five minutes on, for five more minutes: eleven minutes after mullum's check, within its hour.
+        w.state.answers[BYRON] = undefined;
+        w.state.now += ANSWERED_FOR_MS;
+        const mullumAsked = w.state.asked.filter(o => o === MULLUM).length;
+        expect(await failForFiveMinutes(w)).toEqual([null, null, null, null, null, null]);
+        // Mullum's statement from that check is reused (not asked again), and judged against what is kept now: the server
+        // byron's take-over replaced is never offered (before review of 90712eba its 'same' was reused for the hour).
+        expect(w.state.asked.filter(o => o === MULLUM)).toHaveLength(mullumAsked);
+        expect(await acceptAddressFallback(OFFER, w.deps)).toBe('not-same');
+        expect(w.deps.switchTo).not.toHaveBeenCalled();
     });
 
     it('checked again at the tap: another key there now, or no answer, moves nothing', async () => {
@@ -505,18 +554,185 @@ describe('"Use that address for now": the move keeps the copy whole', () => {
         expect(w.deps.switchTo).not.toHaveBeenCalled();
     });
 
-    it('the way back: on mullum, the follow card offers byron again once it answers, and this card offers nothing', async () => {
+    it('the way back: on mullum, the follow card offers byron again once it answers, and this card stands aside for it', async () => {
         const w = world();
         expect(await acceptAddressFallback((await failForFiveMinutes(w))[5]!, w.deps)).toBe('moved');
         // Mullum's info still names byron as the community's main address.
         w.state.answers[MULLUM] = statement(node, COMMUNITY);
         store.set(COMMUNITY_IDENTITY_KEY, JSON.stringify({ [BYRON]: kept(), [MULLUM]: kept() }));
-        expect(fallbackCandidates(MULLUM, w.state.prof)).toEqual([]);
+        // Byron is a way back for this card too; while the follow card offers it, this one stays out of its way.
+        expect(fallbackCandidates(MULLUM, w.state.prof)).toEqual([{ from: MULLUM, to: BYRON, fromHost: 'mullum.example.org', host: 'byron.example.org' }]);
         expect(await addressFollowOffer(w.deps)).toBeNull();
         w.state.answers[BYRON] = statement(node, COMMUNITY);
         forgetFollowChecks();
-        expect(await addressFollowOffer(w.deps)).toEqual({ from: MULLUM, to: BYRON, host: 'byron.example.org' });
+        const way = { from: MULLUM, to: BYRON, host: 'byron.example.org' };
+        expect(await addressFollowOffer(w.deps)).toEqual(way);
         w.state.now += 10 * MIN;
         expect(await addressFallbackOffer(w.deps)).toBeNull();
+        // Mullum stops answering for twelve minutes: one card, the follow card's, never two.
+        w.state.answers[MULLUM] = undefined;
+        for (let i = 0; i < 12; i++) {
+            w.state.now += MIN;
+            expect(await addressFallbackOffer(w.deps)).toBeNull();
+            expect(await addressFollowOffer(w.deps)).toEqual(way);
+        }
+        expect(w.state.now - triesAt(MULLUM).since).toBeGreaterThanOrEqual(FALLBACK_AFTER_MS);
+    });
+});
+
+describe('the follow card\'s move: this card stands aside only when that card will show (review of 90712eba)', () => {
+    const THREE = profile({ addresses: ['byron.example.org', 'mullum.example.org', 'beans.example.net'], primaryAddress: 'beans.example.net' });
+
+    /** At most one of the two cards, and here exactly one: the member is never left with neither. */
+    async function oneCard(w: ReturnType<typeof world>) {
+        const fallback = await addressFallbackOffer(w.deps);
+        const follow = await addressFollowOffer(w.deps);
+        expect([fallback, follow].filter(Boolean)).toHaveLength(1);
+        return { fallback, follow };
+    }
+
+    it('the follow card snoozed for its 7 days: this card offers the main address the phone can\'t follow yet', async () => {
+        const w = world({ prof: profile({ primaryAddress: 'mullum.example.org' }), answers: { [MULLUM]: statement(node, COMMUNITY) } });
+        await snoozeAddressFollow({ from: BYRON, to: MULLUM, host: 'mullum.example.org' }, w.deps);
+        expect(FOLLOW_SNOOZE_MS).toBe(7 * 24 * HOUR);
+        const seen = await failForFiveMinutes(w);
+        expect(seen.slice(0, 5)).toEqual([null, null, null, null, null]);
+        expect(seen[5]).toEqual(OFFER);
+        expect(await addressFollowOffer(w.deps)).toBeNull();
+        expect(await oneCard(w)).toEqual({ fallback: OFFER, follow: null });
+    });
+
+    it('the main address down too (design §3.1): another published address that answers is offered', async () => {
+        const w = world({ prof: THREE, answers: { [MULLUM]: statement(node, COMMUNITY) } });
+        const seen = await failForFiveMinutes(w);
+        expect(seen.slice(0, 5)).toEqual([null, null, null, null, null]);
+        expect(seen[5]).toEqual(OFFER);
+        expect(w.state.asked).toContain(MULLUM);
+        expect(w.state.asked).toContain(THIRD);
+        expect(await oneCard(w)).toEqual({ fallback: OFFER, follow: null });
+    });
+
+    it('control: the main address answers as the community, so the follow card shows and this one never does', async () => {
+        const w = world({ prof: THREE, answers: { [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) } });
+        const follow = { from: BYRON, to: THIRD, host: 'beans.example.net' };
+        expect(await addressFollowOffer(w.deps)).toEqual(follow);
+        expect(await failForFiveMinutes(w)).toEqual([null, null, null, null, null, null]);
+        for (let i = 0; i < 10; i++) { w.state.now += MIN; expect(await oneCard(w)).toEqual({ fallback: null, follow }); }
+        // It stood aside before asking any other address: mullum was never asked.
+        expect(w.state.asked).not.toContain(MULLUM);
+    });
+
+    it('the follow card is told when this card\'s check finds its move, so it shows what this card stood aside for', async () => {
+        const w = world({ prof: THREE, answers: { [MULLUM]: statement(node, COMMUNITY) } });
+        const told = vi.fn();
+        const off = onFollowOfferChanged(told);
+        try {
+            // Home comes into view: the main address doesn't answer, so the follow card has nothing.
+            expect(await addressFollowOffer(w.deps)).toBeNull();
+            told.mockClear();
+            // It answers a minute later; Home stays in view, and only this card asks again, minute by minute.
+            w.state.now += MIN;
+            w.state.answers[THIRD] = statement(node, COMMUNITY);
+            const seen: (AddressFallbackOffer | null)[] = [];
+            for (let i = 0; i < 6; i++) { seen.push(await addressFallbackOffer(w.deps)); w.state.now += MIN; }
+            expect(seen).toEqual([null, null, null, null, null, null]);
+            // This card's check found the move and stood aside for it: the follow card was told, and finds it from that check.
+            expect(told).toHaveBeenCalledTimes(1);
+            const asked = w.state.asked.length;
+            expect(await addressFollowOffer(w.deps)).toEqual({ from: BYRON, to: THIRD, host: 'beans.example.net' });
+            expect(w.state.asked).toHaveLength(asked);
+            // An answer that doesn't change tells nobody.
+            expect(told).toHaveBeenCalledTimes(1);
+        } finally {
+            off();
+        }
+    });
+});
+
+describe('at app open with a connection error: the other addresses asked at once (design §3.2, the director\'s reading)', () => {
+    it('the first look after the app opens gets no answer at its address: the card at once, and it stays until the address answers', async () => {
+        coldStart();
+        const w = world();
+        expect(await addressFallbackOffer(w.deps)).toEqual(OFFER);
+        expect(w.state.asked).toEqual([BYRON, MULLUM]);
+        expect(triesAt(BYRON)).toEqual({ since: w.state.now, last: w.state.now, due: true });
+        // Due for this run: the next minutes' looks keep it, with no five minutes to wait out.
+        for (let i = 0; i < 3; i++) { w.state.now += MIN; expect(await addressFallbackOffer(w.deps)).toEqual(OFFER); }
+        // Byron answers: no card, the run is over.
+        w.state.answers[BYRON] = statement(node, COMMUNITY);
+        w.state.now += MIN;
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        expect(triesAt(BYRON)).toBeUndefined();
+        // It fails again later, not at an open: the five minutes hold.
+        w.state.answers[BYRON] = undefined;
+        w.state.now += ANSWERED_FOR_MS;
+        const seen = await failForFiveMinutes(w);
+        expect(seen.slice(0, 5)).toEqual([null, null, null, null, null]);
+        expect(seen[5]).toEqual(OFFER);
+    });
+
+    it('a cold start more than an hour after the last failure: at once, not five minutes from then (review of 90712eba)', async () => {
+        const w = world();
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        w.state.now += TRIES_GAP_MS + MIN;
+        coldStart();
+        expect(await addressFallbackOffer(w.deps)).toEqual(OFFER);
+    });
+
+    it('back in front from the background is app open too', async () => {
+        const w = world();
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        w.state.now += 2 * HOUR;
+        addressFallbackAppOpened();
+        expect(await addressFallbackOffer(w.deps)).toEqual(OFFER);
+    });
+
+    it('only the first look since the open: one that found the address answering spends it', async () => {
+        coldStart();
+        const w = world({ answers: { [BYRON]: statement(node, COMMUNITY), [MULLUM]: statement(node, COMMUNITY) } });
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        expect(w.state.asked).toEqual([BYRON]);
+        w.state.answers[BYRON] = undefined;
+        w.state.now += ANSWERED_FOR_MS;
+        const seen = await failForFiveMinutes(w);
+        expect(seen.slice(0, 5)).toEqual([null, null, null, null, null]);
+        expect(seen[5]).toEqual(OFFER);
+    });
+
+    it('another server answering at the address at the open is not a connection error: the five minutes hold', async () => {
+        coldStart();
+        const w = world({ answers: { [BYRON]: statement(nodeKey(), COMMUNITY), [MULLUM]: statement(node, COMMUNITY) } });
+        const seen = await failForFiveMinutes(w);
+        expect(seen.slice(0, 5)).toEqual([null, null, null, null, null]);
+        expect(seen[5]).toEqual(OFFER);
+    });
+
+    it('"Not now" per pair still holds at the open: a snoozed pair is never asked, another pair is offered', async () => {
+        const w = world({
+            prof: profile({ addresses: ['byron.example.org', 'mullum.example.org', 'beans.example.net'] }),
+            answers: { [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) },
+        });
+        await snoozeAddressFallback(OFFER, w.deps);
+        coldStart();
+        expect(await addressFallbackOffer(w.deps)).toEqual({ ...OFFER, to: THIRD, host: 'beans.example.net' });
+        expect(w.state.asked).toEqual([BYRON, THIRD]);
+        // Every pair snoozed: nothing asked at the open, not even the phone's address.
+        store.clear();
+        const all = world();
+        await snoozeAddressFallback(OFFER, all.deps);
+        coldStart();
+        expect(await addressFallbackOffer(all.deps)).toBeNull();
+        expect(all.state.asked).toEqual([]);
+    });
+
+    it('at the open with the follow card\'s move checked: one card, the follow card\'s', async () => {
+        const w = world({
+            prof: profile({ addresses: ['byron.example.org', 'mullum.example.org', 'beans.example.net'], primaryAddress: 'beans.example.net' }),
+            answers: { [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) },
+        });
+        coldStart();
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        expect(await addressFollowOffer(w.deps)).toEqual({ from: BYRON, to: THIRD, host: 'beans.example.net' });
+        expect(w.state.asked).not.toContain(MULLUM);
     });
 });

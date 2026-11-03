@@ -5,17 +5,21 @@
  * proved, by the community's own signed statement, to be the same community. Never a move on its own: "Use that address
  * for now" moves the phone (the follow card's move, then Welcome for the community as the BeanPool sheet's switch does),
  * "Not now" hides it for 24 hours for that pair. Asked each time Home comes into view, once a minute while it stays
- * there (the tries are counted in utils/address-fallback.ts, which asks the network far less often), and after any switch.
+ * there (the tries are counted in utils/address-fallback.ts, which asks the network far less often), after any switch,
+ * and when the app comes back to the front from the background: that look is at app open again, so a connection error
+ * then brings the card at once (addressFallbackAppOpened; design §3.2).
  *
  * One column at 320 dp and 1.3× text: the sentence wraps (the addresses are never cut), the two 48 dp buttons stack.
  */
-import React, { useCallback, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Alert, AppState } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { t } from '@beanpool/core';
 import { settingsLineWords } from './settings/settings-lines';
 import { type AppColors } from '../constants/colors';
-import { acceptAddressFallback, addressFallbackOffer, snoozeAddressFallback, type AddressFallbackOffer } from '../utils/address-fallback';
+import {
+    acceptAddressFallback, addressFallbackAppOpened, addressFallbackOffer, snoozeAddressFallback, type AddressFallbackOffer,
+} from '../utils/address-fallback';
 import type { FollowResult } from '../utils/address-follow';
 import { onCommunitySwitched } from '../utils/community-switch';
 
@@ -26,6 +30,8 @@ export function AddressFallbackCard({ colors }: { colors: AppColors }) {
     const [offer, setOffer] = useState<AddressFallbackOffer | null>(null);
     const [busy, setBusy] = useState(false);
     const busyRef = useRef(false);
+    /** The ask while Home is in view, else null. */
+    const checkRef = useRef<(() => void) | null>(null);
 
     useFocusEffect(
         useCallback(() => {
@@ -34,12 +40,27 @@ export function AddressFallbackCard({ colors }: { colors: AppColors }) {
                 if (busyRef.current) return;
                 addressFallbackOffer().then(o => { if (live && !busyRef.current) setOffer(o); }).catch(() => {});
             };
+            checkRef.current = check;
             check();
             const timer = setInterval(check, FALLBACK_RECHECK_MS);
             const off = onCommunitySwitched(() => { if (live) setOffer(null); check(); });
-            return () => { live = false; clearInterval(timer); off(); };
+            return () => { live = false; checkRef.current = null; clearInterval(timer); off(); };
         }, []),
     );
+
+    // Back in front from the background is the app opened again (only from the background: a prompt over the app is not).
+    // Marked while Home is anywhere in the tabs, so the first look at Home after it is at app open; asked at once if in view.
+    useEffect(() => {
+        let away = AppState.currentState === 'background';
+        const sub = AppState.addEventListener('change', next => {
+            if (next === 'background') { away = true; return; }
+            if (next !== 'active' || !away) return;
+            away = false;
+            addressFallbackAppOpened();
+            checkRef.current?.();
+        });
+        return () => sub.remove();
+    }, []);
 
     if (!offer) return null;
 

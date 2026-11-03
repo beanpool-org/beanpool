@@ -3559,5 +3559,7 @@
   "Event · {from}": "イベント · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "ここがあなたのホームです。下からカードを追加するか、カードを長押しして並べ替えてください。",
   "Move {card} earlier": "{card} を前に移動",
-  "Move {card} later": "{card} を後ろに移動"
+  "Move {card} later": "{card} を後ろに移動",
+  "Remove my working style": "自分のワークスタイルを削除",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "この端末と、端末内のすべてのコミュニティからあなたのワークスタイルを削除します。診断をやり直すと元に戻ります。"
 }

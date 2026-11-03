@@ -562,8 +562,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     } catch (healErr) {
                         console.warn('[Pillar Sync] Profile heal attempt failed (will retry next sync):', healErr);
                     }
-                } else if (await waiting.waitingArchetype(anchorUrl, pubKey)) {
-                    // A quiz taken in another community: this one's turn, and only the result goes (utils/working-style.ts).
+                } else if ((await waiting.waitingArchetype(anchorUrl, pubKey)) || (await waiting.waitingRemoval(anchorUrl, pubKey))) {
+                    // A quiz taken in another community, or a removal: this one's turn, and only the result (or the null) goes (utils/working-style.ts).
                     const { pushWaitingArchetype } = await import('../utils/db');
                     await pushWaitingArchetype({ community: anchorUrl }).catch((healErr: unknown) => {
                         console.warn('[Pillar Sync] Working style heal failed (will retry next sync):', healErr);

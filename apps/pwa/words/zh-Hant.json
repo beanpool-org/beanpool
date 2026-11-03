@@ -3559,5 +3559,7 @@
   "Event · {from}": "活動 · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "這是你的首頁。在底部新增卡片，或長按卡片進行排列。",
   "Move {card} earlier": "將{card}前移",
-  "Move {card} later": "將{card}後移"
+  "Move {card} later": "將{card}後移",
+  "Remove my working style": "移除我的工作風格",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "這會把你的工作風格從此裝置及裝置上的每個社群中移除。重新測驗後即可恢復。"
 }

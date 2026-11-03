@@ -4204,5 +4204,7 @@
   "Event · {from}": "فعالية · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "هذه رئيسيتك. أضف بطاقة في الأسفل، أو اضغط مطولًا على بطاقة لترتيبها.",
   "Move {card} earlier": "انقل {card} إلى موضع أسبق",
-  "Move {card} later": "انقل {card} إلى موضع لاحق"
+  "Move {card} later": "انقل {card} إلى موضع لاحق",
+  "Remove my working style": "إزالة أسلوب عملي",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "يُزيل هذا أسلوب عملك من هذا الجهاز ومن كل مجتمع عليه. إعادة الاختبار تعيده."
 }

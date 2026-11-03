@@ -28,13 +28,13 @@ import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from '
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
-import { clearPendingProfileChange, clearWaitingArchetype, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype } from './pending-profile-sync';
-import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, healGuestMark } from './working-style';
+import { clearPendingProfileChange, clearWaitingArchetype, clearWaitingRemoval, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype, waitingRemoval } from './pending-profile-sync';
+import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, healGuestMark, removalToSend } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -4266,7 +4266,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
-            const arch = m.archetype || null;
+            let arch = m.archetype || null;
             let finalArch = arch;
             if (pk === selfPubkey) {
                 selfMemberFound = true;
@@ -4274,6 +4274,14 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                     'SELECT archetype FROM members WHERE public_key = ?',
                     [pk]
                 );
+                // Remove my working style: while this community is still to be told, the result it holds, and any the phone's
+                // row still holds, are ones the member took off. Neither comes back through this sync (not into the row, the
+                // device copy, the other communities, nor the node). One taken after the removal is a retake: it stands.
+                const removal = anchorUrl ? await waitingRemoval(anchorUrl, pk) : null;
+                if (removal) {
+                    if (arch && !archetypeIsAfter(arch, removal.removedOn)) { arch = null; finalArch = null; }
+                    if (localRow?.archetype && !archetypeIsAfter(localRow.archetype, removal.removedOn)) localRow.archetype = null;
+                }
                 if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
                     finalArch = localRow.archetype;
                     // Null is a removal's to send (S3): only a row the node really holds older.
@@ -7623,9 +7631,24 @@ export async function pushWaitingArchetype(opts: { community: string }): Promise
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
     if (!anchorUrl || !identity || plainOriginOf(opts.community) !== plainOriginOf(anchorUrl)) return false;
-    if (!(await waitingArchetype(anchorUrl, identity.publicKey))) return false;
+    const removal = await waitingRemoval(anchorUrl, identity.publicKey);
+    if (!removal && !(await waitingArchetype(anchorUrl, identity.publicKey))) return false;
     const row = await getMemberProfile(identity.publicKey);
     if (!(await stillOnCommunity(anchorUrl))) return false;
+    if (removal) {
+        // Remove my working style: this community's turn to hear it, as a null, where it holds a result (working-style.ts).
+        if (!(await removalToSend(anchorUrl, identity)) || !(await stillOnCommunity(anchorUrl))) return false;
+        const removeBody = JSON.stringify({ publicKey: identity.publicKey, archetype: null });
+        const removeHeaders = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, removeBody, identity.privateKey, identity.publicKey);
+        try {
+            const res = await fetch(`${anchorUrl}/api/profile/update`, { method: 'POST', headers: removeHeaders, body: removeBody });
+            if (!res.ok) return false;
+        } catch {
+            return false;
+        }
+        await clearWaitingRemoval(anchorUrl, removal.removedOn);
+        return true;
+    }
     const archetype = await archetypeToSend(anchorUrl, identity, row?.archetype);
     if (!archetype) return false;
     const bodyString = JSON.stringify({ publicKey: identity.publicKey, archetype });

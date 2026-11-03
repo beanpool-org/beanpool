@@ -3688,5 +3688,7 @@
   "Event · {from}": "Kaganapan · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Ito ang Home mo. Magdagdag ng card sa ibaba, o pindutin nang matagal ang card para ayusin.",
   "Move {card} earlier": "Ilipat ang {card} nang mas maaga",
-  "Move {card} later": "Ilipat ang {card} nang mas huli"
+  "Move {card} later": "Ilipat ang {card} nang mas huli",
+  "Remove my working style": "Alisin ang aking estilo ng pagtatrabaho",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Aalisin nito ang iyong estilo ng pagtatrabaho sa device na ito at sa bawat komunidad dito. Babalik ito kapag inulit mo ang quiz."
 }

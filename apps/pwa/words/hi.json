@@ -3688,5 +3688,7 @@
   "Event · {from}": "कार्यक्रम · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "यह आपका होम है। नीचे कार्ड जोड़ें, या व्यवस्थित करने के लिए किसी कार्ड को दबाए रखें।",
   "Move {card} earlier": "{card} को पहले ले जाएं",
-  "Move {card} later": "{card} को बाद में ले जाएं"
+  "Move {card} later": "{card} को बाद में ले जाएं",
+  "Remove my working style": "मेरी कार्यशैली हटाएं",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "इससे आपकी कार्यशैली इस डिवाइस से और इस पर मौजूद हर समुदाय से हट जाएगी। प्रश्नोत्तरी दोबारा लेने पर वह वापस आ जाएगी।"
 }

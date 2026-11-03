@@ -3689,5 +3689,7 @@
   "Event · {from}": "Événement · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Voici votre accueil. Ajoutez une carte en bas, ou maintenez une carte appuyée pour organiser.",
   "Move {card} earlier": "Déplacer {card} plus tôt",
-  "Move {card} later": "Déplacer {card} plus tard"
+  "Move {card} later": "Déplacer {card} plus tard",
+  "Remove my working style": "Retirer mon style de travail",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Cela retire votre style de travail de cet appareil et de chaque communauté qui s'y trouve. Refaire le quiz le rétablit."
 }

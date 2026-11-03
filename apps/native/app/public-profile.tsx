@@ -6,12 +6,12 @@ import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
+import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile, pushWaitingArchetype } from '../utils/db';
 import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { clearWaitingArchetype, keepQuizResult, keepWaitingArchetype, onGuestVisit } from '../utils/working-style';
+import { clearWaitingArchetype, keepQuizResult, keepWaitingArchetype, onGuestVisit, removeWorkingStyle } from '../utils/working-style';
 import { parseArchetype, calculateSynergy, newestArchetype, publicArchetype, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
@@ -329,6 +329,21 @@ export default function PublicProfileScreen() {
             alignItems: 'center',
             justifyContent: 'center',
         },
+        // Remove my working style: a quiet line under the card's buttons, 44 dp tall, the muted ink of the card.
+        synergyRemoveBtn: {
+            minHeight: 44,
+            paddingHorizontal: 8,
+            marginTop: 4,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        synergyRemoveBtnText: {
+            color: colors.text.secondary,
+            fontSize: 13,
+            fontWeight: '600',
+            textDecorationLine: 'underline',
+            textAlign: 'center',
+        },
         synergyRetakeBtnText: {
             color: colors.text.secondary,
             fontWeight: '700',
@@ -586,6 +601,36 @@ export default function PublicProfileScreen() {
         }
         // Not landed: the row here holds it already, so nothing else would send it, and it waits for this community's next sync.
         if (landed) await clearWaitingArchetype(url, archetype);
+    };
+
+    // One confirm, plain words: nothing about a test is lost that a retake doesn't bring back. The device copy and every
+    // community's row go now; each community is told at its own turn, the open one first (utils/working-style.ts).
+    const confirmRemoveWorkingStyle = () => {
+        Alert.alert(
+            t('Remove my working style'),
+            t('This takes your working style off this device and out of every community on it. A retake brings it back.'),
+            [
+                { text: t('Cancel'), style: 'cancel' },
+                {
+                    text: t('Remove'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (!identity) return;
+                        try {
+                            await removeWorkingStyle(identity.publicKey);
+                        } catch (e) {
+                            console.warn('[Archetype] Remove failed:', e);
+                            Alert.alert(t('Error'), t('Please try again.'));
+                            return;
+                        }
+                        setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                        setProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                        if (url) await pushWaitingArchetype({ community: url }).catch((e) => console.warn('[Archetype] Remove publish best effort:', e));
+                    },
+                },
+            ],
+        );
     };
 
     useEffect(() => {
@@ -1529,6 +1574,14 @@ export default function PublicProfileScreen() {
                                         <Text style={styles.synergyRetakeBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🔄 Retake')}</Text>
                                     </Pressable>
                                 </View>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Remove my working style')}
+                                    style={styles.synergyRemoveBtn}
+                                    onPress={confirmRemoveWorkingStyle}
+                                >
+                                    <Text style={styles.synergyRemoveBtnText} numberOfLines={2}>{t('Remove my working style')}</Text>
+                                </Pressable>
                             </View>
                         );
                     }

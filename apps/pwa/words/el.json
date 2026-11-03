@@ -3687,5 +3687,7 @@
   "Event · {from}": "Εκδήλωση · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Αυτή είναι η Αρχική σας. Προσθέστε μια κάρτα στο κάτω μέρος ή κρατήστε πατημένη μια κάρτα για να τακτοποιήσετε.",
   "Move {card} earlier": "Μετακίνηση {card} νωρίτερα",
-  "Move {card} later": "Μετακίνηση {card} αργότερα"
+  "Move {card} later": "Μετακίνηση {card} αργότερα",
+  "Remove my working style": "Αφαίρεση του στυλ εργασίας μου",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Αυτό αφαιρεί το στυλ εργασίας σου από αυτή τη συσκευή και από κάθε κοινότητα που έχει. Αν ξανακάνεις το κουίζ, επιστρέφει."
 }

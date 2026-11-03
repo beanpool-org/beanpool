@@ -3688,5 +3688,7 @@
   "Event · {from}": "رویداد · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "این خانه شماست. در پایین کارتی اضافه کنید، یا برای چیدمان، کارتی را نگه دارید.",
   "Move {card} earlier": "جابه‌جایی {card} به قبل",
-  "Move {card} later": "جابه‌جایی {card} به بعد"
+  "Move {card} later": "جابه‌جایی {card} به بعد",
+  "Remove my working style": "حذف شیوه کاری من",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "این کار شیوه کاری شما را از این دستگاه و از همه جامعه‌هایی که روی آن هستند حذف می‌کند. با شرکت دوباره در آزمون، دوباره برمی‌گردد."
 }

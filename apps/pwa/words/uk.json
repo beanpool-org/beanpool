@@ -3946,5 +3946,7 @@
   "Event · {from}": "Подія · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Це ваша Головна. Додайте картку внизу або утримуйте картку, щоб упорядкувати.",
   "Move {card} earlier": "Перемістити {card} раніше",
-  "Move {card} later": "Перемістити {card} пізніше"
+  "Move {card} later": "Перемістити {card} пізніше",
+  "Remove my working style": "Видалити мій стиль роботи",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Ваш стиль роботи буде видалено з цього пристрою та з усіх спільнот на ньому. Якщо пройти тест знову, він повернеться."
 }

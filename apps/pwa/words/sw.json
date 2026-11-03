@@ -3688,5 +3688,7 @@
   "Event · {from}": "Tukio · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Hii ndiyo Nyumbani yako. Ongeza kadi chini, au shikilia kadi ili kupanga.",
   "Move {card} earlier": "Hamisha {card} mapema",
-  "Move {card} later": "Hamisha {card} baadaye"
+  "Move {card} later": "Hamisha {card} baadaye",
+  "Remove my working style": "Ondoa mtindo wangu wa kazi",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "Hii inaondoa mtindo wako wa kazi kwenye kifaa hiki na kwenye kila jumuiya iliyomo. Ukifanya tena dodoso, unarudi."
 }

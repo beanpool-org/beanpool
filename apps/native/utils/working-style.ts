@@ -1,10 +1,10 @@
-import { archetypeIsNewer, archetypeToCarry, parseArchetype, publicArchetype, type QuizResult } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, archetypeToCarry, parseArchetype, publicArchetype, type QuizResult } from '@beanpool/core';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { buildSignedHeaders } from './crypto';
 import { fetchMembership } from './membership-probe';
 import { plainOriginOf } from './node-url';
 import { clearGuestNode, getDatabaseFilenameForNode, getSavedNodes, isGuestNode } from './nodes';
-import { clearWaitingArchetype, keepCarriedArchetype, keepWaitingArchetype, waitingArchetype, waitingEntry } from './pending-profile-sync';
+import { clearWaitingArchetype, clearWaitingRemoval, keepCarriedArchetype, keepWaitingArchetype, keepWaitingRemoval, waitingArchetype, waitingEntry, waitingRemoval } from './pending-profile-sync';
 
 /**
  * The member's working style: taken once, on the device, and carried to each community by the device
@@ -18,6 +18,11 @@ import { clearWaitingArchetype, keepCarriedArchetype, keepWaitingArchetype, wait
  *   - the quiz, to the community open now (app/public-profile.tsx);
  *   - a Save or a catch-up publish, carrying what waits there or a device copy newer than the row (archetypeToSend);
  *   - the heal at that community's own next sync, carrying only the result (db.ts pushWaitingArchetype).
+ *
+ * Remove my working style (S3) is the one other line: removeWorkingStyle takes the device copy and every community's row off
+ * the phone and leaves a removal waiting for each community the member is in, which that community's own next sync sends as
+ * `archetype: null` (db.ts pushWaitingArchetype, removalToSend). It uses the slot a result waits in, so the later of a removal
+ * and a retake is the one that stands.
  */
 
 export { clearWaitingArchetype, keepWaitingArchetype };
@@ -96,7 +101,9 @@ export async function firstRunWorkingStyle(explicitKey?: string): Promise<void> 
             ) as { archetype?: string | null } | null;
 
             if (row) {
-                const arch = row.archetype ?? null;
+                // A community still to be told of a removal holds a result the member took off the phone: not one to bring back.
+                const removal = await waitingRemoval(node.url, publicKey);
+                const arch = removal && row.archetype && !archetypeIsAfter(row.archetype, removal.removedOn) ? null : row.archetype ?? null;
                 rowsByCommunity.set(node.url, arch);
                 if (arch && archetypeIsNewer(arch, newestRaw)) {
                     const parsed = parseArchetype(arch);
@@ -171,11 +178,79 @@ export async function keepQuizResult(result: QuizResult, publicKey: string, open
         if (await onGuestVisit(node.url)) {
             const older = await waitingArchetype(node.url, publicKey);
             if (older) await clearWaitingArchetype(node.url, older);
+            const removal = await waitingRemoval(node.url, publicKey);
+            if (removal) await clearWaitingRemoval(node.url, removal.removedOn);
             continue;
         }
         if (plainOriginOf(node.url) === plainOriginOf(openCommunity)) continue;
         await keepWaitingArchetype(node.url, publicKey, archetype);
     }
+}
+
+/** Today in UTC, 'YYYY-MM-DD': the day a removal is made, as a result is dated (core scoreQuiz). */
+const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Remove my working style (DESIGN-archetype-across-fable.md §3, S3): the device copy goes, and so does every community's
+ * row on the phone, so no card shows it. Each community the member is in is left a removal waiting, which that community's
+ * own next sync sends as a null (removalToSend). Not a guest visit: nothing goes to a community the member isn't in, and
+ * what waited there goes. A result that waited somewhere is replaced by the removal; a later retake replaces the removal.
+ * Best effort per community: one whose copy can't be opened still gets its removal.
+ */
+export async function removeWorkingStyle(publicKey: string): Promise<void> {
+    await saveCanonicalProfile({ archetype: null });
+    const removedOn = today();
+    for (const node of await getSavedNodes()) {
+        await clearOwnRow(node.url, publicKey);
+        if (await onGuestVisit(node.url)) {
+            const older = await waitingArchetype(node.url, publicKey);
+            if (older) await clearWaitingArchetype(node.url, older);
+            const removal = await waitingRemoval(node.url, publicKey);
+            if (removal) await clearWaitingRemoval(node.url, removal.removedOn);
+            continue;
+        }
+        await keepWaitingRemoval(node.url, publicKey, removedOn);
+    }
+}
+
+/** The working style off this key's row in `community`'s copy on the phone. The copy may not exist: nothing to clear. */
+async function clearOwnRow(community: string, publicKey: string): Promise<void> {
+    let handle: any = null;
+    try {
+        const SQLite = await import('expo-sqlite');
+        handle = await SQLite.openDatabaseAsync(getDatabaseFilenameForNode(community), { useNewConnection: true });
+        await handle.execAsync('PRAGMA busy_timeout = 30000;');
+        await handle.runAsync('UPDATE members SET archetype = NULL WHERE public_key = ?', [publicKey]);
+    } catch {
+        // No copy yet, or one that can't be opened now: its row is judged against the removal when it syncs (db.ts applyDelta).
+    } finally {
+        await handle?.closeAsync().catch(() => {});
+    }
+}
+
+/**
+ * Whether the removal waiting for `community` goes now, as a null. Only to a community that has just said this key is a
+ * member, and only where it holds a result: a community with none has nothing to remove, and one holding a result taken
+ * after the removal (a retake on another device) keeps it. Either way the removal stops waiting. No answer to either
+ * question sends nothing, and it waits for the next turn. A guest visit is never asked.
+ */
+export async function removalToSend(community: string, identity: Signer): Promise<boolean> {
+    const removal = await waitingRemoval(community, identity.publicKey);
+    if (!removal) return false;
+    if (await onGuestVisit(community)) return false;
+    const member = await saysMember(community, identity.publicKey);
+    if (member === false) {
+        await clearWaitingRemoval(community, removal.removedOn);
+        return false;
+    }
+    if (member !== true) return false;
+    const held = await heldThere(community, identity);
+    if (held === undefined) return false;
+    if (!held || archetypeIsAfter(held, removal.removedOn)) {
+        await clearWaitingRemoval(community, removal.removedOn);
+        return false;
+    }
+    return true;
 }
 
 /**

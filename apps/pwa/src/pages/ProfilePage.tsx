@@ -12,8 +12,9 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { usePictureCrop } from '../components/PictureCropDialog';
-import { parseArchetype, newestArchetype, ARCHETYPES, AVATAR_PICTURE, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
-import { adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from '../lib/working-style';
+import { parseArchetype, ARCHETYPES, AVATAR_PICTURE, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
+import { adoptWorkingStyle, deliverRemoval, keepQuizResult, publishQuizResult, shownWorkingStyle, workingStyleToCarry } from '../lib/working-style';
+import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 
 /** Who can see the contact details: the phone's Settings → Profile options and words (word() keys, shown through t()). */
 const CONTACT_VISIBILITY = [
@@ -65,6 +66,8 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     setContactVisibility(profile.contact.visibility);
                 }
                 setRowRead(true);
+                // A removal still waiting to reach this community goes now that the row is read (lib/working-style.ts).
+                void deliverRemoval(identity.publicKey, profile.archetype ?? null);
                 if (profile.archetype) {
                     setArchetype(profile.archetype);
                     adoptWorkingStyle(identity.publicKey, profile.archetype);
@@ -301,7 +304,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
 
             {/* Working style (self) */}
             {(() => {
-                const mine = parseArchetype(unsentArchetype ?? newestArchetype(archetype, readWorkingStyle(identity.publicKey)));
+                const mine = parseArchetype(unsentArchetype ?? shownWorkingStyle(identity.publicKey, archetype));
                 const primary = mine ? ARCHETYPES[mine.primary] : null;
                 const secondary = mine ? ARCHETYPES[mine.secondary] : null;
 
@@ -371,6 +374,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                     {t('🔄 Retake')}
                                 </button>
                             </div>
+                            <RemoveWorkingStyleButton publicKey={identity.publicKey} onRemoved={() => { setArchetype(null); setUnsentArchetype(null); }} />
                         </div>
                     );
                 }

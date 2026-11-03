@@ -549,14 +549,19 @@ export interface QuizResult {
 
 const TAKEN_ON = /^\d{4}-\d{2}-\d{2}$/;
 
-/** The day of a result: its own `takenOn`, or an older result's stamp cut to the day. Undefined for neither. */
+/**
+ * The day of a result: its own `takenOn`, or an older result's stamp cut to the day. Undefined for neither, and for a day
+ * past tomorrow (UTC; a clock a day ahead is no fault): a date from a bad clock or a node would otherwise beat every
+ * later retake (archetypeIsNewer), so such a result reads as undated and any dated one is newer than it.
+ */
 function dayOf(takenOn: unknown, updatedAt: unknown): string | undefined {
-    if (typeof takenOn === 'string' && TAKEN_ON.test(takenOn) && !Number.isNaN(Date.parse(takenOn))) return takenOn;
+    const latest = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    if (typeof takenOn === 'string' && TAKEN_ON.test(takenOn) && !Number.isNaN(Date.parse(takenOn))) return takenOn <= latest ? takenOn : undefined;
     if (typeof updatedAt !== 'string') return undefined;
     const stamped = Date.parse(updatedAt);
     if (Number.isNaN(stamped)) return undefined;
     const day = new Date(stamped).toISOString().slice(0, 10);
-    return TAKEN_ON.test(day) ? day : undefined;
+    return TAKEN_ON.test(day) && day <= latest ? day : undefined;
 }
 
 export function scoreQuiz(
@@ -696,6 +701,15 @@ export function archetypeIsNewer(candidate?: string | null, over?: string | null
     if (!theirs) return true;
     if (!mine.takenOn) return false;
     return !theirs.takenOn || mine.takenOn > theirs.takenOn;
+}
+
+/**
+ * Whether `result` was taken after `day` ('YYYY-MM-DD', UTC): a removal made on that day stands over it and anything
+ * before it or on it, and a later result stands over the removal. An undated result is never after (Remove my working style).
+ */
+export function archetypeIsAfter(result: string | null | undefined, day: string): boolean {
+    const taken = parseArchetype(result)?.takenOn;
+    return !!taken && taken > day;
 }
 
 /** Whichever of the two to show as the member's own: `first`, unless `second` is newer. */

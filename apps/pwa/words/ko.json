@@ -3559,5 +3559,7 @@
   "Event · {from}": "이벤트 · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "여기가 내 홈이에요. 아래에서 카드를 추가하거나, 카드를 길게 눌러 정렬하세요.",
   "Move {card} earlier": "{card} 앞으로 옮기기",
-  "Move {card} later": "{card} 뒤로 옮기기"
+  "Move {card} later": "{card} 뒤로 옮기기",
+  "Remove my working style": "내 일하는 방식 제거",
+  "This takes your working style off this device and out of every community on it. A retake brings it back.": "이 기기와 이 기기에 있는 모든 커뮤니티에서 내 일하는 방식을 없앱니다. 퀴즈를 다시 풀면 돌아옵니다."
 }

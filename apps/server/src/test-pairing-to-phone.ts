@@ -8,6 +8,7 @@
  *   browser  GET  /api/pair/poll                         'released' + the phone's key
  *   browser  POST /api/pair/send                         the account sealed to that key, once, with the cookie
  *   phone    POST /api/pair/collect { phoneSecret }      the sealed account, to the phone that offered only
+ *   phone    POST /api/pair/saved { phoneSecret, saved } whether it SAVED it; the browser's poll: 'saved' / 'not-saved'
  *
  * Every check here that guards the account has a forced-failure proof in the PR (the check taken out, this suite red).
  * Part 1 goes through the real server and middleware; it spends the 'pairing' bucket (15 a minute per address), so it
@@ -36,6 +37,8 @@ import {
     confirmPairingTransfer,
     sendToPhonePayload,
     collectToPhonePayload,
+    reportToPhoneSaved,
+    cancelPairingSession,
     pollPairingSession,
     transferPairingPayload,
     clearAllPairingSessions,
@@ -122,6 +125,9 @@ async function throughTheServer(): Promise<void> {
     assert(wrong.status === 400 && ((await wrong.json()) as any).triesLeft === 2, 'wrong digits: 400, two tries left');
     const right = await post('/api/pair/confirm', { sessionId: browser.sessionId, code: offered.confirmCode }, cookie);
     assert(right.status === 200, 'the digits the phone shows: released');
+    // A second Confirm (a double click, or a retry of a lost answer) is answered the same, and ends nothing.
+    const twice = await post('/api/pair/confirm', { sessionId: browser.sessionId, code: offered.confirmCode }, cookie);
+    assert(twice.status === 200 && ((await twice.json()) as any).result === 'released', 'a second confirm of a released session: 200 released, not an end');
     const released = (await (await poll(browser.sessionId, cookie)).json()) as any;
     assert(released.status === 'released' && released.phonePubHex === phone.publicKeyHex, "the browser polls: released, with the offering phone's key");
 
@@ -143,6 +149,15 @@ async function throughTheServer(): Promise<void> {
     assert(stranger.status === 403, 'anyone else collecting after: 403');
     const done = (await (await poll(browser.sessionId, cookie)).json()) as any;
     assert(done.status === 'collected' && done.payload === undefined, 'the browser polls: collected, never a payload');
+
+    // 9b. Collected is not saved. Only the phone that collected, with its secret, says it saved the account.
+    const forged = await post('/api/pair/saved', { sessionId: browser.sessionId, phoneSecret: thief.privateKeyHex, saved: true });
+    assert(forged.status === 403, "a 'saved' without the phone's secret: 403");
+    assert(((await (await poll(browser.sessionId, cookie)).json()) as any).status === 'collected', 'and the browser still hears collected, not saved');
+    const saved = await post('/api/pair/saved', { sessionId: browser.sessionId, phoneSecret: offered.phoneSecret, saved: true });
+    assert(saved.status === 200 && saved.headers.get('cache-control') === 'no-store', "the phone says it saved the account: 200, no-store");
+    assert(((await (await poll(browser.sessionId, cookie)).json()) as any).status === 'saved', 'the browser polls: saved');
+    assert((await poll(browser.sessionId, '')).status === 403, 'a poll without the cookie still learns nothing');
 
     // 10. The other direction stays as it was: an offer into a phone-to-browser session is refused.
     const fromPhone = createPairingSession();
@@ -258,6 +273,74 @@ function inTheRelay(): void {
         clearAllPairingSessions();
     }
 
+    // Collected is not saved: the phone's word, kept past the session's end for SAVE_WINDOW_MS, for its browser only.
+    const collectedOne = () => {
+        const { b, secret } = open();
+        const p = createPairInKey();
+        const o = offerToPhoneSession(b.sessionId, p.publicKeyHex);
+        if (!o.ok) throw new Error('offer');
+        confirmPairingTransfer(b.sessionId, secret, o.confirmCode);
+        const sealed = sealPairingPayloadToPhone(ACCOUNT, b.privateKeyHex, p.publicKeyHex, b.sessionId);
+        sendToPhonePayload(b.sessionId, secret, sealed.nonceHex, sealed.ciphertextHex);
+        return { b, secret, phoneSecret: o.phoneSecret };
+    };
+    {
+        const { b, secret, phoneSecret } = collectedOne();
+        assert(pollPairingSession(b.sessionId, secret).status === 'sent', 'sent, not yet collected: the browser hears sent');
+        assert(!reportToPhoneSaved(b.sessionId, phoneSecret, true).ok, "a 'saved' before the phone collected changes nothing");
+        assert(collectToPhonePayload(b.sessionId, phoneSecret).status === 'sent', 'the phone collects');
+        assert(pollPairingSession(b.sessionId, secret).status === 'collected', 'collected: the browser hears collected, not saved');
+        _setPairingClockForTests(PAIRING_RELAY_LIMITS.ttlMs + 1_000);
+        assert(collectToPhonePayload(b.sessionId, phoneSecret).status === 'expired', 'past the 120 s the session and its seal are gone');
+        assert(pollPairingSession(b.sessionId, secret).status === 'collected', 'and its browser still hears collected (the member may read the phone slowly)');
+        assert(pollPairingSession(b.sessionId, 'ab'.repeat(32)).status === 'expired', 'any other browser hears nothing of it');
+        const r = reportToPhoneSaved(b.sessionId, 'cd'.repeat(32), true);
+        assert(!r.ok && r.error === 'wrong-phone', "a 'saved' with another secret: wrong-phone");
+        assert(!reportToPhoneSaved(b.sessionId, phoneSecret, 'yes').ok, "a report that isn't true or false changes nothing");
+        assert(reportToPhoneSaved(b.sessionId, phoneSecret, false).ok, 'the phone says it did not save it');
+        assert(pollPairingSession(b.sessionId, secret).status === 'not-saved', 'its browser hears not-saved');
+        const late = reportToPhoneSaved(b.sessionId, phoneSecret, true);
+        assert(!late.ok && late.error === 'already' && pollPairingSession(b.sessionId, secret).status === 'not-saved', 'the first word stands');
+        assert(reportToPhoneSaved(b.sessionId, phoneSecret, false).ok, 'the same word again (a lost answer) is fine');
+        _setPairingClockForTests(PAIRING_RELAY_LIMITS.saveWindowMs + 1_000);
+        assert(pollPairingSession(b.sessionId, secret).status === 'expired', 'past the save window: nothing is kept');
+        _setPairingClockForTests(0);
+    }
+    {
+        // Anyone may cancel a session; after the collect that leaves the phone's word to reach its browser.
+        const { b, secret, phoneSecret } = collectedOne();
+        collectToPhonePayload(b.sessionId, phoneSecret);
+        cancelPairingSession(b.sessionId);
+        assert(pollPairingSession(b.sessionId, secret).status === 'collected', 'a cancel after the collect: its browser still waits for the phone');
+        assert(reportToPhoneSaved(b.sessionId, phoneSecret, true).ok && pollPairingSession(b.sessionId, secret).status === 'saved', 'and hears saved when the phone says so');
+        // Someone who saw the QR opens a session with the same id: the browser still hears its own phone.
+        const again = initPairingSession(b.sessionId, createPairingSession().publicKeyHex, 'to-phone');
+        assert(pollPairingSession(b.sessionId, secret).status === 'saved', 'a new session on the same id changes nothing for the first browser');
+        assert(pollPairingSession(b.sessionId, again.secret).status === 'waiting', 'and the newcomer sees only its own session');
+        _setPairingClockForTests(PAIRING_RELAY_LIMITS.saveWindowMs + 1_000);
+        assert(!reportToPhoneSaved(b.sessionId, phoneSecret, true).ok, "a 'saved' past the window: expired");
+        _setPairingClockForTests(0);
+        clearAllPairingSessions();
+        assert(_pairingRelayCountsForTests().outcomes === 0, 'clearing the relay clears the phones\' words too');
+    }
+
+    // A second Confirm on a released session: the same answer, no try spent, nothing ended or burned.
+    {
+        const { b, secret } = open();
+        const p = createPairInKey();
+        const o = offerToPhoneSession(b.sessionId, p.publicKeyHex);
+        if (!o.ok) throw new Error('offer');
+        assert(confirmPairingTransfer(b.sessionId, secret, o.confirmCode).result === 'released', 'the digits: released');
+        for (let i = 0; i < 4; i++) confirmPairingTransfer(b.sessionId, secret, otherDigits(o.confirmCode));
+        const again = confirmPairingTransfer(b.sessionId, secret, o.confirmCode);
+        assert(again.result === 'released' && pollPairingSession(b.sessionId, secret).status === 'released', 'four more confirms, any digits: still released, never burned');
+        assert(confirmPairingTransfer(b.sessionId, 'ab'.repeat(32), o.confirmCode).result === 'wrong-browser', 'another browser still gets wrong-browser');
+        const sealed = sealPairingPayloadToPhone(ACCOUNT, b.privateKeyHex, p.publicKeyHex, b.sessionId);
+        assert(sendToPhonePayload(b.sessionId, secret, sealed.nonceHex, sealed.ciphertextHex).ok, 'and the browser still sends');
+        assert(confirmPairingTransfer(b.sessionId, secret, o.confirmCode).result === 'released', 'a confirm after the send: released, nothing changed');
+        clearAllPairingSessions();
+    }
+
     // The existing direction, unchanged: its session takes no offer, and its transfer and digits work as before.
     {
         const b = createPairingSession();
@@ -270,6 +353,7 @@ function inTheRelay(): void {
         assert(t.ok && !!t.confirmCode, 'and still takes its phone\'s account, with four digits');
         assert(sendToPhonePayload(b.sessionId, r.secret, enc.nonceHex, enc.ciphertextHex).ok === false, 'a browser send into it is refused');
         confirmPairingTransfer(b.sessionId, r.secret, t.confirmCode);
+        assert(confirmPairingTransfer(b.sessionId, r.secret, t.confirmCode).result === 'not-confirming', 'a second confirm there answers as before (not-confirming)');
         assert(pollPairingSession(b.sessionId, r.secret).payload?.ciphertextHex === enc.ciphertextHex, 'its browser collects it as before');
         assert(collectToPhonePayload(b.sessionId, 'ab'.repeat(32)).status === 'expired', 'and a phone collect there finds nothing');
         clearAllPairingSessions();

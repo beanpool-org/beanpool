@@ -24,6 +24,13 @@
  * seal the account to it and send it (sendToPhonePayload); only the phone that offered, with its secret, collects it.
  * Same 120 s, three tries, one phone per session, 15 s grace, in memory. A session of one way refuses every step of the
  * other: no phone's payload is ever taken into a `to-phone` session, and no offer into a `from-phone` one.
+ *
+ * Collected is not saved (doors-s9-fix1): the phone has only fetched the seal, and saves nothing until the member taps
+ * Bring it to this phone. So the phone then tells the relay, with its own secret, whether it SAVED the account
+ * (reportToPhoneSaved), and only that tells the browser it may offer to remove the account there. A small record of the
+ * outcome (the two secrets' hashes and one word, never the seal or a key) outlives the session by SAVE_WINDOW_MS, so a
+ * member who reads the phone's confirm slowly is still heard. No report in that time, a refusal, or a failed save: the
+ * browser says the account stays there.
  */
 
 import crypto from 'node:crypto';
@@ -64,6 +71,8 @@ interface PairingSession {
 const PAIRING_TTL_MS = 120_000; // 2 minutes
 /** Once the computer has its payload, a retry of a lost answer gets it again for this long, never past `expiresAt`. */
 const COLLECT_GRACE_MS = 15_000;
+/** To a phone: how long after the phone collects it may say whether it saved the account, and its browser hear it. */
+const SAVE_WINDOW_MS = 5 * 60_000;
 // The relay's memory, measured (#1950: the real functions, --expose-gc, --max-old-space-size=512, the deciding review's
 // probes/relay-full.mts). Anyone can open a session and fill it without signing in, so the caps bound what an unsigned
 // sender can hold for the 2 minutes.
@@ -106,6 +115,7 @@ export const PAIRING_RELAY_LIMITS = {
     graceMs: COLLECT_GRACE_MS,
     confirmTries: CONFIRM_TRIES,
     confirmDigits: CONFIRM_DIGITS,
+    saveWindowMs: SAVE_WINDOW_MS,
 } as const;
 
 const sessions = new Map<string, PairingSession>();
@@ -113,6 +123,44 @@ const sessions = new Map<string, PairingSession>();
 const held = new Set<string>();
 /** Payloads collected and kept for the grace: at most MAX_HELD_PAYLOADS. */
 const collected = new Set<string>();
+
+/**
+ * To a phone, once collected: what the phone said about saving the account, for its browser. Only hashes of the two
+ * binding secrets and the word; at most MAX_HELD_PAYLOADS, each gone SAVE_WINDOW_MS after the collect. A cancel, or the
+ * session ending, leaves it alone (anyone may cancel a session, and the phone's word must still reach its browser).
+ */
+interface SaveOutcome {
+    secretHash: Buffer;
+    phoneSecretHash: Buffer;
+    state: 'collected' | 'saved' | 'not-saved';
+    endsAt: number;
+    timer?: NodeJS.Timeout;
+}
+const outcomes = new Map<string, SaveOutcome>();
+
+function liveOutcome(sessionId: string): SaveOutcome | undefined {
+    const outcome = outcomes.get(sessionId);
+    if (outcome && now() >= outcome.endsAt) {
+        clearTimeout(outcome.timer);
+        outcomes.delete(sessionId);
+        return undefined;
+    }
+    return outcome;
+}
+
+/** The phone has the seal: from now its browser hears 'collected' until the phone says 'saved' or 'not-saved'. */
+function recordCollected(session: PairingSession): void {
+    if (outcomes.has(session.sessionId) || !session.phoneSecretHash || outcomes.size >= MAX_HELD_PAYLOADS) return;
+    const outcome: SaveOutcome = {
+        secretHash: session.secretHash, phoneSecretHash: session.phoneSecretHash, state: 'collected', endsAt: now() + SAVE_WINDOW_MS,
+    };
+    const timer = setTimeout(() => {
+        if (outcomes.get(session.sessionId) === outcome) outcomes.delete(session.sessionId);
+    }, SAVE_WINDOW_MS);
+    if (timer.unref) timer.unref();
+    outcome.timer = timer;
+    outcomes.set(session.sessionId, outcome);
+}
 
 let clockOffsetMs = 0;
 const now = () => Date.now() + clockOffsetMs;
@@ -122,8 +170,8 @@ export function _setPairingClockForTests(offsetMs: number): void {
     clockOffsetMs = offsetMs;
 }
 
-export function _pairingRelayCountsForTests(): { sessions: number; held: number; collected: number } {
-    return { sessions: sessions.size, held: held.size, collected: collected.size };
+export function _pairingRelayCountsForTests(): { sessions: number; held: number; collected: number; outcomes: number } {
+    return { sessions: sessions.size, held: held.size, collected: collected.size, outcomes: outcomes.size };
 }
 
 /** Every way a session ends goes through here, so `held` and `collected` never count one that is gone. */
@@ -250,7 +298,7 @@ export function transferPairingPayload(
 }
 
 /** Only the browser holding the session's binding secret. */
-function bound(session: PairingSession, secret: string | undefined): boolean {
+function bound(session: { secretHash: Buffer }, secret: string | undefined): boolean {
     return !!secret && crypto.timingSafeEqual(sha256(String(secret)), session.secretHash);
 }
 
@@ -269,6 +317,9 @@ export function confirmPairingTransfer(sessionId: string, secret: string | undef
     if (!session) return { result: 'expired' };
     if (!bound(session, secret)) return { result: 'wrong-browser' };
     if (session.status === 'burned') return { result: 'burned' };
+    // To a phone, already released: a second Confirm from the same browser (a double click, or a retry of a lost answer)
+    // gets the same answer and changes nothing. It carries nothing: the phone's key comes only through the poll.
+    if (session.direction === 'to-phone' && (session.status === 'released' || session.status === 'sent')) return { result: 'released' };
     if (session.status !== 'confirming' || !session.confirmCode) return { result: 'not-confirming' };
     const typed = typeof digits === 'string' ? digits.trim() : '';
     const right = CONFIRM_CODE.test(typed) && crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(session.confirmCode));
@@ -297,7 +348,7 @@ export function confirmPairingTransfer(sessionId: string, secret: string | undef
  * lost answer gets it again), re-armed by each poll but never past the session's 120 s.
  */
 export function pollPairingSession(sessionId: string, secret: string | undefined): {
-    status: 'waiting' | 'confirming' | 'transferred' | 'burned' | 'expired' | 'wrong-browser' | 'released' | 'sent' | 'collected';
+    status: 'waiting' | 'confirming' | 'transferred' | 'burned' | 'expired' | 'wrong-browser' | 'released' | 'sent' | 'collected' | 'saved' | 'not-saved';
     desktopPubHex?: string;
     payload?: PairingPayload;
     phonePubHex?: string;
@@ -305,6 +356,10 @@ export function pollPairingSession(sessionId: string, secret: string | undefined
     if (!sessionId || typeof sessionId !== 'string' || !/^[0-9a-fA-F]{16,64}$/.test(sessionId)) {
         return { status: 'expired' };
     }
+
+    // To a phone, collected: what the phone said about saving it, to its browser only, after the session itself is gone too.
+    const outcome = liveOutcome(sessionId);
+    if (outcome && bound(outcome, secret)) return { status: outcome.state };
 
     const session = liveSession(sessionId);
     if (!session) {
@@ -346,7 +401,7 @@ export function pollPairingSession(sessionId: string, secret: string | undefined
 }
 
 /** Only the phone holding the secret its offer got. */
-function phoneBound(session: PairingSession, secret: unknown): boolean {
+function phoneBound(session: { phoneSecretHash?: Buffer }, secret: unknown): boolean {
     return !!session.phoneSecretHash && typeof secret === 'string' && !!secret
         && crypto.timingSafeEqual(sha256(secret), session.phoneSecretHash);
 }
@@ -417,6 +472,7 @@ export function collectToPhonePayload(sessionId: string, phoneSecret: unknown): 
     if (session.status !== 'sent' || !session.payload) return { status: 'expired' };
     const { nonceHex, ciphertextHex } = session.payload;
     session.phoneCollected = true;
+    recordCollected(session);
     if (held.delete(sessionId)) {
         // Collected: the slot is free now. Kept for the grace if the kept ones have room; else it ends now.
         if (collected.size >= MAX_HELD_PAYLOADS) {
@@ -427,6 +483,26 @@ export function collectToPhonePayload(sessionId: string, phoneSecret: unknown): 
     }
     endAt(session, Math.min(now() + COLLECT_GRACE_MS, session.expiresAt));
     return { status: 'sent', nonceHex, ciphertextHex };
+}
+
+export type SavedResult =
+    | { ok: true }
+    | { ok: false; error: 'expired' | 'wrong-phone' | 'bad-report' | 'already' };
+
+/**
+ * To a phone (doors-s9-fix1): the phone that collected, with its secret, says whether it SAVED the account (`saved: true`,
+ * after the save finished) or not (`false`: the seal didn't read, the save failed, or the member cancelled). The first word
+ * stands; the same word again is fine (a retry of a lost answer). Only after 'saved' may the browser offer to remove the
+ * account there. Anyone else, or after SAVE_WINDOW_MS, changes nothing.
+ */
+export function reportToPhoneSaved(sessionId: string, phoneSecret: unknown, saved: unknown): SavedResult {
+    const outcome = typeof sessionId === 'string' ? liveOutcome(sessionId) : undefined;
+    if (!outcome) return { ok: false, error: 'expired' };
+    if (!phoneBound(outcome, phoneSecret)) return { ok: false, error: 'wrong-phone' };
+    if (typeof saved !== 'boolean') return { ok: false, error: 'bad-report' };
+    const state = saved ? 'saved' : 'not-saved';
+    if (outcome.state === 'collected') outcome.state = state;
+    return outcome.state === state ? { ok: true } : { ok: false, error: 'already' };
 }
 
 /**
@@ -446,4 +522,6 @@ export function clearAllPairingSessions(): void {
     sessions.clear();
     held.clear();
     collected.clear();
+    for (const outcome of outcomes.values()) clearTimeout(outcome.timer);
+    outcomes.clear();
 }

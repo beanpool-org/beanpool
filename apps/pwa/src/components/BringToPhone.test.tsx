@@ -6,6 +6,11 @@
  * the digits the phone shows are typed here; once they match, the account goes sealed to the phone's key, opens only
  * with the code's key, and holds the 12 words and the public key but never the private key; a burned or run-out code
  * says so and sends nothing; a browser without the 12 words sends nothing at all.
+ *
+ * And (doors-s9-fix1, the Opus review of 278bff9f): the phone collecting the seal is not the phone saving it, so Remove
+ * from this browser is offered only after the phone says 'saved'; a phone that says 'not-saved', or says nothing, leaves
+ * the account here and the panel says so. A second Confirm (Enter and a click, a double click) sends one confirm and
+ * cancels nothing; a lost answer is a note to try again, and the session goes on.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -27,7 +32,11 @@ function json(status: number, body: unknown): Response {
 }
 
 /** The relay as this browser sees it: poll answers come from `polls` in turn (the last repeats). */
-function stubRelay(polls: Array<() => unknown>, confirms: Array<[number, unknown]> = [[200, { result: 'released' }]]) {
+function stubRelay(
+    polls: Array<() => unknown>,
+    confirms: Array<[number, unknown]> = [[200, { result: 'released' }]],
+    onConfirm?: () => Promise<Response>,
+) {
     const calls: Array<{ path: string; body: any }> = [];
     let p = 0, c = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -37,6 +46,7 @@ function stubRelay(polls: Array<() => unknown>, confirms: Array<[number, unknown
         if (path === '/api/pair/init') return json(200, { success: true, expiresAt: Date.now() + 120_000 });
         if (path.startsWith('/api/pair/poll')) return json(200, polls[Math.min(p++, polls.length - 1)]());
         if (path === '/api/pair/confirm') {
+            if (onConfirm) return onConfirm();
             const [status, answer] = confirms[Math.min(c++, confirms.length - 1)];
             return json(status, answer);
         }
@@ -63,10 +73,11 @@ describe('Put your account on your phone', () => {
         const me = await createIdentity('Ana');
         const phone = createPairInKey();
         let typed = false;
+        let phoneSaved = false;
         const calls = stubRelay([
             () => ({ status: 'confirming' }),
             () => (typed ? { status: 'released', phonePubHex: phone.publicKeyHex } : { status: 'confirming' }),
-            () => ({ status: 'collected' }),
+            () => (phoneSaved ? { status: 'saved' } : { status: 'collected' }),
         ]);
         const onRemoveHere = vi.fn();
         render(<BringToPhone onRemoveHere={onRemoveHere} />);
@@ -101,11 +112,110 @@ describe('Put your account on your phone', () => {
         expect(opened).toEqual({ version: 1, publicKey: stored.publicKey, mnemonic: stored.mnemonic, callsign: 'Ana' });
         expect(JSON.stringify(opened)).not.toContain(stored.privateKey);
 
-        // The phone collected: done, and removing it here is offered, never done.
-        await screen.findByText('Your phone has your account. Finish on your phone.', {}, WAIT);
+        // The phone collected the seal: not saved yet. It says what to tap on the phone, and offers no Remove.
+        await screen.findByText('Your phone has received your account. On your phone, tap Bring it to this phone.', {}, WAIT);
+        expect(screen.queryByRole('button', { name: 'Remove from this browser' })).toBeNull();
+        expect(screen.queryByText(/is now on this browser and your phone/)).toBeNull();
+        expect(calls.some((x) => x.path === '/api/pair/cancel')).toBe(false);
+
+        // The phone says it saved it: done, and removing it here is offered, never done.
+        phoneSaved = true;
+        await screen.findByText('Your phone has saved your account.', {}, WAIT);
+        expect(screen.getByText('Your account is now on this browser and your phone. You can keep both, or remove it from this browser.')).toBeTruthy();
         expect(await loadIdentity()).not.toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Remove from this browser' }));
         expect(onRemoveHere).toHaveBeenCalledTimes(1);
+    }, 20_000);
+
+    async function toCollected(after: () => unknown) {
+        await createIdentity('Ana');
+        const phone = createPairInKey();
+        let typed = false;
+        const calls = stubRelay([
+            () => ({ status: 'confirming' }),
+            () => (typed ? { status: 'released', phonePubHex: phone.publicKeyHex } : { status: 'confirming' }),
+            () => ({ status: 'collected' }),
+            after,
+        ]);
+        const onRemoveHere = vi.fn();
+        render(<BringToPhone onRemoveHere={onRemoveHere} />);
+        fireEvent.click(screen.getByTestId('bring-to-phone-open'));
+        const input = await screen.findByLabelText('Type the four digits your phone shows', {}, WAIT);
+        fireEvent.change(input, { target: { value: '4821' } });
+        typed = true;
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+        await screen.findByText('Your phone has received your account. On your phone, tap Bring it to this phone.', {}, WAIT);
+        return { calls, onRemoveHere };
+    }
+
+    it("a phone that says it didn't save it: the account stays here, no Remove, and a new code is offered", async () => {
+        const { onRemoveHere } = await toCollected(() => ({ status: 'not-saved' }));
+        await screen.findByText("Your phone didn't save your account, so it is still here on this browser. Make a new code to try again.", {}, WAIT);
+        expect(screen.queryByRole('button', { name: 'Remove from this browser' })).toBeNull();
+        expect(screen.queryByText('Your phone has saved your account.')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Make a new code' })).toBeTruthy();
+        expect(onRemoveHere).not.toHaveBeenCalled();
+        expect(await loadIdentity()).not.toBeNull();
+    }, 20_000);
+
+    it('a phone that never says (the session and its word gone): the account stays here, no Remove', async () => {
+        const { onRemoveHere } = await toCollected(() => ({ status: 'expired' }));
+        await screen.findByText("Your phone hasn't said it saved your account, so it is still here on this browser. If your phone shows your account, it is on both.", {}, WAIT);
+        expect(screen.queryByRole('button', { name: 'Remove from this browser' })).toBeNull();
+        expect(screen.queryByText('This code has run out. Make a new one.')).toBeNull();
+        expect(onRemoveHere).not.toHaveBeenCalled();
+    }, 20_000);
+
+    it('a second Confirm while the first is out sends one confirm and cancels nothing; the account still goes', async () => {
+        await createIdentity('Ana');
+        const phone = createPairInKey();
+        let released = false;
+        let answer: (r: Response) => void = () => {};
+        const calls = stubRelay(
+            [() => ({ status: 'confirming' }), () => (released ? { status: 'released', phonePubHex: phone.publicKeyHex } : { status: 'confirming' })],
+            [],
+            // The first confirm's answer waits; any second one gets what the relay answered a released session at 278bff9f.
+            () => (calls.filter((x) => x.path === '/api/pair/confirm').length === 1
+                ? new Promise<Response>((r) => { answer = r; })
+                : Promise.resolve(json(410, { result: 'not-confirming' }))),
+        );
+        render(<BringToPhone />);
+        fireEvent.click(screen.getByTestId('bring-to-phone-open'));
+        const input = await screen.findByLabelText('Type the four digits your phone shows', {}, WAIT);
+        fireEvent.change(input, { target: { value: '4821' } });
+        // Enter, then a click, then Enter again, before the first answer is back.
+        const form = input.closest('form')!;
+        fireEvent.submit(form);
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+        fireEvent.submit(form);
+        await waitFor(() => expect(calls.filter((x) => x.path === '/api/pair/confirm')).toHaveLength(1));
+        released = true;
+        answer(json(200, { result: 'released' }));
+        await waitFor(() => expect(calls.some((x) => x.path === '/api/pair/send')).toBe(true), WAIT);
+        expect(calls.filter((x) => x.path === '/api/pair/confirm')).toHaveLength(1);
+        expect(calls.some((x) => x.path === '/api/pair/cancel')).toBe(false);
+        expect(screen.queryByText('This code has run out. Make a new one.')).toBeNull();
+    }, 20_000);
+
+    it('a lost answer to Confirm is a note to try again, never an end: the session goes on and the poll decides', async () => {
+        await createIdentity('Ana');
+        const phone = createPairInKey();
+        let released = false;
+        const calls = stubRelay(
+            [() => ({ status: 'confirming' }), () => (released ? { status: 'released', phonePubHex: phone.publicKeyHex } : { status: 'confirming' })],
+            [],
+            // The relay released, but its answer never came back.
+            () => { released = true; return Promise.reject(new TypeError('Failed to fetch')); },
+        );
+        render(<BringToPhone />);
+        fireEvent.click(screen.getByTestId('bring-to-phone-open'));
+        const input = await screen.findByLabelText('Type the four digits your phone shows', {}, WAIT);
+        fireEvent.change(input, { target: { value: '4821' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+        await screen.findByText('That did not go through. Try again.', {}, WAIT);
+        expect(calls.some((x) => x.path === '/api/pair/cancel')).toBe(false);
+        await waitFor(() => expect(calls.some((x) => x.path === '/api/pair/send')).toBe(true), WAIT);
+        expect(calls.some((x) => x.path === '/api/pair/cancel')).toBe(false);
     }, 20_000);
 
     it('wrong digits say so and send nothing; three wrong end the code with nothing sent', async () => {

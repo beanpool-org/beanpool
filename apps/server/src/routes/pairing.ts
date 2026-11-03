@@ -17,6 +17,8 @@
  *   POST /api/pair/confirm   browser types the digits the phone shows, as above
  *   POST /api/pair/send      browser, with the binding cookie, only once released: the account sealed to the phone's key
  *   POST /api/pair/collect   phone, with its secret: { sessionId, phoneSecret }; the sealed account once sent
+ *   POST /api/pair/saved     phone, with its secret: { sessionId, phoneSecret, saved }; whether it saved the account.
+ *                            The browser's poll then says 'saved' or 'not-saved'; only 'saved' offers Remove there
  */
 
 import Router from '@koa/router';
@@ -30,6 +32,7 @@ import {
     offerToPhoneSession,
     sendToPhonePayload,
     collectToPhonePayload,
+    reportToPhoneSaved,
     PAIRING_RELAY_LIMITS,
 } from '../pairing-relay.js';
 
@@ -227,6 +230,28 @@ export function createPairingRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         ctx.status = res.status === 'wrong-phone' ? 403 : res.status === 'expired' ? 410 : 200;
         ctx.body = res;
+    });
+
+    /**
+     * POST /api/pair/saved (doors-s9-fix1)
+     * The phone that collected, with its secret: whether it saved the account. Until it says 'saved', its browser never
+     * says the account is on the phone, nor offers to remove it there.
+     */
+    router.post('/api/pair/saved', async (ctx) => {
+        const { sessionId, phoneSecret, saved } = (ctx.request as any).body || {};
+        if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) {
+            ctx.status = 400;
+            ctx.body = { error: 'bad-session' };
+            return;
+        }
+        const res = reportToPhoneSaved(sessionId, phoneSecret, saved);
+        ctx.set('Cache-Control', 'no-store');
+        if (!res.ok) {
+            ctx.status = res.error === 'expired' ? 410 : res.error === 'wrong-phone' ? 403 : res.error === 'already' ? 409 : 400;
+            ctx.body = { error: res.error };
+            return;
+        }
+        ctx.body = { success: true };
     });
 
     /**

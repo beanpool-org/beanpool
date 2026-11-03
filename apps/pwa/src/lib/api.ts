@@ -3385,9 +3385,12 @@ export async function initPairingToPhoneApi(sessionId: string, desktopPubHex: st
     return request<{ success: boolean; expiresAt: number }>('POST', '/api/pair/init', { sessionId, desktopPubHex, to: 'phone' });
 }
 
-/** This browser's view of a to-phone session: a phone scanned ('confirming'), its digits typed ('released', with its key), sent, collected. */
+/**
+ * This browser's view of a to-phone session: a phone scanned ('confirming'), its digits typed ('released', with its key),
+ * sent, collected (the phone has the seal, not yet the account), then the phone's own word: 'saved' or 'not-saved'.
+ */
 export async function pollPairingToPhoneApi(sessionId: string): Promise<{
-    status: 'waiting' | 'confirming' | 'released' | 'sent' | 'collected' | 'burned' | 'expired' | 'wrong-browser';
+    status: 'waiting' | 'confirming' | 'released' | 'sent' | 'collected' | 'saved' | 'not-saved' | 'burned' | 'expired' | 'wrong-browser';
     phonePubHex?: string;
 }> {
     const res = await fetch(`${getNodeApiUrl()}/api/pair/poll?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });

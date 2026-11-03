@@ -1372,6 +1372,16 @@ describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (w
         expect(screen.getByTestId('map-category-chip').textContent).toBe('🏷️ All Categories ▾');
     });
 
+    it("the category panel folds away when a pin's card opens, as the phone's does", async () => {
+        await draw();
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        expect(screen.getByTestId('map-category-panel')).toBeTruthy();
+        const pin = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        await act(async () => { pin.listeners.click(); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+    });
+
     it('Clear filters (the ✕) returns to All, the first category and the first date chip, and goes away', async () => {
         await draw();
         await click('map-type-offers');

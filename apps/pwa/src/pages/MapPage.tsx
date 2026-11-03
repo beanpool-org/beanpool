@@ -73,9 +73,9 @@ import { marketPinMatchesFilter, visibleEventPins as filterEventPins, mapFilters
 import { MAP_CATEGORY_CHIPS, MAP_EVENT_WINDOWS, MAP_TYPE_PILLS, mapCategoryChipLabel } from '../lib/map-filters';
 import { MAP_TAP_CAP_ZOOM, STACK_LIST_CLOSED, areaRingLeafletStyle, settleMapStop, stackDropped, stackHeading, stackLift, stackRestWatch, stackShut, stackTapped, type MapFrame, type StackListState } from '@beanpool/core';
 import {
-    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
+    CLIENT_POST_TYPES, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventRepeatCreate, parseCopyEventContext, withMovedFromLine,
-    eventInWindow, formatEventWhen, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
+    eventInWindow, formatEventWhen, isEventHostView, type EventEditForm, type EventWindow,
     hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
 
@@ -259,7 +259,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
      * layer of its own).
      */
     const markersRef = useRef<L.LayerGroup | null>(null);
-    const eventChipsRef = useRef<HTMLDivElement | null>(null);
     const userMarkerRef = useRef<L.Marker | null>(null);
     const radiusCircleRef = useRef<L.Circle | null>(null);
 
@@ -453,6 +452,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const pinKeysRef = useRef(new Map<L.Layer, string>());
     const stack = useMemo(() => (stackKeys ? stackPins(stackKeys, pinsOnMap) : []), [stackKeys, pinsOnMap]);
     const stackOpen = stack.length > 0;
+    // The category panel folds away on anything that takes the map's attention, as the phone's does (its 'dismiss'): a pin's
+    // card, a bubble's list, the composer.
+    useEffect(() => {
+        if (previewPost || stackOpen || showNewPost) setCategoryOpen(false);
+    }, [previewPost, stackOpen, showNewPost]);
     const stackListRef = useRef(stackList);
     stackListRef.current = stackList;
     const [calendarOpen, setCalendarOpen] = useState(false);
@@ -2312,7 +2316,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <div
                     ref={filterBarRef}
                     data-testid="map-filter-bar"
-                    className="absolute top-[4.25rem] left-0 z-[100] w-fit max-w-full px-3 py-1 flex flex-col items-start gap-1.5 pointer-events-none"
+                    // Over the locate pill and the + button while the panel is open: the phone hides them then, and the tiles under them are taps.
+                    className={`absolute top-[4.25rem] left-0 ${categoryOpen ? 'z-[120]' : 'z-[100]'} w-fit max-w-full px-3 py-1 flex flex-col items-start gap-1.5 pointer-events-none`}
                 >
                     <div
                         data-testid="map-filter-row"
@@ -2386,7 +2391,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
                     {mapType === 'events' ? (
                         <div
-                            ref={eventChipsRef}
                             data-testid="event-window-chips"
                             role="group"
                             aria-label={t('Filter events by date')}

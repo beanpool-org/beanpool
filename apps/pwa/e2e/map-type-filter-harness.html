@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Map type filter harness</title>
+    <script>
+        window.process = { env: {} };
+        // The header's chip, as lib/sync.ts keeps its last sync: "Online" needs a live socket, so the chip draws as it does on a
+        // node that has answered, long enough that the word is there to stand under the bar if the bar were there.
+        try {
+            localStorage.setItem('beanpool-sync-state', JSON.stringify({ connected: true, lastSyncTime: Date.now() - 60000, merkleRoot: null, accountCount: 0 }));
+        } catch (e) { /* private window */ }
+    </script>
+</head>
+<body class="bg-surface-canvas text-text-primary antialiased">
+    <div id="root"></div>
+    <script type="module" src="./map-type-filter-harness.tsx"></script>
+</body>
+</html>

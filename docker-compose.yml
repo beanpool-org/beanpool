@@ -106,6 +106,14 @@ services:
       # asks: phones are told of no newer app, and an app below its floor (MIN_APP_VERSION) gets a banner only, never the
       # full-screen update. See apps/server/src/app-store-versions.ts appStoreCheckDisabled.
       - DISABLE_APP_STORE_CHECK=${DISABLE_APP_STORE_CHECK:-}
+      # The Android APK this server hands out on its local network only (http://<its LAN address>/android; never to the
+      # internet or through the tunnel): the image carries the newest one there was when it was built, and the server asks
+      # GitHub (api.github.com) once a day for a newer one, downloading it (about 160 MB) into data/apk/ only when there is
+      # one. EMPTY = it does. `true` = it never asks; the image's APK is still served. See apps/server/src/services/apk-mirror.ts.
+      - DISABLE_APK_UPDATE_CHECK=${DISABLE_APK_UPDATE_CHECK:-}
+      # EMPTY = a phone on the local network sees "Get the Android app" on the web app's welcome screen. `true` = no link
+      # anywhere; the page and the APK are still there for whoever types the address on the local network.
+      - HIDE_APK_LINK=${HIDE_APK_LINK:-}
       # Where photos and attachments live. EMPTY = on this node's own disk under /data/images, which is every local
       # node. `s3` = an S3-compatible bucket (Cloudflare R2; the global node), and then all five IMAGE_S3_* must be
       # set or the node refuses to start. From .env only: never stored in node_config, never put in a backup.

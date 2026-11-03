@@ -199,7 +199,7 @@ export async function downloadApk(release: ApkRelease, dest: string, source: Apk
             for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
                 bytes += chunk.byteLength;
                 if (bytes > release.size) throw new Error(`the download is larger than the ${release.size} bytes its release gives`);
-                if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
+                if (!out.write(chunk)) await new Promise<void>((r) => out.once('drain', () => r()));
             }
         } finally {
             await new Promise<void>((resolve, reject) => out.end((e?: Error | null) => (e ? reject(e) : resolve())));

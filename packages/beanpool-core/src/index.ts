@@ -39,6 +39,7 @@ export * from './geo.js';
 export * from './member-area-words.js';
 export * from './community-card.js';
 export * from './address-reach.js';
+export * from './android-on-node-words.js';
 export * from './first-trade-words.js';
 export * from './invite-vouch.js';
 export * from './invite-ask.js';

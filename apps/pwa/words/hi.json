@@ -3688,5 +3688,7 @@
   "Event · {from}": "कार्यक्रम · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "यह आपका होम है। नीचे कार्ड जोड़ें, या व्यवस्थित करने के लिए किसी कार्ड को दबाए रखें।",
   "Move {card} earlier": "{card} को पहले ले जाएं",
-  "Move {card} later": "{card} को बाद में ले जाएं"
+  "Move {card} later": "{card} को बाद में ले जाएं",
+  "Messages in your other communities show on your phone, or when you open that community here.": "आपके अन्य समुदायों के संदेश आपके फोन पर दिखाई देते हैं, या जब आप उस समुदाय को यहां खोलते हैं।",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "आपके द्वारा रखे गए प्रत्येक समुदाय से अलर्ट आपके फोन पर पहुंचते हैं। आप BeanPool शीट पर किसी समुदाय के लिए इन्हें बंद कर सकते हैं।"
 }

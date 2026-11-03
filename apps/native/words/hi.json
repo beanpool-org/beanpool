@@ -64,7 +64,7 @@
   "Your account there was closed.": "वहाँ आपका खाता बंद कर दिया गया।",
   "Your own community isn't affected.": "आपका अपना समुदाय इससे प्रभावित नहीं है।",
   "Global community, {state}": "वैश्विक समुदाय, {state}",
-  "Switches to this community. Long press to remove it.": "इस समुदाय पर ले जाता है। हटाने के लिए देर तक दबाएँ।",
+  "Switches to this community. Long press for its options.": "इस समुदाय पर ले जाता है। इसके विकल्पों के लिए देर तक दबाएँ।",
   "Guest": "अतिथि",
   "Explore BeanPool worldwide": "पूरी दुनिया में BeanPool देखें",
   "🌍 Explore BeanPool worldwide": "🌍 पूरी दुनिया में BeanPool देखें",
@@ -6195,5 +6195,14 @@
   "Stop taking questions": "सवाल लेना बंद करें",
   "on the global community": "वैश्विक समुदाय पर",
   "Open their requests there": "उनके अनुरोध वहाँ खोलें",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "यह आपका होम है। नीचे कार्ड जोड़ें, या व्यवस्थित करने के लिए किसी कार्ड को दबाए रखें।"
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "यह आपका होम है। नीचे कार्ड जोड़ें, या व्यवस्थित करने के लिए किसी कार्ड को दबाए रखें।",
+  "Alerts from this community": "इस समुदाय से अलर्ट",
+  "Stops notifications and unread message checks from this community": "इस समुदाय से सूचनाएं और अपठित संदेशों की जांच बंद करता है",
+  "Remove from your saved list": "अपनी सहेजी गई सूची से हटाएं",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{community} में {n} नया संदेश · बदलें",
+    "other": "{community} में {n} नए संदेश · बदलें"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "आपके द्वारा रखे गए प्रत्येक समुदाय से अलर्ट आपके फोन पर पहुंचते हैं। आप BeanPool शीट पर किसी समुदाय के लिए इन्हें बंद कर सकते हैं।",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "इस फ़ोन पर अलर्ट बंद हैं। वहाँ उन्हें रोकने के लिए यह फ़ोन अभी इस समुदाय तक नहीं पहुँच सका, और फिर कोशिश करेगा।"
 }

@@ -64,7 +64,7 @@
   "Your account there was closed.": "Akunmu di sana sudah ditutup.",
   "Your own community isn't affected.": "Komunitasmu sendiri tidak terpengaruh.",
   "Global community, {state}": "Komunitas global, {state}",
-  "Switches to this community. Long press to remove it.": "Beralih ke komunitas ini. Tekan lama untuk menghapusnya.",
+  "Switches to this community. Long press for its options.": "Beralih ke komunitas ini. Tekan lama untuk melihat opsinya.",
   "Guest": "Tamu",
   "Explore BeanPool worldwide": "Jelajahi BeanPool di seluruh dunia",
   "🌍 Explore BeanPool worldwide": "🌍 Jelajahi BeanPool di seluruh dunia",
@@ -5953,5 +5953,13 @@
   "Stop taking questions": "Berhenti menerima pertanyaan",
   "on the global community": "di komunitas global",
   "Open their requests there": "Buka permintaan mereka di sana",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Ini Beranda Anda. Tambahkan kartu di bagian bawah, atau tahan kartu untuk mengatur."
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Ini Beranda Anda. Tambahkan kartu di bagian bawah, atau tahan kartu untuk mengatur.",
+  "Alerts from this community": "Pemberitahuan dari komunitas ini",
+  "Stops notifications and unread message checks from this community": "Menghentikan notifikasi dan pemeriksaan pesan belum dibaca dari komunitas ini",
+  "Remove from your saved list": "Hapus dari daftar tersimpan",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{n} pesan baru di {community} · Beralih"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Pemberitahuan sampai ke ponsel Anda dari setiap komunitas yang Anda simpan. Anda dapat menonaktifkannya untuk komunitas di lembar BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Pemberitahuan mati di ponsel ini. Ponsel belum bisa menghubungi komunitas ini untuk menghentikannya di sana, dan akan mencoba lagi."
 }

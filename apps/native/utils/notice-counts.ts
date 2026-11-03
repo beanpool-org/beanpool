@@ -24,6 +24,7 @@
  */
 import { PUSH_NOTICE_CLOCK_SKEW_SECONDS, PUSH_NOTICE_LIFETIME_SECONDS } from '@beanpool/core';
 import { communityAddress } from './push-pins';
+import { communitiesWithAlertsOff } from './push-alerts-off';
 import { NOTICE_COUNTS_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 import { onCommunitySwitched } from './community-switch';
 
@@ -108,13 +109,18 @@ let writes: Promise<unknown> = Promise.resolve();
  * can't be read), and write them back if it did, after any change under way. Resolves to whether that all held. Never
  * throws: a count that can't be kept is logged, and the numbers stay as they were.
  */
-function update(storage: Storage, change: (tallies: Tallies, active: string | null, kept: Set<string> | null) => boolean): Promise<boolean> {
+function update(
+    storage: Storage,
+    change: (tallies: Tallies, active: string | null, kept: Set<string> | null, off: Set<string>) => boolean,
+): Promise<boolean> {
     const next = writes.then(async () => {
+        // Read inside the write, after any change of the list under way: a switch turned off a moment ago is already here.
+        const off = new Set(await communitiesWithAlertsOff(storage));
         const raw = await storage.getItem(NOTICE_COUNTS_STORE_KEY);
         const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
         const tallies = parse(raw);
         const kept = keptCommunities(anchor, await storage.getItem(SAVED_NODES_STORE_KEY));
-        let dirty = change(tallies, anchor, kept);
+        let dirty = change(tallies, anchor, kept, off);
         // A community the phone no longer keeps takes its count with it (not when the list can't be read: a list that
         // can't be read says nothing about what was forgotten).
         if (kept) for (const c of Object.keys(tallies)) if (!kept.has(c)) { delete tallies[c]; dirty = true; }
@@ -133,11 +139,12 @@ function update(storage: Storage, change: (tallies: Tallies, active: string | nu
 
 /**
  * Notice `id` from `community` reached the phone: counted for that community, unless it is the one in use, or this notice
- * was counted (or seen there) before. Only for a notice the phone checked first (push-notice-check.ts `verifiedNotice`, or
+ * was counted (or seen there) before, or alerts from that community are off (Marty: off silences at once, a push already in
+ * the tray or on its way included; it is still noted as seen). Only for a notice the phone checked first (push-notice-check.ts `verifiedNotice`, or
  * a tap's `checkTap`). Never throws.
  */
 export async function countNotice(storage: Storage, community: string, id: string, now: number = Math.floor(Date.now() / 1000)): Promise<void> {
-    await update(storage, (tallies, active) => {
+    await update(storage, (tallies, active, _kept, off) => {
         const at = communityAddress(community);
         if (!at) return false;
         const tally = tallies[at] ?? { n: 0, seen: {} };
@@ -145,7 +152,7 @@ export async function countNotice(storage: Storage, community: string, id: strin
         tally.seen[id] = now;
         const kept = Object.entries(tally.seen).filter(([, t]) => now - t <= SEEN_KEEP_SECONDS).sort((a, b) => b[1] - a[1]);
         tally.seen = Object.fromEntries(kept.slice(0, SEEN_MAX));
-        if (at !== active) tally.n += 1;
+        if (at !== active && !off.has(at)) tally.n += 1;
         tallies[at] = tally;
         return true;
     });
@@ -156,14 +163,15 @@ export async function countNotice(storage: Storage, community: string, id: strin
  * there. `alerts` is how many of those lines it says a push would have told; a node too old to say gives `unread` here.
  * Resolves to whether `alerts` rose on what it last said, written down before it says so, so one rise is one caller's to
  * tell and nobody tells it twice (two rounds at once, or a write that failed): a line in a muted chat moves the number and
- * tells nobody. A community that has said nothing since it was last in use is compared with none waiting. Nothing for the
+ * tells nobody. Nothing for a community with alerts off, whenever the answer came. A community that has said nothing since it was last in use is compared with none waiting. Nothing for the
  * community in use (the member moved there while it answered) or one the phone doesn't keep. Never throws.
  */
 export async function noteServerUnread(storage: Storage, community: string, unread: number, alerts: number = unread): Promise<boolean> {
     let rose = false;
-    const held = await update(storage, (tallies, active, kept) => {
+    const held = await update(storage, (tallies, active, kept, off) => {
         const at = communityAddress(community);
-        if (!at || at === active || !kept?.has(at)) return false;
+        // Not for a community whose alerts went off while it answered: the switch has already cleared its number.
+        if (!at || at === active || !kept?.has(at) || off.has(at)) return false;
         const tally = tallies[at] ?? { n: 0, seen: {} };
         const same = tally.server === unread && tally.alerts === alerts && tally.n === 0;
         rose = alerts > (tally.alerts ?? 0);
@@ -213,7 +221,7 @@ export async function clearActiveCount(storage: Storage): Promise<void> {
 
 /**
  * Each community's number, by its address (push-pins.ts `communityAddress`), after any change under way: the larger of its
- * push tally and what it last said, only for the communities the phone keeps, never the one in use, and none at 0. Empty
+ * push tally and what it last said, only for the communities the phone keeps, never the one in use or one with alerts off, and none at 0. Empty
  * when they can't be read.
  */
 export async function readNoticeCounts(storage: Pick<Storage, 'getItem'>): Promise<Record<string, number>> {
@@ -222,10 +230,11 @@ export async function readNoticeCounts(storage: Pick<Storage, 'getItem'>): Promi
         const tallies = parse(await storage.getItem(NOTICE_COUNTS_STORE_KEY));
         const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
         const kept = keptCommunities(anchor, await storage.getItem(SAVED_NODES_STORE_KEY));
+        const off = new Set(await communitiesWithAlertsOff(storage));
         const out: Record<string, number> = {};
         for (const [c, tally] of Object.entries(tallies)) {
             const number = Math.max(tally.n, tally.server ?? 0);
-            if (c !== anchor && number > 0 && (!kept || kept.has(c))) out[c] = number;
+            if (c !== anchor && number > 0 && (!kept || kept.has(c)) && !off.has(c)) out[c] = number;
         }
         return out;
     } catch {

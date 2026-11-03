@@ -36,7 +36,8 @@ vi.mock('react-native', () => {
         if (accessibilityState?.disabled || disabled) attrs['aria-disabled'] = 'true';
         if (value !== undefined && onValueChange) attrs['aria-checked'] = String(!!value);
         if (accessible) attrs['data-accessible'] = 'true';
-        if (testID === 'card-settings-sheet') attrs['data-style'] = JSON.stringify(Object.assign({}, ...[props.style].flat(3).filter(Boolean)));
+        if (props.accessibilityElementsHidden) attrs['aria-hidden'] = 'true';
+        if (testID === 'card-settings-sheet' || /^card-band-|^add-card-.*-dot$/.test(testID ?? '')) attrs['data-style'] = JSON.stringify(Object.assign({}, ...[props.style].flat(3).filter(Boolean)));
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     class Value { constructor(public v: number) {} setValue(v: number) { this.v = v; } interpolate() { return 0; } }
@@ -152,7 +153,8 @@ import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import * as tourStore from '../tour-store';
-import { START_CARD_WORDS } from '@beanpool/core';
+import { START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
+import { lightColors } from '../../constants/colors';
 import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
@@ -450,6 +452,34 @@ describe('tailoring: the "…" menu, Arrange, interests', () => {
         expect(after.slice(0, 2)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
         expect(JSON.parse(node.requests[before].body).preferences['home.layout'].cards[0]).toEqual({ id: 'pulse', type: 'pulse' });
         expect(homeReads().at(-1)!.url).toContain('pulse');
+    });
+
+    it('a search saved from the Market with a category comes to Home in that category\'s colour (S2)', async () => {
+        const settings = searchFromMarket({ q: 'seedlings', category: 'garden', kind: 'offer' })!;
+        const lime = lightColors.card.lime;
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({
+            v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings }, { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'any' } }],
+            dismissed: {}, updatedAt: new Date().toISOString(),
+        }));
+        await render();
+        const band = (id: string) => JSON.parse(document.querySelector(`[data-testid="card-band-${id}"]`)!.getAttribute('data-style')!);
+        expect(band('search-k7mq').backgroundColor).toBe(lime.tint);
+        // No category: the Market's orange, as before.
+        expect(band('search-m4p9').backgroundColor).toBe(lightColors.card.orange.tint);
+    });
+
+    it('the picker shows each card\'s hue as a dot before its name: decoration, no label, hidden from a screen reader (S2)', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        const dot = (type: string) => document.querySelector(`[data-testid="add-card-${type}-dot"]`) as HTMLElement;
+        expect(JSON.parse(dot('events').getAttribute('data-style')!)).toMatchObject({ width: 10, height: 10, backgroundColor: lightColors.card.violet.ink });
+        expect(JSON.parse(dot('search').getAttribute('data-style')!).backgroundColor).toBe(lightColors.card.orange.ink);
+        expect(JSON.parse(dot('groups').getAttribute('data-style')!).backgroundColor).toBe(lightColors.card.rose.ink);
+        for (const d of Array.from(document.querySelectorAll('[data-testid^="add-card-"][data-testid$="-dot"]'))) {
+            expect(d.getAttribute('aria-hidden')).toBe('true');
+            expect(d.hasAttribute('aria-label')).toBe(false);
+            expect(d.textContent).toBe('');
+        }
     });
 
     it('a saved search: Add opens its settings sheet, Add to Home puts it first with its words, and it says it fills in from the node', async () => {

@@ -38,7 +38,7 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { ARRANGE_WORDS, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { HOLD_MS } from '../components/HomeCard';
@@ -2292,6 +2292,23 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         await waitFor(() => expect(within(card).getByTestId('home-search-offline')).toHaveTextContent('Shows when your community answers'));
         expect(within(card).queryAllByTestId('home-search-item')).toHaveLength(0);
         expect(card).not.toHaveTextContent('Fresh eggs');
+    });
+
+    it('a search saved from the Market with a category comes to Home in that category\'s colour; with none it stays orange (S2)', async () => {
+        const settings = searchFromMarket({ q: 'seedlings', category: 'garden', kind: 'offer' })!;
+        nodeKeeping(answer(), v2(['market'], AT, [
+            { id: 'search-k7mq', type: 'search', settings },
+            { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'any' } },
+        ]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-search-k7mq');
+        const band = (id: string) => screen.getByTestId(`card-band-${id}`);
+        expect(band('search-k7mq').style.backgroundColor).toBe('var(--bp-card-lime-tint)');
+        expect(band('search-k7mq').style.color).toBe('var(--bp-card-lime-ink)');
+        expect(band('search-m4p9').style.backgroundColor).toBe('var(--bp-card-orange-tint)');
+        // The same colour in Arrange, where the bands stand in for the cards.
+        openArrange();
+        expect(band('search-k7mq').style.backgroundColor).toBe('var(--bp-card-lime-tint)');
     });
 
     it('Arrange names the band by its words, so two searches read as two cards', async () => {

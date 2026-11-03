@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_TYPES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS,
+    HOME_CARD_TYPES, HOME_CATEGORY_HUES, HOME_CHAT_KIND_HUES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS,
     HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardSettings,
     cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeCardHue, homeColumns, moveCard, readChatSettings, readDecideSettings, readHomeLayout,
     readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 import { t } from '../words.js';
+import { BRAND_COLOURS } from '../brand-colours.js';
+import { PRICING_CATEGORIES } from '../pricing-catalog.js';
 import { toolHomeCardTypes } from '../tools/index.js';
 
 const AT = '2026-10-08T10:00:00.000Z';
@@ -478,6 +480,44 @@ describe('card hues (S1, scratch/fable-design/DESIGN-home-look-fable.md §2.2)',
         expect(homeCardHue(undefined)).toBe('sage');
         expect(homeCardHue(null)).toBe('sage');
         expect(homeCardHue({} as unknown as { type: string })).toBe('sage');
+    });
+
+    it('a saved search with a category takes the category hue; with none (or an unknown one) it keeps orange', () => {
+        const search = (settings?: Record<string, unknown>) => ({ id: 'search-1', type: 'search', settings });
+        expect(homeCardHue(search({ q: 'eggs', kind: 'any' }))).toBe('orange');
+        expect(homeCardHue(search())).toBe('orange');
+        expect(homeCardHue(search({ q: 'eggs', category: 'not-a-category' }))).toBe('orange');
+        for (const c of PRICING_CATEGORIES) {
+            const hue = homeCardHue(search({ q: 'x', category: c.id }));
+            expect(hue, c.id).toBe(HOME_CATEGORY_HUES[c.id]);
+            expect(hue, `${c.id} is never amber`).not.toBe('amber');
+        }
+        expect(homeCardHue(search({ q: 'x', category: 'garden' }))).toBe('lime');
+        expect(homeCardHue(search({ q: 'x', category: 'housing' }))).toBe('clay');
+        expect(homeCardHue(search({ q: 'x', category: 'tech' }))).toBe('sky');
+        expect(homeCardHue(search({ q: 'x', category: 'labour' }))).toBe('yellow');
+    });
+
+    it('the category map names every category, and only hues the colour library has', () => {
+        expect(Object.keys(HOME_CATEGORY_HUES).sort()).toEqual(PRICING_CATEGORIES.map(c => c.id).sort());
+        for (const hue of Object.values(HOME_CATEGORY_HUES)) expect(Object.keys(BRAND_COLOURS.card)).toContain(hue);
+    });
+
+    it('a chat card takes its kind\'s hue; with no chat picked it keeps sage', () => {
+        const chat = (settings?: Record<string, unknown>) => ({ id: 'chat-1', type: 'chat', settings });
+        expect(homeCardHue(chat())).toBe('sage');
+        expect(homeCardHue(chat({}))).toBe('sage');
+        expect(homeCardHue(chat({ conversationId: 'c1', kind: 'dm', name: 'Sam' }))).toBe('sage');
+        expect(homeCardHue(chat({ conversationId: 'c2', kind: 'group', name: 'Gardeners' }))).toBe('rose');
+        expect(homeCardHue(chat({ conversationId: 'c3', kind: 'event', name: 'Fete' }))).toBe('violet');
+        expect(homeCardHue(chat({ conversationId: 'c4', kind: 'enterprise', name: 'Bakery' }))).toBe('clay');
+        expect(homeCardHue(chat({ conversationId: 'c5', kind: 'nonsense' }))).toBe('sage');
+        for (const kind of HOME_CHAT_KINDS) expect(Object.keys(BRAND_COLOURS.card)).toContain(HOME_CHAT_KIND_HUES[kind]);
+    });
+
+    it('the settings of one type never colour another', () => {
+        expect(homeCardHue({ type: 'market', settings: { category: 'garden' } })).toBe('orange');
+        expect(homeCardHue({ type: 'events', settings: { conversationId: 'c', kind: 'group' } })).toBe('violet');
     });
 });
 

@@ -14,7 +14,7 @@
  */
 import { useRef, useState, type ReactNode } from 'react';
 import {
-    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t, word,
+    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, homeCardHue, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t, word,
     type HomeDecideShow, type HomeSearchKind, type SkySettings, type WordKey,
 } from '@beanpool/core';
 import { type PickerGroup, type PickerRow } from '../lib/home-layout';
@@ -92,7 +92,12 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPo
                             <li key={r.type} data-testid={`home-add-row-${r.type}`}
                                 className="flex items-center gap-2 px-3 py-2 border-b border-nature-100 dark:border-nature-800 last:border-b-0 min-w-0">
                                 <span className="flex-1 min-w-0 break-words">
-                                    <span className="block text-sm font-bold text-nature-900 dark:text-white">{r.name}</span>
+                                    <span className="flex items-center min-w-0" style={{ gap: 6 }}>
+                                        {/* The colour the card will have on Home, before it is there: decoration, hidden from a screen reader. */}
+                                        <span aria-hidden="true" data-testid={`home-add-dot-${r.type}`} className="shrink-0 rounded-full"
+                                            style={{ width: 10, height: 10, backgroundColor: `var(--bp-card-${homeCardHue({ type: r.type })}-ink)` }} />
+                                        <span className="min-w-0 text-sm font-bold text-nature-900 dark:text-white">{r.name}</span>
+                                    </span>
                                     <span className="block text-xs text-nature-700 dark:text-nature-200">{r.line}</span>
                                     {r.count && <span data-testid={`home-add-count-${r.type}`} className="block text-xs text-nature-600 dark:text-nature-300">{r.count}</span>}
                                     {r.status && <span className="block text-xs text-nature-600 dark:text-nature-300">{r.status}</span>}

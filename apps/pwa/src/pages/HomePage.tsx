@@ -54,7 +54,7 @@ import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
-    starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
+    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
     type HomeFind,
 } from '../lib/home-cards';
@@ -395,7 +395,7 @@ function MarketListingItem({
                             {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
                         </span>
                         <span dir="auto" className="text-sm font-semibold break-words text-text-primary">
-                            {item.title}
+                            {item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}
                         </span>
                     </div>
                     {(price || km) && (
@@ -434,7 +434,7 @@ function MarketListingItem({
                     <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>
                         {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
                     </span>
-                    <span dir="auto">{item.title}</span>
+                    <span dir="auto">{item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}</span>
                 </span>
                 {(price || km) && <span className="block text-xs text-text-secondary">{[price, km].filter(Boolean).join(' · ')}</span>}
             </span>
@@ -458,7 +458,7 @@ function MarketBody({
     nextImageLoading: () => 'eager' | 'lazy';
 }) {
     const { wide } = useCardContainer();
-    const items = starredFirst(m.items, i => i.category, isVisitor ? [] : myInterests);
+    const items = pinnedFirst(starredFirst(m.items, i => i.category, isVisitor ? [] : myInterests));
     const examples = m.examples && m.items.length < 6;
 
     return (
@@ -794,7 +794,7 @@ function DecideBody({
                         testId="home-decide-poll"
                     >
                         <span className="min-w-0 flex-1">
-                            <span className="block break-words text-sm font-semibold">{pollHeading}</span>
+                            <span className="block break-words text-sm font-semibold">{d.poll!.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{pollHeading}</span>
                             {pollCloses && <span className="block text-xs text-text-secondary break-words">{pollCloses}</span>}
                         </span>
                     </HomeLine>
@@ -2730,7 +2730,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                             </span>
                                         )}
                                         {repeats && <span data-testid="home-event-repeats" className="block break-words text-xs font-bold text-violet-800 dark:text-violet-200"><span aria-hidden="true">↻ </span>{repeats}</span>}
-                                        <span dir="auto" className="block break-words font-semibold">{item.title}</span>
+                                        <span dir="auto" className="block break-words font-semibold">{item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}</span>
                                         {(where || km) && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{[where, km].filter(Boolean).join(' · ')}</span>}
                                     </span>
                                     {rsvp && <span className="shrink-0 text-xs font-bold text-emerald-800 dark:text-emerald-300">{rsvp}</span>}

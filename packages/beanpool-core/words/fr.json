@@ -989,5 +989,11 @@
     "other": "{n} membres vous ont demandé d’inviter quelqu’un"
   },
   "🛡️ Your message requests were cleared": "🛡️ Vos demandes de message ont été effacées",
-  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Des personnes à qui vous avez écrit ont signalé vos demandes de message : elles ont donc été effacées et vous ne pouvez pas en envoyer de nouvelles jusqu'au {date}. Vous pouvez toujours répondre aux personnes qui vous ont écrit, et publier."
+  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Des personnes à qui vous avez écrit ont signalé vos demandes de message : elles ont donc été effacées et vous ne pouvez pas en envoyer de nouvelles jusqu'au {date}. Vous pouvez toujours répondre aux personnes qui vous ont écrit, et publier.",
+  "This link opens for members only.": "Ce lien ne s'ouvre que pour les membres.",
+  "This link opens for members only, and only admins invite here.": "Ce lien ne s'ouvre que pour les membres, et seuls les admins invitent ici.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Tout le monde peut lire cette annonce pendant 7 jours, puis demander à rejoindre.",
+  "Anyone can read this listing for 7 days.": "Tout le monde peut lire cette annonce pendant 7 jours.",
+  "Anyone can read this event for 7 days, then ask to join.": "Tout le monde peut lire cet événement pendant 7 jours, puis demander à rejoindre.",
+  "Anyone can read this event for 7 days.": "Tout le monde peut lire cet événement pendant 7 jours."
 }

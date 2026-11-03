@@ -933,5 +933,11 @@
     "other": "{n} anggota meminta Anda mengundang seseorang"
   },
   "🛡️ Your message requests were cleared": "🛡️ Permintaan pesanmu dihapus",
-  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Orang yang kamu tulisi melaporkan permintaan pesanmu, jadi permintaan itu dihapus dan kamu tidak dapat mengirim yang baru sampai {date}. Kamu masih bisa membalas orang yang menulis kepadamu, dan memposting."
+  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Orang yang kamu tulisi melaporkan permintaan pesanmu, jadi permintaan itu dihapus dan kamu tidak dapat mengirim yang baru sampai {date}. Kamu masih bisa membalas orang yang menulis kepadamu, dan memposting.",
+  "This link opens for members only.": "Tautan ini hanya terbuka untuk anggota.",
+  "This link opens for members only, and only admins invite here.": "Tautan ini hanya terbuka untuk anggota, dan di sini hanya admin yang mengundang.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Siapa pun dapat membaca postingan ini selama 7 hari, lalu meminta bergabung.",
+  "Anyone can read this listing for 7 days.": "Siapa pun dapat membaca postingan ini selama 7 hari.",
+  "Anyone can read this event for 7 days, then ask to join.": "Siapa pun dapat membaca acara ini selama 7 hari, lalu meminta bergabung.",
+  "Anyone can read this event for 7 days.": "Siapa pun dapat membaca acara ini selama 7 hari."
 }

@@ -36,7 +36,7 @@ import { adminSigninText, signedRequestBytes } from '@beanpool/core';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
     canManageNode, manageLabel, manageSubtitle, computerSigninLabel, fetchMyNodeRole, fetchAdminQueue, requireDeviceUnlock, requestSettingsLink,
-    buildSettingsHandoffUrl, manageNode, cachedNodeRole, forgetNodeRole, rememberNodeRole, ROLE_CACHE_MS,
+    buildSettingsHandoffUrl, manageNode, cachedNodeRole, cachedNodeRoleHeard, forgetNodeRole, rememberNodeRole, ROLE_CACHE_MS,
 } from '../node-admin';
 
 // The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
@@ -157,6 +157,16 @@ describe("the header's remembered role (so non-admins never ask for the queue)",
         await cachedNodeRole('https://cache-c.example', identity, T);
         await cachedNodeRole('https://cache-b.example', { ...identity, publicKey: 'ef'.repeat(32) }, T);
         expect(calls).toHaveLength(3);
+    });
+
+    it('cachedNodeRoleHeard tells "no answer" (null) from "no role" (a role of null), and does not remember the first', async () => {
+        const url = 'https://cache-heard.example';
+        (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
+        expect(await cachedNodeRoleHeard(url, identity, T)).toBeNull();
+        mockFetch({ '/api/node-admin/me': me('member') });
+        const heard = await cachedNodeRoleHeard(url, identity, T + 1);
+        expect(heard).not.toBeNull();
+        expect(heard?.role).toBeNull();
     });
 
     it('no answer (offline, a 5xx) is not remembered; a refusal is', async () => {

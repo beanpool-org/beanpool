@@ -933,5 +933,11 @@
     "other": "{n} 位成員請你邀請某人"
   },
   "🛡️ Your message requests were cleared": "🛡️ 你的訊息請求已被清除",
-  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "你寫信的人檢舉了你的訊息請求，因此這些請求已被清除，在 {date} 之前你不能傳送新的訊息請求。你仍然可以回覆寫信給你的人，也可以發布內容。"
+  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "你寫信的人檢舉了你的訊息請求，因此這些請求已被清除，在 {date} 之前你不能傳送新的訊息請求。你仍然可以回覆寫信給你的人，也可以發布內容。",
+  "This link opens for members only.": "此連結僅供成員開啟。",
+  "This link opens for members only, and only admins invite here.": "此連結僅供成員開啟，且此處僅管理員可邀請。",
+  "Anyone can read this listing for 7 days, then ask to join.": "任何人均可在 7 天內查看此刊登內容，然後申請加入。",
+  "Anyone can read this listing for 7 days.": "任何人均可在 7 天內查看此刊登內容。",
+  "Anyone can read this event for 7 days, then ask to join.": "任何人均可在 7 天內查看此活動，然後申請加入。",
+  "Anyone can read this event for 7 days.": "任何人均可在 7 天內查看此活動。"
 }

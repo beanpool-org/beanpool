@@ -444,7 +444,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             setMyNodeRole(null);
             return;
         }
-        myNodeRoleOnce().then(r => { if (alive) setMyNodeRole(r); }).catch(() => {});
+        // No answer from the node (undefined) is no role here, as it always was for this page.
+        myNodeRoleOnce().then(r => { if (alive) setMyNodeRole(r ?? null); }).catch(() => {});
         return () => { alive = false; };
     }, [identity?.publicKey]);
     const isOwnerOrAdmin = Boolean(identity?.publicKey) && (myNodeRole === 'owner' || myNodeRole === 'admin');
@@ -2152,7 +2153,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 </div>
 
                  {/* Share with members, and outside the community where it allows it (front doors S6). */}
-                 <SharePostButtons post={selectedPost} />
+                 <SharePostButtons post={selectedPost} isMember={isMember} />
 
                  {!!identity && selectedPost.authorPublicKey === identity.publicKey && (
                      <ShowOnGlobalHostRow

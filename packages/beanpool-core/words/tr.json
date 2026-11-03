@@ -974,5 +974,11 @@
     "other": "{n} üye birini davet etmenizi istedi"
   },
   "🛡️ Your message requests were cleared": "🛡️ Mesaj isteklerin silindi",
-  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Yazdığın kişiler mesaj isteklerini şikayet etti; bu yüzden istekler silindi ve {date} tarihine kadar yenisini gönderemezsin. Sana yazan kişilere yanıt verebilir ve gönderi paylaşabilirsin."
+  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Yazdığın kişiler mesaj isteklerini şikayet etti; bu yüzden istekler silindi ve {date} tarihine kadar yenisini gönderemezsin. Sana yazan kişilere yanıt verebilir ve gönderi paylaşabilirsin.",
+  "This link opens for members only.": "Bu bağlantı yalnızca üyeler için açılır.",
+  "This link opens for members only, and only admins invite here.": "Bu bağlantı yalnızca üyeler için açılır ve burada yalnızca yöneticiler davet edebilir.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Herkes bu ilanı 7 gün boyunca okuyabilir, ardından katılma isteği gönderebilir.",
+  "Anyone can read this listing for 7 days.": "Herkes bu ilanı 7 gün boyunca okuyabilir.",
+  "Anyone can read this event for 7 days, then ask to join.": "Herkes bu etkinliği 7 gün boyunca okuyabilir, ardından katılma isteği gönderebilir.",
+  "Anyone can read this event for 7 days.": "Herkes bu etkinliği 7 gün boyunca okuyabilir."
 }

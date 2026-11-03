@@ -9,9 +9,10 @@
  * which. A refusal says the node's own words, and nothing is copied: never a false success.
  */
 import { useState } from 'react';
-import { PEEK_WORDS as W, t } from '@beanpool/core';
+import { PEEK_WORDS as W, shareSays, t, type WordKey } from '@beanpool/core';
 import type { MarketplacePost } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
+import { useShareRole } from '../lib/use-share-role';
 import { eventLink } from '../lib/event-extras';
 import { makePeekLink } from '../lib/peek';
 import { handOver } from '../lib/hand-over';
@@ -52,7 +53,8 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
     // The link made but not handed over, for the post it was made for (the same button may be drawn for another post
     // next): `failed`, shown to copy by hand; or the share sheet was closed, kept unshown for the next tap.
     const [kept, setKept] = useState<{ postId: string; link: string; failed: boolean } | null>(null);
-    if (info?.features?.shareOutside !== true || !shareableOutside(post)) return null;
+    const says = shareSays(info?.features, undefined, post.type === 'event' ? 'event' : 'listing');
+    if (!says.showShareOutside || !shareableOutside(post)) return null;
     const keptLink = kept?.postId === post.id ? kept.link : null;
     const shownLink = kept?.postId === post.id && kept.failed ? kept.link : null;
 
@@ -90,7 +92,9 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
             <button type="button" data-testid="share-outside-button" onClick={share} disabled={busy} className={BUTTON}>
                 {t(W.shareOutside)}
             </button>
-            <p className="m-0 text-xs text-text-primary break-words">{t(W.shareOutsideNote)}</p>
+            {/* The standing assurance, before the tap: no names or faces, and it can be stopped. */}
+            <p data-testid="share-outside-privacy" className="m-0 text-xs text-text-primary break-words">{t(W.shareOutsideNote)}</p>
+            {says.outsideLine && <p data-testid="share-outside-line" className="m-0 text-xs text-text-secondary break-words">{t(says.outsideLine)}</p>}
             {note && (
                 <p role="status" data-testid="share-outside-note" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
                     {note.text}
@@ -111,7 +115,12 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
 }
 
 /** A listing's two shares: the members' link, and outside where the community allows it. */
-export function SharePostButtons({ post }: { post: MarketplacePost }) {
+export function SharePostButtons({ post, isMember }: { post: MarketplacePost; isMember?: boolean | null }) {
+    const info = useCommunityInfo();
+    const role = useShareRole(info?.features);
+    const says = shareSays(info?.features, role, post.type === 'event' ? 'event' : 'listing');
+    // Invite and share is a member's: a guest here, or one not yet known to be a member, is not offered it. (Omitted means a member.)
+    const showInvite = says.showInviteButton && isMember !== false && isMember !== null;
     const [note, setNote] = useState<string | null>(null);
     const shareWithMembers = async () => {
         const how = await handOver(post.title, eventLink(nodeOrigin(), post.id));
@@ -122,10 +131,17 @@ export function SharePostButtons({ post }: { post: MarketplacePost }) {
             <button type="button" data-testid="share-members-button" onClick={shareWithMembers} className={BUTTON}>
                 {t(W.shareWithMembers)}
             </button>
+            {says.membersLine && (
+                <p data-testid="share-members-note" className="m-0 text-xs text-text-secondary break-words">
+                    {t(says.membersLine)}
+                </p>
+            )}
             {note && <p role="status" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{note}</p>}
-            <ShareOutsideButton post={post} />
-            {/* One invite for a friend, who lands here once they have joined (invite-and-share): only where this member may invite. */}
-            <InviteAndShareButton post={post} />
+            {says.showShareOutside && <ShareOutsideButton post={post} />}
+            {/* ONE invite action (share-one-flow): Invite and share, where this member may invite and the line above does not
+                say only admins do. Where only admins invite and this member is none, the line stands and nothing is offered:
+                the seam for "Ask an admin" (#2775) is here. */}
+            {showInvite && <InviteAndShareButton post={post} />}
         </div>
     );
 }

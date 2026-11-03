@@ -320,6 +320,7 @@ export interface CommunityInfo {
      * (absent when off).
      */
     features?: {
+        door?: string | null; invites?: boolean | null; knocks?: boolean | null;
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
         onlineEvents?: boolean;
@@ -1855,13 +1856,17 @@ export async function removePollOtherAnswer(postId: string, answerId: string): P
     return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/remove`, {});
 }
 
-let myNodeRoleRead: Promise<string | null> | null = null;
+let myNodeRoleRead: Promise<string | null | undefined> | null = null;
 
-/** The signer's role here (GET /api/node-admin/me), asked once a page load, and only by a card that has something to offer an owner. It decides nothing: the node checks every read. */
-export function myNodeRoleOnce(): Promise<string | null> {
+/**
+ * The signer's role here (GET /api/node-admin/me), asked once a page load, and only by a card that has something to offer an owner.
+ * It decides nothing: the node checks every read. A role, null (the node answered: no role), or undefined (it did not answer:
+ * not known, and asked again next time), so a card never mistakes "not heard" for "not an admin".
+ */
+export function myNodeRoleOnce(): Promise<string | null | undefined> {
     myNodeRoleRead ??= (request('GET', '/api/node-admin/me') as Promise<{ role?: string | null }>)
         .then(r => r?.role ?? null)
-        .catch(() => { myNodeRoleRead = null; return null; });
+        .catch(() => { myNodeRoleRead = null; return undefined; });
     return myNodeRoleRead;
 }
 

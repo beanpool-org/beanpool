@@ -14,6 +14,7 @@ vi.mock('react-native', () => ({
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => 'https://castlemaine.beanpool.org'), setItem: vi.fn(), removeItem: vi.fn() } }));
 vi.mock('../../app/ThemeContext', () => ({ useStyles: (f: (t: unknown) => unknown) => f({ colors: {} }) }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => null }));
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recognition: 'member' }) }));
 vi.mock('../node-profile', () => ({ shareOutsideOn: () => true }));
 vi.mock('../db', () => ({ signedRequestWithMethod: (...a: unknown[]) => signedRequestWithMethod(...a), signedGet: vi.fn() }));
 

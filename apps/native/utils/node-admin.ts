@@ -78,23 +78,27 @@ export async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): 
  * on every sign-in link.
  */
 export const ROLE_CACHE_MS = 10 * 60_000;
-const roleCache = new Map<string, { at: number; value: Promise<MyNodeRole> }>();
+const roleCache = new Map<string, { at: number; value: Promise<MyNodeRole | null> }>();
 const roleKey = (nodeUrl: string, publicKey: string) => `${base(nodeUrl)} ${publicKey}`;
 
-export function cachedNodeRole(nodeUrl: string, identity: BeanPoolIdentity, now = Date.now()): Promise<MyNodeRole> {
+export function cachedNodeRoleHeard(nodeUrl: string, identity: BeanPoolIdentity, now = Date.now()): Promise<MyNodeRole | null> {
     const key = roleKey(nodeUrl, identity.publicKey);
     const hit = roleCache.get(key);
     if (hit && now - hit.at < ROLE_CACHE_MS) return hit.value;
     const entry = {
         at: now,
         value: askNodeRole(nodeUrl, identity).then(r => {
-            if (r) return r;
-            if (roleCache.get(key) === entry) roleCache.delete(key);
-            return NO_ROLE;
+            if (!r && roleCache.get(key) === entry) roleCache.delete(key);
+            return r;
         }),
     };
     roleCache.set(key, entry);
     return entry.value;
+}
+
+/** As {@link cachedNodeRoleHeard}, with "no answer" read as no role (the header's icon, which only decides whether to ask). */
+export async function cachedNodeRole(nodeUrl: string, identity: BeanPoolIdentity, now = Date.now()): Promise<MyNodeRole> {
+    return (await cachedNodeRoleHeard(nodeUrl, identity, now)) ?? NO_ROLE;
 }
 
 /** A fresher answer (Settings asks on every focus) replaces the remembered one. */

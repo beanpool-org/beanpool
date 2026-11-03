@@ -9,10 +9,12 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { t } from '@beanpool/core';
+import { shareSays, t } from '@beanpool/core';
 import {
     getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, setEventReminder, type MarketplacePost,
 } from '../lib/api';
+import { useCommunityInfo } from '../lib/features';
+import { useShareRole } from '../lib/use-share-role';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
@@ -58,6 +60,9 @@ const BUTTON =
  * phone app shares. Google Calendar opens Google's template URL in a new tab.
  */
 export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
+    const info = useCommunityInfo();
+    const role = useShareRole(info?.features);
+    const says = shareSays(info?.features, role, 'event');
     const [note, setNote] = useState<string | null>(null);
     const [calendarMenuOpen, setCalendarMenuOpen] = useState(false);
     const calendarMenuRef = useRef<HTMLDivElement | null>(null);
@@ -177,6 +182,11 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                     </button>
                 </div>
             </div>
+            {says.membersLine && (
+                <p data-testid="event-share-members-note" className="m-0 text-xs text-text-secondary break-words">
+                    {t(says.membersLine)}
+                </p>
+            )}
             {/* In the page's flow, not floating: the event's card is overflow-hidden and would cut a floating menu off. */}
                 {calendarMenuOpen && (
                     <div
@@ -210,8 +220,10 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
             {note && <p role="status" data-testid="event-share-note" className="m-0 text-xs text-nature-600 dark:text-nature-400">{note}</p>}
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />
-            {/* One invite for a friend, who lands on this event once they have joined (invite-and-share). */}
-            <InviteAndShareButton post={post} />
+            {/* The one invite action (share-one-flow): a friend who lands on this event once they have joined. Where only admins
+                invite and this member is none, the line above stands and nothing is offered (the seam for "Ask an admin", #2775);
+                a role not heard yet offers nothing either. A guest has no key, and InviteAndShareButton draws nothing for them. */}
+            {says.showInviteButton && <InviteAndShareButton post={post} />}
         </div>
     );
 }

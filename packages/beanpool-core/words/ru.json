@@ -1056,5 +1056,11 @@
     "other": "{n} участника просят вас пригласить человека"
   },
   "🛡️ Your message requests were cleared": "🛡️ Ваши запросы на сообщение удалены",
-  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Люди, которым вы писали, пожаловались на ваши запросы на сообщение, поэтому они удалены, и до {date} вы не можете отправлять новые. Вы по-прежнему можете отвечать тем, кто вам написал, и публиковать записи."
+  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Люди, которым вы писали, пожаловались на ваши запросы на сообщение, поэтому они удалены, и до {date} вы не можете отправлять новые. Вы по-прежнему можете отвечать тем, кто вам написал, и публиковать записи.",
+  "This link opens for members only.": "Эта ссылка открывается только для участников.",
+  "This link opens for members only, and only admins invite here.": "Эта ссылка открывается только для участников, и приглашать здесь могут только администраторы.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Любой может читать это объявление 7 дней, а затем подать заявку на вступление.",
+  "Anyone can read this listing for 7 days.": "Любой может читать это объявление 7 дней.",
+  "Anyone can read this event for 7 days, then ask to join.": "Любой может читать это событие 7 дней, а затем подать заявку на вступление.",
+  "Anyone can read this event for 7 days.": "Любой может читать это событие 7 дней."
 }

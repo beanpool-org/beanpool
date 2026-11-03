@@ -1017,5 +1017,11 @@
     "other": "{n} miembros te pidieron invitar a alguien"
   },
   "🛡️ Your message requests were cleared": "🛡️ Se borraron tus solicitudes de mensaje",
-  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el {date}. Todavía puedes responder a quienes te escribieron y publicar."
+  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el {date}. Todavía puedes responder a quienes te escribieron y publicar.",
+  "This link opens for members only.": "Este enlace se abre solo para miembros.",
+  "This link opens for members only, and only admins invite here.": "Este enlace se abre solo para miembros, y aquí solo invitan los administradores.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Cualquiera puede leer esta publicación durante 7 días y luego pedir unirse.",
+  "Anyone can read this listing for 7 days.": "Cualquiera puede leer esta publicación durante 7 días.",
+  "Anyone can read this event for 7 days, then ask to join.": "Cualquiera puede leer este evento durante 7 días y luego pedir unirse.",
+  "Anyone can read this event for 7 days.": "Cualquiera puede leer este evento durante 7 días."
 }

@@ -974,5 +974,11 @@
     "other": "{n} सदस्यों ने आपसे किसी को आमंत्रित करने को कहा"
   },
   "🛡️ Your message requests were cleared": "🛡️ आपके संदेश अनुरोध हटा दिए गए",
-  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "जिन लोगों को आपने लिखा था उन्होंने आपके संदेश अनुरोधों की रिपोर्ट की, इसलिए वे हटा दिए गए और आप {date} तक नए अनुरोध नहीं भेज सकते। जिन्होंने आपको लिखा है उन्हें आप अब भी जवाब दे सकते हैं, और पोस्ट कर सकते हैं।"
+  "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "जिन लोगों को आपने लिखा था उन्होंने आपके संदेश अनुरोधों की रिपोर्ट की, इसलिए वे हटा दिए गए और आप {date} तक नए अनुरोध नहीं भेज सकते। जिन्होंने आपको लिखा है उन्हें आप अब भी जवाब दे सकते हैं, और पोस्ट कर सकते हैं।",
+  "This link opens for members only.": "यह लिंक केवल सदस्यों के लिए खुलता है।",
+  "This link opens for members only, and only admins invite here.": "यह लिंक केवल सदस्यों के लिए खुलता है, और यहाँ केवल एडमिन ही आमंत्रित करते हैं।",
+  "Anyone can read this listing for 7 days, then ask to join.": "कोई भी व्यक्ति इस लिस्टिंग को 7 दिनों तक पढ़ सकता है, फिर शामिल होने का अनुरोध कर सकता है।",
+  "Anyone can read this listing for 7 days.": "कोई भी व्यक्ति इस लिस्टिंग को 7 दिनों तक पढ़ सकता है।",
+  "Anyone can read this event for 7 days, then ask to join.": "कोई भी व्यक्ति इस कार्यक्रम को 7 दिनों तक पढ़ सकता है, फिर शामिल होने का अनुरोध कर सकता है।",
+  "Anyone can read this event for 7 days.": "कोई भी व्यक्ति इस कार्यक्रम को 7 दिनों तक पढ़ सकता है।"
 }

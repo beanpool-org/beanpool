@@ -2643,11 +2643,12 @@ export interface EndedPostArchiveRun {
  *   after the day, an RSVP), one a report waits on or hidden for the moderators, and another community's copy.
  * - A poll that has closed (by its author, or at its closing time: closeExpiredPolls, the line before this one in the
  *   minute's tick) is taken off the board (`active = 0`, its status stays `completed`) and its audience told `post_removed`.
- *   A poll carries no photos (createPost strips them). Its votes and answers stay in their tables; nothing reads them once
- *   it is off. Left alone as an event is: a report waiting, hidden for the moderators, another community's copy.
+ *   A poll carries no photos (createPost strips them). Its votes and answers stay in their tables: its author still reads
+ *   it by id, with its result (@beanpool/engine getPosts), and an owner's assistant its counts (agent/owner-posts.ts
+ *   poll_results). Left alone as an event is: a report waiting, hidden for the moderators, another community's copy.
  *
- * An event's photos go as archiveStaleListings sends a listing's: each row DELETEd with its `post_photos` tombstone, so a standby deletes
- * its copy too, the objects left to the image store's orphan sweep, brought forward. The post row is stamped, so a phone's
+ * An event's photos go as archiveStaleListings sends a listing's: each row DELETEd with its `post_photos` tombstone, so a
+ * standby deletes its copy too, the objects left to the image store's orphan sweep, brought forward. The post row is stamped, so a phone's
  * delta and a standby's next copy carry the change; nothing in it shrinks.
  *
  * Safe on every tick: each post is its own transaction, and its end state (an event with no photo, a poll off the board)

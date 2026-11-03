@@ -178,9 +178,10 @@ export interface ProfileSwitches {
     openMembership: boolean;
     /** A listing (an Offer or a Need) is archived `profileLimits().listingArchiveDays` after it last changed: taken off
      *  the Market as its author's own removal takes it, and its photos deleted (engine/posts.ts archiveStaleListings;
-     *  DESIGN-global-mothership-fable §4.2, decision 7, Marty 2026-10-18). On (the global node): photos are the cost that
-     *  grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local community): a
-     *  listing stays until its author takes it down, as before. */
+     *  DESIGN-global-mothership-fable §4.2, decision 7, Marty 2026-10-18); an event's photos are deleted a week after it ends,
+     *  and a poll leaves the board when it closes (engine/posts.ts archiveEndedPosts). On (the global node): photos are the
+     *  cost that grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local
+     *  community): a listing stays until its author takes it down, and a closed poll stays on the board, as before. */
     retention: boolean;
     /** A member's first message to someone who hasn't added them, written to them or traded with them waits as a request
      *  until that person accepts it (engine/dm-requests.ts; DESIGN-message-a-friend-fable.md §4, Marty 2026-10-23). On (the
@@ -533,13 +534,13 @@ const PLACE_WATCHES_CEILING = 20;
  * profile's default unless the operator set its env; a value out of range is the default, and the log says so once.
  */
 export interface ProfileLimits {
-    /** Days after it last changed (an edit, a pause, being put back up) a listing is archived: LISTING_ARCHIVE_DAYS, 90.
+    /** Days after it last changed (an edit, a pause, being put back up, a deal on it) a listing is archived: LISTING_ARCHIVE_DAYS, 90.
      *  Null where `retention` is off: a listing stays until its author takes it down. */
     listingArchiveDays: number | null;
     /** Days after it ended an event loses its photos: EVENT_ARCHIVE_DAYS, 7. Null where `retention` is off. */
     eventArchiveDays: number | null;
-    /** A poll is taken off the board when it closes, and its photos deleted. False where `retention` is off: a closed
-     *  poll stays on the board with its result, as before. */
+    /** A poll is taken off the board when it closes; its author still reads it by id. False where `retention` is off: a
+     *  closed poll stays on the board with its result, as before. */
     pollArchiveAtClose: boolean;
     /** Photos a listing or an event may carry: 5 on every node, as the apps' five photo slots are (@beanpool/engine
      *  MAX_POST_PHOTOS). Not an env: a lower number would meet five slots in the apps. */

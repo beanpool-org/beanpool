@@ -12,10 +12,11 @@
  *     30-day scrub takes them on every node). A repeating event whose series has ended goes the same way. Left alone: one 6
  *     days past its end, one changed 2 days ago, a series that goes on, one a report waits on, one hidden for the
  *     moderators, another community's copy, one still to come.
- *     A closed poll leaves the board (active 0, still `completed`), loses its photos, and its audience hears `post_removed`;
- *     one closed with no photo leaves too; one past its closing time goes in the same tick, after closeExpiredPolls; an
- *     open poll stays. The board read before has the closed poll, after has not; the phone's delta brings it inactive with no
- *     photos; a standby's copy (exportSyncState since) carries both rows and every photo tombstone. A second run does nothing.
+ *     A closed poll leaves the board (active 0, still `completed`) and its audience hears `post_removed`; one past its
+ *     closing time goes in the same tick, after closeExpiredPolls; an open poll stays, and so does a closed one a report
+ *     waits on. The board and a by-id read have the closed poll before, not after; its author still opens it by id, closed,
+ *     with its answers. The phone's delta brings it inactive, and the event with no photos; a standby's copy
+ *     (exportSyncState since) carries both rows and each photo tombstone. A second run does nothing.
  *  3. Bounded, main server only, the operator's: a batch of 1 says more are due; a standby archives nothing; the override
  *     retention = false on global archives nothing.
  *  4. Touched inside the window: a listing unchanged for 100 days that a member traded on 10 days ago stays up with its

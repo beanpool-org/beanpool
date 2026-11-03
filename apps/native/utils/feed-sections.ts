@@ -1,26 +1,29 @@
 /**
  * The Market feed's section headings in list view. No React Native imports, so vitest can hold it.
  *
- * Listings are headed by when they were POSTED — Today / Yesterday / This Week / Older Listings — in local
- * calendar days. Events are not: a Saturday event posted this morning used to sit under TODAY, which read as
- * "happening today" (events round 2, B6). An event's card already leads with its own date in the largest
- * text, so events go together under one heading of their own, soonest first, ahead of the listings.
- *
- * The buckets were also rolling 24-hour blocks rather than days, which mislabelled every post type: at 9 am
- * a listing from 11 pm last night was under TODAY. They are local calendar days now.
+ * Listings, events and polls alike are headed by when they were LISTED: Today / Yesterday / This Week / Older Listings, in
+ * local calendar days. The order and the headings are @beanpool/core's market-order (DESIGN-market-order-fable.md): newest
+ * listed first, an event or poll listed again 24 hours before its moment, no author past two places in a day until the others
+ * have had theirs. The headings Upcoming events, Polls and Nearest first are gone: an event comes back in the stream, once.
+ * Its card already leads with its own date in the largest text, so the reader sees why it is there.
  *
  * Each heading is a word() key: the screen shows it through t(), in the member's language.
  */
 
-import { word, type WordKey } from '@beanpool/core';
-
-export const UPCOMING_EVENTS_HEADING = word('Upcoming events');
+import { word, daySections, marketOrder, type DaySectionId, type WordKey } from '@beanpool/core';
 
 export interface FeedSection<T> {
     id: string;
     title: WordKey;
     posts: T[];
 }
+
+const TITLES: Record<DaySectionId, WordKey> = {
+    today: word('Today'),
+    yesterday: word('Yesterday'),
+    thisweek: word('This Week'),
+    older: word('Older Listings'),
+};
 
 function startOfLocalDay(ms: number): number {
     const d = new Date(ms);
@@ -34,43 +37,12 @@ export function localDaysAgo(thenMs: number, nowMs: number): number {
     return Math.round((startOfLocalDay(nowMs) - startOfLocalDay(thenMs)) / (24 * 60 * 60 * 1000));
 }
 
-function startMs(p: any): number {
-    const iso = p?.event_start_at ?? p?.eventStartAt;
-    const ms = iso ? Date.parse(iso) : NaN;
-    return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+/** An already-ordered feed under its day headings (core daySections), empty ones left out; the order within is kept. */
+export function sectionsOfOrdered<T extends Record<string, any>>(ordered: readonly T[], nowMs: number): FeedSection<T>[] {
+    return daySections(ordered, nowMs).map(s => ({ id: `header-${s.id}`, title: TITLES[s.id], posts: s.posts }));
 }
 
-/**
- * Split the (already filtered) feed into headed sections, empty ones left out. The order within a listing
- * section is the order the feed was given in.
- */
+/** Split the (already filtered) feed into the Market's order and its day headings, empty ones left out. */
 export function feedSections<T extends Record<string, any>>(posts: T[], nowMs: number = Date.now()): FeedSection<T>[] {
-    const events: T[] = [];
-    const today: T[] = [];
-    const yesterday: T[] = [];
-    const thisWeek: T[] = [];
-    const older: T[] = [];
-
-    for (const post of posts) {
-        if (post.type === 'event') {
-            events.push(post);
-            continue;
-        }
-        const posted = new Date(post.created_at || post.createdAt).getTime();
-        const days = Number.isFinite(posted) ? localDaysAgo(posted, nowMs) : Number.POSITIVE_INFINITY;
-        if (days <= 0) today.push(post);
-        else if (days === 1) yesterday.push(post);
-        else if (days < 7) thisWeek.push(post);
-        else older.push(post);
-    }
-
-    events.sort((a, b) => startMs(a) - startMs(b));
-    const sections: FeedSection<T>[] = [
-        { id: 'header-events', title: UPCOMING_EVENTS_HEADING, posts: events },
-        { id: 'header-today', title: word('Today'), posts: today },
-        { id: 'header-yesterday', title: word('Yesterday'), posts: yesterday },
-        { id: 'header-thisweek', title: word('This Week'), posts: thisWeek },
-        { id: 'header-older', title: word('Older Listings'), posts: older },
-    ];
-    return sections.filter(s => s.posts.length > 0);
+    return sectionsOfOrdered(marketOrder(posts, nowMs), nowMs);
 }

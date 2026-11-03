@@ -15,8 +15,9 @@
 
 import { beansOn, type NodeFeatures, type NodeProfile } from './node-profile';
 import type { MarketExtraFilter } from './market-filters';
-import { feedSections, type FeedSection } from './feed-sections';
-import { LOCAL_COMMUNITY_LINES, postRulesFor, t, word } from '@beanpool/core';
+import { sectionsOfOrdered, type FeedSection } from './feed-sections';
+import { formatDistance } from './events';
+import { LOCAL_COMMUNITY_LINES, isNodePulsePost, marketOrder, postRulesFor, t, word } from '@beanpool/core';
 
 /** Whether the Market shows Beans: a price on each card and the "Beans only" filter. */
 export function marketShowsBeans(features: NodeFeatures | null | undefined): boolean {
@@ -200,27 +201,90 @@ export function nearestFirst<T extends Record<string, any>>(posts: readonly T[],
     return [...placed.map(x => x.p), ...unplaced];
 }
 
-export const NEAREST_FIRST_HEADING = word('Nearest first');
-export const POLLS_HEADING = word('Polls');
+/**
+ * The worldwide community's circle (Market order, DESIGN-market-order-fable.md §2.5): on a node that gives each phone the
+ * listings near the member's area (`features.nearbyListings`), the Market is the same newest-listed order, cut to that radius
+ * of the member's area. No such feature, or no area, is no circle: the order alone.
+ */
+export interface NearbyCircle { area: Point; radiusKm: number }
+
+export function nearbyCircle(profile: NodeProfile | null | undefined, area: Point | null | undefined): NearbyCircle | null {
+    const n = profile?.features.nearbyListings;
+    if (!n || !area || !Number.isFinite(area.lat) || !Number.isFinite(area.lng)) return null;
+    return { area: { lat: area.lat, lng: area.lng }, radiusKm: n.radiusKm };
+}
+
+/** The one line above the list inside the circle: "Newest within 250 km of your area." */
+export function newestWithinLine(circle: NearbyCircle): string {
+    return t('Newest within {distance} of your area.', { distance: formatDistance(circle.radiusKm) ?? '' });
+}
+
+/** Each placed post's distance from the member's area in km, by post id. A post with no place has none. */
+export function distancesFrom(posts: readonly Record<string, any>[], from: Point): Map<string, number> {
+    const out = new Map<string, number>();
+    for (const p of posts) {
+        const at = placeOf(p);
+        if (at && p.id != null) out.set(String(p.id), km(from, at));
+    }
+    return out;
+}
 
 /**
- * The list view's sections on a node that sorts by distance, from where the member is: events under their own
- * heading as everywhere (soonest first), then polls under theirs (a poll has no place, so nearest first would sink it
- * below every listing; the web app shows it near the top), then every other listing nearest first under one heading,
- * instead of by the day it was posted. Without a point, or on a node that doesn't sort by distance, the feed keeps its
- * day headings.
+ * Drop what lies beyond the circle. A post with no place (a poll, an online event) stays, and so does the member's own and every
+ * post tied to them (`keptIds`: a listing they took, a deal or chat on it, an event they answered; utils/posts-nearby.ts "kept"),
+ * whatever its distance: the phone's copy keeps these on purpose, so a deal never loses its listing. The order is the input's.
+ */
+export function cutToCircle<T extends Record<string, any>>(
+    posts: readonly T[], circle: NearbyCircle, ownKey?: string | null, keptIds?: ReadonlySet<string> | null,
+): T[] {
+    return posts.filter(p => {
+        if (ownKey && (p.author_pubkey === ownKey || p.authorPublicKey === ownKey)) return true;
+        if (keptIds && p.id != null && keptIds.has(String(p.id))) return true;
+        const at = placeOf(p);
+        return !at || km(circle.area, at) <= circle.radiusKm;
+    });
+}
+
+export interface MarketStreamOptions {
+    /** The Events pill: soonest first, a date list wants date order. */
+    eventsOnly?: boolean;
+    /** A search or a tag filter: the node's ranking for the words stands, so the posts keep the order they came in. */
+    narrowedBySearch?: boolean;
+    /** Set on the worldwide community with an area, and not under a Distance: the same order, cut to the circle. */
+    circle?: NearbyCircle | null;
+    /** The member, whose own posts are never cut. */
+    ownKey?: string | null;
+    /** The ids of the posts tied to the member (db getNearbyKeptPostIds): never cut, whatever their distance. */
+    keptIds?: ReadonlySet<string> | null;
+}
+
+function eventStartMs(p: Record<string, any>): number {
+    const ms = Date.parse(p.event_start_at ?? p.eventStartAt ?? '');
+    return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * The Market's stream for the screen (one order on both apps, core market-order): newest listed first, the two-a-day bound,
+ * the node's own Daily Pulse first. Under Events, soonest first; under a search, the node's order stands. On the worldwide
+ * community the circle is cut first.
+ */
+export function marketStream<T extends Record<string, any>>(posts: readonly T[], nowMs: number, o: MarketStreamOptions = {}): T[] {
+    const pulseFirst = (list: T[]): T[] => [...list.filter(isNodePulsePost), ...list.filter(p => !isNodePulsePost(p))];
+    if (o.eventsOnly) {
+        return pulseFirst([...posts].sort((a, b) => eventStartMs(a) - eventStartMs(b)));
+    }
+    if (o.narrowedBySearch) return pulseFirst([...posts]);
+    const cut = o.circle ? cutToCircle(posts, o.circle, o.ownKey, o.keptIds) : [...posts];
+    return pulseFirst(marketOrder(cut, nowMs));
+}
+
+/**
+ * The list view's sections: the day headings over the stream, by the local day each post was listed. `point` is the member's
+ * area (not their GPS fix): on a node that gives phones the listings near an area, the circle is cut first. The headings
+ * Upcoming events, Polls and Nearest first are gone.
  */
 export function marketFeedSections<T extends Record<string, any>>(
-    posts: T[], profile: NodeProfile | null | undefined, point: Point | null, nowMs: number = Date.now(),
+    posts: T[], profile: NodeProfile | null | undefined, point: Point | null, nowMs: number = Date.now(), ownKey?: string | null, keptIds?: ReadonlySet<string> | null,
 ): FeedSection<T>[] {
-    const byDay = feedSections(posts, nowMs);
-    if (!sortsByDistance(profile) || !point) return byDay;
-    const events = byDay.filter(s => s.id === 'header-events');
-    const polls = posts.filter(p => p.type === 'poll');
-    const listings = posts.filter(p => p.type !== 'event' && p.type !== 'poll');
-    return [
-        ...events,
-        ...(polls.length > 0 ? [{ id: 'header-polls', title: POLLS_HEADING, posts: polls }] : []),
-        ...(listings.length > 0 ? [{ id: 'header-nearest', title: NEAREST_FIRST_HEADING, posts: nearestFirst(listings, point) }] : []),
-    ];
+    return sectionsOfOrdered(marketStream(posts, nowMs, { circle: nearbyCircle(profile, point), ownKey, keptIds }), nowMs);
 }

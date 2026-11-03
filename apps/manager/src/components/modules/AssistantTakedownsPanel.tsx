@@ -135,7 +135,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
         const gone = json.gone > 0 ? ` ${count(json.gone)} had gone already.` : '';
         const total = json.back?.length ?? 0;
         const hidden = json.stillHidden?.length ?? 0;
-        const stayed = hidden > 0 ? ` ${count(hidden)} stayed hidden for the moderators, as before the assistant took ${hidden === 1 ? 'it' : 'them'} down.` : '';
+        const stayed = hidden > 0 ? ` ${count(hidden)} stayed hidden for the moderators: a hide from before the assistant took ${hidden === 1 ? 'it' : 'them'} down, or the reports, still hold${hidden === 1 ? 's' : ''} ${hidden === 1 ? 'it' : 'them'}.` : '';
         const up = total > hidden ? ` ${count(total - hidden)} back up: each author is told, and everyone sees them again.` : '';
         return `Put back: ${count(total)}.${gone}${stayed}${up} Any reports the takedown closed are open again.`;
     });

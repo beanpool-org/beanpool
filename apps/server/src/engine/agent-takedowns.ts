@@ -24,16 +24,18 @@
  *
  * Put back (`putBackTakedowns`, a person's only) leaves a post where it stood before the takedown, because nobody reads a post on
  * that tap: it is the answer to a stolen token. The removal's stamp goes, so a mistaken day costs its author nothing, and a mute a
- * takedown brought goes with it. A post that was up is up. One a moderator's burst or the reports had hidden stays hidden on the
- * same stamp, so its burst undo still works, and its author hears that and not that it is back. The reports the takedown closed go
- * back to the moderators' queue, a report filed in the hold stays there, and reporters hear nothing (design §3.5): dismissing a report
- * stays a person's act on that report. The hold stops what would have weighed a hide: a report dismissed during it rechecks nothing
+ * takedown brought goes with it. A post that was up is up, unless the reports would hide it now (below). One a moderator's burst or
+ * the reports had hidden stays hidden on the same stamp, so its burst undo still works, and its author hears that and not that it is
+ * back. The reports the takedown closed go back to the moderators' queue, a report filed in the hold stays there, and reporters hear
+ * nothing (design §3.5): dismissing a report stays a person's act on that report. The hold stops what would have weighed a hide: a
+ * report filed during it is never weighed (evaluateAutoHide skips a hidden post), a report dismissed during it rechecks nothing
  * (recheckHiddenPost refuses), and a burst undone during it skips this post (engine/burst-cleanup.ts). So Put back weighs a kept stamp
- * no standing burst holds, once the removals are cleared and the reports are open again: a post the reports still hide keeps its
- * stamp, and one they no longer hide comes up, and its author hears it is back. Where reports hide nothing, a kept stamp stays as it
- * is, but for a burst undone during the hold: that stamp has no undo left, so Put back does what the undo would have done, and the
- * post comes up. engine/auto-moderation.ts restoreHiddenPost is the same undo for one post, except that a moderator there looks at
- * that post and means it: it comes up, and the open reports they saw are dismissed.
+ * no standing burst holds, and, where reports hide posts, a post that was up, once the removals are cleared and the reports are open
+ * again: a post the reports still hide keeps its stamp, one they no longer hide comes up, and its author hears it is back; one that
+ * was up and they would hide now is hidden as of Put back, and its author hears it is hidden while the moderators look. Where reports
+ * hide nothing, a kept stamp stays as it is, but for a burst undone during the hold: that stamp has no undo left, so Put back does
+ * what the undo would have done, and the post comes up. engine/auto-moderation.ts restoreHiddenPost is the same undo for one post,
+ * except that a moderator there looks at that post and means it: it comes up, and the open reports they saw are dismissed.
  *
  * The sweep (`sweepTakedowns`, on the pulse scheduler's tick) makes a post 7 days old final through `setTakedownRemoval`'s function, which
  * has no way to move a Bean: an event is cancelled then and its goers told, unless it has ended, and the author hears nothing more.
@@ -227,7 +229,7 @@ export type PutBackScope = { postId: string } | { takedownId: string } | { grant
 export interface PutBackResult {
     /** Every post back where it stood before the takedown. */
     back: string[];
-    /** Of those, the ones hidden before it: they stay hidden, for the moderators. */
+    /** Of those, the ones that stay hidden, for the moderators: hidden before it, or that the reports would hide now. */
     stillHidden: string[];
     gone: number;
 }
@@ -271,14 +273,19 @@ export function putBackTakedowns(cb: ModerationNoticeCallbacks, scope: PutBackSc
                 gone++;
                 continue;
             }
-            const weigh = !!h.hidden_before && (burstUndoneSince(h.post_id, h.hidden_before, h.at) || (reportsHide && onlyReportsHold(h.post_id, h.hidden_before)));
+            // A post that was up has its reports weighed too: the hold stopped evaluateAutoHide, so a report filed during it (or
+            // one the takedown closed, now open again) was never weighed, and nothing else would weigh it before the next report.
+            const weigh = h.hidden_before
+                ? burstUndoneSince(h.post_id, h.hidden_before, h.at) || (reportsHide && onlyReportsHold(h.post_id, h.hidden_before))
+                : reportsHide;
             const stamp = weigh ? null : h.hidden_before;
             db.prepare('UPDATE posts SET hidden_by_reports_at = ?, removed_by_moderator_at = NULL, updated_at = ? WHERE id = ?').run(stamp, at, h.post_id);
             db.prepare('UPDATE agent_takedown_posts SET put_back_at = ? WHERE takedown_id = ? AND post_id = ?').run(at, h.takedown_id, h.post_id);
             reopenClosedReports(JSON.parse(h.reports_closed) as string[]);
             const line = { id: h.post_id, title: h.title, author: h.author_pubkey, up: !stamp };
             back.push(line);
-            if (weigh) toWeigh.push({ line, stamp: h.hidden_before as string });
+            // A post that was up and now would be hidden is hidden as of now, as evaluateAutoHide would have hidden it.
+            if (weigh) toWeigh.push({ line, stamp: h.hidden_before ?? at });
         }
         // As a burst's undo weighs: with every post here un-hidden, cleared and its reports open, all weighed against that same
         // state, so the order of the posts decides nothing.

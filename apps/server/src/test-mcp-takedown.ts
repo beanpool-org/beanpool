@@ -975,6 +975,58 @@ async function main(): Promise<void> {
             await takeDown(pastBurst);
             const pastOut = await putBack({ postId: pastBurst });
             assert(pastOut.body?.stillHidden?.includes(pastBurst) && row(pastBurst).hidden_by_reports_at === pastStamp && !up(pastBurst), `a burst's post stays hidden after the burst's record has gone (${show(pastOut)})`);
+
+            // The other direction: a report filed during the hold is never weighed (evaluateAutoHide skips a hidden post), so Put back
+            // weighs a post that was up too. A 12-words newcomer's post, up, which one established member's report would hide.
+            const upNewcomer = (name: string) => {
+                const k = keypair();
+                addMember(k, name);
+                const at = new Date().toISOString();
+                db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(at, k.pub);
+                db.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)`).run(k.pub, `hash-${k.pub}`, at);
+                return { k, id: post(`${name}, up until the hold`, k.pub) };
+            };
+            // The control: the same report, with no takedown, hides it.
+            const noHold = upNewcomer('Ula Words');
+            const noHoldReport = submitReport(reporters[0].pub, noHold.k.pub, 'Spam or scam', noHold.id)!.id;
+            assert(!!row(noHold.id).hidden_by_reports_at && !up(noHold.id) && statusOf(noHoldReport) === 'pending' && openReportsOn(noHold.id) === 1,
+                'control: with no takedown, one established member\'s report hides a 12-words newcomer\'s post');
+            const duringHold = upNewcomer('Uma Words');
+            assert(!row(duringHold.id).hidden_by_reports_at && up(duringHold.id) && openReportsOn(duringHold.id) === 0, 'set up: the same kind of post, up, with no report');
+            await takeDown(duringHold.id);
+            const heldReport = submitReport(reporters[0].pub, duringHold.k.pub, 'Spam or scam', duringHold.id)!.id;
+            assert(statusOf(heldReport) === 'pending' && !!row(duringHold.id).removed_by_moderator_at, 'a report filed during the hold is taken, and stays open');
+            const duringBefore = noticesOf(duringHold.k.pub).length;
+            const duringOut = await putBack({ postId: duringHold.id });
+            assert(duringOut.body?.back?.includes(duringHold.id) && duringOut.body?.stillHidden?.includes(duringHold.id) && !!row(duringHold.id).hidden_by_reports_at
+                && !row(duringHold.id).removed_by_moderator_at && !up(duringHold.id),
+                `Put back weighs it: the report hides it, as with no takedown, and only the removal's stamp goes (${show(duringOut)})`);
+            assert(statusOf(heldReport) === 'pending' && openReportsOn(duringHold.id) === 1, 'with that report open in the queue, for a person');
+            const duringTold = noticesOf(duringHold.k.pub).slice(duringBefore);
+            assert(duringTold.length === 1 && duringTold[0].title !== POST_BACK && /is hidden while the community's moderators look at it/.test(duringTold[0].body),
+                `its author hears it is hidden for review, not that it is back (${JSON.stringify(duringTold.map(n => n.title))})`);
+            // Weighing a post that was up hides nothing the reports would not: the same kind of post with no report comes up.
+            const nothingFiled = upNewcomer('Uli Words');
+            await takeDown(nothingFiled.id);
+            const nothingOut = await putBack({ postId: nothingFiled.id });
+            assert(nothingOut.body?.stillHidden?.length === 0 && !row(nothingFiled.id).hidden_by_reports_at && up(nothingFiled.id) && noticesOf(nothingFiled.k.pub).at(-1)?.title === POST_BACK,
+                `control: with no report it comes up, and its author hears it is back (${show(nothingOut)})`);
+
+            // Reports split around the hold: two circles before it (under the bar of 3, so no stamp), which the takedown closes; a third
+            // during it. Put back opens the two again, and the three together hide it, as they hide the control with no takedown.
+            const splitAuthor = keypair();
+            addMember(splitAuthor, 'Sol Split');
+            const split = post('Reported either side of the hold', splitAuthor.pub), splitControl = post('Reported by the same three, no hold', splitAuthor.pub);
+            for (const r of reporters) submitReport(r.pub, splitAuthor.pub, 'Spam or scam', splitControl);
+            assert(!!row(splitControl).hidden_by_reports_at, 'control: three circles\' reports hide it with no takedown');
+            const beforeHold = reporters.slice(0, 2).map(r => submitReport(r.pub, splitAuthor.pub, 'Spam or scam', split)!.id);
+            assert(!row(split).hidden_by_reports_at && openReportsOn(split) === 2, 'set up: two circles are under the bar, so it is up');
+            await takeDown(split);
+            assert(beforeHold.every(id => statusOf(id) === 'actioned'), 'the takedown closes both');
+            submitReport(reporters[2].pub, splitAuthor.pub, 'Spam or scam', split);
+            const splitOut = await putBack({ postId: split });
+            assert(splitOut.body?.stillHidden?.includes(split) && !!row(split).hidden_by_reports_at && !row(split).removed_by_moderator_at && !up(split) && openReportsOn(split) === 3,
+                `Put back reopens the two, and with the third they hide it (${show(splitOut)})`);
         }
         delete process.env.NODE_PROFILE;
 
@@ -986,7 +1038,9 @@ async function main(): Promise<void> {
         assert(/or an assistant's takedown has it on hold, they are told instead that it "is no longer up"/.test(moderatorsPage), "and the owners' Dismiss Flag line");
         assert(!ownersPage.includes('copies from other communities') && ownersPage.includes('a copy a member shows there from their home community') && ownersPage.includes("another community's listing copied here over a link between communities"), 'the owners\' page names which copies can go and which cannot');
         assert(/From the first day Settings marks that post and warns you before \*\*Remove now\*\*/.test(ownersPage), "the owners' page says the warning comes from the first day");
-        assert(/stays hidden, for the moderators, and that hide can still be undone\. The one exception is a post the reports no longer hide, because a moderator dismissed them during the 7 days: it comes up\./.test(ownersPage), "the owners' page says Put back can bring up what reports no longer hide");
+        assert(/stays hidden, for the moderators, and that hide can still be undone\. The 7 days stop the reports being weighed, so Put back weighs them, with the ones it reopens: a post they no longer hide, because a moderator dismissed them during the 7 days, comes up, and a post that was up but that they would hide now, because of one filed while it was hidden, stays hidden for the moderators\./.test(ownersPage),
+            "the owners' page says Put back can bring up what reports no longer hide, and keep hidden what they would hide now");
+        assert(/its author hears it is back, or, if it stays hidden, that it is hidden for review\./.test(ownersPage), "and that the author of a post that stays hidden hears it is hidden for review");
         assert(!ownersPage.includes('restore a post from the reports') && /After a take-over by a standby .*nothing removes them after the 7 days, and dismissing a report doesn't bring one back\..*no screen does that by itself/.test(ownersPage), 'and says what is true after a take-over');
 
         // ── 7. Caps ──────────────────────────────────────────────────────────────────────────────────

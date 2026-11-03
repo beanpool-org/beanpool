@@ -70,7 +70,7 @@ describe('Taken down by assistants', () => {
             return said;
         };
         const hidden = await putBackOne({ back: ['p1'], stillHidden: ['p1'], gone: 0 });
-        expect(hidden).toMatch(/^Put back: 1 post\. 1 post stayed hidden for the moderators, as before the assistant took it down\./);
+        expect(hidden).toMatch(/^Put back: 1 post\. 1 post stayed hidden for the moderators: a hide from before the assistant took it down, or the reports, still holds it\./);
         expect(hidden).not.toMatch(/everyone sees/);
         const mixed = await putBackOne({ back: ['p1', 'p2', 'p3'], stillHidden: ['p1'], gone: 0 });
         expect(mixed).toMatch(/1 post stayed hidden/);

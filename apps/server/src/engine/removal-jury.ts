@@ -27,7 +27,9 @@ export const JURY_CONFLICT_DAYS = 90;
  *  - the member blocked them;
  *  - the member invited them, or was invited by them;
  *  - a deal between the two was completed in the last 90 days that the member took part in: they bought from the subject,
- *    or it was on a listing of the subject's (the subject accepting and confirming a member's Offer alone doesn't count);
+ *    or it was on a listing of the subject's, or it was a loan (the subject accepting and confirming a member's Offer alone
+ *    doesn't count, but a loan is always asked for and its lender says yes first, engine/escrow.ts lendAskFirst, so a
+ *    member who lent the subject something made the deal too: DESIGN-removal-jury-j2-calls-fable.md call 3, J2a);
  *  - a deal still open that the member opened: one on a listing of the subject's (the side that isn't a deal's listing's
  *    author is the side that asked for it: engine/escrow.ts);
  *  - a direct conversation the member opened with them.
@@ -53,7 +55,7 @@ export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set
           LEFT JOIN posts p ON p.id = t.post_id
          WHERE (t.buyer_pubkey = @s OR t.seller_pubkey = @s) AND t.status = 'completed'
            AND julianday(COALESCE(t.completed_at, t.updated_at, t.created_at)) >= julianday(@since)
-           AND (t.seller_pubkey = @s OR p.author_pubkey = @s)
+           AND (t.seller_pubkey = @s OR p.author_pubkey = @s OR p.lendable = 1)
         UNION SELECT CASE WHEN t.buyer_pubkey = @s THEN t.seller_pubkey ELSE t.buyer_pubkey END FROM marketplace_transactions t
           JOIN posts p ON p.id = t.post_id AND p.author_pubkey = @s
          WHERE (t.buyer_pubkey = @s OR t.seller_pubkey = @s) AND t.status IN ('requested', 'pending', 'disputed')
@@ -104,4 +106,28 @@ export function juryRollOf(decisionId: string): Array<{ key: string; status: Jur
 export function seatedJuror(decisionId: string, key: string): boolean {
     return !!db.prepare("SELECT 1 FROM decision_electors WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'")
         .get(decisionId, key);
+}
+
+/** How many re-keys back a roll key is followed to find the key it was drawn as: far more than any member makes. */
+const DRAWN_AS_HOPS = 16;
+
+/**
+ * The key each roll key was drawn as (DESIGN-removal-jury-j2-calls-fable.md §5.1, J2a). A re-key moves a juror's roll row
+ * and vote to the new key (engine/key-move.ts) but never the pool, which is kept as it was hashed, so a roll key not in the
+ * pool is followed back through the re-keys that replaced it to the one that is. Read from `invalidated_keys` (its
+ * `rekeyed_to`), not `rekey_audit_log`: both record the move, but only the first is in a standby's copy
+ * (engine/replication-manifest.ts: the audit log is this server's own), so a node restored from its standby serves the
+ * same answer. A key that leads to nothing in the pool is its own answer, and Check the draw then fails on it, as it should.
+ */
+export function juryDrawnAs(keys: readonly string[], pool: ReadonlySet<string>): Map<string, string> {
+    const replaced = db.prepare('SELECT public_key FROM invalidated_keys WHERE rekeyed_to = ? ORDER BY invalidated_at DESC LIMIT 1');
+    const out = new Map<string, string>();
+    for (const key of keys) {
+        let at: string | undefined = key;
+        for (let hop = 0; at && !pool.has(at) && hop < DRAWN_AS_HOPS; hop++) {
+            at = (replaced.get(at) as { public_key: string } | undefined)?.public_key;
+        }
+        out.set(key, at && pool.has(at) ? at : key);
+    }
+    return out;
 }

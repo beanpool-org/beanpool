@@ -29,6 +29,7 @@ import type { OwnDecisionVote } from './decision-own-vote';
 import { wrapLng } from './listings-near';
 import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeCommunity } from './home-cards';
 import { ringProfileSaved } from './profile-saved';
+import { rememberLastPhoto } from './last-photo';
 import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
@@ -93,7 +94,7 @@ export async function testNodeConnection(url: string): Promise<{ ok: boolean; ca
  * @beanpool/core request-signing.ts), the host the fetch actually reaches, so a node can't take what a member signed
  * for it to another community.
  */
-function nodeAddress(): string {
+export function nodeAddress(): string {
     return getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 }
 
@@ -800,6 +801,8 @@ export async function updateMemberProfile(publicKey: string, update: {
     const answer = await request<{ success: boolean; profile: MemberProfile }>('POST', '/api/profile/update', { publicKey, ...update });
     // Taken: the page hears it (lib/profile-saved.ts), so the sidebar's picture follows the save.
     ringProfileSaved();
+    // A photo the member chose here is the one to offer when they join another community (lib/last-photo.ts); never read for display.
+    rememberLastPhoto(update.avatar, nodeAddress());
     return answer;
 }
 

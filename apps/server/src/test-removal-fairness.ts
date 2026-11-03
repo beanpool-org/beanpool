@@ -8,8 +8,8 @@
  *
  *  1. The push. When a pause opens its vote, everyone who may vote on it gets one push (`decision.removal`), and the
  *     member it is about gets their own (`account.removal-vote`), which comes through with their chat alerts off. Not the
- *     admin who paused, a member whose credit is frozen, an enterprise's account, a voter with chat alerts off, or one who
- *     joined after the vote opened; a member paused by their own vote still is (they keep their vote elsewhere). The lock
+ *     admin who paused, an enterprise's account, a voter with chat alerts off, or one who
+ *     joined after the vote opened; a member paused by their own vote still is (they keep their vote elsewhere), and so is a member whose credit is frozen (a freeze moves no vote). The lock
  *     screen shows each kind's fixed words; nothing that leaves names the member, the admin or the case, and the details
  *     only open Commons, Decide. The member is told at once on the web too: a kept notice, read when the web app opens.
  *     A pause through a report pushes the same. With votes off a pause opens no vote and pushes nothing of the kind.
@@ -223,7 +223,7 @@ async function main() {
     const hal = seed('HalHill');      // votes off
     const pia = seed('PiaPark');      // paused already: she keeps her vote on others' removals
     const tia = seed('TraderTia');    // proposed Finn's removal before
-    const fay = seed('FrozenFay');    // credit frozen: no vote
+    const fay = seed('FrozenFay');    // credit frozen: still votes (a freeze moves no vote, RV-S7)
     db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(fay.pubKeyHex);
     const quinn = seed('QuietQuinn'); // chat alerts off
     se.setMemberPreferences(quinn.pubKeyHex, { notify_chat: false });
@@ -290,14 +290,14 @@ async function main() {
     const davePaused = await pause(adaSession, dave, DAVE_CASE);
     const daveVote = davePaused.body?.decision?.id as string;
     assert(davePaused.status === 200 && !!daveVote && statusOf(dave) === 'disabled', `Ada pauses Dave; his vote opens (${davePaused.status})`);
-    await settle(() => expo.length >= voters.length + 3);
+    await settle(() => expo.length >= voters.length + 4);
     const toVoters = (who: Id) => pushesTo(who).filter(m => kindOf(m) === 'decision.removal');
-    const told = [abe, ...voters, pia, gen];
+    const told = [abe, ...voters, pia, gen, fay];
     assert(told.every(v => toVoters(v).length === 1),
-        `each member who may vote gets one push of kind decision.removal: Abe, the five voters, Pia (paused by her own vote) and Gwen (${told.map(v => `${v.callsign}:${toVoters(v).length}`).join(', ')})`);
-    const notTold = [ada, dave, fay, quinn, ent, newt];
+        `each member who may vote gets one push of kind decision.removal: Abe, the five voters, Pia (paused by her own vote), Gwen and frozen Fay (a freeze moves no vote) (${told.map(v => `${v.callsign}:${toVoters(v).length}`).join(', ')})`);
+    const notTold = [ada, dave, quinn, ent, newt];
     assert(notTold.every(v => toVoters(v).length === 0),
-        `no voters' push to Ada (who paused), Dave (it is about him), frozen Fay, Quinn (chat alerts off), the enterprise, or Newt (joined after it opened) (${notTold.map(v => `${v.callsign}:${toVoters(v).length}`).join(', ')})`);
+        `no voters' push to Ada (who paused), Dave (it is about him), Quinn (chat alerts off), the enterprise, or Newt (joined after it opened) (${notTold.map(v => `${v.callsign}:${toVoters(v).length}`).join(', ')})`);
     const toDave = pushesTo(dave);
     assert(toDave.length === 1 && kindOf(toDave[0]) === 'account.removal-vote',
         `Dave gets one push of his own, account.removal-vote, though his chat alerts are off (${toDave.map(kindOf).join(', ')})`);

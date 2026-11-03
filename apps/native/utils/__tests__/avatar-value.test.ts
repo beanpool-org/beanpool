@@ -434,6 +434,32 @@ describe('updateMemberProfile canonical mirror', () => {
         await updateMemberProfile('somebody-else', { callsign: 'Ada', avatar_url: PHOTO });
         expect(h.saveCanonicalProfile).not.toHaveBeenCalled();
     });
+
+    // Profile S3: the photo is kept only to be OFFERED on joining another community, and the offer names where it
+    // came from. The community is recorded with the photo, and moves only when the photo does.
+    it('records the community a photo was set in, beside the photo', async () => {
+        h.asyncStorage.getItem.mockImplementation(async (k: string) => (k === 'beanpool_anchor_url' ? HERE : null));
+        await updateMemberProfile(SELF_PK, { callsign: 'Damo', avatar_url: PHOTO });
+        expect(h.saveCanonicalProfile).toHaveBeenCalledWith(expect.objectContaining({ avatar: PHOTO, avatarFrom: HERE }));
+    });
+
+    it('does not move the recorded community for a write that carries no portable photo', async () => {
+        h.asyncStorage.getItem.mockImplementation(async (k: string) => (k === 'beanpool_anchor_url' ? HERE : null));
+        await updateMemberProfile(SELF_PK, { callsign: 'Damo', avatar_url: NODE_URL_VERSIONED, bio: 'hi' });
+        await updateMemberProfile(SELF_PK, { callsign: 'Damo', bio: 'hi again' });
+        for (const [saved] of h.saveCanonicalProfile.mock.calls) {
+            expect(saved.avatar).toBeUndefined();
+            expect(saved.avatarFrom).toBeUndefined();
+        }
+    });
+
+    it('still keeps the photo when the phone has no community address, and records its community as not known', async () => {
+        await updateMemberProfile(SELF_PK, { callsign: 'Damo', avatar_url: PHOTO });
+        const saved = h.saveCanonicalProfile.mock.calls[0][0];
+        expect(saved.avatar).toBe(PHOTO);
+        // null, not undefined: undefined would keep the previous photo's community beside this new photo.
+        expect(saved.avatarFrom).toBeNull();
+    });
 });
 
 // ---------------------------------------------------------------------------

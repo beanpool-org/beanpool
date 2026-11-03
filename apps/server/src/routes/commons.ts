@@ -245,9 +245,10 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
 });
 
 // The jury of a vote a jury decides (DESIGN-removal-jury-fable.md §3, §8; decisions-engine juryForReader): the pool it was
-// drawn from and the draw's facts, so a member can check it (@beanpool/core checkJuryDraw); once it closes, who sat, who
-// stood aside and who voted, never which way. A members' read (the ordinary gate in front of every route not on the public
-// lists); the signer is the reader. 404 for a vote no jury decides, as for one that doesn't exist.
+// drawn from and the draw's facts, so a member can check it (@beanpool/core checkJuryDraw); once it closes, who voted, never
+// which way, and who didn't serve, never why (DESIGN-removal-jury-j2-calls-fable.md call 2, J2a). A members' read (the
+// ordinary gate in front of every route not on the public lists); the signer is the reader. 404 for a vote no jury decides,
+// as for one that doesn't exist.
 router.get('/api/commons/decisions/:id/jury', async (ctx) => {
     const actor = (ctx.state as any)?.actor as string | undefined;
     if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }

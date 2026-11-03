@@ -15,7 +15,7 @@
  *   8. poll_results: counts only on an anonymous poll and on an open vote, fenced text, never who.
  *   9. Whose poll: another assistant's, the owner's own, a member's; a grant not ticked; an enterprise no longer kept.
  *  10. Undo: remove_post, remove_all_i_made, Settings' "Remove its posts" after a revoke.
- *  11. What a brand new member can do: answer, through the real signed route; a frozen member and a visitor cannot.
+ *  11. What a brand new member can do: answer, through the real signed route; a frozen member can too (a freeze moves no vote), a visitor cannot.
  *  12. A community that shows posts by area, with Beans off: the answer says who a poll reaches.
  *  13. The ledger audit is the same after as before: no Bean moved.
  *
@@ -630,15 +630,16 @@ async function main(): Promise<void> {
         assert(structured(await results(fresh))?.options?.[1]?.votes === 1, 'and poll_results counts it');
         db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(mia.pub);
         const frozenVote = await signed(`/api/marketplace/posts/${fresh}/vote`, { optionId: 'opt_1' }, mia);
-        assert(frozenVote.status === 400 && /Credit-frozen members cannot vote in polls/.test(frozenVote.body?.error ?? ''), `a member whose credit is frozen can't (${frozenVote.status} ${frozenVote.body?.error})`);
+        assert(frozenVote.status === 200 && frozenVote.body?.success === true && structured(await results(fresh))?.totalVotes === 2,
+            `a member whose credit is frozen answers all the same, and it counts: a freeze moves no vote (${frozenVote.status} ${frozenVote.body?.error ?? ''})`);
         db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(mia.pub);
         const visitor = keypair();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor) VALUES (?, 'Visitor', 'active', ?, ?, 'inv-test', 1)`).run(visitor.pub, longAgo, owner.pub);
         const visitorVote = await signed(`/api/marketplace/posts/${fresh}/vote`, { optionId: 'opt_1' }, visitor);
-        assert(visitorVote.status !== 200 && structured(await results(fresh))?.totalVotes === 1, `a visitor can't (${visitorVote.status} ${JSON.stringify(visitorVote.body?.error ?? '')})`);
+        assert(visitorVote.status !== 200 && structured(await results(fresh))?.totalVotes === 2, `a visitor can't (${visitorVote.status} ${JSON.stringify(visitorVote.body?.error ?? '')})`);
         const stranger = keypair();
         const strangerVote = await signed(`/api/marketplace/posts/${fresh}/vote`, { optionId: 'opt_1' }, stranger);
-        assert(strangerVote.status !== 200 && structured(await results(fresh))?.totalVotes === 1, `nor a key with no row here (${strangerVote.status})`);
+        assert(strangerVote.status !== 200 && structured(await results(fresh))?.totalVotes === 2, `nor a key with no row here (${strangerVote.status})`);
         clearBoard();
 
         // ── 12. A community that shows posts by area, with Beans off ─────────────────────────────────

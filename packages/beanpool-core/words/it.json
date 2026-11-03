@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card}: ora {n} di {m}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Questo era l'ultimo consiglio. La guida completa è in Impostazioni sotto Aiuto e funzionamento, e funziona anche offline; Disponi, in basso, sposta le tue schede.",
   "Don't show tips again. Add a card brings them back.": "Non mostrare più i consigli. «Aggiungi una scheda» li ripristina.",
-  "Arrange ›": "Disponi ›"
+  "Arrange ›": "Disponi ›",
+  "This link opens for members only.": "Questo link si apre solo per i membri.",
+  "This link opens for members only, and only admins invite here.": "Questo link si apre solo per i membri, e qui possono invitare solo gli amministratori.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Chiunque può leggere questo annuncio per 7 giorni, quindi chiedere di unirsi."
 }

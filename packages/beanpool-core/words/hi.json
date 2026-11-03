@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card} को {m} में से {n} पर ले जाया गया",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "यह अंतिम सुझाव है। पूरी मार्गदर्शिका सेटिंग्स में मदद और कार्यप्रणाली के तहत है, और ऑफ़लाइन भी काम करती है; नीचे व्यवस्थित करें आपके कार्ड खिसकाता है।",
   "Don't show tips again. Add a card brings them back.": "सुझाव दोबारा न दिखाएं। «कार्ड जोड़ें» उन्हें वापस लाता है।",
-  "Arrange ›": "व्यवस्थित करें ›"
+  "Arrange ›": "व्यवस्थित करें ›",
+  "This link opens for members only.": "यह लिंक केवल सदस्यों के लिए खुलता है।",
+  "This link opens for members only, and only admins invite here.": "यह लिंक केवल सदस्यों के लिए खुलता है, और यहाँ केवल एडमिन ही आमंत्रित करते हैं।",
+  "Anyone can read this listing for 7 days, then ask to join.": "कोई भी व्यक्ति इस लिस्टिंग को 7 दिनों तक पढ़ सकता है, फिर शामिल होने का अनुरोध कर सकता है।"
 }

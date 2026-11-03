@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card}: இப்போது {m} இல் {n}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "இதுவே கடைசி குறிப்பு. முழு வழிகாட்டியும் அமைப்புகளில் உள்ளது, இணையம் இன்றியும் இயங்குகிறது; கீழே உள்ள வரிசைப்படுத்து உங்கள் அட்டைகளை நகர்த்துகிறது.",
   "Don't show tips again. Add a card brings them back.": "குறிப்புகளை மீண்டும் காட்ட வேண்டாம். «ஓர் அட்டையைச் சேர்க்கவும்» அவற்றை மீண்டும் கொண்டு வரும்.",
-  "Arrange ›": "வரிசைப்படுத்து ›"
+  "Arrange ›": "வரிசைப்படுத்து ›",
+  "This link opens for members only.": "இந்த இணைப்பு உறுப்பினர்களுக்கு மட்டுமே திறக்கும்.",
+  "This link opens for members only, and only admins invite here.": "இந்த இணைப்பு உறுப்பினர்களுக்கு மட்டுமே திறக்கும், இங்கு நிர்வாகிகள் மட்டுமே அழைக்கலாம்.",
+  "Anyone can read this listing for 7 days, then ask to join.": "யாரும் இந்த இடுகையை 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம்."
 }

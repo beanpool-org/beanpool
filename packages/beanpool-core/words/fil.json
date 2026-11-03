@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "Inilipat ang {card} sa {n} ng {m}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Iyan ang huling tip. Ang buong gabay ay nasa Setting sa ilalim ng Tulong at paano gumagana, at gumagana ito nang walang koneksyon; ang Ayusin sa ibaba ang naglilipat ng mga card mo.",
   "Don't show tips again. Add a card brings them back.": "Huwag nang ipakita muli ang mga tip. Naibabalik ang mga ito sa «Magdagdag ng card».",
-  "Arrange ›": "Ayusin ›"
+  "Arrange ›": "Ayusin ›",
+  "This link opens for members only.": "Magbubukas lang ang link na ito para sa mga miyembro.",
+  "This link opens for members only, and only admins invite here.": "Magbubukas lang ang link na ito para sa mga miyembro, at mga admin lang ang nag-iimbita rito.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Mababasa ng sinuman ang listahang ito sa loob ng 7 araw, pagkatapos ay humiling na sumali."
 }

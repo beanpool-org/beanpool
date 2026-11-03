@@ -892,5 +892,8 @@
   "{card} moved to {n} of {m}": "Đã chuyển {card} đến vị trí {n} trên {m}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Đó là mẹo cuối cùng. Toàn bộ hướng dẫn có trong Cài đặt mục Trợ giúp & cách hoạt động, xem được khi không có mạng; Sắp xếp ở dưới cùng giúp di chuyển các thẻ.",
   "Don't show tips again. Add a card brings them back.": "Không hiển thị lại mẹo. «Thêm thẻ» sẽ bật lại thẻ này.",
-  "Arrange ›": "Sắp xếp ›"
+  "Arrange ›": "Sắp xếp ›",
+  "This link opens for members only.": "Liên kết này chỉ mở cho thành viên.",
+  "This link opens for members only, and only admins invite here.": "Liên kết này chỉ mở cho thành viên, và ở đây chỉ quản trị viên mới được mời.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Bất kỳ ai cũng có thể đọc tin đăng này trong 7 ngày, sau đó xin tham gia."
 }

@@ -1012,5 +1012,8 @@
   "{card} moved to {n} of {m}": "{card}: теперь {n} из {m}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Это последний совет. Полное руководство доступно в Настройках в разделе Помощь и принципы работы (работает офлайн); Упорядочить внизу перемещает карточки.",
   "Don't show tips again. Add a card brings them back.": "Больше не показывать советы. «Добавить карточку» вернёт их обратно.",
-  "Arrange ›": "Упорядочить ›"
+  "Arrange ›": "Упорядочить ›",
+  "This link opens for members only.": "Эта ссылка открывается только для участников.",
+  "This link opens for members only, and only admins invite here.": "Эта ссылка открывается только для участников, и приглашать здесь могут только администраторы.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Любой может читать это объявление 7 дней, а затем подать заявку на вступление."
 }

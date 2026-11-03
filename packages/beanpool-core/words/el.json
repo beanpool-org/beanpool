@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card}: τώρα {n} από {m}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Αυτή είναι η τελευταία συμβουλή. Ολόκληρος ο οδηγός βρίσκεται στις Ρυθμίσεις κάτω από το Βοήθεια & πώς λειτουργεί, και λειτουργεί χωρίς σύνδεση. Η «Τακτοποίηση» στο κάτω μέρος μετακινεί τις κάρτες σας.",
   "Don't show tips again. Add a card brings them back.": "Να μην εμφανιστούν ξανά συμβουλές. Το «Προσθήκη κάρτας» τις επαναφέρει.",
-  "Arrange ›": "Τακτοποίηση ›"
+  "Arrange ›": "Τακτοποίηση ›",
+  "This link opens for members only.": "Αυτός ο σύνδεσμος ανοίγει μόνο για μέλη.",
+  "This link opens for members only, and only admins invite here.": "Αυτός ο σύνδεσμος ανοίγει μόνο για μέλη και εδώ προσκαλούν μόνο οι διαχειριστές.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Οποιοσδήποτε μπορεί να διαβάσει αυτήν την καταχώριση για 7 ημέρες και στη συνέχεια να ζητήσει να συμμετάσχει."
 }

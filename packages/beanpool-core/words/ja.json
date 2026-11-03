@@ -892,5 +892,8 @@
   "{card} moved to {n} of {m}": "{card} を {m} 件中 {n} 番目に移動しました",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "ヒントは以上です。全体のガイドは「設定」＞「ヘルプと仕組み」にあり、オフラインでも閲覧できます。画面下部の「並べ替え」でカードを移動できます。",
   "Don't show tips again. Add a card brings them back.": "ヒントを再表示しない。「カードを追加」からいつでも再表示できます。",
-  "Arrange ›": "並べ替え ›"
+  "Arrange ›": "並べ替え ›",
+  "This link opens for members only.": "このリンクはメンバーのみ開くことができます。",
+  "This link opens for members only, and only admins invite here.": "このリンクはメンバーのみ開くことができ、ここでは管理者のみが招待できます。",
+  "Anyone can read this listing for 7 days, then ask to join.": "誰でもこの投稿を7日間閲覧でき、その後参加を申請できます。"
 }

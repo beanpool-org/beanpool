@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card}: sasa {n} kati ya {m}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Huo ndio kidokezo cha mwisho. Mwongozo mzima upo katika Mipangilio chini ya Msaada na jinsi inavyofanya kazi, na hufanya kazi bila mtandao; Panga, chini, huhamisha kadi zako.",
   "Don't show tips again. Add a card brings them back.": "Usionyeshe vidokezo tena. «Ongeza kadi» inavirudisha.",
-  "Arrange ›": "Panga ›"
+  "Arrange ›": "Panga ›",
+  "This link opens for members only.": "Kiungo hiki hufunguka kwa wanachama pekee.",
+  "This link opens for members only, and only admins invite here.": "Kiungo hiki hufunguka kwa wanachama pekee, na hapa wasimamizi pekee ndio wanaoalika.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Mtu yeyote anaweza kusoma tangazo hili kwa siku 7, kisha aombe kujiunga."
 }

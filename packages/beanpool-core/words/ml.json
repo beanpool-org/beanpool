@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card} {m}-ൽ {n}-ലേക്ക് നീക്കി",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "ഇതാണ് അവസാനത്തെ നുറുങ്ങ്. മുഴുവൻ ഗൈഡും ക്രമീകരണങ്ങളിൽ ഉണ്ട്, ഇന്റർനെറ്റ് ഇല്ലാതെയും പ്രവർത്തിക്കുന്നു; താഴെയുള്ള 'ക്രമപ്പെടുത്തുക' നിങ്ങളുടെ കാർഡുകൾ നീക്കുന്നു.",
   "Don't show tips again. Add a card brings them back.": "ഇനി നുറുങ്ങുകൾ കാണിക്കരുത്. «ഒരു കാർഡ് ചേർക്കുക» അവ തിരികെ കൊണ്ടുവരും.",
-  "Arrange ›": "ക്രമപ്പെടുത്തുക ›"
+  "Arrange ›": "ക്രമപ്പെടുത്തുക ›",
+  "This link opens for members only.": "ഈ ലിങ്ക് അംഗങ്ങൾക്ക് മാത്രമേ തുറക്കൂ.",
+  "This link opens for members only, and only admins invite here.": "ഈ ലിങ്ക് അംഗങ്ങൾക്ക് മാത്രമേ തുറക്കൂ, ഇവിടെ അഡ്മിൻമാർക്ക് മാത്രമേ ക്ഷണിക്കാൻ കഴിയൂ.",
+  "Anyone can read this listing for 7 days, then ask to join.": "ആർക്കും ഈ ലിസ്റ്റിംഗ് 7 ദിവസത്തേക്ക് വായിക്കാം, തുടർന്ന് ചേരാൻ അഭ്യർത്ഥിക്കാം."
 }

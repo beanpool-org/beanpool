@@ -113,6 +113,12 @@ export const PEEK_WORDS = {
     // The member's side.
     shareWithMembers: word('Share with members'),
     shareOutside: word('Share outside the community'),
+    /** Under Share with members, before tap. */
+    membersOnlyLine: word('This link opens for members only.'),
+    /** Under Share with members when only admins invite and member is not admin. */
+    adminsOnlyLine: word('This link opens for members only, and only admins invite here.'),
+    /** Under Share outside, before tap. */
+    shareOutsideLine: word('Anyone can read this listing for 7 days, then ask to join.'),
     /** Under Share outside, before the link is made. */
     shareOutsideNote: word('Anyone with the link sees this post for 7 days, without names or faces. You can stop it any time.'),
     sharedOutside: word('Shared outside'),

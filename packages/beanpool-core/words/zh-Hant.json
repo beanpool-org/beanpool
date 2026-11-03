@@ -892,5 +892,8 @@
   "{card} moved to {n} of {m}": "{card} 已移至第 {n} 位，共 {m} 位",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "這是最後一則提示。完整指南可在「設定」的「說明與運作方式」中離線查看；底部的「排列」可移動你的卡片。",
   "Don't show tips again. Add a card brings them back.": "不再顯示提示。你可以隨時透過「新增卡片」重新找回。",
-  "Arrange ›": "排列 ›"
+  "Arrange ›": "排列 ›",
+  "This link opens for members only.": "此連結僅供成員開啟。",
+  "This link opens for members only, and only admins invite here.": "此連結僅供成員開啟，且此處僅管理員可邀請。",
+  "Anyone can read this listing for 7 days, then ask to join.": "任何人均可在 7 天內查看此刊登內容，然後申請加入。"
 }

@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card}: şimdi {m} içinde {n}.",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Bu son ipucuydu. Rehberin tamamı Ayarlar altında Yardım ve nasıl çalışır bölümündedir ve bağlantı olmadan da çalışır; alttaki Sırala kartlarını taşır.",
   "Don't show tips again. Add a card brings them back.": "İpuçlarını bir daha gösterme. «Kart ekle» onları geri getirir.",
-  "Arrange ›": "Sırala ›"
+  "Arrange ›": "Sırala ›",
+  "This link opens for members only.": "Bu bağlantı yalnızca üyeler için açılır.",
+  "This link opens for members only, and only admins invite here.": "Bu bağlantı yalnızca üyeler için açılır ve burada yalnızca yöneticiler davet edebilir.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Herkes bu ilanı 7 gün boyunca okuyabilir, ardından katılma isteği gönderebilir."
 }

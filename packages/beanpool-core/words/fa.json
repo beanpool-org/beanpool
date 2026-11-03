@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card} به جای {n} از {m} منتقل شد",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "این آخرین نکته است. راهنمای کامل در تنظیمات زیر راهنما و نحوه کارکرد قرار دارد و آفلاین کار می‌کند؛ چیدمان، در پایین، کارت‌ها را جابه‌جا می‌کند.",
   "Don't show tips again. Add a card brings them back.": "دیگر نکات نمایش داده نشود. «افزودن کارت» آن‌ها را بازمی‌گرداند.",
-  "Arrange ›": "چیدمان ›"
+  "Arrange ›": "چیدمان ›",
+  "This link opens for members only.": "این پیوند فقط برای اعضا باز می‌شود.",
+  "This link opens for members only, and only admins invite here.": "این پیوند فقط برای اعضا باز می‌شود و اینجا فقط مدیران دعوت می‌کنند.",
+  "Anyone can read this listing for 7 days, then ask to join.": "هر کسی می‌تواند این آگهی را به مدت ۷ روز بخواند، سپس درخواست پیوستن بدهد."
 }

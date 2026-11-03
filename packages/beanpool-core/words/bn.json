@@ -932,5 +932,8 @@
   "{card} moved to {n} of {m}": "{card} {m}-এর মধ্যে {n} নম্বরে সরানো হয়েছে",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "এটিই শেষ পরামর্শ। পুরো গাইডটি সেটিংসে সহায়তা ও কার্যপদ্ধতির অধীনে আছে এবং অফলাইনেও কাজ করে; নিচের সাজান আপনার কার্ডগুলো সরায়।",
   "Don't show tips again. Add a card brings them back.": "পরামর্শ আর দেখাবেন না। «একটি কার্ড যোগ করুন» এগুলো ফিরিয়ে আনে।",
-  "Arrange ›": "সাজান ›"
+  "Arrange ›": "সাজান ›",
+  "This link opens for members only.": "এই লিংকটি কেবল সদস্যদের জন্যই খোলে।",
+  "This link opens for members only, and only admins invite here.": "এই লিংকটি কেবল সদস্যদের জন্যই খোলে, এবং এখানে কেবল অ্যাডমিনরাই আমন্ত্রণ জানাতে পারেন।",
+  "Anyone can read this listing for 7 days, then ask to join.": "যে কেউ এই তালিকাটি ৭ দিন দেখতে পারেন, তারপর যোগদানের অনুরোধ জানাতে পারেন।"
 }

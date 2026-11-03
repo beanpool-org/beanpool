@@ -1012,5 +1012,8 @@
   "{card} moved to {n} of {m}": "{card}: тепер {n} з {m}",
   "That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.": "Це остання порада. Повний посібник є в Налаштуваннях у розділі «Довідка та як це працює», він відкривається без інтернету; «Упорядкувати» внизу переміщує картки.",
   "Don't show tips again. Add a card brings them back.": "Більше не показувати поради. «Додати картку» повертає їх.",
-  "Arrange ›": "Упорядкувати ›"
+  "Arrange ›": "Упорядкувати ›",
+  "This link opens for members only.": "Це посилання відкривається лише для учасників.",
+  "This link opens for members only, and only admins invite here.": "Це посилання відкривається лише для учасників, і запрошувати тут можуть лише адміністратори.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Будь-хто може переглядати це оголошення протягом 7 днів, а потім подати запит на вступ."
 }

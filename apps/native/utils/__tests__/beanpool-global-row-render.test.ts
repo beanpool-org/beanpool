@@ -28,7 +28,7 @@ import { renderToString } from 'react-dom/server';
 (globalThis as any).React = ReactAll;
 
 vi.mock('react-native', () => {
-    const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
+    const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', switch: 'switch' };
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, onLongPress, accessibilityLabel, accessibilityHint, accessibilityRole, accessibilityState, disabled, testID, numberOfLines, value, onChangeText } = props;
         const attrs: Record<string, unknown> = {};
@@ -52,7 +52,8 @@ vi.mock('react-native', () => {
     const listener = () => ({ remove() {} });
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), Switch: el('input'),
+        Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => s },
         Share: { share: async () => ({}) },
         DeviceEventEmitter: { addListener: listener, emit() {} },
@@ -553,10 +554,13 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         });
     }
 
-    it('a long press removes it from the list, as any saved row (and the row comes back as the Join row: decision 8)', async () => {
+    it('a long press removes it from the list via options modal, as any saved row (and the row comes back as the Join row: decision 8)', async () => {
         list.rows = [RIVERSIDE, SAVED];
         await open();
         await act(async () => { row().dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+        const removeBtn = host.querySelector('[aria-label="Remove from your saved list"]') as HTMLElement;
+        expect(removeBtn).not.toBeNull();
+        await act(async () => { removeBtn.click(); });
         expect(list.removed).toEqual([GLOBAL]);
         list.rows = [RIVERSIDE];
         await act(async () => { root.render(createElement(BeanPoolSheet, { key: 'again' }) as any); });
